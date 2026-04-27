@@ -8,11 +8,20 @@ See current Canton grant proposal for more information: https://github.com/canto
 
 ## Installation
 
-TBD
+Build from source:
+
+```sh
+go install github.com/bitdynamics-ab/canton-devkit/cmd/canton-devkit@latest
+```
+
+Release binaries will be published from tagged releases once release automation
+is enabled in GitHub Actions.
 
 ## Requirements
 
-TBD
+- Go 1.22 or newer for local development
+- Docker for image builds and future LocalNet workflows
+- `golangci-lint` for local linting
 
 ## Quick Start
 
@@ -60,19 +69,60 @@ Options:
 
 ## Configuration
 
-TBD
+Configuration is not implemented yet. Future LocalNet commands are expected to
+accept flags such as `--name` and `--version`.
 
 ## Examples
 
-TBD
+Show help:
+
+```sh
+canton-devkit --help
+```
+
+Print version information:
+
+```sh
+canton-devkit version
+```
 
 ## Development
 
-TBD
+Run tests:
+
+```sh
+make test
+```
+
+Build the CLI:
+
+```sh
+make build
+```
+
+Run linting:
+
+```sh
+make lint
+```
+
+Build the Docker image:
+
+```sh
+make docker-build
+```
 
 ## Releasing
 
-TBD
+Release automation runs when a tag matching `v*` is pushed.
+
+The release workflow builds Linux and macOS binaries for `amd64` and `arm64`,
+uploads them to a GitHub release, and publishes a Docker image to GHCR.
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
 
 ## License
 
