@@ -30,10 +30,13 @@ jobs:
         run: go test ./...
 
       - name: Run golangci-lint
-        # golangci/golangci-lint-action@v8
-        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9
-        with:
-          version: v2.1.6
+        run: |
+          docker run --rm \
+            -e GOLANGCI_LINT_CACHE=/tmp/golangci-lint-cache \
+            -v "${PWD}":/app \
+            -w /app \
+            golangci/golangci-lint@sha256:568ee1c1c53493575fa9494e280e579ac9ca865787bafe4df3023ae59ecf299b \
+            golangci-lint run
 
       - name: Build binary
         run: go build ./cmd/canton-devkit
