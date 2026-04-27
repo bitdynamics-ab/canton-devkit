@@ -58,26 +58,6 @@ Options:
 --version <version>
 ```
 
-### `dar`
-
-TBD
-
-### `contracts`
-
-TBD
-
-### `tx`
-
-TBD
-
-### `metrics`
-
-TBD
-
-### `token`
-
-TBD
-
 ## Configuration
 
 TBD
