@@ -114,10 +114,17 @@ make docker-build
 
 ## Releasing
 
-Release automation runs when a tag matching `v*` is pushed.
+Release automation runs when changes are pushed to `main`, when a tag matching
+`v*` is pushed, or when the release workflow is run manually.
 
 The release workflow builds Linux and macOS binaries for `amd64` and `arm64`,
-uploads them to a GitHub release, and publishes a Docker image to GHCR.
+and publishes Docker images to GHCR.
+
+Main branch builds upload binaries as GitHub Actions artifacts and publish Docker
+images tagged as `main` and `sha-<short-sha>`.
+
+Tagged builds upload binaries to a GitHub release and publish Docker images
+tagged with the release tag and `latest`.
 
 ```sh
 git tag v0.1.0

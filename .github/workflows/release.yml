@@ -1,7 +1,10 @@
 name: Release
 
 on:
+  workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "v*"
 
@@ -29,9 +32,20 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      - name: Set release metadata
+        id: meta
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            version="${GITHUB_REF_NAME}"
+          else
+            version="main-${short_sha}"
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
       - name: Build release binaries
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
           mkdir -p dist
           for os in linux darwin; do
@@ -44,7 +58,16 @@ jobs:
             done
           done
 
+      - name: Upload main branch artifacts
+        if: github.ref == 'refs/heads/main'
+        # actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: canton-devkit-${{ steps.meta.outputs.version }}
+          path: dist/*
+
       - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
         # softprops/action-gh-release@v3
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
         with:
@@ -71,6 +94,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set image metadata
+        id: meta
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            version="${GITHUB_REF_NAME}"
+          else
+            version="main-${short_sha}"
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "tags<<EOF"
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              echo "${IMAGE_NAME}:${version}"
+              echo "${IMAGE_NAME}:latest"
+            else
+              echo "${IMAGE_NAME}:main"
+              echo "${IMAGE_NAME}:sha-${short_sha}"
+            fi
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
       - name: Build and push image
         # docker/build-push-action@v7
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
@@ -78,7 +123,5 @@ jobs:
           context: .
           push: true
           build-args: |
-            VERSION=${{ github.ref_name }}
-          tags: |
-            ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
-            ${{ env.IMAGE_NAME }}:latest
+            VERSION=${{ steps.meta.outputs.version }}
+          tags: ${{ steps.meta.outputs.tags }}
