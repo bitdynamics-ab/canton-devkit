@@ -4,6 +4,8 @@
 
 It is intended to provide a single local workflow for starting, stopping, inspecting, and cleaning up Canton LocalNet instances.
 
+See current Canton grant proposal for more information: https://github.com/canton-foundation/canton-dev-fund/pull/18
+
 ## Installation
 
 TBD
