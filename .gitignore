@@ -1,0 +1,13 @@
+# Build artifacts
+bin/
+dist/
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/

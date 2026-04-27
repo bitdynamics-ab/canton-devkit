@@ -15,14 +15,15 @@ linked in the table below.
 
 ## Current Status
 
-Project tracking has been initialized. The first tracked task covers creating a
-Go CLI boilerplate with container, release, linting, and test automation.
+Task 001 completed the initial standard-library Go CLI boilerplate. A future
+task tracks whether the project should migrate to Cobra later.
 
 ## Tasks & Epics
 
 | ID | Type | Title | Status | File |
 |----|------|-------|--------|------|
-| 001 | Task | Golang CLI Boilerplate | ⏳ Not started | [001-TASK-golang-cli-boilerplate.md](tasks/001-TASK-golang-cli-boilerplate.md) |
+| 001 | Task | Golang CLI Boilerplate | **✅ Complete** | [001-TASK-golang-cli-boilerplate.md](tasks/001-TASK-golang-cli-boilerplate.md) |
+| 002 | Task | Consider Cobra CLI Framework | ⏳ Not started | [002-TASK-consider-cobra-cli-framework.md](tasks/002-TASK-consider-cobra-cli-framework.md) |
 
 ## How to Add a New Task or Epic
 
