@@ -16,7 +16,9 @@ test, and Docker image publishing support.
 - [x] Add Dockerfile for building/running the CLI
 - [x] Add GitHub Actions workflow for linting and unit tests
 - [x] Add GitHub Actions workflow support for Docker image builds
+- [x] Publish Docker images from `main` using `main` and `sha-<short-sha>` tags
 - [x] Add GitHub Actions workflow support for macOS and Linux release artifacts
+- [x] Build release artifacts from `main` as GitHub Actions workflow artifacts
 - [x] Verify linting and unit tests run successfully
 
 ## Notes
@@ -26,6 +28,9 @@ test, and Docker image publishing support.
 - Initial implementation will use only the Go standard library for CLI parsing.
 - Host Go tooling was not installed locally, so verification was run through Docker.
 - Verified with Docker-based `gofmt`, `go test ./...`, `go build ./cmd/canton-devkit`, `golangci-lint run`, `docker build`, and `docker run canton-devkit:dev version`.
+- PR #2 updated release automation so pushes to `main` produce workflow artifacts
+  and GHCR Docker images. Tagged releases continue to create GitHub releases and
+  publish Docker images tagged with the release tag and `latest`.
 
 ## Next Steps
 
