@@ -133,4 +133,4 @@ git push origin v0.1.0
 
 ## License
 
-MIT
+Apache 2.0
