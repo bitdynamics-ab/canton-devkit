@@ -6,6 +6,34 @@ It is intended to provide a single local workflow for starting, stopping, inspec
 
 See current Canton grant proposal for more information: https://github.com/canton-foundation/canton-dev-fund/pull/18
 
+## Repository Layout
+
+```
+cmd/
+  canton-devkit/     Standalone CLI entrypoint (go install / release artifacts)
+internal/
+  cli/               Shared CLI core: argv parsing, command dispatch, help text
+.github/
+  workflows/
+    ci.yml           Build, test, and lint on Linux, macOS, and Windows
+    release.yml      Multi-OS release artifacts and GHCR Docker image
+docs/
+  PROJECT.md         Project index and task tracking
+  tasks/             Per-task notes and progress
+```
+
+## Distribution Model
+
+The same `canton-devkit` binary is distributed two ways:
+
+* **Standalone binary** — built via `go install` or downloaded from GitHub Releases
+  (macOS arm64, Linux amd64, Windows amd64). See BIT-20.
+* **DPM component** — packaged as a native DPM component and installed via
+  `dpm install package`. The component manifest registers a single `localnet`
+  top-level command and uses `exec-args: ["localnet"]` so that `dpm localnet …`
+  maps directly onto `canton-devkit localnet …`. No separate entrypoint binary is
+  needed. See BIT-19 and `docs/tasks/003-TASK-dpm-component-quick-test.md`.
+
 ## Installation
 
 Build from source:

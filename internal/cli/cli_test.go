@@ -75,6 +75,28 @@ func TestRunLocalnetCommands(t *testing.T) {
 	}
 }
 
+// TestRunIsArgvOnly documents the DPM-component invocation contract: when the
+// binary is launched via a DPM component manifest with exec-args: ["localnet"],
+// DPM prepends "localnet" and appends user-supplied args. The CLI core must
+// dispatch correctly from that argv slice with no reliance on argv[0] or env.
+func TestRunIsArgvOnly(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+
+	// Mirrors DPM invocation: exec-args ["localnet"] + user args ["up", "--name", "foo"]
+	code := New(&out, &err, "test").Run([]string{"localnet", "up", "--name", "foo"})
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if !strings.Contains(out.String(), "not implemented yet") {
+		t.Fatalf("expected placeholder output, got %q", out.String())
+	}
+	if err.Len() != 0 {
+		t.Fatalf("expected no stderr output, got %q", err.String())
+	}
+}
+
 func TestRunRejectsUnknownLocalnetCommand(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
