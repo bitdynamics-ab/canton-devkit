@@ -54,13 +54,14 @@ func TestRunRejectsUnknownCommand(t *testing.T) {
 	}
 }
 
-func TestRunLocalnetCommands(t *testing.T) {
-	for command := range localnetCommands {
+func TestRunLocalnetPlaceholderCommands(t *testing.T) {
+	placeholders := []string{"down", "restart", "clean", "status", "logs"}
+	for _, command := range placeholders {
 		t.Run(command, func(t *testing.T) {
 			var out bytes.Buffer
-			var err bytes.Buffer
+			var errBuf bytes.Buffer
 
-			code := New(&out, &err, "test").Run([]string{"localnet", command})
+			code := New(&out, &errBuf, "test").Run([]string{"localnet", command})
 
 			if code != 0 {
 				t.Fatalf("expected exit code 0, got %d", code)
@@ -68,8 +69,8 @@ func TestRunLocalnetCommands(t *testing.T) {
 			if !strings.Contains(out.String(), "not implemented yet") {
 				t.Fatalf("expected placeholder output, got %q", out.String())
 			}
-			if err.Len() != 0 {
-				t.Fatalf("expected no stderr output, got %q", err.String())
+			if errBuf.Len() != 0 {
+				t.Fatalf("expected no stderr output, got %q", errBuf.String())
 			}
 		})
 	}
@@ -81,19 +82,17 @@ func TestRunLocalnetCommands(t *testing.T) {
 // dispatch correctly from that argv slice with no reliance on argv[0] or env.
 func TestRunIsArgvOnly(t *testing.T) {
 	var out bytes.Buffer
-	var err bytes.Buffer
+	var errBuf bytes.Buffer
 
 	// Mirrors DPM invocation: exec-args ["localnet"] + user args ["up", "--name", "foo"]
-	code := New(&out, &err, "test").Run([]string{"localnet", "up", "--name", "foo"})
+	// Dispatches to localnet up; may exit 0 (full success), 2 (no docker), or 4 (compose fail).
+	code := New(&out, &errBuf, "test").Run([]string{"localnet", "up", "--name", "foo"})
 
-	if code != 0 {
-		t.Fatalf("expected exit code 0, got %d", code)
+	if code == 1 {
+		t.Fatalf("exit code 1 means bad args — dispatch failed: stderr=%q", errBuf.String())
 	}
-	if !strings.Contains(out.String(), "not implemented yet") {
-		t.Fatalf("expected placeholder output, got %q", out.String())
-	}
-	if err.Len() != 0 {
-		t.Fatalf("expected no stderr output, got %q", err.String())
+	if !strings.Contains(out.String(), "Starting Canton LocalNet") {
+		t.Fatalf("expected localnet up dispatch, got stdout=%q stderr=%q", out.String(), errBuf.String())
 	}
 }
 

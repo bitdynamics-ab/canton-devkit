@@ -1,9 +1,13 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/config"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 )
 
 const appName = "canton-devkit"
@@ -57,14 +61,28 @@ func (a *App) runLocalnet(args []string) int {
 	}
 
 	command := args[0]
-	description, ok := localnetCommands[command]
+	_, ok := localnetCommands[command]
 	if !ok {
 		_, _ = fmt.Fprintf(a.err, "unknown localnet command %q\n\n%s", command, localnetHelp())
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(a.out, "localnet %s: %s is not implemented yet\n", command, description)
-	return 0
+	switch command {
+	case "up":
+		return a.runLocalnetUp(args[1:])
+	default:
+		_, _ = fmt.Fprintf(a.out, "localnet %s is not implemented yet\n", command)
+		return 0
+	}
+}
+
+func (a *App) runLocalnetUp(args []string) int {
+	opts, err := localnet.ParseUpArgs(args)
+	if err != nil {
+		_, _ = fmt.Fprintf(a.err, "localnet up: %s\n\n%s", err, localnetUpHelp())
+		return localnet.ExitUserError
+	}
+	return localnet.RunUp(context.Background(), a.out, a.err, opts)
 }
 
 func rootHelp() string {
@@ -83,6 +101,25 @@ Options:
   -h, --help      Show help
   -v, --version   Print version information
 `, "\n")
+}
+
+func localnetUpHelp() string {
+	return fmt.Sprintf(`Start a Canton LocalNet instance.
+
+Usage:
+  canton-devkit localnet up --name <name> [--version <version>]
+
+Flags:
+  --name       Required. Name for the LocalNet instance (alphanumeric and hyphens)
+  --version    Canton version to use (default: %s)
+
+Exit codes:
+  0  Success
+  1  Invalid arguments
+  2  Docker preflight failure
+  3  Timeout waiting for services
+  4  Runtime failure
+`, config.DefaultVersion)
 }
 
 func localnetHelp() string {
