@@ -48,14 +48,15 @@ jobs:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
           mkdir -p dist
-          for os in linux darwin; do
-            for arch in amd64 arm64; do
-              output="dist/canton-devkit_${os}_${arch}"
-              if [ "$os" = "windows" ]; then output="${output}.exe"; fi
-              GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build \
-                -ldflags "-s -w -X main.version=${VERSION}" \
-                -o "$output" ./cmd/canton-devkit
-            done
+          targets="linux/amd64 darwin/arm64 windows/amd64"
+          for target in $targets; do
+            os="${target%/*}"
+            arch="${target#*/}"
+            output="dist/canton-devkit_${os}_${arch}"
+            if [ "$os" = "windows" ]; then output="${output}.exe"; fi
+            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build \
+              -ldflags "-s -w -X main.version=${VERSION}" \
+              -o "$output" ./cmd/canton-devkit
           done
 
       - name: Upload main branch artifacts
