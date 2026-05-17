@@ -55,7 +55,8 @@ func TestRunRejectsUnknownCommand(t *testing.T) {
 }
 
 func TestRunLocalnetCommands(t *testing.T) {
-	for command := range localnetCommands {
+	localnetSubcommands := []string{"up", "down", "restart", "clean", "status", "logs"}
+	for _, command := range localnetSubcommands {
 		t.Run(command, func(t *testing.T) {
 			var out bytes.Buffer
 			var err bytes.Buffer

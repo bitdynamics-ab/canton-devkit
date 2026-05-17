@@ -1,9 +1,9 @@
 # 002 - Consider Cobra CLI Framework
 
 **Type:** Task
-**Status:** ⏳ Not started
+**Status:** ✅ Done
 **Created:** 2026-04-27
-**Updated:** 2026-04-27
+**Updated:** 2026-05-17
 
 ## Goal
 
@@ -12,17 +12,21 @@ CLI parser to Cobra once the command surface and UX requirements are clearer.
 
 ## Progress
 
-- [ ] Review command complexity after the initial CLI boilerplate is in use
-- [ ] Compare standard-library parsing against Cobra for help text, validation, and subcommands
-- [ ] Decide whether the dependency and migration cost are justified
-- [ ] Document the decision and implementation plan if migration is approved
+- [x] Review command complexity after the initial CLI boilerplate is in use
+- [x] Compare standard-library parsing against Cobra for help text, validation, and subcommands
+- [x] Decide whether the dependency and migration cost are justified
+- [x] Document the decision and implementation plan if migration is approved
+
+## Decision
+
+Migrate to Cobra. The benefits (auto-generated help, shell completion via
+`completion` subcommand, consistent flag parsing, subcommand extensibility)
+outweigh the added dependency. Implemented in BIT-104.
 
 ## Notes
 
-- The initial CLI intentionally avoids external dependencies.
-- Revisit this if command nesting, flags, shell completion, or generated docs become important.
-
-## Next Steps
-
-Wait until the first real localnet workflows are implemented, then reassess CLI
-framework needs.
+- `internal/cli/cli.go` rewritten with a Cobra command tree.
+- The `App` struct (injected `io.Writer`, `Run() int`) is preserved for testability.
+- DPM invocation contract (`exec-args: ["localnet"]`) still works — subcommand
+  stubs use `DisableFlagParsing` so unknown future flags are passed through cleanly.
+- Shell completion now available via `canton-devkit completion <shell>`.
