@@ -10,15 +10,15 @@ import (
 )
 
 const (
-	DefaultVersion  = "latest"
-	cantonImage     = "digitalasset/canton-open-source"
-	postgresImage   = "postgres"
-	postgresVersion = "14-alpine"
-	ledgerAPIPort   = 5011
-	adminAPIPort    = 5012
+	DefaultVersion   = "latest"
+	cantonImage      = "digitalasset/canton-open-source"
+	postgresImage    = "postgres"
+	postgresVersion  = "14-alpine"
+	ledgerAPIPort    = 5011
+	adminAPIPort     = 5012
 	domainPublicPort = 5018
 	domainAdminPort  = 5019
-	postgresPort    = 5432
+	postgresPort     = 5432
 )
 
 type LocalNetConfig struct {

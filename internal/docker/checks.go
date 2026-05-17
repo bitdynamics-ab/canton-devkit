@@ -228,4 +228,3 @@ func isAddrInUse(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "address already in use") || strings.Contains(msg, "only one usage")
 }
-

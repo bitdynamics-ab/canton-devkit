@@ -73,14 +73,14 @@ func (r *Report) HasWarnings() bool {
 // remediation hints; passing checks render as a single status line.
 func (r *Report) Write(w io.Writer) {
 	for _, c := range r.Results {
-		fmt.Fprintf(w, "  [%s] %s", c.Status, c.Name)
+		_, _ = fmt.Fprintf(w, "  [%s] %s", c.Status, c.Name)
 		if c.Detail != "" {
-			fmt.Fprintf(w, ": %s", c.Detail)
+			_, _ = fmt.Fprintf(w, ": %s", c.Detail)
 		}
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 		if (c.Status == StatusFail || c.Status == StatusWarn) && c.Remediation != "" {
 			for _, line := range strings.Split(strings.TrimSpace(c.Remediation), "\n") {
-				fmt.Fprintf(w, "        → %s\n", line)
+				_, _ = fmt.Fprintf(w, "        → %s\n", line)
 			}
 		}
 	}

@@ -66,11 +66,11 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	fmt.Fprintf(out, "Starting Canton LocalNet %q (version %s)...\n", opts.Name, opts.Version)
+	_, _ = fmt.Fprintf(out, "Starting Canton LocalNet %q (version %s)...\n", opts.Name, opts.Version)
 
 	dataDir := config.DataDir(opts.Name)
 
-	fmt.Fprintf(out, "Running preflight checks...\n")
+	_, _ = fmt.Fprintf(out, "Running preflight checks...\n")
 	report := docker.RunPreflight(ctx, docker.Options{
 		RequiredPorts:  []int{5011, 5012, 5432},
 		DataDir:        dataDir,
@@ -79,7 +79,7 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 	})
 	report.Write(out)
 	if !report.OK() {
-		fmt.Fprintf(errw, "\nPreflight failed. Address the items above and re-run.\n")
+		_, _ = fmt.Fprintf(errw, "\nPreflight failed. Address the items above and re-run.\n")
 		return ExitPreflightFail
 	}
 
@@ -89,9 +89,9 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 		DataDir: dataDir,
 	}
 
-	fmt.Fprintf(out, "Generating configs and identities in %s...\n", dataDir)
+	_, _ = fmt.Fprintf(out, "Generating configs and identities in %s...\n", dataDir)
 	if err := config.Generate(cfg); err != nil {
-		fmt.Fprintf(errw, "Config generation failed: %s\n", err)
+		_, _ = fmt.Fprintf(errw, "Config generation failed: %s\n", err)
 		return ExitRuntimeFailure
 	}
 
@@ -102,36 +102,36 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 		LogWriter:   out,
 	}
 
-	fmt.Fprintf(out, "Starting services...\n")
+	_, _ = fmt.Fprintf(out, "Starting services...\n")
 	if err := runner.Up(ctx); err != nil {
 		if ctx.Err() != nil {
-			fmt.Fprintf(errw, "Interrupted while starting services\n")
+			_, _ = fmt.Fprintf(errw, "Interrupted while starting services\n")
 			return ExitTimeout
 		}
-		fmt.Fprintf(errw, "Failed to start services: %s\n", err)
+		_, _ = fmt.Fprintf(errw, "Failed to start services: %s\n", err)
 		return ExitRuntimeFailure
 	}
 
-	fmt.Fprintf(out, "Waiting for services to become healthy...\n")
+	_, _ = fmt.Fprintf(out, "Waiting for services to become healthy...\n")
 	if err := runner.WaitForHealthy(ctx); err != nil {
 		if ctx.Err() != nil {
-			fmt.Fprintf(errw, "Timed out waiting for services\n")
+			_, _ = fmt.Fprintf(errw, "Timed out waiting for services\n")
 			return ExitTimeout
 		}
-		fmt.Fprintf(errw, "Services failed health check: %s\n", err)
+		_, _ = fmt.Fprintf(errw, "Services failed health check: %s\n", err)
 		return ExitRuntimeFailure
 	}
 
-	fmt.Fprintf(out, "\nCanton LocalNet %q is ready.\n\n", opts.Name)
+	_, _ = fmt.Fprintf(out, "\nCanton LocalNet %q is ready.\n\n", opts.Name)
 
-	fmt.Fprintf(out, "Endpoints:\n")
-	fmt.Fprintf(out, "  Ledger API:    grpc://localhost:5011\n")
-	fmt.Fprintf(out, "  Admin API:     grpc://localhost:5012\n")
-	fmt.Fprintf(out, "  PostgreSQL:    postgresql://canton:canton@localhost:5432\n")
-	fmt.Fprintf(out, "\nCredentials:\n")
-	fmt.Fprintf(out, "  Identity:      %s/identity.txt\n", dataDir)
-	fmt.Fprintf(out, "  Keys:          %s/keys/\n", dataDir)
-	fmt.Fprintf(out, "  Canton config: %s/canton/canton.conf\n", dataDir)
+	_, _ = fmt.Fprintf(out, "Endpoints:\n")
+	_, _ = fmt.Fprintf(out, "  Ledger API:    grpc://localhost:5011\n")
+	_, _ = fmt.Fprintf(out, "  Admin API:     grpc://localhost:5012\n")
+	_, _ = fmt.Fprintf(out, "  PostgreSQL:    postgresql://canton:canton@localhost:5432\n")
+	_, _ = fmt.Fprintf(out, "\nCredentials:\n")
+	_, _ = fmt.Fprintf(out, "  Identity:      %s/identity.txt\n", dataDir)
+	_, _ = fmt.Fprintf(out, "  Keys:          %s/keys/\n", dataDir)
+	_, _ = fmt.Fprintf(out, "  Canton config: %s/canton/canton.conf\n", dataDir)
 
 	return ExitSuccess
 }
@@ -141,7 +141,7 @@ func isValidName(name string) bool {
 		return false
 	}
 	for _, c := range name {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-') {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-' {
 			return false
 		}
 	}

@@ -120,7 +120,7 @@ func TestFirstLine(t *testing.T) {
 func TestCheckPortFreeReportsBusy(t *testing.T) {
 	// Bind to an ephemeral port so we can predict that it's busy.
 	ln := mustListen(t)
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	port := portOf(t, ln.Addr().String())
 
 	res := checkPortFree(port)
@@ -136,7 +136,7 @@ func TestCheckPortFreeReportsFree(t *testing.T) {
 	// Bind, get a port, close, then check that port — almost certainly free.
 	ln := mustListen(t)
 	port := portOf(t, ln.Addr().String())
-	ln.Close()
+	_ = ln.Close()
 
 	res := checkPortFree(port)
 	if res.Status != StatusOK {
