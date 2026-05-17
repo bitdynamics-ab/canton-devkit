@@ -15,10 +15,14 @@ linked in the table below.
 
 ## Current Status
 
-Task 001 completed the initial standard-library Go CLI boilerplate. A future
-task tracks whether the project should migrate to Cobra later. Task 003
-captures a quick proof-of-concept for distributing canton-devkit as a native
-DPM component, ahead of release CI work.
+Task 001 completed the initial standard-library Go CLI boilerplate. Task 004
+(BIT-18) completed the CI baseline: cross-platform build/test matrix
+(Linux/macOS/Windows), migration to `golangci-lint-action`, README layout
+documentation, and a contract test locking the DPM invocation interface.
+
+Task 002 tracks a future Cobra migration decision. Task 003 captures the DPM
+component quick-test proof-of-concept, now superseded for full release
+engineering by Linear issue BIT-19.
 
 ## Tasks & Epics
 
@@ -27,6 +31,7 @@ DPM component, ahead of release CI work.
 | 001 | Task | Golang CLI Boilerplate | **✅ Complete** | [001-TASK-golang-cli-boilerplate.md](tasks/001-TASK-golang-cli-boilerplate.md) |
 | 002 | Task | Consider Cobra CLI Framework | ⏳ Not started | [002-TASK-consider-cobra-cli-framework.md](tasks/002-TASK-consider-cobra-cli-framework.md) |
 | 003 | Task | DPM Component Quick Test | ⏳ Not started | [003-TASK-dpm-component-quick-test.md](tasks/003-TASK-dpm-component-quick-test.md) |
+| 004 | Task | Bootstrap Go Project and CI Baseline (BIT-18) | **✅ Complete** | [004-TASK-bootstrap-go-project-ci-baseline.md](tasks/004-TASK-bootstrap-go-project-ci-baseline.md) |
 
 ## How to Add a New Task or Epic
 
