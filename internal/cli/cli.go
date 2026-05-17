@@ -37,7 +37,7 @@ func (a *App) buildRoot() *cobra.Command {
 		Version:       a.version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Args: cobra.ArbitraryArgs,
+		Args:          cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				err := fmt.Errorf("unknown command %q", args[0])
