@@ -75,6 +75,9 @@ jobs:
 
   docker:
     name: Build and publish Docker image
+    # Disabled: canton-devkit invokes docker and docker compose directly for its features,
+    # so running it inside a container is not suitable.
+    if: false
     runs-on: ubuntu-latest
 
     steps:
