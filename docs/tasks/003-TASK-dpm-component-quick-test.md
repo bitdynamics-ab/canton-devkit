@@ -3,7 +3,7 @@
 **Type:** Task
 **Status:** ⏳ Not started
 **Created:** 2026-05-10
-**Updated:** 2026-05-10
+**Updated:** 2026-05-16
 
 ## Goal
 
@@ -155,6 +155,15 @@ components:
 
 ## Notes for the Implementing Agent
 
+- DPM source research carried out during task 004 (BIT-18) confirmed: DPM does
+  **not** pass the registered command name into the binary's argv. Only
+  `exec-args` + user-supplied args reach the binary. The proposed
+  `exec-args: ["localnet"]` manifest is therefore correct and sufficient — no
+  code changes to the binary are required. A contract test (`TestRunIsArgvOnly`
+  in `internal/cli/cli_test.go`) now locks this invariant.
+- The follow-up Linear issues for the next steps below are:
+  - BIT-19: Native DPM component packaging and OCI publishing.
+  - BIT-34: Installation and Getting Started guide.
 - Prefer `dpm component run` for the first iteration if available — it
   avoids needing a local registry and is the recommended development
   flow per the DPM docs.
