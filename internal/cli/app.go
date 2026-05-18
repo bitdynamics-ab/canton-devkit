@@ -23,7 +23,7 @@ func (a *App) Run(args []string) int {
 	root := a.buildRoot()
 	root.SetArgs(args)
 	if err := root.Execute(); err != nil {
-		fmt.Fprintln(a.err, err)
+		_, _ = fmt.Fprintln(a.err, err)
 		return 1
 	}
 	return 0
