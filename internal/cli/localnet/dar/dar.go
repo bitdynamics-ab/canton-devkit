@@ -25,12 +25,17 @@ func Build() *cobra.Command {
 		Long: `Tools for working with DAR files: the .dar zip archives that
 package Daml-LF compiled code for deployment to a Canton ledger.
 
-Available commands:
-  info    Inspect a local DAR and show its packages, LF version, deps
-  diff    Compare two DAR files with SCU-aware upgrade signals
+Available commands (offline, file-based):
+  info           Inspect a local DAR and show its packages, LF version, deps
+  diff           Compare two DAR files with SCU-aware upgrade signals
 
-Future commands (upload/list/download/remove) will reach a participant's
-Admin API; the inspection commands here work entirely offline.`,
+Available commands (participant Admin API):
+  upload         Upload a DAR to a participant
+  list           List uploaded DARs / packages on a participant
+  download       Download a DAR back from a participant by main package id
+  remove         Unvet (or fully purge) a DAR on a participant
+  build-upload   Shell out to dpm/daml build, then upload
+  watch          Rebuild + re-upload on source change (hot-deploy loop)`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -39,5 +44,11 @@ Admin API; the inspection commands here work entirely offline.`,
 	}
 	cmd.AddCommand(buildInfo())
 	cmd.AddCommand(buildDiff())
+	cmd.AddCommand(buildUpload())
+	cmd.AddCommand(buildListUploaded())
+	cmd.AddCommand(buildDownload())
+	cmd.AddCommand(buildRemove())
+	cmd.AddCommand(buildBuildUpload())
+	cmd.AddCommand(buildWatch())
 	return cmd
 }

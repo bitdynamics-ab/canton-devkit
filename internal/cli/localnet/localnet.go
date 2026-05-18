@@ -30,9 +30,6 @@ func Build() *cobra.Command {
 	localnet.AddCommand(buildList())
 	localnet.AddCommand(buildCreds())
 	localnet.AddCommand(dar.Build())
-	localnet.AddCommand(buildList())
-	localnet.AddCommand(buildCreds())
-	localnet.AddCommand(dar.Build())
 	return localnet
 }
 
