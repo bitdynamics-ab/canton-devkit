@@ -12,7 +12,6 @@ func Build() *cobra.Command {
 		Short: "Manage Canton LocalNet instances",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "unknown localnet command %q\n\n", args[0])
 				_ = cmd.Help()
 				return fmt.Errorf("unknown localnet command %q", args[0])
 			}
