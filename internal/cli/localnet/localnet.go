@@ -3,6 +3,7 @@ package localnet
 import (
 	"fmt"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cli/localnet/dar"
 	"github.com/spf13/cobra"
 )
 
@@ -28,8 +29,7 @@ func Build() *cobra.Command {
 	localnet.AddCommand(buildVersions())
 	localnet.AddCommand(buildList())
 	localnet.AddCommand(buildCreds())
-	localnet.AddCommand(buildList())
-	localnet.AddCommand(buildCreds())
+	localnet.AddCommand(dar.Build())
 	return localnet
 }
 
