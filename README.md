@@ -134,6 +134,19 @@ Run linting:
 make lint
 ```
 
+Install pre-commit hooks (requires [uv](https://docs.astral.sh/uv/)):
+
+```sh
+uvx pre-commit install
+```
+
+This installs a Git pre-commit hook that runs `golangci-lint` automatically
+before each commit. Run it against all files to verify your setup:
+
+```sh
+uvx pre-commit run --all-files
+```
+
 Build the Docker image:
 
 ```sh
