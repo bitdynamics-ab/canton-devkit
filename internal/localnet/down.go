@@ -59,9 +59,18 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 	_, _ = fmt.Fprintf(out, "Stopping Canton LocalNet %q (Splice %s)...\n",
 		state.Name, state.SpliceVersion)
 
+	env, envFiles, err := composeContext(state)
+	if err != nil {
+		_, _ = fmt.Fprintf(errw, "Warning: could not reconstruct compose context: %s\n", err)
+		// Fall through — docker compose down often still works against
+		// the project label even without all substitutions, just noisy.
+	}
+
 	runner := &docker.ComposeRunner{
 		ProjectName:  state.ComposeProject,
 		ComposeFiles: state.ComposeFiles,
+		EnvFiles:     envFiles,
+		Env:          env,
 		WorkDir:      state.ProjectDir,
 		LogWriter:    out,
 	}

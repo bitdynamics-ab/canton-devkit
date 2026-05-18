@@ -36,9 +36,17 @@ func RunLogs(ctx context.Context, out io.Writer, errw io.Writer, opts *LogsOptio
 		return ExitRuntimeFailure
 	}
 
+	env, envFiles, envErr := composeContext(state)
+	if envErr != nil {
+		_, _ = fmt.Fprintf(errw, "Warning: could not reconstruct compose context: %s\n", envErr)
+	}
+
 	args := []string{"compose", "-p", state.ComposeProject}
 	for _, f := range state.ComposeFiles {
 		args = append(args, "-f", f)
+	}
+	for _, ef := range envFiles {
+		args = append(args, "--env-file", ef)
 	}
 	args = append(args, "logs")
 	if opts.Follow {
@@ -56,6 +64,9 @@ func RunLogs(ctx context.Context, out io.Writer, errw io.Writer, opts *LogsOptio
 	cmd.Stdout = out
 	cmd.Stderr = errw
 	cmd.Dir = state.ProjectDir
+	if env != nil {
+		cmd.Env = env
+	}
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
