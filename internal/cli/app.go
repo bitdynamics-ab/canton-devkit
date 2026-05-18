@@ -1,6 +1,9 @@
 package cli
 
-import "io"
+import (
+	"fmt"
+	"io"
+)
 
 const appName = "canton-devkit"
 
@@ -20,6 +23,7 @@ func (a *App) Run(args []string) int {
 	root := a.buildRoot()
 	root.SetArgs(args)
 	if err := root.Execute(); err != nil {
+		fmt.Fprintln(a.err, err)
 		return 1
 	}
 	return 0

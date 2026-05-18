@@ -17,10 +17,8 @@ func (a *App) buildRoot() *cobra.Command {
 		Args:          cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
-				err := fmt.Errorf("unknown command %q", args[0])
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s\n\n", err)
 				_ = cmd.Help()
-				return err
+				return fmt.Errorf("unknown command %q", args[0])
 			}
 			return cmd.Help()
 		},
