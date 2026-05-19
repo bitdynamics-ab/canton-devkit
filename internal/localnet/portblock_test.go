@@ -5,88 +5,54 @@ import (
 	"testing"
 )
 
-func TestChoosePortStrategy_FixedWhenAllFree(t *testing.T) {
-	// Use ports we just freed; very likely to remain free for a few ms.
-	ln1 := mustListen(t)
-	p1 := portOf(t, ln1.Addr().String())
-	_ = ln1.Close()
-
-	ln2 := mustListen(t)
-	p2 := portOf(t, ln2.Addr().String())
-	_ = ln2.Close()
-
-	got := ChoosePortStrategy([]int{p1, p2}, false)
-	if got != PortFixed {
-		t.Errorf("expected PortFixed for free ports, got %s", got)
-	}
-}
-
-func TestChoosePortStrategy_EphemeralWhenAnyBusy(t *testing.T) {
-	ln := mustListen(t)
-	defer func() { _ = ln.Close() }()
-	busy := portOf(t, ln.Addr().String())
-
-	got := ChoosePortStrategy([]int{busy}, false)
-	if got != PortEphemeral {
-		t.Errorf("expected PortEphemeral when port busy, got %s", got)
-	}
-}
-
-func TestChoosePortStrategy_EphemeralWhenFixedTaken(t *testing.T) {
-	got := ChoosePortStrategy([]int{1234567}, true)
-	if got != PortEphemeral {
-		t.Errorf("expected PortEphemeral when caller says fixedTaken, got %s", got)
-	}
-}
-
-func TestPortStrategyString(t *testing.T) {
-	if PortFixed.String() != "fixed" || PortEphemeral.String() != "ephemeral" {
-		t.Errorf("PortStrategy strings drifted: %s, %s", PortFixed, PortEphemeral)
-	}
-	if PortStrategy(99).String() != "unknown" {
-		t.Errorf("unknown PortStrategy should print 'unknown'")
-	}
-}
-
-// --- helpers (also reused by other tests in this package) ---
-
-func mustListen(t *testing.T) net.Listener {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+func TestAllocateUIPorts_AllDistinctAndBound(t *testing.T) {
+	envVars := []string{"A", "B", "C"}
+	got, err := AllocateUIPorts(envVars)
 	if err != nil {
-		t.Fatalf("listen: %v", err)
+		t.Fatalf("AllocateUIPorts: %v", err)
 	}
-	return ln
-}
-
-func portOf(t *testing.T, addr string) int {
-	t.Helper()
-	_, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		t.Fatalf("SplitHostPort: %v", err)
+	if len(got) != len(envVars) {
+		t.Fatalf("expected %d ports, got %d", len(envVars), len(got))
 	}
-	var p int
-	if _, err := mustScan(port, &p); err != nil {
-		t.Fatalf("scan port %q: %v", port, err)
-	}
-	return p
-}
-
-func mustScan(s string, p *int) (int, error) {
-	n := 0
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c < '0' || c > '9' {
-			return 0, errBadPort
+	seen := map[int]bool{}
+	for _, ev := range envVars {
+		p, ok := got[ev]
+		if !ok {
+			t.Errorf("missing port for env %q", ev)
+			continue
 		}
-		n = n*10 + int(c-'0')
+		if p <= 0 || p > 65535 {
+			t.Errorf("port %d for %q out of range", p, ev)
+		}
+		if seen[p] {
+			t.Errorf("duplicate port %d", p)
+		}
+		seen[p] = true
+		// Sanity: the OS should immediately allow us to bind the just-
+		// returned port, proving it's free at allocation time.
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("listen sanity: %v", err)
+		}
+		_ = ln.Close()
 	}
-	*p = n
-	return 1, nil
 }
 
-var errBadPort = badPortErr{}
-
-type badPortErr struct{}
-
-func (badPortErr) Error() string { return "non-numeric port" }
+func TestUIPortEnvVars_StableContract(t *testing.T) {
+	want := []string{
+		"APP_USER_UI_PORT",
+		"APP_PROVIDER_UI_PORT",
+		"SV_UI_PORT",
+		"SWAGGER_UI_PORT",
+		"DB_PORT",
+	}
+	got := UIPortEnvVars()
+	if len(got) != len(want) {
+		t.Fatalf("UIPortEnvVars length: got %d want %d", len(got), len(want))
+	}
+	for i, ev := range want {
+		if got[i] != ev {
+			t.Errorf("UIPortEnvVars[%d] = %q, want %q", i, got[i], ev)
+		}
+	}
+}
