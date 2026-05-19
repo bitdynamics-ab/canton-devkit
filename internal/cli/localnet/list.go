@@ -7,29 +7,24 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func buildStatus() *cobra.Command {
-	opts := &localnet.StatusOptions{}
+func buildList() *cobra.Command {
+	opts := &localnet.ListOptions{Format: "text"}
 	cmd := &cobra.Command{
-		Use:           "status",
-		Short:         "Show per-service health for a Canton LocalNet instance",
+		Use:           "list",
+		Short:         "List every Canton LocalNet instance known to this DevKit",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := localnet.ValidateName(opts.Name); err != nil {
-				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
-				return localnet.AsExitError(localnet.ExitUserError)
-			}
 			if err := localnet.ValidateFormat(opts.Format, "text", "json"); err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
 			return localnet.AsExitError(
-				localnet.RunStatus(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), opts))
+				localnet.RunList(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), opts))
 		},
 	}
-	cmd.Flags().StringVar(&opts.Name, "name", "", "Required. Instance name.")
+	cmd.Flags().BoolVar(&opts.All, "all", false, "Include stopped/failed instances (default: running only).")
 	cmd.Flags().StringVar(&opts.Format, "format", "text", "Output format: text or json.")
-	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }
