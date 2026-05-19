@@ -35,6 +35,8 @@ func RunDoctor(ctx context.Context, out io.Writer, _ io.Writer, _ *DoctorOptions
 		MinMemoryBytes: 4 * 1024 * 1024 * 1024,  // 4 GB
 	})
 
+	writeVersions(out, report)
+
 	_, _ = fmt.Fprintln(out, "Checks:")
 	report.Write(out)
 
@@ -61,5 +63,32 @@ func writeHeader(out io.Writer) {
 	_, _ = fmt.Fprintf(out, "OS / Arch:     %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	_, _ = fmt.Fprintf(out, "Go runtime:    %s\n", runtime.Version())
 	_, _ = fmt.Fprintf(out, "CPUs:          %d\n", runtime.NumCPU())
+	_, _ = fmt.Fprintln(out)
+}
+
+// writeVersions prints the Docker daemon and Compose v2 versions in a
+// dedicated, easy-to-copy block. We surface these here (instead of only
+// inside the Checks section) so bug reports can lead with the versions
+// without scanning the full check output.
+//
+// Unknown values print as "(not detected)" — that happens when the
+// preceding preflight check failed (Docker CLI missing, daemon down,
+// Compose v1).
+func writeVersions(out io.Writer, report *docker.Report) {
+	dockerV := report.DockerVersion
+	if dockerV == "" {
+		dockerV = "(not detected)"
+	} else {
+		dockerV = "v" + dockerV
+	}
+	composeV := report.ComposeVersion
+	if composeV == "" {
+		composeV = "(not detected)"
+	} else if composeV[0] != 'v' {
+		composeV = "v" + composeV
+	}
+	_, _ = fmt.Fprintln(out, "Versions:")
+	_, _ = fmt.Fprintf(out, "  Docker:      %s\n", dockerV)
+	_, _ = fmt.Fprintf(out, "  Compose v2:  %s\n", composeV)
 	_, _ = fmt.Fprintln(out)
 }
