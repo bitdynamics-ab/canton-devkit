@@ -5,59 +5,12 @@ import (
 	"net"
 )
 
-// PortStrategy describes how an instance's host ports are assigned.
-type PortStrategy int
-
-const (
-	// PortFixed publishes each service on the upstream default host port
-	// (2000/3000/4000/5432/9090 + participant suffixes). Used when no
-	// other instance holds those ports.
-	PortFixed PortStrategy = iota
-
-	// PortEphemeral sets TEST_PORT=1 in the compose env. Splice's
-	// compose.yaml interprets that as "drop the fixed `host:container`
-	// binding" so Docker assigns a random ephemeral host port to every
-	// published service. Used when the default ports are taken.
-	//
-	// The drawback: we can't compute the endpoint URLs from the static
-	// EndpointMap — we have to query `docker compose port <svc>
-	// <container-port>` after `up` finishes.
-	PortEphemeral
-)
-
-// String makes PortStrategy printable for logs / debug output.
-func (s PortStrategy) String() string {
-	switch s {
-	case PortFixed:
-		return "fixed"
-	case PortEphemeral:
-		return "ephemeral"
-	}
-	return "unknown"
-}
-
-// ChoosePortStrategy decides between fixed and ephemeral ports. Tries to
-// bind every defaultPort on 127.0.0.1; if all succeed, fixed wins. Any
-// collision (or any prior instance already taking the fixed range)
-// forces ephemeral.
-func ChoosePortStrategy(defaultPorts []int, fixedTaken bool) PortStrategy {
-	if fixedTaken {
-		return PortEphemeral
-	}
-	for _, p := range defaultPorts {
-		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p))
-		if err != nil {
-			return PortEphemeral
-		}
-		_ = ln.Close()
-	}
-	return PortFixed
-}
-
-// AllocateUIPorts picks a free OS-assigned host port for each
-// (envVar → defaultPort) entry. Used in ephemeral mode where the
-// upstream compose project expects a specific env var to name the host
-// port for each UI/postgres service.
+// AllocateUIPorts picks a free OS-assigned host port for each envVar
+// entry. We always allocate ephemerally — DevKit manages host ports so
+// users don't have to care which port any service is bound to. The
+// resulting map is exported as compose env (APP_USER_UI_PORT=… etc.) and
+// also persisted to the registry so `localnet status` / `creds` /
+// `logs` can recover the bindings.
 //
 // Implementation detail: we bind on :0 to let the kernel choose, then
 // close immediately. There's a small TOCTOU race window before docker

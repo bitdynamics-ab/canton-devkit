@@ -56,6 +56,11 @@ func AsExitError(code int) error {
 type UpOptions struct {
 	Name    string
 	Version string // "" or "latest" → splice.LatestAlias
+
+	// SkipPreflight bypasses the docker.RunPreflight call. This is a
+	// test-only knob — unit tests for the `up` orchestration can't run
+	// Docker checks in CI. Not exposed as a CLI flag.
+	SkipPreflight bool
 }
 
 // ValidateName returns an error if the supplied --name is empty or
@@ -117,30 +122,23 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 	}
 	defer release()
 
-	// 3. Decide port strategy. If any other registered instance is in
-	// `running` state, we assume the fixed ports are taken and skip
-	// straight to ephemeral. Otherwise we bind-test the defaults.
-	strategy := ChoosePortStrategy(adapter.RequiredPorts(), anyRunningInstance(opts.Name))
-	_, _ = fmt.Fprintf(out, "Port strategy: %s\n", strategy)
-
-	// 4. Preflight. When using ephemeral ports we still preflight Docker
-	// + disk + memory but skip the port-free check (the defaults may be
-	// busy; that's why we picked ephemeral).
-	preflightPorts := adapter.RequiredPorts()
-	if strategy == PortEphemeral {
-		preflightPorts = nil
-	}
-	_, _ = fmt.Fprintln(out, "Running preflight checks...")
-	report := docker.RunPreflight(ctx, docker.Options{
-		RequiredPorts:  preflightPorts,
-		DataDir:        registry.Root(),
-		MinDiskBytes:   10 * 1024 * 1024 * 1024,
-		MinMemoryBytes: 4 * 1024 * 1024 * 1024,
-	})
-	report.Write(out)
-	if !report.OK() {
-		_, _ = fmt.Fprintln(errw, "\nPreflight failed. Address the items above and re-run.")
-		return ExitPreflightFail
+	// 3. Preflight (Docker CLI / daemon / Compose v2 / disk / memory).
+	// Host TCP ports are NOT preflight-checked — DevKit allocates them
+	// ephemerally (step 8) so port availability is never a precondition.
+	// SkipPreflight is honored for unit tests; in production code paths
+	// the flag is always false.
+	if !opts.SkipPreflight {
+		_, _ = fmt.Fprintln(out, "Running preflight checks...")
+		report := docker.RunPreflight(ctx, docker.Options{
+			DataDir:        registry.Root(),
+			MinDiskBytes:   10 * 1024 * 1024 * 1024,
+			MinMemoryBytes: 4 * 1024 * 1024 * 1024,
+		})
+		report.Write(out)
+		if !report.OK() {
+			_, _ = fmt.Fprintln(errw, "\nPreflight failed. Address the items above and re-run.")
+			return ExitPreflightFail
+		}
 	}
 
 	// 5. Fetch + verify compose project.
@@ -186,30 +184,30 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 		return ExitRuntimeFailure
 	}
 
-	// 8. If ephemeral, pre-allocate UI host ports (compose can't pick
-	// them itself for nginx/swagger/postgres — those services don't
-	// honor TEST_PORT, only the per-UI env vars).
-	var uiOverrides map[string]int
-	if strategy == PortEphemeral {
-		uiOverrides, err = AllocateUIPorts(UIPortEnvVars())
-		if err != nil {
-			_, _ = fmt.Fprintf(errw, "Failed to allocate UI ports: %s\n", err)
-			return ExitRuntimeFailure
-		}
-		// Update state.Ports to reflect the actual UI host ports.
-		state.Ports["app_user_ui"] = uiOverrides["APP_USER_UI_PORT"]
-		state.Ports["app_provider_ui"] = uiOverrides["APP_PROVIDER_UI_PORT"]
-		state.Ports["sv_ui"] = uiOverrides["SV_UI_PORT"]
-		state.Ports["swagger_ui"] = uiOverrides["SWAGGER_UI_PORT"]
-		state.Ports["postgres"] = uiOverrides["DB_PORT"]
+	// 8. Pre-allocate UI host ports. Splice's nginx/swagger/postgres
+	// services don't honor TEST_PORT — they only consume the per-service
+	// env vars (APP_USER_UI_PORT etc). We always allocate ephemerally so
+	// concurrent instances never collide and users don't care which
+	// host port any service is bound to.
+	uiOverrides, err := AllocateUIPorts(UIPortEnvVars())
+	if err != nil {
+		_, _ = fmt.Fprintf(errw, "Failed to allocate UI ports: %s\n", err)
+		return ExitRuntimeFailure
 	}
+	state.Ports["app_user_ui"] = uiOverrides["APP_USER_UI_PORT"]
+	state.Ports["app_provider_ui"] = uiOverrides["APP_PROVIDER_UI_PORT"]
+	state.Ports["sv_ui"] = uiOverrides["SV_UI_PORT"]
+	state.Ports["swagger_ui"] = uiOverrides["SWAGGER_UI_PORT"]
+	state.Ports["postgres"] = uiOverrides["DB_PORT"]
 
-	// Build the compose process env and run `up -d --wait`.
+	// Build the compose process env and run `up -d --wait`. Ephemeral
+	// is always true: canton participant ports get TEST_PORT="" and
+	// UI/postgres ports come from uiOverrides.
 	params := splice.InstanceParams{
 		Name:            opts.Name,
 		Version:         version,
 		ProjectDir:      projectDir,
-		Ephemeral:       strategy == PortEphemeral,
+		Ephemeral:       true,
 		UIPortOverrides: uiOverrides,
 	}
 	env := append(os.Environ(), mapToEnv(adapter.OverlayEnv(params))...)
@@ -261,22 +259,6 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 		opts.Name, version.Tag)
 	printEndpoints(out, state)
 	return ExitSuccess
-}
-
-// anyRunningInstance returns true if the registry shows at least one
-// running instance other than `self`. Used to short-circuit the fixed-
-// port bind test when a prior instance is already holding them.
-func anyRunningInstance(self string) bool {
-	idx, err := registry.ReadIndex()
-	if err != nil {
-		return false
-	}
-	for _, e := range idx.Entries {
-		if e.Name != self && e.Status == registry.StatusRunning {
-			return true
-		}
-	}
-	return false
 }
 
 // captureCredentials reads the per-role auth env files from the cached
