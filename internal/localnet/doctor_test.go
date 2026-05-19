@@ -26,6 +26,9 @@ func TestRunDoctorHeaderContents(t *testing.T) {
 		"Timestamp:",
 		"OS / Arch:     " + runtime.GOOS + "/" + runtime.GOARCH,
 		"Go runtime:    " + runtime.Version(),
+		"Versions:",
+		"Docker:",
+		"Compose v2:",
 		"Checks:",
 		"Result:",
 	}
