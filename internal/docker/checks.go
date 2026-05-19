@@ -3,7 +3,6 @@ package docker
 import (
 	"context"
 	"fmt"
-	"net"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -135,27 +134,6 @@ func checkDockerMemory(ctx context.Context, minBytes uint64) CheckResult {
 	}
 }
 
-func checkPortFree(port int) CheckResult {
-	name := fmt.Sprintf("Port %d free", port)
-	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
-	if err != nil {
-		var detail string
-		if isAddrInUse(err) {
-			detail = "in use"
-		} else {
-			detail = err.Error()
-		}
-		return CheckResult{
-			Name:        name,
-			Status:      StatusFail,
-			Detail:      detail,
-			Remediation: remediationPortBusy(port),
-		}
-	}
-	_ = ln.Close()
-	return CheckResult{Name: name, Status: StatusOK}
-}
-
 func checkDiskSpace(path string, minBytes uint64) CheckResult {
 	avail, err := availableDiskBytes(path)
 	if err != nil {
@@ -218,13 +196,4 @@ func humanBytes(n uint64) string {
 		return fmt.Sprintf("%.0f KB", float64(n)/float64(KB))
 	}
 	return fmt.Sprintf("%d B", n)
-}
-
-func isAddrInUse(err error) bool {
-	if err == nil {
-		return false
-	}
-	// net package wraps the OS error; matching on substring keeps us dep-free.
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "address already in use") || strings.Contains(msg, "only one usage")
 }
