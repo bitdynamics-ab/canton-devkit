@@ -1,7 +1,6 @@
 package docker
 
 import (
-	"fmt"
 	"runtime"
 )
 
@@ -47,16 +46,6 @@ func remediationComposeMissing() string {
 		return "Install the Docker Compose plugin:\n  Debian/Ubuntu: sudo apt install docker-compose-plugin\n  RHEL/Fedora:   sudo dnf install docker-compose-plugin"
 	}
 	return "Install Docker Compose v2: https://docs.docker.com/compose/install/"
-}
-
-func remediationPortBusy(port int) string {
-	switch runtime.GOOS {
-	case "darwin", "linux":
-		return fmt.Sprintf("Stop the process bound to port %d. Find it with:\n  lsof -nP -iTCP:%d -sTCP:LISTEN", port, port)
-	case "windows":
-		return fmt.Sprintf("Stop the process bound to port %d. Find it with:\n  netstat -ano | findstr :%d", port, port)
-	}
-	return fmt.Sprintf("Free TCP port %d on this host.", port)
 }
 
 func remediationDiskUnknown() string {
