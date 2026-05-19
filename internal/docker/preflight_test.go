@@ -2,33 +2,9 @@ package docker
 
 import (
 	"bytes"
-	"net"
-	"strconv"
 	"strings"
 	"testing"
 )
-
-func mustListen(t *testing.T) net.Listener {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	return ln
-}
-
-func portOf(t *testing.T, addr string) int {
-	t.Helper()
-	_, portStr, err := net.SplitHostPort(addr)
-	if err != nil {
-		t.Fatalf("split host/port: %v", err)
-	}
-	p, err := strconv.Atoi(portStr)
-	if err != nil {
-		t.Fatalf("parse port: %v", err)
-	}
-	return p
-}
 
 func TestReportOK(t *testing.T) {
 	r := &Report{Results: []CheckResult{
@@ -114,33 +90,6 @@ func TestFirstLine(t *testing.T) {
 	}
 	if got := firstLine(""); got != "" {
 		t.Errorf("got %q", got)
-	}
-}
-
-func TestCheckPortFreeReportsBusy(t *testing.T) {
-	// Bind to an ephemeral port so we can predict that it's busy.
-	ln := mustListen(t)
-	defer func() { _ = ln.Close() }()
-	port := portOf(t, ln.Addr().String())
-
-	res := checkPortFree(port)
-	if res.Status != StatusFail {
-		t.Fatalf("expected FAIL, got %s (detail=%q)", res.Status, res.Detail)
-	}
-	if res.Remediation == "" {
-		t.Errorf("expected platform-specific remediation, got empty")
-	}
-}
-
-func TestCheckPortFreeReportsFree(t *testing.T) {
-	// Bind, get a port, close, then check that port — almost certainly free.
-	ln := mustListen(t)
-	port := portOf(t, ln.Addr().String())
-	_ = ln.Close()
-
-	res := checkPortFree(port)
-	if res.Status != StatusOK {
-		t.Fatalf("expected OK, got %s (detail=%q)", res.Status, res.Detail)
 	}
 }
 

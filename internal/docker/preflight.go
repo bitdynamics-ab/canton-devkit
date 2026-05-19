@@ -87,9 +87,11 @@ func (r *Report) Write(w io.Writer) {
 }
 
 // Options controls which checks run and the thresholds applied.
+//
+// We deliberately do NOT preflight TCP ports: DevKit allocates host ports
+// for the user (ephemerally via net.Listen(":0")) so port availability is
+// never a precondition of `localnet up`. See BIT-30 discussion.
 type Options struct {
-	// RequiredPorts is the list of TCP ports that must be free on the host.
-	RequiredPorts []int
 	// DataDir is the path whose filesystem is checked for free space.
 	DataDir string
 	// MinDiskBytes is the minimum free disk required. 0 disables the check.
@@ -136,9 +138,6 @@ func RunPreflight(ctx context.Context, opts Options) *Report {
 
 func runHostChecks(opts Options) []CheckResult {
 	var out []CheckResult
-	for _, port := range opts.RequiredPorts {
-		out = append(out, checkPortFree(port))
-	}
 	if opts.DataDir != "" && opts.MinDiskBytes > 0 {
 		out = append(out, checkDiskSpace(opts.DataDir, opts.MinDiskBytes))
 	}
