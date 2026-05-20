@@ -10,18 +10,40 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
-// The "unsafe" secret is hardcoded by Splice LocalNet's entrypoint
-// scripts (docker/console/entrypoint.sh) and matches the value of
-// SPLICE_APP_UI_UNSAFE_SECRET in env/common.env (default "unsafe").
-// All HS256 JWTs in the LocalNet stack are signed with this secret —
-// it is a deliberate, documented dev-only contract.
+// localNetUnsafeDevOnlySecret is the HS256 signing key used by every
+// JWT in Splice LocalNet. It is intentionally a fixed dev-only string
+// — Splice's entrypoint scripts (docker/console/entrypoint.sh) and
+// SPLICE_APP_UI_UNSAFE_SECRET in env/common.env both default to "unsafe"
+// and there is no production setting in this stack.
 //
-// If Splice ever changes this, the JWTs DevKit signs will no longer
-// validate. The contract test in jwt_test.go pins the (algorithm,
-// secret) pair and will fail loudly on the upgrade so we catch it.
-const localNetJWTSecret = "unsafe"
+// ⚠ DO NOT COPY this signer into a production codebase. The whole
+// SignToken path exists only because LocalNet is a developer sandbox
+// where the JWT-validation side accepts this exact secret. Any service
+// that takes real money or real PII MUST use a real KMS / signing key.
+//
+// The contract test in jwt_test.go pins (algorithm, secret) so an
+// upstream Splice change to either value fails loudly here before any
+// JWTs DevKit signs are silently rejected by the validator.
+const localNetUnsafeDevOnlySecret = "unsafe"
+
+// devSecretWarnOnce ensures the prominent stderr warning fires exactly
+// once per process. Without it, `creds --format json` (which calls
+// SignToken three times — sv/app-provider/app-user) would spam the
+// output channel three times in a row.
+var devSecretWarnOnce sync.Once
+
+func warnDevSecret() {
+	devSecretWarnOnce.Do(func() {
+		_, _ = fmt.Fprintln(os.Stderr,
+			"warning: signing JWTs with Splice LocalNet's hardcoded "+
+				"\"unsafe\" dev secret. Tokens are valid ONLY against a "+
+				"LocalNet instance — never reuse this signer for "+
+				"production. See internal/splice/jwt.go.")
+	})
+}
 
 // Role identifies one of the JWT-issuing logical accounts in the
 // Splice LocalNet topology. Names mirror what's documented in
@@ -67,9 +89,15 @@ func LoadCredentialInputs(projectDir string) ([]CredentialInputs, error) {
 }
 
 // SignToken issues a fresh HS256 JWT for the given inputs using the
-// hardcoded LocalNet secret. The token has no `exp` claim — Splice's
+// hardcoded LocalNet dev secret. The token has no `exp` claim — Splice's
 // LocalNet auth flow doesn't enforce expiration.
+//
+// First call in a process prints a one-line stderr warning so a user
+// who accidentally pipes these tokens into a non-dev context sees what
+// they're holding. Subsequent calls are silent (sync.Once).
 func SignToken(in CredentialInputs) (string, error) {
+	warnDevSecret()
+
 	header := map[string]string{"alg": "HS256", "typ": "JWT"}
 	payload := map[string]interface{}{
 		"sub": in.User,
@@ -81,7 +109,7 @@ func SignToken(in CredentialInputs) (string, error) {
 	p64 := base64.RawURLEncoding.EncodeToString(pBytes)
 
 	signingInput := h64 + "." + p64
-	mac := hmac.New(sha256.New, []byte(localNetJWTSecret))
+	mac := hmac.New(sha256.New, []byte(localNetUnsafeDevOnlySecret))
 	mac.Write([]byte(signingInput))
 	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	return signingInput + "." + sig, nil
