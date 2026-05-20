@@ -17,9 +17,6 @@ import (
 )
 
 const (
-	// tarballURLTemplate is the canonical GitHub source-tarball URL.
-	tarballURLTemplate = "https://github.com/canton-network/splice/archive/refs/tags/%s.tar.gz"
-
 	// localnetSubdirSuffix is the path inside the tarball that contains the
 	// compose project. GitHub source tarballs are prefixed with
 	// `<repo>-<tag>/` which we strip during extraction.
@@ -28,6 +25,14 @@ const (
 	// downloadTimeout is the maximum time allowed for the HTTP transfer.
 	downloadTimeout = 5 * time.Minute
 )
+
+// tarballURL is the function Fetch uses to compute the GitHub source-
+// tarball URL for a given Splice version. It's a package var (not a
+// const) so tests can point Fetch at an httptest.Server without
+// monkey-patching the entire HTTP client.
+var tarballURL = func(v Version) string {
+	return fmt.Sprintf("https://github.com/canton-network/splice/archive/refs/tags/%s.tar.gz", v.Tag)
+}
 
 // Fetch ensures the compose project for v is present and verified under
 // cacheRoot. Returns the absolute path of the project directory (the one
@@ -67,9 +72,23 @@ func Fetch(ctx context.Context, v Version, cacheRoot string, progress io.Writer)
 			v.Tag, v.Size/(1024*1024))
 	}
 
-	url := fmt.Sprintf(tarballURLTemplate, v.Tag)
+	url := tarballURL(v)
 	if err := downloadAndExtract(ctx, url, v.SHA256, stagingDir); err != nil {
+		// Staging dir is cleaned by the deferred RemoveAll above; nothing
+		// extra needed here.
 		return "", err
+	}
+
+	// Defensive: confirm the tarball actually contained the expected
+	// localnet subtree before promoting staging → projectDir. Otherwise
+	// we'd cache an empty directory and future runs would short-circuit
+	// the (broken) cache-hit path.
+	if _, err := os.Stat(filepath.Join(stagingDir, "compose.yaml")); err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("tarball %s missing %s/compose.yaml",
+				url, localnetSubdirSuffix)
+		}
+		return "", fmt.Errorf("stat staged compose.yaml: %w", err)
 	}
 
 	if err := os.Rename(stagingDir, projectDir); err != nil {

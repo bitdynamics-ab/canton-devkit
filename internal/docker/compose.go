@@ -30,10 +30,38 @@ type ComposeRunner struct {
 	// expansion the shell env must be primed before docker compose runs.
 	EnvFiles []string
 	// Env, when non-nil, replaces the inherited process environment for
-	// every `docker compose` invocation.
+	// every `docker compose` invocation. WorkDir is the cwd for every
+	// invocation. Both must be set whenever ComposeFiles/EnvFiles use
+	// relative paths, which they always do for the cached Splice project.
 	Env       []string
 	WorkDir   string
 	LogWriter io.Writer
+
+	// commandFn is the seam tests use to inject a fake docker. Production
+	// callers leave it nil; tests set it to capture (and optionally script
+	// the output of) every `docker compose ...` invocation. Centralising
+	// the construction in command() also guarantees that Dir/Env/Stdout/
+	// Stderr are applied uniformly across Up/Down/ps/port — past regressions
+	// had individual methods forgetting one or the other.
+	commandFn func(ctx context.Context, name string, arg ...string) *exec.Cmd
+}
+
+// command constructs the *exec.Cmd for one `docker ...` invocation with
+// Dir + Env applied. Every method in this file routes through here so
+// no call site can accidentally drop WorkDir or Env again (the bug that
+// originally affected Down() and Endpoints()).
+func (c *ComposeRunner) command(ctx context.Context, args ...string) *exec.Cmd {
+	var cmd *exec.Cmd
+	if c.commandFn != nil {
+		cmd = c.commandFn(ctx, "docker", args...)
+	} else {
+		cmd = exec.CommandContext(ctx, "docker", args...)
+	}
+	cmd.Dir = c.WorkDir
+	if c.Env != nil {
+		cmd.Env = c.Env
+	}
+	return cmd
 }
 
 // composeBase returns the leading docker-compose argv shared by Up/Down/
@@ -56,13 +84,9 @@ func (c *ComposeRunner) Up(ctx context.Context) error {
 	// timeout.
 	args := append(c.composeBase(), "up", "-d")
 
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	cmd.Dir = c.WorkDir
+	cmd := c.command(ctx, args...)
 	cmd.Stdout = c.LogWriter
 	cmd.Stderr = c.LogWriter
-	if c.Env != nil {
-		cmd.Env = c.Env
-	}
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("docker compose up failed: %w", err)
@@ -81,7 +105,11 @@ func (c *ComposeRunner) WaitForHealthy(ctx context.Context) error {
 		default:
 		}
 
-		if c.allHealthy(ctx) {
+		ready, fatal := c.healthSnapshot(ctx)
+		if fatal != nil {
+			return fatal
+		}
+		if ready {
 			return nil
 		}
 
@@ -93,39 +121,89 @@ func (c *ComposeRunner) WaitForHealthy(ctx context.Context) error {
 	}
 }
 
-func (c *ComposeRunner) allHealthy(ctx context.Context) bool {
-	args := append(c.composeBase(), "ps", "--format", "{{.Health}}")
-
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	cmd.Dir = c.WorkDir
-	if c.Env != nil {
-		cmd.Env = c.Env
-	}
-	out, err := cmd.Output()
+// healthSnapshot runs `docker compose ps` once and classifies the result.
+// ready=true means every service is in a terminal-good state and the
+// poller can stop; fatal!=nil means something is irrecoverably broken
+// (e.g. a service exited non-zero) and the caller should fail fast
+// instead of polling further.
+//
+// Empty output (no services at all) is treated as not-ready rather than
+// fatal: compose may not have registered the project yet right after
+// `up` returns.
+func (c *ComposeRunner) healthSnapshot(ctx context.Context) (ready bool, fatal error) {
+	// Tab-separated to keep parsing trivial even with whitespace in
+	// future fields. Order: name, state, health.
+	args := append(c.composeBase(), "ps", "--all", "--format", "{{.Name}}\t{{.State}}\t{{.Health}}")
+	out, err := c.command(ctx, args...).Output()
 	if err != nil {
-		return false
+		// Transient errors (e.g. daemon momentarily unavailable) shouldn't
+		// abort the whole wait — keep polling.
+		return false, nil
 	}
+	return classifyHealth(out)
+}
 
-	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+// classifyHealth is the pure parser behind healthSnapshot. Extracted so
+// the readiness logic can be exercised by unit tests against canned
+// `docker compose ps` output without invoking docker.
+//
+// Decision table (per service):
+//
+//	state=running, health=healthy       → counts toward ready
+//	state=running, health=starting      → not ready, keep polling
+//	state=running, health=unhealthy     → fatal (won't recover on its own)
+//	state=running, health=""            → counts toward ready (no healthcheck)
+//	state=exited|dead|removing|paused   → fatal (service died)
+//	state="" (no services yet)          → not ready, keep polling
+//
+// The function returns ready=true iff at least one service was reported
+// AND every reported service is in a counts-toward-ready bucket.
+func classifyHealth(raw []byte) (ready bool, fatal error) {
+	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
 	count := 0
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
 		}
-		if line != "healthy" {
-			return false
+		parts := strings.SplitN(line, "\t", 3)
+		if len(parts) < 2 {
+			return false, nil
+		}
+		name := parts[0]
+		state := parts[1]
+		health := ""
+		if len(parts) == 3 {
+			health = strings.TrimSpace(parts[2])
 		}
 		count++
+
+		switch state {
+		case "running":
+			switch health {
+			case "healthy", "":
+				// good
+			case "starting":
+				return false, nil
+			case "unhealthy":
+				return false, fmt.Errorf("service %q is unhealthy", name)
+			default:
+				return false, nil
+			}
+		case "exited", "dead", "removing", "paused":
+			return false, fmt.Errorf("service %q is in state %q", name, state)
+		default:
+			// "created", "restarting", "" — not ready yet.
+			return false, nil
+		}
 	}
-	return count > 0
+	return count > 0, nil
 }
 
-func (c *ComposeRunner) Endpoints() map[string]string {
+func (c *ComposeRunner) Endpoints(ctx context.Context) map[string]string {
 	endpoints := make(map[string]string)
 	args := append(c.composeBase(), "ps", "--format", "{{.Name}} {{.Publishers}}")
-
-	out, err := exec.Command("docker", args...).Output()
+	out, err := c.command(ctx, args...).Output()
 	if err != nil {
 		return endpoints
 	}
@@ -145,19 +223,14 @@ func (c *ComposeRunner) Endpoints() map[string]string {
 
 // DiscoverPort returns the host port that the given compose service has
 // mapped to its container port. Used when running with TEST_PORT=1 (i.e.
-// PortEphemeral) so we can populate state.Ports with the actual
+// ephemeral allocation) so we can populate state.Ports with the actual
 // daemon-assigned ports.
 //
 // Returns 0 (not an error) if the service exists but doesn't publish
 // the requested container port — caller decides whether that's fatal.
 func (c *ComposeRunner) DiscoverPort(ctx context.Context, service string, containerPort int) (int, error) {
 	args := append(c.composeBase(), "port", service, fmt.Sprintf("%d", containerPort))
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	cmd.Dir = c.WorkDir
-	if c.Env != nil {
-		cmd.Env = c.Env
-	}
-	out, err := cmd.Output()
+	out, err := c.command(ctx, args...).Output()
 	if err != nil {
 		// "no port published" returns exit 1 with empty output —
 		// surface as port=0 rather than an error.
@@ -181,8 +254,5 @@ func (c *ComposeRunner) DiscoverPort(ctx context.Context, service string, contai
 
 func (c *ComposeRunner) Down(ctx context.Context) error {
 	args := append(c.composeBase(), "down", "--volumes", "--remove-orphans")
-
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	cmd.Dir = c.WorkDir
-	return cmd.Run()
+	return c.command(ctx, args...).Run()
 }

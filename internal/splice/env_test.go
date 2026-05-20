@@ -41,11 +41,58 @@ func TestExpand(t *testing.T) {
 		{"${UNDEFINED:-fallback}", "fallback"},
 		{"${EMPTY:-defaulted}", "defaulted"}, // empty triggers default
 		{"${DB_USER:-ignored}", "canton"},
+
+		// Bare $VAR (no braces). Splice env files use this form
+		// inside defaults — e.g. ${LOCALNET_ENV_DIR:-$LOCALNET_DIR/env}.
+		{"$DB_USER", "canton"},
+		{"$DB_USER/path", "canton/path"},
+		{"prefix-$DB_USER-suffix", "prefix-canton-suffix"},
+		{"$DB_USER@$DB_SERVER", "canton@postgres"},
+		{"$UNDEFINED", ""},
+		{"$$DB_USER", "$DB_USER"}, // $$ is a literal $; remaining text is not re-expanded
+
+		// Nested expansion inside defaults — real Splice value.
+		{"${MISSING:-$DB_USER/env}", "canton/env"},
+		{"${MISSING:-${DB_SERVER}/sub}", "postgres/sub"},
+		{"${MISSING:-${ALSO_MISSING:-fallback}}", "fallback"},
+
+		// Bare $ followed by non-identifier stays literal.
+		{"price: $9.99", "price: $9.99"},
+		{"trailing$", "trailing$"},
 	}
 	for _, c := range cases {
 		if got := expand(c.in, m); got != c.want {
 			t.Errorf("expand(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+// TestExpandSelfReference covers a degenerate case Splice env files don't
+// actually contain but which could appear in user-provided overrides:
+// a value that references itself. The expander caps recursion depth so
+// it terminates instead of stack-overflowing.
+func TestExpandSelfReference(t *testing.T) {
+	m := map[string]string{"X": "${X}"}
+	_ = expand("${X}", m) // must not panic / stack-overflow
+}
+
+// TestExpandRealSpliceForm verifies the exact pattern that appears in
+// upstream Splice env files (per BIT-30 review feedback):
+//
+//	LOCALNET_ENV_DIR=${LOCALNET_ENV_DIR:-$LOCALNET_DIR/env}
+func TestExpandRealSpliceForm(t *testing.T) {
+	m := map[string]string{"LOCALNET_DIR": "/cache/splice-0.6.4"}
+	got := expand("${LOCALNET_ENV_DIR:-$LOCALNET_DIR/env}", m)
+	want := "/cache/splice-0.6.4/env"
+	if got != want {
+		t.Errorf("expand: got %q, want %q", got, want)
+	}
+
+	// When LOCALNET_ENV_DIR is already set, the default branch is skipped.
+	m["LOCALNET_ENV_DIR"] = "/explicit/env"
+	got = expand("${LOCALNET_ENV_DIR:-$LOCALNET_DIR/env}", m)
+	if got != "/explicit/env" {
+		t.Errorf("expand: got %q, want /explicit/env", got)
 	}
 }
 
