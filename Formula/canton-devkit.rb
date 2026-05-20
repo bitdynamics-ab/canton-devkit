@@ -14,6 +14,11 @@
 #      brew tap bitdynamics-ab/canton-devkit
 #      brew install canton-devkit
 #
+# The `head` block below lets `brew install --HEAD canton-devkit` build
+# from source against the current main branch — useful before the first
+# tagged release exists (when the stable `url`s still point at
+# placeholder SHAs) and for testing un-released changes.
+#
 # Formula references the artifacts published by .github/workflows/release.yml
 # at tag time (see docs/packaging.md).
 
@@ -22,6 +27,14 @@ class CantonDevkit < Formula
   homepage "https://github.com/bitdynamics-ab/canton-devkit"
   license "Apache-2.0"
   version "0.0.0"
+
+  # Build-from-source path. Use via `brew install --HEAD canton-devkit`.
+  # Doesn't need the stable url/sha256 below to be populated, so it
+  # works on day-1 before any release tag exists.
+  head do
+    url "https://github.com/bitdynamics-ab/canton-devkit.git", branch: "main"
+    depends_on "go" => :build
+  end
 
   # Multi-arch downloads. Each block matches one of the per-platform
   # tarballs that .github/workflows/release.yml's `binaries` job emits.
@@ -42,10 +55,20 @@ class CantonDevkit < Formula
   end
 
   def install
-    # Tarball contains: canton-devkit binary + LICENSE + README.md.
+    if build.head?
+      # Source build: compile with the same flags the release workflow
+      # uses (trimpath + strip symbols + version stamp).
+      system "go", "build",
+             "-trimpath",
+             "-ldflags", "-s -w -X main.version=HEAD",
+             "-o", "canton-devkit",
+             "./cmd/canton-devkit"
+    end
+    # Tarball + source-build paths both leave a `canton-devkit` binary
+    # in cwd and bundle LICENSE + README.md.
     bin.install "canton-devkit"
     prefix.install "LICENSE"
-    prefix.install "README.md" if File.exist?("README.md")
+    prefix.install "README.md"
   end
 
   test do
