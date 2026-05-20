@@ -7,6 +7,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -85,7 +87,7 @@ func TestFetchVerifiesSHA256(t *testing.T) {
 	// helper — but to keep production code dep-free, we just call
 	// downloadAndExtract directly here.
 	dest := t.TempDir()
-	if err := downloadAndExtract(context.Background(), srv.URL, wantSHA, 1<<20, dest); err != nil {
+	if err := downloadAndExtract(context.Background(), srv.URL, wantSHA, "", 1<<20, dest, nil); err != nil {
 		t.Fatalf("downloadAndExtract: %v", err)
 	}
 
@@ -104,7 +106,7 @@ func TestFetchVerifiesSHA256(t *testing.T) {
 	}
 
 	// README.md NOT extracted (outside subdir)
-	if _, err := os.Stat(filepath.Join(dest, "README.md")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dest, "README.md")); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("README.md should not have been extracted (err=%v)", err)
 	}
 }
@@ -121,7 +123,7 @@ func TestFetchRejectsBadSHA256(t *testing.T) {
 
 	err := downloadAndExtract(context.Background(), srv.URL,
 		"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-		1<<20, t.TempDir())
+		"", 1<<20, t.TempDir(), nil)
 	if err == nil || !strings.Contains(err.Error(), "SHA256 mismatch") {
 		t.Fatalf("expected SHA256 mismatch, got %v", err)
 	}
@@ -139,7 +141,7 @@ func TestDownloadAndExtractRejectsOversizedBody(t *testing.T) {
 
 	err := downloadAndExtract(context.Background(), srv.URL,
 		"00000000000000000000000000000000000000000000000000000000000000000000",
-		1<<20, t.TempDir())
+		"", 1<<20, t.TempDir(), nil)
 	if err == nil {
 		t.Fatal("expected cap error, got nil")
 	}
@@ -149,6 +151,78 @@ func TestDownloadAndExtractRejectsOversizedBody(t *testing.T) {
 		// never OOM and we never silently truncate.
 		t.Errorf("unexpected error shape: %v", err)
 	}
+}
+
+// --- Content-SHA verification (BIT-117 #10 hardening) -------------------
+
+// TestDownloadAndExtractAcceptsRegeneratedGzipWhenContentMatches covers
+// the "GitHub regenerated the source tarball" scenario: gzip bytes
+// differ, extracted tree is identical, install succeeds with a warning.
+func TestDownloadAndExtractAcceptsRegeneratedGzipWhenContentMatches(t *testing.T) {
+	tarball := buildTestTarball(t, map[string]string{
+		"splice-x/cluster/compose/localnet/compose.yaml":   "services: {}\n",
+		"splice-x/cluster/compose/localnet/env/common.env": "DB_PORT=5432\n",
+	})
+
+	// Extract to a scratch dir to compute the expected content SHA.
+	scratch := t.TempDir()
+	if err := downloadAndExtract(context.Background(), serveBytesURL(t, tarball),
+		hex.EncodeToString(sha256OfBytes(tarball)), "", 1<<20, scratch, nil); err != nil {
+		t.Fatalf("scratch extract: %v", err)
+	}
+	wantContent, err := computeTreeSHA(scratch)
+	if err != nil {
+		t.Fatalf("computeTreeSHA: %v", err)
+	}
+
+	// Now pretend the upstream gzip hash drifted: pass a wrong wantSHA
+	// but the correct wantContentSHA. The progress writer captures the
+	// warning so we can assert it fires.
+	var progress bytes.Buffer
+	dest := t.TempDir()
+	err = downloadAndExtract(context.Background(), serveBytesURL(t, tarball),
+		strings.Repeat("0", 64), wantContent, 1<<20, dest, &progress)
+	if err != nil {
+		t.Fatalf("expected success with regenerated gzip + matching content, got %v", err)
+	}
+	if !strings.Contains(progress.String(), "gzip hash drifted") {
+		t.Errorf("expected drift warning, got %q", progress.String())
+	}
+}
+
+// TestDownloadAndExtractRejectsContentMismatch covers the inverse: gzip
+// hash matches but the extracted tree doesn't match the catalogued
+// ContentSHA (e.g. a MITM that wrapped a malicious payload in the same-
+// sized gzip envelope by some unlikely collision).
+func TestDownloadAndExtractRejectsContentMismatch(t *testing.T) {
+	tarball := buildTestTarball(t, map[string]string{
+		"splice-x/cluster/compose/localnet/compose.yaml": "services: {}\n",
+	})
+	gzipHash := hex.EncodeToString(sha256OfBytes(tarball))
+
+	err := downloadAndExtract(context.Background(), serveBytesURL(t, tarball),
+		gzipHash,
+		strings.Repeat("1", 64), // wrong content hash
+		1<<20, t.TempDir(), nil)
+	if err == nil || !strings.Contains(err.Error(), "content hash mismatch") {
+		t.Fatalf("expected content hash mismatch, got %v", err)
+	}
+}
+
+// --- helpers used by both groups -----------------------------------------
+
+func serveBytesURL(t *testing.T, body []byte) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+func sha256OfBytes(b []byte) []byte {
+	sum := sha256.Sum256(b)
+	return sum[:]
 }
 
 // --- Fetch (cache + lifecycle) -------------------------------------------
@@ -260,7 +334,7 @@ func TestFetchRejectsTarballWithoutComposeYaml(t *testing.T) {
 	}
 
 	// Project dir must NOT have been installed.
-	if _, statErr := os.Stat(ProjectDir(cacheRoot, v)); !os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(ProjectDir(cacheRoot, v)); !errors.Is(statErr, fs.ErrNotExist) {
 		t.Errorf("project dir should not exist after rejected install, statErr=%v", statErr)
 	}
 }

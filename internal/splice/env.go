@@ -2,7 +2,9 @@ package splice
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -59,7 +61,7 @@ func LoadEnv(projectDir string, files []string, overrides map[string]string) ([]
 		path := filepath.Join(projectDir, rel)
 		f, err := os.Open(path)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, fs.ErrNotExist) {
 				// Some env files are profile-conditional; skip silently.
 				continue
 			}
