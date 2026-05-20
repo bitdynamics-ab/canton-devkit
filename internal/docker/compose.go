@@ -98,14 +98,24 @@ func (c *ComposeRunner) WaitForHealthy(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, readinessTimeout)
 	defer cancel()
 
+	// Track the last raw `ps` snapshot so the timeout error can report
+	// which services were stuck and in what state — without this, the
+	// only signal on timeout is "timed out", which forces the user to
+	// re-run `docker compose ps` manually to diagnose. The most common
+	// stuck-state is splice in `restarting/starting` due to OOM-kill
+	// from insufficient Docker memory (see docs/limitations.md).
+	var lastSnapshot []byte
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("timed out waiting for services to become healthy")
+			return fmt.Errorf("timed out waiting for services to become healthy.\nLast `docker compose ps` snapshot:\n%s", formatHealthSnapshot(lastSnapshot))
 		default:
 		}
 
-		ready, fatal := c.healthSnapshot(ctx)
+		raw, ready, fatal := c.healthSnapshotRaw(ctx)
+		if raw != nil {
+			lastSnapshot = raw
+		}
 		if fatal != nil {
 			return fatal
 		}
@@ -115,10 +125,34 @@ func (c *ComposeRunner) WaitForHealthy(ctx context.Context) error {
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("timed out waiting for services to become healthy")
+			return fmt.Errorf("timed out waiting for services to become healthy.\nLast `docker compose ps` snapshot:\n%s", formatHealthSnapshot(lastSnapshot))
 		case <-time.After(readinessPollWait):
 		}
 	}
+}
+
+// formatHealthSnapshot turns the raw tab-separated `docker compose ps`
+// output into a tidy table for the timeout error message.
+func formatHealthSnapshot(raw []byte) string {
+	if len(raw) == 0 {
+		return "  (no services reported)"
+	}
+	var b strings.Builder
+	b.WriteString("  NAME                              STATE        HEALTH\n")
+	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
+	for scanner.Scan() {
+		line := strings.TrimRight(scanner.Text(), "\r")
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) != 3 {
+			continue
+		}
+		fmt.Fprintf(&b, "  %-32s  %-11s  %s\n",
+			parts[0], parts[1], strings.TrimSpace(parts[2]))
+	}
+	return b.String()
 }
 
 // healthSnapshot runs `docker compose ps` once and classifies the result.
@@ -131,6 +165,13 @@ func (c *ComposeRunner) WaitForHealthy(ctx context.Context) error {
 // fatal: compose may not have registered the project yet right after
 // `up` returns.
 func (c *ComposeRunner) healthSnapshot(ctx context.Context) (ready bool, fatal error) {
+	_, ready, fatal = c.healthSnapshotRaw(ctx)
+	return ready, fatal
+}
+
+// healthSnapshotRaw is the variant the WaitForHealthy loop uses so it
+// can stash the raw ps output for inclusion in a timeout error.
+func (c *ComposeRunner) healthSnapshotRaw(ctx context.Context) (raw []byte, ready bool, fatal error) {
 	// Tab-separated to keep parsing trivial even with whitespace in
 	// future fields. Order: name, state, health.
 	args := append(c.composeBase(), "ps", "--all", "--format", "{{.Name}}\t{{.State}}\t{{.Health}}")
@@ -138,9 +179,10 @@ func (c *ComposeRunner) healthSnapshot(ctx context.Context) (ready bool, fatal e
 	if err != nil {
 		// Transient errors (e.g. daemon momentarily unavailable) shouldn't
 		// abort the whole wait — keep polling.
-		return false, nil
+		return nil, false, nil
 	}
-	return classifyHealth(out)
+	ready, fatal = classifyHealth(out)
+	return out, ready, fatal
 }
 
 // classifyHealth is the pure parser behind healthSnapshot. Extracted so
