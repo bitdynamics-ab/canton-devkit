@@ -1,4 +1,11 @@
-# DPM component manifest for canton-devkit.
+# DPM component manifest template for canton-devkit.
+#
+# This file is a template — the release workflow substitutes
+# @@BINARY_PATH@@ per platform (bin/canton-devkit on Unix,
+# bin/canton-devkit.exe on Windows) and writes the final component.yaml
+# into each per-platform component dir. DPM does NOT auto-append `.exe`
+# on Windows (empirically verified against DPM 1.0.16); without this
+# templating the Windows component would fail manifest validation.
 #
 # Registers a single top-level command `localnet` that delegates the rest
 # of DevKit's CLI surface to our Go binary's own argv parser. We pick
@@ -15,6 +22,6 @@ kind: Component
 spec:
   commands:
     - name: localnet
-      path: bin/canton-devkit
+      path: @@BINARY_PATH@@
       desc: "Canton DevKit: manage LocalNet, DARs, contracts, tokens, and observability"
       exec-args: ["localnet"]

@@ -17,11 +17,19 @@ env:
   # DPM-component OCI artifact.
   GHCR_NAMESPACE: ghcr.io/${{ github.repository }}
   # DPM CLI version pinned for reproducible publishes. Bump deliberately
-  # — see https://github.com/digital-asset/dpm/releases.
+  # — see https://github.com/digital-asset/dpm/releases. The companion
+  # DPM_LINUX_SHA256 below pins the linux-amd64 tarball used to install
+  # the CLI in CI; recompute via:
+  #   curl -sL <release-tarball-url> | sha256sum
   DPM_VERSION: 1.0.16
+  DPM_LINUX_SHA256: 387421d4b3d0e799f05cde1f5c2adc704acd2824796d436861602eb2be759874
   # Build matrix (single source of truth — kept in sync between the
   # standalone-binary and DPM-component jobs).
   RELEASE_TARGETS: linux/amd64 darwin/arm64 windows/amd64
+  # Common Go build flags. -trimpath strips local paths from the binary
+  # (otherwise the CI runner's /home/runner/... shows up in stack
+  # traces); -s -w shrink the binary by ~30%.
+  GO_BUILD_FLAGS: -trimpath -ldflags
 
 jobs:
   binaries:
@@ -66,6 +74,7 @@ jobs:
             binary_name="canton-devkit"
             [ "$os" = "windows" ] && binary_name="canton-devkit.exe"
             GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build \
+              -trimpath \
               -ldflags "-s -w -X main.version=${VERSION}" \
               -o "${stage}/${binary_name}" ./cmd/canton-devkit
 
@@ -105,7 +114,9 @@ jobs:
 
   dpm-component:
     name: Publish DPM component to GHCR
-    needs: binaries
+    # Runs in parallel with `binaries`: the two jobs rebuild Go binaries
+    # independently. Adding `needs: binaries` would serialise for no
+    # gain since neither job consumes the other's outputs.
     runs-on: ubuntu-latest
 
     steps:
@@ -136,13 +147,16 @@ jobs:
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "push=${push}" >> "${GITHUB_OUTPUT}"
 
-      - name: Install DPM CLI
+      - name: Install DPM CLI (sha256-verified)
         run: |
           set -euo pipefail
+          tar="/tmp/dpm-${DPM_VERSION}-linux-amd64.tar.gz"
           curl -sSfL \
             "https://github.com/digital-asset/dpm/releases/download/${DPM_VERSION}/dpm-${DPM_VERSION}-linux-amd64.tar.gz" \
-            | tar -xz -C /usr/local/bin dpm
-          dpm version
+            -o "$tar"
+          echo "${DPM_LINUX_SHA256}  ${tar}" | sha256sum --check --strict -
+          tar -xzf "$tar" -C /usr/local/bin dpm
+          dpm --version
 
       - name: Lay out per-platform component dirs
         env:
@@ -153,17 +167,27 @@ jobs:
           #   <dir>/component.yaml
           #   <dir>/LICENSE
           #   <dir>/bin/canton-devkit[.exe]
+          #
+          # DPM does NOT auto-append `.exe` on Windows — it stat()s the
+          # exact path in component.yaml. We therefore template the
+          # manifest per platform: Unix uses bin/canton-devkit; Windows
+          # gets bin/canton-devkit.exe. (Empirically verified against
+          # DPM 1.0.16.)
           for target in $RELEASE_TARGETS; do
             os="${target%/*}"
             arch="${target#*/}"
             dir="dist/component_${os}_${arch}"
             mkdir -p "${dir}/bin"
-            cp packaging/component.yaml "${dir}/component.yaml"
             cp LICENSE "${dir}/LICENSE"
 
             binary_name="canton-devkit"
             [ "$os" = "windows" ] && binary_name="canton-devkit.exe"
+            # Substitute the binary path token in the manifest template.
+            sed "s|@@BINARY_PATH@@|bin/${binary_name}|" \
+              packaging/component.yaml.tmpl > "${dir}/component.yaml"
+
             GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build \
+              -trimpath \
               -ldflags "-s -w -X main.version=${VERSION}" \
               -o "${dir}/bin/${binary_name}" ./cmd/canton-devkit
           done

@@ -48,13 +48,20 @@ at the newest published release.
 
 The component registers a single top-level command `localnet` that
 delegates the rest of the DevKit CLI surface to the binary's own argv
-parser. See [`packaging/component.yaml`](../packaging/component.yaml).
+parser. See [`packaging/component.yaml.tmpl`](../packaging/component.yaml.tmpl).
 
 DPM does NOT pass the registered command name into the binary's argv —
 only `exec-args` + user args reach it. `exec-args: ["localnet"]` is
 therefore required so the binary always dispatches into its `localnet`
 subtree regardless of how DPM invoked the component. A contract test
 (`TestRunIsArgvOnly`) locks this invariant.
+
+The manifest lives as a template with a `@@BINARY_PATH@@` token: the
+release workflow substitutes `bin/canton-devkit` on Unix platforms and
+`bin/canton-devkit.exe` on Windows. DPM does NOT auto-append `.exe`
+on Windows — empirically verified against DPM 1.0.16, which fails
+manifest validation with `stat ...: no such file or directory` when
+the path doesn't include the extension.
 
 ### Why a single top-level command?
 
@@ -79,9 +86,13 @@ end-to-end against a real DPM CLI:
 # 1. Build a host-platform binary into the expected layout.
 mkdir -p /tmp/cdk-component/bin
 go build -o /tmp/cdk-component/bin/canton-devkit ./cmd/canton-devkit
-cp packaging/component.yaml LICENSE /tmp/cdk-component/
 
-# 2. Run dpm publish --dry-run; it validates the manifest schema and
+# 2. Render the manifest from the template for this platform.
+sed "s|@@BINARY_PATH@@|bin/canton-devkit|" \
+    packaging/component.yaml.tmpl > /tmp/cdk-component/component.yaml
+cp LICENSE /tmp/cdk-component/LICENSE
+
+# 3. Run dpm publish --dry-run; it validates the manifest schema and
 #    reports the OCI layout that would be pushed.
 dpm publish component oci://localhost:5000/canton-devkit:0.0.1-dryrun \
     --dry-run \
