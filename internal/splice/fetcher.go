@@ -73,7 +73,16 @@ func Fetch(ctx context.Context, v Version, cacheRoot string, progress io.Writer)
 	}
 
 	url := tarballURL(v)
-	if err := downloadAndExtract(ctx, url, v.SHA256, stagingDir); err != nil {
+	// Cap the body at 4× the catalogued size. A misconfigured or malicious
+	// server returning a multi-gigabyte stream would otherwise OOM the
+	// host; 4× gives headroom for legitimate variance in GitHub source-
+	// tarball gzip metadata without inviting abuse.
+	maxBytes := v.Size * 4
+	if maxBytes <= 0 {
+		// Unknown size in the catalogue → fall back to a hard 512 MB cap.
+		maxBytes = 512 * 1024 * 1024
+	}
+	if err := downloadAndExtract(ctx, url, v.SHA256, maxBytes, stagingDir); err != nil {
 		// Staging dir is cleaned by the deferred RemoveAll above; nothing
 		// extra needed here.
 		return "", err
@@ -111,7 +120,12 @@ func Fetch(ctx context.Context, v Version, cacheRoot string, progress io.Writer)
 // flight, and extracts the cluster/compose/localnet subtree into destDir.
 // Uses a single streaming pass so a 130 MB tarball never lands on disk
 // whole — only the ~few-hundred-KB compose subtree is persisted.
-func downloadAndExtract(ctx context.Context, url, wantSHA, destDir string) error {
+//
+// The body is wrapped in io.LimitReader(maxBytes+1) so a server that
+// returns an arbitrary-sized stream (misconfigured CDN, malicious
+// proxy) can't OOM the host. The +1 lets us tell "exactly maxBytes"
+// from "more than maxBytes" — only the latter is an attack signal.
+func downloadAndExtract(ctx context.Context, url, wantSHA string, maxBytes int64, destDir string) error {
 	ctx, cancel := context.WithTimeout(ctx, downloadTimeout)
 	defer cancel()
 
@@ -129,8 +143,9 @@ func downloadAndExtract(ctx context.Context, url, wantSHA, destDir string) error
 		return fmt.Errorf("download %s: HTTP %d", url, resp.StatusCode)
 	}
 
+	limited := &cappedReader{r: io.LimitReader(resp.Body, maxBytes+1), max: maxBytes}
 	hasher := sha256.New()
-	teed := io.TeeReader(resp.Body, hasher)
+	teed := io.TeeReader(limited, hasher)
 
 	gzr, err := gzip.NewReader(teed)
 	if err != nil {
@@ -148,11 +163,36 @@ func downloadAndExtract(ctx context.Context, url, wantSHA, destDir string) error
 		return fmt.Errorf("drain tarball: %w", err)
 	}
 
+	if limited.overflow {
+		return fmt.Errorf("download %s: response exceeded %d-byte cap", url, maxBytes)
+	}
+
 	gotSHA := hex.EncodeToString(hasher.Sum(nil))
 	if !strings.EqualFold(gotSHA, wantSHA) {
 		return fmt.Errorf("SHA256 mismatch for %s: got %s, want %s", url, gotSHA, wantSHA)
 	}
 	return nil
+}
+
+// cappedReader wraps an io.LimitReader and remembers whether the cap
+// was hit. A bare io.LimitReader silently truncates at the limit, which
+// would look identical to a short legitimate body — we need to
+// distinguish "stream too large" from "valid stream that happened to be
+// shorter than the cap."
+type cappedReader struct {
+	r        io.Reader
+	max      int64
+	read     int64
+	overflow bool
+}
+
+func (c *cappedReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.read += int64(n)
+	if c.read > c.max {
+		c.overflow = true
+	}
+	return n, err
 }
 
 // extractLocalNet walks a tar reader and writes only entries inside the
@@ -227,6 +267,13 @@ func stripArchivePrefix(name string) (string, bool) {
 
 // safeJoin joins base + rel and rejects results that escape base. This
 // blocks classic tar traversal payloads like `../../etc/passwd`.
+//
+// Invariant: `filepath.Clean(base)` strips any trailing separator, so
+// `cleanedBase` ends in exactly one separator. We then test that
+// `full+sep` starts with `cleanedBase` — appending the separator to
+// `full` prevents the false-positive "base/foo" matching the prefix
+// "base/foobar/". Both ends are normalised before comparison so OS-
+// specific separators (Windows backslash) work transparently.
 func safeJoin(base, rel string) (string, error) {
 	full := filepath.Join(base, rel)
 	cleanedBase := filepath.Clean(base) + string(os.PathSeparator)

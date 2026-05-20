@@ -162,20 +162,25 @@ func classifyHealth(raw []byte) (ready bool, fatal error) {
 	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
 	count := 0
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+		// Trim only \r (Windows line endings) — NOT all whitespace,
+		// because the third column is a tab-delimited empty string for
+		// services without a healthcheck and TrimSpace would eat the
+		// preceding tab, collapsing 3 columns into 2.
+		line := strings.TrimRight(scanner.Text(), "\r")
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "\t", 3)
-		if len(parts) < 2 {
+		// Exactly three columns. If a future `docker compose` release
+		// adds more, plain Split would smuggle them into parts[2] and
+		// silently break the health-string switch; require the exact
+		// shape and keep polling on anything weird.
+		parts := strings.Split(line, "\t")
+		if len(parts) != 3 {
 			return false, nil
 		}
 		name := parts[0]
 		state := parts[1]
-		health := ""
-		if len(parts) == 3 {
-			health = strings.TrimSpace(parts[2])
-		}
+		health := strings.TrimSpace(parts[2])
 		count++
 
 		switch state {
@@ -200,9 +205,22 @@ func classifyHealth(raw []byte) (ready bool, fatal error) {
 	return count > 0, nil
 }
 
+// Endpoints returns container-name → human-readable publisher string,
+// e.g. `nginx → "0.0.0.0:54321->2000/tcp, 0.0.0.0:54322->3000/tcp"`. The
+// value is intentionally a display blob — it's the raw {{.Publishers}}
+// template output and may contain multiple comma-separated mappings
+// when a single service publishes more than one port. Callers that need
+// structured port info should use DiscoverPort() instead, which queries
+// `docker compose port` for a specific (service, container-port) pair.
+//
+// Uses tab as the field separator (instead of space) because Publishers
+// values themselves contain spaces, which `SplitN(line, " ", 2)` could
+// only partially handle. With a tab separator the right-hand side is
+// always exactly the Publishers value, regardless of how many ports it
+// holds.
 func (c *ComposeRunner) Endpoints(ctx context.Context) map[string]string {
 	endpoints := make(map[string]string)
-	args := append(c.composeBase(), "ps", "--format", "{{.Name}} {{.Publishers}}")
+	args := append(c.composeBase(), "ps", "--format", "{{.Name}}\t{{.Publishers}}")
 	out, err := c.command(ctx, args...).Output()
 	if err != nil {
 		return endpoints
@@ -211,12 +229,14 @@ func (c *ComposeRunner) Endpoints(ctx context.Context) map[string]string {
 	scanner := bufio.NewScanner(strings.NewReader(string(out)))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line != "" {
-			parts := strings.SplitN(line, " ", 2)
-			if len(parts) == 2 {
-				endpoints[parts[0]] = parts[1]
-			}
+		if line == "" {
+			continue
 		}
+		parts := strings.SplitN(line, "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		endpoints[parts[0]] = strings.TrimSpace(parts[1])
 	}
 	return endpoints
 }
