@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -131,7 +132,7 @@ func Read(name string) (*State, error) {
 	path := PathFor(name)
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("read %s: %w", path, err)
