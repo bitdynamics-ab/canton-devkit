@@ -42,6 +42,31 @@ and links to follow-up tickets where applicable. Updated as we ship.
   upstream-contract drift will be found by a user, not by us. Filed
   separately as a follow-up.
 
+## Memory requirements
+
+- **Splice's full stack wants ~12 GB of Docker memory.**
+  `resource-constraints.yaml` sums to canton 4 GB + splice 3 GB +
+  postgres 2 GB + console 2 GB + 7 UI services @ 256-512 MB ≈ 12 GB.
+  In practice a single instance runs on 7-8 GB because most of those
+  limits are headroom. But:
+
+  - **Two concurrent instances exceed 8 GB Docker** → splice in one of
+    them gets OOM-restarted by docker, never reaches healthy, and
+    `WaitForHealthy` times out at 15 min.
+  - **GitHub `ubuntu-latest` runners have 7 GB RAM** — enough for
+    `up` to start but Splice's onboarding may not complete. Use a
+    larger runner class or self-hosted for the integration job.
+  - **Docker Desktop default on macOS is 8 GB.** Bump via Settings →
+    Resources before running multi-instance scenarios.
+
+  The preflight check enforces a 4 GB hard floor; the 12 GB
+  recommendation is documentation, not a gate — single-instance
+  setups on 7-8 GB work fine for most users.
+
+  On timeout, `WaitForHealthy` now dumps the last `docker compose ps`
+  snapshot in its error so the stuck service + state are visible
+  without re-running anything.
+
 ## Platform parity
 
 - **Homebrew formula targets macOS arm64 and Linux x86_64 only.**
