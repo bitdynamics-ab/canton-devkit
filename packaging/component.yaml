@@ -1,0 +1,20 @@
+# DPM component manifest for canton-devkit.
+#
+# Registers a single top-level command `localnet` that delegates the rest
+# of DevKit's CLI surface to our Go binary's own argv parser. We pick
+# only one top-level name so we never collide with DPM builtins or with
+# commands published by other components (per
+# docs/tasks/003-TASK-dpm-component-quick-test.md).
+#
+# DPM does NOT pass the registered command name to the binary's argv —
+# only `exec-args` + user args reach it. `exec-args: ["localnet"]` is
+# therefore required so the binary dispatches into its `localnet`
+# subtree regardless of how DPM invoked the component.
+apiVersion: digitalasset.com/v1
+kind: Component
+spec:
+  commands:
+    - name: localnet
+      path: bin/canton-devkit
+      desc: "Canton DevKit: manage LocalNet, DARs, contracts, tokens, and observability"
+      exec-args: ["localnet"]

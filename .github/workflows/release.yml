@@ -13,11 +13,19 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository }}
+  # GHCR namespace for both standalone-binary releases and the
+  # DPM-component OCI artifact.
+  GHCR_NAMESPACE: ghcr.io/${{ github.repository }}
+  # DPM CLI version pinned for reproducible publishes. Bump deliberately
+  # — see https://github.com/digital-asset/dpm/releases.
+  DPM_VERSION: 1.0.16
+  # Build matrix (single source of truth — kept in sync between the
+  # standalone-binary and DPM-component jobs).
+  RELEASE_TARGETS: linux/amd64 darwin/arm64 windows/amd64
 
 jobs:
-  release:
-    name: Build release artifacts
+  binaries:
+    name: Build standalone binaries
     runs-on: ubuntu-latest
 
     steps:
@@ -43,21 +51,42 @@ jobs:
           fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
-      - name: Build release binaries
+      - name: Build release binaries + tarballs + checksums
         env:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
+          set -euo pipefail
           mkdir -p dist
-          targets="linux/amd64 darwin/arm64 windows/amd64"
-          for target in $targets; do
+          for target in $RELEASE_TARGETS; do
             os="${target%/*}"
             arch="${target#*/}"
-            output="dist/canton-devkit_${os}_${arch}"
-            if [ "$os" = "windows" ]; then output="${output}.exe"; fi
+            stage="dist/stage_${os}_${arch}"
+            mkdir -p "${stage}"
+
+            binary_name="canton-devkit"
+            [ "$os" = "windows" ] && binary_name="canton-devkit.exe"
             GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build \
               -ldflags "-s -w -X main.version=${VERSION}" \
-              -o "$output" ./cmd/canton-devkit
+              -o "${stage}/${binary_name}" ./cmd/canton-devkit
+
+            # Bundle LICENSE + README for end-user discoverability.
+            cp LICENSE "${stage}/LICENSE"
+            cp README.md "${stage}/README.md"
+
+            archive_base="canton-devkit_${VERSION}_${os}_${arch}"
+            if [ "$os" = "windows" ]; then
+              (cd "${stage}" && zip -q -r "../${archive_base}.zip" .)
+            else
+              tar -C "${stage}" -czf "dist/${archive_base}.tar.gz" .
+            fi
+            rm -rf "${stage}"
           done
+
+          # Single SHA256SUMS file covers every published artifact. Format
+          # is GNU sha256sum compatible so users can verify via:
+          #   sha256sum --check SHA256SUMS
+          (cd dist && sha256sum * > SHA256SUMS)
+          cat dist/SHA256SUMS
 
       - name: Upload main branch artifacts
         if: github.ref == 'refs/heads/main'
@@ -74,11 +103,9 @@ jobs:
         with:
           files: dist/*
 
-  docker:
-    name: Build and publish Docker image
-    # Disabled: canton-devkit invokes docker and docker compose directly for its features,
-    # so running it inside a container is not suitable.
-    if: false
+  dpm-component:
+    name: Publish DPM component to GHCR
+    needs: binaries
     runs-on: ubuntu-latest
 
     steps:
@@ -86,11 +113,64 @@ jobs:
         # actions/checkout@v5
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
-      - name: Set up Docker Buildx
-        # docker/setup-buildx-action@v4
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
+      - name: Set up Go
+        # actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Set release metadata
+        id: meta
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            # DPM expects a semver-shaped version string for the OCI
+            # tag — strip the `v` prefix.
+            version="${GITHUB_REF_NAME#v}"
+            push="true"
+          else
+            version="0.0.0-${short_sha}"
+            push="false"
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "push=${push}" >> "${GITHUB_OUTPUT}"
+
+      - name: Install DPM CLI
+        run: |
+          set -euo pipefail
+          curl -sSfL \
+            "https://github.com/digital-asset/dpm/releases/download/${DPM_VERSION}/dpm-${DPM_VERSION}-linux-amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin dpm
+          dpm version
+
+      - name: Lay out per-platform component dirs
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Mirror the layout dpm publish component expects:
+          #   <dir>/component.yaml
+          #   <dir>/LICENSE
+          #   <dir>/bin/canton-devkit[.exe]
+          for target in $RELEASE_TARGETS; do
+            os="${target%/*}"
+            arch="${target#*/}"
+            dir="dist/component_${os}_${arch}"
+            mkdir -p "${dir}/bin"
+            cp packaging/component.yaml "${dir}/component.yaml"
+            cp LICENSE "${dir}/LICENSE"
+
+            binary_name="canton-devkit"
+            [ "$os" = "windows" ] && binary_name="canton-devkit.exe"
+            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build \
+              -ldflags "-s -w -X main.version=${VERSION}" \
+              -o "${dir}/bin/${binary_name}" ./cmd/canton-devkit
+          done
+          ls -R dist
 
       - name: Log in to GHCR
+        if: steps.meta.outputs.push == 'true'
         # docker/login-action@v4
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
@@ -98,34 +178,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set image metadata
-        id: meta
+      - name: Validate component manifest (dry-run)
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          short_sha="${GITHUB_SHA::7}"
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            version="${GITHUB_REF_NAME}"
-          else
-            version="main-${short_sha}"
-          fi
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          {
-            echo "tags<<EOF"
-            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-              echo "${IMAGE_NAME}:${version}"
-              echo "${IMAGE_NAME}:latest"
-            else
-              echo "${IMAGE_NAME}:main"
-              echo "${IMAGE_NAME}:sha-${short_sha}"
-            fi
-            echo "EOF"
-          } >> "${GITHUB_OUTPUT}"
+          set -euo pipefail
+          dpm publish component \
+            "oci://${GHCR_NAMESPACE}:${VERSION}" \
+            --dry-run \
+            --platform linux/amd64=dist/component_linux_amd64 \
+            --platform darwin/arm64=dist/component_darwin_arm64 \
+            --platform windows/amd64=dist/component_windows_amd64
 
-      - name: Build and push image
-        # docker/build-push-action@v7
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
-        with:
-          context: .
-          push: true
-          build-args: |
-            VERSION=${{ steps.meta.outputs.version }}
-          tags: ${{ steps.meta.outputs.tags }}
+      - name: Publish DPM component (tag pushes only)
+        if: steps.meta.outputs.push == 'true'
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          dpm publish component \
+            "oci://${GHCR_NAMESPACE}:${VERSION}" \
+            --include-git-info \
+            --extra-tags latest \
+            --platform linux/amd64=dist/component_linux_amd64 \
+            --platform darwin/arm64=dist/component_darwin_arm64 \
+            --platform windows/amd64=dist/component_windows_amd64
