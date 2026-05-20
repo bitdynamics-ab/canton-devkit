@@ -1,5 +1,33 @@
 package splice
 
+import "strings"
+
+// PartyHintFor builds the Splice-compliant validator party hint from a
+// DevKit instance name. Splice strictly validates the hint against
+// `<organization>-<function>-<enumerator>` where organization +
+// function are alphanumeric (underscores allowed, hyphens are the
+// separator) and the enumerator is an integer.
+//
+// We allow `--name` to contain hyphens (e.g. `ci-local`, `my-stack`)
+// because the CLI surface should be friendly. But concatenating
+// `<name>-localparty-1` directly yields `ci-local-localparty-1` →
+// 4 hyphen-segments after Splice's `app_user_` prefix is prepended in
+// env/app-user-auth-on.env. Splice rejects with INVALID_ARGUMENT and
+// the splice container crash-loops. Replacing hyphens with underscores
+// in the name component keeps the segment count at 3 while preserving
+// uniqueness across instance names.
+//
+// Example:
+//
+//	PartyHintFor("ci-local")   → "ci_local-localparty-1"
+//	PartyHintFor("alice")      → "alice-localparty-1"
+//
+// After Splice's env-file prefix: `app_user_ci_local-localparty-1`,
+// `app_user_alice-localparty-1` — both 3 segments, both valid.
+func PartyHintFor(name string) string {
+	return strings.ReplaceAll(name, "-", "_") + "-localparty-1"
+}
+
 // Adapter abstracts the per-major-version differences in how the Splice
 // LocalNet compose project is invoked. One Adapter implementation per
 // supported Splice major (0.5.x, 0.6.x, …) lives under
