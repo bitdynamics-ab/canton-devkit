@@ -55,3 +55,38 @@ func TestWriteContainerRenameOverlay_DeterministicOrder(t *testing.T) {
 		t.Errorf("overlay output is non-deterministic — needed for diff-stable inspection")
 	}
 }
+
+// TestWriteContainerRenameOverlay_RelaxesNginxSpliceDep locks the fix
+// for the dep-health-timeout bug: nginx's depends_on:splice condition
+// must be downgraded to service_started. Without this, `docker compose
+// up -d` blocks on splice's healthcheck and times out before Splice's
+// ~10-min onboarding completes (caught by BIT-117 integration test).
+func TestWriteContainerRenameOverlay_RelaxesNginxSpliceDep(t *testing.T) {
+	path, err := WriteContainerRenameOverlay(t.TempDir(), "alice-")
+	if err != nil {
+		t.Fatalf("WriteContainerRenameOverlay: %v", err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(body)
+
+	// Must contain the relaxation block under nginx.
+	for _, want := range []string{
+		"  nginx:",
+		"    depends_on:",
+		"      splice:",
+		"        condition: service_started",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("overlay missing %q\n---\n%s", want, src)
+		}
+	}
+
+	// Must NOT carry a service_healthy condition under nginx — that's
+	// what we're explicitly overriding.
+	if strings.Contains(src, "        condition: service_healthy") {
+		t.Errorf("overlay still has service_healthy condition; the relaxation didn't take\n%s", src)
+	}
+}
