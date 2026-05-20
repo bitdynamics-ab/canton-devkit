@@ -28,10 +28,6 @@ func (*Adapter) Profiles() []string {
 	return []string{"sv", "app-provider", "app-user", "swagger-ui"}
 }
 
-func (*Adapter) RequiredPorts() []int {
-	return []int{2000, 3000, 4000, 5432, 9090}
-}
-
 func (*Adapter) OverlayEnv(p splice.InstanceParams) map[string]string {
 	env := map[string]string{
 		"LOCALNET_DIR":     p.ProjectDir,

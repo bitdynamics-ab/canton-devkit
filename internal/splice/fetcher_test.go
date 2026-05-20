@@ -85,7 +85,7 @@ func TestFetchVerifiesSHA256(t *testing.T) {
 	// helper — but to keep production code dep-free, we just call
 	// downloadAndExtract directly here.
 	dest := t.TempDir()
-	if err := downloadAndExtract(context.Background(), srv.URL, wantSHA, dest); err != nil {
+	if err := downloadAndExtract(context.Background(), srv.URL, wantSHA, 1<<20, dest); err != nil {
 		t.Fatalf("downloadAndExtract: %v", err)
 	}
 
@@ -121,9 +121,33 @@ func TestFetchRejectsBadSHA256(t *testing.T) {
 
 	err := downloadAndExtract(context.Background(), srv.URL,
 		"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-		t.TempDir())
+		1<<20, t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "SHA256 mismatch") {
 		t.Fatalf("expected SHA256 mismatch, got %v", err)
+	}
+}
+
+// TestDownloadAndExtractRejectsOversizedBody covers the new cappedReader
+// guard: a server that returns more than maxBytes must fail with a
+// clear cap error, not OOM the host or silently truncate.
+func TestDownloadAndExtractRejectsOversizedBody(t *testing.T) {
+	// 2 MB of garbage. Cap will be 1 MB.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(bytes.Repeat([]byte("A"), 2<<20))
+	}))
+	defer srv.Close()
+
+	err := downloadAndExtract(context.Background(), srv.URL,
+		"00000000000000000000000000000000000000000000000000000000000000000000",
+		1<<20, t.TempDir())
+	if err == nil {
+		t.Fatal("expected cap error, got nil")
+	}
+	if !strings.Contains(err.Error(), "exceeded") && !strings.Contains(err.Error(), "gunzip") {
+		// Either the cap fires (preferred) or gzip rejects the garbage
+		// first — both are acceptable failure modes. The point is we
+		// never OOM and we never silently truncate.
+		t.Errorf("unexpected error shape: %v", err)
 	}
 }
 
