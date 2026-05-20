@@ -14,6 +14,22 @@ brew install --formula \
   https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/Formula/canton-devkit.rb
 ```
 
+> Note: the formula's stable `url` + `sha256` start as placeholders
+> (`version "0.0.0"`, all-zero SHA) until the first release tag is cut
+> and `scripts/update-homebrew-formula.sh` rewrites them. Until then,
+> use the `--HEAD` path below.
+
+## Install (build from source via `--HEAD`)
+
+```sh
+brew install --HEAD --formula \
+  https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/Formula/canton-devkit.rb
+```
+
+The formula's `head do … end` block uses git + a build-time `go`
+dependency to compile against the current `main` branch. This works on
+day-1 before any release tag exists.
+
 ## Install (via tap, future)
 
 Once `bitdynamics-ab/homebrew-canton-devkit` is published, the canonical
