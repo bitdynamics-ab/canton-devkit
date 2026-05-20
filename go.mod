@@ -1,6 +1,6 @@
 module github.com/bitdynamics-ab/canton-devkit
 
-go 1.22
+go 1.26
 
 require github.com/spf13/cobra v1.10.2
 
