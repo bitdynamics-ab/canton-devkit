@@ -12,4 +12,5 @@ dist/
 .idea/
 .vscode/
 
+# Agent runtime state
 .claude/scheduled_tasks.lock
