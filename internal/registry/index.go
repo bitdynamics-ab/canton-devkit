@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -41,7 +42,7 @@ func indexPath() string {
 func ReadIndex() (*Index, error) {
 	data, err := os.ReadFile(indexPath())
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return &Index{SchemaVersion: SchemaVersion, Entries: []IndexEntry{}}, nil
 		}
 		return nil, fmt.Errorf("read index: %w", err)
