@@ -28,11 +28,6 @@ type Adapter interface {
 	// swagger-ui at minimum).
 	Profiles() []string
 
-	// RequiredPorts returns the default host ports that must be free
-	// before a single-instance `up` proceeds. Multi-instance up
-	// (BIT-108) computes its own port list from a port-block offset.
-	RequiredPorts() []int
-
 	// OverlayEnv returns the shell-exported variables that the compose
 	// process needs. These are merged into cmd.Env on top of the
 	// inherited process env. Per-instance values like PARTY_HINT come
