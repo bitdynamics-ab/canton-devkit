@@ -127,6 +127,201 @@ func TestFetchRejectsBadSHA256(t *testing.T) {
 	}
 }
 
+// --- Fetch (cache + lifecycle) -------------------------------------------
+
+// servePinnedTarball stands up an httptest server that serves the given
+// bytes and rewires tarballURL to point Fetch at it. Returns a cleanup
+// fn that restores tarballURL.
+func servePinnedTarball(t *testing.T, body []byte) (server *httptest.Server, cleanup func()) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	prev := tarballURL
+	tarballURL = func(v Version) string { return srv.URL }
+	return srv, func() {
+		srv.Close()
+		tarballURL = prev
+	}
+}
+
+func TestFetchCacheHitSkipsDownload(t *testing.T) {
+	cacheRoot := t.TempDir()
+	v := Version{Tag: "test", SHA256: "ignored-on-cache-hit"}
+	projectDir := ProjectDir(cacheRoot, v)
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Pre-seed the cache.
+	if err := os.WriteFile(filepath.Join(projectDir, "compose.yaml"), []byte("cached: true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Tripwire: any HTTP request would explode this test.
+	prev := tarballURL
+	tarballURL = func(v Version) string {
+		t.Fatalf("Fetch attempted to download despite cache hit")
+		return ""
+	}
+	defer func() { tarballURL = prev }()
+
+	got, err := Fetch(context.Background(), v, cacheRoot, nil)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if got != projectDir {
+		t.Errorf("Fetch returned %q, want %q", got, projectDir)
+	}
+	body, err := os.ReadFile(filepath.Join(got, "compose.yaml"))
+	if err != nil {
+		t.Fatalf("compose.yaml: %v", err)
+	}
+	if !strings.Contains(string(body), "cached: true") {
+		t.Errorf("cache content was overwritten: %q", string(body))
+	}
+}
+
+func TestFetchInstallsOnCacheMiss(t *testing.T) {
+	tarball := buildTestTarball(t, map[string]string{
+		"splice-x/cluster/compose/localnet/compose.yaml":   "services: {}\n",
+		"splice-x/cluster/compose/localnet/env/common.env": "DB_PORT=5432\n",
+	})
+	sum := sha256.Sum256(tarball)
+
+	_, cleanup := servePinnedTarball(t, tarball)
+	defer cleanup()
+
+	cacheRoot := t.TempDir()
+	v := Version{Tag: "x", SHA256: hex.EncodeToString(sum[:])}
+
+	got, err := Fetch(context.Background(), v, cacheRoot, nil)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(got, "compose.yaml")); err != nil {
+		t.Errorf("compose.yaml missing after install: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(got, "env", "common.env")); err != nil {
+		t.Errorf("env/common.env missing after install: %v", err)
+	}
+
+	// No staging leftovers.
+	entries, _ := os.ReadDir(cacheRoot)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "splice-stage-") {
+			t.Errorf("staging dir leaked: %s", e.Name())
+		}
+	}
+}
+
+func TestFetchRejectsTarballWithoutComposeYaml(t *testing.T) {
+	tarball := buildTestTarball(t, map[string]string{
+		"splice-x/README.md":                       "no localnet here\n",
+		"splice-x/cluster/compose/other/notes.txt": "ignored too\n",
+	})
+	sum := sha256.Sum256(tarball)
+
+	_, cleanup := servePinnedTarball(t, tarball)
+	defer cleanup()
+
+	cacheRoot := t.TempDir()
+	v := Version{Tag: "x", SHA256: hex.EncodeToString(sum[:])}
+
+	_, err := Fetch(context.Background(), v, cacheRoot, nil)
+	if err == nil {
+		t.Fatal("expected error for tarball without compose.yaml, got nil")
+	}
+	if !strings.Contains(err.Error(), "compose.yaml") {
+		t.Errorf("expected error to mention compose.yaml, got %v", err)
+	}
+
+	// Project dir must NOT have been installed.
+	if _, statErr := os.Stat(ProjectDir(cacheRoot, v)); !os.IsNotExist(statErr) {
+		t.Errorf("project dir should not exist after rejected install, statErr=%v", statErr)
+	}
+}
+
+func TestFetchCleansStagingOnDownloadFailure(t *testing.T) {
+	// Serve garbage so the gzip reader fails.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("not-a-gzip-stream"))
+	}))
+	defer srv.Close()
+
+	prev := tarballURL
+	tarballURL = func(v Version) string { return srv.URL }
+	defer func() { tarballURL = prev }()
+
+	cacheRoot := t.TempDir()
+	v := Version{Tag: "x", SHA256: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}
+
+	if _, err := Fetch(context.Background(), v, cacheRoot, nil); err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	// No staging leftovers; no projectDir half-installed.
+	entries, _ := os.ReadDir(cacheRoot)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "splice-stage-") {
+			t.Errorf("staging dir leaked: %s", e.Name())
+		}
+		if e.Name() == "splice-x" {
+			t.Errorf("partial projectDir leaked: %s", e.Name())
+		}
+	}
+}
+
+func TestFetchHandlesConcurrentRenameRace(t *testing.T) {
+	// Simulate the race: by the time Fetch tries os.Rename(staging,
+	// projectDir), another caller has already moved a valid project
+	// into projectDir. The first caller's rename returns an error
+	// (target exists / non-empty) and Fetch must fall through to the
+	// "compose.yaml exists" success path.
+	tarball := buildTestTarball(t, map[string]string{
+		"splice-x/cluster/compose/localnet/compose.yaml": "services: {}\n",
+	})
+	sum := sha256.Sum256(tarball)
+
+	cacheRoot := t.TempDir()
+	v := Version{Tag: "x", SHA256: hex.EncodeToString(sum[:])}
+	projectDir := ProjectDir(cacheRoot, v)
+
+	// Pre-create the projectDir as if a concurrent caller raced ahead.
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, "compose.yaml"), []byte("from-race\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// And drop a sentinel so we can later confirm Fetch returned this
+	// dir, not a freshly-extracted overwrite.
+	if err := os.WriteFile(filepath.Join(projectDir, "SENTINEL"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Because compose.yaml already exists in projectDir, Fetch should
+	// short-circuit on the FIRST stat — never download, never stage.
+	prev := tarballURL
+	tarballURL = func(v Version) string {
+		t.Fatalf("Fetch attempted to download despite already-installed cache")
+		return ""
+	}
+	defer func() { tarballURL = prev }()
+
+	got, err := Fetch(context.Background(), v, cacheRoot, nil)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if got != projectDir {
+		t.Errorf("Fetch returned %q, want %q", got, projectDir)
+	}
+	if _, err := os.Stat(filepath.Join(got, "SENTINEL")); err != nil {
+		t.Errorf("Fetch clobbered the race winner's cache (SENTINEL gone): %v", err)
+	}
+	// Avoid unused-var warning on tarball/sum in this path.
+	_ = tarball
+}
+
 // buildTestTarball returns a gzipped tar archive containing the named
 // entries. Directories are inferred from key prefixes.
 func buildTestTarball(t *testing.T, entries map[string]string) []byte {

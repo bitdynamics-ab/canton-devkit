@@ -31,12 +31,13 @@ func EnvFiles() []string {
 	}
 }
 
-var (
-	// envLine: KEY=value (KEY: letters, digits, underscore; not starting with digit)
-	envLine = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$`)
-	// shell-style ${VAR} and ${VAR:-default}
-	envRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(:-([^}]*))?\}`)
-)
+// envLine: KEY=value (KEY: letters, digits, underscore; not starting with digit)
+var envLine = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$`)
+
+// maxExpandDepth caps recursive expansion so a self-referential value
+// like KEY=$KEY can't blow the stack. Real Splice files only nest 1-2
+// levels deep; 16 is generous.
+const maxExpandDepth = 16
 
 // LoadEnv reads the listed .env files (paths relative to projectDir) and
 // returns a fully-resolved KEY=value list suitable for `exec.Cmd.Env`,
@@ -106,23 +107,151 @@ func envFromOSEnv() map[string]string {
 	return m
 }
 
-// expand performs ${VAR} and ${VAR:-default} substitution against m.
-// Unknown variables expand to the empty string (or the default if given).
-// Non-${...} text passes through unchanged.
+// expand performs ${VAR}, ${VAR:-default}, and bare $VAR substitution
+// against m. Unknown variables expand to the empty string (or the
+// default if given). Non-`$...` text passes through unchanged.
+//
+// Defaults are expanded recursively (up to maxExpandDepth) so nested
+// references resolve. Example from upstream Splice env files:
+//
+//	LOCALNET_ENV_DIR=${LOCALNET_ENV_DIR:-$LOCALNET_DIR/env}
+//
+// expands to `<value-of-LOCALNET_DIR>/env` when LOCALNET_ENV_DIR is
+// itself unset and LOCALNET_DIR is set in m.
+//
+// We hand-roll the parser instead of using regexp because Go's RE2
+// can't match balanced braces — and Splice env files include defaults
+// that themselves contain `${VAR}`. `$$` is preserved as a literal `$`,
+// matching `make`/`docker compose` substitution semantics.
 func expand(s string, m map[string]string) string {
-	return envRef.ReplaceAllStringFunc(s, func(match string) string {
-		sub := envRef.FindStringSubmatch(match)
-		key := sub[1]
-		hasDefault := sub[2] != ""
-		def := sub[3]
-		if v, ok := m[key]; ok && v != "" {
-			return v
+	return expandDepth(s, m, 0)
+}
+
+func expandDepth(s string, m map[string]string, depth int) string {
+	if depth >= maxExpandDepth {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+
+	i := 0
+	for i < len(s) {
+		c := s[i]
+		if c != '$' || i+1 >= len(s) {
+			b.WriteByte(c)
+			i++
+			continue
 		}
-		if hasDefault {
-			return def
+		next := s[i+1]
+
+		// $$ → literal $
+		if next == '$' {
+			b.WriteByte('$')
+			i += 2
+			continue
 		}
-		return ""
-	})
+
+		// ${...} — find the matching close-brace with brace counting so
+		// nested ${...} inside a default is captured.
+		if next == '{' {
+			end, ok := findMatchingBrace(s, i+1)
+			if !ok {
+				// Unbalanced — leave the run literal.
+				b.WriteByte(c)
+				i++
+				continue
+			}
+			body := s[i+2 : end] // strip ${ and }
+			key, hasDef, def := splitBracedRef(body)
+			if !isValidIdent(key) {
+				// `${...}` whose VAR isn't a valid identifier — leave
+				// literal (defensive; shouldn't appear in real files).
+				b.WriteString(s[i : end+1])
+				i = end + 1
+				continue
+			}
+			b.WriteString(resolve(key, hasDef, def, m, depth))
+			i = end + 1
+			continue
+		}
+
+		// $VAR (bareword) — only if the next char starts a valid
+		// identifier. Otherwise the `$` is literal ("price: $9.99").
+		if isIdentStart(next) {
+			j := i + 1
+			for j < len(s) && isIdentCont(s[j]) {
+				j++
+			}
+			key := s[i+1 : j]
+			b.WriteString(resolve(key, false, "", m, depth))
+			i = j
+			continue
+		}
+
+		// Literal $
+		b.WriteByte(c)
+		i++
+	}
+	return b.String()
+}
+
+// resolve looks up key in m. If found and non-empty, returns it. If
+// hasDef, expands and returns the default. Otherwise returns "".
+func resolve(key string, hasDef bool, def string, m map[string]string, depth int) string {
+	if v, ok := m[key]; ok && v != "" {
+		return v
+	}
+	if hasDef {
+		return expandDepth(def, m, depth+1)
+	}
+	return ""
+}
+
+// findMatchingBrace returns the index of the `}` that closes the `{` at
+// `start`. Handles nested `${...}` by counting unescaped braces.
+func findMatchingBrace(s string, start int) (int, bool) {
+	depth := 0
+	for i := start; i < len(s); i++ {
+		switch s[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i, true
+			}
+		}
+	}
+	return -1, false
+}
+
+// splitBracedRef splits the body of a `${...}` form into key and (if
+// present) the default-value tail introduced by `:-`.
+func splitBracedRef(body string) (key string, hasDef bool, def string) {
+	if i := strings.Index(body, ":-"); i >= 0 {
+		return body[:i], true, body[i+2:]
+	}
+	return body, false, ""
+}
+
+func isIdentStart(b byte) bool {
+	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || b == '_'
+}
+
+func isIdentCont(b byte) bool {
+	return isIdentStart(b) || (b >= '0' && b <= '9')
+}
+
+func isValidIdent(s string) bool {
+	if s == "" || !isIdentStart(s[0]) {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		if !isIdentCont(s[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // stripInlineComment trims a trailing ` # comment` (or `\t# ...`) from a
