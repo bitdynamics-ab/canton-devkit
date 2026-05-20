@@ -68,14 +68,21 @@ func shellQuote(s string) string {
 }
 
 // runnerForWiring builds a ComposeRunner with realistic config and a
-// recorder factory that does NOT actually execute.
-func runnerForWiring(rec *recorder) *ComposeRunner {
+// recorder factory whose returned cmd.Run() succeeds (so multi-call
+// methods like Up() — which now invokes `create` then `start` — don't
+// short-circuit on a non-existent WorkDir's chdir failure).
+//
+// Takes a *testing.T so we can use t.TempDir() for an always-existing
+// WorkDir. The Dir assertion in TestEveryMethodPropagatesWorkDirAndEnv
+// uses the same value rather than hard-coding a path.
+func runnerForWiring(t *testing.T, rec *recorder) *ComposeRunner {
+	t.Helper()
 	return &ComposeRunner{
 		ProjectName:  "canton-test",
 		ComposeFiles: []string{"compose.yaml", "overlay.yaml"},
 		EnvFiles:     []string{"compose.env", "env/common.env"},
 		Env:          []string{"PARTY_HINT=test-localparty-1", "DOCKER_NETWORK=test"},
-		WorkDir:      "/tmp/splice-cache",
+		WorkDir:      t.TempDir(),
 		commandFn:    rec.factory,
 	}
 }
@@ -96,7 +103,7 @@ func assertArgvContains(t *testing.T, got []string, want []string, label string)
 
 func TestUpArgvIncludesProjectFilesAndEnvFiles(t *testing.T) {
 	rec := &recorder{}
-	c := runnerForWiring(rec)
+	c := runnerForWiring(t, rec)
 	_ = c.Up(context.Background())
 
 	if len(rec.calls) != 1 {
@@ -133,15 +140,16 @@ func TestEveryMethodPropagatesWorkDirAndEnv(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := &recorder{}
-			c := runnerForWiring(rec)
+			c := runnerForWiring(t, rec)
 			tc.run(c)
 
 			if len(rec.calls) != 1 {
 				t.Fatalf("%s: expected 1 call, got %d", tc.name, len(rec.calls))
 			}
 			cmd := rec.calls[0]
-			if cmd.Dir != "/tmp/splice-cache" {
-				t.Errorf("%s did not set cmd.Dir: got %q", tc.name, cmd.Dir)
+			if cmd.Dir != c.WorkDir {
+				t.Errorf("%s did not set cmd.Dir to runner WorkDir: got %q want %q",
+					tc.name, cmd.Dir, c.WorkDir)
 			}
 			if !reflect.DeepEqual(cmd.Env, []string{
 				"PARTY_HINT=test-localparty-1", "DOCKER_NETWORK=test",
@@ -154,7 +162,7 @@ func TestEveryMethodPropagatesWorkDirAndEnv(t *testing.T) {
 
 func TestDownArgvShape(t *testing.T) {
 	rec := &recorder{}
-	c := runnerForWiring(rec)
+	c := runnerForWiring(t, rec)
 	_ = c.Down(context.Background())
 
 	if len(rec.calls) != 1 {
