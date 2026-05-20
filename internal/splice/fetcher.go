@@ -9,9 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -82,7 +84,7 @@ func Fetch(ctx context.Context, v Version, cacheRoot string, progress io.Writer)
 		// Unknown size in the catalogue → fall back to a hard 512 MB cap.
 		maxBytes = 512 * 1024 * 1024
 	}
-	if err := downloadAndExtract(ctx, url, v.SHA256, maxBytes, stagingDir); err != nil {
+	if err := downloadAndExtract(ctx, url, v.SHA256, v.ContentSHA, maxBytes, stagingDir, progress); err != nil {
 		// Staging dir is cleaned by the deferred RemoveAll above; nothing
 		// extra needed here.
 		return "", err
@@ -93,7 +95,7 @@ func Fetch(ctx context.Context, v Version, cacheRoot string, progress io.Writer)
 	// we'd cache an empty directory and future runs would short-circuit
 	// the (broken) cache-hit path.
 	if _, err := os.Stat(filepath.Join(stagingDir, "compose.yaml")); err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return "", fmt.Errorf("tarball %s missing %s/compose.yaml",
 				url, localnetSubdirSuffix)
 		}
@@ -117,15 +119,27 @@ func Fetch(ctx context.Context, v Version, cacheRoot string, progress io.Writer)
 }
 
 // downloadAndExtract streams the tarball at url, verifies its SHA256 in
-// flight, and extracts the cluster/compose/localnet subtree into destDir.
-// Uses a single streaming pass so a 130 MB tarball never lands on disk
-// whole — only the ~few-hundred-KB compose subtree is persisted.
+// flight, extracts the cluster/compose/localnet subtree into destDir,
+// and then (when wantContentSHA != "") verifies the extracted tree
+// matches the catalogued content hash.
+//
+// Two-layer integrity model:
+//
+//   - wantSHA covers the raw gzip body. Fast (in-line via TeeReader)
+//     but not byte-stable: GitHub regenerates source-tarballs lazily
+//     and the gzip metadata can shift. On mismatch we fall through to
+//     the content check rather than failing immediately when
+//     wantContentSHA is set.
+//   - wantContentSHA covers the extracted tree (paths + sizes +
+//     content, sorted by path). Stable across GitHub's archive
+//     regeneration because it only depends on the files we keep.
+//     Authoritative when set.
 //
 // The body is wrapped in io.LimitReader(maxBytes+1) so a server that
 // returns an arbitrary-sized stream (misconfigured CDN, malicious
 // proxy) can't OOM the host. The +1 lets us tell "exactly maxBytes"
 // from "more than maxBytes" — only the latter is an attack signal.
-func downloadAndExtract(ctx context.Context, url, wantSHA string, maxBytes int64, destDir string) error {
+func downloadAndExtract(ctx context.Context, url, wantSHA, wantContentSHA string, maxBytes int64, destDir string, progress io.Writer) error {
 	ctx, cancel := context.WithTimeout(ctx, downloadTimeout)
 	defer cancel()
 
@@ -168,10 +182,90 @@ func downloadAndExtract(ctx context.Context, url, wantSHA string, maxBytes int64
 	}
 
 	gotSHA := hex.EncodeToString(hasher.Sum(nil))
-	if !strings.EqualFold(gotSHA, wantSHA) {
-		return fmt.Errorf("SHA256 mismatch for %s: got %s, want %s", url, gotSHA, wantSHA)
+	gzipMatches := strings.EqualFold(gotSHA, wantSHA)
+
+	if wantContentSHA == "" {
+		// Legacy entries with no content hash recorded — gzip hash is
+		// the only check, mismatch is fatal.
+		if !gzipMatches {
+			return fmt.Errorf("SHA256 mismatch for %s: got %s, want %s", url, gotSHA, wantSHA)
+		}
+		return nil
+	}
+
+	// Content-hash path. Compute the extracted-tree hash regardless
+	// of gzip-hash outcome; the tree hash is authoritative.
+	gotContentSHA, err := computeTreeSHA(destDir)
+	if err != nil {
+		return fmt.Errorf("compute content hash: %w", err)
+	}
+	if !strings.EqualFold(gotContentSHA, wantContentSHA) {
+		return fmt.Errorf("content hash mismatch for %s: extracted tree hashed to %s, want %s",
+			url, gotContentSHA, wantContentSHA)
+	}
+	if !gzipMatches && progress != nil {
+		// Tree matches but gzip doesn't — upstream regenerated the
+		// tarball. Surface to the user so the catalogue can be updated
+		// at leisure, but don't fail the install.
+		_, _ = fmt.Fprintf(progress,
+			"Warning: %s gzip hash drifted (got %s, expected %s); "+
+				"extracted tree still matches the catalogued ContentSHA. "+
+				"Please refresh internal/splice/versions.go.SHA256.\n",
+			url, gotSHA, wantSHA)
 	}
 	return nil
+}
+
+// computeTreeSHA hashes the file tree under root. The algorithm is
+// path-sorted SHA-256 over `<rel-path>\0<size>\0<content>` triples for
+// every regular file; symlinks, devices, etc. are not emitted by
+// extractLocalNet so we don't see them here. Identical contents +
+// layout always produce the same hash regardless of host filesystem
+// timestamps or atime tracking.
+//
+// Mirrored by scripts/compute-tree-sha.sh, which is what humans use to
+// populate Version.ContentSHA when adding a new catalogue entry.
+func computeTreeSHA(root string) (string, error) {
+	var entries []string
+	if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		entries = append(entries, filepath.ToSlash(rel))
+		return nil
+	}); err != nil {
+		return "", err
+	}
+	sort.Strings(entries)
+
+	h := sha256.New()
+	for _, rel := range entries {
+		fp := filepath.Join(root, filepath.FromSlash(rel))
+		st, err := os.Stat(fp)
+		if err != nil {
+			return "", err
+		}
+		_, _ = fmt.Fprintf(h, "%s\x00%d\x00", rel, st.Size())
+		f, err := os.Open(fp)
+		if err != nil {
+			return "", err
+		}
+		if _, err := io.Copy(h, f); err != nil {
+			_ = f.Close()
+			return "", err
+		}
+		if err := f.Close(); err != nil {
+			return "", err
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // cappedReader wraps an io.LimitReader and remembers whether the cap
