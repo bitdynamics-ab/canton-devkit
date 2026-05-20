@@ -357,8 +357,12 @@ func TestEndpointsParsesNamePublishersPairs(t *testing.T) {
 	skipIfNoShell(t)
 	rec := &scriptedRecorder{
 		script: func(args []string) (string, int) {
-			return "canton 0.0.0.0:54321->4001/tcp\n" +
-				"nginx 0.0.0.0:60001->2000/tcp\n", 0
+			// Tab-separated: matches the {{.Name}}\t{{.Publishers}}
+			// format the runner asks for. The nginx line carries TWO
+			// comma-separated publishers to verify multi-publisher
+			// services land in one value rather than being truncated.
+			return "canton\t0.0.0.0:54321->4001/tcp\n" +
+				"nginx\t0.0.0.0:60001->2000/tcp, 0.0.0.0:60002->3000/tcp\n", 0
 		},
 	}
 	c := &ComposeRunner{
@@ -368,7 +372,7 @@ func TestEndpointsParsesNamePublishersPairs(t *testing.T) {
 	got := c.Endpoints(context.Background())
 	want := map[string]string{
 		"canton": "0.0.0.0:54321->4001/tcp",
-		"nginx":  "0.0.0.0:60001->2000/tcp",
+		"nginx":  "0.0.0.0:60001->2000/tcp, 0.0.0.0:60002->3000/tcp",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Endpoints mismatch:\n  got:  %v\n  want: %v", sortKeys(got), sortKeys(want))

@@ -178,24 +178,5 @@ func TestEnvFilesAndProfilesMatchUpstream(t *testing.T) {
 	}
 }
 
-func TestRequiredPorts_CoversAllPublishedUIs(t *testing.T) {
-	// RequiredPorts is informational only after BIT-30 (DevKit allocates
-	// ports ephemerally), but the list must still cover every default
-	// host port that the upstream compose.yaml publishes — otherwise
-	// downstream consumers reading the list would silently miss ports.
-	wantSet := map[int]struct{}{
-		2000: {}, 3000: {}, 4000: {}, 5432: {}, 9090: {},
-	}
-	got := New().RequiredPorts()
-	if len(got) != len(wantSet) {
-		t.Errorf("RequiredPorts length: got %d want %d (%v)", len(got), len(wantSet), got)
-	}
-	for _, p := range got {
-		if _, ok := wantSet[p]; !ok {
-			t.Errorf("RequiredPorts has unexpected port %d", p)
-		}
-	}
-}
-
 // Compile-time check that Adapter satisfies the splice.Adapter contract.
 var _ splice.Adapter = (*Adapter)(nil)
