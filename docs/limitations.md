@@ -47,7 +47,9 @@ and links to follow-up tickets where applicable. Updated as we ship.
 ## Memory requirements
 
 - **Splice's full stack wants ~12 GB of Docker memory.**
-  `resource-constraints.yaml` sums to canton 4 GB + splice 3 GB +
+  `cluster/compose/localnet/resource-constraints.yaml` (from
+  [canton-network/splice](https://github.com/canton-network/splice))
+  sums to canton 4 GB + splice 3 GB +
   postgres 2 GB + console 2 GB + 7 UI services @ 256-512 MB ≈ 12 GB.
   In practice a single instance runs on 7-8 GB because most of those
   limits are headroom. But:
