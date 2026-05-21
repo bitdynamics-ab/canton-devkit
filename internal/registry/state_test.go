@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -230,5 +231,120 @@ func TestConcurrentWritesDifferentInstancesAllSucceed(t *testing.T) {
 	}
 	if len(idx.Entries) != 5 {
 		t.Errorf("want 5 entries, got %d: %v", len(idx.Entries), idx.Entries)
+	}
+}
+
+// --- Path-traversal hardening (Zhe review, PR #24) -----------------------
+
+// TestValidateName_RejectsUnsafeNames covers every category of input
+// that could let a `--name` value escape the registry root or break
+// downstream tooling. Each case must fail with ErrInvalidName.
+//
+// This is the primary defense against the bug Zhe flagged: a Delete
+// with --name=../x would have caused os.RemoveAll to target a path
+// outside ~/.canton-devkit/localnet/.
+func TestValidateName_RejectsUnsafeNames(t *testing.T) {
+	cases := []struct {
+		name string
+		why  string
+	}{
+		{"", "empty"},
+		{".", "current-dir literal"},
+		{"..", "parent-dir literal"},
+		{"../x", "parent-dir traversal"},
+		{"../../etc/passwd", "deep traversal"},
+		{"/tmp/x", "absolute unix"},
+		{"a/b", "embedded forward slash"},
+		{`a\b`, "embedded backslash (Windows separator)"},
+		{".hidden", "leading dot (would land in Root/.hidden, valid-ish but excluded for clarity)"},
+		{"-flag", "leading hyphen (could be parsed as a flag in tooling)"},
+		{"name with spaces", "spaces"},
+		{"name\nwithnewline", "control character"},
+		{"name\x00null", "NUL byte"},
+		{"name\twith tab", "tab"},
+		{"日本語", "non-ASCII (we keep the regex ASCII-only for cross-OS path safety)"},
+		{"a;b", "shell metachar"},
+		{"a$b", "shell metachar"},
+		{`a"b`, "shell metachar"},
+		// 65-char name (one over the limit).
+		{strings.Repeat("a", 65), "over 64-char length"},
+	}
+	for _, c := range cases {
+		t.Run(c.why, func(t *testing.T) {
+			err := ValidateName(c.name)
+			if err == nil {
+				t.Errorf("ValidateName(%q) accepted but should reject (%s)", c.name, c.why)
+				return
+			}
+			if !errors.Is(err, ErrInvalidName) {
+				t.Errorf("ValidateName(%q) returned %v, expected wrapped ErrInvalidName", c.name, err)
+			}
+		})
+	}
+}
+
+// TestValidateName_AcceptsRealisticNames complements the negative test:
+// every name a user might plausibly pick must pass.
+func TestValidateName_AcceptsRealisticNames(t *testing.T) {
+	good := []string{
+		"alice",
+		"diag",
+		"ci-1",
+		"ci-local",
+		"my-stack",
+		"my_stack",
+		"dev2",
+		"a",
+		strings.Repeat("a", 64),
+	}
+	for _, name := range good {
+		if err := ValidateName(name); err != nil {
+			t.Errorf("ValidateName(%q) rejected but should accept: %v", name, err)
+		}
+	}
+}
+
+// TestDelete_CannotEscapeRegistryRoot is the end-to-end proof of the
+// fix: even attempting Delete with a traversal name returns
+// ErrInvalidName instead of calling os.RemoveAll on a path outside
+// Root().
+//
+// Verifies behaviourally — a "sentinel" file lives in a sibling
+// directory; if Delete were buggy it would be removed.
+func TestDelete_CannotEscapeRegistryRoot(t *testing.T) {
+	registryRoot := t.TempDir()
+	t.Setenv("CANTON_DEVKIT_REGISTRY", registryRoot)
+
+	// Set up a sentinel file in a sibling directory. A successful
+	// traversal Delete would land on this path.
+	parentDir := filepath.Dir(registryRoot)
+	sentinel := filepath.Join(parentDir, "sentinel.txt")
+	if err := os.WriteFile(sentinel, []byte("must-not-be-deleted"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Remove(sentinel) }()
+
+	// What an attacker might try.
+	hostileNames := []string{
+		"../sentinel.txt",
+		"..",
+		"../../",
+		"/" + filepath.Base(sentinel),
+	}
+	for _, n := range hostileNames {
+		t.Run(n, func(t *testing.T) {
+			err := Delete(n)
+			if err == nil {
+				t.Errorf("Delete(%q) returned nil — security bug, would have called RemoveAll outside root", n)
+			}
+			if !errors.Is(err, ErrInvalidName) {
+				t.Errorf("Delete(%q) returned %v, expected wrapped ErrInvalidName", n, err)
+			}
+		})
+	}
+
+	// Sentinel must still exist.
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Errorf("sentinel was removed despite validation — %v", err)
 	}
 }
