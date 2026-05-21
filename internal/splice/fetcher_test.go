@@ -5,8 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"io/fs"
 	"net/http"
@@ -64,34 +62,51 @@ func TestSafeJoinRejectsTraversal(t *testing.T) {
 	}
 }
 
-// TestFetchVerifiesSHA256 spins up a local HTTP server that serves a tiny
-// hand-rolled tar.gz containing a `cluster/compose/localnet/compose.yaml`
-// entry. We pin the SHA in a Version and confirm Fetch extracts the file
-// to the expected cache path.
-func TestFetchVerifiesSHA256(t *testing.T) {
+// TestFetchInstallsAndVerifiesContent spins up a local HTTP server that
+// serves a tiny hand-rolled tar.gz containing a
+// `cluster/compose/localnet/compose.yaml` entry, computes the expected
+// ContentSHA from a scratch extraction, then re-runs downloadAndExtract
+// pinned to that hash and confirms install + verification both succeed.
+func TestFetchInstallsAndVerifiesContent(t *testing.T) {
 	tarball := buildTestTarball(t, map[string]string{
 		"splice-test/cluster/compose/localnet/compose.yaml":   "services: {}\n",
 		"splice-test/cluster/compose/localnet/env/common.env": "DB_PORT=5432\n",
 		"splice-test/README.md":                               "should be skipped\n",
 	})
-	sum := sha256.Sum256(tarball)
-	wantSHA := hex.EncodeToString(sum[:])
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(tarball)
 	}))
 	defer srv.Close()
 
-	// Override the URL template via a local copy of downloadAndExtract.
-	// Cleanest test-only path: temporarily wire URL through an env-vary
-	// helper — but to keep production code dep-free, we just call
-	// downloadAndExtract directly here.
+	// First pass: extract to compute the expected ContentSHA.
+	scratch := t.TempDir()
+	if err := downloadAndExtract(context.Background(), srv.URL, "", 1<<20, scratch); err == nil {
+		t.Fatal("expected error when ContentSHA is empty (refusing to install unverified)")
+	}
+	// Workaround: directly compute the tree SHA from a successful
+	// extraction. We do this by faking it — write the files manually
+	// in a way the scratch dir contains them. Simpler path: do a
+	// real extract via a private call that bypasses the empty-hash
+	// guard. We achieve the same by computing the expected hash
+	// from the file contents directly, which is identical to what
+	// computeTreeSHA would produce.
+	expectedTree := t.TempDir()
+	_ = os.WriteFile(filepath.Join(expectedTree, "compose.yaml"), []byte("services: {}\n"), 0o644)
+	_ = os.MkdirAll(filepath.Join(expectedTree, "env"), 0o755)
+	_ = os.WriteFile(filepath.Join(expectedTree, "env", "common.env"), []byte("DB_PORT=5432\n"), 0o644)
+	wantContent, err := computeTreeSHA(expectedTree)
+	if err != nil {
+		t.Fatalf("computeTreeSHA: %v", err)
+	}
+
+	// Second pass: real install with the correct ContentSHA.
 	dest := t.TempDir()
-	if err := downloadAndExtract(context.Background(), srv.URL, wantSHA, "", 1<<20, dest, nil); err != nil {
+	if err := downloadAndExtract(context.Background(), srv.URL, wantContent, 1<<20, dest); err != nil {
 		t.Fatalf("downloadAndExtract: %v", err)
 	}
 
-	// compose.yaml present and content correct
+	// compose.yaml present
 	body, err := os.ReadFile(filepath.Join(dest, "compose.yaml"))
 	if err != nil {
 		t.Fatalf("compose.yaml not extracted: %v", err)
@@ -99,37 +114,13 @@ func TestFetchVerifiesSHA256(t *testing.T) {
 	if !strings.Contains(string(body), "services") {
 		t.Errorf("unexpected compose.yaml content: %q", string(body))
 	}
-
-	// env/common.env present (nested entry)
-	if _, err := os.Stat(filepath.Join(dest, "env", "common.env")); err != nil {
-		t.Errorf("env/common.env not extracted: %v", err)
-	}
-
-	// README.md NOT extracted (outside subdir)
+	// README.md NOT extracted (outside subdir).
 	if _, err := os.Stat(filepath.Join(dest, "README.md")); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("README.md should not have been extracted (err=%v)", err)
 	}
 }
 
-func TestFetchRejectsBadSHA256(t *testing.T) {
-	tarball := buildTestTarball(t, map[string]string{
-		"splice-test/cluster/compose/localnet/compose.yaml": "x",
-	})
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write(tarball)
-	}))
-	defer srv.Close()
-
-	err := downloadAndExtract(context.Background(), srv.URL,
-		"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-		"", 1<<20, t.TempDir(), nil)
-	if err == nil || !strings.Contains(err.Error(), "SHA256 mismatch") {
-		t.Fatalf("expected SHA256 mismatch, got %v", err)
-	}
-}
-
-// TestDownloadAndExtractRejectsOversizedBody covers the new cappedReader
+// TestDownloadAndExtractRejectsOversizedBody covers the cappedReader
 // guard: a server that returns more than maxBytes must fail with a
 // clear cap error, not OOM the host or silently truncate.
 func TestDownloadAndExtractRejectsOversizedBody(t *testing.T) {
@@ -140,8 +131,7 @@ func TestDownloadAndExtractRejectsOversizedBody(t *testing.T) {
 	defer srv.Close()
 
 	err := downloadAndExtract(context.Background(), srv.URL,
-		"00000000000000000000000000000000000000000000000000000000000000000000",
-		"", 1<<20, t.TempDir(), nil)
+		strings.Repeat("0", 64), 1<<20, t.TempDir())
 	if err == nil {
 		t.Fatal("expected cap error, got nil")
 	}
@@ -153,59 +143,34 @@ func TestDownloadAndExtractRejectsOversizedBody(t *testing.T) {
 	}
 }
 
-// --- Content-SHA verification (BIT-117 #10 hardening) -------------------
-
-// TestDownloadAndExtractAcceptsRegeneratedGzipWhenContentMatches covers
-// the "GitHub regenerated the source tarball" scenario: gzip bytes
-// differ, extracted tree is identical, install succeeds with a warning.
-func TestDownloadAndExtractAcceptsRegeneratedGzipWhenContentMatches(t *testing.T) {
-	tarball := buildTestTarball(t, map[string]string{
-		"splice-x/cluster/compose/localnet/compose.yaml":   "services: {}\n",
-		"splice-x/cluster/compose/localnet/env/common.env": "DB_PORT=5432\n",
-	})
-
-	// Extract to a scratch dir to compute the expected content SHA.
-	scratch := t.TempDir()
-	if err := downloadAndExtract(context.Background(), serveBytesURL(t, tarball),
-		hex.EncodeToString(sha256OfBytes(tarball)), "", 1<<20, scratch, nil); err != nil {
-		t.Fatalf("scratch extract: %v", err)
-	}
-	wantContent, err := computeTreeSHA(scratch)
-	if err != nil {
-		t.Fatalf("computeTreeSHA: %v", err)
-	}
-
-	// Now pretend the upstream gzip hash drifted: pass a wrong wantSHA
-	// but the correct wantContentSHA. The progress writer captures the
-	// warning so we can assert it fires.
-	var progress bytes.Buffer
-	dest := t.TempDir()
-	err = downloadAndExtract(context.Background(), serveBytesURL(t, tarball),
-		strings.Repeat("0", 64), wantContent, 1<<20, dest, &progress)
-	if err != nil {
-		t.Fatalf("expected success with regenerated gzip + matching content, got %v", err)
-	}
-	if !strings.Contains(progress.String(), "gzip hash drifted") {
-		t.Errorf("expected drift warning, got %q", progress.String())
-	}
-}
-
-// TestDownloadAndExtractRejectsContentMismatch covers the inverse: gzip
-// hash matches but the extracted tree doesn't match the catalogued
-// ContentSHA (e.g. a MITM that wrapped a malicious payload in the same-
-// sized gzip envelope by some unlikely collision).
+// TestDownloadAndExtractRejectsContentMismatch covers the case where
+// the extracted tree doesn't match the catalogued ContentSHA (e.g. an
+// upstream tag pointing to unexpected content, or a MITM that managed
+// to wrap a malicious payload).
 func TestDownloadAndExtractRejectsContentMismatch(t *testing.T) {
 	tarball := buildTestTarball(t, map[string]string{
 		"splice-x/cluster/compose/localnet/compose.yaml": "services: {}\n",
 	})
-	gzipHash := hex.EncodeToString(sha256OfBytes(tarball))
 
 	err := downloadAndExtract(context.Background(), serveBytesURL(t, tarball),
-		gzipHash,
 		strings.Repeat("1", 64), // wrong content hash
-		1<<20, t.TempDir(), nil)
+		1<<20, t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "content hash mismatch") {
 		t.Fatalf("expected content hash mismatch, got %v", err)
+	}
+}
+
+// TestDownloadAndExtractRejectsEmptyContentSHA verifies the
+// defense-in-depth check: a Version with no ContentSHA is rejected so
+// we never silently install unverified content.
+func TestDownloadAndExtractRejectsEmptyContentSHA(t *testing.T) {
+	tarball := buildTestTarball(t, map[string]string{
+		"splice-x/cluster/compose/localnet/compose.yaml": "services: {}\n",
+	})
+	err := downloadAndExtract(context.Background(), serveBytesURL(t, tarball),
+		"", 1<<20, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "no ContentSHA") {
+		t.Fatalf("expected refusal for empty ContentSHA, got %v", err)
 	}
 }
 
@@ -220,9 +185,36 @@ func serveBytesURL(t *testing.T, body []byte) string {
 	return srv.URL
 }
 
-func sha256OfBytes(b []byte) []byte {
-	sum := sha256.Sum256(b)
-	return sum[:]
+// versionForTarball extracts the test tarball into a scratch dir, hashes
+// the result, and returns a Version pinned to that ContentSHA. The
+// commit is a fake string — the URL is rewired by servePinnedTarball
+// so the catalogued Commit value is never used for HTTP.
+func versionForTarball(t *testing.T, tarball []byte) Version {
+	t.Helper()
+	// Extract via the same pipeline Fetch uses, so the ContentSHA we
+	// compute matches what downloadAndExtract will compute at install
+	// time. We bypass content verification by using a "compute first,
+	// then trust" loop: extract once to a scratch dir with no SHA
+	// verification by replicating the extract steps directly.
+	scratch := t.TempDir()
+	gzr, err := gzip.NewReader(bytes.NewReader(tarball))
+	if err != nil {
+		t.Fatalf("gunzip test tarball: %v", err)
+	}
+	if err := extractLocalNet(tar.NewReader(gzr), scratch); err != nil {
+		t.Fatalf("extract test tarball: %v", err)
+	}
+	_ = gzr.Close()
+	sha, err := computeTreeSHA(scratch)
+	if err != nil {
+		t.Fatalf("computeTreeSHA: %v", err)
+	}
+	return Version{
+		Tag:        "x",
+		Commit:     "testcommit",
+		ContentSHA: sha,
+		Size:       int64(len(tarball)),
+	}
 }
 
 // --- Fetch (cache + lifecycle) -------------------------------------------
@@ -245,7 +237,7 @@ func servePinnedTarball(t *testing.T, body []byte) (server *httptest.Server, cle
 
 func TestFetchCacheHitSkipsDownload(t *testing.T) {
 	cacheRoot := t.TempDir()
-	v := Version{Tag: "test", SHA256: "ignored-on-cache-hit"}
+	v := Version{Tag: "test", Commit: "testcommit", ContentSHA: "ignored-on-cache-hit"}
 	projectDir := ProjectDir(cacheRoot, v)
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -284,13 +276,12 @@ func TestFetchInstallsOnCacheMiss(t *testing.T) {
 		"splice-x/cluster/compose/localnet/compose.yaml":   "services: {}\n",
 		"splice-x/cluster/compose/localnet/env/common.env": "DB_PORT=5432\n",
 	})
-	sum := sha256.Sum256(tarball)
 
 	_, cleanup := servePinnedTarball(t, tarball)
 	defer cleanup()
 
 	cacheRoot := t.TempDir()
-	v := Version{Tag: "x", SHA256: hex.EncodeToString(sum[:])}
+	v := versionForTarball(t, tarball)
 
 	got, err := Fetch(context.Background(), v, cacheRoot, nil)
 	if err != nil {
@@ -317,13 +308,12 @@ func TestFetchRejectsTarballWithoutComposeYaml(t *testing.T) {
 		"splice-x/README.md":                       "no localnet here\n",
 		"splice-x/cluster/compose/other/notes.txt": "ignored too\n",
 	})
-	sum := sha256.Sum256(tarball)
 
 	_, cleanup := servePinnedTarball(t, tarball)
 	defer cleanup()
 
 	cacheRoot := t.TempDir()
-	v := Version{Tag: "x", SHA256: hex.EncodeToString(sum[:])}
+	v := versionForTarball(t, tarball)
 
 	_, err := Fetch(context.Background(), v, cacheRoot, nil)
 	if err == nil {
@@ -351,7 +341,7 @@ func TestFetchCleansStagingOnDownloadFailure(t *testing.T) {
 	defer func() { tarballURL = prev }()
 
 	cacheRoot := t.TempDir()
-	v := Version{Tag: "x", SHA256: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}
+	v := Version{Tag: "x", Commit: "fakecommit", ContentSHA: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}
 
 	if _, err := Fetch(context.Background(), v, cacheRoot, nil); err == nil {
 		t.Fatal("expected error, got nil")
@@ -378,10 +368,9 @@ func TestFetchHandlesConcurrentRenameRace(t *testing.T) {
 	tarball := buildTestTarball(t, map[string]string{
 		"splice-x/cluster/compose/localnet/compose.yaml": "services: {}\n",
 	})
-	sum := sha256.Sum256(tarball)
 
 	cacheRoot := t.TempDir()
-	v := Version{Tag: "x", SHA256: hex.EncodeToString(sum[:])}
+	v := versionForTarball(t, tarball)
 	projectDir := ProjectDir(cacheRoot, v)
 
 	// Pre-create the projectDir as if a concurrent caller raced ahead.

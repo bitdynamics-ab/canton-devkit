@@ -15,8 +15,29 @@ func TestResolveSupportedTag(t *testing.T) {
 		if v.Tag != tag {
 			t.Errorf("Resolve(%q) returned Tag=%q", tag, v.Tag)
 		}
-		if v.SHA256 == "" {
-			t.Errorf("Resolve(%q) has empty SHA256 — every curated entry must be pinned", tag)
+		if v.Commit == "" {
+			t.Errorf("Resolve(%q) has empty Commit — every curated entry must be pinned to an immutable commit SHA", tag)
+		}
+		if v.ContentSHA == "" {
+			t.Errorf("Resolve(%q) has empty ContentSHA — every curated entry must be content-hashed", tag)
+		}
+		if v.Major == "" {
+			t.Errorf("Resolve(%q) has empty Major — needed for adapter routing", tag)
+		}
+	}
+}
+
+// TestVersionsJSONIsValid sanity-checks the embedded catalogue: every
+// commit SHA looks like a hex git SHA (40 chars), every ContentSHA is
+// SHA-256 hex (64 chars). Catches typos that init() would also catch
+// but with a clearer error.
+func TestVersionsJSONIsValid(t *testing.T) {
+	for tag, v := range SupportedVersions {
+		if len(v.Commit) != 40 {
+			t.Errorf("%q: commit %q is not a 40-char git SHA", tag, v.Commit)
+		}
+		if len(v.ContentSHA) != 64 {
+			t.Errorf("%q: content_sha %q is not a 64-char SHA-256 hex", tag, v.ContentSHA)
 		}
 	}
 }
