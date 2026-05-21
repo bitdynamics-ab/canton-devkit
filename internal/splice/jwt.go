@@ -14,19 +14,45 @@ import (
 )
 
 // localNetUnsafeDevOnlySecret is the HS256 signing key used by every
-// JWT in Splice LocalNet. It is intentionally a fixed dev-only string
-// — Splice's entrypoint scripts (docker/console/entrypoint.sh) and
-// SPLICE_APP_UI_UNSAFE_SECRET in env/common.env both default to "unsafe"
-// and there is no production setting in this stack.
+// JWT in Splice LocalNet. It is intentionally a fixed dev-only string.
+//
+// # Source-of-truth verification (Splice 0.6.4)
+//
+// Four independent locations in the upstream Splice tree
+// (canton-network/splice → cluster/compose/localnet/) all use the
+// literal "unsafe" — no quoting variations, no whitespace, no encoding.
+// Grepped, listed here so a future reader can confirm against any new
+// Splice release without re-deriving:
+//
+//  1. env/common.env:
+//     SPLICE_APP_UI_UNSAFE_SECRET=${SPLICE_APP_UI_UNSAFE_SECRET:-unsafe}
+//
+//  2. conf/canton/{sv,app-provider,app-user}/app-auth.conf:
+//     type   = unsafe-jwt-hmac-256
+//     secret = "unsafe"
+//     (Canton participant auth-services — what validates the JWTs we
+//     send to the participant ledger API.)
+//
+//  3. conf/splice/{sv,app-provider,app-user}/app-auth.conf:
+//     algorithm = "hs-256-unsafe"
+//     secret    = "unsafe"
+//     (Splice validator-apps auth + ledger-api auth-config — what
+//     validates the JWTs Splice's own HTTP APIs accept.)
+//
+//  4. docker/console/entrypoint.sh:
+//     jwt-cli encode hs256 --s unsafe --p '{"sub": "..", "aud": ".."}'
+//     (Reference impl that produces console-tokens the same way we do.)
+//
+// The Splice config labels "unsafe-jwt-hmac-256" and "hs-256-unsafe"
+// are just internal naming — the wire algorithm is plain HS256
+// (HMAC-SHA-256). The contract test in jwt_test.go pins both the
+// algorithm and the secret string so any upstream change fails loudly
+// here before tokens are silently rejected by the validator.
 //
 // ⚠ DO NOT COPY this signer into a production codebase. The whole
 // SignToken path exists only because LocalNet is a developer sandbox
 // where the JWT-validation side accepts this exact secret. Any service
 // that takes real money or real PII MUST use a real KMS / signing key.
-//
-// The contract test in jwt_test.go pins (algorithm, secret) so an
-// upstream Splice change to either value fails loudly here before any
-// JWTs DevKit signs are silently rejected by the validator.
 const localNetUnsafeDevOnlySecret = "unsafe"
 
 // devSecretWarnOnce ensures the prominent stderr warning fires exactly
