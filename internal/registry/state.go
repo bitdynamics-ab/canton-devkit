@@ -22,6 +22,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -85,6 +87,62 @@ type Credential struct {
 // ErrNotFound is returned by Read when no state file exists.
 var ErrNotFound = errors.New("instance not registered")
 
+// ErrInvalidName is returned by every public registry entry point when
+// the instance name is unsafe to use as a path component. Callers
+// should treat this as a user-error condition (exit 1), not a system
+// failure.
+var ErrInvalidName = errors.New("invalid instance name")
+
+// validInstanceName matches names that are safe to use as a path
+// component on every supported OS. The character set is intentionally
+// narrower than what filesystems accept — we forbid hyphens at the
+// start (to avoid being parsed as a flag in tooling) and require at
+// least one alphanumeric to keep accidental empty/dot names out.
+//
+// `a-z A-Z 0-9 _ -` and length 1-64 covers every reasonable instance
+// name (alice, ci-local, my_stack, dev-2). Anything Unicode, with
+// path separators, with `.`, or with shell metacharacters is
+// rejected.
+var validInstanceName = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$`)
+
+// ValidateName rejects instance names that could escape the registry
+// root or break tooling. Called from every public entry point that
+// accepts a name (PathFor, DataDirFor, Read, Write, Delete, Lock).
+//
+// The check is conservative — it's far easier to widen later than to
+// narrow after users depend on quirky names. Specifically rejected:
+//
+//   - empty string
+//   - leading hyphen (could be parsed as a flag)
+//   - any byte outside [A-Za-z0-9_-]
+//   - longer than 64 bytes (no good reason to allow more, and helps
+//     bound on-disk path lengths on Windows)
+//
+// After the regex passes, we belt-and-suspenders: confirm
+// filepath.Clean(name) == name and that the resulting Root()/name path
+// stays under Root() once joined. That catches platform-specific
+// edge cases the regex might miss (e.g. NTFS short names).
+func ValidateName(name string) error {
+	if !validInstanceName.MatchString(name) {
+		return fmt.Errorf("%w: %q must be 1-64 chars of [A-Za-z0-9_-], starting with alphanumeric or underscore",
+			ErrInvalidName, name)
+	}
+	if filepath.Clean(name) != name {
+		// Should be impossible after the regex, but the cost of an
+		// extra check is essentially zero and catches future
+		// regressions (e.g. someone widening the regex without
+		// re-thinking containment).
+		return fmt.Errorf("%w: %q changes under filepath.Clean", ErrInvalidName, name)
+	}
+	root := Root()
+	joined := filepath.Join(root, name)
+	rel, err := filepath.Rel(root, joined)
+	if err != nil || strings.HasPrefix(rel, "..") || rel == "." {
+		return fmt.Errorf("%w: %q would escape registry root %s", ErrInvalidName, name, root)
+	}
+	return nil
+}
+
 // Root returns the base directory under which instances are stored.
 // Defaults to ~/.canton-devkit/localnet/. Overridable for tests via
 // CANTON_DEVKIT_REGISTRY.
@@ -104,12 +162,27 @@ func Root() string {
 }
 
 // PathFor returns the state.json path for the named instance.
+//
+// Callers should call ValidateName first if `name` is user-supplied;
+// PathFor itself panics on an invalid name rather than silently
+// returning a path outside the registry root. The panic is intentional:
+// returning a "safe-looking but wrong" path would defeat the purpose
+// of validation. Read/Write/Delete (the on-disk entry points) validate
+// before invoking PathFor so the panic path is unreachable in normal
+// flow — it exists only to catch programmer error.
 func PathFor(name string) string {
+	if err := ValidateName(name); err != nil {
+		panic(fmt.Sprintf("registry.PathFor called with invalid name: %v", err))
+	}
 	return filepath.Join(Root(), name, "state.json")
 }
 
 // DataDirFor returns the per-instance data directory (parent of state.json).
+// Same panic-on-invalid semantics as PathFor.
 func DataDirFor(name string) string {
+	if err := ValidateName(name); err != nil {
+		panic(fmt.Sprintf("registry.DataDirFor called with invalid name: %v", err))
+	}
 	return filepath.Join(Root(), name)
 }
 
@@ -129,6 +202,9 @@ func NewState(name, spliceVersion string) *State {
 
 // Read loads the state file for the named instance.
 func Read(name string) (*State, error) {
+	if err := ValidateName(name); err != nil {
+		return nil, err
+	}
 	path := PathFor(name)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -155,8 +231,8 @@ func Read(name string) (*State, error) {
 // if missing. Updates the index. Mode 0600 because future versions of the
 // struct hold JWTs.
 func Write(s *State) error {
-	if s.Name == "" {
-		return fmt.Errorf("registry: cannot write state with empty Name")
+	if err := ValidateName(s.Name); err != nil {
+		return err
 	}
 	if s.SchemaVersion == 0 {
 		s.SchemaVersion = SchemaVersion
@@ -185,7 +261,17 @@ func Write(s *State) error {
 }
 
 // Delete removes the instance directory and index entry. Idempotent.
+//
+// Validates the name up-front so an attacker-controlled --name (e.g.
+// `../../home/victim`) can never make os.RemoveAll target a path
+// outside the registry root. The defense-in-depth check inside
+// ValidateName re-resolves the joined path via filepath.Rel; if the
+// regex were ever widened by mistake, that check still catches
+// containment violations.
 func Delete(name string) error {
+	if err := ValidateName(name); err != nil {
+		return err
+	}
 	dir := DataDirFor(name)
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("remove %s: %w", dir, err)

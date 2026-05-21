@@ -18,6 +18,9 @@ import (
 // understand DevKit isn't protecting against the collision and that
 // the behaviour is documented.
 func Lock(name string) (release func(), err error) {
+	if err := ValidateName(name); err != nil {
+		return nil, err
+	}
 	_, _ = fmt.Fprintf(os.Stderr,
 		"warning: registry locking is a no-op on Windows; concurrent "+
 			"`localnet up --name %s` may race. See docs/limitations.md.\n",

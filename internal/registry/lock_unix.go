@@ -17,6 +17,9 @@ import (
 // the stub in lock_windows.go. Cross-platform robust locking would require
 // `golang.org/x/sys/windows`, which we deliberately avoid to stay zero-dep.
 func Lock(name string) (release func(), err error) {
+	if err := ValidateName(name); err != nil {
+		return nil, err
+	}
 	dir := DataDirFor(name)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("mkdir for lock: %w", err)

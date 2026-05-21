@@ -17,13 +17,15 @@ and links to follow-up tickets where applicable. Updated as we ship.
 
 ## Splice version pinning
 
-- **Tarball SHA-256 may shift if GitHub regenerates the source archive.**
-  `internal/splice/versions.go` pins each version by hashing the
-  upstream GitHub source-tarball. GitHub regenerates these lazily
-  and the gzip metadata can vary. If a regenerated archive yields a
-  new digest, every pinned version fails until the catalogue is
-  updated. Two future fixes: verify by extracting + hashing the file
-  tree (not the gzip), or pin a git commit and `git archive` locally.
+- **(resolved)** *Earlier the catalogue pinned the raw gzip SHA, which
+  could drift if GitHub regenerated the source-tarball.* The catalogue
+  now pins (a) the git commit SHA (immutable, content-addressable —
+  `internal/splice/versions.json`'s `commit` field) and (b) the
+  ContentSHA of the extracted `cluster/compose/localnet/` subtree
+  (`content_sha` field). The tarball-by-commit URL is byte-stable
+  enough; we hash the extracted tree, not the gzip envelope, so a
+  gzip-level rewrite (compression-level change, mtime drift) has no
+  effect. See `docs/versions.md`.
 
 ## Compose env reconstruction
 
