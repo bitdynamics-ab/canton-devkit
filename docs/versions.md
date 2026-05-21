@@ -4,6 +4,39 @@ DevKit pins to a **curated** list of Splice versions in
 [`internal/splice/versions.json`](../internal/splice/versions.json) so
 `localnet up` never composes-up an untested upstream tag.
 
+## What we fetch, and from where
+
+> **Upstream repo:** [`canton-network/splice`](https://github.com/canton-network/splice)
+> **Subtree extracted:** `cluster/compose/localnet/`
+> **Fetch URL:** `https://github.com/canton-network/splice/archive/<commit-sha>.tar.gz`
+
+That subtree is the canonical Splice LocalNet definition — `compose.yaml`,
+`compose.env`, `resource-constraints.yaml`, `conf/`, `docker/`, `env/`.
+DevKit downloads only that subtree on cache-miss and verifies it against
+the catalogue's `content_sha`; the rest of the Splice source tree is
+discarded.
+
+### Not to be confused with `cn-quickstart`
+
+[`digital-asset/cn-quickstart`](https://github.com/digital-asset/cn-quickstart)
+is a separate repo that *builds on top of* the same Splice LocalNet to
+provide an App-Provider quickstart with a backend service, frontend,
+Daml workflows, etc. — see its README for context. DevKit deliberately
+fetches the bare LocalNet base from `canton-network/splice` rather than
+the App-Provider layer from cn-quickstart, because we want the minimal
+infrastructure surface for our lifecycle (`up` / `down` / `status` /
+`creds` / `logs`). App-Provider workflows are out of scope for DevKit;
+users who want them can run cn-quickstart's `make start` on top of a
+DevKit-managed LocalNet.
+
+### A note on the upstream URL
+
+GitHub may surface this repo as `hyperledger-labs/splice` in older
+documentation (e.g. cn-quickstart's README still uses that name).
+That URL redirects to `canton-network/splice` — GitHub's API resolves
+both to the same canonical `full_name`, and tag SHAs match. We use the
+canonical name in code and docs.
+
 ## Anatomy of a catalogue entry
 
 ```json
