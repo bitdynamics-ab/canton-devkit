@@ -282,12 +282,30 @@ func Delete(name string) error {
 	return nil
 }
 
+// forceFailBeforeRename is a test-only fault-injection seam. When set,
+// it is called inside atomicWrite between the temp file's Close() and
+// the os.Rename(). A test can panic() inside the hook to simulate a
+// process crash at the worst possible moment — after the temp file is
+// fully written but before it's promoted to the canonical path.
+//
+// In production code paths this is nil (zero overhead). Tests set it
+// per-call and clear it on defer.
+//
+// Together with the `committed` flag's deferred cleanup, this lets us
+// prove the actual atomicity guarantee: a crash between write and
+// rename leaves the on-disk state untouched and no temp files behind.
+var forceFailBeforeRename func()
+
 // atomicWrite writes data to a temp sibling then renames over path so a
 // crashed write never produces a half-written state file.
 //
 // On any error path, the temp file is removed in the deferred cleanup;
 // on the success path, `committed = true` short-circuits the cleanup
 // because the rename has already promoted the temp to `path`.
+//
+// The defer runs through panic unwinding as well, so even a panic
+// between write and rename (simulated via forceFailBeforeRename) leaves
+// no leftover temp file — see TestAtomicWriteSurvivesPanicBeforeRename.
 func atomicWrite(path string, data []byte, mode os.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".tmp-state-*")
@@ -312,6 +330,9 @@ func atomicWrite(path string, data []byte, mode os.FileMode) error {
 	}
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close temp: %w", err)
+	}
+	if forceFailBeforeRename != nil {
+		forceFailBeforeRename() // may panic; defer above still cleans tmp
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
 		return fmt.Errorf("rename %s → %s: %w", tmpPath, path, err)

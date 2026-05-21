@@ -2,6 +2,7 @@ package registry
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -73,38 +74,111 @@ func TestStatePerms(t *testing.T) {
 	}
 }
 
-func TestAtomicWriteSurvivesCrash(t *testing.T) {
+// TestAtomicWriteSurvivesPanicBeforeRename proves the real atomicity
+// guarantee: a process crash between the temp-file write and the
+// os.Rename leaves the on-disk state.json untouched and no temp file
+// behind.
+//
+// We simulate the crash by setting `forceFailBeforeRename` to a
+// function that panics. The deferred cleanup in atomicWrite runs
+// through the panic (Go semantics) and removes the orphan temp file
+// because `committed` is still false. The canonical state.json is
+// either absent (first write) or contains the prior payload
+// (subsequent write) — never half-written.
+//
+// (Replaces the older "drop a leftover and rewrite" test that didn't
+// actually simulate a crash. See PR #24 review + BIT-118.)
+func TestAtomicWriteSurvivesPanicBeforeRename(t *testing.T) {
 	useTmpRoot(t)
-	// Pre-create a state file with a known good payload.
+
+	// First, write a known-good payload so we have an "original" to
+	// prove was preserved.
 	if err := Write(NewState("alice", "0.6.4")); err != nil {
 		t.Fatal(err)
 	}
-	original, _ := os.ReadFile(PathFor("alice"))
-
-	// Simulate a half-written file by dropping a leftover tmp file
-	// in the same directory — atomicWrite must clean it up.
-	leftover := filepath.Join(DataDirFor("alice"), ".tmp-state-crash")
-	if err := os.WriteFile(leftover, []byte("garbage"), 0o600); err != nil {
+	originalBytes, err := os.ReadFile(PathFor("alice"))
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Write again. Should succeed; leftover may remain (not cleanup target).
-	s := NewState("alice", "0.6.5")
-	if err := Write(s); err != nil {
-		t.Fatalf("re-Write: %v", err)
+	// Arm the fault. The function panics between Close and Rename.
+	forceFailBeforeRename = func() { panic("simulated crash") }
+	defer func() { forceFailBeforeRename = nil }()
+
+	// Run Write inside a recover so the test process survives the
+	// simulated crash.
+	func() {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatal("expected panic from forceFailBeforeRename, got none")
+			}
+		}()
+		_ = Write(NewState("alice", "0.6.5-attempted-crash"))
+	}()
+
+	// Invariant 1: state.json on disk MUST still contain the original
+	// payload (no half-written or partial overwrite).
+	currentBytes, err := os.ReadFile(PathFor("alice"))
+	if err != nil {
+		t.Fatalf("state.json gone after simulated crash: %v", err)
+	}
+	if string(currentBytes) != string(originalBytes) {
+		t.Errorf("state.json changed despite simulated crash before rename:\n  was: %s\n  now: %s",
+			originalBytes, currentBytes)
 	}
 
+	// Invariant 2: no orphan temp file in the instance directory. The
+	// deferred cleanup must have removed it even though we panicked.
+	entries, err := os.ReadDir(DataDirFor("alice"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".tmp-state-") {
+			t.Errorf("orphan temp file leaked after simulated crash: %s", e.Name())
+		}
+	}
+
+	// Invariant 3: post-crash recovery — disarming the fault and
+	// retrying must produce a working write. Proves the fault hook
+	// is the only thing keeping us from succeeding.
+	forceFailBeforeRename = nil
+	if err := Write(NewState("alice", "0.6.5")); err != nil {
+		t.Fatalf("re-Write after recovery: %v", err)
+	}
 	got, err := Read("alice")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.SpliceVersion != "0.6.5" {
-		t.Errorf("write didn't take effect: %s", got.SpliceVersion)
+		t.Errorf("recovered write didn't take effect: %s", got.SpliceVersion)
 	}
-	// Original payload must NOT still be on disk.
-	current, _ := os.ReadFile(PathFor("alice"))
-	if string(current) == string(original) {
-		t.Errorf("state.json wasn't actually rewritten")
+}
+
+// TestAtomicWrite_NoOrphanTempOnFirstWriteCrash covers the
+// edge case: the very first Write crashes (no existing state.json).
+// state.json must remain absent and no temp file may leak.
+func TestAtomicWrite_NoOrphanTempOnFirstWriteCrash(t *testing.T) {
+	useTmpRoot(t)
+
+	forceFailBeforeRename = func() { panic("simulated crash") }
+	defer func() { forceFailBeforeRename = nil }()
+
+	func() {
+		defer func() { _ = recover() }()
+		_ = Write(NewState("alice", "0.6.4"))
+	}()
+
+	if _, err := os.Stat(PathFor("alice")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("state.json should not exist after crashed first write, got err=%v", err)
+	}
+	// Instance dir may exist (we MkdirAll before atomicWrite) but
+	// must contain no temp files.
+	entries, _ := os.ReadDir(DataDirFor("alice"))
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".tmp-state-") {
+			t.Errorf("orphan temp file leaked: %s", e.Name())
+		}
 	}
 }
 
