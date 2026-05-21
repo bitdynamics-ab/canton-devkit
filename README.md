@@ -22,6 +22,28 @@ docs/
   tasks/             Per-task notes and progress
 ```
 
+## Upstream Splice base
+
+DevKit does not bundle a Splice runtime. On `localnet up`, it downloads
+the `cluster/compose/localnet/` subtree from the upstream Splice
+repository, pinned by **git commit SHA** (immutable) and verified by
+content hash post-extract.
+
+- **Upstream repo:** [`canton-network/splice`](https://github.com/canton-network/splice)
+  *(the same project is also reachable as `hyperledger-labs/splice` —
+  that URL redirects to the canonical name.)*
+- **Subtree extracted:** `cluster/compose/localnet/`
+- **Fetch URL pattern:** `https://github.com/canton-network/splice/archive/<commit-sha>.tar.gz`
+- **Catalogue of supported versions:** [`internal/splice/versions.json`](internal/splice/versions.json)
+  — see [`docs/versions.md`](docs/versions.md) for the integrity model
+  and the maintainer flow for adding new versions.
+
+DevKit is **not** derived from
+[`digital-asset/cn-quickstart`](https://github.com/digital-asset/cn-quickstart),
+which is a separate project that *layers* an App-Provider quickstart
+(backend service, Daml workflows, frontend) on top of the same Splice
+LocalNet base. DevKit deliberately consumes the bare base.
+
 ## Distribution Model
 
 The same `canton-devkit` binary is distributed two ways:
