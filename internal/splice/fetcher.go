@@ -29,11 +29,19 @@ const (
 )
 
 // tarballURL is the function Fetch uses to compute the GitHub source-
-// tarball URL for a given Splice version. It's a package var (not a
-// const) so tests can point Fetch at an httptest.Server without
-// monkey-patching the entire HTTP client.
+// tarball URL for a given Splice version.
+//
+// We pin to the COMMIT SHA, not the tag. A tag can be force-pushed
+// (`git push --force origin refs/tags/X`) to point at a different
+// commit; using the commit URL means the upstream content is bound to
+// the exact bytes that were reviewed when the catalogue entry was
+// added. Tags are looked up at catalogue-update time, never at fetch
+// time.
+//
+// It's a package var (not a const) so tests can point Fetch at an
+// httptest.Server without monkey-patching the entire HTTP client.
 var tarballURL = func(v Version) string {
-	return fmt.Sprintf("https://github.com/canton-network/splice/archive/refs/tags/%s.tar.gz", v.Tag)
+	return fmt.Sprintf("https://github.com/canton-network/splice/archive/%s.tar.gz", v.Commit)
 }
 
 // Fetch ensures the compose project for v is present and verified under
@@ -84,7 +92,7 @@ func Fetch(ctx context.Context, v Version, cacheRoot string, progress io.Writer)
 		// Unknown size in the catalogue → fall back to a hard 512 MB cap.
 		maxBytes = 512 * 1024 * 1024
 	}
-	if err := downloadAndExtract(ctx, url, v.SHA256, v.ContentSHA, maxBytes, stagingDir, progress); err != nil {
+	if err := downloadAndExtract(ctx, url, v.ContentSHA, maxBytes, stagingDir); err != nil {
 		// Staging dir is cleaned by the deferred RemoveAll above; nothing
 		// extra needed here.
 		return "", err
@@ -118,28 +126,22 @@ func Fetch(ctx context.Context, v Version, cacheRoot string, progress io.Writer)
 	return projectDir, nil
 }
 
-// downloadAndExtract streams the tarball at url, verifies its SHA256 in
-// flight, extracts the cluster/compose/localnet subtree into destDir,
-// and then (when wantContentSHA != "") verifies the extracted tree
-// matches the catalogued content hash.
+// downloadAndExtract streams the tarball at url, extracts the
+// cluster/compose/localnet subtree into destDir, and verifies the
+// extracted tree against wantContentSHA.
 //
-// Two-layer integrity model:
-//
-//   - wantSHA covers the raw gzip body. Fast (in-line via TeeReader)
-//     but not byte-stable: GitHub regenerates source-tarballs lazily
-//     and the gzip metadata can shift. On mismatch we fall through to
-//     the content check rather than failing immediately when
-//     wantContentSHA is set.
-//   - wantContentSHA covers the extracted tree (paths + sizes +
-//     content, sorted by path). Stable across GitHub's archive
-//     regeneration because it only depends on the files we keep.
-//     Authoritative when set.
+// Single-layer integrity model: the URL itself encodes a git commit
+// SHA (immutable, content-addressable — see tarballURL); GitHub's
+// `/archive/<sha>.tar.gz` endpoint always serves the same git tree.
+// Gzip envelope bytes can still vary (e.g. compression-level changes),
+// so we hash the EXTRACTED tree, not the raw body. computeTreeSHA
+// produces a deterministic hash of the kept subtree.
 //
 // The body is wrapped in io.LimitReader(maxBytes+1) so a server that
 // returns an arbitrary-sized stream (misconfigured CDN, malicious
 // proxy) can't OOM the host. The +1 lets us tell "exactly maxBytes"
 // from "more than maxBytes" — only the latter is an attack signal.
-func downloadAndExtract(ctx context.Context, url, wantSHA, wantContentSHA string, maxBytes int64, destDir string, progress io.Writer) error {
+func downloadAndExtract(ctx context.Context, url, wantContentSHA string, maxBytes int64, destDir string) error {
 	ctx, cancel := context.WithTimeout(ctx, downloadTimeout)
 	defer cancel()
 
@@ -158,10 +160,8 @@ func downloadAndExtract(ctx context.Context, url, wantSHA, wantContentSHA string
 	}
 
 	limited := &cappedReader{r: io.LimitReader(resp.Body, maxBytes+1), max: maxBytes}
-	hasher := sha256.New()
-	teed := io.TeeReader(limited, hasher)
 
-	gzr, err := gzip.NewReader(teed)
+	gzr, err := gzip.NewReader(limited)
 	if err != nil {
 		return fmt.Errorf("gunzip: %w", err)
 	}
@@ -171,30 +171,20 @@ func downloadAndExtract(ctx context.Context, url, wantSHA, wantContentSHA string
 		return err
 	}
 
-	// Drain remaining bytes so the SHA256 covers the full tarball, even
-	// if the subdir extraction finished before EOF.
-	if _, err := io.Copy(io.Discard, teed); err != nil {
+	// Drain remaining bytes so we catch a body that's larger than the
+	// extracted subtree alone (and trip the cap if applicable).
+	if _, err := io.Copy(io.Discard, limited); err != nil {
 		return fmt.Errorf("drain tarball: %w", err)
 	}
-
 	if limited.overflow {
 		return fmt.Errorf("download %s: response exceeded %d-byte cap", url, maxBytes)
 	}
 
-	gotSHA := hex.EncodeToString(hasher.Sum(nil))
-	gzipMatches := strings.EqualFold(gotSHA, wantSHA)
-
 	if wantContentSHA == "" {
-		// Legacy entries with no content hash recorded — gzip hash is
-		// the only check, mismatch is fatal.
-		if !gzipMatches {
-			return fmt.Errorf("SHA256 mismatch for %s: got %s, want %s", url, gotSHA, wantSHA)
-		}
-		return nil
+		// Should not happen — every catalogue entry has a ContentSHA.
+		// Fail loud rather than silently accepting arbitrary content.
+		return fmt.Errorf("no ContentSHA recorded for %s; refusing to install unverified tree", url)
 	}
-
-	// Content-hash path. Compute the extracted-tree hash regardless
-	// of gzip-hash outcome; the tree hash is authoritative.
 	gotContentSHA, err := computeTreeSHA(destDir)
 	if err != nil {
 		return fmt.Errorf("compute content hash: %w", err)
@@ -202,16 +192,6 @@ func downloadAndExtract(ctx context.Context, url, wantSHA, wantContentSHA string
 	if !strings.EqualFold(gotContentSHA, wantContentSHA) {
 		return fmt.Errorf("content hash mismatch for %s: extracted tree hashed to %s, want %s",
 			url, gotContentSHA, wantContentSHA)
-	}
-	if !gzipMatches && progress != nil {
-		// Tree matches but gzip doesn't — upstream regenerated the
-		// tarball. Surface to the user so the catalogue can be updated
-		// at leisure, but don't fail the install.
-		_, _ = fmt.Fprintf(progress,
-			"Warning: %s gzip hash drifted (got %s, expected %s); "+
-				"extracted tree still matches the catalogued ContentSHA. "+
-				"Please refresh internal/splice/versions.go.SHA256.\n",
-			url, gotSHA, wantSHA)
 	}
 	return nil
 }
