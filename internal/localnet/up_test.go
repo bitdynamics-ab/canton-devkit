@@ -11,14 +11,28 @@ import (
 )
 
 func TestValidateName(t *testing.T) {
-	valid := []string{"alice", "alice-net", "Test123", "a", "a-b-c"}
+	// DNS-label form (PR #20 #6): lowercase a-z0-9-, no leading/trailing
+	// hyphen, 1-63 chars. ValidateName delegates to
+	// registry.ValidateName so the rule is enforced in exactly one
+	// place; this test pins the wrapper's contract (empty-string
+	// message + error propagation).
+	valid := []string{"alice", "alice-net", "a", "a-b-c", "test123"}
 	for _, n := range valid {
 		if err := ValidateName(n); err != nil {
 			t.Errorf("expected %q valid, got %v", n, err)
 		}
 	}
 
-	invalid := []string{"", "-alice", "alice-", "has space", "has_underscore", "slash/in", string(make([]byte, 64))}
+	invalid := []string{
+		"",                       // empty -> --name is required
+		"-alice",                 // leading hyphen
+		"alice-",                 // trailing hyphen
+		"has space",              // space
+		"has_underscore",         // underscore (rejected by DNS-label rule)
+		"Test123",                // uppercase (rejected by DNS-label rule)
+		"slash/in",               // path separator
+		string(make([]byte, 64)), // length / NUL
+	}
 	for _, n := range invalid {
 		if err := ValidateName(n); err == nil {
 			t.Errorf("expected %q invalid", n)
@@ -26,18 +40,18 @@ func TestValidateName(t *testing.T) {
 	}
 }
 
-func TestIsValidName(t *testing.T) {
-	// isValidName is the lowercase predicate; ValidateName wraps it
-	// with a richer error. Keep this test so a regression in the
-	// predicate fails loudly without going through ValidateName.
-	if !isValidName("alice") {
-		t.Error("alice should validate")
-	}
-	if isValidName("") {
-		t.Error("empty should not validate")
-	}
-	if isValidName("a b") {
-		t.Error("spaces should not validate")
+// TestValidateName_DelegatesToRegistry locks in the single-source-of-
+// truth contract: a name that registry.ValidateName rejects must also
+// be rejected by the CLI wrapper. Catches the regression where
+// someone re-introduces a divergent ad-hoc check in this package.
+func TestValidateName_DelegatesToRegistry(t *testing.T) {
+	for _, n := range []string{"MyStack", "my_stack", "..", "a/b"} {
+		if registry.ValidateName(n) == nil {
+			t.Fatalf("test premise broken: registry.ValidateName accepts %q", n)
+		}
+		if ValidateName(n) == nil {
+			t.Errorf("localnet.ValidateName accepted %q but registry rejects it (policies diverged)", n)
+		}
 	}
 }
 

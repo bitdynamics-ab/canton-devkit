@@ -64,14 +64,18 @@ type UpOptions struct {
 }
 
 // ValidateName returns an error if the supplied --name is empty or
-// fails the alphanumeric-and-hyphen rule. Exported so the Cobra builder
-// can validate after flag parsing and surface a clean error.
+// fails the DNS-label rule. Thin wrapper over registry.ValidateName
+// — Zhe flagged in PR #20 that CLI and registry validation must
+// share a single rule (otherwise we maintain two policies that
+// drift). The empty-string check is hoisted here so the CLI error
+// message can mention `--name` rather than the generic
+// ErrInvalidName phrasing.
 func ValidateName(name string) error {
 	if name == "" {
 		return fmt.Errorf("--name is required")
 	}
-	if !isValidName(name) {
-		return fmt.Errorf("--name must be alphanumeric with hyphens (got %q)", name)
+	if err := registry.ValidateName(name); err != nil {
+		return fmt.Errorf("--name %w", err)
 	}
 	return nil
 }
@@ -341,19 +345,4 @@ type endpointDisplay struct {
 	key    string
 	label  string
 	scheme string
-}
-
-func isValidName(name string) bool {
-	if len(name) == 0 || len(name) > 63 {
-		return false
-	}
-	for _, c := range name {
-		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-' {
-			return false
-		}
-	}
-	if name[0] == '-' || name[len(name)-1] == '-' {
-		return false
-	}
-	return true
 }
