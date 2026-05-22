@@ -1,6 +1,7 @@
 package splice
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -59,8 +60,16 @@ func TestResolveUnsupported(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unsupported version")
 	}
-	if !strings.Contains(err.Error(), "supported:") {
-		t.Errorf("error should list supported tags, got %v", err)
+	// Post-PR #20 #2: Resolve returns ErrUncuratedTag (no longer a
+	// generic "unsupported" error) so orchestrators can distinguish
+	// "tag exists nowhere" from "tag is upstream but not curated."
+	// The list of curated tags is still embedded so users see what
+	// the safe options are.
+	if !errors.Is(err, ErrUncuratedTag) {
+		t.Errorf("expected ErrUncuratedTag, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "curated tags:") {
+		t.Errorf("error should list curated tags, got %v", err)
 	}
 }
 
