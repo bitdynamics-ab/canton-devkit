@@ -54,7 +54,7 @@ Supported Splice versions: %s
 		},
 	}
 	cmd.Flags().StringVar(&opts.Name, "name", "",
-		"Required. Identifier for this LocalNet instance (alphanumeric + hyphens, 1-63 chars).")
+		"Required. Identifier for this LocalNet instance (DNS label: lowercase a-z, 0-9, hyphens; no leading/trailing hyphen; 1-63 chars).")
 	cmd.Flags().StringVar(&opts.Version, "version", "latest",
 		"Splice LocalNet release tag.")
 	_ = cmd.MarkFlagRequired("name")
