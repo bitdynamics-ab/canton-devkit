@@ -271,6 +271,13 @@ func captureCredentials(projectDir string, errw io.Writer) map[string]registry.C
 		_, _ = fmt.Fprintf(errw, "Warning: could not read auth env files: %s\n", err)
 		return nil
 	}
+	// One-shot dev-secret warning to the injected stderr. SignToken
+	// itself is pure (no global writes) — the orchestrator owns the
+	// output channel. RunCreds emits the same warning when re-issuing
+	// tokens from a previously-captured instance.
+	if len(inputs) > 0 {
+		_, _ = fmt.Fprintln(errw, splice.DevSecretWarning)
+	}
 	out := make(map[string]registry.Credential, len(inputs))
 	for _, in := range inputs {
 		jwt, err := splice.SignToken(in)
