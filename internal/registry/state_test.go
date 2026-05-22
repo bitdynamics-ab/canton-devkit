@@ -340,8 +340,15 @@ func TestValidateName_RejectsUnsafeNames(t *testing.T) {
 		{"a;b", "shell metachar"},
 		{"a$b", "shell metachar"},
 		{`a"b`, "shell metachar"},
-		// 65-char name (one over the limit).
-		{strings.Repeat("a", 65), "over 64-char length"},
+		// DNS-label policy (PR #20 #6): uppercase, underscore, trailing
+		// hyphen all rejected so the name is safe to embed as a
+		// hostname in the future {service}.{instance}.localhost model.
+		{"MyStack", "uppercase rejected (not DNS-label)"},
+		{"my_stack", "underscore rejected (not DNS-label)"},
+		{"name-", "trailing hyphen (not DNS-label)"},
+		{"_leading", "leading underscore (not DNS-label)"},
+		// 64-char name (one over the DNS-label limit of 63).
+		{strings.Repeat("a", 64), "over 63-char DNS-label length"},
 	}
 	for _, c := range cases {
 		t.Run(c.why, func(t *testing.T) {
@@ -366,10 +373,10 @@ func TestValidateName_AcceptsRealisticNames(t *testing.T) {
 		"ci-1",
 		"ci-local",
 		"my-stack",
-		"my_stack",
 		"dev2",
 		"a",
-		strings.Repeat("a", 64),
+		"1", // single-digit also valid as DNS label
+		strings.Repeat("a", 63),
 	}
 	for _, name := range good {
 		if err := ValidateName(name); err != nil {
