@@ -68,6 +68,15 @@ type UpOptions struct {
 	Name    string
 	Version string // "" or "latest" → splice.LatestAlias
 
+	// AllowUncurated opts the user into layer 2 of the two-layer
+	// version model (PR #20 #2): if --version is not in the curated
+	// catalogue, RunUp consults the upstream Splice GitHub repo to
+	// resolve a commit SHA, prints a one-line "uncurated" warning, and
+	// proceeds. Without this flag, an uncurated --version fails fast
+	// with ErrUncuratedTag. Default false keeps the audited path the
+	// safe default for first-time users.
+	AllowUncurated bool
+
 	// SkipPreflight bypasses the docker.RunPreflight call. This is a
 	// test-only knob — unit tests for the `up` orchestration can't run
 	// Docker checks in CI. Not exposed as a CLI flag.
@@ -129,11 +138,20 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// 1. Resolve version + adapter.
-	version, err := splice.Resolve(opts.Version)
+	// 1. Resolve version + adapter. Layer-1 (curated) is the default;
+	// AllowUncurated opts into layer-2 (upstream resolution) — see
+	// PR #20 #2 / internal/splice/resolver.go.
+	version, fromUpstream, err := splice.ResolveOrUpstream(ctx, opts.Version, opts.AllowUncurated)
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "%s\n", err)
 		return ExitUserError
+	}
+	if fromUpstream {
+		// One-line caveat so the user is never surprised that the bits
+		// they're running weren't reviewed by a DevKit maintainer.
+		_, _ = fmt.Fprintf(errw,
+			"warning: using uncurated Splice tag %q (resolved upstream to commit %s); not tested by DevKit\n",
+			version.Tag, shortSHA(version.Commit))
 	}
 	adapter, err := adapterFor(version)
 	if err != nil {
@@ -408,4 +426,13 @@ type endpointDisplay struct {
 	key    string
 	label  string
 	scheme string
+}
+
+// shortSHA returns the first 7 characters of a git SHA (or the whole
+// string if shorter). Used only for the uncurated-tag warning.
+func shortSHA(s string) string {
+	if len(s) <= 7 {
+		return s
+	}
+	return s[:7]
 }

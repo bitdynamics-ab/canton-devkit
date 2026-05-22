@@ -200,6 +200,29 @@ func TestRunUp_HappyPath_FakeDriven(t *testing.T) {
 	}
 }
 
+// TestRunUp_UncuratedTagWithoutOptInRejected locks in the security
+// floor of the two-layer version model (PR #20 #2): without
+// --allow-uncurated, a tag that isn't in the curated catalogue must
+// be rejected as a user error BEFORE any expensive work.
+func TestRunUp_UncuratedTagWithoutOptInRejected(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	t.Setenv("HOME", t.TempDir()) // isolate resolved-versions.json
+
+	var out, errBuf bytes.Buffer
+	code := RunUp(context.Background(), &out, &errBuf, &UpOptions{
+		Name:           "uncurated-default",
+		Version:        "0.99.0-this-tag-does-not-exist",
+		SkipPreflight:  true,
+		AllowUncurated: false,
+	})
+	if code != ExitUserError {
+		t.Fatalf("RunUp code = %d, want ExitUserError; stderr=%q", code, errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "--allow-uncurated") {
+		t.Errorf("stderr should hint at --allow-uncurated, got %q", errBuf.String())
+	}
+}
+
 // composeRunnerStub is the fake injected via UpOptions.NewRunner in
 // the happy-path test. It records call order so a regression that
 // flips Up/WaitForHealthy is caught immediately.
