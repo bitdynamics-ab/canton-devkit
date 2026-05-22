@@ -3,6 +3,19 @@
 Living list of things DevKit does not (yet) do well, with the rationale
 and links to follow-up tickets where applicable. Updated as we ship.
 
+## Instance naming
+
+- **`--name` must be a DNS label.** Names are validated against RFC 1123:
+  1-63 chars of lowercase `[a-z0-9-]`, must start and end with `[a-z0-9]`.
+  Uppercase, underscores, and leading/trailing hyphens are rejected.
+  We chose DNS-label form so the same name is safe to embed as a
+  hostname in the future `{service}.{instance}.localhost` routing model
+  without a second translation step. Single source of truth lives in
+  `internal/registry/state.go` (`ValidateName`); the CLI layer delegates.
+  *Migration:* pre-PR-#20 instances created with uppercase or underscore
+  names (e.g. `MyStack`, `my_stack`) must be torn down with the old
+  binary and re-created under a DNS-label name.
+
 ## Concurrency / locking
 
 - **Windows: registry locking is process-local only.**

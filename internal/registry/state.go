@@ -94,16 +94,27 @@ var ErrNotFound = errors.New("instance not registered")
 var ErrInvalidName = errors.New("invalid instance name")
 
 // validInstanceName matches names that are safe to use as a path
-// component on every supported OS. The character set is intentionally
-// narrower than what filesystems accept — we forbid hyphens at the
-// start (to avoid being parsed as a flag in tooling) and require at
-// least one alphanumeric to keep accidental empty/dot names out.
+// component AND as a DNS label. We require DNS label form (RFC 1123)
+// because the future hostname-routing model — Splice publishes
+// {service}.{instance}.localhost endpoints — would otherwise break
+// for names containing uppercase or underscores. Zhe flagged this in
+// PR #20: keeping a single rule across registry, CLI and downstream
+// hostname construction is cheaper than wiring two policies that
+// drift.
 //
-// `a-z A-Z 0-9 _ -` and length 1-64 covers every reasonable instance
-// name (alice, ci-local, my_stack, dev-2). Anything Unicode, with
-// path separators, with `.`, or with shell metacharacters is
-// rejected.
-var validInstanceName = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$`)
+// RFC 1123 label format:
+//   - lowercase a-z, 0-9, hyphen
+//   - must start AND end with [a-z0-9] (no leading/trailing hyphen)
+//   - 1-63 characters
+//
+// Rejects: uppercase ("MyStack"), underscores ("my_stack"), leading
+// hyphen ("-flag"), trailing hyphen ("name-"), empty, anything Unicode
+// or with path separators / shell metacharacters.
+//
+// Migration: pre-#20 instances named with uppercase or underscores
+// (e.g. "my_stack") need to be re-created under a DNS-label name.
+// Documented in docs/limitations.md.
+var validInstanceName = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 
 // ValidateName rejects instance names that could escape the registry
 // root or break tooling. Called from every public entry point that
@@ -113,10 +124,10 @@ var validInstanceName = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$`)
 // narrow after users depend on quirky names. Specifically rejected:
 //
 //   - empty string
-//   - leading hyphen (could be parsed as a flag)
-//   - any byte outside [A-Za-z0-9_-]
-//   - longer than 64 bytes (no good reason to allow more, and helps
-//     bound on-disk path lengths on Windows)
+//   - leading or trailing hyphen
+//   - any byte outside [a-z0-9-] (uppercase and underscore rejected
+//     to keep DNS-label compatibility for future hostname routing)
+//   - longer than 63 bytes (DNS label maximum)
 //
 // After the regex passes, we belt-and-suspenders: confirm
 // filepath.Clean(name) == name and that the resulting Root()/name path
@@ -124,7 +135,7 @@ var validInstanceName = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$`)
 // edge cases the regex might miss (e.g. NTFS short names).
 func ValidateName(name string) error {
 	if !validInstanceName.MatchString(name) {
-		return fmt.Errorf("%w: %q must be 1-64 chars of [A-Za-z0-9_-], starting with alphanumeric or underscore",
+		return fmt.Errorf("%w: %q must be a DNS label: 1-63 chars of [a-z0-9-], starting and ending with [a-z0-9]",
 			ErrInvalidName, name)
 	}
 	if filepath.Clean(name) != name {
