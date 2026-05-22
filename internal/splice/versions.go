@@ -88,17 +88,23 @@ func init() {
 	}
 }
 
-// Resolve maps a user-supplied version string to a Version. The special
-// value "latest" (or "") maps to LatestAlias. Anything not in the
-// catalogue returns an error listing the supported tags.
+// Resolve maps a user-supplied version string to a curated Version.
+// The special value "latest" (or "") maps to LatestAlias. Tags not in
+// the catalogue return ErrUncuratedTag — the caller is responsible for
+// deciding whether to fall through to runtime resolution (see
+// ResolveOrUpstream / ResolveUpstream).
+//
+// We keep Resolve catalogue-only so a "just give me whatever works"
+// caller can't accidentally start running arbitrary upstream tags
+// without an explicit opt-in elsewhere.
 func Resolve(req string) (Version, error) {
 	if req == "" || req == "latest" {
 		req = LatestAlias
 	}
 	v, ok := SupportedVersions[req]
 	if !ok {
-		return Version{}, fmt.Errorf("unsupported Splice version %q; supported: %s",
-			req, strings.Join(Supported(), ", "))
+		return Version{}, fmt.Errorf("%w: %q (curated tags: %s)",
+			ErrUncuratedTag, req, strings.Join(Supported(), ", "))
 	}
 	return v, nil
 }

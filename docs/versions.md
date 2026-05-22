@@ -96,15 +96,27 @@ A reviewer then:
   merging.
 - Commits + pushes.
 
-## Automatic refresh
+## Two-layer resolution (PR #20 #2)
 
-`.github/workflows/refresh-versions.yml` runs every Monday at 06:00 UTC:
-- Enumerates upstream tags via the GitHub API.
-- Filters to N.N.N semver (skips pre-release artifacts like `next-cilr`).
-- Runs the maintainer script for any tag not in the catalogue.
-- Opens a PR with the diff. A human reviewer merges or closes.
+DevKit now exposes the catalogue as the *default* tier of a two-layer
+version model — the curated path stays audited, and an explicit
+opt-in unlocks arbitrary upstream tags for prerelease testing.
 
-Manual trigger: GitHub Actions → "Refresh Splice versions" → Run workflow.
+| Layer | Trigger | Source | ContentSHA | Notes |
+|-------|---------|--------|------------|-------|
+| 1 — Curated | `--version <tag>` for any tag in `versions.json` (or `--version latest`) | Embedded catalogue | Pinned at catalogue time, verified post-extract | Default. Audited. Offline. |
+| 2 — Upstream | `--version <tag> --allow-uncurated` for any tag not in the catalogue | `api.github.com/repos/canton-network/splice/git/refs/tags/<tag>` | Computed on first extract, recorded for future runs | Requires explicit opt-in. Network on first call. Cached at `~/.canton-devkit/cache/resolved-versions.json`. |
+
+Layer 2 trades audit for flexibility: it lets a user spin up a
+`0.7.0-alpha.4` LocalNet without waiting for a catalogue PR, but
+DevKit can't promise the bits were tested against this release.
+Orchestrators print a one-line "Using uncurated Splice tag" warning
+on the layer-2 path so the user is never surprised.
+
+Because layer 2 exists, the previous weekly cron that auto-bumped
+the catalogue was removed in this change — it added latency without
+solving the prerelease use case, and the catalogue is now strictly
+the curated-by-humans surface.
 
 ## Why not just point at the latest tag?
 
