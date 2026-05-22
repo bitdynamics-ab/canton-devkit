@@ -57,6 +57,11 @@ Supported Splice versions: %s
 		"Required. Identifier for this LocalNet instance (DNS label: lowercase a-z, 0-9, hyphens; no leading/trailing hyphen; 1-63 chars).")
 	cmd.Flags().StringVar(&opts.Version, "version", "latest",
 		"Splice LocalNet release tag.")
+	cmd.Flags().BoolVar(&opts.AllowUncurated, "allow-uncurated", false,
+		"Allow --version tags not in the curated DevKit catalogue. "+
+			"DevKit will resolve the tag against the upstream Splice GitHub "+
+			"repo and proceed. The resulting LocalNet is not tested by "+
+			"DevKit — use for prereleases / alphas at your own risk.")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }
