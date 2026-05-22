@@ -193,13 +193,29 @@ func (c *ComposeRunner) healthSnapshotRaw(ctx context.Context) (raw []byte, read
 //
 //	state=running, health=healthy       → counts toward ready
 //	state=running, health=starting      → not ready, keep polling
-//	state=running, health=unhealthy     → fatal (won't recover on its own)
+//	state=running, health=unhealthy     → not ready, keep polling
 //	state=running, health=""            → counts toward ready (no healthcheck)
 //	state=exited|dead|removing|paused   → fatal (service died)
 //	state="" (no services yet)          → not ready, keep polling
 //
 // The function returns ready=true iff at least one service was reported
 // AND every reported service is in a counts-toward-ready bucket.
+//
+// # Why `running/unhealthy` is not fatal
+//
+// Splice's container healthchecks routinely report `unhealthy` for a
+// stretch during onboarding (DAML package vetting, SV keygen, validator
+// registration) before settling green. The container is alive, the
+// process is running, and `restart: always` brings it back if it does
+// crash — so a transient `unhealthy` is not proof of irrecoverable
+// failure. The 15-minute WaitForHealthy timeout (with the post-mortem
+// `docker compose ps` snapshot in the error message) is the actual
+// gate; classifyHealth's job is just "is this snapshot good enough to
+// stop polling?", and the honest answer for unhealthy is "no, wait".
+//
+// `exited`/`dead`/`removing`/`paused` ARE fatal because the container
+// is no longer running — no amount of waiting will produce a healthy
+// state from there.
 func classifyHealth(raw []byte) (ready bool, fatal error) {
 	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
 	count := 0
@@ -233,7 +249,10 @@ func classifyHealth(raw []byte) (ready bool, fatal error) {
 			case "starting":
 				return false, nil
 			case "unhealthy":
-				return false, fmt.Errorf("service %q is unhealthy", name)
+				// Not fatal — Splice flips unhealthy briefly during
+				// onboarding. WaitForHealthy's 15-min timeout is the
+				// real gate. See decision-table commentary above.
+				return false, nil
 			default:
 				return false, nil
 			}

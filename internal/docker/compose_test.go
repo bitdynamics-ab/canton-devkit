@@ -197,9 +197,21 @@ func TestClassifyHealth(t *testing.T) {
 			wantReady: false,
 		},
 		{
-			name:      "unhealthy_is_fatal",
+			// Splice's containers report unhealthy mid-onboarding;
+			// the 15-min WaitForHealthy timeout is the actual gate.
+			// classifyHealth should keep polling, not fail fast.
+			name:      "unhealthy_keeps_polling",
 			raw:       "canton\trunning\thealthy\nsplice\trunning\tunhealthy\n",
-			wantFatal: `service "splice" is unhealthy`,
+			wantReady: false,
+		},
+		{
+			// Mirror case: an unhealthy snapshot should not lock the
+			// poller into a fatal state — once the service recovers,
+			// the next snapshot lands in the healthy bucket and the
+			// poller succeeds.
+			name:      "unhealthy_recovers_to_healthy",
+			raw:       "canton\trunning\thealthy\nsplice\trunning\thealthy\n",
+			wantReady: true,
 		},
 		{
 			name:      "exited_is_fatal",
@@ -265,9 +277,12 @@ func skipIfNoShell(t *testing.T) {
 
 func TestWaitForHealthyReturnsOnFatal(t *testing.T) {
 	skipIfNoShell(t)
+	// Use a genuinely fatal state — exited — since unhealthy is no
+	// longer fatal (Splice flips unhealthy briefly during onboarding;
+	// the 15-min WaitForHealthy timeout is the real gate for that).
 	rec := &scriptedRecorder{
 		script: func(args []string) (string, int) {
-			return "canton\trunning\thealthy\nsplice\trunning\tunhealthy\n", 0
+			return "canton\trunning\thealthy\npostgres\texited\t\n", 0
 		},
 	}
 	c := &ComposeRunner{
@@ -277,8 +292,40 @@ func TestWaitForHealthyReturnsOnFatal(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	err := c.WaitForHealthy(ctx)
-	if err == nil || !strings.Contains(err.Error(), "unhealthy") {
-		t.Fatalf("expected unhealthy fatal, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "exited") {
+		t.Fatalf("expected exited fatal, got %v", err)
+	}
+}
+
+// TestWaitForHealthyRecoversFromTransientUnhealthy proves the
+// behaviour Zhe asked for on PR #20: an unhealthy snapshot must not
+// terminate the poller. Splice routinely reports unhealthy during
+// onboarding, then settles to healthy. We script two ps calls in
+// sequence: the first returns unhealthy, the second healthy. The
+// poller must keep going past the first and succeed on the second.
+func TestWaitForHealthyRecoversFromTransientUnhealthy(t *testing.T) {
+	skipIfNoShell(t)
+	calls := 0
+	rec := &scriptedRecorder{
+		script: func(args []string) (string, int) {
+			calls++
+			if calls == 1 {
+				return "canton\trunning\thealthy\nsplice\trunning\tunhealthy\n", 0
+			}
+			return "canton\trunning\thealthy\nsplice\trunning\thealthy\n", 0
+		},
+	}
+	c := &ComposeRunner{
+		ProjectName: "p", WorkDir: ".",
+		commandFn: rec.factory,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := c.WaitForHealthy(ctx); err != nil {
+		t.Fatalf("expected success after transient unhealthy, got %v", err)
+	}
+	if calls < 2 {
+		t.Errorf("expected at least 2 polls (unhealthy → healthy), got %d", calls)
 	}
 }
 
