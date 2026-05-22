@@ -6,6 +6,7 @@ package localnet
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -173,6 +174,17 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 	composeFiles := append([]string(nil), adapter.ComposeFiles()...)
 	composeFiles = append(composeFiles, overlayPath) // absolute path; not relative to projectDir
 
+	// PR #20 #5/#7: read any pre-existing state so we can reuse the
+	// previously assigned UI host ports — stable URLs across an
+	// up/down/up cycle is the whole point of persisting them. If no
+	// prior state exists (first run, or it was deleted), priorPorts
+	// stays nil and ReuseOrAllocateUIPorts falls back to full
+	// ephemeral allocation.
+	var priorPorts map[string]int
+	if prior, err := registry.Read(opts.Name); err == nil {
+		priorPorts = prior.Ports
+	}
+
 	state := registry.NewState(opts.Name, version.Tag)
 	state.ComposeProject = "canton-" + opts.Name
 	state.ComposeFiles = composeFiles
@@ -190,11 +202,23 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 
 	// 8. Pre-allocate UI host ports. Splice's nginx/swagger/postgres
 	// services don't honor TEST_PORT — they only consume the per-service
-	// env vars (APP_USER_UI_PORT etc). We always allocate ephemerally so
-	// concurrent instances never collide and users don't care which
-	// host port any service is bound to.
-	uiOverrides, err := AllocateUIPorts(UIPortEnvVars())
+	// env vars (APP_USER_UI_PORT etc).
+	//
+	// On first run priorPorts is nil → all ports allocated ephemerally.
+	// On re-up after a clean `down`, ReuseOrAllocateUIPorts hands back
+	// the same ports the user previously had (PR #20 #5/#7 stable-URL
+	// contract) unless one is busy, in which case we surface
+	// ErrPortBusy as a user error and stop — silently picking a new
+	// port would defeat the contract.
+	uiOverrides, err := ReuseOrAllocateUIPorts(UIPortEnvVars(), priorPorts)
 	if err != nil {
+		if errors.Is(err, ErrPortBusy) {
+			_, _ = fmt.Fprintf(errw,
+				"%s\nFree the conflicting process (lsof -i :<port>) or tear down the "+
+					"other instance and re-run `localnet up --name %s`.\n",
+				err, opts.Name)
+			return ExitPreflightFail
+		}
 		_, _ = fmt.Fprintf(errw, "Failed to allocate UI ports: %s\n", err)
 		return ExitRuntimeFailure
 	}
