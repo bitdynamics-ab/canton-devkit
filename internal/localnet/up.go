@@ -50,6 +50,16 @@ func AsExitError(code int) error {
 	return ExitCodeError(code)
 }
 
+// composeOps is the subset of *docker.ComposeRunner that RunUp drives.
+// Extracted as an interface (and matched implicitly by ComposeRunner)
+// so a fake-driven happy-path test can swap in a no-op stub. Two
+// methods is the floor — adding more here means rewiring RunUp first,
+// keeping the seam honest.
+type composeOps interface {
+	Up(ctx context.Context) error
+	WaitForHealthy(ctx context.Context) error
+}
+
 // UpOptions captures the parsed `localnet up` flags. Cobra binds the
 // flags directly to the corresponding `cmd.Flags().StringVar` targets in
 // internal/cli/localnet/up.go; this struct exists so the Run* function
@@ -62,6 +72,21 @@ type UpOptions struct {
 	// test-only knob — unit tests for the `up` orchestration can't run
 	// Docker checks in CI. Not exposed as a CLI flag.
 	SkipPreflight bool
+
+	// Test-only seams (PR #20 #9). When nil, RunUp uses the real
+	// splice.Fetch and *docker.ComposeRunner. The fake-driven happy-
+	// path test in up_test.go injects no-op stubs so we can prove the
+	// orchestration sequence without docker / network.
+	//
+	// FetchFn replaces splice.Fetch — return a directory that contains
+	// (at minimum) an env/ subdir with role auth files; nil err means
+	// "happy path."
+	FetchFn func(ctx context.Context, v splice.Version, cacheRoot string, out io.Writer) (string, error)
+	// NewRunner replaces the *docker.ComposeRunner constructor —
+	// receives the same plumbing fields the real runner gets so the
+	// test can assert on them. Returning a stub that succeeds on
+	// Up+WaitForHealthy drives RunUp to the success path.
+	NewRunner func(projectName string, composeFiles, envFiles, env []string, workDir string, logw io.Writer) composeOps
 }
 
 // ValidateName returns an error if the supplied --name is empty or
@@ -146,9 +171,15 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 		}
 	}
 
-	// 5. Fetch + verify compose project.
+	// 5. Fetch + verify compose project. FetchFn is a test seam
+	// (PR #20 #9); in production it's nil and we call splice.Fetch
+	// directly.
 	cacheRoot := splice.CacheRoot()
-	projectDir, err := splice.Fetch(ctx, version, cacheRoot, out)
+	fetch := opts.FetchFn
+	if fetch == nil {
+		fetch = splice.Fetch
+	}
+	projectDir, err := fetch(ctx, version, cacheRoot, out)
 	if err != nil {
 		if ctx.Err() != nil {
 			_, _ = fmt.Fprintln(errw, "Interrupted while fetching Splice LocalNet")
@@ -240,13 +271,21 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 	}
 	env := append(os.Environ(), mapToEnv(adapter.OverlayEnv(params))...)
 
-	runner := &docker.ComposeRunner{
-		ProjectName:  state.ComposeProject,
-		ComposeFiles: composeFiles,
-		EnvFiles:     adapter.EnvFiles(),
-		Env:          env,
-		WorkDir:      projectDir,
-		LogWriter:    out,
+	// NewRunner is a test seam (PR #20 #9). Production: build the
+	// real *docker.ComposeRunner (which satisfies composeOps
+	// implicitly).
+	var runner composeOps
+	if opts.NewRunner != nil {
+		runner = opts.NewRunner(state.ComposeProject, composeFiles, adapter.EnvFiles(), env, projectDir, out)
+	} else {
+		runner = &docker.ComposeRunner{
+			ProjectName:  state.ComposeProject,
+			ComposeFiles: composeFiles,
+			EnvFiles:     adapter.EnvFiles(),
+			Env:          env,
+			WorkDir:      projectDir,
+			LogWriter:    out,
+		}
 	}
 
 	_, _ = fmt.Fprintln(out, "Starting services...")

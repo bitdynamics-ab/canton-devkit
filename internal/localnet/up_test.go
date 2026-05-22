@@ -3,11 +3,15 @@ package localnet
 import (
 	"bytes"
 	"context"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
+	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
 
 func TestValidateName(t *testing.T) {
@@ -102,6 +106,122 @@ func TestRunUp_RejectsConcurrentSameNameOp(t *testing.T) {
 	if !strings.Contains(stderrText, "busy") && !strings.Contains(stderrText, "lock") {
 		t.Errorf("expected 'busy' or 'lock' in stderr, got %q", stderrText)
 	}
+}
+
+// TestRunUp_HappyPath_FakeDriven covers the request Zhe filed as
+// PR #20 #9: prove the bring-up orchestration sequence end-to-end
+// without docker or network. We swap in two seams:
+//
+//   - FetchFn returns a tempdir pre-populated with env/<role>-auth-on.env
+//     files (so captureCredentials reaches signing).
+//   - NewRunner returns a stub whose Up + WaitForHealthy both succeed.
+//
+// We then assert:
+//
+//   - return code is ExitSuccess
+//   - registry.State for --name was written with Status=running
+//   - state.Ports contains the five UI keys we hand to compose
+//   - state.Credentials has one entry per Splice role
+//   - the runner stub saw Up *and* WaitForHealthy called (sequence
+//     matters — a regression that called WaitForHealthy before Up
+//     would deadlock under real docker)
+func TestRunUp_HappyPath_FakeDriven(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+
+	// Build a fake project dir containing the env/ files
+	// LoadCredentialInputs expects. Three roles, each with VALIDATOR_USER
+	// and AUDIENCE set; everything else can be omitted.
+	projectDir := t.TempDir()
+	envDir := filepath.Join(projectDir, "env")
+	if err := os.MkdirAll(envDir, 0o755); err != nil {
+		t.Fatalf("mkdir env: %v", err)
+	}
+	envFiles := map[string]string{
+		"sv-auth-on.env":           "AUTH_SV_VALIDATOR_USER_NAME=sv-user\nAUTH_SV_AUDIENCE=sv-aud\n",
+		"app-provider-auth-on.env": "AUTH_APP_PROVIDER_VALIDATOR_USER_NAME=ap-user\nAUTH_APP_PROVIDER_AUDIENCE=ap-aud\n",
+		"app-user-auth-on.env":     "AUTH_APP_USER_VALIDATOR_USER_NAME=au-user\nAUTH_APP_USER_AUDIENCE=au-aud\n",
+	}
+	for name, body := range envFiles {
+		if err := os.WriteFile(filepath.Join(envDir, name), []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	stub := &composeRunnerStub{}
+	opts := &UpOptions{
+		Name:          "happy",
+		Version:       splice.LatestAlias,
+		SkipPreflight: true,
+		FetchFn: func(_ context.Context, _ splice.Version, _ string, _ io.Writer) (string, error) {
+			return projectDir, nil
+		},
+		NewRunner: func(string, []string, []string, []string, string, io.Writer) composeOps {
+			return stub
+		},
+	}
+
+	var out, errBuf bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	code := RunUp(ctx, &out, &errBuf, opts)
+	if code != ExitSuccess {
+		t.Fatalf("RunUp = %d, want ExitSuccess\nstdout=%q\nstderr=%q",
+			code, out.String(), errBuf.String())
+	}
+
+	// Sequence: Up before WaitForHealthy, both exactly once.
+	if stub.upCalls != 1 {
+		t.Errorf("compose Up called %d times, want 1", stub.upCalls)
+	}
+	if stub.waitCalls != 1 {
+		t.Errorf("compose WaitForHealthy called %d times, want 1", stub.waitCalls)
+	}
+	if stub.firstCall != "Up" {
+		t.Errorf("first runner call = %q, want %q (Wait before Up would deadlock under real docker)",
+			stub.firstCall, "Up")
+	}
+
+	// Registry has the expected terminal state.
+	state, err := registry.Read("happy")
+	if err != nil {
+		t.Fatalf("registry.Read: %v", err)
+	}
+	if state.Status != registry.StatusRunning {
+		t.Errorf("state.Status = %q, want %q", state.Status, registry.StatusRunning)
+	}
+	for _, k := range []string{"app_user_ui", "app_provider_ui", "sv_ui", "swagger_ui", "postgres"} {
+		if p, ok := state.Ports[k]; !ok || p <= 0 {
+			t.Errorf("state.Ports[%q] = %d (ok=%v); expected non-zero", k, p, ok)
+		}
+	}
+	if len(state.Credentials) != 3 {
+		t.Errorf("state.Credentials length = %d, want 3", len(state.Credentials))
+	}
+}
+
+// composeRunnerStub is the fake injected via UpOptions.NewRunner in
+// the happy-path test. It records call order so a regression that
+// flips Up/WaitForHealthy is caught immediately.
+type composeRunnerStub struct {
+	upCalls, waitCalls int
+	firstCall          string
+}
+
+func (s *composeRunnerStub) Up(context.Context) error {
+	s.upCalls++
+	if s.firstCall == "" {
+		s.firstCall = "Up"
+	}
+	return nil
+}
+
+func (s *composeRunnerStub) WaitForHealthy(context.Context) error {
+	s.waitCalls++
+	if s.firstCall == "" {
+		s.firstCall = "WaitForHealthy"
+	}
+	return nil
 }
 
 // TestRunUp_LockReleasedAfterDownIsReusable proves the symmetric
