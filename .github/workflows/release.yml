@@ -18,7 +18,7 @@ env:
 jobs:
   release:
     name: Build release artifacts
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
 
     steps:
       - name: Check out repository
@@ -79,7 +79,7 @@ jobs:
     # Disabled: canton-devkit invokes docker and docker compose directly for its features,
     # so running it inside a container is not suitable.
     if: false
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
 
     steps:
       - name: Check out repository
