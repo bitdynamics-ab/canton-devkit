@@ -11,11 +11,25 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
+// composeDowner is the subset of *docker.ComposeRunner that RunDown
+// drives. Extracted as an interface so tests can swap in a stub that
+// returns a controlled error (or success) without touching Docker.
+// *docker.ComposeRunner satisfies it implicitly.
+type composeDowner interface {
+	Down(ctx context.Context) error
+}
+
 // DownOptions captures `localnet down` flags. Cobra binds directly.
 type DownOptions struct {
 	Name      string
 	KeepData  bool
 	KeepCache bool // documented, currently informational (cache is shared across instances)
+
+	// NewRunner is a test-only seam (PR #21 Zhe review). When nil,
+	// RunDown constructs the real *docker.ComposeRunner. Tests inject a
+	// stub to assert the compose-failure / interruption decision table
+	// without docker.
+	NewRunner func(projectName string, composeFiles, envFiles, env []string, workDir string, logw io.Writer) composeDowner
 }
 
 // RunDown tears down a named instance. Idempotent — running against an
@@ -59,6 +73,17 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 	_, _ = fmt.Fprintf(out, "Stopping Canton LocalNet %q (Splice %s)...\n",
 		state.Name, state.SpliceVersion)
 
+	// Persist the transitional `stopping` state BEFORE invoking compose
+	// (Zhe review, PR #21). If we crashed or were SIGKILLed mid-
+	// teardown without this, `localnet status` would keep reporting
+	// `running` even though containers are partially down. Failure to
+	// write the transitional state is non-fatal — the worst case
+	// reverts to the pre-fix behaviour.
+	state.Status = registry.StatusStopping
+	if err := registry.Write(state); err != nil {
+		_, _ = fmt.Fprintf(errw, "Warning: could not persist stopping state: %s\n", err)
+	}
+
 	env, envFiles, err := composeContext(state)
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "Warning: could not reconstruct compose context: %s\n", err)
@@ -66,19 +91,45 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 		// the project label even without all substitutions, just noisy.
 	}
 
-	runner := &docker.ComposeRunner{
-		ProjectName:  state.ComposeProject,
-		ComposeFiles: state.ComposeFiles,
-		EnvFiles:     envFiles,
-		Env:          env,
-		WorkDir:      state.ProjectDir,
-		LogWriter:    out,
+	var runner composeDowner
+	if opts.NewRunner != nil {
+		runner = opts.NewRunner(state.ComposeProject, state.ComposeFiles, envFiles, env, state.ProjectDir, out)
+	} else {
+		runner = &docker.ComposeRunner{
+			ProjectName:  state.ComposeProject,
+			ComposeFiles: state.ComposeFiles,
+			EnvFiles:     envFiles,
+			Env:          env,
+			WorkDir:      state.ProjectDir,
+			LogWriter:    out,
+		}
 	}
 	if err := runner.Down(ctx); err != nil {
-		// Compose down failure on an already-cleaned project is
-		// recoverable — fall through to data-dir cleanup. Surface the
-		// error for visibility but don't fail the command.
-		_, _ = fmt.Fprintf(errw, "Warning: docker compose down: %s\n", err)
+		// Zhe review (PR #21): a compose-down failure must NOT silently
+		// fall through to registry.Delete — doing so would scrub the
+		// retry metadata while containers / volumes may still be
+		// running. Preserve state as Failed, leave the data dir +
+		// registry entry intact so the user can retry, and exit
+		// non-zero so scripts see the failure.
+		//
+		// Interruption (Ctrl-C / SIGTERM) is a separate cell:
+		// ExitTimeout rather than ExitRuntimeFailure, since the
+		// underlying compose call may still be in flight on the host.
+		if ctx.Err() != nil {
+			_, _ = fmt.Fprintln(errw, "Interrupted during docker compose down — retry once the host is idle")
+			state.Status = registry.StatusPartial
+			_ = registry.Write(state)
+			return ExitTimeout
+		}
+		_, _ = fmt.Fprintf(errw,
+			"docker compose down failed: %s\nRegistry state preserved at %s. "+
+				"Re-run `localnet down --name %s` once the host is healthy.\n",
+			err, state.DataDir, state.Name)
+		state.Status = registry.StatusFailed
+		if werr := registry.Write(state); werr != nil {
+			_, _ = fmt.Fprintf(errw, "Warning: could not persist failed state: %s\n", werr)
+		}
+		return ExitRuntimeFailure
 	}
 
 	if !opts.KeepData {

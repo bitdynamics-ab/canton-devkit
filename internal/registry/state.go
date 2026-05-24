@@ -37,6 +37,12 @@ type Status string
 const (
 	StatusCreating Status = "creating"
 	StatusRunning  Status = "running"
+	// StatusStopping is the transitional state RunDown persists BEFORE
+	// it invokes `docker compose down`. Without it, a crash or SIGKILL
+	// mid-teardown would leave the registry reporting `running` while
+	// the containers may be partially torn down — `localnet status`
+	// would then lie to the user. Zhe flagged this on PR #21.
+	StatusStopping Status = "stopping"
 	StatusStopped  Status = "stopped"
 	StatusFailed   Status = "failed"
 	StatusPartial  Status = "partial"
