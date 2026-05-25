@@ -87,6 +87,7 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 	if hub != nil {
 		mux.HandleFunc("POST /api/instances", handleCreate(hub))
 		mux.HandleFunc("GET /api/instances/{name}/events", handleInstanceEvents(hub))
+		mux.HandleFunc("DELETE /api/instances/{name}/up", handleCancelUp(hub))
 	} else {
 		// Stub so a misconfigured deployment fails loudly
 		// rather than 404 (which the frontend would mistake
@@ -99,6 +100,7 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		}
 		mux.HandleFunc("POST /api/instances", stub)
 		mux.HandleFunc("GET /api/instances/{name}/events", stub)
+		mux.HandleFunc("DELETE /api/instances/{name}/up", stub)
 	}
 }
 
@@ -669,4 +671,72 @@ func splitLines(s string) []string {
 	}
 	out = append(out, s[start:])
 	return out
+}
+
+// ── BIT-163e: cancel an in-flight create-instance goroutine ───────
+
+// handleCancelUp: DELETE /api/instances/{name}/up.
+//
+// The CSRF middleware in router.go protects DELETE against
+// cross-origin invocations (DELETE isn't a CORS simple method,
+// so a browser preflight would fire and be rejected by the
+// Origin check). Loopback bind is the outer defence.
+//
+// Sequence:
+//  1. validate name
+//  2. lookup the job; 404 if no in-flight goroutine
+//  3. publish a synthetic kind=cancelled event so SSE consumers
+//     see the user-initiated cancellation BEFORE the natural
+//     step.failed events RunUp emits when it notices ctx.Err()
+//  4. invoke the registered cancel func — the goroutine's
+//     ctx.Done() fires, RunUp returns ExitTimeout via its
+//     existing path, the deferred ClearBuffer + Unregister run
+//
+// 204 No Content on success. The frontend doesn't need a body —
+// the SSE stream carries the actual cancellation marker, and
+// the registry change becomes visible to /api/instances on the
+// goroutine's next state write.
+//
+// Idempotency: a second DELETE for the same name (after the
+// goroutine has already exited) returns 404, NOT 200/204. The
+// frontend's "cancel" button should debounce so this only
+// matters for genuine retries; the 404 is the right signal that
+// there's nothing to cancel.
+func handleCancelUp(hub *stream.Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if err := registry.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+
+		if !jobs.Active(name) {
+			writeErrorWithCode(w, http.StatusNotFound,
+				ErrCodeNotFound,
+				"no in-flight create job for "+name,
+				"the up may have already finished — refresh the instance list to check")
+			return
+		}
+
+		// Publish cancellation marker BEFORE invoking cancel.
+		// Order matters: a fast subscriber reading the SSE in
+		// real-time should see kind=cancelled THEN the
+		// step.failed events RunUp emits as ctx.Err() propagates
+		// through the orchestrator. Reverse order would surface
+		// the natural failure ("Interrupted while …") without
+		// the user-initiated marker, which the frontend would
+		// mis-render as a generic failure.
+		progress.PublishCancelled(hub, name, "user requested via DELETE")
+
+		// Cancel returns false if the job vanished between
+		// Active() and Cancel(). Treat as success — the goal
+		// was achieved (no in-flight work). Don't 404 on a
+		// race the user can't observe.
+		jobs.Cancel(name)
+
+		log.Printf("cancel instance %q via DELETE", name)
+		w.WriteHeader(http.StatusNoContent)
+	}
 }

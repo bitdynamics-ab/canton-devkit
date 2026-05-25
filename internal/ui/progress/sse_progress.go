@@ -238,6 +238,37 @@ func (w *eventWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+// PublishCancelled emits a synthetic cancellation marker on a
+// per-instance topic. Called by the DELETE /api/instances/{name}/up
+// handler BEFORE invoking the in-flight goroutine's context
+// cancel — so the SSE consumer sees the cancellation as a
+// user-initiated event ahead of the natural step.failed events
+// that follow when RunUp notices ctx.Err().
+//
+// The frontend uses the kind=cancelled event to switch from "in
+// progress" to "cancelled" UX (different banner copy, different
+// retry CTA) rather than treating it as a generic failure.
+//
+// reason is surfaced verbatim. Today the handler passes "user
+// requested via DELETE"; future variants could carry "server
+// shutdown" or "policy timeout."
+//
+// No event ID — this is a one-shot synthetic; SSE consumers
+// don't gap-detect on it. The hub still buffers it if the topic
+// is in EnableBuffering mode, so a late subscriber sees the
+// cancellation.
+func PublishCancelled(hub *stream.Hub, name, reason string) {
+	payload, _ := json.Marshal(struct {
+		Kind   string `json:"kind"`
+		Reason string `json:"reason,omitempty"`
+	}{Kind: "cancelled", Reason: reason})
+	hub.Publish(stream.Event{
+		SchemaVersion: stream.EventSchemaVersion,
+		Topic:         TopicFor(name),
+		Data:          payload,
+	})
+}
+
 // uintToString — strconv.FormatUint without the import. Same
 // helper as in internal/ui/stream/buffer_test.go; kept duplicated
 // to avoid coupling a test helper into a production package.
