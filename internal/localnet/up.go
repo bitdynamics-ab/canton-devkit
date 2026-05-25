@@ -177,10 +177,13 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 	// the flag is always false.
 	if !opts.SkipPreflight {
 		_, _ = fmt.Fprintln(out, "Running preflight checks...")
+		// Shared thresholds with `localnet doctor` — the
+		// `doctor && up` gating contract requires both surfaces
+		// to use the same numbers. See docker.DefaultMin*Bytes.
 		report := docker.RunPreflight(ctx, docker.Options{
 			DataDir:        registry.Root(),
-			MinDiskBytes:   10 * 1024 * 1024 * 1024,
-			MinMemoryBytes: 4 * 1024 * 1024 * 1024,
+			MinDiskBytes:   docker.DefaultMinDiskBytes,
+			MinMemoryBytes: docker.DefaultMinMemoryBytes,
 		})
 		report.Write(out)
 		if !report.OK() {

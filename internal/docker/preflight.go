@@ -10,6 +10,24 @@ import (
 
 const preflightCheckTimeout = 10 * time.Second
 
+// DefaultMinDiskBytes / DefaultMinMemoryBytes are the shared
+// resource thresholds used by BOTH `localnet up` preflight and
+// `localnet doctor`. They MUST be equal across the two surfaces —
+// the `doctor && up` shell-gating contract (PR #39 review:
+// "doctor must not fail on a host where `up` would pass") relies
+// on it. A regression where one site drifted was caught in the
+// PR #39 follow-up review; TestThresholdParity_DoctorMatchesUp
+// pins the equality.
+//
+// Values chosen to match the current `up` defaults (the
+// historical authority — `up` shipped these before `doctor`
+// existed). If the proposal requires a bump, edit ONCE here and
+// the gate stays consistent.
+const (
+	DefaultMinDiskBytes   uint64 = 10 * 1024 * 1024 * 1024 // 10 GiB
+	DefaultMinMemoryBytes uint64 = 4 * 1024 * 1024 * 1024  // 4 GiB
+)
+
 // Status describes the outcome of a single preflight check.
 type Status int
 
