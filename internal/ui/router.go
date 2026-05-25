@@ -26,10 +26,33 @@ func NewRouter(assets http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	mux.HandleFunc("GET /api/version", handleVersion)
-	// SPA + static — catch-all. MUST be last so /api/* and /events
-	// (added later) take precedence.
-	mux.Handle("GET /", assets)
-	return withCommonHeaders(mux)
+	// Reviewer pin (PR #41 #c): the SPA fallback used to swallow
+	// /api/<typo> requests and return the React index with 200,
+	// hiding routing bugs (a misspelled handler path on the
+	// frontend looked like "the API returned HTML, weird"). We
+	// now have an explicit 404 handler for /api/* AND /events/*
+	// that fires when no specific pattern matches. Anything else
+	// (genuine SPA route) falls through to the asset handler.
+	mux.HandleFunc("/api/", apiNotFound)
+	mux.HandleFunc("/events/", apiNotFound) // sub-paths only; /events is added by BIT-130
+	// Catch-all for everything else. Method intentionally
+	// unconstrained so an unknown POST hits the asset handler
+	// (which writes a 405 internally) rather than colliding with
+	// the /api/ method pattern under Go 1.22's mux conflict rules.
+	mux.Handle("/", assets)
+	// withOriginCheck protects credential-issuing routes from
+	// cross-origin POST. Skipped for safe methods; see
+	// internal/ui/csrf.go for the rationale.
+	return withCommonHeaders(withOriginCheck(mux))
+}
+
+// apiNotFound is the explicit 404 for unknown /api/* and /events/*
+// paths. Returns JSON so a frontend fetch() consumer sees a
+// structured error instead of an HTML SPA-index 200.
+func apiNotFound(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = w.Write([]byte(`{"error":"not found"}` + "\n"))
 }
 
 // handleHealthz is the cheapest possible liveness probe — no docker

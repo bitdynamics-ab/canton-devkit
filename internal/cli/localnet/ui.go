@@ -43,8 +43,9 @@ import (
 // already in use and we fell back to a free port via `--port 0`.
 func buildUI() *cobra.Command {
 	var (
-		port int
-		host string
+		port             int
+		host             string
+		allowNonLoopback bool
 	)
 	cmd := &cobra.Command{
 		Use:   "ui",
@@ -67,9 +68,10 @@ identifiers and is not designed for LAN-wide exposure.`,
 				return err
 			}
 			srv := ui.New(ui.Config{
-				Host:   host,
-				Port:   port,
-				Router: ui.NewRouter(assets),
+				Host:             host,
+				Port:             port,
+				Router:           ui.NewRouter(assets),
+				AllowNonLoopback: allowNonLoopback,
 			})
 
 			// Bind FIRST so we can print the actual URL with the
@@ -123,7 +125,11 @@ identifiers and is not designed for LAN-wide exposure.`,
 	cmd.Flags().IntVar(&port, "port", 7777,
 		"TCP port to bind. 0 = OS-assigned (prints the actual port).")
 	cmd.Flags().StringVar(&host, "host", "127.0.0.1",
-		"Loopback interface to bind. Non-loopback values are accepted "+
-			"but strongly discouraged — the UI exposes credentials.")
+		"Loopback interface to bind. Non-loopback values are REFUSED "+
+			"unless --allow-non-loopback is also set.")
+	cmd.Flags().BoolVar(&allowNonLoopback, "allow-non-loopback", false,
+		"Allow binding on a non-loopback interface. Exposes the UI "+
+			"(JWTs, party IDs) on the network. Use only with an SSH "+
+			"tunnel or a firewall in front. Default: refused.")
 	return cmd
 }
