@@ -153,10 +153,43 @@ var stepLabel = map[Step]string{
 	StepCaptureJWTs:    "Capturing JWTs · registering endpoints",
 }
 
-// StartStep prints the step's header line. detail is appended in
-// parentheses when non-empty so the user sees context (e.g. the
-// resolved splice tag).
+// textVisibleSteps is the allowlist of steps TextProgress renders a
+// header line for. Mirrors the three lines today's up.go emits
+// directly:
+//
+//	"Running preflight checks..."
+//	"Starting services..."
+//	"Waiting for services to become healthy..."
+//
+// The other five steps (resolve, lock, fetch, persist, capture
+// JWTs) happen silently in the CLI today — either because the
+// underlying call writes its own progress (splice.Fetch streams
+// download dots into Out()) or because they're fast enough to not
+// warrant a line. Keeping the allowlist here means BIT-163b's
+// refactor can issue StartStep for ALL steps unconditionally;
+// TextProgress filters to the visible ones, and the upcoming
+// SSEProgress impl emits every event.
+//
+// Adding a step here is a deliberate CLI behaviour change — it'll
+// add a new line to `localnet up` output. Discuss before doing it.
+var textVisibleSteps = map[Step]bool{
+	StepPreflight:     true,
+	StepStartServices: true,
+	StepWaitHealthy:   true,
+}
+
+// StartStep prints the step's header line — but ONLY for steps in
+// textVisibleSteps. The five silent steps (resolve, lock, fetch,
+// persist, capture_jwts) happen invisibly in the CLI today; the
+// orchestrator calls StartStep unconditionally and TextProgress
+// filters. SSEProgress (future) emits an event for every call.
+//
+// detail is appended in parentheses when non-empty so the user
+// sees context (e.g. the resolved splice tag).
 func (t *TextProgress) StartStep(step Step, detail string) {
+	if !textVisibleSteps[step] {
+		return
+	}
 	label := labelFor(step)
 	if detail == "" {
 		fmt.Fprintf(t.OutW, "%s...\n", label)

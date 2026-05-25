@@ -115,7 +115,12 @@ func ValidateName(name string) error {
 	return nil
 }
 
-// RunUp orchestrates the full bring-up sequence:
+// RunUp orchestrates the full bring-up sequence. The Step taxonomy
+// (StepResolveVersion through StepCaptureJWTs in progress.go) matches
+// the eight phases the webui-create.jsx mockup renders; each phase
+// calls into the `prog` Progress interface so the CLI's TextProgress
+// emits today's terminal lines while the Web UI's SSEProgress
+// (BIT-163c) ships typed step events to the browser.
 //
 //  1. Resolve --version against the curated list + look up the per-major
 //     adapter for that Splice tag.
@@ -134,41 +139,56 @@ func ValidateName(name string) error {
 //
 // SIGINT/SIGTERM cancel the in-flight `docker compose` call. RunUp never
 // modifies the host outside ~/.canton/.
-func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) int {
+//
+// CLI byte-equivalence: the CLI caller passes `&TextProgress{OutW:
+// cmd.OutOrStdout(), ErrW: cmd.ErrOrStderr()}`. TextProgress filters
+// StartStep to a three-step allowlist (preflight / start_services /
+// wait_healthy) so today's terminal output is unchanged; the five
+// silent steps become non-silent only when SSEProgress is wired in.
+func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	// 1. Resolve version + adapter. Layer-1 (curated) is the default;
 	// AllowUncurated opts into layer-2 (upstream resolution) — see
 	// PR #20 #2 / internal/splice/resolver.go.
+	prog.StartStep(StepResolveVersion, "")
 	version, fromUpstream, err := splice.ResolveOrUpstream(ctx, opts.Version, opts.AllowUncurated)
 	if err != nil {
-		_, _ = fmt.Fprintf(errw, "%s\n", err)
+		prog.FailStep(StepResolveVersion, err.Error(), nil)
 		return ExitUserError
 	}
 	if fromUpstream {
 		// One-line caveat so the user is never surprised that the bits
 		// they're running weren't reviewed by a DevKit maintainer.
-		_, _ = fmt.Fprintf(errw,
-			"warning: using uncurated Splice tag %q (resolved upstream to commit %s); not tested by DevKit\n",
-			version.Tag, shortSHA(version.Commit))
+		prog.Warn(fmt.Sprintf(
+			"using uncurated Splice tag %q (resolved upstream to commit %s); not tested by DevKit",
+			version.Tag, shortSHA(version.Commit)))
 	}
 	adapter, err := adapterFor(version)
 	if err != nil {
-		_, _ = fmt.Fprintf(errw, "%s\n", err)
+		prog.FailStep(StepResolveVersion, err.Error(), nil)
 		return ExitRuntimeFailure
 	}
+	prog.FinishStep(StepResolveVersion,
+		fmt.Sprintf("splice %s · adapter %s", version.Tag, adapter.MajorVersion()))
 
-	_, _ = fmt.Fprintf(out, "Starting Canton LocalNet %q (Splice %s, adapter %s)...\n",
+	// The "Starting Canton LocalNet ... " header preserves the
+	// existing CLI line. TextProgress writes it verbatim; SSEProgress
+	// gets it as a console-style event so the browser sees the same
+	// banner.
+	fmt.Fprintf(prog.Out(), "Starting Canton LocalNet %q (Splice %s, adapter %s)...\n",
 		opts.Name, version.Tag, adapter.MajorVersion())
 
 	// 2. Per-instance lock. Released on any return path.
+	prog.StartStep(StepAcquireLock, "")
 	release, err := registry.Lock(opts.Name)
 	if err != nil {
-		_, _ = fmt.Fprintf(errw, "%s\n", err)
+		prog.FailStep(StepAcquireLock, err.Error(), nil)
 		return ExitUserError
 	}
 	defer release()
+	prog.FinishStep(StepAcquireLock, "")
 
 	// 3. Preflight (Docker CLI / daemon / Compose v2 / disk / memory).
 	// Host TCP ports are NOT preflight-checked — DevKit allocates them
@@ -176,7 +196,7 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 	// SkipPreflight is honored for unit tests; in production code paths
 	// the flag is always false.
 	if !opts.SkipPreflight {
-		_, _ = fmt.Fprintln(out, "Running preflight checks...")
+		prog.StartStep(StepPreflight, "")
 		// Shared thresholds with `localnet doctor` — the
 		// `doctor && up` gating contract requires both surfaces
 		// to use the same numbers. See docker.DefaultMin*Bytes.
@@ -185,44 +205,49 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 			MinDiskBytes:   docker.DefaultMinDiskBytes,
 			MinMemoryBytes: docker.DefaultMinMemoryBytes,
 		})
-		report.Write(out)
+		report.Write(prog.Out())
 		if !report.OK() {
-			_, _ = fmt.Fprintln(errw, "\nPreflight failed. Address the items above and re-run.")
+			prog.FailStep(StepPreflight,
+				"\nPreflight failed. Address the items above and re-run.", nil)
 			return ExitPreflightFail
 		}
+		prog.FinishStep(StepPreflight, "")
 	}
 
-	// 5. Fetch + verify compose project. FetchFn is a test seam
+	// 4. Fetch + verify compose project. FetchFn is a test seam
 	// (PR #20 #9); in production it's nil and we call splice.Fetch
 	// directly.
+	prog.StartStep(StepFetchSplice, "")
 	cacheRoot := splice.CacheRoot()
 	fetch := opts.FetchFn
 	if fetch == nil {
 		fetch = splice.Fetch
 	}
-	projectDir, err := fetch(ctx, version, cacheRoot, out)
+	projectDir, err := fetch(ctx, version, cacheRoot, prog.Out())
 	if err != nil {
 		if ctx.Err() != nil {
-			_, _ = fmt.Fprintln(errw, "Interrupted while fetching Splice LocalNet")
+			prog.FailStep(StepFetchSplice, "Interrupted while fetching Splice LocalNet", nil)
 			return ExitTimeout
 		}
-		_, _ = fmt.Fprintf(errw, "Failed to fetch Splice LocalNet %s: %s\n", version.Tag, err)
+		prog.FailStep(StepFetchSplice,
+			fmt.Sprintf("Failed to fetch Splice LocalNet %s", version.Tag), err)
 		return ExitRuntimeFailure
 	}
+	prog.FinishStep(StepFetchSplice, "")
 
-	// 6. Generate per-instance container-rename overlay. Every Splice
-	// service has a hardcoded container_name; without renaming, two
-	// instances collide daemon-wide regardless of project name.
+	// 5. Persist state — generate per-instance container-rename
+	// overlay, write the (creating) state.json. Every Splice service
+	// has a hardcoded container_name; without renaming, two instances
+	// collide daemon-wide regardless of project name.
+	prog.StartStep(StepPersistState, "")
 	dataDir := registry.DataDirFor(opts.Name)
 	containerPrefix := opts.Name + "-"
 	overlayPath, err := WriteContainerRenameOverlay(dataDir, containerPrefix)
 	if err != nil {
-		_, _ = fmt.Fprintf(errw, "Failed to write container-rename overlay: %s\n", err)
+		prog.FailStep(StepPersistState, "Failed to write container-rename overlay", err)
 		return ExitRuntimeFailure
 	}
 
-	// 7. Persist state BEFORE compose-up so a crash mid-bring-up still
-	// leaves enough metadata for `localnet down` to clean up.
 	composeFiles := append([]string(nil), adapter.ComposeFiles()...)
 	composeFiles = append(composeFiles, overlayPath) // absolute path; not relative to projectDir
 
@@ -248,11 +273,11 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 	state.AlphaProtocolEnabled = adapter.SupportsAlphaProtocol()
 	state.Status = registry.StatusCreating
 	if err := registry.Write(state); err != nil {
-		_, _ = fmt.Fprintf(errw, "Failed to write registry state: %s\n", err)
+		prog.FailStep(StepPersistState, "Failed to write registry state", err)
 		return ExitRuntimeFailure
 	}
 
-	// 8. Pre-allocate UI host ports. Splice's nginx/swagger/postgres
+	// Pre-allocate UI host ports. Splice's nginx/swagger/postgres
 	// services don't honor TEST_PORT — they only consume the per-service
 	// env vars (APP_USER_UI_PORT etc).
 	//
@@ -265,13 +290,12 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 	uiOverrides, err := ReuseOrAllocateUIPorts(UIPortEnvVars(), priorPorts)
 	if err != nil {
 		if errors.Is(err, ErrPortBusy) {
-			_, _ = fmt.Fprintf(errw,
-				"%s\nFree the conflicting process (lsof -i :<port>) or tear down the "+
-					"other instance and re-run `localnet up --name %s`.\n",
-				err, opts.Name)
+			prog.FailStep(StepPersistState,
+				fmt.Sprintf("%s\nFree the conflicting process (lsof -i :<port>) or tear down the "+
+					"other instance and re-run `localnet up --name %s`.", err, opts.Name), nil)
 			return ExitPreflightFail
 		}
-		_, _ = fmt.Fprintf(errw, "Failed to allocate UI ports: %s\n", err)
+		prog.FailStep(StepPersistState, "Failed to allocate UI ports", err)
 		return ExitRuntimeFailure
 	}
 	state.Ports["app_user_ui"] = uiOverrides["APP_USER_UI_PORT"]
@@ -279,10 +303,12 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 	state.Ports["sv_ui"] = uiOverrides["SV_UI_PORT"]
 	state.Ports["swagger_ui"] = uiOverrides["SWAGGER_UI_PORT"]
 	state.Ports["postgres"] = uiOverrides["DB_PORT"]
+	prog.FinishStep(StepPersistState, "")
 
-	// Build the compose process env and run `up -d --wait`. Ephemeral
-	// is always true: canton participant ports get TEST_PORT="" and
-	// UI/postgres ports come from uiOverrides.
+	// 6. Starting services. Build the compose process env and run
+	// `up -d --wait`. Ephemeral is always true: canton participant
+	// ports get TEST_PORT="" and UI/postgres ports come from
+	// uiOverrides.
 	params := splice.InstanceParams{
 		Name:            opts.Name,
 		Version:         version,
@@ -297,7 +323,7 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 	// implicitly).
 	var runner composeOps
 	if opts.NewRunner != nil {
-		runner = opts.NewRunner(state.ComposeProject, composeFiles, adapter.EnvFiles(), env, projectDir, out)
+		runner = opts.NewRunner(state.ComposeProject, composeFiles, adapter.EnvFiles(), env, projectDir, prog.Out())
 	} else {
 		runner = &docker.ComposeRunner{
 			ProjectName:  state.ComposeProject,
@@ -305,47 +331,51 @@ func RunUp(ctx context.Context, out io.Writer, errw io.Writer, opts *UpOptions) 
 			EnvFiles:     adapter.EnvFiles(),
 			Env:          env,
 			WorkDir:      projectDir,
-			LogWriter:    out,
+			LogWriter:    prog.Out(),
 		}
 	}
 
-	_, _ = fmt.Fprintln(out, "Starting services...")
+	prog.StartStep(StepStartServices, "")
 	if err := runner.Up(ctx); err != nil {
-		markFailed(state, errw)
+		markFailed(state, prog.Err())
 		if ctx.Err() != nil {
-			_, _ = fmt.Fprintln(errw, "Interrupted while starting services")
+			prog.FailStep(StepStartServices, "Interrupted while starting services", nil)
 			return ExitTimeout
 		}
-		_, _ = fmt.Fprintf(errw, "Failed to start services: %s\n", err)
+		prog.FailStep(StepStartServices, "Failed to start services", err)
 		return ExitRuntimeFailure
 	}
+	prog.FinishStep(StepStartServices, "")
 
-	_, _ = fmt.Fprintln(out, "Waiting for services to become healthy...")
+	// 7. Wait for services to become healthy.
+	prog.StartStep(StepWaitHealthy, "")
 	if err := runner.WaitForHealthy(ctx); err != nil {
-		markFailed(state, errw)
+		markFailed(state, prog.Err())
 		if ctx.Err() != nil {
-			_, _ = fmt.Fprintln(errw, "Timed out waiting for services")
+			prog.FailStep(StepWaitHealthy, "Timed out waiting for services", nil)
 			return ExitTimeout
 		}
-		_, _ = fmt.Fprintf(errw, "Services failed health check: %s\n", err)
+		prog.FailStep(StepWaitHealthy, "Services failed health check", err)
 		return ExitRuntimeFailure
 	}
+	prog.FinishStep(StepWaitHealthy, "")
 
-	// 9. Capture JWTs and persist running state. (UI ports were
-	// pre-allocated in step 8; canton participant ports run on Docker-
-	// ephemeral host ports and aren't surfaced — they're network-
-	// internal.)
-	if creds := captureCredentials(projectDir, errw); creds != nil {
+	// 8. Capture JWTs and persist running state. (UI ports were
+	// pre-allocated in step 5; canton participant ports run on
+	// Docker-ephemeral host ports and aren't surfaced — they're
+	// network-internal.)
+	prog.StartStep(StepCaptureJWTs, "")
+	if creds := captureCredentials(projectDir, prog.Err()); creds != nil {
 		state.Credentials = creds
 	}
 	state.Status = registry.StatusRunning
 	if err := registry.Write(state); err != nil {
-		_, _ = fmt.Fprintf(errw, "Warning: services healthy but registry write failed: %s\n", err)
+		prog.Warn(fmt.Sprintf("services healthy but registry write failed: %s", err))
 	}
+	prog.FinishStep(StepCaptureJWTs, "")
 
-	_, _ = fmt.Fprintf(out, "\nCanton LocalNet %q (Splice %s) is ready.\n\n",
-		opts.Name, version.Tag)
-	printEndpoints(out, state)
+	prog.Done(fmt.Sprintf(`Canton LocalNet %q (Splice %s) is ready.`, opts.Name, version.Tag))
+	printEndpoints(prog.Out(), state)
 	return ExitSuccess
 }
 

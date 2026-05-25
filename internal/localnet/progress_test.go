@@ -9,10 +9,15 @@ import (
 )
 
 // TestTextProgress_StartStepOutput pins the exact byte sequence
-// TextProgress.StartStep produces for each step. The BIT-163b
-// refactor must keep CLI output byte-identical; this test catches
-// any drift introduced when the refactor migrates a fmt.Fprintf
-// callsite over to progress.StartStep.
+// TextProgress.StartStep produces for each visible step. The
+// BIT-163b refactor must keep CLI output byte-identical; this test
+// catches drift introduced when the refactor migrates a
+// fmt.Fprintf callsite over to progress.StartStep.
+//
+// "Visible" here = the three steps the existing CLI emits a header
+// line for (preflight / start_services / wait_healthy). The five
+// silent steps are covered by TestTextProgress_StartStepSilentSteps
+// below.
 func TestTextProgress_StartStepOutput(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -21,22 +26,28 @@ func TestTextProgress_StartStepOutput(t *testing.T) {
 		want   string
 	}{
 		{
-			name:   "no detail",
+			name:   "preflight, no detail",
 			step:   StepPreflight,
 			detail: "",
 			want:   "Running preflight checks...\n",
 		},
 		{
-			name:   "with detail",
-			step:   StepFetchSplice,
-			detail: "splice 0.4.12",
-			want:   "Fetching Splice LocalNet (splice 0.4.12)...\n",
+			name:   "start_services, no detail",
+			step:   StepStartServices,
+			detail: "",
+			want:   "Starting services...\n",
 		},
 		{
-			name:   "unknown step falls back to token",
-			step:   Step("hypothetical_future_step"),
+			name:   "wait_healthy, no detail",
+			step:   StepWaitHealthy,
 			detail: "",
-			want:   "hypothetical_future_step...\n",
+			want:   "Waiting for services to become healthy...\n",
+		},
+		{
+			name:   "preflight with detail (hypothetical future use)",
+			step:   StepPreflight,
+			detail: "skipping disk check",
+			want:   "Running preflight checks (skipping disk check)...\n",
 		},
 	}
 	for _, tc := range cases {
@@ -49,6 +60,40 @@ func TestTextProgress_StartStepOutput(t *testing.T) {
 			}
 			if errw.Len() != 0 {
 				t.Errorf("stderr should be empty, got %q", errw.String())
+			}
+		})
+	}
+}
+
+// TestTextProgress_StartStepSilentSteps pins the "silent" contract
+// for the five steps the existing CLI doesn't print a header for.
+// These steps still happen — and SSEProgress (BIT-163c) will emit
+// typed events for them — but TextProgress must produce zero bytes
+// or BIT-163b's refactor would accidentally add new lines to
+// `localnet up` output.
+//
+// Adding a step to textVisibleSteps is a deliberate CLI behaviour
+// change; this test fails loudly if someone slips one in.
+func TestTextProgress_StartStepSilentSteps(t *testing.T) {
+	silent := []Step{
+		StepResolveVersion,
+		StepAcquireLock,
+		StepFetchSplice,
+		StepPersistState,
+		StepCaptureJWTs,
+	}
+	for _, s := range silent {
+		t.Run(string(s), func(t *testing.T) {
+			var out, errw bytes.Buffer
+			p := &TextProgress{OutW: &out, ErrW: &errw}
+			p.StartStep(s, "any detail")
+			if out.Len() != 0 {
+				t.Errorf("Step %q is supposed to be silent in CLI; got %q",
+					s, out.String())
+			}
+			if errw.Len() != 0 {
+				t.Errorf("Step %q stderr should be empty; got %q",
+					s, errw.String())
 			}
 		})
 	}

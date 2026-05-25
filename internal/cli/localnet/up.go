@@ -49,8 +49,17 @@ Supported Splice versions: %s
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
+			// TextProgress wraps the Cobra writers so RunUp's typed
+			// step events (BIT-163a/b) render as today's terminal
+			// lines for CLI users. The Web UI's POST handler
+			// (BIT-165) will pass an SSEProgress impl instead so
+			// browsers see the full typed event stream.
+			prog := &localnet.TextProgress{
+				OutW: cmd.OutOrStdout(),
+				ErrW: cmd.ErrOrStderr(),
+			}
 			return localnet.AsExitError(
-				localnet.RunUp(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), opts))
+				localnet.RunUp(cmd.Context(), prog, opts))
 		},
 	}
 	cmd.Flags().StringVar(&opts.Name, "name", "",
