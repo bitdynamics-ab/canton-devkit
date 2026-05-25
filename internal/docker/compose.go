@@ -341,7 +341,28 @@ func (c *ComposeRunner) DiscoverPort(ctx context.Context, service string, contai
 	return port, nil
 }
 
-func (c *ComposeRunner) Down(ctx context.Context) error {
-	args := append(c.composeBase(), "down", "--volumes", "--remove-orphans")
+// Stop runs `docker compose down`. When removeVolumes is true the call
+// is destructive — it strips named volumes and orphan containers,
+// equivalent to the previous Down() semantics and what `localnet
+// clean` will use. When false it preserves volumes so a follow-up
+// `localnet up` against the same --name can resume from existing
+// state; this is what `localnet down` (BIT-124) wants.
+//
+// --remove-orphans is always set because forgetting it leaves
+// dangling containers when a later compose project rename happens
+// (e.g. across an instance rename), and the user has no way to find
+// or clean them without inspecting docker directly.
+func (c *ComposeRunner) Stop(ctx context.Context, removeVolumes bool) error {
+	args := append(c.composeBase(), "down", "--remove-orphans")
+	if removeVolumes {
+		args = append(args, "--volumes")
+	}
 	return c.command(ctx, args...).Run()
+}
+
+// Down is the destructive variant — kept as a thin wrapper over
+// Stop(true) so existing callers and tests keep working. New code
+// should call Stop directly with the explicit removeVolumes choice.
+func (c *ComposeRunner) Down(ctx context.Context) error {
+	return c.Stop(ctx, true)
 }
