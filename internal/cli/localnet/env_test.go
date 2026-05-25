@@ -59,6 +59,9 @@ func TestEnv_ShellOutputIsPosixQuoted(t *testing.T) {
 	for _, want := range []string{
 		"CANTON_INSTANCE='demo'",
 		"CANTON_SPLICE_VERSION='0.6.4'",
+		// Use filepath.Join via Sprintf so the assertion holds
+		// on Windows (\) and POSIX (/) -- mirrors the
+		// production filepath.Join in env.go::collectEnv.
 		"CANTON_AUTH_FILE='" + filepath.Join("/test/demo", "auth.json") + "'",
 		"CANTON_APP_USER_UI_PORT='4485'",
 		"CANTON_APP_PROVIDER_UI_PORT='3485'",
@@ -97,6 +100,9 @@ func TestEnv_ShellQuotesNeutraliseInjection(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 
+	// Must contain the hostile substring AS A LITERAL inside
+	// single quotes. The `$()` and backticks must NOT appear
+	// outside surrounding quotes.
 	wantLiteral := "CANTON_AUTH_FILE='" + filepath.Join("/tmp/$(rm -rf ~); echo pwned `id`", "auth.json") + "'"
 	if !strings.Contains(out.String(), wantLiteral) {
 		t.Errorf("hostile DataDir not POSIX-quoted; output:\n%s\nwant substring: %s", out.String(), wantLiteral)
@@ -166,6 +172,10 @@ func TestEnv_DotenvUsesDoubleQuoteAndEscapes(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 
+	// Every backtick is escaped per dotenv spec (some parsers
+	// treat ` as command-substitution); want \`tick\`.
+	// Build via filepath.Join + dotenvQuote so the assertion is
+	// portable across separator conventions.
 	want := "CANTON_AUTH_FILE=" + dotenvQuote(filepath.Join(s.DataDir, "auth.json"))
 	if !strings.Contains(out.String(), want) {
 		t.Errorf("dotenv escaping wrong\nfull:\n%s\nwant substring: %s", out.String(), want)
