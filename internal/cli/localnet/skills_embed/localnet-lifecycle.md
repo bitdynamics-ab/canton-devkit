@@ -28,7 +28,7 @@ they can point a Daml SDK or external app at.
 dpm localnet up --name <NAME>
 ```
 
-Defaults to the latest curated Splice version. Add `--splice 0.6.4`
+Defaults to the latest curated Splice version. Add `--version 0.6.4`
 to pin one explicitly. The command blocks until every service is
 `healthy` — typically 3–5 minutes on a cold start.
 
@@ -83,12 +83,13 @@ text the user can act on. Never try `dmesg`, `systemctl`, or
 
 ```sh
 dpm localnet up --name demo
-dpm localnet up --name testnet --port-base 6000
+dpm localnet up --name testnet
 dpm localnet list
 ```
 
-Each instance gets its own port block (defaults to allocator;
-`--port-base` pins). State lives under `~/.canton-devkit/localnet/<name>/`.
+Each instance gets its own port block (allocator picks free ports per
+instance). State lives under `~/.canton-devkit/localnet/<name>/`. Pin
+a specific Splice version per instance with `--version 0.6.4`.
 
 ## What to NOT do
 
