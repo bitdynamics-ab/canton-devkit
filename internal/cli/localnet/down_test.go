@@ -28,9 +28,7 @@ func seedDownInstance(t *testing.T, name string, status registry.Status) {
 
 func installFakeStopper(t *testing.T, fn func(ctx context.Context, st *registry.State) error) {
 	t.Helper()
-	prev := stopperFn
-	stopperFn = fn
-	t.Cleanup(func() { stopperFn = prev })
+	installStopper(t, fn)
 }
 
 // TestDown_NotFoundIsIdempotentSuccess pins the PR #21 carry-forward:
@@ -210,5 +208,56 @@ func TestDown_InvalidNameRejected(t *testing.T) {
 	cmd.SetArgs([]string{"--name", "bad/name"})
 	if err := cmd.Execute(); err == nil {
 		t.Fatal("expected error for invalid --name")
+	}
+}
+
+// TestDown_LockAcquiredBeforeStateBranch is the reviewer pin (PR #33
+// #4) for lock-ordering. The original code read state, branched on
+// StatusStopped, THEN acquired the lock — racy: a concurrent writer
+// flipping status between the Read and the Lock would slip through.
+//
+// We pin the corrected order with a NEGATIVE assertion: seed an
+// already-stopped instance, hold the lock from this goroutine, then
+// run `down`. With the bug present, RunDown would observe Stopped
+// before the lock and short-circuit ExitSuccess without contending
+// the lock. With the fix, RunDown attempts the lock FIRST, gets
+// LockHeld immediately (registry.Lock is non-blocking by contract),
+// and returns ExitUserError. The exit code is the observable that
+// proves the lock came first.
+//
+// Additionally, the stopper MUST NOT have been called — proving
+// neither the stopped-short-circuit nor any later code path was
+// reached.
+func TestDown_LockAcquiredBeforeStateBranch(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedDownInstance(t, "demo", registry.StatusStopped)
+
+	release, err := registry.Lock("demo")
+	if err != nil {
+		t.Fatalf("seed lock: %v", err)
+	}
+	defer release()
+
+	stopperRan := false
+	installFakeStopper(t, func(context.Context, *registry.State) error {
+		stopperRan = true
+		return nil
+	})
+
+	var out, errBuf bytes.Buffer
+	code := RunDown(context.Background(), &out, &errBuf,
+		DownOptions{Name: "demo"})
+
+	// Lock-first contract: with the bug, code would be ExitSuccess
+	// (short-circuit on the stale Stopped read). With the fix, the
+	// lock attempt fails first and surfaces as ExitUserError.
+	if code == localnet.ExitSuccess {
+		t.Fatalf("RunDown returned ExitSuccess while lock was held — short-circuited on state before Lock (lock-ordering regression). stderr=%q", errBuf.String())
+	}
+	if code != localnet.ExitUserError {
+		t.Fatalf("RunDown returned %d, want ExitUserError; stderr=%q", code, errBuf.String())
+	}
+	if stopperRan {
+		t.Error("stopper ran despite lock contention — lock not held across the call")
 	}
 }
