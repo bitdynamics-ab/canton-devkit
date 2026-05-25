@@ -20,7 +20,7 @@ type Snapshot struct {
 
 // SnapshotVolume is one entry in Snapshot.Volumes.
 type SnapshotVolume struct {
-	Name        string `json:"name"`         // docker volume name
-	SizeBytes   int64  `json:"size_bytes"`
-	ContentSHA  string `json:"content_sha"`  // sha256 of the tar stream
+	Name       string `json:"name"` // docker volume name
+	SizeBytes  int64  `json:"size_bytes"`
+	ContentSHA string `json:"content_sha"` // sha256 of the tar stream
 }
