@@ -36,6 +36,7 @@
 <script type="text/babel" src="webui-explorer.jsx"></script>
 <script type="text/babel" src="webui-metrics-agent.jsx"></script>
 <script type="text/babel" src="webui-extras.jsx"></script>
+<script type="text/babel" src="webui-create.jsx"></script>
 
 <!-- frames -->
 <script type="text/babel" src="browser-window.jsx"></script>
@@ -110,6 +111,35 @@ function App() {
         <DCArtboard id="web-instances" label="Multi-instance switcher" width={1440} height={900}>
           <WebFrame label="Switch LocalNet · hubble" url="devkit.local/instances">
             <InstanceSwitcherScreen />
+          </WebFrame>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ────────────────────────────────────────────────────────────────── */}
+      <DCSection id="create" title="Create LocalNet · the long-running flow" subtitle="POST /api/instances + SSE progress + ExitCodeError mapping. Grounded in localnet.RunUp.">
+        <DCArtboard id="create-form" label="1 · New LocalNet · empty form" width={1440} height={900}>
+          <WebFrame label="New LocalNet · hubble" url="devkit.local/instances/new">
+            <CreateLocalNetFormScreen />
+          </WebFrame>
+        </DCArtboard>
+        <DCArtboard id="create-filled" label="2 · New LocalNet · validated + advanced" width={1440} height={900}>
+          <WebFrame label="New LocalNet · hubble" url="devkit.local/instances/new">
+            <CreateLocalNetFilledScreen />
+          </WebFrame>
+        </DCArtboard>
+        <DCArtboard id="create-progress" label="3 · Bringing up · SSE live progress" width={1440} height={900}>
+          <WebFrame label="Bringing up demo" url="devkit.local/instances/demo?creating">
+            <CreateProgressScreen />
+          </WebFrame>
+        </DCArtboard>
+        <DCArtboard id="create-err-ports" label="4a · Error · PORTS_IN_USE (exit 2)" width={1440} height={900}>
+          <WebFrame label="New LocalNet · error" url="devkit.local/instances/new">
+            <CreateErrorPortsScreen />
+          </WebFrame>
+        </DCArtboard>
+        <DCArtboard id="create-err-docker" label="4b · Error · DOCKER_DOWN (exit 2)" width={1440} height={900}>
+          <WebFrame label="New LocalNet · error" url="devkit.local/instances/new">
+            <CreateErrorDockerScreen />
           </WebFrame>
         </DCArtboard>
       </DCSection>
