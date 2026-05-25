@@ -3,6 +3,7 @@ import { type InstanceSummary } from "../api";
 import { W } from "../tokens";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { CreateLocalNetModal } from "./CreateLocalNetModal";
+import { CreatingPanel } from "./CreatingPanel";
 import { DeveloperSetup } from "./DeveloperSetup";
 import { InstanceDetail } from "./InstanceDetail";
 
@@ -98,12 +99,23 @@ export function Dashboard() {
         </>
       )}
 
-      {sel.selected && (
-        <>
-          <InstanceDetail name={sel.selected} />
-          <DeveloperSetup name={sel.selected} />
-        </>
-      )}
+      {sel.selected && (() => {
+        // When the selected instance is mid-bring-up, surface
+        // the live progress panel above the static detail. The
+        // JWT generator is hidden while creating — no point
+        // signing tokens for an instance that's not running yet.
+        const selectedRow = sel.instances.find((i) => i.name === sel.selected);
+        const isCreating = selectedRow?.status === "creating";
+        return (
+          <>
+            {isCreating && (
+              <CreatingPanel name={sel.selected} onRefresh={sel.refresh} />
+            )}
+            <InstanceDetail name={sel.selected} />
+            {!isCreating && <DeveloperSetup name={sel.selected} />}
+          </>
+        );
+      })()}
     </div>
   );
 }

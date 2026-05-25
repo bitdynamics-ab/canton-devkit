@@ -441,7 +441,7 @@ function FormBody({
       >
         CLI equivalent:{" "}
         <span style={{ color: W.brand }}>
-          dpm localnet up --name {name || "&lt;name&gt;"} --version{" "}
+          dpm localnet up --name {name || "<name>"} --version{" "}
           {version || "latest"}
         </span>
       </div>
