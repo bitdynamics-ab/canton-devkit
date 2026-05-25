@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -91,11 +92,48 @@ type DownOptions struct {
 // the test wants.
 //
 // Modelled as a package var rather than a parameter on RunDown
-// because RunDown is also called by the future Web UI handler — and
-// neither caller wants a fake-runner argument in production. Tests
-// that swap the var must do so within a t.Cleanup-restored scope;
-// `go test` serialises by default which is fine here.
-var stopperFn func(ctx context.Context, state *registry.State) error
+// because RunDown is also called by the future Web UI handler
+// (BIT-131 POST /api/instances/:name/down) — neither caller wants
+// a fake-runner argument in production. Once the Web UI ships,
+// RunDown is reachable from concurrent goroutines (one per HTTP
+// request), so the read of stopperFn is guarded by stopperMu.
+// Tests use installStopper (below) which swaps under the mutex
+// and restores via t.Cleanup.
+//
+// Reviewer pin (PR #33 #6): the var-based seam without lock
+// protection would race with concurrent Web UI requests once
+// BIT-131 lands — by then the field is exported via a getter, but
+// the race would already be in shipped code. Adding the mutex
+// now is cheap and pins the contract.
+var (
+	stopperMu sync.RWMutex
+	stopperFn func(ctx context.Context, state *registry.State) error
+)
+
+// getStopper returns the active stopper under the read lock.
+func getStopper() func(ctx context.Context, state *registry.State) error {
+	stopperMu.RLock()
+	defer stopperMu.RUnlock()
+	return stopperFn
+}
+
+// installStopper is the test-only helper that swaps stopperFn under
+// the write lock and registers the restore via t.Cleanup. Tests
+// MUST use this rather than `stopperFn = ...` directly so the
+// mutex contract holds.
+func installStopper(t interface {
+	Cleanup(func())
+}, fn func(ctx context.Context, state *registry.State) error) {
+	stopperMu.Lock()
+	prev := stopperFn
+	stopperFn = fn
+	stopperMu.Unlock()
+	t.Cleanup(func() {
+		stopperMu.Lock()
+		stopperFn = prev
+		stopperMu.Unlock()
+	})
+}
 
 // RunDown is exported so the future Web UI handler can call the
 // same code path without forking the implementation.
@@ -121,18 +159,31 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 		return localnet.ExitRuntimeFailure
 	}
 
-	if state.Status == registry.StatusStopped {
-		_, _ = fmt.Fprintln(out, term.Dimc(fmt.Sprintf(
-			"LocalNet %q is already stopped.", opts.Name)))
-		return localnet.ExitSuccess
-	}
-
+	// Reviewer pin (PR #33 #4): lock-ordering. The original code
+	// read state, branched on StatusStopped, THEN acquired the
+	// lock — racy if a concurrent `down` (or future Web UI POST)
+	// flipped status between the Read and the Lock. Now: take the
+	// lock first, re-Read inside the critical section, and branch
+	// on the authoritative state. The early `state` Read above
+	// stays only to provide a friendly ErrNotFound message before
+	// we even attempt to lock.
 	release, err := registry.Lock(opts.Name)
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "%s\n", err)
 		return localnet.ExitUserError
 	}
 	defer release()
+
+	// Re-read under the lock — between the pre-lock Read above
+	// and now, a concurrent writer may have changed status.
+	if fresh, rerr := registry.Read(opts.Name); rerr == nil {
+		state = fresh
+	}
+	if state.Status == registry.StatusStopped {
+		_, _ = fmt.Fprintln(out, term.Dimc(fmt.Sprintf(
+			"LocalNet %q is already stopped.", opts.Name)))
+		return localnet.ExitSuccess
+	}
 
 	_, _ = fmt.Fprintln(out, term.Prompt("", "", "", fmt.Sprintf(
 		"dpm localnet down %s %s",
@@ -149,7 +200,7 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 		_, _ = fmt.Fprintf(errw, "warning: could not persist stopping state: %s\n", werr)
 	}
 
-	stop := stopperFn
+	stop := getStopper()
 	if stop == nil {
 		stop = defaultStop
 	}
