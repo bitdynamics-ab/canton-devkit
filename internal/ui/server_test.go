@@ -19,7 +19,7 @@ func TestServer_BindsToLoopbackByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("assets: %v", err)
 	}
-	srv := New(Config{Port: 0, Router: NewRouter(assets)}) // default host
+	srv := New(Config{Port: 0, Router: NewRouter(assets, nil)}) // default host
 	addr, err := srv.Listen()
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -57,7 +57,7 @@ func TestConfig_WithDefaultsKeepsPortZero(t *testing.T) {
 // non-zero port.
 func TestServer_PortZeroAssignsFreePort(t *testing.T) {
 	assets, _ := AssetsHandler()
-	srv := New(Config{Port: 0, Router: NewRouter(assets)})
+	srv := New(Config{Port: 0, Router: NewRouter(assets, nil)})
 	addr, err := srv.Listen()
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -77,7 +77,7 @@ func TestServer_PortZeroAssignsFreePort(t *testing.T) {
 // the bare-Serve path to fail fast.
 func TestServer_ServeBeforeListenErrors(t *testing.T) {
 	assets, _ := AssetsHandler()
-	srv := New(Config{Port: 0, Router: NewRouter(assets)})
+	srv := New(Config{Port: 0, Router: NewRouter(assets, nil)})
 	err := srv.Serve()
 	if err == nil {
 		t.Fatal("Serve before Listen should return an error, not block")
@@ -92,7 +92,7 @@ func TestServer_ServeBeforeListenErrors(t *testing.T) {
 // the path SIGINT triggers in ui.go.
 func TestServer_ShutdownStopsServe(t *testing.T) {
 	assets, _ := AssetsHandler()
-	srv := New(Config{Port: 0, Router: NewRouter(assets)})
+	srv := New(Config{Port: 0, Router: NewRouter(assets, nil)})
 	if _, err := srv.Listen(); err != nil {
 		t.Fatalf("listen: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestServer_ReadHeaderTimeoutSet(t *testing.T) {
 // Smoke-tests the assembled pipeline at one of the cheapest endpoints.
 func TestServer_HealthzReturnsOK(t *testing.T) {
 	assets, _ := AssetsHandler()
-	srv := New(Config{Port: 0, Router: NewRouter(assets)})
+	srv := New(Config{Port: 0, Router: NewRouter(assets, nil)})
 	addr, err := srv.Listen()
 	if err != nil {
 		t.Fatalf("listen: %v", err)

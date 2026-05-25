@@ -1,0 +1,207 @@
+package ui
+
+import (
+	"bufio"
+	"context"
+	"net/http"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
+)
+
+// TestSSE_ReceivesPublishedEvent is the end-to-end smoke for the SSE
+// stack: bind a server with a real hub, connect via GET /events,
+// publish an event, assert the wire format on the read side.
+// Catches regressions in: handler installation, wire format,
+// hub→handler plumbing.
+func TestSSE_ReceivesPublishedEvent(t *testing.T) {
+	hub := stream.New()
+	assets, _ := AssetsHandler()
+	srv := New(Config{Port: 0, Router: NewRouter(assets, hub)})
+	addr, _ := srv.Listen()
+	go srv.Serve() //nolint:errcheck
+	defer srv.Shutdown(context.Background())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+addr+"/events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /events: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Errorf("Content-Type = %q, want text/event-stream", ct)
+	}
+	if cc := resp.Header.Get("Cache-Control"); !strings.Contains(cc, "no-cache") {
+		t.Errorf("Cache-Control = %q, want no-cache", cc)
+	}
+
+	// Give the handler a beat to install its subscription before
+	// we publish, otherwise the publish fires before any subscriber
+	// exists.
+	time.Sleep(50 * time.Millisecond)
+	hub.Publish(stream.Event{Topic: "services", ID: "42", Data: []byte("hello")})
+
+	scanner := bufio.NewScanner(resp.Body)
+	var lines []string
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) && len(lines) < 4 {
+		if scanner.Scan() {
+			lines = append(lines, scanner.Text())
+		}
+	}
+	body := strings.Join(lines, "\n")
+	for _, want := range []string{"id: 42", "event: services", "data: hello"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("SSE frame missing %q\nfull:\n%s", want, body)
+		}
+	}
+}
+
+// TestSSE_TopicFilter exercises ?topics=foo,bar: only events whose
+// Topic appears in the list reach this subscriber. Without this,
+// every browser tab gets every event and the wire/CPU cost
+// multiplies.
+func TestSSE_TopicFilter(t *testing.T) {
+	hub := stream.New()
+	assets, _ := AssetsHandler()
+	srv := New(Config{Port: 0, Router: NewRouter(assets, hub)})
+	addr, _ := srv.Listen()
+	go srv.Serve() //nolint:errcheck
+	defer srv.Shutdown(context.Background())
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET",
+		"http://"+addr+"/events?topics=metrics", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	time.Sleep(50 * time.Millisecond)
+	hub.Publish(stream.Event{Topic: "services", Data: []byte("skip-me")})
+	hub.Publish(stream.Event{Topic: "metrics", Data: []byte("show-me")})
+
+	scanner := bufio.NewScanner(resp.Body)
+	var got []string
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if scanner.Scan() {
+			got = append(got, scanner.Text())
+		}
+	}
+	body := strings.Join(got, "\n")
+	if strings.Contains(body, "skip-me") {
+		t.Errorf("topic filter let unmatched topic through:\n%s", body)
+	}
+	if !strings.Contains(body, "show-me") {
+		t.Errorf("topic filter blocked matching topic:\n%s", body)
+	}
+}
+
+// TestSSE_DisconnectFreesSubscription pins the cleanup contract:
+// when the HTTP client cancels (browser tab closed), the handler
+// MUST call cancel on the subscription so the hub doesn't keep
+// trying to deliver to a dead channel. We assert via Hub.Stats:
+// subscriber count returns to 0 after the request context cancels.
+func TestSSE_DisconnectFreesSubscription(t *testing.T) {
+	hub := stream.New()
+	assets, _ := AssetsHandler()
+	srv := New(Config{Port: 0, Router: NewRouter(assets, hub)})
+	addr, _ := srv.Listen()
+	go srv.Serve() //nolint:errcheck
+	defer srv.Shutdown(context.Background())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+addr+"/events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+
+	// Confirm the subscription registered.
+	time.Sleep(50 * time.Millisecond)
+	if got := hub.Stats().Subscribers; got != 1 {
+		t.Fatalf("Stats.Subscribers = %d after connect, want 1", got)
+	}
+
+	// Disconnect.
+	cancel()
+	resp.Body.Close()
+
+	// The handler's defer cancel() should fire on the next loop
+	// iteration when ctx.Done is selected. Poll briefly.
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if hub.Stats().Subscribers == 0 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Errorf("Subscribers = %d after disconnect, want 0 — subscription leaked",
+		hub.Stats().Subscribers)
+}
+
+// TestSSE_NilHubReturns503 pins the fallback wiring: when the
+// router is constructed with hub=nil (test mode, future read-only
+// mode), /events serves 503 rather than crashing or 404-ing.
+func TestSSE_NilHubReturns503(t *testing.T) {
+	assets, _ := AssetsHandler()
+	srv := New(Config{Port: 0, Router: NewRouter(assets, nil)})
+	addr, _ := srv.Listen()
+	go srv.Serve() //nolint:errcheck
+	defer srv.Shutdown(context.Background())
+
+	resp, err := http.Get("http://" + addr + "/events")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503", resp.StatusCode)
+	}
+}
+
+// TestSSE_MultiLineDataGetsPerLinePrefix pins the SSE spec
+// detail: multi-line Data must produce one `data:` line per
+// source line. A single `data:` containing embedded newlines is
+// invalid SSE and would be interpreted as the end of the event by
+// some clients.
+func TestSSE_MultiLineDataGetsPerLinePrefix(t *testing.T) {
+	hub := stream.New()
+	assets, _ := AssetsHandler()
+	srv := New(Config{Port: 0, Router: NewRouter(assets, hub)})
+	addr, _ := srv.Listen()
+	go srv.Serve() //nolint:errcheck
+	defer srv.Shutdown(context.Background())
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+addr+"/events", nil)
+	resp, _ := http.DefaultClient.Do(req)
+	defer resp.Body.Close()
+
+	time.Sleep(50 * time.Millisecond)
+	hub.Publish(stream.Event{Topic: "x", Data: []byte("line1\nline2\nline3")})
+
+	scanner := bufio.NewScanner(resp.Body)
+	var got []string
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) && len(got) < 6 {
+		if scanner.Scan() {
+			got = append(got, scanner.Text())
+		}
+	}
+	body := strings.Join(got, "\n")
+	for _, want := range []string{"data: line1", "data: line2", "data: line3"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q in:\n%s", want, body)
+		}
+	}
+}

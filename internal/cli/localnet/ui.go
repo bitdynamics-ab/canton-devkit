@@ -9,6 +9,7 @@ import (
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui"
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 	"github.com/spf13/cobra"
 )
@@ -83,10 +84,11 @@ identifiers and is not designed for LAN-wide exposure.`,
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), term.Warnc(
 					"warning: serving the build-time placeholder frontend — run `make frontend` before `go build` to embed the real Vite bundle"))
 			}
+			hub := stream.New()
 			srv := ui.New(ui.Config{
 				Host:             host,
 				Port:             port,
-				Router:           ui.NewRouter(assets),
+				Router:           ui.NewRouter(assets, hub),
 				AllowNonLoopback: allowNonLoopback,
 			})
 

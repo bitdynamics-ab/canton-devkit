@@ -135,7 +135,7 @@ func startTestServer(t *testing.T) (*Server, string) {
 	if err != nil {
 		t.Fatalf("AssetsHandler: %v", err)
 	}
-	srv := New(Config{Port: 0, Router: NewRouter(assets)})
+	srv := New(Config{Port: 0, Router: NewRouter(assets, nil)})
 	addr, err := srv.Listen()
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
