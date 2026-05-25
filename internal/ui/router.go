@@ -64,6 +64,11 @@ func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
 // statusRecorder wraps http.ResponseWriter to capture the final
 // status code for the access log. The stdlib type has no status-
 // read API; the standard pattern is to override WriteHeader.
+//
+// Flush pass-through: SSE handlers require http.Flusher. Without
+// the explicit forward, the type assertion in sse.go fails and
+// every /events request 500s. The stdlib provides the Flusher
+// on the underlying writer; we just need to expose it.
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
@@ -72,6 +77,15 @@ type statusRecorder struct {
 func (s *statusRecorder) WriteHeader(code int) {
 	s.status = code
 	s.ResponseWriter.WriteHeader(code)
+}
+
+// Flush forwards to the underlying writer's Flusher if present.
+// SSE depends on this — without the forward, sseHandler's
+// `w.(http.Flusher)` assertion fails through this wrapper.
+func (s *statusRecorder) Flush() {
+	if f, ok := s.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // withAccessLog emits one line per request via log.Default():

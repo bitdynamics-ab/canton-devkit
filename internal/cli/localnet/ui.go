@@ -138,6 +138,16 @@ identifiers and is not designed for LAN-wide exposure.`,
 					}
 					return localnet.AsExitError(localnet.ExitRuntimeFailure)
 				}
+				// PR #42 round-2 #3: explicitly close the SSE hub
+				// so any lingering subscriber goroutines unblock
+				// on their channel close. http.Server.Shutdown
+				// doesn't drain SSE streams — the loop sits in
+				// `case ev, ok := <-eventCh`, which only returns
+				// when the channel closes (cancel) OR ctx.Done
+				// fires on the request. Without Hub.Close the
+				// goroutine can outlive the server briefly.
+				hub.Close()
+
 				// Wait for Serve to return after Shutdown.
 				<-errCh
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), term.Dimc("stopped."))
