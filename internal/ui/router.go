@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui/handlers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 )
 
@@ -31,10 +32,13 @@ func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	mux.HandleFunc("GET /api/version", handleVersion)
-	// /events (SSE) — added by BIT-130. The handler itself does
-	// its own Origin check before opening the stream (see sse.go),
-	// since EventSource sends GET and the global CSRF middleware
-	// is GET-exempt.
+	// REST handlers under /api/* (BIT-131). Each handler package
+	// owns one resource; new resources mount themselves here as
+	// they land.
+	handlers.MountInstances(mux)
+	// /events (SSE) — added by BIT-130. Handler does its own
+	// Origin check (sse.go) since EventSource sends GET and the
+	// global CSRF middleware is GET-exempt.
 	if hub != nil {
 		mux.Handle("GET /events", sseHandler(hub))
 	} else {
