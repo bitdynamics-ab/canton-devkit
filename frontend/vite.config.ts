@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -33,5 +34,20 @@ export default defineConfig({
         ws: false, // SSE is plain HTTP, not WebSocket
       },
     },
+  },
+  test: {
+    // jsdom — needed because the components touch document,
+    // navigator.clipboard, and react-router-dom expects a DOM.
+    environment: "jsdom",
+    // Auto-imports @testing-library/jest-dom matchers and runs
+    // afterEach cleanup so tests don't leak DOM state between
+    // each other.
+    globals: true,
+    setupFiles: ["./src/test/setup.ts"],
+    // Co-located convention: src/**/*.test.ts(x). Keeps each test
+    // next to the code it exercises rather than mirroring the
+    // tree under a separate __tests__/ root.
+    include: ["src/**/*.test.{ts,tsx}"],
+    css: false,
   },
 });
