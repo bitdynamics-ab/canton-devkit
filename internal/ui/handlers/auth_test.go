@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -16,6 +17,14 @@ import (
 
 // authMux returns a test server with both instances and auth
 // handlers mounted — auth depends on the instance existing.
+//
+// Reviewer pin (PR #43 cross-PR R2): the previous shape used a
+// bare http.ServeMux without going through the production
+// NewRouter middleware chain (CSRF, common headers, access log).
+// Tests passed but didn't prove the JWT endpoint was CSRF-protected
+// end-to-end. The variant routedAuthMux returns the FULL pipeline;
+// authMux is retained for tests that want to bypass middleware
+// (Origin checks, etc.) to assert handler logic in isolation.
 func authMux(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -455,3 +464,118 @@ func requireSchemaVersionField(t *testing.T, rt reflect.Type, name string) {
 		t.Errorf(`%s.SchemaVersion json tag = %q, want "schema_version"`, name, tag)
 	}
 }
+
+// TestAuth_CacheControlNoStore is the reviewer pin (PR #43 round-2
+// Cache-Control): every API JSON response carries no-store. The
+// previous shape relied on the absence of Cache-Control header,
+// which left browsers and proxies free to cache credentials.
+// Catches: someone disables the header in writeJSON.
+func TestAuth_CacheControlNoStore(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedWithCredentials(t, "demo", "app-provider::p")
+	srv := authMux(t)
+
+	// Hit the JWT endpoint (the most credential-sensitive
+	// path) and the app-config endpoint. Both should
+	// carry no-store on the response.
+	for _, url := range []string{
+		srv.URL + "/api/instances/demo/jwt",
+		srv.URL + "/api/instances/demo/app-config?format=json",
+	} {
+		var resp *http.Response
+		var err error
+		if strings.Contains(url, "/jwt") {
+			resp, err = http.Post(url, "application/json", strings.NewReader(""))
+		} else {
+			resp, err = http.Get(url)
+		}
+		if err != nil {
+			t.Fatalf("%s: %v", url, err)
+		}
+		got := resp.Header.Get("Cache-Control")
+		resp.Body.Close()
+		if got != "no-store" {
+			t.Errorf("%s Cache-Control = %q, want no-store — credentials cacheable", url, got)
+		}
+	}
+}
+
+// TestWriteError_5xxDoesNotLeakCausePath is the reviewer pin
+// (PR #43 round-2 5xx leak): the 5xx response body must NOT
+// include the cause string. The cause typically carries
+// filesystem paths or other internal detail; it stays in the
+// server-side log (TestWriteError_5xxLogsCauseServerSide pins
+// the other half).
+func TestWriteError_5xxDoesNotLeakCausePath(t *testing.T) {
+	// Synthesise a cause that obviously contains a path.
+	cause := errors.New("read /home/user/.canton-devkit/secret/state.json: permission denied")
+	rec := newHandlersTestRecorder()
+	writeError(rec, http.StatusInternalServerError, "internal error", cause)
+
+	body := rec.body.String()
+	for _, leak := range []string{
+		"/home/user",
+		".canton-devkit/secret",
+		"permission denied",
+	} {
+		if strings.Contains(body, leak) {
+			t.Errorf("5xx body leaked %q:\n%s", leak, body)
+		}
+	}
+}
+
+// TestWriteError_5xxLogsCauseServerSide is the other half: the
+// cause MUST be logged via log.Default so the operator can
+// still diagnose. Without this, the previous patch would have
+// thrown away diagnostic information.
+func TestWriteError_5xxLogsCauseServerSide(t *testing.T) {
+	var buf bytes.Buffer
+	prev := log.Default().Writer()
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(prev) })
+
+	cause := errors.New("read /tmp/state.json: missing")
+	rec := newHandlersTestRecorder()
+	writeError(rec, http.StatusInternalServerError, "internal error", cause)
+
+	if !strings.Contains(buf.String(), "missing") ||
+		!strings.Contains(buf.String(), "/tmp/state.json") {
+		t.Errorf("5xx cause not logged server-side:\n%s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "handler error:") {
+		t.Errorf("log line missing 'handler error:' prefix:\n%s", buf.String())
+	}
+}
+
+// TestWriteError_4xxDoesNotLog — symmetric pin: 4xx errors are
+// client input; we don't want to log every malformed request to
+// the audit stream. Only 5xx (server-side failures the operator
+// might need to diagnose) get logged.
+func TestWriteError_4xxDoesNotLog(t *testing.T) {
+	var buf bytes.Buffer
+	prev := log.Default().Writer()
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(prev) })
+
+	writeError(newHandlersTestRecorder(), http.StatusBadRequest, "bad request",
+		errors.New("client typed garbage"))
+
+	if strings.Contains(buf.String(), "handler error:") {
+		t.Errorf("4xx logged via handler-error stream (would flood logs with client input):\n%s", buf.String())
+	}
+}
+
+// newHandlersTestRecorder is a tiny http.ResponseWriter that lets
+// the table-style tests above inspect what writeError emits.
+type handlersTestRecorder struct {
+	hdr  http.Header
+	code int
+	body bytes.Buffer
+}
+
+func newHandlersTestRecorder() *handlersTestRecorder {
+	return &handlersTestRecorder{hdr: http.Header{}}
+}
+func (r *handlersTestRecorder) Header() http.Header         { return r.hdr }
+func (r *handlersTestRecorder) Write(p []byte) (int, error) { return r.body.Write(p) }
+func (r *handlersTestRecorder) WriteHeader(code int)        { r.code = code }
