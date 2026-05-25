@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ApiError, type InstanceSummary, fetchInstances } from "../api";
 import { W } from "../tokens";
+import { DeveloperSetup } from "./DeveloperSetup";
 
 // Dashboard — Overview screen. Mirrors the LocalNet table at the
 // top of docs/design/mockups/webui-dashboard.jsx. Renders the
@@ -20,6 +21,18 @@ export function Dashboard() {
     | { kind: "ok"; instances: InstanceSummary[]; warning?: string }
     | { kind: "err"; error: string; detail?: string }
   >({ kind: "loading" });
+  // selected = user's explicit pick. When null we auto-select the
+  // first running instance so the Developer setup card always has
+  // a target if one exists. User clicks override the auto-pick and
+  // stick across re-fetches (until that instance disappears).
+  const [selected, setSelected] = useState<string | null>(null);
+
+  const instances = state.kind === "ok" ? state.instances : [];
+  const effectiveName = useMemo(() => {
+    if (selected && instances.some((i) => i.name === selected)) return selected;
+    const running = instances.find((i) => i.status === "running");
+    return running?.name ?? null;
+  }, [selected, instances]);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,15 +94,27 @@ export function Dashboard() {
           {state.instances.length === 0 ? (
             <EmptyState />
           ) : (
-            <InstanceTable instances={state.instances} />
+            <InstanceTable
+              instances={state.instances}
+              selected={effectiveName}
+              onSelect={setSelected}
+            />
           )}
         </>
       )}
+
+      {effectiveName && <DeveloperSetup name={effectiveName} />}
     </div>
   );
 }
 
-function InstanceTable({ instances }: { instances: InstanceSummary[] }) {
+interface InstanceTableProps {
+  instances: InstanceSummary[];
+  selected: string | null;
+  onSelect: (name: string) => void;
+}
+
+function InstanceTable({ instances, selected, onSelect }: InstanceTableProps) {
   return (
     <div
       style={{
@@ -118,12 +143,21 @@ function InstanceTable({ instances }: { instances: InstanceSummary[] }) {
           {instances.map((i) => (
             <tr
               key={i.name}
+              onClick={() => onSelect(i.name)}
               style={{
                 borderTop: `1px solid ${W.border}`,
+                background: i.name === selected ? W.surface2 : undefined,
+                cursor: "pointer",
               }}
             >
               <td style={td}>
-                <strong style={{ color: W.text }}>{i.name}</strong>
+                <strong
+                  style={{
+                    color: i.name === selected ? W.brand : W.text,
+                  }}
+                >
+                  {i.name}
+                </strong>
               </td>
               <td style={td}>
                 <StatusBadge status={i.status} />

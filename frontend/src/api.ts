@@ -113,3 +113,80 @@ export const fetchInstances = () => apiFetch<ListResponse>("/api/instances");
 
 export const fetchInstance = (name: string) =>
   apiFetch<Instance>(`/api/instances/${encodeURIComponent(name)}`);
+
+// JwtRequest mirrors internal/ui/handlers/auth.go jwtRequest.
+export interface JwtRequest {
+  role?: string;
+  ttl_seconds?: number;
+  audience?: string;
+}
+
+// JwtResponse mirrors internal/ui/handlers/auth.go jwtResponse.
+// `token` is the redaction placeholder ("<redacted>") unless
+// the request was made with ?include_jwt=true; `redacted`
+// signals which path.
+export interface JwtResponse {
+  schema_version: number;
+  token: string;
+  redacted?: boolean;
+  party: string;
+  audience: string;
+  role: string;
+  warning_dev_secret: string;
+  expires_in_seconds?: number;
+}
+
+// issueJwt posts to the JWT endpoint. `includeJwt=true` triggers
+// the raw-token mode — UI surfaces it ONLY after the user clicks
+// "show token" so the response stays redacted-by-default for
+// screenshot shares.
+export function issueJwt(
+  name: string,
+  req: JwtRequest,
+  includeJwt: boolean,
+): Promise<JwtResponse> {
+  const qs = includeJwt ? "?include_jwt=true" : "";
+  return apiFetch<JwtResponse>(
+    `/api/instances/${encodeURIComponent(name)}/jwt${qs}`,
+    {
+      method: "POST",
+      body: JSON.stringify(req),
+    },
+  );
+}
+
+// AppConfigFormat is the query-param `format=` whitelist.
+export type AppConfigFormat = "env" | "json" | "yaml";
+
+// fetchAppConfigText returns the .env or YAML body as plain
+// text — the env / yaml endpoints emit text/plain so apiFetch's
+// JSON-decode path would error. Inline a small fetch here that
+// returns the body verbatim.
+export async function fetchAppConfigText(
+  name: string,
+  format: "env" | "yaml",
+): Promise<string> {
+  const resp = await fetch(
+    `/api/instances/${encodeURIComponent(name)}/app-config?format=${format}`,
+  );
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new ApiError(resp.status, { code: "APP_CONFIG", error: body });
+  }
+  return resp.text();
+}
+
+// AppConfigPayload mirrors internal/ui/handlers/auth.go
+// appConfigPayload (the JSON shape).
+export interface AppConfigPayload {
+  schema_version: number;
+  name: string;
+  splice_version: string;
+  endpoints: Record<string, string>;
+  parties: Record<string, string>;
+}
+
+export const fetchAppConfigJSON = (name: string) =>
+  apiFetch<AppConfigPayload>(
+    `/api/instances/${encodeURIComponent(name)}/app-config?format=json`,
+  );
