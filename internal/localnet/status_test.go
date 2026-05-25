@@ -1,0 +1,296 @@
+package localnet
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"os/exec"
+	"strings"
+	"testing"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
+)
+
+var execLookPath = exec.LookPath
+
+func seedStatusInstance(t *testing.T, name string, status registry.Status) {
+	t.Helper()
+	s := registry.NewState(name, "0.6.4")
+	s.ComposeProject = "canton-" + name
+	s.DockerNetwork = name
+	s.ContainerPrefix = name + "-"
+	s.ProjectDir = t.TempDir()
+	s.DataDir = t.TempDir()
+	s.Status = status
+	s.Ports = map[string]int{
+		"app_user_ui":     4485,
+		"swagger_ui":      9090,
+		"postgres":        5432,
+		"some_random_key": 12345,
+	}
+	s.Credentials = map[string]registry.Credential{
+		"sv": {Role: "sv", User: "sv-user", Audience: "sv-aud", JWT: "eyJ.svsig"},
+	}
+	if err := registry.Write(s); err != nil {
+		t.Fatalf("seed %q: %v", name, err)
+	}
+}
+
+func installFakeStatusProber(t *testing.T, fn func(ctx context.Context, st *registry.State) ([]types.ServiceStatus, error)) {
+	t.Helper()
+	prev := statusProberFn
+	statusProberFn = fn
+	t.Cleanup(func() { statusProberFn = prev })
+}
+
+func TestStatus_NotFoundIsUserError(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	var out, errBuf bytes.Buffer
+	code := RunStatus(context.Background(), &out, &errBuf, &StatusOptions{Name: "ghost", Format: "table"})
+	if code != ExitUserError {
+		t.Fatalf("exit code = %d, want %d", code, ExitUserError)
+	}
+	if !strings.Contains(errBuf.String(), `"ghost"`) || !strings.Contains(errBuf.String(), "dpm localnet list") {
+		t.Errorf("stderr should name instance and hint list, got %q", errBuf.String())
+	}
+}
+
+func TestStatus_TableRendersHeaderAndSections(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedStatusInstance(t, "demo", registry.StatusRunning)
+	installFakeStatusProber(t, func(context.Context, *registry.State) ([]types.ServiceStatus, error) {
+		return []types.ServiceStatus{
+			{Name: "canton-domain", State: "healthy", Image: "splice/canton:0.6.4", Ports: "4400, 4401"},
+			{Name: "participant-alice", State: "syncing", Image: "splice/participant:0.6.4", Ports: "4441"},
+		}, nil
+	})
+
+	var out, errBuf bytes.Buffer
+	code := RunStatus(context.Background(), &out, &errBuf, &StatusOptions{Name: "demo", Format: "table"})
+	if code != ExitSuccess {
+		t.Fatalf("exit code = %d, stderr=%q", code, errBuf.String())
+	}
+	body := out.String()
+	for _, want := range []string{"Name", "demo", "Splice", "0.6.4", "SERVICES", "canton-domain", "participant-alice", "ENDPOINTS", "Wallet · app-user", "http://localhost:4485", "IDENTITIES", "sv-user"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("output missing %q\nfull:\n%s", want, body)
+		}
+	}
+}
+
+func TestStatus_SoftFailsOnProberError(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedStatusInstance(t, "demo", registry.StatusStopped)
+	installFakeStatusProber(t, func(context.Context, *registry.State) ([]types.ServiceStatus, error) {
+		return nil, errors.New("docker daemon unreachable")
+	})
+
+	var out, errBuf bytes.Buffer
+	code := RunStatus(context.Background(), &out, &errBuf, &StatusOptions{Name: "demo", Format: "table"})
+	if code != ExitSuccess {
+		t.Fatalf("status should soft-fail with exit 0, got %d", code)
+	}
+	if !strings.Contains(out.String(), "docker query failed") || !strings.Contains(out.String(), "ENDPOINTS") {
+		t.Errorf("registry view should render with docker hint, got %q", out.String())
+	}
+	if !strings.Contains(errBuf.String(), "docker compose ps failed") {
+		t.Errorf("soft-fail should warn on stderr, got %q", errBuf.String())
+	}
+}
+
+func TestStatus_JSONShape(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedStatusInstance(t, "demo", registry.StatusRunning)
+	installFakeStatusProber(t, func(context.Context, *registry.State) ([]types.ServiceStatus, error) {
+		return []types.ServiceStatus{{Name: "canton-domain", State: "healthy", Image: "splice/canton:0.6.4"}}, nil
+	})
+
+	var out, errBuf bytes.Buffer
+	code := RunStatus(context.Background(), &out, &errBuf, &StatusOptions{Name: "demo", Format: "json"})
+	if code != ExitSuccess {
+		t.Fatalf("exit code = %d, stderr=%q", code, errBuf.String())
+	}
+	var got types.Instance
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\nbody=%s", err, out.String())
+	}
+	if got.Name != "demo" || got.SpliceVersion != "0.6.4" {
+		t.Errorf("instance shape wrong: %+v", got)
+	}
+	if len(got.Services) != 1 || got.Services[0].Name != "canton-domain" {
+		t.Errorf("Services round-trip: got %+v", got.Services)
+	}
+	if len(got.Endpoints) == 0 {
+		t.Error("Endpoints empty")
+	}
+	if got.Credentials["sv"].JWT != statusJWTRedaction {
+		t.Errorf("JWT = %q, want redacted", got.Credentials["sv"].JWT)
+	}
+}
+
+func TestStatus_IncludeJWTOptIn(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedStatusInstance(t, "demo", registry.StatusRunning)
+	installFakeStatusProber(t, func(context.Context, *registry.State) ([]types.ServiceStatus, error) { return nil, nil })
+
+	got, err := CollectStatus(context.Background(), "demo", true, true)
+	if err != nil {
+		t.Fatalf("CollectStatus: %v", err)
+	}
+	if got.Credentials["sv"].JWT != "eyJ.svsig" {
+		t.Errorf("expected raw JWT with includeJWT, got %q", got.Credentials["sv"].JWT)
+	}
+}
+
+func TestStatus_NoLiveSkipsProber(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedStatusInstance(t, "demo", registry.StatusStopped)
+	called := false
+	installFakeStatusProber(t, func(context.Context, *registry.State) ([]types.ServiceStatus, error) {
+		called = true
+		return nil, nil
+	})
+
+	var out, errBuf bytes.Buffer
+	code := RunStatus(context.Background(), &out, &errBuf, &StatusOptions{Name: "demo", Format: "table", NoLive: true})
+	if code != ExitSuccess {
+		t.Fatalf("exit code = %d", code)
+	}
+	if called {
+		t.Error("--no-live should skip the docker query")
+	}
+	if !strings.Contains(errBuf.String(), "no-live") {
+		t.Errorf("--no-live should warn on stderr, got %q", errBuf.String())
+	}
+}
+
+func TestStatus_NoLiveWarning_JSONStdoutClean(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedStatusInstance(t, "demo", registry.StatusRunning)
+
+	var out, errBuf bytes.Buffer
+	code := RunStatus(context.Background(), &out, &errBuf, &StatusOptions{Name: "demo", Format: "json", NoLive: true})
+	if code != ExitSuccess {
+		t.Fatalf("exit code = %d", code)
+	}
+	var got types.Instance
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Errorf("stdout is not valid JSON: %v\nstdout=%q", err, out.String())
+	}
+	if errBuf.Len() == 0 {
+		t.Errorf("--no-live should emit warning on stderr in JSON mode")
+	}
+	if got.LiveProbeFailed {
+		t.Errorf("LiveProbeFailed = true under --no-live")
+	}
+}
+
+func TestStatus_SoftFailSetsLiveProbeFailedInJSON(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedStatusInstance(t, "demo", registry.StatusRunning)
+	installFakeStatusProber(t, func(context.Context, *registry.State) ([]types.ServiceStatus, error) {
+		return nil, errors.New("docker daemon unreachable")
+	})
+
+	var out, errBuf bytes.Buffer
+	code := RunStatus(context.Background(), &out, &errBuf, &StatusOptions{Name: "demo", Format: "json"})
+	if code != ExitSuccess {
+		t.Fatalf("exit code = %d", code)
+	}
+	var got types.Instance
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\nbody=%s", err, out.String())
+	}
+	if !got.LiveProbeFailed {
+		t.Errorf("LiveProbeFailed = false after soft-fail")
+	}
+	if got.Services != nil {
+		t.Errorf("Services should be nil on soft-fail, got %+v", got.Services)
+	}
+}
+
+func TestCollapseState(t *testing.T) {
+	cases := []struct{ state, health, want string }{
+		{"running", "healthy", "healthy"},
+		{"running", "", "healthy"},
+		{"running", "starting", "syncing"},
+		{"running", "unhealthy", "unhealthy"},
+		{"paused", "", "paused"},
+		{"exited", "", "exited"},
+		{"dead", "", "exited"},
+		{"removing", "", "exited"},
+		{"created", "", "created"},
+	}
+	for _, c := range cases {
+		if got := collapseState(c.state, c.health); got != c.want {
+			t.Errorf("collapseState(%q,%q) = %q, want %q", c.state, c.health, got, c.want)
+		}
+	}
+}
+
+func TestEndpointsFromPorts(t *testing.T) {
+	got := endpointsFromPorts(map[string]int{"app_user_ui": 4485, "weird_service": 9999})
+	if len(got) != 2 {
+		t.Fatalf("got %d endpoints, want 2", len(got))
+	}
+	if got[0].Label != "Wallet · app-user" || got[0].URL != "http://localhost:4485" {
+		t.Errorf("known endpoint mapping wrong: %+v", got[0])
+	}
+	if got[1].Label != "weird_service" || got[1].Scheme != "tcp" {
+		t.Errorf("unknown endpoint should fall back to label+tcp: %+v", got[1])
+	}
+}
+
+func TestEndpointsFromPorts_SkipsZeroPorts(t *testing.T) {
+	got := endpointsFromPorts(map[string]int{"app_user_ui": 0, "postgres": 5432})
+	if len(got) != 1 || got[0].Label != "Postgres" {
+		t.Errorf("zero ports should be skipped, got %+v", got)
+	}
+}
+
+func TestStateGlyph_AllStatesRenderDistinctly(t *testing.T) {
+	cases := []struct {
+		in           string
+		mustContain  string
+		mustNotEqual []string
+	}{
+		{string(registry.StatusRunning), "healthy", nil},
+		{string(registry.StatusCreating), "creating", []string{"syncing", "healthy"}},
+		{string(registry.StatusStopped), "stopped", nil},
+		{string(registry.StatusFailed), "exited", nil},
+		{string(registry.StatusPartial), "partial", nil},
+		{"healthy", "healthy", nil},
+		{"unhealthy", "unhealthy", []string{"healthy"}},
+		{"syncing", "syncing", []string{"healthy", "creating"}},
+		{"exited", "exited", []string{"stopped"}},
+		{"paused", "paused", nil},
+	}
+	rendered := make(map[string]string, len(cases))
+	for _, c := range cases {
+		got := stateGlyph(c.in)
+		if got == "" || !strings.Contains(got, c.mustContain) {
+			t.Errorf("stateGlyph(%q) = %q, want substring %q", c.in, got, c.mustContain)
+		}
+		rendered[c.in] = got
+	}
+	for _, c := range cases {
+		for _, other := range c.mustNotEqual {
+			if rendered[c.in] == rendered[other] {
+				t.Errorf("stateGlyph(%q) and stateGlyph(%q) collide: both = %q", c.in, other, rendered[c.in])
+			}
+		}
+	}
+}
+
+func TestStatusProber_UsesComposeRunnerSeam(t *testing.T) {
+	if _, err := execLookPath("docker"); err != nil {
+		t.Skipf("docker not on PATH: %v", err)
+	}
+	s := &registry.State{ComposeProject: "definitely-does-not-exist-" + t.Name(), ProjectDir: t.TempDir()}
+	_, err := defaultStatusProber(context.Background(), s)
+	if err != nil && !strings.Contains(err.Error(), "docker compose ps") {
+		t.Errorf("error should carry ComposeRunner.Ps's wrap prefix, got: %v", err)
+	}
+}
