@@ -79,9 +79,82 @@ type Hub struct {
 	subs   map[*subscription]struct{}
 	bufLen int
 
+	// Per-topic event buffers for the replay-on-subscribe contract
+	// (BIT-163c). Populated only for topics the caller has opted
+	// in via EnableBuffering — the global topic firehose is NOT
+	// buffered, because the only consumer that needs replay today
+	// is the per-instance create-flow SSE stream:
+	//
+	//   POST /api/instances → spawns up goroutine that calls
+	//     hub.EnableBuffering("instance:demo") + publishes the
+	//     first StepStartedevent (the "instance lock" step).
+	//
+	//   Browser opens GET /api/instances/demo/events 50ms later;
+	//     SubscribeWithReplay drains the buffer into the
+	//     subscriber's channel BEFORE the live event flow starts,
+	//     so the user sees step 1 even though the SSE arrived after
+	//     it published.
+	//
+	// Buffers are removed on ClearBuffer(topic) — the up handler
+	// calls that after Done/Fail to free memory eagerly. Without
+	// the call, the buffer leaks at most one capacity's worth of
+	// events per finished instance — annoying but not catastrophic.
+	topicBuffers map[string]*topicBuffer
+
 	// stats — atomically updated, read by Stats() for observability.
 	published atomic.Uint64
 	dropped   atomic.Uint64
+}
+
+// topicBuffer is a fixed-size ring of recent events for one topic.
+// Capacity is set per-buffer (EnableBuffering's cap parameter); the
+// create-instance flow uses 128, which fits ~16 step starts + step
+// finishes + a few warnings without eviction during a normal up.
+//
+// A full buffer evicts the oldest event silently. SubscribeWithReplay
+// drains whatever's currently in the ring; it doesn't emit a
+// "dropped" sentinel like the live drop-oldest does, because
+// replay losses aren't observable to the live publisher (the lost
+// events were published before the subscriber existed).
+type topicBuffer struct {
+	mu     sync.Mutex
+	events []Event
+	cap    int
+}
+
+func newTopicBuffer(cap int) *topicBuffer {
+	if cap < 1 {
+		cap = 1
+	}
+	return &topicBuffer{
+		events: make([]Event, 0, cap),
+		cap:    cap,
+	}
+}
+
+// append adds an event to the ring. Evicts the oldest when full.
+// Slice realloc is bounded by `cap` so steady-state memory is flat.
+func (b *topicBuffer) append(e Event) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.events) >= b.cap {
+		// Shift left by one. For cap=128 this is a 127-element
+		// copy per publish — negligible at human-paced step
+		// events (~10/sec peak during compose-up).
+		copy(b.events, b.events[1:])
+		b.events = b.events[:len(b.events)-1]
+	}
+	b.events = append(b.events, e)
+}
+
+// snapshot returns a copy of the current buffer contents. Safe to
+// hand to subscribers — no aliasing with future appends.
+func (b *topicBuffer) snapshot() []Event {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	out := make([]Event, len(b.events))
+	copy(out, b.events)
+	return out
 }
 
 // subscription is the per-subscriber state the publisher writes to.
@@ -117,8 +190,9 @@ type subscription struct {
 // New constructs a Hub with the default per-subscriber buffer.
 func New() *Hub {
 	return &Hub{
-		subs:   make(map[*subscription]struct{}),
-		bufLen: defaultBuffer,
+		subs:         make(map[*subscription]struct{}),
+		bufLen:       defaultBuffer,
+		topicBuffers: make(map[string]*topicBuffer),
 	}
 }
 
@@ -130,9 +204,62 @@ func NewWithBuffer(buf int) *Hub {
 		buf = 1
 	}
 	return &Hub{
-		subs:   make(map[*subscription]struct{}),
-		bufLen: buf,
+		subs:         make(map[*subscription]struct{}),
+		bufLen:       buf,
+		topicBuffers: make(map[string]*topicBuffer),
 	}
+}
+
+// EnableBuffering opts a topic into the replay buffer. Subsequent
+// Publish calls for `topic` append to a fixed-size ring (cap
+// events). SubscribeWithReplay drains the ring into new
+// subscribers before live event flow begins.
+//
+// Idempotent — calling it twice for the same topic with the same
+// cap is a no-op. A different cap on a re-enable resizes the
+// existing buffer (truncates if the new cap is smaller).
+//
+// The create-instance handler calls this with cap=128 right after
+// the POST is accepted, before spawning the up goroutine. The
+// matching ClearBuffer call frees the ring when the up finishes.
+//
+// cap < 1 is clamped to 1.
+func (h *Hub) EnableBuffering(topic string, cap int) {
+	if cap < 1 {
+		cap = 1
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	existing, ok := h.topicBuffers[topic]
+	if !ok {
+		h.topicBuffers[topic] = newTopicBuffer(cap)
+		return
+	}
+	// Already buffering. Resize only if cap differs to avoid
+	// dropping queued events on a no-op re-enable.
+	if existing.cap == cap {
+		return
+	}
+	existing.mu.Lock()
+	defer existing.mu.Unlock()
+	existing.cap = cap
+	if len(existing.events) > cap {
+		// Keep the most recent `cap` events; older ones evict.
+		existing.events = append([]Event(nil), existing.events[len(existing.events)-cap:]...)
+	}
+}
+
+// ClearBuffer removes the topic's replay buffer. Called by the
+// create-instance handler after the up finishes (success or
+// failure) to free memory eagerly.
+//
+// Subsequent Publish calls for `topic` are still delivered to
+// live subscribers — they just no longer accumulate in any
+// replay ring. Safe to call on a topic that was never buffered.
+func (h *Hub) ClearBuffer(topic string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.topicBuffers, topic)
 }
 
 // Subscribe registers a new subscriber. topics may be empty to
@@ -194,6 +321,16 @@ func (h *Hub) Publish(e Event) int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
+	// If the topic has a replay buffer, append BEFORE live delivery.
+	// Order matters: a late SubscribeWithReplay (one that races
+	// Publish) sees the event in either the snapshot (if we appended
+	// before they snapshotted) OR the live channel (if we appended
+	// after) — never both, because subscribe holds h.mu.Lock for the
+	// add+snapshot and we hold h.mu.RLock here.
+	if buf, ok := h.topicBuffers[e.Topic]; ok {
+		buf.append(e)
+	}
+
 	delivered := 0
 	for s := range h.subs {
 		// Topic filter: empty topic set = match-all.
@@ -207,6 +344,98 @@ func (h *Hub) Publish(e Event) int {
 	}
 	h.published.Add(1)
 	return delivered
+}
+
+// SubscribeWithReplay is the variant the per-instance SSE handler
+// uses. It atomically:
+//
+//  1. Snapshots each requested topic's replay buffer
+//  2. Registers the subscription so live events start flowing
+//  3. Pre-fills the subscription's channel with the snapshot
+//
+// The pre-fill happens BEFORE the subscription enters h.subs, so
+// no publisher can interleave a live event into the channel during
+// the drain. Ordering guarantee: replay events appear in
+// publish-order, immediately followed by any live events published
+// after Subscribe returns.
+//
+// The subscription channel must be large enough to hold the entire
+// snapshot without blocking. We size it to max(h.bufLen,
+// sum-of-buffer-sizes) to keep that promise; in practice the
+// per-instance topic ring is 128 and h.bufLen is 64, so the
+// channel is 128.
+//
+// Returns the channel + cancel func, same as Subscribe.
+func (h *Hub) SubscribeWithReplay(topics ...string) (<-chan Event, func()) {
+	// Snapshot each topic's buffer first — outside the hub lock so
+	// we don't hold writers off. A concurrent Publish during the
+	// snapshot may add an event to the topic buffer; we hold
+	// h.mu.Lock below before registering the subscription, so
+	// that event either:
+	//   (a) lands in the snapshot we already took (we win the race)
+	//   (b) lands ONLY in the buffer (we lose the race AND the
+	//       subscriber isn't registered yet, so the live publisher
+	//       doesn't see it) — caught on a SECOND snapshot under
+	//       the lock below
+	//
+	// The "two-snapshot under lock" pattern is the simplest
+	// correctness proof. Doing one snapshot before the lock is
+	// premature optimisation; tests will catch it if it matters.
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Compute channel size: enough to hold every replay event plus
+	// the usual live buffer. Without this, prefilling N replay
+	// events into a chan of capacity bufLen<N would deadlock on
+	// the prefill sends.
+	totalReplay := 0
+	snapshots := make(map[string][]Event, len(topics))
+	for _, t := range topics {
+		if buf, ok := h.topicBuffers[t]; ok {
+			snap := buf.snapshot()
+			snapshots[t] = snap
+			totalReplay += len(snap)
+		}
+	}
+	chanSize := h.bufLen
+	if totalReplay > chanSize {
+		chanSize = totalReplay
+	}
+
+	s := &subscription{
+		topics: make(map[string]struct{}, len(topics)),
+		ch:     make(chan Event, chanSize),
+	}
+	for _, t := range topics {
+		s.topics[t] = struct{}{}
+	}
+
+	// Pre-fill BEFORE registering. No publisher can send to s.ch
+	// yet because s isn't in h.subs. Iterate topics in the order
+	// the caller gave them so cross-topic replay is deterministic.
+	for _, t := range topics {
+		for _, ev := range snapshots[t] {
+			s.ch <- ev // never blocks: chanSize ≥ totalReplay
+		}
+	}
+
+	// NOW make the subscription visible to publishers.
+	h.subs[s] = struct{}{}
+
+	cancel := func() {
+		h.mu.Lock()
+		if _, ok := h.subs[s]; !ok {
+			h.mu.Unlock()
+			return
+		}
+		delete(h.subs, s)
+		h.mu.Unlock()
+		s.mu.Lock()
+		s.closed = true
+		close(s.ch)
+		s.mu.Unlock()
+	}
+	return s.ch, cancel
 }
 
 // deliverTo handles the drop-oldest semantics for one subscriber.
