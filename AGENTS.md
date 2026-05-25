@@ -6,7 +6,7 @@ This file provides guidelines for AI agents contributing to canton-devkit.
 
 canton-devkit is a CLI tool for managing Canton LocalNet developer environments. It provides a single workflow for starting, stopping, inspecting, and cleaning up Canton LocalNet instances.
 
-- **Language:** Go 1.22
+- **Language:** Go 1.26
 - **CLI Framework:** Cobra
 - **Module path:** `github.com/bitdynamics-ab/canton-devkit`
 
@@ -50,14 +50,13 @@ canton-devkit is a CLI tool for managing Canton LocalNet developer environments.
 
 - **Entry point:** `cmd/canton-devkit/main.go`
 - **CLI wiring:** `internal/cli/` — root command, version subcommand, localnet subcommands
-- **Localnet subcommands** are currently stubs
+- **Localnet subcommands** are partially implemented — check `internal/cli/localnet/` for the current set; commands not yet wired return a "not implemented yet" stub.
 - **DPM contract:** The CLI must dispatch correctly from an argv slice with no reliance on `argv[0]` or environment variables. The `TestRunIsArgvOnly` test guards this contract and must not be broken.
 
 ## CI Pipeline
 
-- **Linux tests are required** on every PR and push to `main`
-- **macOS and Windows tests can be triggered manually** to save cost
-- Lint runs on ubuntu-latest only
+- Both jobs (`test` and `lint`) run on `[self-hosted, Linux]` runners on every PR and push to `main`.
+- macOS / Windows CI was removed in commit `9a0dae1` — cross-platform validation now lives in `.github/workflows/release.yml`.
 - All GitHub Actions must be SHA-pinned (no floating tags like `@v4`)
 
 ## Commit Messages
