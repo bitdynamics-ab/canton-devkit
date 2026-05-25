@@ -34,6 +34,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"sort"
 
@@ -221,8 +222,17 @@ func joinComma(ss []string) string {
 // writeJSON is the shared JSON-response helper. Indented for
 // human-readability (browsers and `curl | jq` both prefer it);
 // the gzip middleware (future) will erase the size cost.
+//
+// Reviewer pin (PR #43 round-2 Cache-Control): every API JSON
+// response carries no-store. Without it, browsers and HTTP
+// proxies can cache responses that include credentials (the
+// JWT endpoint, app-config) or that change frequently (instance
+// list). The Vite bundle (handled in assets.go) opts INTO
+// hashed-file caching separately; this default applies only to
+// /api/* responses written through this helper.
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
@@ -266,21 +276,34 @@ const (
 	ErrCodeRequestTooLarge = "REQUEST_TOO_LARGE"
 )
 
-// writeError emits a structured error. `summary` is human-facing
-// (rendered as a toast); `cause` is appended as the detail string
-// only for server-side (5xx) errors — 4xx errors are client input
-// being wrong, and echoing the cause amplifies attacker-controlled
-// strings into the response. Handlers wanting a specific code use
-// writeErrorWithCode.
+// writeError emits a structured error.
+//
+// Reviewer pin (PR #43 round-2 5xx leak): the previous shape
+// included the raw cause string for 5xx errors. That leaked
+// filesystem paths (e.g. "read /home/user/.canton-devkit/...")
+// into the response body — visible to anyone on the loopback
+// AND to anyone who can screenshot a JS error. Now:
+//   - 4xx: code + summary only (no cause)
+//   - 5xx: code + summary only AS WELL — the cause is LOGGED
+//     server-side via log.Default so the operator can diagnose,
+//     but never leaves the box. A correlation ID would be
+//     better than the implicit log/wire pairing; tracked for
+//     a future observability pass.
+//
+// `summary` is the human-facing label (rendered as a toast);
+// it must not include attacker-controlled strings — the caller's
+// responsibility, but the helper enforces "no Detail" so a
+// careless cause.Error() can't leak.
 func writeError(w http.ResponseWriter, status int, summary string, cause error) {
-	body := errorBody{
+	if cause != nil && status >= 500 {
+		// Log server-side, don't ship to client.
+		log.Printf("handler error: status=%d code=%s summary=%q cause=%v",
+			status, codeForStatus(status), summary, cause)
+	}
+	writeJSON(w, status, errorBody{
 		Code:  codeForStatus(status),
 		Error: summary,
-	}
-	if cause != nil && status >= 500 {
-		body.Detail = cause.Error()
-	}
-	writeJSON(w, status, body)
+	})
 }
 
 // writeErrorWithCode is the variant used when the handler wants

@@ -265,10 +265,10 @@ type rrRecorder struct {
 	body bytes.Buffer
 }
 
-func newRR() *rrRecorder                           { return &rrRecorder{hdr: http.Header{}} }
-func (r *rrRecorder) Header() http.Header          { return r.hdr }
-func (r *rrRecorder) Write(p []byte) (int, error)  { return r.body.Write(p) }
-func (r *rrRecorder) WriteHeader(code int)         { r.code = code }
+func newRR() *rrRecorder                          { return &rrRecorder{hdr: http.Header{}} }
+func (r *rrRecorder) Header() http.Header         { return r.hdr }
+func (r *rrRecorder) Write(p []byte) (int, error) { return r.body.Write(p) }
+func (r *rrRecorder) WriteHeader(code int)        { r.code = code }
 
 // mustParseURL is a tiny test helper for constructing requests
 // with literal path strings.
@@ -331,5 +331,38 @@ func TestRouter_AccessLogEmittedPerRequest(t *testing.T) {
 	// (?include_jwt=true would leak credential intent).
 	if strings.Contains(body, "?") {
 		t.Errorf("access log included query string — credential leak vector:\n%s", body)
+	}
+}
+
+// TestCSRF_JWTEndpointProtectedEndToEnd is the reviewer pin
+// (PR #43 cross-PR round-2): the /api/instances/{name}/jwt
+// route is credential-issuing and MUST go through the CSRF
+// middleware from withOriginCheck (#41). The handler-package
+// unit tests use a bare ServeMux that bypasses the middleware;
+// without this end-to-end test, a regression that drops
+// withOriginCheck from NewRouter or accidentally exempts /api/
+// routes would silently pass handler-package tests.
+//
+// Catch is structural: we drive the FULL NewRouter pipeline and
+// assert a cross-origin POST to the JWT endpoint returns 403,
+// proving the middleware chain reaches that handler.
+func TestCSRF_JWTEndpointProtectedEndToEnd(t *testing.T) {
+	srv, addr := startTestServer(t)
+	defer srv.Shutdown(context.Background())
+
+	// We don't care whether the underlying handler would have
+	// succeeded — we only care that the CSRF gate fires BEFORE
+	// the handler runs. Cross-origin POST → 403.
+	req, _ := http.NewRequest("POST",
+		"http://"+addr+"/api/instances/demo/jwt", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("cross-origin POST /api/instances/demo/jwt status = %d, want 403 — withOriginCheck not reaching credential route",
+			resp.StatusCode)
 	}
 }
