@@ -54,14 +54,29 @@ type FriendlyError struct {
 	Summary     string   // one line; appears next to the code
 	Remediation []string // each entry one line; rendered as a numbered list
 	Cause       error    // wrapped; nil if no underlying error
+	// IncludeCause opts the cause into Error()'s one-line form.
+	// Default false: Error() emits "error · code X · summary" only.
+	//
+	// Reviewer pin (PR #36 #4): leaking the underlying cause by
+	// default risks exposing paths, hostnames, port numbers, or
+	// other system details through CI/log surfaces where the
+	// FriendlyError was constructed to deliberately *replace* the
+	// raw error with a curated message. Callers that DO want the
+	// cause in the one-liner (debug logs, devkit doctor) set this
+	// explicitly. The cause is always available via errors.Unwrap
+	// / errors.As regardless of this flag.
+	IncludeCause bool
 }
 
 // Error returns a one-line machine-readable form suitable for
 // non-TTY stderr or wrapped log lines: `error · code PORTS_IN_USE ·
 // summary…`. Mirrors the dim/bold tokenisation of ScreenError but
 // without ANSI codes so grep/CI parsers see stable text.
+//
+// The cause is appended only when IncludeCause is set — see the
+// field comment for why default-off is the safer posture.
 func (f *FriendlyError) Error() string {
-	if f.Cause != nil {
+	if f.Cause != nil && f.IncludeCause {
 		return fmt.Sprintf("error · code %s · %s (%s)", f.Code, f.Summary, f.Cause.Error())
 	}
 	return fmt.Sprintf("error · code %s · %s", f.Code, f.Summary)
@@ -163,9 +178,14 @@ func RenderFriendly(w io.Writer, f *FriendlyError) {
 // `return localnet.FriendlyExit(errw, err, ExitUserError)` and
 // trust that an upstream ExitTimeout still surfaces as 3.
 //
-// Non-TTY detection delegates to term.ShouldColor so the same gate
-// that disables ANSI also disables the box (a callout without color
-// is just confusingly indented).
+// Box gating delegates to term.IsTerminal (NOT term.ShouldColor).
+// Reviewer pin (PR #36 #3): the original code used ShouldColor,
+// which conflated "is a TTY" with "should emit ANSI" — so a user
+// with NO_COLOR=1 on a real terminal (a common CI pattern) lost
+// the box STRUCTURE too. The box's value is the left ┃ accent +
+// the indented remediation list; both work without color. We now
+// gate the box on TTY only, and let the per-token Errc/Brandc/etc.
+// inside RenderFriendly respect ShouldColor for the ANSI sequences.
 func FriendlyExit(errw io.Writer, err error, fallback int) int {
 	if err == nil {
 		return 0 // success regardless of fallback; nil means nothing to report
@@ -176,7 +196,7 @@ func FriendlyExit(errw io.Writer, err error, fallback int) int {
 		code = int(ece)
 	}
 	f := AsFriendly(err)
-	if f != nil && term.ShouldColor(errw) {
+	if f != nil && term.IsTerminal(errw) {
 		RenderFriendly(errw, f)
 		return code
 	}

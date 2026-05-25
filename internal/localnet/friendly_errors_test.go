@@ -4,17 +4,33 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"testing"
 )
 
+// osPipe + readAll are tiny wrappers so the test reads naturally.
+func osPipe() (*os.File, *os.File, error) { return os.Pipe() }
+func readAll(t *testing.T, r io.Reader) string {
+	t.Helper()
+	b, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	return string(b)
+}
+
 // TestFriendlyError_ErrorIsMachineReadable pins the one-line form
 // CI logs and scripts will grep. Code must appear verbatim, no
-// ANSI noise, cause appended in parens if present.
+// ANSI noise. Cause is appended ONLY when IncludeCause is set —
+// see TestFriendlyError_DoesNotLeakCauseByDefault for the default-
+// off contract.
 func TestFriendlyError_ErrorIsMachineReadable(t *testing.T) {
 	withCause := NewFriendly(ErrCodePortsInUse, "two ports busy",
 		errors.New("bind: address in use"),
 		"kill 88341", "use --ports …")
+	withCause.IncludeCause = true
 	got := withCause.Error()
 	for _, want := range []string{"code PORTS_IN_USE", "two ports busy", "address in use"} {
 		if !strings.Contains(got, want) {
@@ -28,6 +44,83 @@ func TestFriendlyError_ErrorIsMachineReadable(t *testing.T) {
 	noCause := NewFriendly(ErrCodeDockerDown, "docker daemon unreachable", nil)
 	if strings.Contains(noCause.Error(), "()") {
 		t.Errorf("Error() with no cause should not emit empty parens: %q", noCause.Error())
+	}
+}
+
+// TestFriendlyError_DoesNotLeakCauseByDefault is the reviewer pin
+// (PR #36 #4): a FriendlyError constructed with a cause but
+// WITHOUT IncludeCause=true must NOT include the cause string in
+// Error(). The cause often carries paths, ports, hostnames, or
+// bind addresses that we deliberately replaced with a curated
+// summary; leaking them through Error() defeats that curation.
+//
+// The cause is still reachable via errors.Unwrap / errors.As —
+// this only governs the one-line string form.
+func TestFriendlyError_DoesNotLeakCauseByDefault(t *testing.T) {
+	cause := errors.New("bind /var/run/secret.sock: address in use on 127.0.0.1:8080")
+	f := NewFriendly(ErrCodePortsInUse, "two ports busy", cause, "kill them")
+	got := f.Error()
+	// Curated summary should appear.
+	if !strings.Contains(got, "two ports busy") {
+		t.Errorf("Error() missing summary: %q", got)
+	}
+	// Cause details must NOT appear by default.
+	for _, leak := range []string{"/var/run/secret.sock", "127.0.0.1:8080", "address in use"} {
+		if strings.Contains(got, leak) {
+			t.Errorf("Error() leaked cause detail %q: %q", leak, got)
+		}
+	}
+	// Cause is still reachable via errors.Unwrap.
+	if !errors.Is(f, cause) {
+		t.Error("cause should still be reachable via errors.Is even when not in Error()")
+	}
+	// Opt-in: setting IncludeCause does include the cause.
+	f.IncludeCause = true
+	if !strings.Contains(f.Error(), "address in use") {
+		t.Errorf("IncludeCause=true should append cause, got: %q", f.Error())
+	}
+}
+
+// TestFriendlyExit_BoxRendersOnTTYWithoutColor is the reviewer pin
+// (PR #36 #3): the Box gate was previously term.ShouldColor, which
+// suppressed the structural box whenever NO_COLOR was set even on
+// a real TTY. The new gate is term.IsTerminal, so structure
+// survives no-color setups. We can't simulate a TTY with a
+// bytes.Buffer (IsTerminal returns false for non-*os.File), so this
+// test exercises the bytes.Buffer path AND an *os.File path via a
+// pipe to lock in both halves of the new contract.
+func TestFriendlyExit_BoxRendersOnTTYWithoutColor(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	err := NewFriendly(ErrCodeDockerDown, "docker daemon unreachable", nil, "start docker")
+
+	// bytes.Buffer: IsTerminal=false → no box.
+	var buf bytes.Buffer
+	_ = FriendlyExit(&buf, err, 99)
+	if strings.Contains(buf.String(), "┃") {
+		t.Errorf("non-TTY writer should not render box, got: %q", buf.String())
+	}
+
+	// os.Pipe: read end is a *os.File but not a TTY, so IsTerminal
+	// is still false — this proves the gate is genuinely on
+	// IsTerminal (not on writer-type alone). We assert the negative
+	// here; the positive (real TTY) is tested by manual smoke in
+	// the BIT-126 acceptance run because Go has no portable way to
+	// open a PTY in unit tests without cgo.
+	r, w, err2 := osPipe()
+	if err2 != nil {
+		t.Skipf("os.Pipe unavailable: %v", err2)
+	}
+	defer r.Close()
+	defer w.Close()
+	_ = FriendlyExit(w, err, 99)
+	w.Close()
+	out := readAll(t, r)
+	if strings.Contains(out, "┃") {
+		t.Errorf("os.Pipe (not a TTY) should not render box, got: %q", out)
+	}
+	// But the one-line form MUST be there — pipes are still output.
+	if !strings.Contains(out, "code DOCKER_DOWN") {
+		t.Errorf("pipe output missing one-line form: %q", out)
 	}
 }
 
