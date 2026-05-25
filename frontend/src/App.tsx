@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
-import { Route, Routes } from "react-router-dom";
+import { useEffect, useState, type ReactNode } from "react";
+import { Route, Routes, useLocation } from "react-router-dom";
 import { SCHEMA_VERSION, fetchVersion } from "./api";
 import { Shell } from "./shell/Shell";
 import { InstanceSelectionProvider } from "./shell/useInstanceSelection";
+import { ErrorBoundary } from "./shell/ErrorBoundary";
 import { Dashboard } from "./screens/Dashboard";
 import { Placeholder } from "./screens/Placeholder";
 import { W } from "./tokens";
@@ -48,18 +49,38 @@ export function App() {
   return (
     <InstanceSelectionProvider>
       <Shell>
-        <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/explorer/*" element={<Placeholder name="Explorer" ticket="BIT-132" />} />
-        <Route path="/dar/*" element={<Placeholder name="DAR Manager" ticket="BIT-127" />} />
-        <Route path="/metrics/*" element={<Placeholder name="Metrics" ticket="BIT-134" />} />
-        <Route path="/tokens/*" element={<Placeholder name="Tokens" ticket="BIT-140" />} />
-        <Route path="/agent/*" element={<Placeholder name="Agent Skills" ticket="BIT-135" />} />
-        <Route path="*" element={<Placeholder name="Not found" />} />
-        </Routes>
+        <RoutedSurface />
       </Shell>
     </InstanceSelectionProvider>
   );
+}
+
+// RoutedSurface lives inside the Router so it can use
+// useLocation() — its pathname becomes the boundary's reset key,
+// so a crash in /explorer doesn't follow you to /overview when
+// you navigate away.
+//
+// One boundary per route element (rather than one around all
+// Routes) so a crash in /explorer keeps the topbar interactive
+// AND keeps the sibling /metrics route renderable when the user
+// navigates to it.
+function RoutedSurface() {
+  const loc = useLocation();
+  return (
+    <Routes>
+      <Route path="/" element={<Guard routeKey={loc.pathname}><Dashboard /></Guard>} />
+      <Route path="/explorer/*" element={<Guard routeKey={loc.pathname}><Placeholder name="Explorer" ticket="BIT-132" /></Guard>} />
+      <Route path="/dar/*" element={<Guard routeKey={loc.pathname}><Placeholder name="DAR Manager" ticket="BIT-127" /></Guard>} />
+      <Route path="/metrics/*" element={<Guard routeKey={loc.pathname}><Placeholder name="Metrics" ticket="BIT-134" /></Guard>} />
+      <Route path="/tokens/*" element={<Guard routeKey={loc.pathname}><Placeholder name="Tokens" ticket="BIT-140" /></Guard>} />
+      <Route path="/agent/*" element={<Guard routeKey={loc.pathname}><Placeholder name="Agent Skills" ticket="BIT-135" /></Guard>} />
+      <Route path="*" element={<Guard routeKey={loc.pathname}><Placeholder name="Not found" /></Guard>} />
+    </Routes>
+  );
+}
+
+function Guard({ routeKey, children }: { routeKey: string; children: ReactNode }) {
+  return <ErrorBoundary routeKey={routeKey}>{children}</ErrorBoundary>;
 }
 
 interface BootGateProps {
