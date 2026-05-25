@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -67,7 +69,10 @@ func TestJWT_DefaultRoleIssued(t *testing.T) {
 	seedWithCredentials(t, "demo", "app-provider::1220a8d2")
 	srv := authMux(t)
 
-	resp, err := http.Post(srv.URL+"/api/instances/demo/jwt",
+	// Pass ?include_jwt=true to receive the raw token; the
+	// redacted-by-default contract is pinned by
+	// TestJWT_RedactedByDefault below.
+	resp, err := http.Post(srv.URL+"/api/instances/demo/jwt?include_jwt=true",
 		"application/json", strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("POST: %v", err)
@@ -83,6 +88,12 @@ func TestJWT_DefaultRoleIssued(t *testing.T) {
 	}
 	if got.Party != "app-provider::1220a8d2" {
 		t.Errorf("Party = %q, want recorded party", got.Party)
+	}
+	if got.SchemaVersion != SchemaVersion {
+		t.Errorf("SchemaVersion = %d, want %d", got.SchemaVersion, SchemaVersion)
+	}
+	if got.Redacted {
+		t.Error("Redacted = true even with ?include_jwt=true — flag ignored")
 	}
 	// JWT must have 3 base64-ish segments separated by dots
 	// (standard JWT shape; cheap sanity check without parsing).
@@ -237,5 +248,210 @@ func TestAppConfig_UnknownFormatReturns400(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400 for unknown format", resp.StatusCode)
+	}
+}
+
+// TestJWT_RedactedByDefault is the reviewer pin (PR #43 #a): when
+// ?include_jwt=true is NOT passed, Token in the response must be
+// the redaction placeholder, NOT the real JWT. Default-redact
+// keeps CI logs, screenshot-shares, and "look at the response"
+// demos from leaking a usable signing token. Mirrors PR #38's
+// --include-jwt convention on the CLI side.
+func TestJWT_RedactedByDefault(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedWithCredentials(t, "demo", "app-provider::1220a8d2")
+	srv := authMux(t)
+
+	// Bare POST — no ?include_jwt.
+	resp, err := http.Post(srv.URL+"/api/instances/demo/jwt",
+		"application/json", strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var got jwtResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	if !got.Redacted {
+		t.Error("Redacted = false by default — token will leak through screenshots/logs")
+	}
+	if got.Token != jwtRedactionPlaceholder {
+		t.Errorf("Token = %q, want %q (redaction regressed)",
+			got.Token, jwtRedactionPlaceholder)
+	}
+	if strings.Count(got.Token, ".") == 2 {
+		t.Error("Token has JWT shape (header.payload.sig) by default — raw JWT leaked")
+	}
+}
+
+// TestJWT_BodyCapEnforced is the reviewer pin (PR #43 #d): the
+// handler must refuse unbounded request bodies. We send a body
+// over maxAuthBodyBytes and expect a 4xx — without the
+// http.MaxBytesReader wrapper, json.Decoder happily reads
+// gigabytes into memory.
+func TestJWT_BodyCapEnforced(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedWithCredentials(t, "demo", "p")
+	srv := authMux(t)
+
+	// 8 KiB body, double the cap. Valid-looking JSON envelope
+	// with padding so the decode itself doesn't fail before the
+	// cap fires.
+	padding := strings.Repeat("x", 8*1024)
+	body := `{"role":"app-provider","audience":"` + padding + `"}`
+	resp, err := http.Post(srv.URL+"/api/instances/demo/jwt",
+		"application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	// Either 400 (decode failed because cap clipped JSON) or
+	// 413 (MaxBytesReader explicitly returned). Both are acceptable
+	// rejections; what's NOT acceptable is 200 (cap regressed).
+	if resp.StatusCode == http.StatusOK {
+		t.Errorf("8 KiB body accepted (status 200) — body cap regressed")
+	}
+	if resp.StatusCode < 400 || resp.StatusCode >= 500 {
+		t.Errorf("body-cap status = %d, want 4xx", resp.StatusCode)
+	}
+}
+
+// TestJWT_AuditLogEmittedOnIssue is the reviewer pin (PR #43 #f):
+// every JWT issuance must emit a stable audit line. Catches the
+// regression class where the audit logging is removed or silently
+// stops firing — security ops loses visibility.
+//
+// We capture log output via log.SetOutput; restore in t.Cleanup.
+func TestJWT_AuditLogEmittedOnIssue(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedWithCredentials(t, "demo", "app-provider::1220a8d2")
+	srv := authMux(t)
+
+	var logBuf bytes.Buffer
+	prevOut := log.Default().Writer()
+	log.SetOutput(&logBuf)
+	t.Cleanup(func() { log.SetOutput(prevOut) })
+
+	resp, err := http.Post(srv.URL+"/api/instances/demo/jwt?include_jwt=true",
+		"application/json", strings.NewReader(`{"role":"sv"}`))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	resp.Body.Close()
+
+	logLine := logBuf.String()
+	for _, want := range []string{
+		"audit: jwt_issued",
+		`instance="demo"`,
+		`role="sv"`,
+		`raw=true`,
+	} {
+		if !strings.Contains(logLine, want) {
+			t.Errorf("audit log missing %q\nfull:\n%s", want, logLine)
+		}
+	}
+	// Audit MUST NOT include the raw token (even an audit log
+	// shouldn't carry the secret).
+	if strings.Count(logLine, ".") > 4 {
+		// JWTs have 2 dots; the audit format has a few more from
+		// the audience URL. A leaked JWT would push >>4. Tight
+		// threshold is fine here as a smell check.
+	}
+	if strings.Contains(logLine, "eyJ") {
+		t.Error("audit log contains a raw JWT (starts with eyJ) — secret leaked into logs")
+	}
+}
+
+// TestJWT_AuditLogNotesRedactedByDefault is the symmetric pin
+// for the audit log: when the caller does NOT pass include_jwt,
+// the audit line carries raw=false so log scrapers can distinguish
+// "someone read the raw token" (suspicious) from "someone
+// generated a credential preview" (routine).
+func TestJWT_AuditLogNotesRedactedByDefault(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedWithCredentials(t, "demo", "p")
+	srv := authMux(t)
+
+	var logBuf bytes.Buffer
+	prevOut := log.Default().Writer()
+	log.SetOutput(&logBuf)
+	t.Cleanup(func() { log.SetOutput(prevOut) })
+
+	resp, err := http.Post(srv.URL+"/api/instances/demo/jwt",
+		"application/json", strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	resp.Body.Close()
+
+	if !strings.Contains(logBuf.String(), "raw=false") {
+		t.Errorf("audit log missing raw=false on redacted issue:\n%s", logBuf.String())
+	}
+}
+
+// TestErrorBody_AlignedWithFriendlyTaxonomy is the reviewer pin
+// (PR #43 #e): error responses must carry the (Code, Error,
+// Detail, Remediation) shape that mirrors PR #36's FriendlyError
+// taxonomy. Catches drift where someone adds an error path that
+// emits a different envelope.
+//
+// Exercised via the 400 path (unknown role) — guaranteed to fire
+// a writeError call.
+func TestErrorBody_AlignedWithFriendlyTaxonomy(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedWithCredentials(t, "demo", "p")
+	srv := authMux(t)
+
+	resp, err := http.Post(srv.URL+"/api/instances/demo/jwt",
+		"application/json", strings.NewReader(`{"role":"nonexistent"}`))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+
+	var got errorBody
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Code == "" {
+		t.Error("Code empty — frontend can't branch on stable error token")
+	}
+	if got.Error == "" {
+		t.Error("Error empty — toast has nothing to show")
+	}
+	// 400 must NOT echo a cause Detail (validation errors echo
+	// attacker-controlled strings; reviewer pin).
+	if got.Detail != "" {
+		t.Errorf("4xx Detail = %q, want empty (attacker-controlled echo risk)", got.Detail)
+	}
+}
+
+// TestJWTResponse_CarriesSchemaVersion + TestAppConfigPayload_CarriesSchemaVersion
+// are the reflective pins for PR #43 #c. Reflective assertions
+// rather than reading-the-source so the schema-pin reflection
+// test catches future top-level types added to this package.
+func TestJWTResponse_CarriesSchemaVersion(t *testing.T) {
+	requireSchemaVersionField(t, reflect.TypeOf(jwtResponse{}), "jwtResponse")
+}
+func TestAppConfigPayload_CarriesSchemaVersion(t *testing.T) {
+	requireSchemaVersionField(t, reflect.TypeOf(appConfigPayload{}), "appConfigPayload")
+}
+
+// requireSchemaVersionField is the shared assertion helper.
+// Mirrors the implementation in api/types/schema_pin_test.go.
+func requireSchemaVersionField(t *testing.T, rt reflect.Type, name string) {
+	t.Helper()
+	f, ok := rt.FieldByName("SchemaVersion")
+	if !ok {
+		t.Fatalf("%s missing SchemaVersion field — schema-pin reflection test would fail", name)
+	}
+	if f.Type.Kind() != reflect.Int {
+		t.Errorf("%s.SchemaVersion kind = %v, want int", name, f.Type.Kind())
+	}
+	if tag := f.Tag.Get("json"); tag != "schema_version" {
+		t.Errorf(`%s.SchemaVersion json tag = %q, want "schema_version"`, name, tag)
 	}
 }

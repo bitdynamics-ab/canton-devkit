@@ -229,21 +229,84 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	_ = enc.Encode(body)
 }
 
-// errorBody is the canonical error response shape the frontend
-// matches on. Keep this small and STABLE — every new error path
-// adds rows to its `code` set, never renames the field.
+// errorBody is the canonical error response shape — aligned with
+// PR #36's FriendlyError taxonomy in internal/localnet/friendly_errors.go.
+//
+// Reviewer pin (PR #43 #e): the previous shape was a free-form
+// {error, detail} pair. The CLI's friendly_errors carries
+// (Code, Summary, Remediation[]) and the frontend already knows
+// how to render that triple. Mirroring keeps one error taxonomy
+// across CLI and UI surfaces.
+//
+// Fields:
+//   - Code: stable token scripts/frontends branch on (e.g.
+//     "INSTANCE_NOT_FOUND"). Never renamed once shipped.
+//   - Error: one-line human summary (toast).
+//   - Detail: cause string for the dev-tools view; populated only
+//     for 5xx (server-side) so 4xx (client-input) errors don't
+//     echo attacker-controlled strings.
+//   - Remediation: ordered action list ("try X then Y").
 type errorBody struct {
-	Error  string `json:"error"`
-	Detail string `json:"detail,omitempty"`
+	Code        string   `json:"code"`
+	Error       string   `json:"error"`
+	Detail      string   `json:"detail,omitempty"`
+	Remediation []string `json:"remediation,omitempty"`
 }
+
+// Stable error-code tokens. Mirror the ErrorCode constants in
+// internal/localnet/friendly_errors.go where applicable; new codes
+// here belong in the docs at devkit.dev/e/<CODE>.
+const (
+	ErrCodeInvalidRequest  = "INVALID_REQUEST"
+	ErrCodeNotFound        = "NOT_FOUND"
+	ErrCodeInternal        = "INTERNAL"
+	ErrCodeRegistry        = "REGISTRY_READ_FAILED"
+	ErrCodeUnknownRole     = "UNKNOWN_ROLE"
+	ErrCodeUnknownFormat   = "UNKNOWN_FORMAT"
+	ErrCodeRequestTooLarge = "REQUEST_TOO_LARGE"
+)
 
 // writeError emits a structured error. `summary` is human-facing
 // (rendered as a toast); `cause` is appended as the detail string
-// for the dev-tools view.
+// only for server-side (5xx) errors — 4xx errors are client input
+// being wrong, and echoing the cause amplifies attacker-controlled
+// strings into the response. Handlers wanting a specific code use
+// writeErrorWithCode.
 func writeError(w http.ResponseWriter, status int, summary string, cause error) {
-	body := errorBody{Error: summary}
-	if cause != nil {
+	body := errorBody{
+		Code:  codeForStatus(status),
+		Error: summary,
+	}
+	if cause != nil && status >= 500 {
 		body.Detail = cause.Error()
 	}
 	writeJSON(w, status, body)
+}
+
+// writeErrorWithCode is the variant used when the handler wants
+// to pin a specific stable code rather than the status-derived
+// default.
+func writeErrorWithCode(w http.ResponseWriter, status int, code, summary string, remediation ...string) {
+	writeJSON(w, status, errorBody{
+		Code:        code,
+		Error:       summary,
+		Remediation: remediation,
+	})
+}
+
+// codeForStatus is the default code mapping. Handlers wanting a
+// more specific code use writeErrorWithCode.
+func codeForStatus(status int) string {
+	switch {
+	case status == http.StatusNotFound:
+		return ErrCodeNotFound
+	case status == http.StatusBadRequest:
+		return ErrCodeInvalidRequest
+	case status == http.StatusRequestEntityTooLarge:
+		return ErrCodeRequestTooLarge
+	case status >= 500:
+		return ErrCodeInternal
+	default:
+		return ErrCodeInvalidRequest
+	}
 }
