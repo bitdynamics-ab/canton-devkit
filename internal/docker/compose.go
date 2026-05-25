@@ -327,6 +327,16 @@ func (c *ComposeRunner) Endpoints(ctx context.Context) map[string]string {
 	return endpoints
 }
 
+// Ps returns a tab-separated docker compose ps snapshot for status rendering.
+func (c *ComposeRunner) Ps(ctx context.Context) ([]byte, error) {
+	args := append(c.composeBase(), "ps", "--all", "--format", "{{.Name}}\t{{.State}}\t{{.Health}}\t{{.Image}}\t{{.Publishers}}")
+	out, err := c.command(ctx, args...).Output()
+	if err != nil {
+		return nil, fmt.Errorf("docker compose ps: %w", err)
+	}
+	return out, nil
+}
+
 // DiscoverPort returns the host port that the given compose service has
 // mapped to its container port. Used when running with TEST_PORT=1 (i.e.
 // ephemeral allocation) so we can populate state.Ports with the actual

@@ -32,10 +32,11 @@ type Instance struct {
 	DataDir    string `json:"data_dir"`
 
 	// Live state (populated only by status; nil by list).
-	Services    []ServiceStatus       `json:"services,omitempty"`
-	Endpoints   []Endpoint            `json:"endpoints,omitempty"`
-	Parties     []Party               `json:"parties,omitempty"`
-	Credentials map[string]Credential `json:"credentials,omitempty"`
+	Services        []ServiceStatus       `json:"services,omitempty"`
+	LiveProbeFailed bool                  `json:"live_probe_failed,omitempty"`
+	Endpoints       []Endpoint            `json:"endpoints,omitempty"`
+	Parties         []Party               `json:"parties,omitempty"`
+	Credentials     map[string]Credential `json:"credentials,omitempty"`
 }
 
 // InstanceSummary is the row shape returned by `localnet list --json`
