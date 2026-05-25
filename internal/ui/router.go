@@ -2,7 +2,9 @@ package ui
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
+	"time"
 )
 
 // NewRouter wires the M2 Web UI HTTP surface:
@@ -43,7 +45,64 @@ func NewRouter(assets http.Handler) http.Handler {
 	// withOriginCheck protects credential-issuing routes from
 	// cross-origin POST. Skipped for safe methods; see
 	// internal/ui/csrf.go for the rationale.
-	return withCommonHeaders(withOriginCheck(mux))
+	// Middleware chain (outer → inner): access log first so it
+	// wraps everything including 403s from CSRF and 404s from
+	// /api/typo. Common headers + Origin gate run per request
+	// inside the logged span.
+	return withAccessLog(withCommonHeaders(withOriginCheck(mux)))
+}
+
+// statusRecorder wraps http.ResponseWriter to capture the final
+// status code for the access log. The stdlib type has no status-
+// read API; the standard pattern is to override WriteHeader.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusRecorder) WriteHeader(code int) {
+	s.status = code
+	s.ResponseWriter.WriteHeader(code)
+}
+
+// withAccessLog emits one line per request via log.Default():
+//
+//	access: 200 GET /api/version  127.0.0.1  3.2ms
+//
+// Reviewer pin (PR #41 #3). Format is stable and parseable.
+//
+// We deliberately do NOT log query strings — they can carry
+// credentials (?include_jwt=true today, future auth tokens). The
+// path-only line is enough for traffic-shape diagnostics.
+//
+// Routed through log.Default so audit/access/app logs share one
+// stream — operators redirect the logger once and get everything.
+// Future structured-logging migration is one-line change here.
+func withAccessLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		log.Printf("access: %d %s %s  %s  %s",
+			rec.status, r.Method, r.URL.Path,
+			clientIP(r),
+			time.Since(start).Round(time.Microsecond),
+		)
+	})
+}
+
+// clientIP extracts the loopback IP without the ephemeral port.
+// Loopback-only server so we don't need X-Forwarded-For chains.
+func clientIP(r *http.Request) string {
+	if r.RemoteAddr == "" {
+		return "?"
+	}
+	for i := len(r.RemoteAddr) - 1; i >= 0; i-- {
+		if r.RemoteAddr[i] == ':' {
+			return r.RemoteAddr[:i]
+		}
+	}
+	return r.RemoteAddr
 }
 
 // apiNotFound is the explicit 404 for unknown /api/* and /events/*
