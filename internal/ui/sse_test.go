@@ -221,7 +221,6 @@ func TestSSE_MultiLineDataGetsPerLinePrefix(t *testing.T) {
 		}
 	}
 }
-
 // TestSSE_RejectsCrossOriginConnection is the reviewer pin
 // (PR #42 #c): a browser tab on evil.example.com can open
 // EventSource("http://127.0.0.1:7777/events") and read our event
