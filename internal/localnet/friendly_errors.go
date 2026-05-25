@@ -144,15 +144,36 @@ func RenderFriendly(w io.Writer, f *FriendlyError) {
 
 // FriendlyExit is the one-call helper for orchestrators. If err is a
 // FriendlyError and `errw` is a TTY, render the box; otherwise print
-// the machine-readable Error() form. Returns code unchanged so the
-// caller can `return localnet.FriendlyExit(errw, err, ExitPreflightFail)`.
+// the machine-readable Error() form.
+//
+// Exit-code precedence (CLAUDE.md: "ExitCodeError must not silently
+// collapse through wrappers"):
+//
+//  1. If err's chain carries an ExitCodeError, that wins. This
+//     preserves the exit-code contract every Run* function in this
+//     package establishes — e.g. RunUp returns
+//     localnet.AsExitError(ExitPreflightFail) and any later wrapper
+//     (including FriendlyExit) must surface 2, not whatever
+//     `fallback` happened to be passed in.
+//  2. Otherwise the `fallback` argument is used. Callers pass the
+//     code they want when wrapping a non-ExitCodeError (e.g.
+//     ExitUserError for an upstream validation error).
+//
+// Returns the chosen code so the caller can write
+// `return localnet.FriendlyExit(errw, err, ExitUserError)` and
+// trust that an upstream ExitTimeout still surfaces as 3.
 //
 // Non-TTY detection delegates to term.ShouldColor so the same gate
 // that disables ANSI also disables the box (a callout without color
 // is just confusingly indented).
-func FriendlyExit(errw io.Writer, err error, code int) int {
+func FriendlyExit(errw io.Writer, err error, fallback int) int {
 	if err == nil {
-		return code
+		return 0 // success regardless of fallback; nil means nothing to report
+	}
+	code := fallback
+	var ece ExitCodeError
+	if errors.As(err, &ece) {
+		code = int(ece)
 	}
 	f := AsFriendly(err)
 	if f != nil && term.ShouldColor(errw) {
