@@ -244,6 +244,31 @@ export const createInstance = (req: CreateInstanceRequest) =>
     body: JSON.stringify(req),
   });
 
+// scrubInstance invokes DELETE /api/instances/{name} — removes the
+// registry entry entirely. Use for cleanup of zombie creating
+// entries (e.g. server restart killed the goroutine mid-up,
+// leaving an orphan record) or for failed instances the user
+// wants to retry the name of.
+//
+// Backend refuses on `running` (409 INSTANCE_RUNNING — wants the
+// real `down` flow) or while a job is actively creating (409
+// INSTANCE_CREATING — caller should cancel /up first).
+export async function scrubInstance(name: string): Promise<void> {
+  const resp = await fetch(`/api/instances/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+  if (!resp.ok && resp.status !== 404) {
+    const text = await resp.text();
+    let body: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try {
+      body = JSON.parse(text);
+    } catch {
+      /* non-JSON; keep default */
+    }
+    throw new ApiError(resp.status, body);
+  }
+}
+
 // cancelInstanceUp invokes DELETE /api/instances/{name}/up. 204 on
 // success; 404 if the goroutine already exited (idempotent). The
 // SSE stream carries the synthetic kind=cancelled event the

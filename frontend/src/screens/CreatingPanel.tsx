@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   STEP_LABELS,
   STEP_ORDER,
   cancelInstanceUp,
+  scrubInstance,
   type StepName,
 } from "../api";
 import { W, wMono } from "../tokens";
@@ -50,34 +51,56 @@ export function CreatingPanel({ name, onRefresh }: Props) {
   const eventsUrl = `/api/instances/${encodeURIComponent(name)}/events`;
   const progress = useCreateProgress(eventsUrl);
 
-  // Track whether we've seen any event in the grace window.
-  // If not by ZOMBIE_GRACE_MS, surface the "stalled" affordance —
-  // the user shouldn't be left staring at an empty progress panel
-  // wondering if anything's happening.
-  const [zombieSuspected, setZombieSuspected] = useState(false);
+  // Zombie detection: if no event has arrived by ZOMBIE_GRACE_MS
+  // we surface the "stalled" affordance. Derived freshly on every
+  // render rather than via setTimeout — a setTimeout closure
+  // captures progress.startedAt at effect-setup time and never
+  // re-checks it, so events arriving 4 seconds later (slow
+  // network, slow first publish) would leave the panel
+  // permanently "stalled" even though the stream is flowing.
+  //
+  // The mountedAt ref pegs the start time once per (name); we
+  // re-render every second via the elapsed-time ticker, so the
+  // derived check stays current without any timer of its own.
+  const mountedAtRef = useRef<number>(Date.now());
   useEffect(() => {
-    setZombieSuspected(false);
-    const t = setTimeout(() => {
-      if (progress.startedAt === null) setZombieSuspected(true);
-    }, ZOMBIE_GRACE_MS);
-    return () => clearTimeout(t);
-    // Reset the timer whenever the name changes (user switched
-    // instances mid-creating); progress.startedAt is captured
-    // intentionally — only the initial null matters for stall
-    // detection.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    mountedAtRef.current = Date.now();
   }, [name]);
+  // Tick once per second so the zombie-grace check + the elapsed
+  // counter both re-evaluate. Cheap; clearInterval on unmount.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => forceTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const zombieSuspected =
+    progress.startedAt === null &&
+    Date.now() - mountedAtRef.current > ZOMBIE_GRACE_MS;
 
-  async function onCancel() {
+  // Cancel in the LIVE path: ask the goroutine to stop.
+  // Backend publishes kind=cancelled, then the goroutine sees
+  // ctx.Done() and writes status=failed via its existing path.
+  async function onCancelLive() {
     try {
       await cancelInstanceUp(name);
-      // Refresh so the row's status updates once the goroutine
-      // unwinds and writes state=failed (or the entry vanishes
-      // after a clean).
       setTimeout(onRefresh, 300);
     } catch {
-      // 404 = already finished; refresh anyway so the UI catches
-      // the new state.
+      onRefresh();
+    }
+  }
+
+  // Cancel in the ZOMBIE path: there is no live goroutine, so
+  // /up cancel would 404. Scrub the registry entry instead so the
+  // row disappears from the list. The user explicitly asked for
+  // cleanup; we honor it.
+  async function onScrub() {
+    try {
+      await scrubInstance(name);
+      onRefresh();
+    } catch {
+      // If scrub fails (e.g. 409 because the backend decided the
+      // entry is now running), refresh anyway so the user sees
+      // current state.
       onRefresh();
     }
   }
@@ -111,7 +134,7 @@ export function CreatingPanel({ name, onRefresh }: Props) {
       </header>
 
       {zombieSuspected && progress.startedAt === null ? (
-        <ZombieHint name={name} onCancel={onCancel} onRefresh={onRefresh} />
+        <ZombieHint name={name} onScrub={onScrub} onRefresh={onRefresh} />
       ) : (
         <>
           <StepList progress={progress} />
@@ -143,7 +166,7 @@ export function CreatingPanel({ name, onRefresh }: Props) {
                 justifyContent: "flex-end",
               }}
             >
-              <button onClick={onCancel} style={cancelBtnStyle}>
+              <button onClick={onCancelLive} style={cancelBtnStyle}>
                 Cancel bring-up
               </button>
             </div>
@@ -317,11 +340,11 @@ function Pill({ color, children }: { color: string; children: React.ReactNode })
 
 function ZombieHint({
   name,
-  onCancel,
+  onScrub,
   onRefresh,
 }: {
   name: string;
-  onCancel: () => void;
+  onScrub: () => void;
   onRefresh: () => void;
 }) {
   return (
@@ -345,17 +368,17 @@ function ZombieHint({
       <ul style={{ color: W.text2, marginTop: 6, paddingLeft: 18 }}>
         <li>The bring-up finished after the page loaded — refresh to pick up the new state.</li>
         <li>
-          The server was restarted mid-bring-up, orphaning the entry. Run{" "}
-          <code style={{ fontFamily: wMono }}>dpm localnet clean --name {name}</code>{" "}
-          from a terminal to scrub it, or try Cancel to attempt a clean shutdown.
+          The server was restarted mid-bring-up, orphaning the entry.
+          Click <strong>Remove entry</strong> to scrub it from the
+          registry, or refresh if you think it's recovered.
         </li>
       </ul>
       <div style={{ marginTop: 12, display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <button onClick={onCancel} style={{ ...cancelBtnStyle, color: W.warn, borderColor: W.warn }}>
-          Cancel
-        </button>
         <button onClick={onRefresh} style={{ ...cancelBtnStyle, color: W.brand, borderColor: W.brand }}>
           Refresh list
+        </button>
+        <button onClick={onScrub} style={{ ...cancelBtnStyle, color: W.err, borderColor: W.err }}>
+          Remove entry
         </button>
       </div>
     </div>

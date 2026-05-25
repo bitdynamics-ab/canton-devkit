@@ -88,6 +88,7 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("POST /api/instances", handleCreate(hub))
 		mux.HandleFunc("GET /api/instances/{name}/events", handleInstanceEvents(hub))
 		mux.HandleFunc("DELETE /api/instances/{name}/up", handleCancelUp(hub))
+		mux.HandleFunc("DELETE /api/instances/{name}", handleScrubInstance(hub))
 	} else {
 		// Stub so a misconfigured deployment fails loudly
 		// rather than 404 (which the frontend would mistake
@@ -101,6 +102,7 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("POST /api/instances", stub)
 		mux.HandleFunc("GET /api/instances/{name}/events", stub)
 		mux.HandleFunc("DELETE /api/instances/{name}/up", stub)
+		mux.HandleFunc("DELETE /api/instances/{name}", stub)
 	}
 }
 
@@ -539,6 +541,88 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 			Instance:      req.Name,
 			EventsURL:     "/api/instances/" + req.Name + "/events",
 		})
+	}
+}
+
+// handleScrubInstance: DELETE /api/instances/{name}.
+//
+// Removes the registry entry for an instance. The narrower
+// /api/instances/{name}/up cancels an in-flight goroutine but
+// leaves the registry entry alone (the goroutine writes its own
+// status=failed before exit). This endpoint is the registry-level
+// cleanup — for orphaned `creating` entries left by a server
+// restart, or for instances that finished badly and the user
+// wants to retry the name.
+//
+// Safety: refuses to scrub a `running` instance — that path
+// belongs to a future DELETE /api/instances/{name}/down (which
+// would do `docker compose down` + state cleanup). 409 in that
+// case with a remediation hint.
+//
+// Also refuses to scrub if a job is actively creating — that
+// would race the goroutine. 409 with a hint to call /up cancel
+// first.
+//
+// 204 on success; the entry is gone from /api/instances next
+// poll. Idempotent against a non-existent name (404 → success
+// would be misleading; we keep the honest 404).
+//
+// Files on disk: removes the per-instance state.json + dir.
+// Does NOT remove docker resources — the up may have crashed
+// before docker got involved (the common zombie case is exactly
+// this), and trying `docker compose down` against an unknown
+// project would 5xx for no benefit.
+func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if err := registry.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+
+		// Refuse if a job is actively creating — the goroutine
+		// would race our cleanup. Caller should DELETE /up first.
+		if jobs.Active(name) {
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_CREATING",
+				"instance "+name+" is being created — cancel the bring-up first",
+				"call DELETE /api/instances/"+name+"/up to cancel, then retry this DELETE")
+			return
+		}
+
+		state, err := registry.Read(name)
+		if err != nil {
+			if errors.Is(err, registry.ErrNotFound) {
+				writeErrorWithCode(w, http.StatusNotFound,
+					ErrCodeNotFound,
+					"instance "+name+" not registered")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "read state", err)
+			return
+		}
+
+		// Block on `running` — that needs a real `down` flow.
+		if state.Status == registry.StatusRunning {
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_RUNNING",
+				"instance "+name+" is running — stop it first",
+				"run `dpm localnet down --name "+name+"` from a terminal (the Web UI's down endpoint is BIT-173)")
+			return
+		}
+
+		// Clean the in-memory event buffer if any; then the
+		// on-disk state + index entry.
+		hub.ClearBuffer(progress.TopicFor(name))
+		if err := registry.Delete(name); err != nil {
+			writeError(w, http.StatusInternalServerError, "delete state", err)
+			return
+		}
+
+		log.Printf("scrub instance %q via DELETE", name)
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
