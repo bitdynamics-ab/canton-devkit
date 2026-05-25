@@ -27,6 +27,7 @@ func Build() *cobra.Command {
 	localnet.AddCommand(buildLogs())
 	localnet.AddCommand(buildVersions())
 	localnet.AddCommand(buildUI())
+	localnet.AddCommand(buildSkills())
 	return localnet
 }
 
