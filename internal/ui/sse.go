@@ -75,7 +75,11 @@ func sseHandler(hub *stream.Hub) http.Handler {
 
 		// SSE headers.
 		h := w.Header()
-		h.Set("Content-Type", "text/event-stream")
+		// Reviewer pin (PR #42 round-2 #4): charset=utf-8 is
+		// required — without it some clients (older Safari,
+		// intermediate proxies) treat the stream as Latin-1
+		// and mangle multi-byte event data.
+		h.Set("Content-Type", "text/event-stream; charset=utf-8")
 		h.Set("Cache-Control", "no-cache, no-transform")
 		h.Set("Connection", "keep-alive")
 		// X-Accel-Buffering tells nginx (if it's ever in front of us)
@@ -146,8 +150,14 @@ func writeSSEFrame(w http.ResponseWriter, e stream.Event) {
 		return
 	}
 	// Per spec, every line of Data needs its own data: prefix.
-	// We split on LF; CRLF survives because we don't strip CR.
-	for _, line := range strings.Split(string(e.Data), "\n") {
+	// Strip a single trailing newline (the most common case where
+	// callers append "\n" to a log line) so we don't emit a
+	// trailing empty `data:` line, which would change the SSE
+	// event payload from "msg" to "msg\n" — reviewer pin (PR #42
+	// round-2 #4 trailing-newline bug).
+	body := string(e.Data)
+	body = strings.TrimRight(body, "\n")
+	for _, line := range strings.Split(body, "\n") {
 		_, _ = fmt.Fprintf(w, "data: %s\n", line)
 	}
 	_, _ = w.Write([]byte("\n"))

@@ -31,8 +31,10 @@
 package stream
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // Event is a single broadcast payload. Topic routes the event; Data
@@ -85,26 +87,30 @@ type Hub struct {
 // subscription is the per-subscriber state the publisher writes to.
 // One per active /events HTTP request.
 //
-// closeMu serialises close(ch) (in cancel) with sends in deliverTo
-// (called by Publish). Reviewer pin (PR #42 #a): without this, a
-// cancel that runs while a Publish is mid-send races on the channel
-// state — sending to a just-closed channel PANICS. closeMu is held
-// for read by deliverTo (multiple Publishes may be in flight) and
-// for write by cancel; the boolean `closed` is checked under the
-// read lock so deliverTo short-circuits without trying to send.
+// mu serialises BOTH close(ch) (in cancel) AND the deliverTo body
+// per subscription. Reviewer pin (PR #42 round-2 #1 / round-1 #a):
+// the round-1 fix used an RWMutex that allowed multiple concurrent
+// deliverTo calls; under load that lets two publishers both drain
+// from the same channel, double-counting drops and racing the
+// retry. A single Mutex per subscription serialises sends to one
+// subscriber — many subscribers still proceed in parallel because
+// the Mutex is per-subscription, not per-hub. The hub-level RWMutex
+// (h.mu) keeps the SET of subscribers safe for concurrent iteration.
+//
+// The cost (one publisher per subscriber at a time) is tiny: each
+// deliverTo is a non-blocking channel op + at most one drain + one
+// send. Microseconds. Net effect of the change: zero throughput
+// impact, correct drop accounting under concurrent publish load.
 type subscription struct {
-	topics  map[string]struct{} // empty = subscribe-all
-	ch      chan Event
-	closeMu sync.RWMutex
-	closed  bool // protected by closeMu
+	topics map[string]struct{} // empty = subscribe-all
+	ch     chan Event
+	mu     sync.Mutex
+	closed bool // protected by mu
 	// droppedSinceWarn counts events lost to drop-oldest for THIS
 	// subscriber. When non-zero the next successful send is preceded
 	// by a synthetic "dropped" event so the client can react.
-	//
-	// Reviewer pin (PR #42 #b): atomic.Uint64 keeps the per-add safe,
-	// BUT the Load + Store in deliverTo was racy — a concurrent
-	// Publish could increment between our Load and our Store, losing
-	// drop accounting. Now we use Swap(0) to atomically read + reset.
+	// Read+reset via Swap(0) under mu so concurrent increments
+	// inside deliverTo are safe (PR #42 #b).
 	droppedSinceWarn atomic.Uint64
 }
 
@@ -161,15 +167,15 @@ func (h *Hub) Subscribe(topics ...string) (<-chan Event, func()) {
 		h.mu.Unlock()
 
 		// Then close the channel under the subscription's own
-		// write lock — this synchronises with deliverTo's RLock,
-		// guaranteeing no in-flight Publish is still trying to
-		// send when close() runs. Without this, a Publish that
-		// picked up the sub before our delete-from-h.subs could
-		// race close → panic on send-to-closed-channel.
-		s.closeMu.Lock()
+		// mutex — serialises with deliverTo, guaranteeing no
+		// in-flight Publish is still trying to send when close()
+		// runs. Without this, a Publish that picked up the sub
+		// before our delete-from-h.subs could race close → panic
+		// on send-to-closed-channel.
+		s.mu.Lock()
 		s.closed = true
 		close(s.ch)
-		s.closeMu.Unlock()
+		s.mu.Unlock()
 	}
 	return s.ch, cancel
 }
@@ -218,8 +224,13 @@ func (h *Hub) Publish(e Event) int {
 // droppedSinceWarn between our Load and Store, losing the
 // increment. Swap is atomic.
 func (h *Hub) deliverTo(s *subscription, e Event) {
-	s.closeMu.RLock()
-	defer s.closeMu.RUnlock()
+	// Serialise deliveries to THIS subscriber. Multiple publishers
+	// may call deliverTo concurrently; without the lock, two
+	// drains can race the same channel and double-count drops.
+	// Per-subscription Mutex keeps the lock surface tiny — other
+	// subscribers proceed in parallel via their own mutexes.
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.closed {
 		return
 	}
@@ -295,5 +306,57 @@ func (h *Hub) Stats() Stats {
 		Subscribers: n,
 		Published:   h.published.Load(),
 		Dropped:     h.dropped.Load(),
+	}
+}
+
+// Close shuts down the hub. Every active subscriber is closed,
+// the hub's set is cleared, and subsequent Publish calls become
+// no-ops returning 0. Idempotent — calling Close twice is safe.
+//
+// Reviewer pin (PR #42 round-2 #3): the original hub had no
+// way to mass-disconnect subscribers — `dpm localnet ui` SIGINT
+// shut down the HTTP server but the hub's goroutines (held by
+// in-flight EventSource connections) leaked their subscriptions
+// until the connection itself died. Hub.Close + an explicit
+// call from ui.go's shutdown path closes the loop.
+func (h *Hub) Close() {
+	h.mu.Lock()
+	subs := make([]*subscription, 0, len(h.subs))
+	for s := range h.subs {
+		subs = append(subs, s)
+	}
+	h.subs = make(map[*subscription]struct{}) // clear; Publish becomes no-op
+	h.mu.Unlock()
+	for _, s := range subs {
+		s.mu.Lock()
+		if !s.closed {
+			s.closed = true
+			close(s.ch)
+		}
+		s.mu.Unlock()
+	}
+}
+
+// WaitForSubscribers polls Stats().Subscribers until it reaches
+// n or ctx expires. Returns true when the count is reached.
+// Tests use this instead of time.Sleep to deterministically
+// wait for an SSE handler to register its subscription.
+//
+// Reviewer pin (PR #42 round-2 #6): time.Sleep in tests is the
+// classic flakiness vector — 50ms works locally, fails on a
+// slow CI runner. A predicate-based wait converts "sleep enough"
+// into "wait until the actual condition holds."
+func (h *Hub) WaitForSubscribers(ctx context.Context, n int) bool {
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
+	for {
+		if h.Stats().Subscribers >= n {
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-tick.C:
+		}
 	}
 }

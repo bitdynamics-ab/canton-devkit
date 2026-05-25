@@ -41,9 +41,13 @@ func TestSSE_ReceivesPublishedEvent(t *testing.T) {
 	}
 
 	// Give the handler a beat to install its subscription before
-	// we publish, otherwise the publish fires before any subscriber
-	// exists.
-	time.Sleep(50 * time.Millisecond)
+	// we publish; the helper polls Stats() instead of sleeping a
+	// fixed interval (PR #42 round-2 #6 — no time.Sleep in tests).
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Second)
+	if !hub.WaitForSubscribers(waitCtx, 1) {
+		t.Fatal("subscriber didn't register")
+	}
+	waitCancel()
 	hub.Publish(stream.Event{Topic: "services", ID: "42", Data: []byte("hello")})
 
 	scanner := bufio.NewScanner(resp.Body)
@@ -84,7 +88,11 @@ func TestSSE_TopicFilter(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	time.Sleep(50 * time.Millisecond)
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Second)
+	if !hub.WaitForSubscribers(waitCtx, 1) {
+		t.Fatal("subscriber didn't register")
+	}
+	waitCancel()
 	hub.Publish(stream.Event{Topic: "services", Data: []byte("skip-me")})
 	hub.Publish(stream.Event{Topic: "metrics", Data: []byte("show-me")})
 
@@ -126,7 +134,11 @@ func TestSSE_DisconnectFreesSubscription(t *testing.T) {
 	}
 
 	// Confirm the subscription registered.
-	time.Sleep(50 * time.Millisecond)
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Second)
+	if !hub.WaitForSubscribers(waitCtx, 1) {
+		t.Fatal("subscriber didn't register")
+	}
+	waitCancel()
 	if got := hub.Stats().Subscribers; got != 1 {
 		t.Fatalf("Stats.Subscribers = %d after connect, want 1", got)
 	}
@@ -187,7 +199,11 @@ func TestSSE_MultiLineDataGetsPerLinePrefix(t *testing.T) {
 	resp, _ := http.DefaultClient.Do(req)
 	defer resp.Body.Close()
 
-	time.Sleep(50 * time.Millisecond)
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Second)
+	if !hub.WaitForSubscribers(waitCtx, 1) {
+		t.Fatal("subscriber didn't register")
+	}
+	waitCancel()
 	hub.Publish(stream.Event{Topic: "x", Data: []byte("line1\nline2\nline3")})
 
 	scanner := bufio.NewScanner(resp.Body)
@@ -258,5 +274,74 @@ func TestSSE_NoOriginAllowedForCurl(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("/events with no Origin status = %d, want 200", resp.StatusCode)
+	}
+}
+
+// TestSSE_ContentTypeCharsetUTF8 is the reviewer pin (PR #42
+// round-2 #4): the SSE Content-Type must include charset=utf-8.
+// Without it, older Safari + some proxies interpret the stream
+// as Latin-1 and mangle multi-byte event data.
+func TestSSE_ContentTypeCharsetUTF8(t *testing.T) {
+	hub := stream.New()
+	assets, _ := AssetsHandler()
+	srv := New(Config{Port: 0, Router: NewRouter(assets, hub)})
+	addr, _ := srv.Listen()
+	go srv.Serve() //nolint:errcheck
+	defer srv.Shutdown(context.Background())
+
+	resp, err := http.Get("http://" + addr + "/events")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	ct := resp.Header.Get("Content-Type")
+	if !strings.Contains(ct, "charset=utf-8") {
+		t.Errorf("Content-Type = %q, want charset=utf-8 — non-UTF-8 clients mangle multi-byte data",
+			ct)
+	}
+}
+
+// TestSSE_TrailingNewlineStripped is the reviewer pin (PR #42
+// round-2 #4): a Data payload ending in "\n" must not produce
+// a spurious empty `data:` line that changes the event payload
+// from "msg" to "msg\n" on the client side.
+func TestSSE_TrailingNewlineStripped(t *testing.T) {
+	hub := stream.New()
+	assets, _ := AssetsHandler()
+	srv := New(Config{Port: 0, Router: NewRouter(assets, hub)})
+	addr, _ := srv.Listen()
+	go srv.Serve() //nolint:errcheck
+	defer srv.Shutdown(context.Background())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+addr+"/events", nil)
+	resp, _ := http.DefaultClient.Do(req)
+	defer resp.Body.Close()
+
+	waitCtx, wc := context.WithTimeout(context.Background(), time.Second)
+	if !hub.WaitForSubscribers(waitCtx, 1) {
+		t.Fatal("subscriber didn't register")
+	}
+	wc()
+
+	hub.Publish(stream.Event{Topic: "x", Data: []byte("msg\n")})
+
+	scanner := bufio.NewScanner(resp.Body)
+	var got []string
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) && len(got) < 4 {
+		if scanner.Scan() {
+			got = append(got, scanner.Text())
+		}
+	}
+	body := strings.Join(got, "\n")
+	// Must have ONE `data: msg` and NO trailing `data:` empty
+	// (the trailing-newline bug emitted "data: msg\ndata: \n\n").
+	if !strings.Contains(body, "data: msg") {
+		t.Errorf("missing 'data: msg' in:\n%s", body)
+	}
+	if strings.Contains(body, "data: \n") || strings.Contains(body, "data:\n\n") {
+		t.Errorf("trailing empty data line present (trailing-newline bug):\n%s", body)
 	}
 }
