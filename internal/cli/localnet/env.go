@@ -1,141 +1,291 @@
 package localnet
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/spf13/cobra"
 )
 
-// `localnet env --name <name>` prints shell-exportable KEY=value lines
-// for the named instance. Usage:
+// buildEnv wires `dpm localnet env --name <inst>` -- BIT-125.
 //
-//	eval $(canton-devkit localnet env --name pebble)
+// Emits a block of KEY=value lines describing every endpoint and
+// credential of the instance, designed for the common shell idiom:
 //
-// This is the v1 wedge (registry-only, no live docker probe). PR #34
-// (BIT-125) ships the richer version with fish + powershell formats,
-// dotenv quoting, the EnvExport types-package move, and the security-
-// hardening I flagged in that PR's reviews. When PR #34 lands, this
-// file is replaced wholesale.
+//	eval "$(dpm localnet env --name hubble)"
 //
-// # Quoting (PR #34 #1 lesson re-applied)
+// Output style matches docs/design/mockups/screens-tokens-help.jsx
+// (ScreenEnv). Three formats:
 //
-// Every value goes through shellQuote — single-quoted with embedded
-// `'` escaped as `'\”`. Round-trip tested: a value containing
-// `$(rm -rf ~)` lands inside the quotes inert. The user reported
-// regression in PR #34's review on this exact issue; we don't ship
-// the wedge without the same defence.
+//	shell  (default)  KEY=value  ;  comment lines start with #
+//	dotenv            same as shell (kept distinct so a future
+//	                  --quote variant doesn't break shell users)
+//	json              types.EnvExport for scripted consumers
 //
-// # JWT redaction (PR #34 #2 / PR #38 lesson re-applied)
-//
-// JWTs are excluded by default. `--include-jwt` opts in. The redaction
-// pattern mirrors PR #38's `--include-jwt` flag so the two surfaces
-// stay consistent for the user.
+// The Web UI handler (BIT-131 GET /api/instances/:name/env) will
+// later call collectEnv() directly and emit the json variant.
 func buildEnv() *cobra.Command {
 	var (
 		name       string
+		format     string
 		includeJWT bool
 	)
 	cmd := &cobra.Command{
 		Use:   "env",
-		Short: "Print shell-exportable env vars for an instance",
-		Long: "Emits KEY=value lines suitable for `eval $(canton-devkit " +
-			"localnet env --name <name>)`. Every value is single-quoted " +
-			"and `'`-escaped so adversarial values in the registry " +
-			"(unlikely but defended) can't reach eval as code. JWTs " +
-			"are excluded unless --include-jwt is set.",
+		Short: "Export LocalNet endpoints and credentials as env vars",
+		Long: `Prints a KEY=value block summarising the named LocalNet
+instance -- every host port from the Ports map plus the user/
+audience for each captured credential. Use with:
+
+  eval "$(dpm localnet env --name hubble)"
+
+Formats:
+
+  shell    POSIX single-quoted KEY='value'  (default; eval-safe)
+  dotenv   double-quoted KEY="value" with $/\/" escapes (dotenv spec)
+  json     machine-readable shape; matches the Web UI handler
+
+JWTs are REDACTED by default (CANTON_<ROLE>_JWT=<redacted>) so
+CI logs / shared terminals don't leak the dev-only signing
+secret. Pass --include-jwt to opt in; the command refuses to
+emit a real JWT to a non-TTY stdout unless the flag is set, so
+piping to a file always requires opt-in.`,
+		Args:          cobra.NoArgs,
+		SilenceUsage:  true,
+		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if name == "" {
-				return fmt.Errorf("--name is required")
+			if err := localnet.ValidateName(name); err != nil {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
+				return localnet.AsExitError(localnet.ExitUserError)
 			}
-			st, err := registry.Read(name)
+			ex, err := collectEnv(name, includeJWT)
 			if err != nil {
-				return fmt.Errorf("read %s: %w", name, err)
+				if errors.Is(err, registry.ErrNotFound) {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "no LocalNet instance named %q\n", name)
+					return localnet.AsExitError(localnet.ExitUserError)
+				}
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s\n", err)
+				return localnet.AsExitError(localnet.ExitRuntimeFailure)
 			}
-			writeEnv(cmd.OutOrStdout(), st, includeJWT)
-			return nil
+			switch format {
+			case "", "shell":
+				return writeEnvShell(cmd.OutOrStdout(), ex)
+			case "dotenv":
+				return writeEnvDotenv(cmd.OutOrStdout(), ex)
+			case "json":
+				return writeEnvJSON(cmd.OutOrStdout(), ex)
+			default:
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+					"--format must be shell, dotenv, or json (got %q)\n", format)
+				return localnet.AsExitError(localnet.ExitUserError)
+			}
 		},
 	}
-	cmd.Flags().StringVar(&name, "name", "", "Instance name (required)")
+	cmd.Flags().StringVar(&name, "name", "",
+		"Required. Identifier of the LocalNet instance to export.")
+	cmd.Flags().StringVar(&format, "format", "shell",
+		"Output format: shell | dotenv | json")
 	cmd.Flags().BoolVar(&includeJWT, "include-jwt", false,
-		"Include CANTON_*_JWT vars. WARNING: tokens go through argv "+
-			"to the parent shell — visible in shell history and `ps`. "+
-			"Prefer reading the auth file: `cat $(canton-devkit localnet "+
-			"status --name <name> --json | jq -r '.data_dir')/auth.json`.")
+		"Emit raw CANTON_<ROLE>_JWT values. Default is <redacted>.")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }
 
-// writeEnv produces sorted, shell-quoted KEY=value lines. Sorted so
-// diff output (`localnet env --name a | diff localnet env --name b`)
-// is stable across map iteration orders, and so the file ends up
-// reviewable when piped to `tee env.sh`.
-func writeEnv(out io.Writer, st *registry.State, includeJWT bool) {
-	pairs := map[string]string{
-		"CANTON_DEVKIT_INSTANCE":       st.Name,
-		"CANTON_DEVKIT_SPLICE_VERSION": st.SpliceVersion,
-		"CANTON_DEVKIT_DATA_DIR":       st.DataDir,
-	}
+// jwtRedaction is the placeholder string that replaces a captured
+// JWT when --include-jwt is not set. Format chosen so a downstream
+// shell that expects a real token errors loudly ("Bearer
+// <redacted>" -> 401) instead of silently passing an empty header.
+const jwtRedaction = "<redacted>"
 
-	// Per-endpoint URL vars. Names match the convention used inside
-	// Splice's compose env (APP_USER_UI_PORT etc) but prefixed with
-	// CANTON_DEVKIT_ so they don't collide with what Splice already
-	// writes into the container env.
-	for key, port := range st.Ports {
-		envKey := "CANTON_DEVKIT_" + strings.ToUpper(key) + "_URL"
-		scheme := "http"
-		if key == "postgres" {
-			scheme = "postgresql"
-		}
-		pairs[envKey] = fmt.Sprintf("%s://localhost:%d", scheme, port)
-	}
-
-	// Per-role party + JWT vars. PARTY always; JWT only when the
-	// user opts in via --include-jwt (BIT-125 + PR #38 redact-default
-	// pattern). The "redacted" placeholder string is deliberately
-	// readable so `eval` doesn't fail on something cryptic — pasting
-	// `<redacted>` as a Bearer token gets an obvious 401 from the
-	// participant.
-	for role, cred := range st.Credentials {
-		roleKey := strings.ReplaceAll(strings.ToUpper(role), "-", "_")
-		pairs["CANTON_DEVKIT_"+roleKey+"_PARTY"] = cred.User
-		if includeJWT {
-			pairs["CANTON_DEVKIT_"+roleKey+"_JWT"] = cred.JWT
-		}
-	}
-
-	keys := make([]string, 0, len(pairs))
-	for k := range pairs {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	_, _ = fmt.Fprintf(out, "# canton-devkit · %s · splice %s\n",
-		st.Name, st.SpliceVersion)
-	if !includeJWT {
-		_, _ = fmt.Fprintln(out,
-			"# JWTs omitted by default. Re-run with --include-jwt to include them.")
-	}
-	for _, k := range keys {
-		_, _ = fmt.Fprintf(out, "export %s=%s\n", k, shellQuote(pairs[k]))
-	}
+// EnvExport is the typed shape returned by `--format=json` and the
+// future Web UI handler. Lives here (instead of internal/api/types)
+// because the underlying source is the instance-shaped State; once
+// status (BIT-144) lands, the shape moves into types/ alongside
+// Instance to avoid duplication.
+type EnvExport struct {
+	Instance string            `json:"instance"`
+	Vars     map[string]string `json:"vars"`
 }
 
-// shellQuote wraps s in single quotes and escapes any embedded `'`
-// using the POSIX `'\”` idiom. The result round-trips through
-// `eval` byte-for-byte for any input that doesn't contain a NUL —
-// which the registry can't produce because state.json is JSON.
+// collectEnv builds the export from the registry. Two sources:
 //
-// Empty input yields `”` (a valid empty shell string).
+//  1. state.Ports map -> CANTON_<UPPER>_PORT for each logical name.
+//     Hyphens in the logical name become underscores so a value like
+//     "app-user-ui" produces CANTON_APP_USER_UI_PORT (matches what
+//     scripts already expect -- no env name has hyphens).
 //
-// Same shape as the helper PR #34 reviewers asked for in round 1;
-// kept identical so the proper PR #34 impl is a drop-in replacement.
+//  2. state.Credentials map -> CANTON_<ROLE>_JWT and the user/audience
+//     pair that signed it, so a downstream client can re-derive the
+//     JWT if it later rotates.
+//
+// Plus a small set of stable convenience keys (CANTON_INSTANCE,
+// CANTON_SPLICE_VERSION, CANTON_AUTH_FILE) so shell scripts can
+// branch on them without re-reading state.json.
+func collectEnv(name string, includeJWT bool) (EnvExport, error) {
+	state, err := registry.Read(name)
+	if err != nil {
+		return EnvExport{}, err
+	}
+	out := EnvExport{
+		Instance: name,
+		Vars:     make(map[string]string, len(state.Ports)*2+len(state.Credentials)*3+3),
+	}
+
+	out.Vars["CANTON_INSTANCE"] = name
+	out.Vars["CANTON_SPLICE_VERSION"] = state.SpliceVersion
+	// AuthFile points at the per-instance auth.json the user can
+	// load with `jq` -- matches the path-shape used by the mockup's
+	// ScreenEnv (~/.canton-devkit/<name>/auth.json).
+	// filepath.Join (not "/" concat) so the path is correct on
+	// Windows and doesn't duplicate separators if state.DataDir
+	// has a trailing slash. Reviewer pin on PR #34.
+	out.Vars["CANTON_AUTH_FILE"] = filepath.Join(state.DataDir, "auth.json")
+
+	for logical, port := range state.Ports {
+		out.Vars[portEnvKey(logical)] = fmt.Sprintf("%d", port)
+	}
+	for role, cred := range state.Credentials {
+		base := credEnvKeyPrefix(role)
+		if includeJWT {
+			out.Vars[base+"_JWT"] = cred.JWT
+		} else {
+			// Default: emit a non-empty redaction placeholder so
+			// downstream tooling that asserts the variable is set
+			// keeps working, but the dev-only signing secret never
+			// hits stdout / CI logs / shared terminals.
+			out.Vars[base+"_JWT"] = jwtRedaction
+		}
+		if cred.User != "" {
+			out.Vars[base+"_USER"] = cred.User
+		}
+		if cred.Audience != "" {
+			out.Vars[base+"_AUDIENCE"] = cred.Audience
+		}
+	}
+	return out, nil
+}
+
+// portEnvKey converts a logical port name ("app_user_ui" or
+// "app-provider-ui") into the canonical CANTON_<UPPER>_PORT env-var
+// key. Both underscore and hyphen are normalised because the state
+// file's Port keys vary across adapter versions.
+func portEnvKey(logical string) string {
+	upper := strings.ToUpper(logical)
+	upper = strings.ReplaceAll(upper, "-", "_")
+	return "CANTON_" + upper + "_PORT"
+}
+
+// credEnvKeyPrefix turns a role label ("sv", "app-user") into the
+// shared prefix for that role's CANTON_ env vars. Mirrors
+// portEnvKey's normalisation rules so a downstream consumer sees a
+// consistent CANTON_APP_USER_* set whether the role is hyphenated
+// or underscored upstream.
+func credEnvKeyPrefix(role string) string {
+	upper := strings.ToUpper(role)
+	upper = strings.ReplaceAll(upper, "-", "_")
+	return "CANTON_" + upper
+}
+
+// writeEnvShell prints KEY='value' POSIX-single-quoted so the
+// output is safe for `eval "$(dpm localnet env ...)"` even when a
+// value contains shell metacharacters ($ ` " \ space ;) -- which a
+// hostile registry.State or DataDir can absolutely contain (e.g.
+// CANTON_DEVKIT_REGISTRY pointed at a path with `$(rm -rf ~)` in
+// it would otherwise be evaluated at source-time).
+//
+// Single quotes neutralise all shell expansion. The only character
+// that needs escaping inside single quotes is the single quote
+// itself; we do the standard dance for that.
+//
+// Header comments document the instance + the eval idiom so the
+// output remains useful when piped to a file the user reads later.
+func writeEnvShell(w io.Writer, ex EnvExport) error {
+	if _, err := fmt.Fprintf(w, "# Canton DevKit · localnet %s\n", shellQuote(ex.Instance)); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(w, "# Source these in your app or CI step:"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "#   eval \"$(dpm localnet env --name %s)\"\n", shellQuote(ex.Instance)); err != nil {
+		return err
+	}
+	for _, k := range sortedKeys(ex.Vars) {
+		if _, err := fmt.Fprintf(w, "%s=%s\n", k, shellQuote(ex.Vars[k])); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeEnvDotenv prints KEY="value" with $/\/`/" escapes per the
+// dotenv specification (https://hexdocs.pm/dotenvy/dotenv-file-format.html).
+// Distinct from writeEnvShell because dotenv-aware parsers (Node,
+// Python, Vite) prefer double-quoted form so they can interpolate
+// $VAR if the user opts in by writing it literally. We never emit
+// $ ourselves -- interpolation is only possible for values that
+// were already $-quoted in the registry, which our writer values
+// never are.
+func writeEnvDotenv(w io.Writer, ex EnvExport) error {
+	if _, err := fmt.Fprintf(w, "# Canton DevKit · localnet %s\n", ex.Instance); err != nil {
+		return err
+	}
+	for _, k := range sortedKeys(ex.Vars) {
+		if _, err := fmt.Fprintf(w, "%s=%s\n", k, dotenvQuote(ex.Vars[k])); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// shellQuote returns a POSIX-safe single-quoted form of s. The
+// only escape needed inside '...' is the single quote itself.
+// Empty string is "”" so the value is unambiguously present.
 func shellQuote(s string) string {
 	if s == "" {
 		return "''"
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// dotenvQuote returns a dotenv-safe double-quoted form of s. We
+// escape: backslash, double quote, dollar (interpolation token),
+// and backtick (some parsers treat it as command substitution).
+// Newlines stay literal -- dotenv-spec requires preserving them
+// inside double quotes.
+func dotenvQuote(s string) string {
+	r := strings.NewReplacer(
+		`\`, `\\`,
+		`"`, `\"`,
+		`$`, `\$`,
+		"`", "\\`",
+	)
+	return `"` + r.Replace(s) + `"`
+}
+
+// writeEnvJSON serialises EnvExport. We use indented JSON so the
+// `--format=json` output is a usable diff artefact when stashed in
+// a fixture or CI log.
+func writeEnvJSON(w io.Writer, ex EnvExport) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(ex)
+}
+
+// sortedKeys returns map keys in stable lexical order so two calls
+// produce identical output (essential for `git diff` and CI golden
+// comparisons).
+func sortedKeys(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
