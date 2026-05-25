@@ -1,0 +1,38 @@
+/* Base styles. The mockup JSX inlines styles per element; we
+   lift only the body/layout-defaults here and let components
+   own their own styling via the tokens. This keeps the
+   import-graph honest: tokens.ts is the single source of truth,
+   global CSS is just zero-out. */
+
+:root {
+  color-scheme: dark;
+  --bg: #0B0E13;
+  --text: #E6E9EE;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "IBM Plex Sans", "Inter Tight", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
