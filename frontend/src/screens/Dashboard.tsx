@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ApiError, type InstanceSummary, fetchInstances } from "../api";
 import { W } from "../tokens";
 import { DeveloperSetup } from "./DeveloperSetup";
+import { InstanceDetail } from "./InstanceDetail";
 
 // Dashboard — Overview screen. Mirrors the LocalNet table at the
 // top of docs/design/mockups/webui-dashboard.jsx. Renders the
@@ -103,7 +104,12 @@ export function Dashboard() {
         </>
       )}
 
-      {effectiveName && <DeveloperSetup name={effectiveName} />}
+      {effectiveName && (
+        <>
+          <InstanceDetail name={effectiveName} />
+          <DeveloperSetup name={effectiveName} />
+        </>
+      )}
     </div>
   );
 }
