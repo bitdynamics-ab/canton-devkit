@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 )
 
 // NewRouter wires the M2 Web UI HTTP surface:
@@ -12,39 +14,46 @@ import (
 //	/healthz       — liveness probe (200 OK, no body); cheap, no docker calls
 //	/api/version   — server identity + schema versions for handshake
 //	/api/*         — REST handlers (added by BIT-131 in a follow-on PR)
-//	/events        — SSE stream (added by BIT-130 in a follow-on PR)
+//	/events        — SSE stream (added by BIT-130)
 //	/              — embedded Vite bundle with SPA fallback (assets.go)
 //
-// The skeleton landing in BIT-129 deliberately ships /healthz, /api/version,
-// and the asset handler only. The empty space for /api/* and /events is
-// where the follow-on PRs slot in — keeping each PR a reviewable size.
+// `hub` may be nil for callers that don't want SSE (test wiring,
+// future "read-only" mode); in that case /events is mounted as a
+// 503-returning stub. Production callers pass a real hub from
+// internal/ui/stream.
 //
 // We use net/http.ServeMux (stdlib) rather than chi/gorilla. Go 1.22's mux
 // added method+path patterns ("GET /api/version"), which covers everything
 // the current surface needs. Pulling chi for one router would add a
 // transitive dep for no functional gain; if middleware composition gets
 // hairy (rate limiting, auth, request logging) the swap is mechanical.
-func NewRouter(assets http.Handler) http.Handler {
+func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	mux.HandleFunc("GET /api/version", handleVersion)
-	// Reviewer pin (PR #41 #c): the SPA fallback used to swallow
-	// /api/<typo> requests and return the React index with 200,
-	// hiding routing bugs (a misspelled handler path on the
-	// frontend looked like "the API returned HTML, weird"). We
-	// now have an explicit 404 handler for /api/* AND /events/*
-	// that fires when no specific pattern matches. Anything else
-	// (genuine SPA route) falls through to the asset handler.
+	// /events (SSE) — added by BIT-130. The handler itself does
+	// its own Origin check before opening the stream (see sse.go),
+	// since EventSource sends GET and the global CSRF middleware
+	// is GET-exempt.
+	if hub != nil {
+		mux.Handle("GET /events", sseHandler(hub))
+	} else {
+		mux.HandleFunc("GET /events", func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "SSE disabled (no hub configured)",
+				http.StatusServiceUnavailable)
+		})
+	}
+	// PR #41 #c: explicit 404 for /api/<typo> and /events/<typo>
+	// so a misspelled handler path doesn't fall through to the
+	// SPA index. Frontend fetch() consumers get a structured
+	// error instead of "the API returned HTML, weird".
 	mux.HandleFunc("/api/", apiNotFound)
-	mux.HandleFunc("/events/", apiNotFound) // sub-paths only; /events is added by BIT-130
+	mux.HandleFunc("/events/", apiNotFound)
 	// Catch-all for everything else. Method intentionally
 	// unconstrained so an unknown POST hits the asset handler
-	// (which writes a 405 internally) rather than colliding with
-	// the /api/ method pattern under Go 1.22's mux conflict rules.
+	// rather than colliding with the /api/ method pattern under
+	// Go 1.22's mux conflict rules.
 	mux.Handle("/", assets)
-	// withOriginCheck protects credential-issuing routes from
-	// cross-origin POST. Skipped for safe methods; see
-	// internal/ui/csrf.go for the rationale.
 	// Middleware chain (outer → inner): access log first so it
 	// wraps everything including 403s from CSRF and 404s from
 	// /api/typo. Common headers + Origin gate run per request
