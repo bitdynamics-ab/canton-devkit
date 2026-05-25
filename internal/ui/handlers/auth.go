@@ -4,11 +4,22 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
+
+// SchemaVersion is the handlers-package mirror of
+// internal/api/types.SchemaVersion. Inlined to keep handlers free
+// of an upward api/types import. A parity test in
+// handlers_schema_test.go asserts the two stay equal.
+//
+// Reviewer pin (PR #43 #c): every top-level response in this
+// package now carries this version (jwtResponse, appConfigPayload).
+const SchemaVersion = 1
 
 // MountAuth installs the auth/credential routes — the surfaces the
 // 2026-05-25 dashboard refresh added as a "Developer setup" card:
@@ -55,18 +66,40 @@ type jwtRequest struct {
 }
 
 // jwtResponse is what the dashboard renders into the monospace token
-// preview. The header/payload/signature split mirrors the colored
-// triplet in the JSX mockup — the frontend re-splits on `.` for
-// rendering but we send the whole token plus the components for
-// convenience.
+// preview.
+//
+// Reviewer pin (PR #43 #c): SchemaVersion is the schema-pin reflection
+// test's anchor — every top-level response carries it so a frontend
+// bundled for v1 refuses a v2 backend cleanly. Mirrors the patterns
+// in api/types/{Instance,ListResponse,PreflightReport,Snapshot}.
+//
+// Reviewer pin (PR #43 #a): Token is REDACTED by default — the raw
+// JWT only returns when ?include_jwt=true is set. Mirrors PR #38's
+// `--include-jwt` convention. Default-redacted keeps CI logs,
+// screenshot-shares, and "look at the response" demos from leaking
+// a usable signing token.
 type jwtResponse struct {
-	Token        string `json:"token"`
-	Party        string `json:"party"`
-	Audience     string `json:"audience"`
-	Role         string `json:"role"`
-	WarningDev   string `json:"warning_dev_secret"`
-	ExpiresInSec int    `json:"expires_in_seconds,omitempty"`
+	SchemaVersion int    `json:"schema_version"`
+	Token         string `json:"token"`
+	Redacted      bool   `json:"redacted,omitempty"`
+	Party         string `json:"party"`
+	Audience      string `json:"audience"`
+	Role          string `json:"role"`
+	WarningDev    string `json:"warning_dev_secret"`
+	ExpiresInSec  int    `json:"expires_in_seconds,omitempty"`
 }
+
+// jwtRedactionPlaceholder mirrors statusJWTRedaction in
+// internal/cli/localnet/status.go — same sentinel so the two
+// surfaces don't drift.
+const jwtRedactionPlaceholder = "<redacted>"
+
+// maxAuthBodyBytes caps request bodies for the auth POST. The JSON
+// payload is at most a few hundred bytes (role + ttl + audience);
+// 4 KiB is generous and catches the regression class where a bug
+// (or malicious client) sends an unbounded body and exhausts memory.
+// Reviewer pin (PR #43 #d).
+const maxAuthBodyBytes = 4 * 1024
 
 // handleIssueJWT signs a fresh JWT for the given instance + role.
 //
@@ -89,9 +122,14 @@ func handleIssueJWT(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req jwtRequest
-	// Empty body is OK — the dashboard default-clicks before
-	// surfacing the dropdowns. json.Decoder treats EOF as no-op.
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	// Reviewer pin (PR #43 #d): cap the body. http.MaxBytesReader
+	// returns a 413 error on Read once the cap is exceeded, which
+	// json.Decoder surfaces as a decode error we treat as 400.
+	r.Body = http.MaxBytesReader(w, r.Body, maxAuthBodyBytes)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		writeError(w, http.StatusBadRequest, "invalid request body", err)
+		return
+	}
 	role := splice.Role(req.Role)
 	if role == "" {
 		role = splice.RoleAppProvider
@@ -125,14 +163,45 @@ func handleIssueJWT(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "sign token", err)
 		return
 	}
+
+	// Reviewer pin (PR #43 #a): default-redact. Mirrors PR #38's
+	// --include-jwt convention. The dashboard MUST pass
+	// ?include_jwt=true on the fetch when it actually wants to
+	// render the token; default-redacted keeps screenshot shares
+	// and logs from leaking a usable signer.
+	includeJWT := r.URL.Query().Get("include_jwt") == "true"
+	respToken := jwtRedactionPlaceholder
+	if includeJWT {
+		respToken = token
+	}
+
+	// Reviewer pin (PR #43 #f): audit log. JWT issuance is a
+	// security-relevant event — every issue gets a stderr line
+	// with the role, party, audience, and whether the raw token
+	// was returned. Routes through log.Default so callers can
+	// redirect at the slog/log.Output layer.
+	auditJWTIssued(name, string(role), user, audience, includeJWT)
+
 	writeJSON(w, http.StatusOK, jwtResponse{
-		Token:        token,
-		Party:        user,
-		Audience:     audience,
-		Role:         string(role),
-		WarningDev:   splice.DevSecretWarning,
-		ExpiresInSec: req.TTLSeconds, // TODO(BIT-141): plumb into SignToken
+		SchemaVersion: SchemaVersion,
+		Token:         respToken,
+		Redacted:      !includeJWT,
+		Party:         user,
+		Audience:      audience,
+		Role:          string(role),
+		WarningDev:    splice.DevSecretWarning,
+		ExpiresInSec:  req.TTLSeconds, // TODO(BIT-141): plumb into SignToken
 	})
+}
+
+// auditJWTIssued writes a single audit line per JWT issuance.
+// Format is stable (parseable by log scrapers) and intentionally
+// does NOT include the raw token — even an audit log shouldn't
+// carry the secret. The `raw=true|false` field signals whether the
+// caller opted into the unredacted response.
+func auditJWTIssued(instance, role, party, audience string, raw bool) {
+	log.Printf("audit: jwt_issued instance=%q role=%q party=%q audience=%q raw=%t",
+		instance, role, party, audience, raw)
 }
 
 // roleAllowed checks against the canonical role set. Adding a new
@@ -189,6 +258,7 @@ func handleAppConfig(w http.ResponseWriter, r *http.Request) {
 	// Build the shared payload first, then render per-format.
 	// Keeps the per-format rendering branches small.
 	cfg := appConfigPayload{
+		SchemaVersion: SchemaVersion,
 		Name:          s.Name,
 		SpliceVersion: s.SpliceVersion,
 		Endpoints:     endpointsFromPorts(s.Ports),
@@ -212,7 +282,14 @@ func handleAppConfig(w http.ResponseWriter, r *http.Request) {
 
 // appConfigPayload is the canonical shape across all output
 // formats. Renderers project it into env / json / yaml.
+//
+// Reviewer pin (PR #43 #c): SchemaVersion. Same rationale as
+// jwtResponse — every top-level response carries it so the
+// frontend can validate the handshake. The env/yaml renderers
+// skip it (the formats are line-oriented, not structured), but
+// the JSON path includes it.
 type appConfigPayload struct {
+	SchemaVersion int               `json:"schema_version" yaml:"-"`
 	Name          string            `json:"name" yaml:"name"`
 	SpliceVersion string            `json:"splice_version" yaml:"splice_version"`
 	Endpoints     map[string]string `json:"endpoints" yaml:"endpoints"`
