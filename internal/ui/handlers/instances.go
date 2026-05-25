@@ -613,9 +613,20 @@ func handleInstanceEvents(hub *stream.Hub) http.HandlerFunc {
 }
 
 // writeInstanceEventFrame is a minimal SSE encoder for the
-// per-instance handler. Mirrors the writeSSEFrame in
-// internal/ui/sse.go (kept private there); duplicated here so the
-// handlers package doesn't import from internal/ui.
+// per-instance handler.
+//
+// We DO NOT emit an `event:` line. The hub's Topic field is
+// internal routing data (e.g. "instance:test"); when emitted on
+// the wire it becomes a NAMED SSE event, which EventSource's
+// onmessage handler ignores by spec (only the default-type events
+// fire onmessage; named events require addEventListener(name, …)).
+//
+// Since the per-instance handler ALWAYS serves a single topic
+// (the {name} path param IS the topic), the topic is redundant on
+// the wire — the consumer already knows what stream they opened.
+// Omitting the event: line means events arrive as the default
+// type and the frontend's onmessage catches them as the spec
+// intends.
 //
 // Per spec, multi-line data needs one "data:" prefix per line; we
 // strip a trailing newline so the payload doesn't gain a trailing
@@ -623,9 +634,6 @@ func handleInstanceEvents(hub *stream.Hub) http.HandlerFunc {
 func writeInstanceEventFrame(w http.ResponseWriter, e stream.Event) {
 	if e.ID != "" {
 		_, _ = fmt.Fprintf(w, "id: %s\n", e.ID)
-	}
-	if e.Topic != "" {
-		_, _ = fmt.Fprintf(w, "event: %s\n", e.Topic)
 	}
 	if len(e.Data) == 0 {
 		_, _ = w.Write([]byte("data:\n\n"))
