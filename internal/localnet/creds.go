@@ -23,21 +23,32 @@ func ValidateCredsOptions(opts *CredsOptions) error {
 	if err := ValidateFormat(opts.Format, "table", "env", "json", "raw"); err != nil {
 		return err
 	}
+	if opts.Role != "" && !validCredsRole(opts.Role) {
+		return fmt.Errorf("--role must be one of [sv app-provider app-user] (got %q)", opts.Role)
+	}
 	if opts.Format == "raw" && opts.Role == "" {
 		return fmt.Errorf("--format raw requires --role")
 	}
 	return nil
 }
 
+func validCredsRole(role string) bool {
+	switch role {
+	case "sv", "app-provider", "app-user":
+		return true
+	default:
+		return false
+	}
+}
+
 // RunCreds prints captured JWTs for the named instance. Exit codes:
 //   - 0 success
-//   - 1 invalid args
-//   - 3 instance not registered or no creds captured
+//   - 1 invalid args, instance not registered, no creds captured, or invalid role
 func RunCreds(out io.Writer, errw io.Writer, opts *CredsOptions) int {
 	state, err := registry.Read(opts.Name)
 	if err == registry.ErrNotFound {
 		_, _ = fmt.Fprintf(errw, "No instance named %q is registered.\n", opts.Name)
-		return 3
+		return ExitUserError
 	}
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "Failed to read state: %s\n", err)
@@ -46,13 +57,13 @@ func RunCreds(out io.Writer, errw io.Writer, opts *CredsOptions) int {
 	if len(state.Credentials) == 0 {
 		_, _ = fmt.Fprintf(errw, "No credentials captured for instance %q.\n", opts.Name)
 		_, _ = fmt.Fprintln(errw, "(JWT capture runs at `localnet up` time — re-run if the instance pre-dates this feature.)")
-		return 3
+		return ExitUserError
 	}
 
 	selected := filterCredentials(state.Credentials, opts.Role)
 	if len(selected) == 0 {
 		_, _ = fmt.Fprintf(errw, "No credentials for role %q on instance %q.\n", opts.Role, opts.Name)
-		return 3
+		return ExitUserError
 	}
 
 	switch opts.Format {
@@ -61,7 +72,7 @@ func RunCreds(out io.Writer, errw io.Writer, opts *CredsOptions) int {
 	case "env":
 		printCredsEnv(out, selected)
 	case "raw":
-		// Single role guaranteed by ParseCredsArgs.
+		// Single role guaranteed by ValidateCredsOptions.
 		for _, c := range selected {
 			_, _ = fmt.Fprintln(out, c.JWT)
 		}
