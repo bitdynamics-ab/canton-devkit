@@ -50,6 +50,74 @@ skills/README.md for authoring rules.`,
 	}
 	cmd.AddCommand(buildSkillsInstall())
 	cmd.AddCommand(buildSkillsList())
+	cmd.AddCommand(buildSkillsUninstall())
+	return cmd
+}
+
+// buildSkillsUninstall implements `dpm localnet skills uninstall`.
+//
+// Reviewer pin (PR #44 round-2 uninstall): symmetric to install.
+// Removes ONLY the .md files this binary knows about — never the
+// target directory itself, never files we didn't ship — so a
+// user who hand-edited additional files in the same dir doesn't
+// lose them. Idempotent (missing files are fine).
+//
+// Future "skill upgrade" workflow: `uninstall && install` flushes
+// a stale doc set when the .md content changes between dpm
+// versions.
+func buildSkillsUninstall() *cobra.Command {
+	var (
+		target string
+		dryRun bool
+	)
+	cmd := &cobra.Command{
+		Use:   "uninstall",
+		Short: "Remove the bundled skill docs from the target dir",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			dest, err := resolveSkillsTarget(target)
+			if err != nil {
+				return err
+			}
+			files, err := listSkillFiles()
+			if err != nil {
+				return err
+			}
+			absDest, err := filepath.Abs(dest)
+			if err != nil {
+				return fmt.Errorf("resolve target: %w", err)
+			}
+
+			removed := 0
+			for _, f := range files {
+				outPath := filepath.Join(dest, f)
+				// Same zip-slip guard as install — never remove
+				// anything outside the resolved target.
+				if err := assertInsideDir(absDest, outPath); err != nil {
+					return fmt.Errorf("refusing to remove %s: %w", f, err)
+				}
+				if dryRun {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), term.Dimc("  would remove "+outPath))
+					removed++
+					continue
+				}
+				err := os.Remove(outPath)
+				if err == nil {
+					removed++
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(),
+						term.Step(term.StepCheck, "removed", f, ""))
+				} else if !os.IsNotExist(err) {
+					return fmt.Errorf("remove %s: %w", outPath, err)
+				}
+			}
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), term.Dimc(
+				fmt.Sprintf("uninstalled %d skill(s) from %s", removed, dest)))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&target, "target", "",
+		"Source directory to clean. Default: ~/.claude/skills/canton-devkit/")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false,
+		"Print what would be removed without touching the filesystem.")
 	return cmd
 }
 
@@ -98,6 +166,18 @@ func buildSkillsInstall() *cobra.Command {
 				return fmt.Errorf("create target %s: %w", dest, err)
 			}
 
+			// Reviewer pin (PR #44 round-2 zip-slip): validate the
+			// resolved outPath stays under dest BEFORE writing.
+			// The current source (embed.FS) is trusted, but
+			// defence-in-depth means a future change that lets
+			// users contribute skill files can't sneak in
+			// `../../etc/passwd.md` and have it overwrite
+			// arbitrary host files. The validation is one
+			// filepath.Rel + a prefix check — cheap and exact.
+			absDest, err := filepath.Abs(dest)
+			if err != nil {
+				return fmt.Errorf("resolve target dir: %w", err)
+			}
 			for _, f := range files {
 				body, err := fs.ReadFile(skillsFS,
 					filepath.ToSlash(filepath.Join(skillsEmbedRoot, f)))
@@ -105,6 +185,9 @@ func buildSkillsInstall() *cobra.Command {
 					return fmt.Errorf("read embedded %s: %w", f, err)
 				}
 				outPath := filepath.Join(dest, f)
+				if err := assertInsideDir(absDest, outPath); err != nil {
+					return fmt.Errorf("refusing to write %s: %w", f, err)
+				}
 				if err := os.WriteFile(outPath, body, 0o644); err != nil {
 					return fmt.Errorf("write %s: %w", outPath, err)
 				}
@@ -140,6 +223,33 @@ func buildSkillsList() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// assertInsideDir is the zip-slip guard used by install. Returns
+// an error if `path` resolves to anything outside `absDir`.
+// filepath.Rel + a "is the result relative and non-traversal"
+// check is the textbook safe-extraction pattern.
+//
+// Reviewer pin (PR #44 round-2 zip-slip): even though the
+// current source (embed.FS) is trusted, future code that lets
+// users contribute skill files must not be able to overwrite
+// arbitrary host files via "../../etc/passwd.md".
+func assertInsideDir(absDir, path string) error {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(absDir, abs)
+	if err != nil {
+		return err
+	}
+	if rel == "." || rel == "" {
+		return fmt.Errorf("path resolves to the target dir itself, not a file inside it")
+	}
+	if strings.HasPrefix(rel, "..") || strings.Contains(rel, string(filepath.Separator)+"..") {
+		return fmt.Errorf("path %q escapes target dir %q (rel=%q)", path, absDir, rel)
+	}
+	return nil
 }
 
 // resolveSkillsTarget expands ~ and applies the default if empty.

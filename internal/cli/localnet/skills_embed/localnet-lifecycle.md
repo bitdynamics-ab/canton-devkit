@@ -1,4 +1,5 @@
 ---
+# SPDX-License-Identifier: Apache-2.0
 name: canton-devkit-lifecycle
 description: Bring a Canton LocalNet instance up, check its status, and
   cleanly stop it. Use this whenever the user asks to "spin up a ledger",

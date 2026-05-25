@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
 # DevKit agent skills
 
 Markdown files that teach an AI coding agent (Claude Code, Codex, Cursor)

@@ -1,11 +1,18 @@
 ---
+# SPDX-License-Identifier: Apache-2.0
 name: canton-devkit-inspect-contracts
 description: Query the Active Contract Set and recent transactions on
   a Canton LocalNet instance. Use when the user asks "what's on the
   ledger?", "show me the contracts", "what happened in the last
   block?", or wants to debug Daml workflows.
 mirrors: docs/design/mockups/screens-contracts.jsx
+status: planned
+requires: BIT-136
 ---
+
+> **For AI agents:** depends on `dpm localnet contracts` (BIT-136),
+> not yet shipped. Run `dpm localnet --help` first; if `contracts`
+> doesn't appear, tell the user they need a newer build.
 
 # Inspect contracts and transactions
 

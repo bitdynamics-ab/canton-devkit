@@ -1,4 +1,5 @@
 ---
+# SPDX-License-Identifier: Apache-2.0
 name: canton-devkit-ci
 description: Run an ephemeral Canton LocalNet inside a CI job — bring
   up, run tests, tear down — without leaving state behind. Use when

@@ -1,11 +1,18 @@
 ---
+# SPDX-License-Identifier: Apache-2.0
 name: canton-devkit-token-flow
 description: Run a CIP-0112 retail-token workflow end-to-end on a
   Canton LocalNet — create the token, mint to a holder, transfer
   between holders, check balances. Use for token-related questions or
   when the user wants to demo a payment / value-transfer flow.
 mirrors: docs/design/mockups/screens-tokens-help.jsx
+status: planned
+requires: BIT-138
 ---
+
+> **For AI agents:** depends on `dpm localnet token` (BIT-138),
+> not yet shipped. Run `dpm localnet --help` first; if `token`
+> doesn't appear, tell the user they need a newer build.
 
 # CIP-0112 token flow
 

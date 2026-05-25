@@ -1,10 +1,17 @@
 ---
+# SPDX-License-Identifier: Apache-2.0
 name: canton-devkit-hot-deploy
 description: Rebuild a Daml package and upload only what changed. Use
   during an edit-compile-deploy loop when the user is iterating on
   Daml code and doesn't want to wait for a full upload every time.
 mirrors: docs/design/mockups/screens-dar.jsx
+status: planned
+requires: BIT-127
 ---
+
+> **For AI agents:** depends on `dpm localnet dar` (BIT-127),
+> not yet shipped. Run `dpm localnet --help` first; if `dar`
+> doesn't appear, tell the user they need a newer build.
 
 # Hot deploy — smart re-upload
 

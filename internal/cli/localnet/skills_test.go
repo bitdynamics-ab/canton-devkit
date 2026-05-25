@@ -2,6 +2,7 @@ package localnet
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -166,5 +167,167 @@ func TestResolveSkillsTarget_ExpandsTilde(t *testing.T) {
 	}
 	if !strings.Contains(got, ".codex/skills/canton-devkit") {
 		t.Errorf("tilde expansion lost the suffix: %q", got)
+	}
+}
+
+// TestSkillsInstall_AssertInsideDir is the reviewer pin (PR #44
+// round-2 zip-slip): the install path-traversal guard must reject
+// any computed outPath that escapes the resolved target dir. We
+// exercise assertInsideDir directly with adversarial inputs;
+// the production caller uses it from inside the install loop.
+func TestSkillsInstall_AssertInsideDir(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct {
+		path    string
+		wantErr bool
+	}{
+		{filepath.Join(dir, "skill.md"), false},
+		{filepath.Join(dir, "sub", "skill.md"), false},
+		{filepath.Join(dir, "..", "escape.md"), true},
+		{filepath.Join(dir, "..", "..", "etc", "passwd"), true},
+		{"/etc/passwd", true},
+		{dir, true}, // path is the dir itself, not a file inside
+	}
+	for _, c := range cases {
+		err := assertInsideDir(dir, c.path)
+		if (err != nil) != c.wantErr {
+			t.Errorf("assertInsideDir(%q, %q) err=%v, wantErr=%v",
+				dir, c.path, err, c.wantErr)
+		}
+	}
+}
+
+// TestSkillsUninstall_RemovesInstalledFiles pins the symmetric
+// path: install + uninstall returns the dir to its prior state
+// (modulo any hand-written files outside our bundle).
+func TestSkillsUninstall_RemovesInstalledFiles(t *testing.T) {
+	dest := t.TempDir()
+
+	// Install.
+	install := buildSkills()
+	install.SetArgs([]string{"install", "--target", dest})
+	var out bytes.Buffer
+	install.SetOut(&out)
+	install.SetErr(&out)
+	if err := install.Execute(); err != nil {
+		t.Fatalf("install: %v\n%s", err, out.String())
+	}
+
+	// Plant a hand-written file the uninstall MUST NOT touch.
+	keepPath := filepath.Join(dest, "my-private-notes.md")
+	if err := os.WriteFile(keepPath, []byte("user-owned"), 0o644); err != nil {
+		t.Fatalf("seed user file: %v", err)
+	}
+
+	// Uninstall.
+	uninstall := buildSkills()
+	uninstall.SetArgs([]string{"uninstall", "--target", dest})
+	out.Reset()
+	uninstall.SetOut(&out)
+	uninstall.SetErr(&out)
+	if err := uninstall.Execute(); err != nil {
+		t.Fatalf("uninstall: %v\n%s", err, out.String())
+	}
+
+	// Every bundled skill file gone; user file preserved.
+	bundled, _ := listSkillFiles()
+	for _, f := range bundled {
+		if _, err := os.Stat(filepath.Join(dest, f)); !os.IsNotExist(err) {
+			t.Errorf("bundled %s still present after uninstall (err=%v)", f, err)
+		}
+	}
+	if _, err := os.Stat(keepPath); err != nil {
+		t.Errorf("user file removed by uninstall: %v", err)
+	}
+}
+
+// TestSkillsUninstall_DryRunRemovesNothing — --dry-run on
+// uninstall mirrors install: prints what would happen, touches
+// nothing.
+func TestSkillsUninstall_DryRunRemovesNothing(t *testing.T) {
+	dest := t.TempDir()
+
+	install := buildSkills()
+	install.SetArgs([]string{"install", "--target", dest})
+	install.SetOut(io.Discard)
+	install.SetErr(io.Discard)
+	if err := install.Execute(); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	uninstall := buildSkills()
+	uninstall.SetArgs([]string{"uninstall", "--target", dest, "--dry-run"})
+	var out bytes.Buffer
+	uninstall.SetOut(&out)
+	uninstall.SetErr(&out)
+	if err := uninstall.Execute(); err != nil {
+		t.Fatalf("dry-run uninstall: %v", err)
+	}
+	if !strings.Contains(out.String(), "would remove") {
+		t.Errorf("dry-run output should say 'would remove', got %q", out.String())
+	}
+	// Files still present.
+	bundled, _ := listSkillFiles()
+	for _, f := range bundled {
+		if _, err := os.Stat(filepath.Join(dest, f)); err != nil {
+			t.Errorf("dry-run uninstall removed file %s: %v", f, err)
+		}
+	}
+}
+
+// TestSkillsFutureVerbAgentGuidance is the reviewer pin (PR #44
+// round-2 future-verb gating): every skill whose YAML frontmatter
+// declares `status: planned` MUST also carry an AI-agent guidance
+// block telling the agent to run `dpm localnet --help` first and
+// refuse if the verb isn't available. Without this, the agent
+// downloads the doc, follows the recipe, and runs commands that
+// don't exist.
+//
+// Detection: scan for `status: planned` in the embedded files;
+// for each match, assert "For AI agents" appears in the body.
+func TestSkillsFutureVerbAgentGuidance(t *testing.T) {
+	entries, _ := skillsFS.ReadDir(skillsEmbedRoot)
+	checked := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		body, err := skillsFS.ReadFile(filepath.ToSlash(filepath.Join(skillsEmbedRoot, e.Name())))
+		if err != nil {
+			t.Fatalf("read %s: %v", e.Name(), err)
+		}
+		if !strings.Contains(string(body), "status: planned") {
+			continue
+		}
+		checked++
+		if !strings.Contains(string(body), "For AI agents") {
+			t.Errorf("%s declares status: planned but has no 'For AI agents' guidance block — agent will run vapor commands",
+				e.Name())
+		}
+		if !strings.Contains(string(body), "dpm localnet --help") {
+			t.Errorf("%s declares status: planned but doesn't tell agent to verify via `dpm localnet --help`",
+				e.Name())
+		}
+	}
+	if checked == 0 {
+		t.Skip("no status:planned skills in this branch — lint not exercised")
+	}
+}
+
+// TestSkillsAllHaveSPDXHeader is the reviewer pin (PR #44 round-2
+// SPDX): every .md file in the embedded skills set must carry an
+// SPDX-License-Identifier marker so downstream consumers
+// (homebrew formula auditors, package signers, license scrapers)
+// can attribute the file correctly.
+func TestSkillsAllHaveSPDXHeader(t *testing.T) {
+	entries, _ := skillsFS.ReadDir(skillsEmbedRoot)
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		body, _ := skillsFS.ReadFile(filepath.ToSlash(filepath.Join(skillsEmbedRoot, e.Name())))
+		if !strings.Contains(string(body), "SPDX-License-Identifier:") {
+			t.Errorf("%s missing SPDX-License-Identifier", e.Name())
+		}
 	}
 }

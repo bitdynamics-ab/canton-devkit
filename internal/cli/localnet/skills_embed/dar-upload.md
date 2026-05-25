@@ -1,10 +1,20 @@
 ---
+# SPDX-License-Identifier: Apache-2.0
 name: canton-devkit-dar-upload
 description: Upload a compiled Daml package (a .dar file) to a running
   Canton LocalNet instance. Use when the user asks to "upload a DAR",
   "deploy my Daml code", or "vet a package."
 mirrors: docs/design/mockups/screens-dar.jsx
+status: planned
+requires: BIT-127
 ---
+
+> **For AI agents reading this skill:** the `dpm localnet dar`
+> subcommand is not yet shipped in your installed `dpm` binary
+> (tracked by BIT-127). Run `dpm localnet --help` first — if
+> `dar` doesn't appear, tell the user they need a newer build and
+> stop. Do NOT fall back to raw `daml ledger upload-dar` (see
+> "What to NOT do" below).
 
 # DAR upload
 
