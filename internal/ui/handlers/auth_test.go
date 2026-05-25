@@ -28,7 +28,7 @@ import (
 func authMux(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	MountInstances(mux)
+	MountInstances(mux, nil)
 	MountAuth(mux)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)

@@ -32,23 +32,74 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"sort"
+	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui/progress"
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 )
 
-// MountInstances installs the instance-resource routes on mux. Path
-// prefix is fixed at /api/instances. The handlers are stateless;
-// every call re-reads from registry, which is cheap (small files)
-// and means a concurrent `up`/`down` change is visible immediately.
-func MountInstances(mux *http.ServeMux) {
+// upBodyMax caps the POST /api/instances request body. Defence-in-
+// depth against a malicious-or-buggy client feeding us a 100 MiB
+// JSON blob — the handler only needs a tiny request shape.
+const upBodyMax = 4 << 10 // 4 KiB
+
+// upJobTimeout is the hard ceiling on a single create-instance
+// goroutine. RunUp does Splice fetch + docker compose up + health
+// probe, which can take ~2 minutes on a fresh box. 10 minutes
+// gives headroom for slow networks without hanging an orphaned
+// goroutine indefinitely when the browser closes the SSE.
+//
+// This is NOT the HTTP request timeout — the POST returns 202
+// immediately; the goroutine runs on its own context, independent
+// of the request. Cancellation (BIT-163e) passes a CancelFunc
+// into the goroutine's context that DELETE invokes.
+const upJobTimeout = 10 * time.Minute
+
+// progressBufferCap is the per-instance topic ring size. Sized
+// for a normal up: 8 step.started + 8 step.finished + a few
+// step.progress + a few warnings + the done event = ~32 events.
+// 128 leaves headroom for verbose compose-log forwarding without
+// the oldest events evicting during a 90-second up.
+const progressBufferCap = 128
+
+// MountInstances installs the instance-resource routes on mux.
+// hub may be nil for callers that don't want the create-instance
+// flow (e.g. read-only deployments); in that case POST and the
+// SSE endpoint return 503.
+//
+// Path prefix is fixed at /api/instances. The GET handlers are
+// stateless — every call re-reads from registry. The POST handler
+// spawns a long-running goroutine that publishes progress events
+// to a per-instance topic on hub.
+func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 	mux.HandleFunc("GET /api/instances", handleList)
 	mux.HandleFunc("GET /api/instances/{name}", handleDetail)
+	if hub != nil {
+		mux.HandleFunc("POST /api/instances", handleCreate(hub))
+		mux.HandleFunc("GET /api/instances/{name}/events", handleInstanceEvents(hub))
+	} else {
+		// Stub so a misconfigured deployment fails loudly
+		// rather than 404 (which the frontend would mistake
+		// for a missing endpoint).
+		stub := func(w http.ResponseWriter, _ *http.Request) {
+			writeErrorWithCode(w, http.StatusServiceUnavailable,
+				"SSE_DISABLED",
+				"create-instance flow disabled (no event hub configured)",
+				"start the server with the default config; --no-hub is a test seam")
+		}
+		mux.HandleFunc("POST /api/instances", stub)
+		mux.HandleFunc("GET /api/instances/{name}/events", stub)
+	}
 }
 
 // handleList: GET /api/instances → types.ListResponse.
@@ -327,9 +378,295 @@ func codeForStatus(status int) string {
 		return ErrCodeInvalidRequest
 	case status == http.StatusRequestEntityTooLarge:
 		return ErrCodeRequestTooLarge
+	case status == http.StatusConflict:
+		return "INSTANCE_EXISTS"
 	case status >= 500:
 		return ErrCodeInternal
 	default:
 		return ErrCodeInvalidRequest
 	}
+}
+
+// ── BIT-163d: async create-instance flow ──────────────────────────
+
+// upRequest is the body shape for POST /api/instances. Mirrors
+// `dpm localnet up` flags exactly so CLI and Web UI surface the
+// same controls.
+type upRequest struct {
+	Name           string `json:"name"`
+	Version        string `json:"version,omitempty"`         // empty → "latest" server-side
+	AllowUncurated bool   `json:"allow_uncurated,omitempty"` // resolve unknown tags upstream
+}
+
+// upAcceptedResponse is the 202 body the POST returns. The frontend
+// uses events_url to open the EventSource for progress streaming;
+// instance is echoed so a client that auto-navigated can pick
+// it up from the response without parsing the URL.
+type upAcceptedResponse struct {
+	SchemaVersion int    `json:"schema_version"`
+	Instance      string `json:"instance"`
+	EventsURL     string `json:"events_url"`
+}
+
+// handleCreate: POST /api/instances → 202 + spawns goroutine.
+//
+// Validation order (cheapest first; each rejection fails the
+// request before any work):
+//
+//	1. body decode + size cap
+//	2. RFC 1123 DNS-label name validation
+//	3. duplicate-name check (registry has an entry OR jobs
+//	   registry has an in-flight goroutine)
+//
+// Then:
+//
+//	4. hub.EnableBuffering(topic, 128)
+//	5. context.WithCancel — cancel stored in jobs registry for
+//	   the future DELETE handler (BIT-163e); context.WithTimeout
+//	   wraps that with the 10-minute job ceiling
+//	6. spawn goroutine → RunUp(ctx, SSEProgress, opts)
+//	7. return 202 with {instance, events_url}
+//
+// The goroutine's deferred cleanup:
+//
+//	defer jobs.Unregister(name)
+//	defer hub.ClearBuffer(topic)
+//	defer ctxCancel() (releases context resources)
+//
+// Order matters: Unregister BEFORE ClearBuffer so a fast-
+// reconnecting browser that races the cleanup sees either
+// (a) the buffer still present and replays final events, or
+// (b) the registry already cleared and gets a fresh 404 from
+// the SSE endpoint — never an inconsistent state where the
+// buffer is gone but the job is still listed.
+func handleCreate(hub *stream.Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Body cap first.
+		r.Body = http.MaxBytesReader(w, r.Body, upBodyMax)
+
+		var req upRequest
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil {
+			var mbe *http.MaxBytesError
+			if errors.As(err, &mbe) {
+				writeErrorWithCode(w, http.StatusRequestEntityTooLarge,
+					ErrCodeRequestTooLarge,
+					"request body too large",
+					"the create-instance body should be tiny — check you didn't paste binary data")
+				return
+			}
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid request body",
+				"the body must be JSON: {\"name\":\"<dns-label>\", \"version\":\"<tag>\"?}")
+			return
+		}
+
+		if err := localnet.ValidateName(req.Name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error(),
+				"names must be lowercase DNS labels (a-z, 0-9, hyphen); 1–63 chars; can't start or end with hyphen")
+			return
+		}
+
+		// Reject duplicates against BOTH the registry (an
+		// already-running instance) AND the jobs registry (a
+		// bring-up that hasn't finished yet). The two failure
+		// modes are distinct UX cases — the frontend renders
+		// "instance exists, switch to it" vs "instance is
+		// being created, watch progress" — but both serve as a
+		// reason to refuse the new POST.
+		if _, err := registry.Read(req.Name); err == nil {
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_EXISTS",
+				"instance "+req.Name+" already exists",
+				"pick a different name, or stop the existing one first via `dpm localnet down --name "+req.Name+"`")
+			return
+		}
+		if jobs.Active(req.Name) {
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_CREATING",
+				"instance "+req.Name+" is already being created",
+				"open the progress stream at /api/instances/"+req.Name+"/events to watch the existing run")
+			return
+		}
+
+		topic := progress.TopicFor(req.Name)
+		hub.EnableBuffering(topic, progressBufferCap)
+
+		// Detached context: the request returns 202 immediately,
+		// but the goroutine runs until RunUp completes (or the
+		// 10-minute ceiling fires). WithCancel comes outside
+		// WithTimeout so the DELETE handler's cancel wins
+		// regardless of the timeout's state.
+		jobCtx, cancelJob := context.WithTimeout(context.Background(), upJobTimeout)
+		// Register BEFORE spawning so a racing second POST
+		// loses (sees the entry already present).
+		if !jobs.Register(req.Name, cancelJob) {
+			// Lost the race with another POST that just won.
+			cancelJob()
+			hub.ClearBuffer(topic)
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_CREATING",
+				"instance "+req.Name+" is already being created",
+				"open /api/instances/"+req.Name+"/events to watch the existing run")
+			return
+		}
+
+		opts := &localnet.UpOptions{
+			Name:           req.Name,
+			Version:        req.Version,
+			AllowUncurated: req.AllowUncurated,
+		}
+
+		go func() {
+			// Cleanup order matters — see handler godoc.
+			defer cancelJob()
+			defer hub.ClearBuffer(topic)
+			defer jobs.Unregister(req.Name)
+
+			prog := progress.New(hub, req.Name)
+			exitCode := localnet.RunUp(jobCtx, prog, opts)
+			log.Printf("create instance %q: exit_code=%d", req.Name, exitCode)
+		}()
+
+		writeJSON(w, http.StatusAccepted, upAcceptedResponse{
+			SchemaVersion: types.SchemaVersion,
+			Instance:      req.Name,
+			EventsURL:     "/api/instances/" + req.Name + "/events",
+		})
+	}
+}
+
+// handleInstanceEvents: GET /api/instances/{name}/events.
+//
+// SSE endpoint for the per-instance progress stream. Subscribes
+// to instance:<name> via SubscribeWithReplay so a late client
+// (browser opening the EventSource ~50ms after POST returns)
+// receives the events that were published before its connection
+// completed.
+//
+// Returns 404 if no buffer exists for the topic — meaning either
+// the up finished (and ClearBuffer ran) OR the name was never
+// the target of a POST. The frontend distinguishes "instance
+// finished" from "instance never existed" via the registry.Read
+// followup.
+//
+// 30s heartbeat (matches the global /events handler). On the
+// goroutine's done event the client closes the EventSource;
+// idle connections beyond that survive on the heartbeat until
+// the user navigates away.
+func handleInstanceEvents(hub *stream.Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if err := registry.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			writeError(w, http.StatusInternalServerError,
+				"streaming unsupported", nil)
+			return
+		}
+
+		// SSE headers — same shape as the global /events handler.
+		h := w.Header()
+		h.Set("Content-Type", "text/event-stream; charset=utf-8")
+		h.Set("Cache-Control", "no-cache, no-transform")
+		h.Set("Connection", "keep-alive")
+		h.Set("X-Accel-Buffering", "no")
+		w.WriteHeader(http.StatusOK)
+		flusher.Flush()
+
+		topic := progress.TopicFor(name)
+		ch, cancel := hub.SubscribeWithReplay(topic)
+		defer cancel()
+
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		ctx := r.Context()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case ev, ok := <-ch:
+				if !ok {
+					return
+				}
+				writeInstanceEventFrame(w, ev)
+				flusher.Flush()
+			case <-ticker.C:
+				_, _ = w.Write([]byte(": keepalive\n\n"))
+				flusher.Flush()
+			}
+		}
+	}
+}
+
+// writeInstanceEventFrame is a minimal SSE encoder for the
+// per-instance handler. Mirrors the writeSSEFrame in
+// internal/ui/sse.go (kept private there); duplicated here so the
+// handlers package doesn't import from internal/ui.
+//
+// Per spec, multi-line data needs one "data:" prefix per line; we
+// strip a trailing newline so the payload doesn't gain a trailing
+// empty data: line.
+func writeInstanceEventFrame(w http.ResponseWriter, e stream.Event) {
+	if e.ID != "" {
+		_, _ = fmt.Fprintf(w, "id: %s\n", e.ID)
+	}
+	if e.Topic != "" {
+		_, _ = fmt.Fprintf(w, "event: %s\n", e.Topic)
+	}
+	if len(e.Data) == 0 {
+		_, _ = w.Write([]byte("data:\n\n"))
+		return
+	}
+	body := string(e.Data)
+	body = trimRight(body, "\n")
+	for _, line := range splitLines(body) {
+		_, _ = fmt.Fprintf(w, "data: %s\n", line)
+	}
+	_, _ = w.Write([]byte("\n"))
+}
+
+// trimRight / splitLines — tiny stdlib-free helpers used by
+// writeInstanceEventFrame. Keeps this file strings-package-free
+// for symmetry with the existing helpers (jsonInt etc).
+func trimRight(s, cutset string) string {
+	for len(s) > 0 {
+		r := s[len(s)-1]
+		found := false
+		for i := 0; i < len(cutset); i++ {
+			if r == cutset[i] {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return s
+		}
+		s = s[:len(s)-1]
+	}
+	return s
+}
+
+func splitLines(s string) []string {
+	var out []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			out = append(out, s[start:i])
+			start = i + 1
+		}
+	}
+	out = append(out, s[start:])
+	return out
 }

@@ -39,7 +39,7 @@ func seedInstance(t *testing.T, name, version string, ports map[string]int, stat
 func servingMux(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	MountInstances(mux)
+	MountInstances(mux, nil)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv

@@ -35,7 +35,7 @@ func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
 	// REST handlers under /api/* (BIT-131). Each handler package
 	// owns one resource; new resources mount themselves here as
 	// they land.
-	handlers.MountInstances(mux)
+	handlers.MountInstances(mux, hub)
 	handlers.MountAuth(mux)
 	// /events (SSE) — added by BIT-130. Handler does its own
 	// Origin check (sse.go) since EventSource sends GET and the
