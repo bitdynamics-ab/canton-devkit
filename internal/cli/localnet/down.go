@@ -16,20 +16,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildDown wires `dpm localnet down --name <inst>` — BIT-124.
+// buildDown wires `dpm localnet down --name <inst>` — BIT-124,
+// carrying forward the contract PR #21 established and review on
+// PR #33 flagged as regressed:
 //
-// Semantics: stop containers + detach networks, but **preserve
-// volumes** so a follow-up `up` against the same name resumes. The
-// destructive wipe lives in `localnet clean` (separate command,
-// confirmation prompt — implemented later).
+//	docker compose down  →  NO --volumes (preserves state)
+//	StatusRunning   →  StatusStopping  (BEFORE compose call)
+//	  └─ compose ok  →  StatusStopped  (or registry.Delete if !KeepData)
+//	  └─ compose err →  StatusFailed   (preserved for retry)  exit 4
+//	  └─ interrupted →  StatusPartial  (compose may still be in flight) exit 3
+//
+// The transitional StatusStopping is critical: if we SIGKILL during
+// compose-down without it, `localnet status` keeps reporting
+// `running` while containers are partially gone.
 //
 // Output matches docs/design/mockups/screens-lifecycle.jsx
-// (ScreenDown): three Step rows + a brand-accented Box confirming
-// preservation. The "draining ledger" message is informational —
-// docker compose itself handles graceful shutdown — but the visual
-// step makes it obvious that down is doing more than a hard kill.
+// (ScreenDown): three Step rows + a brand-accented Box.
 func buildDown() *cobra.Command {
-	var name string
+	var (
+		name     string
+		keepData bool
+	)
 	cmd := &cobra.Command{
 		Use:   "down",
 		Short: "Stop a Canton LocalNet instance (preserves volumes)",
@@ -40,8 +47,14 @@ Docker networks. Volumes are preserved so a follow-up
 
 resumes from the same on-disk state.
 
-To remove volumes (destructive — drops all ledger state), use
-` + "`dpm localnet clean --name <name>`" + ` instead.`,
+By default the per-instance registry entry is removed once
+compose-down succeeds — re-running ` + "`up`" + ` re-registers it. Pass
+--keep-data to keep ~/.canton-devkit/localnet/<name>/ on disk
+(useful for diagnosing a failed bring-up; preserves overlay env
++ state.json).
+
+To remove docker volumes (destructive — drops all ledger state),
+use ` + "`dpm localnet clean --name <name>`" + ` instead.`,
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -51,17 +64,28 @@ To remove volumes (destructive — drops all ledger state), use
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
 			return localnet.AsExitError(
-				RunDown(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), name))
+				RunDown(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(),
+					DownOptions{Name: name, KeepData: keepData}))
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "",
 		"Required. Identifier of the LocalNet instance to stop.")
+	cmd.Flags().BoolVar(&keepData, "keep-data", false,
+		"Keep ~/.canton-devkit/localnet/<name>/ (overlay env + state.json).")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }
 
+// DownOptions carries the `localnet down` flags into RunDown. Mirrors
+// PR #21's shape so the future Web UI handler (BIT-131
+// POST /api/instances/:name/down) has a stable parameter to pass.
+type DownOptions struct {
+	Name     string
+	KeepData bool
+}
+
 // stopperFn is the seam tests use to bypass docker. Production
-// callers leave it nil; the production path builds a real
+// callers leave it nil; production builds a real
 // docker.ComposeRunner and calls Stop(ctx, false). A test sets
 // stopperFn to a fake that records the call and returns whatever
 // the test wants.
@@ -73,34 +97,37 @@ To remove volumes (destructive — drops all ledger state), use
 // `go test` serialises by default which is fine here.
 var stopperFn func(ctx context.Context, state *registry.State) error
 
-// RunDown is exported so the future Web UI handler
-// (P2-03 POST /api/instances/:name/down) can call the same code
-// path without forking the implementation. The CLI command is a
-// thin shell that wires opts.
-func RunDown(ctx context.Context, out io.Writer, errw io.Writer, name string) int {
+// RunDown is exported so the future Web UI handler can call the
+// same code path without forking the implementation.
+func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOptions) int {
 	ctx, stopSignal := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stopSignal()
 
-	state, err := registry.Read(name)
+	state, err := registry.Read(opts.Name)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
-			_, _ = fmt.Fprintf(errw, "no LocalNet instance named %q\n", name)
-			return localnet.ExitUserError
+			// PR #21 carry-forward: a missing entry is the
+			// no-op idempotent case for scripts. We also scrub
+			// any orphan index row defensively.
+			if delErr := registry.Delete(opts.Name); delErr != nil {
+				_, _ = fmt.Fprintf(errw,
+					"warning: could not scrub orphan registry entry: %s\n", delErr)
+			}
+			_, _ = fmt.Fprintln(out, term.Dimc(fmt.Sprintf(
+				"No instance named %q is registered. Nothing to do.", opts.Name)))
+			return localnet.ExitSuccess
 		}
 		_, _ = fmt.Fprintf(errw, "read registry state: %s\n", err)
 		return localnet.ExitRuntimeFailure
 	}
 
 	if state.Status == registry.StatusStopped {
-		// No-op is the right answer — script callers wrapping
-		// `down` should be able to call it idempotently without
-		// special-casing "already down."
 		_, _ = fmt.Fprintln(out, term.Dimc(fmt.Sprintf(
-			"LocalNet %q is already stopped.", name)))
+			"LocalNet %q is already stopped.", opts.Name)))
 		return localnet.ExitSuccess
 	}
 
-	release, err := registry.Lock(name)
+	release, err := registry.Lock(opts.Name)
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "%s\n", err)
 		return localnet.ExitUserError
@@ -109,8 +136,18 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, name string) in
 
 	_, _ = fmt.Fprintln(out, term.Prompt("", "", "", fmt.Sprintf(
 		"dpm localnet down %s %s",
-		term.Amberc("--name"), name)))
+		term.Amberc("--name"), opts.Name)))
 	_, _ = fmt.Fprintln(out)
+
+	// PR #21 carry-forward: persist transitional state BEFORE
+	// compose. If we crash or SIGKILL mid-teardown without this,
+	// `localnet status` keeps reporting "running" while containers
+	// are partially down. A write failure here is non-fatal —
+	// reverts to the pre-fix behaviour.
+	state.Status = registry.StatusStopping
+	if werr := registry.Write(state); werr != nil {
+		_, _ = fmt.Fprintf(errw, "warning: could not persist stopping state: %s\n", werr)
+	}
 
 	stop := stopperFn
 	if stop == nil {
@@ -122,15 +159,26 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, name string) in
 		"Draining ledger", "in-flight commands", ""))
 
 	if err := stop(ctx, state); err != nil {
+		// PR #21 carry-forward: TWO separate cells here.
+		//   ctx.Err() != nil    → interrupted, exit 3, status partial.
+		//                         compose may still be running on the host;
+		//                         user retries when the host is idle.
+		//   ctx.Err() == nil    → genuine compose failure, exit 4, status failed.
+		//                         registry entry + data dir preserved so user
+		//                         can retry.
 		if ctx.Err() != nil {
-			_, _ = fmt.Fprintln(errw,
-				term.Errorc("Interrupted while stopping services"))
-			markFailedStop(state, errw)
+			_, _ = fmt.Fprintln(errw, term.Errorc(
+				"Interrupted during docker compose down — retry once the host is idle"))
+			markStatus(state, registry.StatusPartial, errw)
 			return localnet.ExitTimeout
 		}
 		_, _ = fmt.Fprintf(errw, "%s\n",
 			term.Step(term.StepCross, "Compose down failed", err.Error(), ""))
-		markFailedStop(state, errw)
+		_, _ = fmt.Fprintln(errw, term.Dimc(fmt.Sprintf(
+			"Registry state preserved at %s. Re-run `localnet down --name %s` "+
+				"once the host is healthy.",
+			state.DataDir, opts.Name)))
+		markStatus(state, registry.StatusFailed, errw)
 		return localnet.ExitRuntimeFailure
 	}
 
@@ -139,23 +187,34 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, name string) in
 	_, _ = fmt.Fprintln(out, term.Step(term.StepCheck,
 		"Detaching networks · keeping volumes", "", ""))
 
-	state.Status = registry.StatusStopped
-	if err := registry.Write(state); err != nil {
-		// Compose already stopped successfully; a state-write failure
-		// is a soft warning rather than an error code — the user's
-		// containers ARE stopped, we just couldn't record it.
-		_, _ = fmt.Fprintf(errw,
-			"warning: services stopped but registry write failed: %s\n", err)
+	// PR #21 carry-forward: by default we remove the per-instance
+	// registry entry after a clean stop. --keep-data preserves it
+	// (useful for diagnosing a failed bring-up).
+	if !opts.KeepData {
+		if delErr := registry.Delete(state.Name); delErr != nil {
+			_, _ = fmt.Fprintf(errw,
+				"warning: could not remove instance dir: %s\n", delErr)
+			// Don't fail the command — compose IS down; this is
+			// a soft cleanup follow-up.
+		}
+	} else {
+		state.Status = registry.StatusStopped
+		if werr := registry.Write(state); werr != nil {
+			_, _ = fmt.Fprintf(errw,
+				"warning: services stopped but registry write failed: %s\n", werr)
+		}
+		_, _ = fmt.Fprintln(out, term.Dimc(fmt.Sprintf(
+			"Kept instance data at %s", state.DataDir)))
 	}
 
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, term.Box(term.BoxBrand,
 		fmt.Sprintf("%s Stopped LocalNet %s %s\n%s",
 			term.Brandc("✦"),
-			term.Bold("\""+name+"\""),
+			term.Bold("\""+opts.Name+"\""),
 			term.Dimc("· state preserved."),
 			term.Dimc(fmt.Sprintf("Run %s to resume, or %s to remove volumes.",
-				term.Textc(fmt.Sprintf("localnet up --name %s", name)),
+				term.Textc(fmt.Sprintf("localnet up --name %s", opts.Name)),
 				term.Textc("localnet clean"))))))
 
 	return localnet.ExitSuccess
@@ -174,14 +233,13 @@ func defaultStop(ctx context.Context, st *registry.State) error {
 	return runner.Stop(ctx, false)
 }
 
-// markFailedStop flips the registry status to "partial" so a later
-// `status` shows the half-stopped state instead of pretending
-// everything's fine. Mirrors the same pattern up.go uses on a
-// mid-bring-up failure.
-func markFailedStop(state *registry.State, errw io.Writer) {
-	state.Status = registry.StatusPartial
+// markStatus persists `s` for `state`. A write failure is soft —
+// compose may have already done its job and the user's containers
+// state on disk is authoritative; we just couldn't record it.
+func markStatus(state *registry.State, s registry.Status, errw io.Writer) {
+	state.Status = s
 	if err := registry.Write(state); err != nil {
-		_, _ = fmt.Fprintf(errw, "warning: could not record failed stop: %s\n", err)
+		_, _ = fmt.Fprintf(errw, "warning: could not record %s state: %s\n", s, err)
 	}
 }
 

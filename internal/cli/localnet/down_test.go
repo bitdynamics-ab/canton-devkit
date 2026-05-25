@@ -6,14 +6,12 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// seedDownInstance is the test helper for BIT-124's tests; it writes
-// a minimal valid state.json via registry.Write so RunDown's
-// registry.Read finds something to operate on.
 func seedDownInstance(t *testing.T, name string, status registry.Status) {
 	t.Helper()
 	s := registry.NewState(name, "0.6.4")
@@ -28,10 +26,6 @@ func seedDownInstance(t *testing.T, name string, status registry.Status) {
 	}
 }
 
-// installFakeStopper swaps the package-level stopperFn for the test's
-// duration. t.Cleanup restores the prior value so subsequent tests
-// (and any code that runs after `go test` finishes a t.Run) don't
-// see a leaked fake.
 func installFakeStopper(t *testing.T, fn func(ctx context.Context, st *registry.State) error) {
 	t.Helper()
 	prev := stopperFn
@@ -39,32 +33,28 @@ func installFakeStopper(t *testing.T, fn func(ctx context.Context, st *registry.
 	t.Cleanup(func() { stopperFn = prev })
 }
 
-// TestDown_NotFoundIsUserError exercises the "unknown instance" path.
-// Important because the registry returns ErrNotFound rather than a
-// generic error here, and the user gets a clearer message + exit
-// code 1 than "I/O failure".
-func TestDown_NotFoundIsUserError(t *testing.T) {
+// TestDown_NotFoundIsIdempotentSuccess pins the PR #21 carry-forward:
+// a missing instance is NOT a user error — scripts that wrap `down`
+// should be able to call it idempotently without checking first.
+func TestDown_NotFoundIsIdempotentSuccess(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 
 	var out, errBuf bytes.Buffer
-	code := RunDown(context.Background(), &out, &errBuf, "ghost")
-	if code != localnet.ExitUserError {
-		t.Fatalf("code = %d, want ExitUserError; stderr=%q", code, errBuf.String())
+	code := RunDown(context.Background(), &out, &errBuf, DownOptions{Name: "ghost"})
+	if code != localnet.ExitSuccess {
+		t.Fatalf("code = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
-	if !strings.Contains(errBuf.String(), `"ghost"`) {
-		t.Errorf("stderr should mention the missing instance name, got %q", errBuf.String())
+	if !strings.Contains(out.String(), "Nothing to do") {
+		t.Errorf("expected 'Nothing to do' hint, got %q", out.String())
 	}
 }
 
-// TestDown_AlreadyStoppedIsNoOpSuccess covers the idempotency
-// guarantee from the BIT-124 description: scripts that call `down`
-// twice should not get a non-zero on the second call.
+// TestDown_AlreadyStoppedIsNoOpSuccess: re-calling on a stopped
+// instance must be a no-op success that does NOT call the stopper.
 func TestDown_AlreadyStoppedIsNoOpSuccess(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedDownInstance(t, "demo", registry.StatusStopped)
 
-	// Install a fake stopper that would fail loudly if it ran; the
-	// already-stopped path should not call it at all.
 	called := false
 	installFakeStopper(t, func(context.Context, *registry.State) error {
 		called = true
@@ -72,7 +62,7 @@ func TestDown_AlreadyStoppedIsNoOpSuccess(t *testing.T) {
 	})
 
 	var out, errBuf bytes.Buffer
-	code := RunDown(context.Background(), &out, &errBuf, "demo")
+	code := RunDown(context.Background(), &out, &errBuf, DownOptions{Name: "demo"})
 	if code != localnet.ExitSuccess {
 		t.Fatalf("code = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
@@ -84,75 +74,127 @@ func TestDown_AlreadyStoppedIsNoOpSuccess(t *testing.T) {
 	}
 }
 
-// TestDown_HappyPathStopsAndFlipsStatus drives the full success path
-// via the fake stopper, then re-reads the registry to confirm the
-// status flipped to stopped. This is the contract the Web UI handler
-// (P2-03) will rely on for `GET /api/instances/:name` to show the
-// right state after a `POST .../down`.
-func TestDown_HappyPathStopsAndFlipsStatus(t *testing.T) {
+// TestDown_HappyPath_StatusStoppingBeforeCompose pins the most
+// important PR #21 carry-forward (regressed in PR #33, surfaced in
+// review): the transitional `stopping` status MUST be persisted
+// BEFORE the compose call. Without it, a SIGKILL mid-teardown
+// leaves the registry showing "running" while containers are gone.
+//
+// We assert by having the fake stopper READ the registry mid-call:
+// at that point Status must already be StatusStopping. After the
+// default down (no --keep-data) the entry is removed so we can
+// only observe the transitional state from inside the stopper.
+func TestDown_HappyPath_StatusStoppingBeforeCompose(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedDownInstance(t, "demo", registry.StatusRunning)
 
-	calls := 0
+	var observed registry.Status
 	installFakeStopper(t, func(context.Context, *registry.State) error {
-		calls++
+		if s, err := registry.Read("demo"); err == nil {
+			observed = s.Status
+		}
 		return nil
 	})
 
 	var out, errBuf bytes.Buffer
-	code := RunDown(context.Background(), &out, &errBuf, "demo")
+	code := RunDown(context.Background(), &out, &errBuf, DownOptions{Name: "demo"})
 	if code != localnet.ExitSuccess {
 		t.Fatalf("code = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
-	if calls != 1 {
-		t.Errorf("stopper called %d times, want 1", calls)
+	if observed != registry.StatusStopping {
+		t.Errorf("status during compose call = %q, want %q (PR #21 contract regressed)",
+			observed, registry.StatusStopping)
 	}
+	// Post-success default: instance removed from registry.
+	if _, err := registry.Read("demo"); !errors.Is(err, registry.ErrNotFound) {
+		t.Errorf("expected ErrNotFound after default down, got %v", err)
+	}
+}
 
-	// Registry status must now be "stopped" — this is the
-	// observable side-effect callers depend on.
+// TestDown_KeepData preserves the per-instance registry entry and
+// flips status to Stopped. Mirrors PR #21's --keep-data flag.
+func TestDown_KeepData(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedDownInstance(t, "demo", registry.StatusRunning)
+	installFakeStopper(t, func(context.Context, *registry.State) error { return nil })
+
+	var out, errBuf bytes.Buffer
+	code := RunDown(context.Background(), &out, &errBuf,
+		DownOptions{Name: "demo", KeepData: true})
+	if code != localnet.ExitSuccess {
+		t.Fatalf("code = %d; stderr=%q", code, errBuf.String())
+	}
 	got, err := registry.Read("demo")
 	if err != nil {
-		t.Fatalf("re-read state: %v", err)
+		t.Fatalf("re-read state with --keep-data: %v", err)
 	}
 	if got.Status != registry.StatusStopped {
 		t.Errorf("Status = %q, want %q", got.Status, registry.StatusStopped)
 	}
-
-	for _, want := range []string{"Draining ledger", "Stopping services", "Detaching networks", "Stopped LocalNet"} {
-		if !strings.Contains(out.String(), want) {
-			t.Errorf("stdout missing %q\nfull=%s", want, out.String())
-		}
-	}
 }
 
-// TestDown_StopFailureMarksPartial covers the negative path: when
-// docker compose down fails for a real reason (network gone, daemon
-// died), we MUST flip the registry to "partial" so a later `status`
-// can show "something's wrong here" instead of falsely reporting
-// "stopped". Mirrors up.go's markFailed pattern.
-func TestDown_StopFailureMarksPartial(t *testing.T) {
+// TestDown_ComposeFailureMarksFailedExits4 is the PR #21 cell
+// reviewer flagged as collapsed: a genuine compose-down failure
+// (NOT interruption) MUST mark StatusFailed and return
+// ExitRuntimeFailure (4), preserving the registry entry so the
+// user can retry.
+func TestDown_ComposeFailureMarksFailedExits4(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedDownInstance(t, "demo", registry.StatusRunning)
-
 	installFakeStopper(t, func(context.Context, *registry.State) error {
 		return errors.New("docker daemon vanished")
 	})
 
 	var out, errBuf bytes.Buffer
-	code := RunDown(context.Background(), &out, &errBuf, "demo")
+	code := RunDown(context.Background(), &out, &errBuf, DownOptions{Name: "demo"})
 	if code != localnet.ExitRuntimeFailure {
-		t.Fatalf("code = %d, want ExitRuntimeFailure; stderr=%q", code, errBuf.String())
+		t.Fatalf("code = %d, want ExitRuntimeFailure (%d); stderr=%q",
+			code, localnet.ExitRuntimeFailure, errBuf.String())
 	}
-
 	got, err := registry.Read("demo")
 	if err != nil {
-		t.Fatalf("re-read state: %v", err)
+		t.Fatalf("registry entry should be preserved for retry: %v", err)
+	}
+	if got.Status != registry.StatusFailed {
+		t.Errorf("Status = %q, want %q (PR #21 cell regressed)",
+			got.Status, registry.StatusFailed)
+	}
+	if !strings.Contains(errBuf.String(), "preserved") {
+		t.Errorf("stderr should mention state preservation, got %q", errBuf.String())
+	}
+}
+
+// TestDown_InterruptionMarksPartialExits3 is the OTHER cell PR #33
+// collapsed. SIGINT during compose-down must return ExitTimeout (3)
+// and mark StatusPartial — distinct from the genuine-failure cell
+// because the compose process may still be running on the host.
+func TestDown_InterruptionMarksPartialExits3(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedDownInstance(t, "demo", registry.StatusRunning)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	installFakeStopper(t, func(c context.Context, _ *registry.State) error {
+		cancel() // simulate interruption mid-call
+		time.Sleep(5 * time.Millisecond)
+		return c.Err() // context.Canceled
+	})
+
+	var out, errBuf bytes.Buffer
+	code := RunDown(ctx, &out, &errBuf, DownOptions{Name: "demo"})
+	if code != localnet.ExitTimeout {
+		t.Fatalf("code = %d, want ExitTimeout (%d); stderr=%q",
+			code, localnet.ExitTimeout, errBuf.String())
+	}
+	got, err := registry.Read("demo")
+	if err != nil {
+		t.Fatalf("registry entry should be preserved for retry: %v", err)
 	}
 	if got.Status != registry.StatusPartial {
-		t.Errorf("Status = %q, want %q", got.Status, registry.StatusPartial)
+		t.Errorf("Status = %q, want %q (interruption cell regressed)",
+			got.Status, registry.StatusPartial)
 	}
-	if !strings.Contains(errBuf.String(), "Compose down failed") {
-		t.Errorf("stderr missing failure label, got %q", errBuf.String())
+	if !strings.Contains(errBuf.String(), "Interrupted") {
+		t.Errorf("stderr should explain interruption, got %q", errBuf.String())
 	}
 }
 
@@ -166,8 +208,7 @@ func TestDown_InvalidNameRejected(t *testing.T) {
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"--name", "bad/name"})
-	err := cmd.Execute()
-	if err == nil {
+	if err := cmd.Execute(); err == nil {
 		t.Fatal("expected error for invalid --name")
 	}
 }
