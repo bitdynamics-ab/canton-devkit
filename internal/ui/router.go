@@ -36,6 +36,7 @@ func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
 	// owns one resource; new resources mount themselves here as
 	// they land.
 	handlers.MountInstances(mux)
+	handlers.MountAuth(mux)
 	// /events (SSE) — added by BIT-130. Handler does its own
 	// Origin check (sse.go) since EventSource sends GET and the
 	// global CSRF middleware is GET-exempt.
