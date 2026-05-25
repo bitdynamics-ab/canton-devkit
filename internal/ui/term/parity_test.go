@@ -113,8 +113,12 @@ func TestBoxKinds_DecisionTable(t *testing.T) {
 		// the renderer ran. Color difference can't be asserted
 		// without ANSI inspection — we save that for the
 		// integration tests.
-		if !strings.Contains(got, "┃") {
-			t.Errorf("Box(%v) missing left border ┃: %q", label, got)
+		// Structural assertion via BoxLeftBorderRune (PR #31 #9
+		// review pin) — lets a future Windows ASCII profile
+		// substitute the rune without rewriting this assertion.
+		if !strings.ContainsRune(got, BoxLeftBorderRune) {
+			t.Errorf("Box(%v) missing left border (rune=%q): %q",
+				label, BoxLeftBorderRune, got)
 		}
 	}
 }

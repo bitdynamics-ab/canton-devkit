@@ -41,7 +41,9 @@ const (
 	// it invokes `docker compose down`. Without it, a crash or SIGKILL
 	// mid-teardown would leave the registry reporting `running` while
 	// the containers may be partially torn down — `localnet status`
-	// would then lie to the user. Zhe flagged this on PR #21.
+	// would then lie to the user. Zhe flagged this on PR #21; lives
+	// on m1-foundation so list.go's statusGlyph and the types
+	// projection test can both reference the constant.
 	StatusStopping Status = "stopping"
 	StatusStopped  Status = "stopped"
 	StatusFailed   Status = "failed"

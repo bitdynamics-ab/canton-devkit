@@ -32,9 +32,25 @@ func (s Spinner) Init() tea.Cmd {
 	return s.tick()
 }
 
+// SpinnerTickMsg is exported so tests can construct one and drive
+// Update without waiting on the real 80 ms timer.
+type SpinnerTickMsg = spinnerTickMsg
+
 // Update advances the frame on every tick and schedules the next one.
 // Unknown messages pass through unchanged — embedding parents stay
 // free to dispatch on their own message types.
+//
+// **Value receiver — MUST reassign.** Spinner is a value type
+// (not pointer); the frame field only advances on the returned
+// copy. Embedding parents MUST capture the return:
+//
+// Example:
+//
+//	var cmd tea.Cmd
+//	m.spinner, cmd = m.spinner.Update(msg) // MUST reassign — value receiver
+//
+// TestSpinner_ReassignmentContract pins this so a future "let's
+// switch to a pointer receiver" PR fails loudly here first.
 func (s Spinner) Update(msg tea.Msg) (Spinner, tea.Cmd) {
 	if _, ok := msg.(spinnerTickMsg); !ok {
 		return s, nil

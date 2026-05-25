@@ -14,11 +14,17 @@ import (
 //	  ✓  canton-domain ...
 //	  ✓  participant-alice ...
 //
-// right is optional dim trailing text that sits flush-right on the
-// header row (the "auto-refresh 2s" hint in the mockup). Pass "" to
-// omit. children is a pre-rendered block — typically the join of
+// right is optional dim trailing text on the header row (the
+// "auto-refresh 2s" hint in the mockup). Pass "" to omit.
+// children is a pre-rendered block — typically the join of
 // several Step/KV/Table lines.
-func Section(title, right, children string) string {
+//
+// width controls the underline length in cells. Pass 0 for the
+// auto-size default (VisibleLen(title)+len(right)+4, capped at 80).
+// Reviewer pin on PR #31 #7: the previous fixed-60-rune separator
+// silently truncated for long titles or wasted space for short
+// ones. TestSection_SeparatorMatchesWidthArg locks this in.
+func Section(title, right, children string, width int) string {
 	var head strings.Builder
 	head.WriteString(S().
 		Foreground(Brand).
@@ -28,11 +34,16 @@ func Section(title, right, children string) string {
 		head.WriteString("  ")
 		head.WriteString(Dimc(right))
 	}
-	// Width-agnostic underline: we use a fixed-character separator
-	// rather than padding to terminal width because the renderer
-	// doesn't know the destination width and we'd rather under-fill
-	// than overflow (which wraps badly in narrow terminals).
-	sep := S().Foreground(Faint).Render(strings.Repeat("─", 60))
+	if width == 0 {
+		width = VisibleLen(title) + len(right) + 4
+		if width > 80 {
+			width = 80
+		}
+		if width < 20 {
+			width = 20
+		}
+	}
+	sep := S().Foreground(Faint).Render(strings.Repeat("─", width))
 	return fmt.Sprintf("%s\n%s\n%s", head.String(), sep, indent(children, 2))
 }
 

@@ -32,7 +32,7 @@ func Table(cols []Column, rows [][]string) string {
 			widths[i] = c.Width
 			continue
 		}
-		widths[i] = visibleLen(c.Label)
+		widths[i] = VisibleLen(c.Label)
 	}
 	for _, row := range rows {
 		for i := range cols {
@@ -42,7 +42,7 @@ func Table(cols []Column, rows [][]string) string {
 			if i >= len(row) {
 				continue
 			}
-			if n := visibleLen(row[i]); n > widths[i] {
+			if n := VisibleLen(row[i]); n > widths[i] {
 				widths[i] = n
 			}
 		}
@@ -94,7 +94,7 @@ func Table(cols []Column, rows [][]string) string {
 // otherwise left-align. Padding uses spaces; we measure visible width
 // so ANSI-colored cells pad correctly.
 func padCell(s string, w int, align string) string {
-	pad := w - visibleLen(s)
+	pad := w - VisibleLen(s)
 	if pad <= 0 {
 		return s
 	}
@@ -104,7 +104,7 @@ func padCell(s string, w int, align string) string {
 	return s + strings.Repeat(" ", pad)
 }
 
-// visibleLen returns the rune-count of s with ANSI CSI escape
+// VisibleLen returns the rune-count of s with ANSI CSI escape
 // sequences (color codes) excluded. lipgloss output wraps cells in
 // `\x1b[...m` runs; counting raw bytes overstates the visible width
 // and inflates table padding.
@@ -114,7 +114,7 @@ func padCell(s string, w int, align string) string {
 // for SGR (color) sequences which is all lipgloss emits; non-CSI
 // escapes (OSC, DCS) are not handled but lipgloss doesn't produce
 // them.
-func visibleLen(s string) int {
+func VisibleLen(s string) int {
 	const (
 		stOut int = iota
 		stAfterEsc
