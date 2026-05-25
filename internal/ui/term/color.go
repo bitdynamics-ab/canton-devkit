@@ -22,10 +22,10 @@ import "github.com/charmbracelet/lipgloss"
 // next mockup review.
 var (
 	// Backgrounds + neutrals.
-	Background     = lipgloss.Color("#0E1116")
-	PanelBg        = lipgloss.Color("#13171E")
-	PanelBorder    = lipgloss.Color("#1F2630")
-	ChromeBg       = lipgloss.Color("#161B22")
+	Background  = lipgloss.Color("#0E1116")
+	PanelBg     = lipgloss.Color("#13171E")
+	PanelBorder = lipgloss.Color("#1F2630")
+	ChromeBg    = lipgloss.Color("#161B22")
 
 	// Text scale, brightest to faintest.
 	Text  = lipgloss.Color("#D6DAE0")

@@ -14,7 +14,7 @@ type ServiceStatus struct {
 	State   string `json:"state"`
 	Ports   string `json:"ports,omitempty"` // pre-formatted "4441, 4442"
 	CPUPct  string `json:"cpu_pct,omitempty"`
-	Memory  string `json:"memory,omitempty"` // "740MiB"
+	Memory  string `json:"memory,omitempty"`  // "740MiB"
 	Profile string `json:"profile,omitempty"` // sv | app-provider | …
 }
 

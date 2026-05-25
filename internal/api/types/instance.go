@@ -40,8 +40,8 @@ type InstanceSummary struct {
 	Name          string `json:"name"`
 	Status        string `json:"status"`
 	SpliceVersion string `json:"splice_version"`
-	Ports         string `json:"ports"`             // pre-formatted "4441-4487" range
-	StartedAgo    string `json:"started_ago"`       // "1h 22m ago"; empty if !running
+	Ports         string `json:"ports"`       // pre-formatted "4441-4487" range
+	StartedAgo    string `json:"started_ago"` // "1h 22m ago"; empty if !running
 	VolumeSize    string `json:"volume_size,omitempty"`
 }
 
