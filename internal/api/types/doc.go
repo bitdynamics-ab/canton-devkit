@@ -4,6 +4,13 @@
 // added here flows into both surfaces by serializing the same Go
 // struct.
 //
+// Scope note (BIT-141 umbrella review on PR #31): although the
+// primary M2 consumer is the Web UI handler set (BIT-131), every
+// shape here is ALSO consumed by an M1 CLI `--json` flag.
+// Splitting the package across milestones would force the CLI
+// to maintain a parallel shape and reintroduce the drift this
+// package exists to prevent. The package ships as M1 foundation.
+//
 // Design rules:
 //
 //  1. JSON tags use snake_case; matches existing
