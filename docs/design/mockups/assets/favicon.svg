@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="BitDynamics">
+  <title>BitDynamics — Favicon</title>
+  
+  <rect width="64" height="64" rx="10" fill="#07090A"></rect>
+  <rect x="14" y="14" width="36" height="36" fill="none" stroke="#5B6571" stroke-width="2"></rect>
+  <rect x="24" y="24" width="16" height="16" fill="#C8FF5A"></rect>
+  <line x1="32" y1="6" x2="32" y2="14" stroke="#C8FF5A" stroke-width="3"></line>
+  <line x1="32" y1="50" x2="32" y2="58" stroke="#5B6571" stroke-width="2"></line>
+</svg>

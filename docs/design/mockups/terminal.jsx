@@ -76,7 +76,15 @@ function Terminal({ title = "~/canton-app", subtitle, width = '100%', height = '
         <div style={{ flex: 1, textAlign: 'center', fontSize: 11.5, color: TERM.dim, letterSpacing: 0.2 }}>
           {title}{subtitle && <span style={{ color: TERM.faint }}> — {subtitle}</span>}
         </div>
-        <span style={{ fontSize: 10, color: TERM.faint, letterSpacing: 0.4, fontFamily: fontMono, paddingRight: 4 }}>BitDynamics</span>
+        <span style={{ display:'inline-flex', alignItems:'center', gap: 5, paddingRight: 4 }}>
+          <svg width="11" height="11" viewBox="0 0 64 64" aria-hidden="true">
+            <rect x="10" y="10" width="44" height="44" fill="none" stroke={TERM.faint} strokeWidth="4" />
+            <rect x="22" y="22" width="20" height="20" fill="#CCFB6A" />
+            <line x1="32" y1="0"  x2="32" y2="8"  stroke="#CCFB6A" strokeWidth="5" />
+            <line x1="32" y1="56" x2="32" y2="64" stroke={TERM.faint} strokeWidth="4" />
+          </svg>
+          <span style={{ fontSize: 10, color: TERM.faint, letterSpacing: 0.6, fontFamily: fontMono, fontWeight: 600 }}>BITDYNAMICS</span>
+        </span>
       </div>
       {/* body */}
       <div style={{ padding: pad, flex: 1, overflow: 'hidden' }}>{children}</div>

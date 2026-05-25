@@ -154,12 +154,117 @@ function DashboardScreen() {
             wallet.localhost · scan.localhost · canton.localhost · grpc 4901, 3901, 2901 · DSO party::1220dso0…
           </div>
         </div>
-        <div style={{display:'flex', gap:8}}>
+        <div style={{display:'flex', gap:8, flexWrap:'wrap', justifyContent:'flex-end'}}>
           <button className="w-btn"><span style={{color:W.brand}}>⏻</span> Restart</button>
           <button className="w-btn"><span style={{color:W.amber}}>◐</span> Snapshot</button>
-          <button className="w-btn primary">Open in CLI</button>
+          <button className="w-btn primary"><span style={{marginRight:2}}>⌬</span> Generate JWT</button>
+          <button className="w-btn"><span style={{color:W.info}}>↓</span> Export app config</button>
         </div>
       </section>
+
+      {/* Developer credentials */}
+      <Card pad={0} title="Developer setup" subtitle="Grab credentials and config for your app. Auth mode: shared-secret (default) · switch to OAuth2 via Keycloak in Settings."
+        style={{marginBottom:16}}
+        action={<>
+          <span className="w-pill" style={{background:W.surface2, color:W.dim, border:`1px solid ${W.border}`}}>shared-secret</span>
+          <button className="w-btn" style={{padding:'5px 10px', fontSize:11.5}}>Rotate all</button>
+        </>}>
+        <div style={{display:'grid', gridTemplateColumns:'1.4fr 1.4fr 1fr', gap:0}}>
+
+          {/* JWT generator */}
+          <div style={{padding:'14px 18px', borderRight:`1px solid ${W.border}`}}>
+            <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:8}}>
+              <span style={{
+                width:28, height:28, borderRadius:7, display:'flex', alignItems:'center', justifyContent:'center',
+                background: `${W.brand}1A`, color: W.brand, fontSize: 14,
+              }}>⌬</span>
+              <div style={{fontWeight:600, fontSize:13}}>JWT token</div>
+              <Pill color={W.ok}><Dot color={W.ok} /> active</Pill>
+              <span style={{marginLeft:'auto', color:W.dim, fontSize:11.5}}>expires in 23h</span>
+            </div>
+            <div style={{display:'flex', gap:6, marginBottom:10}}>
+              <button className="w-btn" style={{padding:'5px 9px', fontSize:11.5}}>party: app-provider ⌄</button>
+              <button className="w-btn" style={{padding:'5px 9px', fontSize:11.5}}>ttl: 24h ⌄</button>
+              <button className="w-btn" style={{padding:'5px 9px', fontSize:11.5}}>aud: ledger-api ⌄</button>
+            </div>
+            <div style={{
+              background: W.bg, border:`1px solid ${W.border}`, borderRadius:7,
+              padding:'10px 12px', fontFamily: wMono, fontSize: 11, color: W.text2,
+              wordBreak:'break-all', lineHeight: 1.5, marginBottom: 8, position:'relative',
+            }}>
+              <span style={{color:W.mag}}>eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9</span>
+              <span style={{color:W.dim}}>.</span>
+              <span style={{color:W.brand}}>eyJodHRwczovL2RhbWwuY29tL2xlZGdlci1hcGkiOnsibGVkZ2VySWQiOiJsb2NhbG5ldC1odWJibGUiLCJhcHBsaWNhdGlvbklkIjoiZGV2a2l0In19</span>
+              <span style={{color:W.dim}}>.</span>
+              <span style={{color:W.amber}}>a8f2c4e9d1b0f7e6c3a5b2d9f1e0a4c7b8</span>
+              <button className="w-iconbtn" style={{position:'absolute', top:6, right:6, fontSize:11}} title="Copy">⎘</button>
+            </div>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <Mono c={W.dim}>cli: dpm localnet jwt --party app-provider</Mono>
+              <button className="w-btn primary" style={{padding:'5px 10px', fontSize:11.5}}>Regenerate</button>
+            </div>
+          </div>
+
+          {/* App config */}
+          <div style={{padding:'14px 18px', borderRight:`1px solid ${W.border}`}}>
+            <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:8}}>
+              <span style={{
+                width:28, height:28, borderRadius:7, display:'flex', alignItems:'center', justifyContent:'center',
+                background: `${W.info}1A`, color: W.info, fontSize: 14,
+              }}>{ '{}' }</span>
+              <div style={{fontWeight:600, fontSize:13}}>App config</div>
+              <span style={{marginLeft:'auto', color:W.dim, fontSize:11.5}}>endpoints + party IDs + JWT</span>
+            </div>
+            <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:10}}>
+              {['.env', 'daml.yaml', 'package.json', 'application.conf', 'json', 'yaml'].map((f, i) => (
+                <button key={i} className="w-btn" style={{padding:'4px 9px', fontSize:11.5, ...(i===0 ? {background:W.brand, color:'#082018', borderColor:W.brand, fontWeight:600} : {})}}>{f}</button>
+              ))}
+            </div>
+            <pre style={{
+              margin:0, background:W.bg, border:`1px solid ${W.border}`, borderRadius:7,
+              padding:'10px 12px', fontFamily:wMono, fontSize:11, color:W.text2, lineHeight:1.6, overflow:'hidden',
+            }}>
+<span style={{color:W.dim}}># app-provider · ready for your dApp</span>{'\n'}
+<span style={{color:W.info}}>LEDGER_HOST</span>=<span style={{color:W.text}}>localhost</span>{'\n'}
+<span style={{color:W.info}}>LEDGER_PORT</span>=<span style={{color:W.text}}>3901</span>{'\n'}
+<span style={{color:W.info}}>PARTY_ID</span>=<span style={{color:W.mag}}>app-provider::1220a8d2…</span>{'\n'}
+<span style={{color:W.info}}>JWT_TOKEN</span>=<span style={{color:W.amber}}>eyJ0eXAiOi…</span>{'\n'}
+<span style={{color:W.info}}>WALLET_URL</span>=<span style={{color:W.text}}>http://wallet.localhost</span>
+            </pre>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:8}}>
+              <Mono c={W.dim}>cli: dpm localnet env --name hubble</Mono>
+              <button className="w-btn primary" style={{padding:'5px 10px', fontSize:11.5}}>Download .env</button>
+            </div>
+          </div>
+
+          {/* Quick connect */}
+          <div style={{padding:'14px 18px'}}>
+            <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:10}}>
+              <span style={{
+                width:28, height:28, borderRadius:7, display:'flex', alignItems:'center', justifyContent:'center',
+                background: `${W.mag}1A`, color: W.mag, fontSize: 14,
+              }}>↗</span>
+              <div style={{fontWeight:600, fontSize:13}}>Quick connect</div>
+            </div>
+            {[
+              { name:'Wallet UI',    url:'wallet.localhost',         color: W.brand },
+              { name:'Scan · CNS',   url:'scan.localhost',            color: W.info  },
+              { name:'Swagger',      url:'localhost:9090',            color: W.amber },
+              { name:'Grafana',      url:'localhost:3000',            color: W.mag   },
+              { name:'Daml Shell',   url:'dpm daml-shell --name hubble', color: W.rose, cli:true },
+            ].map((r,i) => (
+              <div key={i} className="w-row" style={{
+                display:'flex', alignItems:'center', gap:8, padding:'6px 10px', borderRadius:6, marginBottom:2,
+              }}>
+                <span style={{width:6, height:6, borderRadius:'50%', background:r.color}} />
+                <span style={{fontSize:12, fontWeight:500, flex:'0 0 auto'}}>{r.name}</span>
+                <Mono c={W.dim}>{r.url}</Mono>
+                <span className="w-kbd" style={{marginLeft:'auto'}}>{r.cli ? '↗' : '⌘C'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Card>
 
       {/* KPI strip */}
       <div style={{display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:14, marginBottom:16}}>
