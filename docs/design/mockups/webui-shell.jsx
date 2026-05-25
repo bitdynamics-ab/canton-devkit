@@ -55,14 +55,28 @@ if (typeof document !== 'undefined' && !document.getElementById('w-styles')) {
   document.head.appendChild(s);
 }
 
-// ── Logo mark ────────────────────────────────────────────────────────────
-function LogoMark({ size = 22 }) {
+// ── BitDynamics mark (chip/candle motif: outer frame + lime square + leads) ──
+function LogoMark({ size = 22, frame = '#5C6573', fill = '#CCFB6A' }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <rect x="2" y="2" width="20" height="20" rx="6" fill={W.brand} fillOpacity="0.18" />
-      <path d="M8 8h8M8 12h5M8 16h8" stroke={W.brand} strokeWidth="1.6" strokeLinecap="round" />
-      <circle cx="17.5" cy="12" r="1.6" fill={W.brand} />
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-label="BitDynamics">
+      <rect x="10" y="10" width="44" height="44" fill="none" stroke={frame} strokeWidth="3" />
+      <rect x="22" y="22" width="20" height="20" fill={fill} />
+      <line x1="32" y1="0"  x2="32" y2="8"  stroke={fill}  strokeWidth="4" />
+      <line x1="32" y1="56" x2="32" y2="64" stroke={frame} strokeWidth="3" />
     </svg>
+  );
+}
+
+// ── BitDynamics horizontal lockup (mark + wordmark) ──
+function LogoLockup({ height = 18, color = '#E6E9EE', frame = '#5C6573', fill = '#CCFB6A' }) {
+  return (
+    <span style={{display:'inline-flex', alignItems:'center', gap: height * 0.45, lineHeight: 1}}>
+      <LogoMark size={height} frame={frame} fill={fill} />
+      <span style={{
+        fontFamily: wMono, color, fontWeight: 600,
+        letterSpacing: height * 0.06, fontSize: height * 0.78,
+      }}>BITDYNAMICS</span>
+    </span>
   );
 }
 
@@ -171,12 +185,15 @@ function AppShell({ active = 'overview', instance = 'hubble', children, topRight
         <main className="w-scroll" style={{flex:1, overflow:'auto', padding: '20px 28px 44px', minHeight:0}}>{children}</main>
         <footer style={{
           position:'absolute', bottom: 0, left: 0, right: 0,
-          padding:'6px 28px', display:'flex', alignItems:'center', justifyContent:'space-between',
+          padding:'8px 28px', display:'flex', alignItems:'center', justifyContent:'space-between',
           background: `linear-gradient(180deg, transparent 0%, ${W.bg} 60%)`,
           color: W.faint, fontSize: 10.5, fontFamily: wMono, letterSpacing: 0.3,
           pointerEvents: 'none',
         }}>
-          <span><span style={{color: W.dim}}>built by</span> <span style={{color: W.text2}}>BitDynamics</span></span>
+          <span style={{display:'inline-flex', alignItems:'center', gap:8}}>
+            <span style={{color: W.dim}}>built by</span>
+            <LogoLockup height={13} color={W.text2} frame={W.dim} />
+          </span>
           <span>canton-devkit v0.7.2 · splice 0.4.12</span>
         </footer>
       </div>
@@ -258,4 +275,4 @@ function Mono({ children, c = W.text }) {
   return <span style={{ fontFamily: wMono, color: c, fontSize: 12 }}>{children}</span>;
 }
 
-Object.assign(window, { W, wMono, wSans, AppShell, TopBar, Card, Mono, Pill, Dot, LogoMark });
+Object.assign(window, { W, wMono, wSans, AppShell, TopBar, Card, Mono, Pill, Dot, LogoMark, LogoLockup });
