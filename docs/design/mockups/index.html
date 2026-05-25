@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Canton DevKit — CLI & Web UI design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  html, body, #root { margin: 0; padding: 0; background:#f0eee9; }
+  body { font-family: 'IBM Plex Sans', 'Inter Tight', system-ui, sans-serif; color:#1c1917; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<!-- shared primitives -->
+<script type="text/babel" src="terminal.jsx"></script>
+<script type="text/babel" src="webui-shell.jsx"></script>
+
+<!-- CLI screens -->
+<script type="text/babel" src="screens-lifecycle.jsx"></script>
+<script type="text/babel" src="screens-dar.jsx"></script>
+<script type="text/babel" src="screens-contracts.jsx"></script>
+<script type="text/babel" src="screens-tokens-help.jsx"></script>
+
+<!-- Web UI screens -->
+<script type="text/babel" src="webui-dashboard.jsx"></script>
+<script type="text/babel" src="webui-dar.jsx"></script>
+<script type="text/babel" src="webui-explorer.jsx"></script>
+<script type="text/babel" src="webui-metrics-agent.jsx"></script>
+<script type="text/babel" src="webui-extras.jsx"></script>
+
+<!-- frames -->
+<script type="text/babel" src="browser-window.jsx"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState } = React;
+
+// Fixed-size wrapper for our 1400×900 Web UI screens (inside DCArtboard).
+function WebFrame({ children, label, url }) {
+  return (
+    <ChromeWindow
+      width={1440} height={900}
+      url={url}
+      tabs={[{ title: label, active: true }]}
+      activeIndex={0}
+    >
+      <div style={{ width: 1440, height: 870 - 34, background:'#0B0E13' }}>
+        {children}
+      </div>
+    </ChromeWindow>
+  );
+}
+
+function App() {
+  return (
+    <DesignCanvas>
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      <DCSection id="web" title="Web UI · M2 dashboard" subtitle="Browser-based companion to the CLI. Same telemetry, same data, all keyboard-driven.">
+        <DCArtboard id="web-overview" label="Overview · LocalNet Dashboard" width={1440} height={900}>
+          <WebFrame label="Canton DevKit · Overview" url="devkit.local/hubble/overview">
+            <DashboardScreen />
+          </WebFrame>
+        </DCArtboard>
+
+        <DCArtboard id="web-explorer" label="Explorer · ACS + Transactions" width={1440} height={900}>
+          <WebFrame label="Explorer · hubble" url="devkit.local/hubble/explorer">
+            <ExplorerScreen />
+          </WebFrame>
+        </DCArtboard>
+
+        <DCArtboard id="web-dar" label="DAR Manager · upload, vet, diff" width={1440} height={900}>
+          <WebFrame label="DAR Manager · hubble" url="devkit.local/hubble/dar">
+            <DarManagerScreen />
+          </WebFrame>
+        </DCArtboard>
+
+        <DCArtboard id="web-metrics" label="Metrics · Canton Grafana preset" width={1440} height={900}>
+          <WebFrame label="Metrics · hubble" url="devkit.local/hubble/metrics">
+            <MetricsScreen />
+          </WebFrame>
+        </DCArtboard>
+
+        <DCArtboard id="web-tokens" label="Tokens · CIP-0112 faucet + cards" width={1440} height={900}>
+          <WebFrame label="Tokens · hubble" url="devkit.local/hubble/tokens">
+            <TokensScreen />
+          </WebFrame>
+        </DCArtboard>
+
+        <DCArtboard id="web-agent" label="Agent Skill · Claude / Codex" width={1440} height={900}>
+          <WebFrame label="Agent Skill · hubble" url="devkit.local/hubble/agent">
+            <AgentScreen />
+          </WebFrame>
+        </DCArtboard>
+
+        <DCArtboard id="web-palette" label="Command palette · ⌘K overlay" width={1440} height={900}>
+          <WebFrame label="⌘K · hubble" url="devkit.local/hubble/overview?palette=open">
+            <CommandPaletteScreen />
+          </WebFrame>
+        </DCArtboard>
+
+        <DCArtboard id="web-instances" label="Multi-instance switcher" width={1440} height={900}>
+          <WebFrame label="Switch LocalNet · hubble" url="devkit.local/instances">
+            <InstanceSwitcherScreen />
+          </WebFrame>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      <DCSection id="cli-life" title="CLI · LocalNet lifecycle" subtitle="dpm localnet up / status / doctor / logs / env / list / down · plus a friendly error">
+        <DCArtboard id="cli-help"    label="Help · root"          width={760}  height={620}><ScreenHelp /></DCArtboard>
+        <DCArtboard id="cli-up"      label="up · preflight + ready" width={780} height={620}><ScreenUp /></DCArtboard>
+        <DCArtboard id="cli-status"  label="status · dashboard"    width={780} height={620}><ScreenStatus /></DCArtboard>
+        <DCArtboard id="cli-doctor"  label="doctor · host check"   width={780} height={540}><ScreenDoctor /></DCArtboard>
+        <DCArtboard id="cli-logs"    label="logs · live tail"      width={840} height={460}><ScreenLogs /></DCArtboard>
+        <DCArtboard id="cli-env"     label="env · .env export"     width={780} height={380}><ScreenEnv /></DCArtboard>
+        <DCArtboard id="cli-list"    label="list · instances"      width={840} height={300}><ScreenList /></DCArtboard>
+        <DCArtboard id="cli-down"    label="down · graceful stop"  width={780} height={300}><ScreenDown /></DCArtboard>
+        <DCArtboard id="cli-err"     label="error · helpful failure" width={780} height={400}><ScreenError /></DCArtboard>
+      </DCSection>
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      <DCSection id="cli-dar" title="CLI · DAR management" subtitle="upload · list · info · diff · watch · build-upload (delegates to dpm build)">
+        <DCArtboard id="cli-dar-up"    label="dar upload · vet on multiple participants" width={840} height={440}><ScreenDarUpload /></DCArtboard>
+        <DCArtboard id="cli-dar-list"  label="dar list · packages"                       width={920} height={460}><ScreenDarList /></DCArtboard>
+        <DCArtboard id="cli-dar-info"  label="dar info · templates, choices, deps"       width={840} height={560}><ScreenDarInfo /></DCArtboard>
+        <DCArtboard id="cli-dar-diff"  label="dar diff · SCU-aware verdict"              width={840} height={540}><ScreenDarDiff /></DCArtboard>
+        <DCArtboard id="cli-dar-watch" label="dar watch · hot redeploy on save"          width={840} height={400}><ScreenDarWatch /></DCArtboard>
+      </DCSection>
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      <DCSection id="cli-explorer" title="CLI · Contract & transaction exploration" subtitle="Capabilities daml-shell does NOT offer — live watch, multi-filter listing, per-party projection.">
+        <DCArtboard id="cli-watch"   label="contracts watch · live create/archive" width={1000} height={500}><ScreenContractsWatch /></DCArtboard>
+        <DCArtboard id="cli-tx-ls"   label="tx ls · party + offset + template"     width={1000} height={500}><ScreenTxList /></DCArtboard>
+        <DCArtboard id="cli-tx-rp"   label="tx replay · per-party visibility"      width={920}  height={580}><ScreenTxReplay /></DCArtboard>
+      </DCSection>
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      <DCSection id="cli-obs" title="CLI · Observability" subtitle="dpm localnet metrics · terminal summary of the Grafana preset">
+        <DCArtboard id="cli-metrics" label="metrics · throughput, latency, ACS" width={840} height={500}><ScreenMetrics /></DCArtboard>
+      </DCSection>
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      <DCSection id="cli-token" title="CLI · Token toolkit (CIP-0112)" subtitle="Interactive wizard for new tokens, plus convenience mint/transfer/burn/balance.">
+        <DCArtboard id="cli-token-create" label="token create · CIP-0112 wizard" width={780} height={620}><ScreenTokenCreate /></DCArtboard>
+        <DCArtboard id="cli-token-act"    label="mint · transfer · balance"      width={840} height={500}><ScreenTokenActions /></DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
