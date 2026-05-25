@@ -9,6 +9,12 @@ package types
 // SchemaVersion of the underlying registry record) stay in
 // registry.State and are deliberately omitted here.
 type Instance struct {
+	// SchemaVersion ties this response to the package SchemaVersion
+	// constant so handlers + CLI --json consumers can detect format
+	// breaks. Reviewer pin on PR #31 #3:
+	// TestAllTopLevelResponses_CarrySchemaVersion enforces that
+	// every top-level response struct here has this field.
+	SchemaVersion int    `json:"schema_version"`
 	Name          string `json:"name"`
 	SpliceVersion string `json:"splice_version"`
 	Status        string `json:"status"` // "running" | "stopped" | …

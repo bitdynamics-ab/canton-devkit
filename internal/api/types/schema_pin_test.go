@@ -2,9 +2,50 @@ package types
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+// TestAllTopLevelResponses_CarrySchemaVersion is the BIT-143 #3
+// review pin: every top-level response struct in this package
+// MUST have a `SchemaVersion int` field so consumers can detect
+// format breaks. Reflection-driven so a new response type added
+// without the field fails LOUDLY here rather than silently
+// shipping without versioning.
+//
+// We hand-enumerate the "top-level" set because reflection over a
+// package's exported types isn't available at runtime in Go;
+// every entry corresponds to a struct callers serialize whole as
+// a JSON response body.
+//
+// Rule: when adding a new top-level response type, add it to the
+// hand-list AND give it a `SchemaVersion int` field. The test
+// fails either way if you forget.
+func TestAllTopLevelResponses_CarrySchemaVersion(t *testing.T) {
+	topLevel := []interface{}{
+		Instance{},
+		ListResponse{},
+		PreflightReport{},
+		Snapshot{},
+	}
+	for _, v := range topLevel {
+		typ := reflect.TypeOf(v)
+		f, ok := typ.FieldByName("SchemaVersion")
+		if !ok {
+			t.Errorf("%s missing required SchemaVersion field", typ.Name())
+			continue
+		}
+		if f.Type.Kind() != reflect.Int {
+			t.Errorf("%s.SchemaVersion is %s, want int", typ.Name(), f.Type.Kind())
+		}
+		// JSON tag must be snake_case `schema_version` so the
+		// wire shape stays consistent across types.
+		if tag := f.Tag.Get("json"); tag != "schema_version" && !strings.HasPrefix(tag, "schema_version,") {
+			t.Errorf("%s.SchemaVersion json tag = %q, want \"schema_version\"", typ.Name(), tag)
+		}
+	}
+}
 
 // TestSchemaVersion_ConsistentAcrossResponses is the BIT-143
 // review pin: every top-level response struct that carries a

@@ -19,6 +19,13 @@ const (
 	BoxInfo
 )
 
+// BoxLeftBorderRune is the glyph Box uses for its left accent bar.
+// Exported as a constant so tests can assert presence structurally
+// (`strings.Count(out, string(BoxLeftBorderRune))`) instead of hard-
+// coding the literal "┃" — lets a future Windows ASCII profile
+// substitute "|" without breaking tests. Reviewer pin on PR #31 #9.
+const BoxLeftBorderRune = '┃'
+
 // Box renders a left-accented, padded block — the "READY" /
 // "BREAKING" callout style from the mockups. Equivalent to:
 //

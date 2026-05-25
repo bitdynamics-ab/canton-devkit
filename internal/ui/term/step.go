@@ -3,6 +3,7 @@ package term
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 // StepKind selects the glyph + color a Step row renders with. The set
@@ -62,13 +63,17 @@ func Step(kind StepKind, label, detail, elapsed string) string {
 // KV renders one "key: value" pair with a fixed-width dim key column.
 // Mirrors terminal.jsx::KV. keyWidth is the left-column width in
 // runes; pass 0 to default to 14 (the JSX default).
+//
+// Padding is measured in RUNES (not bytes) so multi-byte keys like
+// "日本" align with ASCII keys of the same visual width.
+// TestKV_MultiByteKeyAlignment locks this in.
 func KV(key string, value string, keyWidth int) string {
 	if keyWidth <= 0 {
 		keyWidth = 14
 	}
 	k := key
-	if len(k) < keyWidth {
-		k = k + strings.Repeat(" ", keyWidth-len(k))
+	if w := utf8.RuneCountInString(k); w < keyWidth {
+		k = k + strings.Repeat(" ", keyWidth-w)
 	}
 	return Dimc(k) + "  " + Textc(value)
 }
