@@ -205,3 +205,58 @@ func TestSSE_MultiLineDataGetsPerLinePrefix(t *testing.T) {
 		}
 	}
 }
+
+// TestSSE_RejectsCrossOriginConnection is the reviewer pin
+// (PR #42 #c): a browser tab on evil.example.com can open
+// EventSource("http://127.0.0.1:7777/events") and read our event
+// stream — EventSource always sends GET (CSRF-exempt globally),
+// so the SSE handler must do its own Origin check.
+func TestSSE_RejectsCrossOriginConnection(t *testing.T) {
+	hub := stream.New()
+	assets, _ := AssetsHandler()
+	srv := New(Config{Port: 0, Router: NewRouter(assets, hub)})
+	addr, _ := srv.Listen()
+	go srv.Serve() //nolint:errcheck
+	defer srv.Shutdown(context.Background())
+
+	req, _ := http.NewRequest("GET", "http://"+addr+"/events", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /events: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("cross-origin /events status = %d, want 403", resp.StatusCode)
+	}
+}
+
+// TestSSE_NoOriginAllowedForCurl is the symmetric pin: a CLI tool
+// (curl, EventSource client outside a browser) that doesn't send
+// Origin at all should still be allowed — there's no CSRF risk
+// without a browser. Catches the regression class where the
+// gate over-tightens and refuses legitimate non-browser clients.
+func TestSSE_NoOriginAllowedForCurl(t *testing.T) {
+	hub := stream.New()
+	assets, _ := AssetsHandler()
+	srv := New(Config{Port: 0, Router: NewRouter(assets, hub)})
+	addr, _ := srv.Listen()
+	go srv.Serve() //nolint:errcheck
+	defer srv.Shutdown(context.Background())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+addr+"/events", nil)
+	// No Origin header (curl default).
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /events: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusForbidden {
+		t.Errorf("/events with no Origin returned 403 — curl/CLI clients blocked")
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("/events with no Origin status = %d, want 200", resp.StatusCode)
+	}
+}

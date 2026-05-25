@@ -55,6 +55,24 @@ func sseHandler(hub *stream.Hub) http.Handler {
 			return
 		}
 
+		// Reviewer pin (PR #42 #c): SSE uses GET, which is exempt
+		// from the global CSRF middleware. But the threat model
+		// still applies — a tab on evil.example.com can open
+		// EventSource("http://127.0.0.1:7777/events") and read
+		// our event stream (Origin is sent but not checked by
+		// EventSource itself). Gate explicitly here.
+		//
+		// Origin is missing on direct curl (no browser), so we
+		// only enforce when it IS present and only fail on
+		// mismatch — curl users with no Origin proceed.
+		if origin := r.Header.Get("Origin"); origin != "" {
+			if err := checkOriginAgainstHost(r); err != nil {
+				http.Error(w, "forbidden: "+err.Error(),
+					http.StatusForbidden)
+				return
+			}
+		}
+
 		// SSE headers.
 		h := w.Header()
 		h.Set("Content-Type", "text/event-stream")

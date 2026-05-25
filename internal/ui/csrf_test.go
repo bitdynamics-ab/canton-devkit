@@ -64,7 +64,7 @@ func TestServer_AllowsNonLoopbackWhenExplicitlyOptedIn(t *testing.T) {
 // fetch() from any unrelated site the user has open.
 func TestCSRF_RejectsCrossOriginPost(t *testing.T) {
 	assets, _ := AssetsHandler()
-	srv := New(Config{Port: 0, Router: NewRouter(assets)})
+	srv := New(Config{Port: 0, Router: NewRouter(assets, nil)})
 	addr, _ := srv.Listen()
 	go srv.Serve() //nolint:errcheck
 	defer srv.Shutdown(context.Background())
@@ -87,7 +87,7 @@ func TestCSRF_RejectsCrossOriginPost(t *testing.T) {
 // important assertion is the status is NOT 403.
 func TestCSRF_AcceptsSameOriginPost(t *testing.T) {
 	assets, _ := AssetsHandler()
-	srv := New(Config{Port: 0, Router: NewRouter(assets)})
+	srv := New(Config{Port: 0, Router: NewRouter(assets, nil)})
 	addr, _ := srv.Listen()
 	go srv.Serve() //nolint:errcheck
 	defer srv.Shutdown(context.Background())
@@ -109,7 +109,7 @@ func TestCSRF_AcceptsSameOriginPost(t *testing.T) {
 // for cross-origin requests). Default to refusing.
 func TestCSRF_RejectsMissingOriginPost(t *testing.T) {
 	assets, _ := AssetsHandler()
-	srv := New(Config{Port: 0, Router: NewRouter(assets)})
+	srv := New(Config{Port: 0, Router: NewRouter(assets, nil)})
 	addr, _ := srv.Listen()
 	go srv.Serve() //nolint:errcheck
 	defer srv.Shutdown(context.Background())
