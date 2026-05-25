@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { type InstanceSummary } from "../api";
 import { W } from "../tokens";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
+import { CreateLocalNetModal } from "./CreateLocalNetModal";
 import { DeveloperSetup } from "./DeveloperSetup";
 import { InstanceDetail } from "./InstanceDetail";
 
@@ -19,12 +21,49 @@ import { InstanceDetail } from "./InstanceDetail";
 // status flips — needs a producer in internal/localnet first).
 export function Dashboard() {
   const sel = useInstanceSelection();
+  const [createOpen, setCreateOpen] = useState(false);
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 600, marginTop: 0 }}>
-        LocalNet instances
-      </h1>
+      <header
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          marginBottom: 12,
+        }}
+      >
+        <h1 style={{ fontSize: 20, fontWeight: 600, marginTop: 0, marginBottom: 0 }}>
+          LocalNet instances
+        </h1>
+        <button
+          onClick={() => setCreateOpen(true)}
+          style={{
+            background: W.brand,
+            color: "#082018",
+            border: `1px solid ${W.brand}`,
+            borderRadius: 6,
+            padding: "6px 14px",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          + New instance
+        </button>
+      </header>
+
+      <CreateLocalNetModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(name) => {
+          // After a successful create, refresh the list and
+          // promote the new instance to the URL-driven selection
+          // so the detail card pops the moment the modal closes.
+          sel.refresh();
+          sel.select(name);
+        }}
+      />
 
       {sel.loading && <p style={{ color: W.dim }}>Loading…</p>}
 
@@ -48,7 +87,7 @@ export function Dashboard() {
             </div>
           )}
           {sel.instances.length === 0 ? (
-            <EmptyState />
+            <EmptyState onCreate={() => setCreateOpen(true)} />
           ) : (
             <InstanceTable
               instances={sel.instances}
@@ -172,21 +211,39 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function EmptyState() {
+function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
         borderRadius: 8,
-        padding: 24,
+        padding: 32,
         color: W.dim,
         textAlign: "center",
       }}
     >
-      <p style={{ marginTop: 0 }}>No LocalNet instances yet.</p>
-      <p style={{ marginBottom: 0 }}>
-        Run{" "}
+      <p style={{ marginTop: 0, fontSize: 14, color: W.text }}>
+        No LocalNet instances yet.
+      </p>
+      <button
+        onClick={onCreate}
+        style={{
+          background: W.brand,
+          color: "#082018",
+          border: `1px solid ${W.brand}`,
+          borderRadius: 6,
+          padding: "8px 18px",
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: "pointer",
+          margin: "8px 0 12px",
+        }}
+      >
+        + Create your first instance
+      </button>
+      <p style={{ marginBottom: 0, fontSize: 11.5 }}>
+        Or run{" "}
         <code style={{ color: W.text2 }}>dpm localnet up --name demo</code>{" "}
         in your terminal.
       </p>

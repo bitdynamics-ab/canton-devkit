@@ -190,3 +190,174 @@ export const fetchAppConfigJSON = (name: string) =>
   apiFetch<AppConfigPayload>(
     `/api/instances/${encodeURIComponent(name)}/app-config?format=json`,
   );
+
+// ── BIT-163d/e/f: create-instance flow ────────────────────────────
+
+// SpliceVersionEntry mirrors internal/ui/handlers/splice_versions.go
+// SpliceVersionEntry. Status taxonomy matches the version picker
+// badges in webui-create.jsx (latest / supported / available /
+// drifted / catalogued-only). Today the backend only emits
+// latest+supported; the rest are reserved for the upstream check.
+export interface SpliceVersionEntry {
+  tag: string;
+  status: "latest" | "supported" | "available" | "drifted" | "catalogued-only";
+  major: string;
+  commit: string;
+  note?: string;
+}
+
+export interface SpliceVersionsResponse {
+  schema_version: number;
+  latest_alias: string;
+  versions: SpliceVersionEntry[];
+}
+
+// fetchSpliceVersions powers the version picker in the create
+// modal. Stateless GET; safe to call on every modal open.
+export const fetchSpliceVersions = () =>
+  apiFetch<SpliceVersionsResponse>("/api/splice/versions");
+
+// CreateInstanceRequest mirrors handlers/instances.go upRequest.
+// version="" defers to the server's "latest" alias.
+export interface CreateInstanceRequest {
+  name: string;
+  version?: string;
+  allow_uncurated?: boolean;
+}
+
+// CreateInstanceAcceptedResponse is what POST /api/instances
+// returns on success (202). events_url is the relative path the
+// modal opens an EventSource on for progress streaming.
+export interface CreateInstanceAcceptedResponse {
+  schema_version: number;
+  instance: string;
+  events_url: string;
+}
+
+// createInstance kicks off the bring-up. The HTTP request returns
+// 202 immediately; progress arrives over the SSE stream at the
+// returned events_url. Errors here are client-side
+// (400 validation / 409 duplicate / 413 oversized / 503 disabled).
+export const createInstance = (req: CreateInstanceRequest) =>
+  apiFetch<CreateInstanceAcceptedResponse>("/api/instances", {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+
+// cancelInstanceUp invokes DELETE /api/instances/{name}/up. 204 on
+// success; 404 if the goroutine already exited (idempotent). The
+// SSE stream carries the synthetic kind=cancelled event the
+// backend publishes before the actual cancel propagates.
+export async function cancelInstanceUp(name: string): Promise<void> {
+  const resp = await fetch(
+    `/api/instances/${encodeURIComponent(name)}/up`,
+    { method: "DELETE" },
+  );
+  if (!resp.ok && resp.status !== 404) {
+    const text = await resp.text();
+    let body: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try {
+      body = JSON.parse(text);
+    } catch {
+      /* non-JSON; keep default */
+    }
+    throw new ApiError(resp.status, body);
+  }
+}
+
+// CreateProgressEvent — the discriminated-union of payloads
+// SSEProgress publishes (internal/ui/progress/sse_progress.go).
+// EventSource wire format: each event's `data:` line carries a
+// JSON object the modal switches on by `kind`.
+export type CreateProgressEvent =
+  | StepStartedEvent
+  | StepProgressEvent
+  | StepFinishedEvent
+  | StepFailedEvent
+  | WarnEvent
+  | DoneEvent
+  | OutputEvent
+  | CancelledEvent;
+
+// step names mirror internal/localnet/progress.go Step constants.
+// The modal renders a step row per name in display order.
+export type StepName =
+  | "resolve_version"
+  | "acquire_lock"
+  | "preflight"
+  | "fetch_splice"
+  | "persist_state"
+  | "start_services"
+  | "wait_healthy"
+  | "capture_jwts";
+
+export const STEP_ORDER: StepName[] = [
+  "resolve_version",
+  "acquire_lock",
+  "preflight",
+  "fetch_splice",
+  "persist_state",
+  "start_services",
+  "wait_healthy",
+  "capture_jwts",
+];
+
+export const STEP_LABELS: Record<StepName, string> = {
+  resolve_version: "Resolve version + adapter",
+  acquire_lock: "Acquire instance lock",
+  preflight: "Run preflight checks",
+  fetch_splice: "Fetch Splice LocalNet",
+  persist_state: "Persist state + write overlay",
+  start_services: "Starting services",
+  wait_healthy: "Wait for services to become healthy",
+  capture_jwts: "Capture JWTs · register endpoints",
+};
+
+interface StepStartedEvent {
+  kind: "step.started";
+  step: StepName;
+  detail?: string;
+}
+interface StepProgressEvent {
+  kind: "step.progress";
+  step: StepName;
+  detail?: string;
+  percent?: number;
+}
+interface StepFinishedEvent {
+  kind: "step.finished";
+  step: StepName;
+  detail?: string;
+}
+interface StepFailedEvent {
+  kind: "step.failed";
+  step: StepName;
+  summary?: string;
+  cause?: string;
+}
+interface WarnEvent {
+  kind: "warn";
+  message: string;
+}
+interface DoneEvent {
+  kind: "done";
+  detail?: string;
+}
+interface OutputEvent {
+  kind: "output";
+  stream: "stdout" | "stderr";
+  text: string;
+}
+interface CancelledEvent {
+  kind: "cancelled";
+  reason?: string;
+}
+
+// ApiErrorBody is re-exported here because cancelInstanceUp uses
+// it directly (it bypasses apiFetch for the raw fetch path).
+interface ApiErrorBody {
+  code: string;
+  error: string;
+  detail?: string;
+  remediation?: string[];
+}
