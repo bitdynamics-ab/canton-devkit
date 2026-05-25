@@ -497,3 +497,97 @@ func tamper(t *testing.T, archivePath, vol string, body []byte) {
 		t.Fatalf("rename: %v", err)
 	}
 }
+
+// TestRestore_SurfaceRegistryReadErrors is the reviewer pin (PR #37
+// #6) for the dropped-error half of the TOCTOU fix. The original
+// `existing, _ := registry.Read(name)` swallowed every error
+// including permission denied and corrupt JSON, then proceeded as
+// if there were no existing instance. We assert the new behaviour
+// by seeding a CORRUPT state.json for the target name: restore must
+// now fail with ExitRuntimeFailure (read error surfaced) instead
+// of silently overwriting.
+func TestRestore_SurfaceRegistryReadErrors(t *testing.T) {
+	regRoot := t.TempDir()
+	t.Setenv("CANTON_DEVKIT_REGISTRY", regRoot)
+	seedSnapshotInstance(t, "demo")
+
+	fa := &fakeArchiver{volumes: map[string][]byte{"canton-demo_postgres": []byte("x")}}
+	installFakeArchiver(t, fa)
+	dest := filepath.Join(t.TempDir(), "snap.tgz")
+	if code := RunSnapshot(context.Background(), io.Discard, io.Discard, "demo", dest); code != localnet.ExitSuccess {
+		t.Fatalf("snapshot failed: %d", code)
+	}
+
+	// Corrupt the state.json (NOT delete — that would hit the
+	// legitimate ErrNotFound path). The Read should return an
+	// error other than ErrNotFound, which the new code surfaces.
+	badPath := filepath.Join(regRoot, "demo", "state.json")
+	if err := os.WriteFile(badPath, []byte("{not json"), 0o600); err != nil {
+		t.Fatalf("corrupt state: %v", err)
+	}
+
+	installFakeArchiver(t, &fakeArchiver{volumes: map[string][]byte{}})
+	var out, errBuf bytes.Buffer
+	code := RunRestore(context.Background(), &out, &errBuf, "demo", dest, false)
+	if code == localnet.ExitSuccess {
+		t.Fatalf("RunRestore returned ExitSuccess despite corrupt registry state — read error was swallowed (PR #37 #6 regression). stderr=%q", errBuf.String())
+	}
+	if code != localnet.ExitRuntimeFailure {
+		t.Fatalf("RunRestore returned %d, want ExitRuntimeFailure; stderr=%q", code, errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "read existing registry state") {
+		t.Errorf("stderr should explain the read failure, got %q", errBuf.String())
+	}
+}
+
+// TestRestore_WarnsOnNameMismatch is the reviewer pin (PR #37 #7b):
+// when --name differs from the snapshot's embedded original name,
+// restore must surface a warning. The restore still proceeds —
+// renaming on restore is a supported workflow — but a stderr line
+// must mention BOTH names so the user understands embedded log
+// paths still reference the original.
+func TestRestore_WarnsOnNameMismatch(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedSnapshotInstance(t, "demo")
+	fa := &fakeArchiver{volumes: map[string][]byte{"canton-demo_postgres": []byte("x")}}
+	installFakeArchiver(t, fa)
+	dest := filepath.Join(t.TempDir(), "snap.tgz")
+	if code := RunSnapshot(context.Background(), io.Discard, io.Discard, "demo", dest); code != localnet.ExitSuccess {
+		t.Fatalf("snapshot failed: %d", code)
+	}
+
+	// Restore as a DIFFERENT name into a fresh registry.
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	installFakeArchiver(t, &fakeArchiver{volumes: map[string][]byte{}})
+	var out, errBuf bytes.Buffer
+	code := RunRestore(context.Background(), &out, &errBuf, "renamed", dest, false)
+	if code != localnet.ExitSuccess {
+		t.Fatalf("RunRestore (rename) failed: %d; stderr=%q", code, errBuf.String())
+	}
+	// Both names must appear in the warning so the user understands.
+	if !strings.Contains(errBuf.String(), "demo") || !strings.Contains(errBuf.String(), "renamed") {
+		t.Errorf("name-mismatch warning should mention BOTH names, got stderr=%q", errBuf.String())
+	}
+	if !strings.Contains(strings.ToLower(errBuf.String()), "warning") {
+		t.Errorf("stderr should be labeled 'warning', got %q", errBuf.String())
+	}
+	// Restore must still succeed under the new name.
+	if got, err := registry.Read("renamed"); err != nil || got.Name != "renamed" {
+		t.Errorf("renamed instance not registered: %v / %+v", err, got)
+	}
+}
+
+// TestAvailableDiskBytes_NonZero exercises the disk-preflight
+// helper on the test temp dir. We only assert a non-zero result on
+// the supported platforms — the function is allowed to return an
+// error on filesystems where statfs is unavailable, and the
+// caller treats errors as "preflight unavailable" (proceeds).
+func TestAvailableDiskBytes_NonZero(t *testing.T) {
+	got, err := availableDiskBytes(t.TempDir())
+	if err != nil {
+		t.Skipf("availableDiskBytes unavailable on this platform: %v", err)
+	}
+	if got == 0 {
+		t.Errorf("availableDiskBytes returned 0 — should report some free space on test temp dir")
+	}
+}

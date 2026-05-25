@@ -414,7 +414,18 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 		fmt.Sprintf("schema %d · %d volume(s) · captured %s",
 			meta.SchemaVersion, len(meta.Volumes), meta.CreatedAt), ""))
 
-	existing, _ := registry.Read(name)
+	// Reviewer pin (PR #37 #6): the original `existing, _ :=
+	// registry.Read(name)` swallowed every error including
+	// permission denied and corrupt JSON, then assumed nil meant
+	// "no existing instance" — masking real failures and letting a
+	// restore overwrite a state file the caller was warned about.
+	// We now distinguish ErrNotFound (the legitimate "no existing"
+	// case) from every other error (surface + bail).
+	existing, rerr := registry.Read(name)
+	if rerr != nil && !errors.Is(rerr, registry.ErrNotFound) {
+		_, _ = fmt.Fprintf(errw, "read existing registry state for %q: %s\n", name, rerr)
+		return localnet.ExitRuntimeFailure
+	}
 	if existing != nil {
 		if existing.Status == registry.StatusRunning {
 			_, _ = fmt.Fprintf(errw,
@@ -430,6 +441,48 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 			return localnet.ExitUserError
 		}
 	}
+
+	// Reviewer pin (PR #37 #7b): if the user-supplied --name
+	// differs from the snapshot's embedded original name, surface
+	// a warning. The restore proceeds (renaming-on-restore is a
+	// supported workflow) but the user should know they're not
+	// recovering the original identity — e.g. agents, log paths,
+	// and credentials baked into the embedded state may reference
+	// the OLD name. This is a soft warning, NOT a refusal.
+	if embedded.Name != "" && embedded.Name != name {
+		_, _ = fmt.Fprintln(errw, term.Warnc(fmt.Sprintf(
+			"warning: snapshot's original instance name was %q; restoring as %q. "+
+				"Embedded log paths and identifiers still reference the original name.",
+			embedded.Name, name)))
+	}
+
+	// Reviewer pin (PR #37 #7a): disk preflight. Restore unpacks
+	// every volume tar into the docker volume root; without a
+	// preflight the user can fill the disk mid-restore and leave
+	// a half-populated registry entry behind. Sum the expected
+	// volume sizes from the snapshot header and refuse if the
+	// destination filesystem has less free space + a 20% safety
+	// margin. The header sizes are the compressed-tar bytes; the
+	// margin covers tar overhead and filesystem block rounding.
+	if avail, err := availableDiskBytes(filepath.Dir(src)); err == nil {
+		var need int64
+		for _, v := range meta.Volumes {
+			need += v.SizeBytes
+		}
+		needWithMargin := need + need/5 // 20%
+		if avail > 0 && needWithMargin > 0 && avail < uint64(needWithMargin) {
+			_, _ = fmt.Fprintf(errw,
+				"insufficient disk space to restore: snapshot needs ~%d MiB (with margin) but only %d MiB available. "+
+					"Free space and retry.\n",
+				needWithMargin/1024/1024, avail/1024/1024)
+			return localnet.ExitUserError
+		}
+	}
+	// availableDiskBytes returning an error (unsupported FS,
+	// permissions) is non-fatal: we proceed without the preflight
+	// rather than blocking restore in environments where statfs
+	// isn't available. The unpack loop will still surface ENOSPC
+	// with a useful error.
 
 	// Re-register from embedded state, keyed by the user-supplied
 	// --name so "restore as a different name" works without extra
