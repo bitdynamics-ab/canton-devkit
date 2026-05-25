@@ -1,0 +1,164 @@
+package localnet
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"strings"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
+)
+
+// Package localnet (this file): the friendly-error wrapper. BIT-126.
+//
+// Today the orchestrators (RunUp / RunDown / future RunDoctor) return
+// raw error strings and the caller prints them to stderr. That's
+// good for `--json` consumers and CI logs but loses the chance to
+// surface remediation steps for the small set of failures users hit
+// repeatedly (ports in use, docker daemon down, instance lock held).
+//
+// This file adds a tiny taxonomy: ErrorCode + Remediation list +
+// RenderFriendly() that produces the boxed callout from
+// docs/design/mockups/screens-tokens-help.jsx (ScreenError) when
+// stderr is a TTY. On non-TTY stderr we fall back to a one-line
+// machine-readable form so CI logs stay grep-able.
+//
+// The wrapper is opt-in: a caller wraps a raw error with one of the
+// FriendlyErr* constructors at the failure site; everything else
+// keeps using plain fmt.Errorf and gets unchanged behaviour.
+
+// ErrorCode is the stable identifier scripts can branch on. New codes
+// belong in the table below + the docs site (devkit.dev/e/<CODE>);
+// codes are NEVER renamed once shipped because users may have built
+// alerts around them.
+type ErrorCode string
+
+const (
+	ErrCodePortsInUse   ErrorCode = "PORTS_IN_USE"
+	ErrCodeDockerDown   ErrorCode = "DOCKER_DOWN"
+	ErrCodeComposeFail  ErrorCode = "COMPOSE_FAILED"
+	ErrCodeInstanceBusy ErrorCode = "INSTANCE_BUSY"
+	ErrCodeNotFound     ErrorCode = "INSTANCE_NOT_FOUND"
+	ErrCodeFetchFail    ErrorCode = "SPLICE_FETCH_FAILED"
+)
+
+// FriendlyError carries a code, a one-line summary, and an ordered
+// list of remediation tips. Wraps a cause for errors.Is/As callers.
+//
+// Implements error so it can sit anywhere `error` is expected — the
+// orchestrator just needs to know whether to call RenderFriendly()
+// (TTY stderr) or err.Error() (everything else). FriendlyExit(errw,
+// err, code) is the helper that does the right thing.
+type FriendlyError struct {
+	Code        ErrorCode
+	Summary     string   // one line; appears next to the code
+	Remediation []string // each entry one line; rendered as a numbered list
+	Cause       error    // wrapped; nil if no underlying error
+}
+
+// Error returns a one-line machine-readable form suitable for
+// non-TTY stderr or wrapped log lines: `error · code PORTS_IN_USE ·
+// summary…`. Mirrors the dim/bold tokenisation of ScreenError but
+// without ANSI codes so grep/CI parsers see stable text.
+func (f *FriendlyError) Error() string {
+	if f.Cause != nil {
+		return fmt.Sprintf("error · code %s · %s (%s)", f.Code, f.Summary, f.Cause.Error())
+	}
+	return fmt.Sprintf("error · code %s · %s", f.Code, f.Summary)
+}
+
+// Unwrap supports errors.Is / errors.As on the cause chain. Callers
+// that wrap a docker exec.ExitError can still type-check it through
+// the FriendlyError envelope.
+func (f *FriendlyError) Unwrap() error { return f.Cause }
+
+// NewFriendly is the constructor. `summary` is the bright line shown
+// inside the box; `remediation` is the bulleted "try one of:" list.
+// Pass nil for cause if the failure was synthesised (e.g. our own
+// port-scan returned a conflict — no upstream error to wrap).
+func NewFriendly(code ErrorCode, summary string, cause error, remediation ...string) *FriendlyError {
+	return &FriendlyError{
+		Code:        code,
+		Summary:     summary,
+		Remediation: remediation,
+		Cause:       cause,
+	}
+}
+
+// AsFriendly is a typed errors.As — returns the *FriendlyError if
+// err's chain contains one, nil otherwise. Lets `App.Run` decide
+// whether to render the box without a type assertion in the call
+// site.
+func AsFriendly(err error) *FriendlyError {
+	var f *FriendlyError
+	if errors.As(err, &f) {
+		return f
+	}
+	return nil
+}
+
+// RenderFriendly writes the boxed ScreenError-style callout to w.
+// Layout:
+//
+//	┃ error · code PORTS_IN_USE · devkit.dev/e/PORTS_IN_USE
+//	┃ Two ports DevKit needs are already bound by other processes.
+//	┃
+//	┃ Try one of:
+//	┃   1. Stop the conflicting processes   ·  kill 88341 88450
+//	┃   2. Pick different ports             ·  dpm localnet up --ports …
+//	┃   3. Inspect host readiness           ·  dpm localnet doctor
+//
+// term.Box owns the left accent bar; we own the body assembly.
+// Numbering is rendered with brand-colored "1." prefixes; the
+// remediation strings can contain a "  ·  " separator to split a
+// label from its example command — we don't parse them, we trust
+// the caller to write them readably.
+func RenderFriendly(w io.Writer, f *FriendlyError) {
+	if f == nil {
+		return
+	}
+	var body strings.Builder
+	body.WriteString(term.Errorc("error"))
+	body.WriteString(term.Dimc(" · code "))
+	body.WriteString(term.Textc(string(f.Code)))
+	body.WriteString(term.Dimc(" · "))
+	body.WriteString(term.Faintc(fmt.Sprintf("devkit.dev/e/%s", f.Code)))
+	body.WriteString("\n")
+	body.WriteString(term.Textc(f.Summary))
+	if len(f.Remediation) > 0 {
+		body.WriteString("\n\n")
+		body.WriteString(term.Dimc("Try one of:"))
+		body.WriteString("\n")
+		for i, r := range f.Remediation {
+			body.WriteString("  ")
+			body.WriteString(term.Brandc(fmt.Sprintf("%d.", i+1)))
+			body.WriteString(" ")
+			body.WriteString(term.Textc(r))
+			if i < len(f.Remediation)-1 {
+				body.WriteString("\n")
+			}
+		}
+	}
+	_, _ = fmt.Fprintln(w, term.Box(term.BoxError, body.String()))
+}
+
+// FriendlyExit is the one-call helper for orchestrators. If err is a
+// FriendlyError and `errw` is a TTY, render the box; otherwise print
+// the machine-readable Error() form. Returns code unchanged so the
+// caller can `return localnet.FriendlyExit(errw, err, ExitPreflightFail)`.
+//
+// Non-TTY detection delegates to term.ShouldColor so the same gate
+// that disables ANSI also disables the box (a callout without color
+// is just confusingly indented).
+func FriendlyExit(errw io.Writer, err error, code int) int {
+	if err == nil {
+		return code
+	}
+	f := AsFriendly(err)
+	if f != nil && term.ShouldColor(errw) {
+		RenderFriendly(errw, f)
+		return code
+	}
+	_, _ = fmt.Fprintln(errw, err.Error())
+	return code
+}
