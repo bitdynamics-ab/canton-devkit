@@ -24,10 +24,37 @@
 package ui
 
 import (
+	"bytes"
 	"embed"
 	"io/fs"
 	"net/http"
+	"path"
+	"strings"
 )
+
+// placeholderSentinel is the comment string embedded in the
+// placeholder dist/index.html. The CLI calls IsPlaceholderBundle()
+// at startup; if it returns true, `dpm localnet ui` prints a
+// stderr warning so a release binary that forgot to run
+// `make frontend` doesn't silently ship the dev placeholder to
+// real users. Reviewer pin (PR #41 #5).
+const placeholderSentinel = "DEVKIT_FRONTEND_PLACEHOLDER"
+
+// IsPlaceholderBundle reports whether the embedded dist/index.html
+// is the build-time placeholder rather than a real Vite build.
+// Cheap: a single byte-scan of the embedded index.
+//
+// Production callers (dpm localnet ui) call this once at startup
+// and surface a one-line stderr warning. Tests can call it
+// directly to assert that a release-pipeline build replaced the
+// placeholder.
+func IsPlaceholderBundle() bool {
+	body, err := fs.ReadFile(distFS, "dist/index.html")
+	if err != nil {
+		return true // can't read = effectively broken; warn either way
+	}
+	return bytes.Contains(body, []byte(placeholderSentinel))
+}
 
 // distFS is the embedded Vite build output. Everything under dist/ is
 // rolled into the binary at compile time. The exclude pattern keeps
@@ -65,18 +92,42 @@ func AssetsHandler() (http.Handler, error) {
 	// file, serve index.html so React Router takes the URL. We detect
 	// "doesn't resolve" by stat-ing the FS; that's cheaper than calling
 	// the file server and inspecting its 404.
+	//
+	// Reviewer pin (PR #41 #2): defend against path traversal in
+	// the SPA-fallback path. path.Clean collapses `..` segments;
+	// any cleaned path that begins with `..` (or that escapes
+	// the embedded root) gets a 400, not a stealth SPA-index
+	// response. http.FileServer ALREADY refuses traversal for
+	// real-file requests, but we run our own fs.Stat first and
+	// the embed.FS reject-on-traversal is implementation-defined
+	// — belt and suspenders.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// API and SSE routes are handled by the router BEFORE this
-		// handler runs (chain order in router.go). Anything that
-		// reaches us is either a static file or a SPA route.
 		clean := r.URL.Path
 		if clean == "" || clean == "/" {
 			serveIndex(w, index)
 			return
 		}
+		// path.Clean collapses "/foo/../bar" → "/bar". After
+		// cleaning, any leading ".." (e.g. URL "/../etc/passwd"
+		// → cleaned "/etc/passwd" which IS rooted, but the
+		// raw input shows intent) is suspicious. We reject the
+		// request EXPLICITLY rather than letting it become a
+		// 404 — the latter is debuggable, the former is a
+		// security signal.
+		if strings.Contains(r.URL.Path, "..") {
+			http.Error(w, "bad request: path traversal",
+				http.StatusBadRequest)
+			return
+		}
+		cleaned := path.Clean(clean)
+		if cleaned != clean && cleaned+"/" != clean {
+			http.Error(w, "bad request: non-canonical path",
+				http.StatusBadRequest)
+			return
+		}
 		// Strip the leading slash for fs.Stat — the embedded FS uses
 		// rooted-but-leading-slash-less paths.
-		statPath := clean
+		statPath := cleaned
 		if statPath[0] == '/' {
 			statPath = statPath[1:]
 		}

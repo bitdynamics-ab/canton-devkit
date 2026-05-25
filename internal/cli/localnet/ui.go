@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 	"github.com/spf13/cobra"
@@ -62,10 +63,25 @@ identifiers and is not designed for LAN-wide exposure.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			// Reviewer pin (PR #41 #4): every error path from this
+			// command must wrap with localnet.AsExitError so the
+			// outer cobra/app exit-code plumbing surfaces the right
+			// numeric code (matches CLAUDE.md's "ExitCodeError must
+			// not silently collapse through wrappers" rule).
 			assets, err := ui.AssetsHandler()
 			if err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "load embedded assets: %s\n", err)
-				return err
+				return localnet.AsExitError(localnet.ExitRuntimeFailure)
+			}
+			// Placeholder-bundle guard (PR #41 #5). If the binary
+			// was built without `make frontend`, the embedded dist
+			// is the placeholder shipped at clone time. Print one
+			// stderr warning so an operator running a release-mode
+			// binary knows the frontend will be a dev placeholder,
+			// not the real Vite build.
+			if ui.IsPlaceholderBundle() {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), term.Warnc(
+					"warning: serving the build-time placeholder frontend — run `make frontend` before `go build` to embed the real Vite bundle"))
 			}
 			srv := ui.New(ui.Config{
 				Host:             host,
@@ -79,7 +95,13 @@ identifiers and is not designed for LAN-wide exposure.`,
 			addr, err := srv.Listen()
 			if err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s\n", err)
-				return err
+				// Listen failures: bind-refused (--host non-loopback
+				// without flag) is ExitUserError; everything else
+				// (port in use, EACCES) is ExitRuntimeFailure.
+				if errIsNonLoopback(err) {
+					return localnet.AsExitError(localnet.ExitUserError)
+				}
+				return localnet.AsExitError(localnet.ExitRuntimeFailure)
 			}
 			url := fmt.Sprintf("http://%s/", addr)
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), term.Step(term.StepCheck,
@@ -107,7 +129,12 @@ identifiers and is not designed for LAN-wide exposure.`,
 				if err := srv.Shutdown(shutdownCtx); err != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 						"graceful shutdown: %s\n", err)
-					return err
+					// Deadline exceeded mid-drain → ExitTimeout
+					// (matches the down command's convention).
+					if shutdownCtx.Err() != nil {
+						return localnet.AsExitError(localnet.ExitTimeout)
+					}
+					return localnet.AsExitError(localnet.ExitRuntimeFailure)
 				}
 				// Wait for Serve to return after Shutdown.
 				<-errCh
@@ -117,8 +144,9 @@ identifiers and is not designed for LAN-wide exposure.`,
 				if err != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 						"server error: %s\n", err)
+					return localnet.AsExitError(localnet.ExitRuntimeFailure)
 				}
-				return err
+				return nil
 			}
 		},
 	}
@@ -132,4 +160,25 @@ identifiers and is not designed for LAN-wide exposure.`,
 			"(JWTs, party IDs) on the network. Use only with an SSH "+
 			"tunnel or a firewall in front. Default: refused.")
 	return cmd
+}
+
+// errIsNonLoopback unwraps to ui.ErrNonLoopbackBind so the CLI
+// can choose ExitUserError (user picked a bad --host) over
+// ExitRuntimeFailure (port-in-use / EACCES / etc.).
+func errIsNonLoopback(err error) bool {
+	if err == nil {
+		return false
+	}
+	for e := err; e != nil; {
+		if e == ui.ErrNonLoopbackBind {
+			return true
+		}
+		type unwrap interface{ Unwrap() error }
+		u, ok := e.(unwrap)
+		if !ok {
+			return false
+		}
+		e = u.Unwrap()
+	}
+	return false
 }

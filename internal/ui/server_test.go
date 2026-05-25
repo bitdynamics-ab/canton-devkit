@@ -157,3 +157,20 @@ func TestServer_HealthzReturnsOK(t *testing.T) {
 		t.Errorf("body = %q, want %q", body, "ok")
 	}
 }
+
+// TestServer_IdleTimeoutSet pins PR #41 round-2 #1: every server
+// MUST have a non-zero IdleTimeout. Without it, keep-alive
+// connections from sleeping browser tabs pin server-side
+// goroutines indefinitely; over hours of use that accumulates
+// into a leak. 60s is the chosen value (twice the SSE heartbeat
+// so a healthy stream's keepalives reset the timer cleanly).
+func TestServer_IdleTimeoutSet(t *testing.T) {
+	srv := New(Config{Port: 0, Router: http.NewServeMux()})
+	if srv.http.IdleTimeout == 0 {
+		t.Error("IdleTimeout = 0 — keep-alive connections will pin goroutines on sleeping tabs")
+	}
+	if srv.http.IdleTimeout < 30*time.Second {
+		t.Errorf("IdleTimeout = %v, too aggressive — would close healthy SSE streams between heartbeats",
+			srv.http.IdleTimeout)
+	}
+}

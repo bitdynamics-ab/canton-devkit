@@ -93,6 +93,18 @@ func (c Config) withDefaults() Config {
 // for that. Two-step construction is deliberate: tests can construct
 // a Server, inspect Config, then Listen on an OS-assigned port to
 // avoid clashing with another local test.
+//
+// Timeouts (load-bearing — see Server docstring):
+//
+//   - ReadHeaderTimeout (10s): slowloris floor, prevents byte-dribble
+//     attacks on header parsing.
+//   - IdleTimeout (60s): closes connections idle on keep-alive. Without
+//     this, a browser tab that goes to sleep can pin a server-side
+//     conn (and goroutine) indefinitely; over hours of use that
+//     accumulates into a small leak. 60s matches the typical proxy
+//     idle window AND is twice the SSE heartbeat (30s in sse.go),
+//     so a healthy SSE stream's keepalives reset the timer well
+//     before it fires. Reviewer pin (PR #41 #1).
 func New(cfg Config) *Server {
 	cfg = cfg.withDefaults()
 	return &Server{
@@ -100,6 +112,7 @@ func New(cfg Config) *Server {
 		http: &http.Server{
 			Handler:           cfg.Router,
 			ReadHeaderTimeout: 10 * time.Second, // slowloris floor
+			IdleTimeout:       60 * time.Second, // keep-alive reap
 		},
 	}
 }

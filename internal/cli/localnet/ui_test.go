@@ -3,12 +3,15 @@ package localnet
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 )
 
 // safeBuffer wraps bytes.Buffer with a mutex so the test goroutine
@@ -169,5 +172,37 @@ func TestUI_LoopbackFlagRejectsNonLoopback(t *testing.T) {
 	}
 	if !strings.Contains(errBuf.String(), "non-loopback") {
 		t.Errorf("stderr should explain the gate, got %q", errBuf.String())
+	}
+}
+
+// TestUI_NonLoopbackHostReturnsUserExitCode is the reviewer pin
+// (PR #41 round-2 #4): bind failures must wrap with the right
+// ExitCodeError so the outer cobra exit-code plumbing surfaces
+// 1 (user error) vs 4 (runtime failure). Without this, the CLI
+// loses the distinction users branch on (`dpm ui || ...`).
+func TestUI_NonLoopbackHostReturnsUserExitCode(t *testing.T) {
+	cmd := buildUI()
+	var out, errBuf safeBuffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errBuf)
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	cmd.SetArgs([]string{"--port", "0", "--host", "0.0.0.0"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd.SetContext(ctx)
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for non-loopback bind")
+	}
+	var ece localnet.ExitCodeError
+	if !errors.As(err, &ece) {
+		t.Fatalf("expected ExitCodeError, got %T: %v", err, err)
+	}
+	if int(ece) != localnet.ExitUserError {
+		t.Errorf("exit code = %d, want ExitUserError (%d) — bind-refused is user input",
+			int(ece), localnet.ExitUserError)
 	}
 }
