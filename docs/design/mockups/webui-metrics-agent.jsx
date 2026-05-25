@@ -246,6 +246,51 @@ function AgentScreen() {
         </div>
       </section>
 
+      {/* What is this — explainer */}
+      <Card pad={0} style={{marginBottom:14, background:`linear-gradient(135deg, ${W.surface} 0%, ${W.card} 100%)`}}>
+        <div style={{padding:'18px 22px', display:'grid', gridTemplateColumns:'auto 1fr', gap:18, alignItems:'flex-start'}}>
+          <div style={{
+            width:54, height:54, borderRadius:14,
+            background:`linear-gradient(135deg, ${W.brand}33, ${W.brand}11)`,
+            display:'flex', alignItems:'center', justifyContent:'center',
+            fontSize:26, color:W.brand, flex:'0 0 auto',
+          }}>✦</div>
+          <div>
+            <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:8, flexWrap:'wrap'}}>
+              <h2 style={{margin:0, fontSize:16, fontWeight:600, letterSpacing:-0.2}}>What this does</h2>
+              <Pill color={W.brand}>optional</Pill>
+              <span className="w-pill" style={{background:W.surface2, color:W.dim, border:`1px solid ${W.border}`}}>auxiliary docs · not core runtime</span>
+            </div>
+            <p style={{margin:'0 0 12px', color:W.text2, fontSize:13.5, lineHeight:1.6, maxWidth:880}}>
+              Skill docs are small <Mono c={W.text}>.md</Mono> files that teach an AI coding agent how to use DevKit <em>safely</em>. You drop them into your editor's skills folder once; from then on, the agent knows the exact, documented <Mono c={W.brand}>dpm localnet</Mono> commands to spin up a ledger, upload a DAR, inspect contracts, or run a CIP-0112 token flow — without you copy-pasting the docs into every conversation.
+            </p>
+            <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:14, marginTop:10}}>
+              <div>
+                <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6}}>
+                  <span style={{width:22, height:22, borderRadius:6, background:`${W.brand}1A`, color:W.brand, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:11.5}}>1</span>
+                  <span style={{fontWeight:600, fontSize:12.5}}>Install once</span>
+                </div>
+                <div style={{color:W.dim, fontSize:11.5, lineHeight:1.55}}>Click <Mono c={W.text2}>Open in Claude</Mono> or copy the doc into <Mono c={W.text2}>.claude/skills/</Mono>, <Mono c={W.text2}>~/.codex/</Mono>, or any agent that reads markdown skills.</div>
+              </div>
+              <div>
+                <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6}}>
+                  <span style={{width:22, height:22, borderRadius:6, background:`${W.brand}1A`, color:W.brand, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:11.5}}>2</span>
+                  <span style={{fontWeight:600, fontSize:12.5}}>Ask in plain English</span>
+                </div>
+                <div style={{color:W.dim, fontSize:11.5, lineHeight:1.55}}>"Boot a fresh ledger called <Mono c={W.text2}>weiss</Mono> and upload my retail-token build." The agent picks the matching skill from its index.</div>
+              </div>
+              <div>
+                <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6}}>
+                  <span style={{width:22, height:22, borderRadius:6, background:`${W.brand}1A`, color:W.brand, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:11.5}}>3</span>
+                  <span style={{fontWeight:600, fontSize:12.5}}>Agent runs DevKit, safely</span>
+                </div>
+                <div style={{color:W.dim, fontSize:11.5, lineHeight:1.55}}>It only uses documented <Mono c={W.text2}>dpm localnet</Mono> commands — never raw <Mono c={W.text2}>docker</Mono> — and pauses on first failure to run <Mono c={W.text2}>doctor</Mono>.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
       <div style={{display:'grid', gridTemplateColumns:'260px 1fr 320px', gap:14, alignItems:'start'}}>
         <Card title="Skills" subtitle="6 workflows" pad={6}>
           {[
