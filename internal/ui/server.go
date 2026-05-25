@@ -9,6 +9,14 @@ import (
 	"time"
 )
 
+// ErrNonLoopbackBind is returned by Listen when Config.Host resolves to
+// a non-loopback IP and AllowNonLoopback is false. Reviewer pin
+// (PR #41 #a): the previous shape merely "strongly discouraged"
+// non-loopback in --host's help text, then bound anyway. Defence-in-
+// depth requires a real refusal at the bind layer — the docstring
+// is not load-bearing security.
+var ErrNonLoopbackBind = errors.New("ui server: refusing non-loopback bind without AllowNonLoopback")
+
 // Server wraps a configured *http.Server with lifecycle plumbing the CLI
 // command (internal/cli/localnet/ui.go) drives.
 //
@@ -52,6 +60,18 @@ type Config struct {
 	// Router is the http.Handler tree (typically built by NewRouter).
 	// Required.
 	Router http.Handler
+	// AllowNonLoopback opts the caller into binding on a non-loopback
+	// interface. When false (default), Listen() refuses any Host
+	// that resolves to anything other than a loopback IP with
+	// ErrNonLoopbackBind. The CLI exposes this as an explicit flag
+	// (`--allow-non-loopback`) that defaults off; users who genuinely
+	// need LAN binding have to type the flag.
+	//
+	// Reviewer pin (PR #41 #a): the docstring's "loopback only"
+	// claim was advisory until this gate landed. The default-deny
+	// posture means a future regression that silently widens the
+	// bind fails closed.
+	AllowNonLoopback bool
 }
 
 // defaults applied by New when zero. Kept as a function (not const) so
@@ -89,7 +109,17 @@ func New(cfg Config) *Server {
 // before the blocking Serve loop starts.
 //
 // Returns the resolved addr (matters when Port=0).
+//
+// Refuses non-loopback Host values unless Config.AllowNonLoopback is
+// true. The check resolves Host via net.LookupIP so a hostname like
+// "0.0.0.0" or "localhost.example.com" is gated correctly, not just
+// literal IP strings. See ErrNonLoopbackBind.
 func (s *Server) Listen() (string, error) {
+	if !s.cfg.AllowNonLoopback {
+		if err := assertLoopback(s.cfg.Host); err != nil {
+			return "", err
+		}
+	}
 	addr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -98,6 +128,39 @@ func (s *Server) Listen() (string, error) {
 	s.ln = ln
 	s.addr = ln.Addr().String()
 	return s.addr, nil
+}
+
+// assertLoopback resolves host and refuses any IP that isn't loopback.
+// Treats "0.0.0.0" / "::" explicitly as non-loopback (they're INADDR_ANY
+// — bind on ALL interfaces, which is the worst case for "loopback
+// only"). Empty host is treated as loopback because the withDefaults
+// upgrade fills it to 127.0.0.1; reaching here with "" would be a
+// programming bug, but we tolerate it as loopback rather than crashing.
+func assertLoopback(host string) error {
+	if host == "" {
+		return nil
+	}
+	// Reject INADDR_ANY explicitly — these resolve to "any" not "loopback".
+	if host == "0.0.0.0" || host == "::" || host == "[::]" {
+		return fmt.Errorf("%w: %q is the wildcard bind, not loopback",
+			ErrNonLoopbackBind, host)
+	}
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return fmt.Errorf("%w: cannot resolve host %q: %v",
+			ErrNonLoopbackBind, host, err)
+	}
+	if len(ips) == 0 {
+		return fmt.Errorf("%w: host %q resolved to no IPs",
+			ErrNonLoopbackBind, host)
+	}
+	for _, ip := range ips {
+		if !ip.IsLoopback() {
+			return fmt.Errorf("%w: host %q resolves to %s",
+				ErrNonLoopbackBind, host, ip)
+		}
+	}
+	return nil
 }
 
 // Addr returns the resolved listener address. Empty until Listen()

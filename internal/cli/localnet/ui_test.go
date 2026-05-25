@@ -6,9 +6,31 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
+
+// safeBuffer wraps bytes.Buffer with a mutex so the test goroutine
+// reading the buffer doesn't race with the command goroutine writing
+// to it. bytes.Buffer is not goroutine-safe by itself, and the
+// `go test -race` detector correctly flagged this when the polling
+// loop read out.String() while Execute() was still writing.
+type safeBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *safeBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+func (s *safeBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
+}
 
 // TestUI_BindsAndShutdownsCleanly is the integration smoke for the
 // `dpm localnet ui` command. We drive the command with --port 0 (to
@@ -26,7 +48,7 @@ import (
 // wondering whether the UI is up.
 func TestUI_BindsAndShutdownsCleanly(t *testing.T) {
 	cmd := buildUI()
-	var out, errBuf bytes.Buffer
+	var out, errBuf safeBuffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&errBuf)
 	cmd.SilenceUsage = true
@@ -121,4 +143,31 @@ func extractURL(stdout string) string {
 		}
 	}
 	return rest[:end]
+}
+
+// TestUI_LoopbackFlagRejectsNonLoopback is the CLI-level pin for
+// PR #41 #a: `dpm localnet ui --host 0.0.0.0` (without
+// --allow-non-loopback) must fail at Listen() with the
+// ErrNonLoopbackBind error surfaced to stderr. Catches the
+// regression class where someone widens the gate by accident.
+func TestUI_LoopbackFlagRejectsNonLoopback(t *testing.T) {
+	cmd := buildUI()
+	var out, errBuf safeBuffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errBuf)
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	// 0.0.0.0 = wildcard bind = explicitly non-loopback.
+	cmd.SetArgs([]string{"--port", "0", "--host", "0.0.0.0"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd.SetContext(ctx)
+
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("ui --host 0.0.0.0 succeeded — loopback gate regressed")
+	}
+	if !strings.Contains(errBuf.String(), "non-loopback") {
+		t.Errorf("stderr should explain the gate, got %q", errBuf.String())
+	}
 }
