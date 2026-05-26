@@ -122,10 +122,11 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("DELETE /api/instances/{name}", stub)
 		mux.HandleFunc("POST /api/instances/{name}/down", stub)
 	}
-	// Container probe + log tail are hub-independent (pure
-	// docker reads) — mount them for every deployment.
+	// Container probe + log tail + restart are hub-independent
+	// (pure docker calls) — mount them for every deployment.
 	mux.HandleFunc("GET /api/instances/{name}/containers", handleInstanceContainers())
 	mux.HandleFunc("GET /api/instances/{name}/containers/{container}/logs", handleContainerLogs())
+	mux.HandleFunc("POST /api/instances/{name}/containers/{container}/restart", handleContainerRestart())
 }
 
 // handleList: GET /api/instances → types.ListResponse.
@@ -1001,6 +1002,98 @@ func handleContainerLogs() http.HandlerFunc {
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(combined.Bytes())
+	}
+}
+
+// handleContainerRestart: POST /api/instances/{name}/containers/{container}/restart.
+//
+// Runs `docker restart <container>` against the named container.
+// Synchronous (docker restart blocks until container exits then
+// starts again). 30s timeout — docker's default stop grace is
+// 10s plus startup, so most containers are well under this.
+//
+// Same path-param validation as the logs endpoint: container
+// name regex + verified against the instance's compose project
+// via docker compose ps so arbitrary host containers can't be
+// poked.
+//
+// 204 on success. 5xx with the docker error on failure (most
+// likely cause: the container is gone between the ps probe and
+// the restart call).
+func handleContainerRestart() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		container := r.PathValue("container")
+		if err := registry.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+		if !validContainerName(container) {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid container name")
+			return
+		}
+
+		state, err := registry.Read(name)
+		if err != nil {
+			if errors.Is(err, registry.ErrNotFound) {
+				writeErrorWithCode(w, http.StatusNotFound,
+					ErrCodeNotFound,
+					"instance "+name+" not registered")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "read state", err)
+			return
+		}
+
+		// Verify container belongs to this instance's project.
+		// Defence-in-depth: without this, a malicious client
+		// could restart arbitrary containers on the host by
+		// passing a foreign container name.
+		probeCtx, cancelProbe := context.WithTimeout(r.Context(), 5*time.Second)
+		containers, probeErr := composePs(probeCtx, state.ComposeProject)
+		cancelProbe()
+		if probeErr != nil {
+			writeErrorWithCode(w, http.StatusServiceUnavailable,
+				"DOCKER_PROBE_FAILED",
+				"could not query docker", probeErr.Error())
+			return
+		}
+		found := false
+		for _, c := range containers {
+			if c.Name == container {
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeErrorWithCode(w, http.StatusNotFound,
+				ErrCodeNotFound,
+				"container "+container+" not in compose project "+state.ComposeProject)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "docker", "restart", container)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			cause := strings.TrimSpace(stderr.String())
+			if cause == "" {
+				cause = err.Error()
+			}
+			log.Printf("restart container %q: %s", container, cause)
+			writeErrorWithCode(w, http.StatusInternalServerError,
+				"CONTAINER_RESTART_FAILED",
+				"failed to restart "+container+": "+firstLine(cause))
+			return
+		}
+		log.Printf("restart container %q: ok", container)
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

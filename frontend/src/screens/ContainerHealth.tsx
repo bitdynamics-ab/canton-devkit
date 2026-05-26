@@ -3,6 +3,7 @@ import {
   ApiError,
   type ContainersResponse,
   fetchContainers,
+  restartContainer,
 } from "../api";
 import { W, wMono } from "../tokens";
 import { ContainerLogsModal } from "./ContainerLogsModal";
@@ -32,6 +33,36 @@ export function ContainerHealth({ name }: { name: string }) {
   >({ kind: "loading" });
   // Selected container for the logs modal. Null = closed.
   const [logsOpen, setLogsOpen] = useState<string | null>(null);
+  // Tracks which container restart is in flight (one at a time
+  // is fine — UI disables that row's button + shows spinner).
+  // Inline string-set so multiple rapid clicks on different
+  // rows can each show their own pending state.
+  const [restarting, setRestarting] = useState<Set<string>>(new Set());
+  const [restartErr, setRestartErr] = useState<string | null>(null);
+
+  async function onRestart(container: string) {
+    if (!confirm(`Restart ${container}? Container will be stopped + started; in-flight requests may drop.`)) {
+      return;
+    }
+    setRestarting((s) => new Set([...s, container]));
+    setRestartErr(null);
+    try {
+      await restartContainer(name, container);
+      // Poll loop picks up the new "Up X seconds" automatically;
+      // no manual refresh needed.
+    } catch (e) {
+      setRestartErr(
+        `Restart ${container} failed: ` +
+          (e instanceof ApiError ? e.message : "unknown error"),
+      );
+    } finally {
+      setRestarting((s) => {
+        const next = new Set(s);
+        next.delete(container);
+        return next;
+      });
+    }
+  }
 
   // Poll loop. Restarts when name changes; tears down on
   // unmount via the cleanup closure.
@@ -120,10 +151,29 @@ export function ContainerHealth({ name }: { name: string }) {
         </div>
       )}
 
+      {restartErr && (
+        <div
+          role="alert"
+          style={{
+            color: W.err,
+            background: `${W.err}10`,
+            border: `1px solid ${W.err}`,
+            borderRadius: 6,
+            padding: "6px 10px",
+            fontSize: 12,
+            marginBottom: 8,
+          }}
+        >
+          {restartErr}
+        </div>
+      )}
+
       {state.kind === "ok" && (
         <ContainersTable
           containers={state.data.containers}
           onPickLogs={(c) => setLogsOpen(c)}
+          onRestart={onRestart}
+          restarting={restarting}
         />
       )}
 
@@ -140,9 +190,13 @@ export function ContainerHealth({ name }: { name: string }) {
 function ContainersTable({
   containers,
   onPickLogs,
+  onRestart,
+  restarting,
 }: {
   containers: ContainersResponse["containers"];
   onPickLogs: (name: string) => void;
+  onRestart: (name: string) => void;
+  restarting: Set<string>;
 }) {
   if (containers.length === 0) {
     return (
@@ -160,7 +214,7 @@ function ContainersTable({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "auto 1fr 1fr auto",
+        gridTemplateColumns: "auto 1fr 1fr auto auto",
         gap: "4px 12px",
         fontSize: 11.5,
         fontFamily: wMono,
@@ -179,12 +233,21 @@ function ContainersTable({
       <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase" }}>
         status
       </div>
+      <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase", textAlign: "right" }}>
+        actions
+      </div>
       {sorted.map((c) => {
         const { color, glyph } = signalFor(c);
-        const onClick = () => onPickLogs(c.name);
+        const onLogs = () => onPickLogs(c.name);
+        const onRestartClick = (e: React.MouseEvent) => {
+          e.stopPropagation();
+          onRestart(c.name);
+        };
+        const isRestarting = restarting.has(c.name);
         // display:contents rows can't carry click handlers, so
-        // each cell gets its own onClick + cursor:pointer. CSS
-        // grid layout preserved.
+        // each cell gets its own onClick + cursor:pointer. The
+        // restart button cell stops propagation so clicking the
+        // button doesn't ALSO open the logs modal.
         const cellBase: React.CSSProperties = {
           cursor: "pointer",
           padding: "2px 0",
@@ -193,19 +256,39 @@ function ContainersTable({
           <div
             key={c.name}
             style={{ display: "contents" }}
-            title={`Click to view logs for ${c.name}`}
+            title={`Click columns to view logs for ${c.name}`}
           >
-            <div onClick={onClick} style={{ ...cellBase, color, fontSize: 14, textAlign: "center" }}>{glyph}</div>
-            <div onClick={onClick} style={{ ...cellBase, color: W.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: "underline", textDecorationColor: W.faint, textDecorationStyle: "dotted", textUnderlineOffset: 2 }}>
+            <div onClick={onLogs} style={{ ...cellBase, color, fontSize: 14, textAlign: "center" }}>{glyph}</div>
+            <div onClick={onLogs} style={{ ...cellBase, color: W.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: "underline", textDecorationColor: W.faint, textDecorationStyle: "dotted", textUnderlineOffset: 2 }}>
               {c.service}
             </div>
-            <div onClick={onClick} style={{ ...cellBase, color: W.text2 }}>
+            <div onClick={onLogs} style={{ ...cellBase, color: W.text2 }}>
               <span style={{ color }}>{c.state}</span>
               {c.health && (
                 <span style={{ color: W.dim }}> · {c.health}</span>
               )}
             </div>
-            <div onClick={onClick} style={{ ...cellBase, color: W.dim, fontSize: 10.5 }}>{c.status}</div>
+            <div onClick={onLogs} style={{ ...cellBase, color: W.dim, fontSize: 10.5 }}>{c.status}</div>
+            <div style={{ textAlign: "right" }}>
+              <button
+                onClick={onRestartClick}
+                disabled={isRestarting}
+                title={`Restart ${c.name} (docker restart)`}
+                style={{
+                  background: "transparent",
+                  color: isRestarting ? W.dim : W.warn,
+                  border: `1px solid ${isRestarting ? W.dim : W.warn}`,
+                  borderRadius: 4,
+                  padding: "2px 8px",
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  fontFamily: wMono,
+                  cursor: isRestarting ? "wait" : "pointer",
+                }}
+              >
+                {isRestarting ? "↻ restarting…" : "↻ restart"}
+              </button>
+            </div>
           </div>
         );
       })}

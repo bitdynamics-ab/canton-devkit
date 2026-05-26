@@ -149,6 +149,30 @@ export interface ContainersResponse {
 export const fetchContainers = (name: string) =>
   apiFetch<ContainersResponse>(`/api/instances/${encodeURIComponent(name)}/containers`);
 
+// restartContainer hits POST .../containers/{container}/restart.
+// 204 on success, 5xx with cause on failure. The handler
+// validates the container belongs to the named instance's
+// compose project, so arbitrary host containers can't be poked.
+export async function restartContainer(
+  instance: string,
+  container: string,
+): Promise<void> {
+  const resp = await fetch(
+    `/api/instances/${encodeURIComponent(instance)}/containers/${encodeURIComponent(container)}/restart`,
+    { method: "POST" },
+  );
+  if (!resp.ok) {
+    const text = await resp.text();
+    let body: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try {
+      body = JSON.parse(text);
+    } catch {
+      // non-JSON; default body retained
+    }
+    throw new ApiError(resp.status, body);
+  }
+}
+
 // fetchContainerLogs hits the docker-logs tail endpoint. Returns
 // plain text (already escaped for HTML safety — the frontend
 // renders in a <pre>). tail/since map to the server's query

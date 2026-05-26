@@ -232,18 +232,25 @@ function DetailGrid({ instance }: { instance: Instance }) {
   );
 }
 
-// ActionButton dispatches the right verb per instance status:
-//   - running        → Stop  (POST /down via stopInstance)
-//   - stopped/failed → Remove entry (DELETE / via scrubInstance)
-//   - creating       → no button (CreatingPanel owns that surface)
-//   - other states   → no button (defensive)
+// ActionButton dispatches the right verb(s) per instance status.
+// Registry status alone isn't enough — docker truth may diverge
+// (the BIT-178 ContainerHealth panel shows this). Specifically:
 //
-// The pair-vs-single choice keeps the surface honest: Stop on a
-// failed instance would be meaningless (there's nothing live to
-// stop), and Remove on a running instance would orphan containers.
-// Backend already refuses both cross-cases with 409, but hiding
-// the button is the kinder UX than letting the user click and
-// get an error toast.
+//   - running        → Stop  (containers are live by definition)
+//   - failed/partial → Stop + Remove (containers MAY still be up
+//                       — the orchestrator gave up but docker
+//                       compose down is the right cleanup; if no
+//                       project exists docker no-ops cleanly)
+//   - stopped        → Remove only (containers definitely gone)
+//   - creating       → no button (CreatingPanel owns that surface)
+//   - other          → no button (defensive)
+//
+// The Stop variant on failed/partial is labeled "Stop containers"
+// (distinct from "Stop" on running) so the user knows it's a
+// force-cleanup rather than a graceful shutdown of a healthy
+// instance. The wording difference also matters because docker
+// compose down with --volumes is destructive — surface it
+// explicitly when the registry's been lying.
 function ActionButton({
   status,
   busy,
@@ -267,7 +274,31 @@ function ActionButton({
       </button>
     );
   }
-  if (status === "stopped" || status === "failed" || status === "partial") {
+  if (status === "failed" || status === "partial") {
+    // Both Stop and Remove — docker may still have live containers
+    // even though the registry gave up.
+    return (
+      <div style={{ display: "flex", gap: 6 }}>
+        <button
+          onClick={onStop}
+          disabled={busy}
+          title="Force docker compose down — use if containers are still running. Data volumes preserved."
+          style={btnStyle(W.warn, busy)}
+        >
+          {busy ? "Stopping…" : "⏹ Stop containers"}
+        </button>
+        <button
+          onClick={onRemove}
+          disabled={busy}
+          title="Remove the registry entry only. Won't touch docker — run Stop first if containers are live."
+          style={btnStyle(W.dim, busy)}
+        >
+          {busy ? "Removing…" : "✕ Remove entry"}
+        </button>
+      </div>
+    );
+  }
+  if (status === "stopped") {
     return (
       <button
         onClick={onRemove}
