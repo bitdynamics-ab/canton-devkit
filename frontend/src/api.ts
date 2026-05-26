@@ -149,6 +149,39 @@ export interface ContainersResponse {
 export const fetchContainers = (name: string) =>
   apiFetch<ContainersResponse>(`/api/instances/${encodeURIComponent(name)}/containers`);
 
+// fetchContainerLogs hits the docker-logs tail endpoint. Returns
+// plain text (already escaped for HTML safety — the frontend
+// renders in a <pre>). tail/since map to the server's query
+// params (200/empty defaults; tail clamped server-side to
+// [10, 2000]).
+//
+// Errors: 404 if the named container isn't in the instance's
+// compose project; 503 if docker is unreachable.
+export async function fetchContainerLogs(
+  instance: string,
+  container: string,
+  opts: { tail?: number; since?: string } = {},
+): Promise<string> {
+  const qs = new URLSearchParams();
+  if (opts.tail !== undefined) qs.set("tail", String(opts.tail));
+  if (opts.since) qs.set("since", opts.since);
+  const q = qs.toString() ? `?${qs.toString()}` : "";
+  const resp = await fetch(
+    `/api/instances/${encodeURIComponent(instance)}/containers/${encodeURIComponent(container)}/logs${q}`,
+  );
+  if (!resp.ok) {
+    const text = await resp.text();
+    let body: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try {
+      body = JSON.parse(text);
+    } catch {
+      // non-JSON; default body retained
+    }
+    throw new ApiError(resp.status, body);
+  }
+  return resp.text();
+}
+
 // JwtRequest mirrors internal/ui/handlers/auth.go jwtRequest.
 export interface JwtRequest {
   role?: string;

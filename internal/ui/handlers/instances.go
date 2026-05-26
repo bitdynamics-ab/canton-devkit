@@ -43,6 +43,7 @@ import (
 	"net/http"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -121,9 +122,10 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("DELETE /api/instances/{name}", stub)
 		mux.HandleFunc("POST /api/instances/{name}/down", stub)
 	}
-	// Container probe is hub-independent (pure docker read) —
-	// mount it for every deployment.
+	// Container probe + log tail are hub-independent (pure
+	// docker reads) — mount them for every deployment.
 	mux.HandleFunc("GET /api/instances/{name}/containers", handleInstanceContainers())
+	mux.HandleFunc("GET /api/instances/{name}/containers/{container}/logs", handleContainerLogs())
 }
 
 // handleList: GET /api/instances → types.ListResponse.
@@ -866,6 +868,197 @@ func composePs(ctx context.Context, project string) ([]ContainerHealth, error) {
 		containers = append(containers, e.toHealth())
 	}
 	return containers, nil
+}
+
+// handleContainerLogs: GET /api/instances/{name}/containers/{container}/logs.
+//
+// Returns the last N lines (default 200, capped at 2000) of the
+// named container's logs as text/plain. The frontend renders
+// the body in a <pre> with terminal styling.
+//
+// Container name is path-param-validated against the live
+// docker-compose-ps output for the instance's project, so
+// arbitrary names can't be passed in (defence-in-depth against
+// a misconfigured proxy that forwards untrusted path segments).
+//
+// Query params:
+//
+//	tail=<n>  — max lines to return; clamped to [10, 2000].
+//	            Default 200.
+//	since=<duration> — docker --since flag, e.g. "5m", "30s".
+//	            Default empty (whole log).
+//
+// 404 if the named container isn't in the instance's compose
+// project (or doesn't exist in docker at all).
+// 503 if docker itself can't be reached.
+func handleContainerLogs() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		container := r.PathValue("container")
+		if err := registry.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+		if !validContainerName(container) {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid container name",
+				"container names are alphanumeric + hyphens; arbitrary shell metachars rejected")
+			return
+		}
+
+		state, err := registry.Read(name)
+		if err != nil {
+			if errors.Is(err, registry.ErrNotFound) {
+				writeErrorWithCode(w, http.StatusNotFound,
+					ErrCodeNotFound,
+					"instance "+name+" not registered")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "read state", err)
+			return
+		}
+
+		// Verify the container actually belongs to this
+		// instance's project. Without this check, anyone could
+		// fetch logs from any container on the host by passing
+		// a foreign name. The check is cheap (one
+		// docker compose ps) and the defence-in-depth is worth
+		// the extra round trip.
+		probeCtx, cancelProbe := context.WithTimeout(r.Context(), 5*time.Second)
+		containers, probeErr := composePs(probeCtx, state.ComposeProject)
+		cancelProbe()
+		if probeErr != nil {
+			writeErrorWithCode(w, http.StatusServiceUnavailable,
+				"DOCKER_PROBE_FAILED",
+				"could not query docker", probeErr.Error())
+			return
+		}
+		found := false
+		for _, c := range containers {
+			if c.Name == container {
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeErrorWithCode(w, http.StatusNotFound,
+				ErrCodeNotFound,
+				"container "+container+" not in compose project "+state.ComposeProject)
+			return
+		}
+
+		// tail / since query params with sane bounds.
+		tail := 200
+		if t := r.URL.Query().Get("tail"); t != "" {
+			if n, err := parseClampedInt(t, 10, 2000); err == nil {
+				tail = n
+			}
+		}
+		since := r.URL.Query().Get("since")
+		// Validate `since` against a strict subset of docker's
+		// duration format (digits + h/m/s) to avoid passing
+		// shell-y characters through to the docker CLI.
+		if since != "" && !validDuration(since) {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid since duration",
+				"format: <number><h|m|s>, e.g. 5m, 30s, 2h")
+			return
+		}
+
+		args := []string{"logs", "--tail", strconv.Itoa(tail)}
+		if since != "" {
+			args = append(args, "--since", since)
+		}
+		args = append(args, container)
+
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "docker", args...)
+		// Docker logs are written to stderr for the bootstrap +
+		// stdout for application output; merge for the user.
+		var combined bytes.Buffer
+		cmd.Stdout = &combined
+		cmd.Stderr = &combined
+		if err := cmd.Run(); err != nil {
+			// If we got SOME output, surface it anyway — log
+			// tails often partial-fail when the container
+			// rotates mid-fetch.
+			if combined.Len() == 0 {
+				writeErrorWithCode(w, http.StatusServiceUnavailable,
+					"DOCKER_LOGS_FAILED",
+					"could not tail container logs", err.Error())
+				return
+			}
+		}
+
+		// Plain-text response so the frontend can render in a
+		// <pre> without a JSON decode + escape round-trip.
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(combined.Bytes())
+	}
+}
+
+// validContainerName allows alphanumeric, dot, underscore,
+// hyphen — the character set docker actually uses for container
+// names. Rejects path separators, shell metachars, spaces.
+func validContainerName(s string) bool {
+	if s == "" || len(s) > 253 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		ok := (c >= 'a' && c <= 'z') ||
+			(c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') ||
+			c == '-' || c == '_' || c == '.'
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// validDuration accepts the narrow docker --since format:
+// one-or-more digits followed by exactly one unit letter (h/m/s).
+// Rejects compound expressions ("1h30m") and shell metachars.
+func validDuration(s string) bool {
+	if len(s) < 2 || len(s) > 6 {
+		return false
+	}
+	last := s[len(s)-1]
+	if last != 'h' && last != 'm' && last != 's' {
+		return false
+	}
+	for i := 0; i < len(s)-1; i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// parseClampedInt parses s as an integer and clamps to [lo, hi].
+// Returns an error only on non-integer input — out-of-range
+// values get silently clamped because the caller's intent is
+// clearer that way ("tail=99999" → return the max we'll allow).
+func parseClampedInt(s string, lo, hi int) (int, error) {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, err
+	}
+	if n < lo {
+		return lo, nil
+	}
+	if n > hi {
+		return hi, nil
+	}
+	return n, nil
 }
 
 // dockerComposePsEntry mirrors the JSON fields `docker compose ps

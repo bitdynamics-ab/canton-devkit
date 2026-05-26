@@ -5,6 +5,7 @@ import {
   fetchContainers,
 } from "../api";
 import { W, wMono } from "../tokens";
+import { ContainerLogsModal } from "./ContainerLogsModal";
 
 // ContainerHealth — live per-container status panel. Polls
 // /api/instances/{name}/containers every POLL_MS so the user
@@ -29,6 +30,8 @@ export function ContainerHealth({ name }: { name: string }) {
     | { kind: "err"; message: string; status: number }
     | { kind: "absent" } // 503 — no docker project / daemon down
   >({ kind: "loading" });
+  // Selected container for the logs modal. Null = closed.
+  const [logsOpen, setLogsOpen] = useState<string | null>(null);
 
   // Poll loop. Restarts when name changes; tears down on
   // unmount via the cleanup closure.
@@ -118,16 +121,28 @@ export function ContainerHealth({ name }: { name: string }) {
       )}
 
       {state.kind === "ok" && (
-        <ContainersTable containers={state.data.containers} />
+        <ContainersTable
+          containers={state.data.containers}
+          onPickLogs={(c) => setLogsOpen(c)}
+        />
       )}
+
+      <ContainerLogsModal
+        open={logsOpen !== null}
+        instance={name}
+        container={logsOpen ?? ""}
+        onClose={() => setLogsOpen(null)}
+      />
     </section>
   );
 }
 
 function ContainersTable({
   containers,
+  onPickLogs,
 }: {
   containers: ContainersResponse["containers"];
+  onPickLogs: (name: string) => void;
 }) {
   if (containers.length === 0) {
     return (
@@ -166,19 +181,31 @@ function ContainersTable({
       </div>
       {sorted.map((c) => {
         const { color, glyph } = signalFor(c);
+        const onClick = () => onPickLogs(c.name);
+        // display:contents rows can't carry click handlers, so
+        // each cell gets its own onClick + cursor:pointer. CSS
+        // grid layout preserved.
+        const cellBase: React.CSSProperties = {
+          cursor: "pointer",
+          padding: "2px 0",
+        };
         return (
-          <div key={c.name} style={{ display: "contents" }}>
-            <div style={{ color, fontSize: 14, textAlign: "center" }}>{glyph}</div>
-            <div style={{ color: W.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <div
+            key={c.name}
+            style={{ display: "contents" }}
+            title={`Click to view logs for ${c.name}`}
+          >
+            <div onClick={onClick} style={{ ...cellBase, color, fontSize: 14, textAlign: "center" }}>{glyph}</div>
+            <div onClick={onClick} style={{ ...cellBase, color: W.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: "underline", textDecorationColor: W.faint, textDecorationStyle: "dotted", textUnderlineOffset: 2 }}>
               {c.service}
             </div>
-            <div style={{ color: W.text2 }}>
+            <div onClick={onClick} style={{ ...cellBase, color: W.text2 }}>
               <span style={{ color }}>{c.state}</span>
               {c.health && (
                 <span style={{ color: W.dim }}> · {c.health}</span>
               )}
             </div>
-            <div style={{ color: W.dim, fontSize: 10.5 }}>{c.status}</div>
+            <div onClick={onClick} style={{ ...cellBase, color: W.dim, fontSize: 10.5 }}>{c.status}</div>
           </div>
         );
       })}
