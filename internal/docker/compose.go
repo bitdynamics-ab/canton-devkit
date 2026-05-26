@@ -13,9 +13,13 @@ import (
 const (
 	// Splice LocalNet's onboarding flow (DAML package vetting, SV
 	// keygen, validator registration) routinely takes 3–5 minutes on a
-	// cold start. 15 minutes gives slow hosts plenty of headroom; the
-	// caller can still ^C earlier.
-	readinessTimeout  = 15 * time.Minute
+	// cold start. Splice 0.6.4 cold-start with no cached images was
+	// observed taking 18+ minutes on a resource-constrained machine
+	// (Splice container stuck in `health: starting` while canton +
+	// participants reached healthy), so 25 minutes gives realistic
+	// headroom without leaking goroutines indefinitely on a genuinely
+	// stuck daemon. The caller can still ^C earlier.
+	readinessTimeout  = 25 * time.Minute
 	readinessPollWait = 3 * time.Second
 )
 

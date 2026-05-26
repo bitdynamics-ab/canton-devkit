@@ -57,21 +57,25 @@ const upBodyMax = 4 << 10 // 4 KiB
 
 // upJobTimeout is the hard ceiling on a single create-instance
 // goroutine. Sized to comfortably outlast the internal docker
-// readinessTimeout (15 min, see internal/docker/compose.go
+// readinessTimeout (25 min, see internal/docker/compose.go
 // WaitForHealthy) plus slack for Splice fetch + compose up.
 //
-// First-run Splice 0.6.4 with no cached images and slow nginx
-// healthcheck legitimately needs ~12-15 minutes. A tighter outer
-// cap fires before WaitForHealthy's own deadline and surfaces a
-// misleading "Timed out waiting for services" while the
-// containers are actually still progressing — observed on the
-// BIT-163 live preview, fixed by bumping from 10 min.
+// First-run Splice 0.6.4 with no cached images was observed
+// taking 18+ minutes — splice container in `health: starting`
+// long after canton/participants reached healthy. The earlier
+// 10/20-minute caps fired before WaitForHealthy's own deadline
+// and surfaced a misleading "Timed out waiting for services"
+// while containers were actually still progressing.
+//
+// 30 minutes total outer cap accommodates: fetch (~1 min cached
+// / ~5 min fresh) + docker up (~30s) + WaitForHealthy (~25 min
+// worst case) + capture JWTs (~5s) + slack.
 //
 // This is NOT the HTTP request timeout — the POST returns 202
 // immediately; the goroutine runs on its own context, independent
 // of the request. Cancellation (BIT-163e) passes a CancelFunc
 // into the goroutine's context that DELETE invokes.
-const upJobTimeout = 20 * time.Minute
+const upJobTimeout = 30 * time.Minute
 
 // progressBufferCap is the per-instance topic ring size. Sized
 // for a normal up: 8 step.started + 8 step.finished + a few
