@@ -244,6 +244,36 @@ export const createInstance = (req: CreateInstanceRequest) =>
     body: JSON.stringify(req),
   });
 
+// stopInstance invokes POST /api/instances/{name}/down — runs
+// `docker compose down` against the named instance and removes
+// per-instance data unless { keep_data: true }. Synchronous on the
+// wire (down is fast, ~10-30s on the happy path); the call blocks
+// until the server returns 204 or 5xx.
+//
+// On failure, the server's error envelope includes a one-line
+// summary the modal shows to the user; the full output goes to
+// the server log.
+export async function stopInstance(name: string, keepData = false): Promise<void> {
+  const resp = await fetch(
+    `/api/instances/${encodeURIComponent(name)}/down`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keep_data: keepData }),
+    },
+  );
+  if (!resp.ok) {
+    const text = await resp.text();
+    let body: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try {
+      body = JSON.parse(text);
+    } catch {
+      /* non-JSON; keep default */
+    }
+    throw new ApiError(resp.status, body);
+  }
+}
+
 // scrubInstance invokes DELETE /api/instances/{name} — removes the
 // registry entry entirely. Use for cleanup of zombie creating
 // entries (e.g. server restart killed the goroutine mid-up,

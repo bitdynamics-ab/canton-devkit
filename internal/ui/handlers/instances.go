@@ -32,10 +32,12 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"sort"
@@ -95,6 +97,7 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("GET /api/instances/{name}/events", handleInstanceEvents(hub))
 		mux.HandleFunc("DELETE /api/instances/{name}/up", handleCancelUp(hub))
 		mux.HandleFunc("DELETE /api/instances/{name}", handleScrubInstance(hub))
+		mux.HandleFunc("POST /api/instances/{name}/down", handleDownInstance())
 	} else {
 		// Stub so a misconfigured deployment fails loudly
 		// rather than 404 (which the frontend would mistake
@@ -109,6 +112,7 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("GET /api/instances/{name}/events", stub)
 		mux.HandleFunc("DELETE /api/instances/{name}/up", stub)
 		mux.HandleFunc("DELETE /api/instances/{name}", stub)
+		mux.HandleFunc("POST /api/instances/{name}/down", stub)
 	}
 }
 
@@ -548,6 +552,130 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 			EventsURL:     "/api/instances/" + req.Name + "/events",
 		})
 	}
+}
+
+// downTimeout caps a single down operation. `docker compose down`
+// is usually fast (10-30s) but a stuck container can extend it
+// well past the default 10s SIGTERM grace per container × N
+// services. 3 minutes is generous.
+const downTimeout = 3 * time.Minute
+
+// downRequest is the body shape (currently empty; reserved for
+// future --keep-data flag once the frontend has a UI for it).
+type downRequest struct {
+	KeepData bool `json:"keep_data,omitempty"`
+}
+
+// handleDownInstance: POST /api/instances/{name}/down.
+//
+// Synchronous wrapper around localnet.RunDown. Down is fast
+// enough that streaming progress over SSE is overkill — the
+// modal would barely have time to render before completion.
+// (Compare to /up which is minutes-long; that one warrants the
+// full SSE choreography.)
+//
+// Returns 204 on success, 5xx with the captured output on
+// failure. Body is application/json; an empty body or
+// {"keep_data": true} are both valid.
+//
+// Refuses on `creating` (409) — a goroutine is mid-up; the
+// caller should DELETE /up to cancel first, then this endpoint
+// can scrub what's left.
+func handleDownInstance() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if err := registry.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+
+		// Body parse. Empty body is fine — treat as defaults.
+		r.Body = http.MaxBytesReader(w, r.Body, upBodyMax)
+		var req downRequest
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil && err != io.EOF {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid request body",
+				"the body should be empty or {\"keep_data\": bool}")
+			return
+		}
+
+		if jobs.Active(name) {
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_CREATING",
+				"instance "+name+" is being created — cancel the bring-up first",
+				"call DELETE /api/instances/"+name+"/up to cancel, then retry")
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), downTimeout)
+		defer cancel()
+
+		// Capture out/err for the failure-response body. The
+		// success path discards them — 204 has no body.
+		var outBuf, errBuf bytes.Buffer
+		exit := localnet.RunDown(ctx, &outBuf, &errBuf, &localnet.DownOptions{
+			Name:     name,
+			KeepData: req.KeepData,
+		})
+
+		if exit == localnet.ExitSuccess {
+			log.Printf("down instance %q: ok", name)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		// Non-zero exit → 5xx with the cause from stderr.
+		// RunDown writes friendly errors to errw; surface those
+		// directly so the frontend can render them.
+		status := http.StatusInternalServerError
+		if exit == localnet.ExitUserError {
+			status = http.StatusBadRequest
+		} else if exit == localnet.ExitTimeout {
+			status = http.StatusRequestTimeout
+		}
+		cause := errBuf.String()
+		if cause == "" {
+			cause = "down failed with exit code " + uintToString(uint64(exit))
+		}
+		log.Printf("down instance %q: exit=%d err=%s", name, exit, cause)
+		writeErrorWithCode(w, status,
+			"DOWN_FAILED",
+			"failed to stop "+name+": "+firstLine(cause),
+			"the docker compose down output is in the server log; "+
+				"try `dpm localnet down --name "+name+"` from a terminal for full output")
+	}
+}
+
+// uintToString — stdlib-free integer to ASCII. Duplicated here
+// to keep this file's strconv-free convention.
+func uintToString(n uint64) string {
+	if n == 0 {
+		return "0"
+	}
+	var buf [20]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(buf[i:])
+}
+
+// firstLine returns just the first line of s. Used to keep error
+// summaries one-line-y; the full output goes to the server log.
+func firstLine(s string) string {
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			return s[:i]
+		}
+	}
+	return s
 }
 
 // handleScrubInstance: DELETE /api/instances/{name}.

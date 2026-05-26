@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { ApiError, type Instance, fetchInstance } from "../api";
+import {
+  ApiError,
+  type Instance,
+  fetchInstance,
+  stopInstance,
+} from "../api";
 import { W, wMono } from "../tokens";
 
 // InstanceDetail — the per-instance detail card the dashboard
@@ -14,12 +19,41 @@ import { W, wMono } from "../tokens";
 // Pure-frontend slice: the endpoint shipped in PR #43 but no
 // screen consumed it. Wiring it surfaces the data without
 // changing the backend.
-export function InstanceDetail({ name }: { name: string }) {
+interface Props {
+  name: string;
+  // Optional: refresh the dashboard's instance list after a Stop
+  // succeeds so the row's status updates (running → stopped) and
+  // the DeveloperSetup panel hides.
+  onChanged?: () => void;
+}
+
+export function InstanceDetail({ name, onChanged }: Props) {
   const [state, setState] = useState<
     | { kind: "loading" }
     | { kind: "ok"; instance: Instance }
     | { kind: "err"; error: string }
   >({ kind: "loading" });
+  const [stopping, setStopping] = useState<
+    | { kind: "idle" }
+    | { kind: "running" }
+    | { kind: "err"; message: string }
+  >({ kind: "idle" });
+
+  async function onStop() {
+    if (!confirm(`Stop instance ${name}? Containers will be brought down via docker compose. Data volumes are preserved.`)) {
+      return;
+    }
+    setStopping({ kind: "running" });
+    try {
+      await stopInstance(name, /*keepData=*/ true);
+      setStopping({ kind: "idle" });
+      onChanged?.();
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "failed to stop";
+      setStopping({ kind: "err", message: msg });
+      onChanged?.();
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -58,7 +92,6 @@ export function InstanceDetail({ name }: { name: string }) {
         {state.kind === "ok" && state.instance.live_probe_failed && (
           <span
             style={{
-              marginLeft: "auto",
               color: W.warn,
               fontSize: 11,
               border: `1px solid ${W.warn}`,
@@ -69,7 +102,44 @@ export function InstanceDetail({ name }: { name: string }) {
             live probe failed
           </span>
         )}
+        <span style={{ marginLeft: "auto" }} />
+        {state.kind === "ok" && state.instance.status === "running" && (
+          <button
+            onClick={onStop}
+            disabled={stopping.kind === "running"}
+            style={{
+              background: "transparent",
+              color: stopping.kind === "running" ? W.dim : W.err,
+              border: `1px solid ${stopping.kind === "running" ? W.dim : W.err}`,
+              borderRadius: 6,
+              padding: "4px 12px",
+              fontSize: 11.5,
+              fontWeight: 600,
+              cursor: stopping.kind === "running" ? "wait" : "pointer",
+            }}
+            title="Bring containers down via docker compose. Data volumes preserved."
+          >
+            {stopping.kind === "running" ? "Stopping…" : "⏹ Stop"}
+          </button>
+        )}
       </header>
+
+      {stopping.kind === "err" && (
+        <div
+          role="alert"
+          style={{
+            background: `${W.err}10`,
+            color: W.err,
+            border: `1px solid ${W.err}`,
+            borderRadius: 6,
+            padding: "6px 10px",
+            fontSize: 12,
+            marginBottom: 10,
+          }}
+        >
+          Stop failed: {stopping.message}
+        </div>
+      )}
 
       {state.kind === "loading" && (
         <div style={{ color: W.dim, fontSize: 13 }}>Loading…</div>

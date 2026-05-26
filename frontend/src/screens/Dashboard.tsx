@@ -111,7 +111,7 @@ export function Dashboard() {
             {isCreating && (
               <CreatingPanel name={sel.selected} onRefresh={sel.refresh} />
             )}
-            <InstanceDetail name={sel.selected} />
+            <InstanceDetail name={sel.selected} onChanged={sel.refresh} />
             {!isCreating && <DeveloperSetup name={sel.selected} />}
           </>
         );
