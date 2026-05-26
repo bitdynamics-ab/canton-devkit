@@ -9,6 +9,8 @@ import (
 )
 
 func TestRunDoctorHeaderContents(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+
 	// We can't predict whether all preflight checks pass on every CI host
 	// (e.g. Windows in CI can't bind port 5432 if something else uses it).
 	// Assert only on the bug-report header content + exit-code shape.
@@ -30,6 +32,7 @@ func TestRunDoctorHeaderContents(t *testing.T) {
 		"Docker:",
 		"Compose v2:",
 		"Checks:",
+		"Disk space",
 		"Result:",
 	}
 	for _, s := range mustContain {
@@ -40,6 +43,8 @@ func TestRunDoctorHeaderContents(t *testing.T) {
 }
 
 func TestRunDoctorExitCodeMatchesResultLine(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+
 	var out bytes.Buffer
 	var errBuf bytes.Buffer
 	code := RunDoctor(context.Background(), &out, &errBuf, &DoctorOptions{})

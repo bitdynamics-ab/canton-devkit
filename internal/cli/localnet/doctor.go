@@ -9,7 +9,7 @@ func buildDoctor() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Diagnose host prerequisites for running Canton LocalNet",
-		Long: `Runs every preflight check (Docker CLI, daemon, Compose v2, ports,
+		Long: `Runs every preflight check (Docker CLI, daemon, Compose v2,
 disk, memory, host prereqs) and prints a bug-report-friendly summary,
 including system identifiers (OS/arch, Go runtime). Makes no changes
 to the host.
