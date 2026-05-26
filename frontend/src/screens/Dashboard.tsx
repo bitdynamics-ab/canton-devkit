@@ -119,7 +119,11 @@ export function Dashboard() {
             {isCreating && (
               <CreatingPanel name={sel.selected} onRefresh={sel.refresh} />
             )}
-            <InstanceDetail name={sel.selected} onChanged={sel.refresh} />
+            <InstanceDetail
+              name={sel.selected}
+              statusHint={selectedRow?.status}
+              onChanged={sel.refresh}
+            />
             {!isCreating && <DeveloperSetup name={sel.selected} />}
           </>
         );

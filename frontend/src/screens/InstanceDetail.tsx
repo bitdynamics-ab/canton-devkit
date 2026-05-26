@@ -22,18 +22,29 @@ import { W, wMono } from "../tokens";
 // changing the backend.
 interface Props {
   name: string;
+  // statusHint comes from sel.instances (the always-fresh list)
+  // and gates which action button renders. Falls back to the
+  // status in the fetched-instance state if omitted — but the
+  // dashboard should pass it so the button reflects the latest
+  // list state immediately after onChanged, not the stale copy
+  // from this component's own mount-time fetch.
+  statusHint?: string;
   // Optional: refresh the dashboard's instance list after a Stop
   // succeeds so the row's status updates (running → stopped) and
   // the DeveloperSetup panel hides.
   onChanged?: () => void;
 }
 
-export function InstanceDetail({ name, onChanged }: Props) {
+export function InstanceDetail({ name, statusHint, onChanged }: Props) {
   const [state, setState] = useState<
     | { kind: "loading" }
     | { kind: "ok"; instance: Instance }
     | { kind: "err"; error: string }
   >({ kind: "loading" });
+  // Bumped to force a refetch after a successful Stop/Remove so
+  // the cached instance.status doesn't lie about the post-action
+  // state.
+  const [refetchTick, setRefetchTick] = useState(0);
   const [stopping, setStopping] = useState<
     | { kind: "idle" }
     | { kind: "running" }
@@ -48,10 +59,15 @@ export function InstanceDetail({ name, onChanged }: Props) {
     try {
       await stopInstance(name, /*keepData=*/ true);
       setStopping({ kind: "idle" });
+      // Bump our own refetch tick so this card's status field
+      // updates from running → stopped, then notify the parent
+      // so the dashboard's row + ActionButton catch up too.
+      setRefetchTick((n) => n + 1);
       onChanged?.();
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "failed to stop";
       setStopping({ kind: "err", message: msg });
+      setRefetchTick((n) => n + 1);
       onChanged?.();
     }
   }
@@ -70,6 +86,9 @@ export function InstanceDetail({ name, onChanged }: Props) {
       await scrubInstance(name);
       setStopping({ kind: "idle" });
       onChanged?.();
+      // No setRefetchTick — the entry is gone, the parent's
+      // refresh will drop this whole card via sel.selected
+      // changing or the conditional render hiding it.
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "failed to remove";
       setStopping({ kind: "err", message: msg });
@@ -79,7 +98,14 @@ export function InstanceDetail({ name, onChanged }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    setState({ kind: "loading" });
+    // Only show the loading placeholder on a true name-change
+    // mount, not on a refetchTick bump — the latter is a
+    // background refresh and the cached data is still valid
+    // until the new fetch resolves. Without this guard, every
+    // Stop/Remove would briefly blank the detail card.
+    if (refetchTick === 0) {
+      setState({ kind: "loading" });
+    }
     fetchInstance(name)
       .then((r) => {
         if (!cancelled) setState({ kind: "ok", instance: r });
@@ -94,7 +120,7 @@ export function InstanceDetail({ name, onChanged }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [name]);
+  }, [name, refetchTick]);
 
   return (
     <section
@@ -125,12 +151,20 @@ export function InstanceDetail({ name, onChanged }: Props) {
           </span>
         )}
         <span style={{ marginLeft: "auto" }} />
-        {state.kind === "ok" && <ActionButton
-          status={state.instance.status}
-          busy={stopping.kind === "running"}
-          onStop={onStop}
-          onRemove={onRemove}
-        />}
+        {/* Status source priority:
+           1. statusHint from parent (always-fresh sel.instances row)
+           2. state.instance.status (this card's own fetch)
+           This keeps the action button accurate the instant the
+           dashboard refreshes after Stop, without waiting for
+           this card's own refetch to settle. */}
+        {(statusHint || state.kind === "ok") && (
+          <ActionButton
+            status={statusHint ?? (state.kind === "ok" ? state.instance.status : "")}
+            busy={stopping.kind === "running"}
+            onStop={onStop}
+            onRemove={onRemove}
+          />
+        )}
       </header>
 
       {stopping.kind === "err" && (
