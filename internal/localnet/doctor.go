@@ -31,8 +31,8 @@ func RunDoctor(ctx context.Context, out io.Writer, _ io.Writer, _ *DoctorOptions
 	// allocates them ephemerally — so a green doctor implies `up` will
 	// also pass preflight.
 	report := docker.RunPreflight(ctx, docker.Options{
-		MinDiskBytes:   10 * 1024 * 1024 * 1024, // 10 GB
-		MinMemoryBytes: 4 * 1024 * 1024 * 1024,  // 4 GB
+		MinDiskBytes:   docker.DefaultMinDiskBytes,
+		MinMemoryBytes: docker.DefaultMinMemoryBytes,
 	})
 
 	writeVersions(out, report)
