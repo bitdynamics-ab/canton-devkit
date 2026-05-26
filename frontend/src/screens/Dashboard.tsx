@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { type InstanceSummary } from "../api";
 import { W } from "../tokens";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
@@ -56,14 +56,22 @@ export function Dashboard() {
 
       <CreateLocalNetModal
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={(name) => {
-          // After a successful create, refresh the list and
-          // promote the new instance to the URL-driven selection
-          // so the detail card pops the moment the modal closes.
-          sel.refresh();
-          sel.select(name);
-        }}
+        onClose={useCallback(() => setCreateOpen(false), [])}
+        onCreated={useCallback(
+          (name: string) => {
+            // After a successful create, refresh the list and
+            // promote the new instance to the URL-driven selection
+            // so the detail card pops the moment the modal closes.
+            //
+            // useCallback'd so the modal's done-effect doesn't
+            // see this as a new identity each render and refire.
+            // Deps cover both sel.refresh + sel.select since
+            // they come from the context value.
+            sel.refresh();
+            sel.select(name);
+          },
+          [sel.refresh, sel.select],
+        )}
       />
 
       {sel.loading && <p style={{ color: W.dim }}>Loading…</p>}

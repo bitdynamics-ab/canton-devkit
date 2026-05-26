@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -86,13 +87,29 @@ export function InstanceSelectionProvider({ children }: { children: ReactNode })
     return state.instances.find((i) => i.status === "running")?.name ?? null;
   }, [state.instances, urlPick]);
 
+  // setParams is stable across renders, but `params` is a fresh
+  // URLSearchParams instance every render (react-router quirk).
+  // If we include `params` in the useCallback deps, `select` gets
+  // a new identity each render — that cascades into the context
+  // `value` memo also being unstable, which causes consumers
+  // that pass `sel.select` to child effects' deps to fire those
+  // effects on every render. Observed as a tight render loop
+  // hammering /api/instances after a successful create flow.
+  //
+  // Fix: capture the live `params` via ref and dereference inside
+  // the callback. useCallback deps are now empty + setParams (a
+  // stable function) — select is rock-stable across renders.
+  const paramsRef = useRef(params);
+  useEffect(() => {
+    paramsRef.current = params;
+  }, [params]);
   const select = useCallback(
     (name: string) => {
-      const next = new URLSearchParams(params);
+      const next = new URLSearchParams(paramsRef.current);
       next.set("instance", name);
       setParams(next, { replace: false });
     },
-    [params, setParams],
+    [setParams],
   );
 
   const value = useMemo<InstanceSelection>(

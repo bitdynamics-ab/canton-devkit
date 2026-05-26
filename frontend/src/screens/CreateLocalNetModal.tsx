@@ -111,11 +111,29 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
   // refresh its list and pick up the new instance. The modal
   // stays open until the user closes it explicitly — the
   // "is ready" banner is the celebratory beat.
+  //
+  // Fires AT MOST ONCE per (stage instance) — without this the
+  // callback gets re-invoked on every render because parents
+  // typically pass a fresh arrow function as `onCreated`, which
+  // changes the effect's identity each render and re-triggers
+  // the body. With `firedRef` we guarantee one call per accepted
+  // instance, regardless of how the parent typed the callback.
+  const firedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (progress.banner.kind === "done" && stage.kind === "progress") {
+    if (
+      progress.banner.kind === "done" &&
+      stage.kind === "progress" &&
+      firedRef.current !== stage.accepted.instance
+    ) {
+      firedRef.current = stage.accepted.instance;
       onCreated?.(stage.accepted.instance);
     }
   }, [progress.banner.kind, stage, onCreated]);
+  // Reset the fired guard whenever the modal closes so a NEW
+  // open with a NEW create can fire onCreated again.
+  useEffect(() => {
+    if (!open) firedRef.current = null;
+  }, [open]);
 
   if (!open) return null;
 
