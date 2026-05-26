@@ -749,7 +749,23 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
   );
 }
 
-function VersionPicker({
+// VersionPicker renders the curated Splice catalogue as a native HTML
+// <select> dropdown. The previous implementation rendered a custom
+// scrollable button-list when versions were present and fell back to a
+// free-text <input> when the API returned empty (loading / network
+// error). Users reported the empty-state textbox felt like a regression
+// from the prior dropdown UX, and typing an arbitrary tag silently
+// routed to the upstream-resolution path that the curated dropdown is
+// meant to prevent. This rewrite uses a real <select> in both states:
+// disabled placeholder when loading, populated when versions arrive.
+//
+// Sort order: "latest" first, then descending semver — so the newest
+// catalogued releases sit near the top of the dropdown.
+//
+// Exported so the regression test (VersionPicker.test.tsx) can render
+// the component in isolation and pin the "always a <select>, never a
+// textbox" invariant.
+export function VersionPicker({
   versions,
   selected,
   onSelect,
@@ -760,75 +776,58 @@ function VersionPicker({
 }) {
   if (versions.length === 0) {
     return (
-      <input
-        value={selected}
-        onChange={(e) => onSelect(e.target.value)}
-        placeholder="0.4.12"
-        style={inputStyle}
-        spellCheck={false}
-      />
+      <select disabled value="" style={selectStyle} aria-label="Splice version">
+        <option value="">Loading curated versions…</option>
+      </select>
     );
   }
+
+  const sorted = [...versions].sort((a, b) => {
+    if (a.status === "latest" && b.status !== "latest") return -1;
+    if (b.status === "latest" && a.status !== "latest") return 1;
+    return b.tag.localeCompare(a.tag, undefined, { numeric: true });
+  });
+
   return (
-    <div
-      style={{
-        background: W.bg,
-        border: `1px solid ${W.border}`,
-        borderRadius: 7,
-        maxHeight: 200,
-        overflow: "auto",
-      }}
+    <select
+      value={selected}
+      onChange={(e) => onSelect(e.target.value)}
+      style={selectStyle}
+      aria-label="Splice version"
     >
-      {versions.map((v) => {
-        const isSelected = v.tag === selected;
-        return (
-          <button
-            key={v.tag}
-            type="button"
-            onClick={() => onSelect(v.tag)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              width: "100%",
-              padding: "8px 12px",
-              border: "none",
-              background: isSelected ? `${W.brand}14` : "transparent",
-              borderLeft: `2px solid ${isSelected ? W.brand : "transparent"}`,
-              color: W.text,
-              cursor: "pointer",
-              fontSize: 12.5,
-              textAlign: "left",
-            }}
-          >
-            <span style={{ fontFamily: wMono, fontWeight: 600 }}>{v.tag}</span>
-            {v.status === "latest" && (
-              <span
-                style={{
-                  background: `${W.brand}1A`,
-                  color: W.brand,
-                  fontSize: 10,
-                  fontWeight: 700,
-                  padding: "1px 6px",
-                  borderRadius: 999,
-                }}
-              >
-                latest
-              </span>
-            )}
-            <span style={{ color: W.dim, fontSize: 11, fontFamily: wMono }}>
-              major {v.major}
-            </span>
-            <span style={{ flex: 1 }} />
-            <span style={{ color: W.dim, fontFamily: wMono, fontSize: 10.5 }}>
-              {v.commit.slice(0, 8)}
-            </span>
-          </button>
-        );
-      })}
-    </div>
+      {sorted.map((v) => (
+        <option key={v.tag} value={v.tag}>
+          {v.tag}
+          {v.status === "latest" ? " (latest)" : ""}
+          {v.major ? ` — major ${v.major}` : ""}
+        </option>
+      ))}
+    </select>
   );
 }
+
+// selectStyle is inlined rather than spread from `inputStyle` because
+// `inputStyle` is declared further down in this file — relying on
+// hoisting here triggers a TDZ "used before declaration" error under
+// Vite/SWC's strict ES module ordering. Visual parity with inputStyle
+// is intentional (same dark-theme tokens, same border radius) plus
+// `appearance: "auto"` so the native OS dropdown caret stays visible.
+// Without the explicit appearance, some browsers drop the caret when
+// a custom borderRadius/background is applied — making the field look
+// like a disabled text input, which is the regression this commit fixes.
+const selectStyle: React.CSSProperties = {
+  width: "100%",
+  background: W.bg,
+  color: W.text,
+  border: `1px solid ${W.border}`,
+  borderRadius: 6,
+  padding: "7px 10px",
+  fontSize: 13,
+  fontFamily: wMono,
+  outline: "none",
+  cursor: "pointer",
+  appearance: "auto",
+};
 
 function Field({
   label,
