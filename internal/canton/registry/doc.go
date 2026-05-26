@@ -1,0 +1,46 @@
+// Package registry is canton-devkit's typed client for the Splice
+// HTTP surface — the validator-app and scan-app REST APIs that
+// collectively serve as the "Splice Registry API" the proposal refers
+// to (docs/original-devkit-proposal.md line 207: "DevKit will use the
+// LocalNet Ledger API, wallet UI/API, and registry APIs where
+// available").
+//
+// # Surface map (Splice 0.6.4, verified via cached nginx routes)
+//
+// Per-tenant Splice instance (sv / app-provider / app-user) exposes:
+//
+//	GET  /api/scan/v0/...        — SV-only; public read-only ledger scan
+//	GET  /api/sv/v0/...          — SV-only; super-validator admin
+//	*    /api/validator/v0/...   — per-tenant; wallet, transfers, ANS, token ops
+//	*    /                       — UI assets (wallet, scan, ANS web UIs)
+//	grpc grpc-ledger-api.localhost — Canton Ledger API gRPC (covered by
+//	                                  internal/canton/ledger, not this package)
+//	http json-ledger-api.localhost — Canton Ledger API JSON
+//	                                  (covered by internal/canton/ledger if/when needed)
+//
+// The CIP-0112 token "registry" is the scan app's `/v0/featured-apps`
+// + token-instrument endpoints; per-wallet token operations live on
+// `/api/validator/v0/wallet/*` and `/api/validator/v0/transfer/*`.
+//
+// # Scope
+//
+// This package ships the wiring (typed Client, auth-header injection,
+// JSON decode shape, error wrapping) plus one canonical smoke endpoint
+// (`GET /api/scan/v0/dso`) so M3 consumers have a working pattern to
+// extend. Per-endpoint methods land alongside the CLI / Web UI consumer
+// that needs them — adding a method here without a caller would be
+// premature work against an evolving Splice API. See README.md inside
+// the package for the "how to add an endpoint" recipe.
+//
+// # Auth
+//
+// Identical model to [internal/canton/ledger]: the [TokenSource]
+// interface returns a fresh bearer JWT per-request. Production wraps
+// [internal/splice.SignToken]; tests pass [StaticToken].
+//
+// # Tests
+//
+// Unit tests use [httptest.NewServer] with route-matched stub handlers.
+// Integration tests behind `//go:build integration` hit a real
+// `localnet up --name dev` instance — same gating as ledger/.
+package registry
