@@ -48,19 +48,39 @@ fi
 echo "Scanning $compose"
 
 # REQUIRED ${VAR} references in compose.yaml. A reference counts as
-# required only if it has NO default: bare `${VAR}` but not `${VAR:-...}`
-# or `${VAR-...}`. Refs with defaults are harmless when DevKit doesn't
-# set the value (compose substitutes the default).
-referenced=$(grep -oE '\$\{[A-Z_]+[A-Z0-9_]*\}' "$compose" \
-  | sed -E 's/^\$\{([A-Z_][A-Z0-9_]*)\}$/\1/' \
-  | sort -u)
+# required if it has no default: bare `${VAR}` and Compose's explicit
+# required forms `${VAR?message}` / `${VAR:?message}`. Refs with a
+# default (`${VAR-default}` or `${VAR:-default}`) are harmless when
+# DevKit doesn't set the value because compose substitutes the default.
+referenced=$(
+  (grep -oE '\$\{[^}]+\}' "$compose" || true) \
+    | while IFS= read -r ref; do
+        body=${ref#'${'}
+        body=${body%'}'}
+        if [[ "$body" =~ ^([A-Z_][A-Z0-9_]*)(:?-) ]]; then
+          continue
+        fi
+        if [[ "$body" =~ ^([A-Z_][A-Z0-9_]*)($|:?\?) ]]; then
+          printf '%s\n' "${BASH_REMATCH[1]}"
+        fi
+      done \
+    | sort -u
+)
 
-# Vars DevKit's adapter.OverlayEnv() always sets. Mirrors
-# internal/splice/v05/adapter.go and v06/adapter.go.
+# Vars DevKit's adapter.OverlayEnv() always sets. Mirrors the common
+# subset of internal/splice/v05/adapter.go and v06/adapter.go.
 overlay_env=(
   LOCALNET_DIR LOCALNET_ENV_DIR IMAGE_TAG DOCKER_NETWORK PARTY_HINT
-  COMPOSE_PROFILES TEST_PORT ALPHA_PROTOCOL_VERSION_ENV
+  COMPOSE_PROFILES TEST_PORT
 )
+
+# 0.6.x additionally sets ALPHA_PROTOCOL_VERSION_ENV; 0.5.x deliberately
+# does not. Infer the version from the cached project directory name
+# (`splice-0.6.4`, etc.) so a 0.5 cache does not get false coverage.
+project_base=$(basename "$project")
+if [[ "$project_base" =~ ^splice-0\.6\. ]]; then
+  overlay_env+=(ALPHA_PROTOCOL_VERSION_ENV)
+fi
 
 # Vars DevKit allocates as ephemeral host ports. Mirrors
 # internal/localnet/portblock.go.UIPortEnvVars().
@@ -68,16 +88,15 @@ ui_port_env=(
   APP_USER_UI_PORT APP_PROVIDER_UI_PORT SV_UI_PORT SWAGGER_UI_PORT DB_PORT
 )
 
-# Vars provided by the Splice env files DevKit loads via Adapter.EnvFiles().
-# Extracted by grep-ing the files we know exist in the cached project.
+# Vars provided by the Splice env files DevKit passes via Adapter.EnvFiles().
+# Extracted by grep-ing only the files the adapters actually return.
 env_files_provide=$(
-  for f in "$project"/env/common.env "$project"/compose.env \
-           "$project"/env/postgres.env "$project"/env/splice.env \
-           "$project"/env/alpha-protocol-version.env \
-           "$project"/env/sv-auth-on.env "$project"/env/app-provider-auth-on.env \
-           "$project"/env/app-user-auth-on.env; do
-    [[ -f "$f" ]] && grep -oE '^[A-Z_][A-Z0-9_]*' "$f" 2>/dev/null
-  done | sort -u
+  (
+    for f in "$project"/compose.env "$project"/env/common.env; do
+      [[ -f "$f" ]] && grep -oE '^[A-Z_][A-Z0-9_]*' "$f" 2>/dev/null
+    done
+    true
+  ) | sort -u
 )
 
 # Build the union of all "satisfied" sets.
