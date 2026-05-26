@@ -1,0 +1,48 @@
+# BIT-134 — Prometheus scrape config for the observability profile.
+#
+# HONEST SCOPE NOTE (review v3):
+# Splice 0.6.4's stock compose does NOT expose any Prometheus
+# endpoints. Canton has built-in OpenTelemetry support but only
+# emits if its `metrics-reporter` config is overridden — the
+# stock Splice config doesn't enable that. So this scrape config
+# only includes targets that we KNOW exist:
+#
+#   1. Prometheus itself (`localhost:9090`) — proves the stack
+#      is up and Grafana can query something.
+#
+# To actually scrape canton / splice metrics requires one of:
+#
+#   (A) Override canton's config to enable `metrics-reporter` of
+#       type=prometheus on a known port. Splice's compose mounts
+#       conf files from $LOCALNET_DIR/conf/canton/; the override
+#       would go in a sibling overlay file `assets/compose/
+#       canton-metrics.yaml` that mounts a config snippet enabling
+#       the reporter. Tracked as BIT-134-followup-1 (canton config
+#       overlay).
+#   (B) Run a JMX exporter sidecar that reads canton's JMX MBeans
+#       and exposes a /metrics endpoint. Tracked as
+#       BIT-134-followup-2 (jmx-exporter sidecar).
+#
+# Until (A) or (B) lands, this config produces an EMPTY Grafana
+# dashboard with the panels in place but no data. That's honest
+# and reviewable — the previous fictional `canton:9000` /
+# `splice:5014` / `postgres:9187` targets would have silently
+# failed every scrape and left no diagnostic trail.
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+  external_labels:
+    instance: "${COMPOSE_PROJECT_NAME:-canton}"
+
+scrape_configs:
+  # Prometheus self-scrape — proves the stack is up. Always
+  # produces data so a user opening Grafana can see SOMETHING
+  # even before they enable canton metrics via the follow-up
+  # overlays.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          component: prometheus

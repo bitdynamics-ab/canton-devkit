@@ -93,7 +93,7 @@ func parseMajor(version string) (int, error) {
 	return strconv.Atoi(v)
 }
 
-func checkDockerMemory(ctx context.Context, minBytes uint64) CheckResult {
+func checkDockerMemory(ctx context.Context, minBytes, recommendedBytes uint64) CheckResult {
 	if minBytes == 0 {
 		return CheckResult{Name: "Docker memory", Status: StatusSkipped, Detail: "no minimum set"}
 	}
@@ -123,7 +123,15 @@ func checkDockerMemory(ctx context.Context, minBytes uint64) CheckResult {
 		return CheckResult{
 			Name:        "Docker memory",
 			Status:      StatusFail,
-			Detail:      fmt.Sprintf("%s available, %s recommended", humanBytes(mem), humanBytes(minBytes)),
+			Detail:      fmt.Sprintf("%s available, %s required", humanBytes(mem), humanBytes(minBytes)),
+			Remediation: remediationMemoryLow(),
+		}
+	}
+	if recommendedBytes > minBytes && mem < recommendedBytes {
+		return CheckResult{
+			Name:        "Docker memory",
+			Status:      StatusWarn,
+			Detail:      fmt.Sprintf("%s available, %s recommended for this version", humanBytes(mem), humanBytes(recommendedBytes)),
 			Remediation: remediationMemoryLow(),
 		}
 	}

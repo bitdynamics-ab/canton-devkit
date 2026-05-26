@@ -329,12 +329,96 @@ export interface CreateInstanceAcceptedResponse {
 // createInstance kicks off the bring-up. The HTTP request returns
 // 202 immediately; progress arrives over the SSE stream at the
 // returned events_url. Errors here are client-side
-// (400 validation / 409 duplicate / 413 oversized / 503 disabled).
-export const createInstance = (req: CreateInstanceRequest) =>
-  apiFetch<CreateInstanceAcceptedResponse>("/api/instances", {
+// (400 validation / 409 duplicate / 413 oversized / 422 preflight
+// failure / 503 disabled). 422 carries a PreflightReport body, not
+// the usual ApiError envelope — handled by createInstance via the
+// X-Preflight-Failed response header so the modal can surface the
+// findings inline instead of generic error text.
+export async function createInstance(req: CreateInstanceRequest): Promise<CreateInstanceAcceptedResponse> {
+  const resp = await fetch("/api/instances", {
     method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(req),
   });
+  if (resp.status === 422 && resp.headers.get("X-Preflight-Failed")) {
+    const report = (await resp.json()) as PreflightReport;
+    throw new PreflightFailedError(report);
+  }
+  const text = await resp.text();
+  if (!resp.ok) {
+    let body: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try { body = JSON.parse(text); } catch { /* non-JSON */ }
+    throw new ApiError(resp.status, body);
+  }
+  return JSON.parse(text) as CreateInstanceAcceptedResponse;
+}
+
+// PreflightReport mirrors internal/api/types.PreflightReport.
+// Returned by GET /api/preflight?version=<tag> and as the body of
+// a 422 from POST /api/instances when the host can't satisfy the
+// chosen version's resource floor.
+export interface PreflightReport {
+  schema_version: number;
+  ok: boolean;
+  sections: PreflightSection[];
+  summary?: string;
+  // BIT-172 — stable machine-readable code populated when ok=false.
+  // Values: PORTS_IN_USE | DOCKER_DOWN | DOCKER_NOT_INSTALLED |
+  // COMPOSE_V1_OR_MISSING | DOCKER_MEMORY_LOW | DISK_LOW |
+  // PREFLIGHT_FAILED. Frontend switches on this for targeted
+  // remediation panels.
+  error_code?: ErrorCode;
+}
+
+// ErrorCode — wire-stable strings from internal/localnet/coded_error.go.
+// New values are non-breaking; renaming/repurposing is breaking.
+// Keep this union in sync with the Go constants.
+export type ErrorCode =
+  | "PORTS_IN_USE"
+  | "DOCKER_DOWN"
+  | "DOCKER_NOT_INSTALLED"
+  | "COMPOSE_V1_OR_MISSING"
+  | "DOCKER_MEMORY_LOW"
+  | "DISK_LOW"
+  | "PREFLIGHT_FAILED"
+  | "CANTON_OOM"
+  | "CONTAINER_UNHEALTHY";
+
+export interface PreflightSection {
+  title: string;
+  checks: PreflightCheck[];
+}
+
+export interface PreflightCheck {
+  label: string;
+  result: "pass" | "warn" | "fail" | "skip";
+  detail?: string;
+  remediation?: string[];
+}
+
+// PreflightFailedError is thrown by createInstance when the server
+// rejects with a 422 preflight failure. The caller (typically the
+// create modal) catches this and renders the report inline rather
+// than the generic error envelope.
+export class PreflightFailedError extends Error {
+  report: PreflightReport;
+  constructor(report: PreflightReport) {
+    super(report.summary || "system requirements not met");
+    this.report = report;
+  }
+}
+
+// fetchPreflight runs the system-requirements gate for a version
+// without queuing a bring-up. The create modal calls this on
+// version-change so the Create button can be disabled (and the
+// findings shown) BEFORE the user clicks — no need to round-trip
+// through POST /api/instances just to discover an under-provisioned
+// host. Always returns a PreflightReport (200) — `ok=false` is the
+// signal to block, not a thrown error.
+export const fetchPreflight = (version: string) =>
+  apiFetch<PreflightReport>(
+    `/api/preflight?version=${encodeURIComponent(version)}`,
+  );
 
 // stopInstance invokes POST /api/instances/{name}/down — runs
 // `docker compose down` against the named instance and removes
@@ -481,6 +565,12 @@ interface StepFailedEvent {
   step: StepName;
   summary?: string;
   cause?: string;
+  // BIT-172 — stable machine-readable code, populated when the
+  // server recognized the failure mode (PORTS_IN_USE,
+  // DOCKER_DOWN, DOCKER_MEMORY_LOW, etc.). useCreateProgress
+  // surfaces this in the banner so the modal can render targeted
+  // remediation panels instead of generic "failed" copy.
+  error_code?: ErrorCode;
 }
 interface WarnEvent {
   kind: "warn";

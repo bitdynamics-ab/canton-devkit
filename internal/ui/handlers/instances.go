@@ -32,7 +32,6 @@
 package handlers
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -41,15 +40,15 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os/exec"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
+	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/progress"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 )
@@ -520,6 +519,28 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 			return
 		}
 
+		// Resolve the version up front so the preflight gate uses
+		// the same Splice catalogue entry RunUp will. If the user
+		// asked for an uncurated tag with AllowUncurated, skip
+		// the version-specific memory floor — there's no curated
+		// requirement to enforce — and rely on RunUp's own
+		// in-stream preflight for the global defaults.
+		if v, err := splice.Resolve(req.Version); err == nil {
+			report := runPreflightForVersion(r.Context(), v)
+			if !report.OK {
+				w.Header().Set("X-Preflight-Failed", "1")
+				writeJSON(w, http.StatusUnprocessableEntity, report)
+				return
+			}
+		} else if !req.AllowUncurated {
+			// Same shape RunUp would produce for the same input.
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"unknown splice version: "+req.Version,
+				"call GET /api/splice/versions for the curated list, or set allow_uncurated to bypass")
+			return
+		}
+
 		topic := progress.TopicFor(req.Name)
 		hub.EnableBuffering(topic, progressBufferCap)
 
@@ -656,9 +677,19 @@ func handleDownInstance() http.HandlerFunc {
 			cause = "down failed with exit code " + uintToString(uint64(exit))
 		}
 		log.Printf("down instance %q: exit=%d err=%s", name, exit, cause)
+		// BIT-176: RunDown writes multiple lines to errw — `Warning:`
+		// notices about non-fatal side issues (e.g. "could not
+		// reconstruct compose context") followed by the actual
+		// fatal cause. The plain `firstLine` helper grabbed the
+		// first line which was often the Warning, making the
+		// surfaced "Stop failed: …" misleading. firstNonWarningLine
+		// skips lines starting with "Warning:" / "warning:" so the
+		// summary always reflects the actual failure. The full
+		// output is still in the server log for diagnostic
+		// triangulation.
 		writeErrorWithCode(w, status,
 			"DOWN_FAILED",
-			"failed to stop "+name+": "+firstLine(cause),
+			"failed to stop "+name+": "+firstNonWarningLine(cause),
 			"the docker compose down output is in the server log; "+
 				"try `dpm localnet down --name "+name+"` from a terminal for full output")
 	}
@@ -689,6 +720,74 @@ func firstLine(s string) string {
 		}
 	}
 	return s
+}
+
+// firstNonWarningLine returns the first line of s that does not
+// look like a `Warning:` / `WARN:` notice. RunDown emits warning
+// lines for non-fatal side issues (orphan-registry cleanup, state
+// persistence, compose-context reconstruction) before the actual
+// fatal cause, so a naive firstLine would surface a Warning as
+// the failure summary — see BIT-176.
+//
+// Match is on a small fixed set of case variants (Warning, warning,
+// WARNING, WARN, warn, Warn) rather than truly case-insensitive
+// — sufficient for the patterns RunDown actually emits and avoids
+// a unicode.ToLower allocation per line on a hot path. New variants
+// slot into looksLikeWarningLine without changing this function.
+//
+// CRLF safe: a trailing \r left by docker-compose on Windows stderr
+// is trimmed per-line before the prefix check.
+//
+// If every line is a warning OR the string is empty, returns the
+// raw first line so the caller still has *something* to show.
+func firstNonWarningLine(s string) string {
+	start := 0
+	for i := 0; i <= len(s); i++ {
+		if i == len(s) || s[i] == '\n' {
+			line := s[start:i]
+			// Trim a trailing \r so CRLF line endings (Windows
+			// docker-compose stderr) don't defeat the prefix
+			// match below.
+			if len(line) > 0 && line[len(line)-1] == '\r' {
+				line = line[:len(line)-1]
+			}
+			if !looksLikeWarningLine(line) && line != "" {
+				return line
+			}
+			start = i + 1
+		}
+	}
+	// Fallthrough: every line was a warning. Surface the first
+	// raw line — the user still gets a hint, just not the ideal
+	// one.
+	return firstLine(s)
+}
+
+// looksLikeWarningLine matches lines that should be skipped when
+// looking for the surfaced failure cause. Recognizes the case
+// variants RunDown actually emits (in internal/localnet/down.go):
+//
+//	Warning:    docker-compose / docker stderr convention
+//	warning:    lowercase fmt.Errorf wrappers
+//	WARNING:    occasional ALL-CAPS from system logs
+//	WARN:       short form some upstream tools use
+//	warn:       lowercase short form
+//	Warn:       title-case short form
+//
+// Defensive whitespace trim for indented continuation lines.
+func looksLikeWarningLine(line string) bool {
+	// Trim leading whitespace defensively — docker-compose's
+	// formatted output sometimes indents continuation lines.
+	for len(line) > 0 && (line[0] == ' ' || line[0] == '\t') {
+		line = line[1:]
+	}
+	switch {
+	case len(line) >= 8 && (line[:8] == "Warning:" || line[:8] == "warning:" || line[:8] == "WARNING:"):
+		return true
+	case len(line) >= 5 && (line[:5] == "WARN:" || line[:5] == "warn:" || line[:5] == "Warn:"):
+		return true
+	}
+	return false
 }
 
 // ContainerHealth is one row in the per-instance container
@@ -768,7 +867,7 @@ func handleInstanceContainers() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 
-		containers, runErr := composePs(ctx, state.ComposeProject)
+		health, runErr := containersList(ctx, state.ComposeProject)
 		if runErr != nil {
 			// Docker call failed (daemon down? project label
 			// doesn't exist?). Surface the failure as a 503
@@ -784,9 +883,9 @@ func handleInstanceContainers() http.HandlerFunc {
 		resp := ContainersResponse{
 			SchemaVersion: types.SchemaVersion,
 			Instance:      name,
-			Containers:    containers,
+			Containers:    health,
 		}
-		for _, c := range containers {
+		for _, c := range health {
 			switch c.Health {
 			case "healthy":
 				resp.HealthyCount++
@@ -806,69 +905,29 @@ func handleInstanceContainers() http.HandlerFunc {
 	}
 }
 
-// composePs runs `docker compose -p <project> ps --all --format
-// json` and parses each NDJSON line into a ContainerHealth.
-// Returns an empty slice (no error) when docker reports no
-// containers for the project — the project may have been torn
-// down out-of-band, or never created.
-//
-// Error path is reserved for docker-side failures (daemon down,
-// compose binary missing) — the handler surfaces those as 503.
-func composePs(ctx context.Context, project string) ([]ContainerHealth, error) {
-	cmd := exec.CommandContext(ctx,
-		"docker", "compose", "-p", project,
-		"ps", "--all", "--format", "json")
-	out, err := cmd.Output()
+// containersList wraps the shared containers.List (called from
+// both the CLI's `dpm localnet container list` and this handler)
+// and re-shapes Info → ContainerHealth so the API responses keep
+// their stable JSON tags. The docker-side logic lives once in
+// internal/localnet/containers — see AGENTS.md "CLI ↔ Web UI
+// parity" rule.
+func containersList(ctx context.Context, project string) ([]ContainerHealth, error) {
+	infos, err := containers.List(ctx, project)
 	if err != nil {
-		// Empty output + non-zero exit usually means "no such
-		// project" which we treat as empty-list success. Other
-		// errors (daemon down) propagate.
-		if exitErr, ok := err.(*exec.ExitError); ok && len(out) == 0 {
-			stderrText := string(exitErr.Stderr)
-			if strings.Contains(stderrText, "no such") ||
-				strings.Contains(stderrText, "not exist") {
-				return nil, nil
-			}
-		}
-		return nil, fmt.Errorf("docker compose ps: %w", err)
+		return nil, err
 	}
-	if len(bytes.TrimSpace(out)) == 0 {
-		return nil, nil
+	out := make([]ContainerHealth, 0, len(infos))
+	for _, c := range infos {
+		out = append(out, ContainerHealth{
+			Name:    c.Name,
+			Service: c.Service,
+			State:   c.State,
+			Health:  c.Health,
+			Status:  c.Status,
+			Image:   c.Image,
+		})
 	}
-
-	// docker compose ps --format json emits a single JSON ARRAY
-	// in newer versions (>= v2.21) or NDJSON in older. Handle
-	// both: if the first non-whitespace byte is '[', parse as
-	// array; otherwise parse line-by-line.
-	trimmed := bytes.TrimLeft(out, " \t\r\n")
-	containers := []ContainerHealth{}
-	if len(trimmed) > 0 && trimmed[0] == '[' {
-		var arr []dockerComposePsEntry
-		if err := json.Unmarshal(trimmed, &arr); err != nil {
-			return nil, fmt.Errorf("parse compose ps JSON array: %w", err)
-		}
-		for _, e := range arr {
-			containers = append(containers, e.toHealth())
-		}
-		return containers, nil
-	}
-	// NDJSON fallback.
-	scanner := bufio.NewScanner(bytes.NewReader(trimmed))
-	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			continue
-		}
-		var e dockerComposePsEntry
-		if err := json.Unmarshal(line, &e); err != nil {
-			// Best-effort: skip a malformed line rather than
-			// fail the whole call.
-			continue
-		}
-		containers = append(containers, e.toHealth())
-	}
-	return containers, nil
+	return out, nil
 }
 
 // handleContainerLogs: GET /api/instances/{name}/containers/{container}/logs.
@@ -929,25 +988,18 @@ func handleContainerLogs() http.HandlerFunc {
 		// docker compose ps) and the defence-in-depth is worth
 		// the extra round trip.
 		probeCtx, cancelProbe := context.WithTimeout(r.Context(), 5*time.Second)
-		containers, probeErr := composePs(probeCtx, state.ComposeProject)
+		belongsErr := containers.BelongsToProject(probeCtx, state.ComposeProject, container)
 		cancelProbe()
-		if probeErr != nil {
+		if belongsErr != nil {
+			if errors.Is(belongsErr, containers.ErrContainerNotInProject) {
+				writeErrorWithCode(w, http.StatusNotFound,
+					ErrCodeNotFound,
+					"container "+container+" not in compose project "+state.ComposeProject)
+				return
+			}
 			writeErrorWithCode(w, http.StatusServiceUnavailable,
 				"DOCKER_PROBE_FAILED",
-				"could not query docker", probeErr.Error())
-			return
-		}
-		found := false
-		for _, c := range containers {
-			if c.Name == container {
-				found = true
-				break
-			}
-		}
-		if !found {
-			writeErrorWithCode(w, http.StatusNotFound,
-				ErrCodeNotFound,
-				"container "+container+" not in compose project "+state.ComposeProject)
+				"could not query docker", belongsErr.Error())
 			return
 		}
 
@@ -970,38 +1022,24 @@ func handleContainerLogs() http.HandlerFunc {
 			return
 		}
 
-		args := []string{"logs", "--tail", strconv.Itoa(tail)}
-		if since != "" {
-			args = append(args, "--since", since)
-		}
-		args = append(args, container)
-
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "docker", args...)
-		// Docker logs are written to stderr for the bootstrap +
-		// stdout for application output; merge for the user.
-		var combined bytes.Buffer
-		cmd.Stdout = &combined
-		cmd.Stderr = &combined
-		if err := cmd.Run(); err != nil {
-			// If we got SOME output, surface it anyway — log
-			// tails often partial-fail when the container
-			// rotates mid-fetch.
-			if combined.Len() == 0 {
-				writeErrorWithCode(w, http.StatusServiceUnavailable,
-					"DOCKER_LOGS_FAILED",
-					"could not tail container logs", err.Error())
-				return
-			}
+		body, err := containers.Logs(ctx, container, containers.LogsOptions{
+			Tail:  tail,
+			Since: since,
+		})
+		if err != nil && body == "" {
+			writeErrorWithCode(w, http.StatusServiceUnavailable,
+				"DOCKER_LOGS_FAILED",
+				"could not tail container logs", err.Error())
+			return
 		}
-
 		// Plain-text response so the frontend can render in a
 		// <pre> without a JSON decode + escape round-trip.
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(combined.Bytes())
+		_, _ = w.Write([]byte(body))
 	}
 }
 
@@ -1054,42 +1092,28 @@ func handleContainerRestart() http.HandlerFunc {
 		// could restart arbitrary containers on the host by
 		// passing a foreign container name.
 		probeCtx, cancelProbe := context.WithTimeout(r.Context(), 5*time.Second)
-		containers, probeErr := composePs(probeCtx, state.ComposeProject)
+		belongsErr := containers.BelongsToProject(probeCtx, state.ComposeProject, container)
 		cancelProbe()
-		if probeErr != nil {
+		if belongsErr != nil {
+			if errors.Is(belongsErr, containers.ErrContainerNotInProject) {
+				writeErrorWithCode(w, http.StatusNotFound,
+					ErrCodeNotFound,
+					"container "+container+" not in compose project "+state.ComposeProject)
+				return
+			}
 			writeErrorWithCode(w, http.StatusServiceUnavailable,
 				"DOCKER_PROBE_FAILED",
-				"could not query docker", probeErr.Error())
-			return
-		}
-		found := false
-		for _, c := range containers {
-			if c.Name == container {
-				found = true
-				break
-			}
-		}
-		if !found {
-			writeErrorWithCode(w, http.StatusNotFound,
-				ErrCodeNotFound,
-				"container "+container+" not in compose project "+state.ComposeProject)
+				"could not query docker", belongsErr.Error())
 			return
 		}
 
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "docker", "restart", container)
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		if err := cmd.Run(); err != nil {
-			cause := strings.TrimSpace(stderr.String())
-			if cause == "" {
-				cause = err.Error()
-			}
-			log.Printf("restart container %q: %s", container, cause)
+		if err := containers.Restart(ctx, container); err != nil {
+			log.Printf("restart container %q: %v", container, err)
 			writeErrorWithCode(w, http.StatusInternalServerError,
 				"CONTAINER_RESTART_FAILED",
-				"failed to restart "+container+": "+firstLine(cause))
+				"failed to restart "+container+": "+firstLine(err.Error()))
 			return
 		}
 		log.Printf("restart container %q: ok", container)
@@ -1154,29 +1178,12 @@ func parseClampedInt(s string, lo, hi int) (int, error) {
 	return n, nil
 }
 
-// dockerComposePsEntry mirrors the JSON fields `docker compose ps
-// --format json` emits. Only the fields we render are mapped;
-// unknown extras (e.g. ExitCode, RunningFor) are ignored so a
-// docker version bump that adds new fields doesn't break us.
-type dockerComposePsEntry struct {
-	Name    string `json:"Name"`
-	Service string `json:"Service"`
-	State   string `json:"State"`
-	Health  string `json:"Health"`
-	Status  string `json:"Status"`
-	Image   string `json:"Image"`
-}
-
-func (e dockerComposePsEntry) toHealth() ContainerHealth {
-	return ContainerHealth{
-		Name:    e.Name,
-		Service: e.Service,
-		State:   e.State,
-		Health:  e.Health,
-		Status:  e.Status,
-		Image:   e.Image,
-	}
-}
+// dockerComposePsEntry was the in-package JSON decoder for the
+// `docker compose ps --format json` output. Moved to
+// internal/localnet/containers/containers.go so the CLI and HTTP
+// handlers share one parser — see AGENTS.md "CLI ↔ Web UI parity"
+// rule. The wrapper containersList re-shapes the shared Info into
+// the API-stable ContainerHealth shape.
 
 // handleScrubInstance: DELETE /api/instances/{name}.
 //

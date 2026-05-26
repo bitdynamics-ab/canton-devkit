@@ -1,15 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ApiError,
+  PreflightFailedError,
   STEP_LABELS,
   STEP_ORDER,
   cancelInstanceUp,
   createInstance,
+  fetchPreflight,
   fetchSpliceVersions,
   type CreateInstanceAcceptedResponse,
+  type PreflightCheck,
+  type PreflightReport,
   type SpliceVersionEntry,
 } from "../api";
 import { W, wMono, wSans } from "../tokens";
+import { remediationForCode } from "./remediation";
 import {
   type ProgressState,
   type StepState,
@@ -53,6 +58,18 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
   const [allowUncurated, setAllowUncurated] = useState(false);
   const [versions, setVersions] = useState<SpliceVersionEntry[]>([]);
   const [stage, setStage] = useState<Stage>({ kind: "form" });
+  // Per-version system-requirements check. "idle" = no version
+  // picked yet; "loading" = probe in flight; "ok" = host meets
+  // floor; "blocked" = at least one FAIL — Create button disabled.
+  // Warnings (WARN-only report) still allow submit; the user sees
+  // them inline as a heads-up.
+  const [preflight, setPreflight] = useState<
+    | { kind: "idle" }
+    | { kind: "loading" }
+    | { kind: "ok"; report: PreflightReport }
+    | { kind: "blocked"; report: PreflightReport }
+    | { kind: "err"; message: string }
+  >({ kind: "idle" });
   const inputRef = useRef<HTMLInputElement>(null);
 
   const progress = useCreateProgress(
@@ -135,10 +152,53 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
     if (!open) firedRef.current = null;
   }, [open]);
 
+  // Probe system requirements whenever the picked version changes
+  // (while still on the form stage). Skipped for the uncurated-tag
+  // bypass since the server doesn't enforce a per-version floor
+  // for tags not in the catalogue. Race-safe via a cancelled flag —
+  // a fast-clicker who flips between versions only sees the latest
+  // result, not whichever subprocess probe finishes last.
+  useEffect(() => {
+    if (!open || stage.kind !== "form") return;
+    if (!version || allowUncurated) {
+      setPreflight({ kind: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setPreflight({ kind: "loading" });
+    fetchPreflight(version)
+      .then((report) => {
+        if (cancelled) return;
+        setPreflight(
+          report.ok
+            ? { kind: "ok", report }
+            : { kind: "blocked", report },
+        );
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setPreflight({
+          kind: "err",
+          message:
+            e instanceof ApiError
+              ? e.message
+              : "could not check system requirements",
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, stage.kind, version, allowUncurated]);
+
   if (!open) return null;
 
   const nameValid = NAME_RE.test(name);
-  const canSubmit = nameValid && stage.kind === "form";
+  // Gating: name validity AND preflight not blocked. "loading" or
+  // "err" still allows submit — preflight is advisory in those
+  // states; the server's own gate is the source of truth.
+  const preflightBlocks = preflight.kind === "blocked";
+  const canSubmit =
+    nameValid && stage.kind === "form" && !preflightBlocks;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -152,6 +212,15 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
       });
       setStage({ kind: "progress", accepted });
     } catch (e) {
+      if (e instanceof PreflightFailedError) {
+        // Server-side gate caught what the inline probe missed
+        // (race with the user, or first time the version was
+        // chosen). Drop back to form stage with the report
+        // populated so the inline panel renders the findings.
+        setPreflight({ kind: "blocked", report: e.report });
+        setStage({ kind: "form" });
+        return;
+      }
       const apiErr = e instanceof ApiError ? e : null;
       setStage({
         kind: "error",
@@ -201,6 +270,7 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
               versions={versions}
               allowUncurated={allowUncurated}
               setAllowUncurated={setAllowUncurated}
+              preflight={preflight}
               onSubmit={submit}
             />
           )}
@@ -352,6 +422,13 @@ function ModalFooter({
 
 // ── stage bodies ──────────────────────────────────────────────────
 
+type PreflightState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "ok"; report: PreflightReport }
+  | { kind: "blocked"; report: PreflightReport }
+  | { kind: "err"; message: string };
+
 interface FormBodyProps {
   inputRef: React.RefObject<HTMLInputElement>;
   name: string;
@@ -362,6 +439,7 @@ interface FormBodyProps {
   versions: SpliceVersionEntry[];
   allowUncurated: boolean;
   setAllowUncurated: (b: boolean) => void;
+  preflight: PreflightState;
   onSubmit: (e: React.FormEvent) => void;
 }
 
@@ -375,6 +453,7 @@ function FormBody({
   versions,
   allowUncurated,
   setAllowUncurated,
+  preflight,
   onSubmit,
 }: FormBodyProps) {
   return (
@@ -406,6 +485,8 @@ function FormBody({
           onSelect={setVersion}
         />
       </Field>
+
+      <PreflightPanel state={preflight} />
 
       <details style={{ marginTop: 4 }}>
         <summary
@@ -641,6 +722,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
     );
   }
   if (banner.kind === "failed") {
+    const remediation = remediationForCode(banner.errorCode);
     return (
       <div
         style={{
@@ -656,6 +738,26 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
         {banner.cause && (
           <div style={{ color: W.text2, marginTop: 4, fontFamily: wMono, fontSize: 11 }}>
             {banner.cause}
+          </div>
+        )}
+        {remediation && (
+          <div
+            style={{
+              marginTop: 8,
+              padding: "8px 10px",
+              background: W.surface2,
+              borderRadius: 6,
+              color: W.text2,
+              fontSize: 11.5,
+              borderLeft: `3px solid ${W.warn}`,
+            }}
+          >
+            <strong style={{ color: W.warn }}>{remediation.title}</strong>
+            <ul style={{ margin: "4px 0 0", paddingLeft: 18, lineHeight: 1.55 }}>
+              {remediation.steps.map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+            </ul>
           </div>
         )}
       </div>
@@ -749,7 +851,24 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
   );
 }
 
-function VersionPicker({
+// VersionPicker renders the curated Splice catalogue as a native HTML
+// <select> dropdown. The previous implementation fell back to a free-text
+// <input> when versions.length === 0 (typically a transient API-load
+// state). We deliberately don't fall back to a text field anymore: users
+// reported that the empty-state textbox felt like the picker had been
+// replaced, and typing an arbitrary tag silently routes to the
+// upstream-resolution path that the curated dropdown is meant to
+// prevent. The loading state is now a disabled select with a single
+// "Loading…" option so the field shape stays consistent.
+//
+// Sort order: "latest" first, then descending semver (so the newest
+// catalogued releases sit near the top of the dropdown).
+//
+// Exported so the regression test (VersionPicker.test.tsx) can render
+// it in isolation. The "dropdown not textbox" invariant is exactly the
+// kind of UI contract a future contributor could break by accident
+// when adding a "type a custom version" affordance — the test pins it.
+export function VersionPicker({
   versions,
   selected,
   onSelect,
@@ -760,72 +879,217 @@ function VersionPicker({
 }) {
   if (versions.length === 0) {
     return (
-      <input
-        value={selected}
-        onChange={(e) => onSelect(e.target.value)}
-        placeholder="0.4.12"
-        style={inputStyle}
-        spellCheck={false}
-      />
+      <select disabled value="" style={selectStyle} aria-label="Splice version">
+        <option value="">Loading curated versions…</option>
+      </select>
+    );
+  }
+
+  const sorted = [...versions].sort((a, b) => {
+    if (a.status === "latest" && b.status !== "latest") return -1;
+    if (b.status === "latest" && a.status !== "latest") return 1;
+    return b.tag.localeCompare(a.tag, undefined, { numeric: true });
+  });
+
+  return (
+    <select
+      value={selected}
+      onChange={(e) => onSelect(e.target.value)}
+      style={selectStyle}
+      aria-label="Splice version"
+    >
+      {sorted.map((v) => (
+        <option key={v.tag} value={v.tag}>
+          {v.tag}
+          {v.status === "latest" ? " (latest)" : ""}
+          {v.major ? ` — major ${v.major}` : ""}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+// selectStyle is inlined rather than spread from `inputStyle` because
+// `inputStyle` is declared further down in this file — relying on
+// hoisting here triggers a TDZ "used before declaration" error under
+// Vite/SWC's strict ES module ordering. Visual parity with inputStyle
+// is intentional (same dark-theme tokens, same border radius) plus
+// `appearance: "auto"` so the native OS dropdown caret stays visible.
+// Without the explicit appearance, some browsers drop the caret when
+// a custom borderRadius/background is applied — making the field look
+// like a disabled text input, which is exactly the regression users
+// reported and this commit fixes.
+const selectStyle: React.CSSProperties = {
+  width: "100%",
+  background: W.bg,
+  color: W.text,
+  border: `1px solid ${W.border}`,
+  borderRadius: 6,
+  padding: "7px 10px",
+  fontSize: 13,
+  fontFamily: wMono,
+  outline: "none",
+  cursor: "pointer",
+  appearance: "auto",
+};
+
+// remediationForCode is extracted to ./remediation.ts so it can
+// be unit-tested without React Testing Library setup — see
+// remediation.test.ts. BIT-172 review v3.
+
+// PreflightPanel renders the system-requirements check inline in
+// the form. Three visual modes:
+//
+//   loading  — pill saying "checking docker memory + disk…"
+//   blocked  — red box: every fail check + its remediation;
+//              warns rendered as amber subnotes. Create disabled.
+//   ok+warn  — amber box with warning checks (proceeding allowed)
+//   ok+pass  — tiny green confirmation pill
+//   err      — neutral note; doesn't block ("server probe failed,
+//              the server-side gate will still run on submit")
+//
+// The component never reads the version directly — it just
+// renders whatever the parent's effect produced. Clean separation.
+function PreflightPanel({ state }: { state: PreflightState }) {
+  if (state.kind === "idle") return null;
+  if (state.kind === "loading") {
+    return (
+      <div
+        style={{
+          padding: "8px 12px",
+          background: W.surface2,
+          color: W.dim,
+          border: `1px solid ${W.border}`,
+          borderRadius: 7,
+          fontSize: 11.5,
+          fontFamily: wMono,
+        }}
+      >
+        ⠋ checking system requirements (docker memory · disk · daemon)…
+      </div>
+    );
+  }
+  if (state.kind === "err") {
+    return (
+      <div
+        style={{
+          padding: "8px 12px",
+          background: W.surface2,
+          color: W.dim,
+          border: `1px solid ${W.border}`,
+          borderRadius: 7,
+          fontSize: 11.5,
+        }}
+      >
+        Pre-flight probe couldn't reach the server ({state.message}). The
+        server-side gate still runs on submit.
+      </div>
+    );
+  }
+  const allChecks: { section: string; check: PreflightCheck }[] = [];
+  for (const sec of state.report.sections) {
+    for (const c of sec.checks) {
+      allChecks.push({ section: sec.title, check: c });
+    }
+  }
+  const fails = allChecks.filter((c) => c.check.result === "fail");
+  const warns = allChecks.filter((c) => c.check.result === "warn");
+  const blocked = state.kind === "blocked";
+  const accent = blocked ? W.err : warns.length > 0 ? W.warn : W.ok;
+  const heading = blocked
+    ? "✗ Host doesn't meet this version's requirements"
+    : warns.length > 0
+    ? "⚠ Host meets minimums — but raise resources for headroom"
+    : "✓ Host is ready for this version";
+  if (!blocked && warns.length === 0) {
+    // Compact success pill — don't clutter the form.
+    return (
+      <div
+        style={{
+          padding: "6px 10px",
+          background: `${W.ok}14`,
+          color: W.ok,
+          border: `1px solid ${W.ok}44`,
+          borderRadius: 7,
+          fontSize: 11.5,
+          fontFamily: wMono,
+        }}
+      >
+        {heading} · {state.report.summary}
+      </div>
     );
   }
   return (
     <div
+      role={blocked ? "alert" : undefined}
       style={{
-        background: W.bg,
-        border: `1px solid ${W.border}`,
-        borderRadius: 7,
-        maxHeight: 200,
-        overflow: "auto",
+        padding: "10px 12px",
+        background: `${accent}10`,
+        border: `1px solid ${accent}`,
+        borderRadius: 8,
+        fontSize: 12,
       }}
     >
-      {versions.map((v) => {
-        const isSelected = v.tag === selected;
-        return (
-          <button
-            key={v.tag}
-            type="button"
-            onClick={() => onSelect(v.tag)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              width: "100%",
-              padding: "8px 12px",
-              border: "none",
-              background: isSelected ? `${W.brand}14` : "transparent",
-              borderLeft: `2px solid ${isSelected ? W.brand : "transparent"}`,
-              color: W.text,
-              cursor: "pointer",
-              fontSize: 12.5,
-              textAlign: "left",
-            }}
-          >
-            <span style={{ fontFamily: wMono, fontWeight: 600 }}>{v.tag}</span>
-            {v.status === "latest" && (
-              <span
-                style={{
-                  background: `${W.brand}1A`,
-                  color: W.brand,
-                  fontSize: 10,
-                  fontWeight: 700,
-                  padding: "1px 6px",
-                  borderRadius: 999,
-                }}
-              >
-                latest
-              </span>
-            )}
-            <span style={{ color: W.dim, fontSize: 11, fontFamily: wMono }}>
-              major {v.major}
+      <div style={{ color: accent, fontWeight: 600, marginBottom: 6 }}>
+        {heading}
+      </div>
+      {state.report.summary && (
+        <div style={{ color: W.text2, marginBottom: 8, fontSize: 11.5 }}>
+          {state.report.summary}
+        </div>
+      )}
+      {[...fails, ...warns].map(({ section, check }, i) => (
+        <div
+          key={`${section}-${check.label}-${i}`}
+          style={{
+            marginTop: 6,
+            padding: "6px 8px",
+            background: W.bg,
+            border: `1px solid ${W.border}`,
+            borderRadius: 6,
+          }}
+        >
+          <div style={{ fontFamily: wMono, fontSize: 11.5 }}>
+            <span
+              style={{
+                color: check.result === "fail" ? W.err : W.warn,
+                fontWeight: 700,
+                marginRight: 6,
+              }}
+            >
+              {check.result === "fail" ? "✗" : "⚠"} {check.label}
             </span>
-            <span style={{ flex: 1 }} />
-            <span style={{ color: W.dim, fontFamily: wMono, fontSize: 10.5 }}>
-              {v.commit.slice(0, 8)}
-            </span>
-          </button>
-        );
-      })}
+            <span style={{ color: W.dim }}>· {section}</span>
+          </div>
+          {check.detail && (
+            <div
+              style={{
+                color: W.text2,
+                fontSize: 11,
+                marginTop: 3,
+                fontFamily: wMono,
+              }}
+            >
+              {check.detail}
+            </div>
+          )}
+          {check.remediation && check.remediation.length > 0 && (
+            <ul
+              style={{
+                margin: "4px 0 0 0",
+                paddingLeft: 18,
+                color: W.text2,
+                fontSize: 11,
+                lineHeight: 1.5,
+              }}
+            >
+              {check.remediation.map((r: string, j: number) => (
+                <li key={j}>{r}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

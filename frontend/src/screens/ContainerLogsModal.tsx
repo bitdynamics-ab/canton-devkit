@@ -28,6 +28,12 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
   const [loading, setLoading] = useState(false);
   const preRef = useRef<HTMLPreElement>(null);
   const autoScrollRef = useRef(true);
+  // Track whether mousedown started on the overlay itself. Without
+  // this, the click that opened the modal (mousedown on a row cell,
+  // mouseup after the modal mounted) can land on the overlay and
+  // immediately close it. Only close when mousedown AND click both
+  // originated on the overlay.
+  const downOnOverlayRef = useRef(false);
 
   // Esc closes — same gate as the other modals.
   useEffect(() => {
@@ -93,10 +99,17 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
       role="dialog"
       aria-modal="true"
       aria-label={`Logs for ${container}`}
-      onClick={onClose}
+      onMouseDown={(e) => {
+        downOnOverlayRef.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && downOnOverlayRef.current) {
+          onClose();
+        }
+      }}
       style={overlayStyle}
     >
-      <div onClick={(e) => e.stopPropagation()} style={modalStyle}>
+      <div onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} style={modalStyle}>
         <header style={headerStyle}>
           <div>
             <div style={{ fontWeight: 600, fontSize: 14, color: W.text }}>

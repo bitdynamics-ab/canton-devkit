@@ -129,6 +129,13 @@ type stepPayload struct {
 	Percent int    `json:"percent,omitempty"`
 	Summary string `json:"summary,omitempty"`
 	Cause   string `json:"cause,omitempty"`
+	// ErrorCode is a stable machine-readable code from
+	// internal/localnet.CodedError. Populated on step.failed when
+	// RunUp recognized the failure mode (PORTS_IN_USE, DOCKER_DOWN,
+	// etc.). Frontend switches on this to render specific
+	// remediation panels instead of generic error text — see
+	// BIT-172.
+	ErrorCode string `json:"error_code,omitempty"`
 }
 
 type warnPayload struct {
@@ -170,10 +177,14 @@ func (p *SSEProgress) FinishStep(step localnet.Step, detail string) {
 
 // FailStep publishes a "step.failed" event. cause is stringified
 // here so the wire stays JSON-safe; nil cause omits the field.
+// When cause carries a CodedError (via localnet.WithCode), the
+// machine-readable code is stamped on the payload — frontend
+// switches on ErrorCode to render specific remediation panels.
 func (p *SSEProgress) FailStep(step localnet.Step, summary string, cause error) {
 	pl := stepPayload{Kind: "step.failed", Step: string(step), Summary: summary}
 	if cause != nil {
 		pl.Cause = cause.Error()
+		pl.ErrorCode = localnet.CodeOf(cause)
 	}
 	p.publish(pl)
 }

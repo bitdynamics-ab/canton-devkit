@@ -54,10 +54,17 @@ Supported Splice versions: %s
 			// lines for CLI users. The Web UI's POST handler
 			// (BIT-165) will pass an SSEProgress impl instead so
 			// browsers see the full typed event stream.
-			prog := &localnet.TextProgress{
-				OutW: cmd.OutOrStdout(),
-				ErrW: cmd.ErrOrStderr(),
-			}
+			//
+			// NewTextProgress auto-detects whether the writer is a
+			// TTY and switches between the BIT-122 mockup-styled
+			// rendering (Section headers, brand-accented Box for
+			// the success marker) and the historical plain text
+			// (pipes, CI, golden-byte tests). The literal struct
+			// form is kept for backward compatibility — tests
+			// that constructed TextProgress directly still get
+			// the plain bytes they assert on.
+			prog := localnet.NewTextProgress(
+				cmd.OutOrStdout(), cmd.ErrOrStderr())
 			return localnet.AsExitError(
 				localnet.RunUp(cmd.Context(), prog, opts))
 		},
@@ -71,6 +78,12 @@ Supported Splice versions: %s
 			"DevKit will resolve the tag against the upstream Splice GitHub "+
 			"repo and proceed. The resulting LocalNet is not tested by "+
 			"DevKit — use for prereleases / alphas at your own risk.")
+	cmd.Flags().StringSliceVar(&opts.Profiles, "profile", nil,
+		"Docker compose profiles to enable. "+
+			"`--profile observability` adds Prometheus + Grafana via the "+
+			"BIT-134 overlay (extra ~600 MiB RAM); host ports allocated and "+
+			"persisted alongside the regular UI ports so re-up preserves "+
+			"bookmarked URLs. Repeatable for multiple profiles.")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }

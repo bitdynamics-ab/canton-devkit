@@ -126,10 +126,20 @@ type cobraWriter interface {
 	Write(p []byte) (n int, err error)
 }
 
-// localnet_validateFormat keeps this command's format check independent
-// of the localnet package's identical helper — PR-A lands this before
-// PR-B exposes ValidateFormat publicly. Cheap defensive copy.
+// localnet_validateFormat is the legacy lowercase name kept for
+// callers in this package that landed before PR-B promoted
+// ValidateFormat to its exported form (BIT-127 adoption).
+// Delegates to the public ValidateFormat — single source of truth.
 func localnet_validateFormat(got string, allowed ...string) error {
+	return ValidateFormat(got, allowed...)
+}
+
+// ValidateFormat checks that got is one of allowed. Exported so
+// the BIT-127 dar subcommands (internal/cli/localnet/dar) can
+// share the same validation as the in-package versions/container/
+// refresh subcommands — keeps the error wording identical across
+// every CLI surface that takes a --format flag.
+func ValidateFormat(got string, allowed ...string) error {
 	for _, a := range allowed {
 		if got == a {
 			return nil

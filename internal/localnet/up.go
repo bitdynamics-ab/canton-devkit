@@ -12,10 +12,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 )
 
 // Exit codes. Stable across releases — scripts can depend on them.
@@ -76,6 +79,13 @@ type UpOptions struct {
 	// with ErrUncuratedTag. Default false keeps the audited path the
 	// safe default for first-time users.
 	AllowUncurated bool
+
+	// Profiles is the docker compose profile set to enable on this
+	// bring-up. BIT-134: `--profile observability` adds Prometheus
+	// + Grafana via the assets/compose/observability.yaml overlay.
+	// Empty (default) means "no opt-in profiles" — same behavior
+	// as before this field existed.
+	Profiles []string
 
 	// SkipPreflight bypasses the docker.RunPreflight call. This is a
 	// test-only knob — unit tests for the `up` orchestration can't run
@@ -149,6 +159,12 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Wall-clock start for the welcome screen's "ready in Nm Ns" line.
+	// Captured at the top of RunUp so it includes resolve+preflight
+	// time, not just compose-up time — gives the user a realistic
+	// "cold start cost" expectation for their next dev cycle.
+	startedAt := time.Now()
+
 	// 1. Resolve version + adapter. Layer-1 (curated) is the default;
 	// AllowUncurated opts into layer-2 (upstream resolution) — see
 	// PR #20 #2 / internal/splice/resolver.go.
@@ -197,18 +213,30 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	// the flag is always false.
 	if !opts.SkipPreflight {
 		prog.StartStep(StepPreflight, "")
-		// Shared thresholds with `localnet doctor` — the
-		// `doctor && up` gating contract requires both surfaces
-		// to use the same numbers. See docker.DefaultMin*Bytes.
+		// Memory floor is version-aware (CLI ↔ Web UI parity:
+		// matches GET /api/preflight). splice.MinMemoryFor() is
+		// guaranteed to return >= docker.DefaultMinMemoryBytes
+		// by TestThresholdParity_VersionMinAtLeastDefault — a
+		// per-version override can only RAISE the gate, never
+		// weaken it, so the `doctor && up` contract holds:
+		// every host that passes doctor still passes up's floor
+		// for the lightest catalogued version.
 		report := docker.RunPreflight(ctx, docker.Options{
-			DataDir:        registry.Root(),
-			MinDiskBytes:   docker.DefaultMinDiskBytes,
-			MinMemoryBytes: docker.DefaultMinMemoryBytes,
+			DataDir:                registry.Root(),
+			MinDiskBytes:           docker.DefaultMinDiskBytes,
+			MinMemoryBytes:         splice.MinMemoryFor(version),
+			RecommendedMemoryBytes: splice.RecommendedMemoryFor(version),
 		})
 		report.Write(prog.Out())
 		if !report.OK() {
+			// BIT-172: stamp the most-specific code we can infer
+			// from the failed checks so the UI can render a
+			// targeted remediation panel (Docker not running vs
+			// memory too low vs disk full, etc.) instead of a
+			// generic "preflight failed" wall of text.
 			prog.FailStep(StepPreflight,
-				"\nPreflight failed. Address the items above and re-run.", nil)
+				"\nPreflight failed. Address the items above and re-run.",
+				WithCode(fmt.Errorf("preflight failed"), PreflightCodeFromReport(report)))
 			return ExitPreflightFail
 		}
 		prog.FinishStep(StepPreflight, "")
@@ -251,6 +279,27 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	composeFiles := append([]string(nil), adapter.ComposeFiles()...)
 	composeFiles = append(composeFiles, overlayPath) // absolute path; not relative to projectDir
 
+	// BIT-134: observability profile materializes the embedded
+	// Prometheus + Grafana overlay and appends its compose file.
+	// Profile activation gates the actual service-start (services
+	// in the overlay are scoped under `profiles: [observability]`).
+	hasObservabilityProfile := false
+	for _, p := range opts.Profiles {
+		if p == ObservabilityProfileName {
+			hasObservabilityProfile = true
+			break
+		}
+	}
+	if hasObservabilityProfile {
+		overlay, err := MaterializeObservabilityOverlay(dataDir)
+		if err != nil {
+			prog.FailStep(StepPersistState,
+				"Failed to extract observability overlay", err)
+			return ExitRuntimeFailure
+		}
+		composeFiles = append(composeFiles, overlay)
+	}
+
 	// PR #20 #5/#7: read any pre-existing state so we can reuse the
 	// previously assigned UI host ports — stable URLs across an
 	// up/down/up cycle is the whole point of persisting them. If no
@@ -287,12 +336,23 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	// contract) unless one is busy, in which case we surface
 	// ErrPortBusy as a user error and stop — silently picking a new
 	// port would defeat the contract.
-	uiOverrides, err := ReuseOrAllocateUIPorts(UIPortEnvVars(), priorPorts)
+	// BIT-134 review v4: when --profile observability is on,
+	// allocate Prometheus + Grafana host ports alongside the
+	// rest so they go through the stable-reuse contract too.
+	portEnvVars := UIPortEnvVars()
+	if hasObservabilityProfile {
+		portEnvVars = append(portEnvVars, ObservabilityPortEnvVars()...)
+	}
+	uiOverrides, err := ReuseOrAllocateUIPorts(portEnvVars, priorPorts)
 	if err != nil {
 		if errors.Is(err, ErrPortBusy) {
+			// BIT-172: stamp PORTS_IN_USE so the frontend can
+			// render the "free the port" remediation panel
+			// instead of the generic failure dialog.
 			prog.FailStep(StepPersistState,
 				fmt.Sprintf("%s\nFree the conflicting process (lsof -i :<port>) or tear down the "+
-					"other instance and re-run `localnet up --name %s`.", err, opts.Name), nil)
+					"other instance and re-run `localnet up --name %s`.", err, opts.Name),
+				WithCode(err, ErrCodePortsInUse))
 			return ExitPreflightFail
 		}
 		prog.FailStep(StepPersistState, "Failed to allocate UI ports", err)
@@ -303,6 +363,10 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	state.Ports["sv_ui"] = uiOverrides["SV_UI_PORT"]
 	state.Ports["swagger_ui"] = uiOverrides["SWAGGER_UI_PORT"]
 	state.Ports["postgres"] = uiOverrides["DB_PORT"]
+	if hasObservabilityProfile {
+		state.Ports["prometheus_ui"] = uiOverrides["PROMETHEUS_HOST_PORT"]
+		state.Ports["grafana_ui"] = uiOverrides["GRAFANA_HOST_PORT"]
+	}
 	prog.FinishStep(StepPersistState, "")
 
 	// 6. Starting services. Build the compose process env and run
@@ -332,6 +396,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			Env:          env,
 			WorkDir:      projectDir,
 			LogWriter:    prog.Out(),
+			Profiles:     opts.Profiles,
 		}
 	}
 
@@ -355,7 +420,22 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			prog.FailStep(StepWaitHealthy, "Timed out waiting for services", nil)
 			return ExitTimeout
 		}
-		prog.FailStep(StepWaitHealthy, "Services failed health check", err)
+		// BIT-174: try to diagnose the failure by inspecting the
+		// unhealthy containers' recent logs. Most common cause on
+		// first-run with default Docker memory: canton JVM OOM-loop
+		// — its logs include "exceeds half of the container's
+		// total memory". If we spot that pattern, stamp
+		// CANTON_OOM so the UI renders the memory-raise
+		// remediation card; otherwise stamp CONTAINER_UNHEALTHY
+		// so the UI can at least offer a "see logs" affordance.
+		diagCtx, cancelDiag := context.WithTimeout(ctx, 15*time.Second)
+		code := diagnoseUnhealthy(diagCtx, state.ComposeProject)
+		cancelDiag()
+		if code == "" {
+			code = ErrCodeContainerUnhealthy
+		}
+		prog.FailStep(StepWaitHealthy, "Services failed health check",
+			WithCode(err, code))
 		return ExitRuntimeFailure
 	}
 	prog.FinishStep(StepWaitHealthy, "")
@@ -374,8 +454,12 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	}
 	prog.FinishStep(StepCaptureJWTs, "")
 
-	prog.Done(fmt.Sprintf(`Canton LocalNet %q (Splice %s) is ready.`, opts.Name, version.Tag))
-	printEndpoints(prog.Out(), state)
+	// Welcome screen — replaces the old inline brand Box + plain
+	// endpoint listing with a single composable view (lockup +
+	// primary CTA + grouped endpoint cards + try-next cheat sheet).
+	// The renderer auto-degrades to a plain text variant on non-TTY
+	// writers so `localnet up | tee log` still grep-cleanly.
+	renderWelcome(prog.Out(), opts.Name, version.Tag, state, time.Since(startedAt))
 	return ExitSuccess
 }
 
@@ -428,37 +512,176 @@ func mapToEnv(m map[string]string) []string {
 	return out
 }
 
-func printEndpoints(out io.Writer, state *registry.State) {
-	_, _ = fmt.Fprintln(out, "Endpoints:")
+// renderWelcome composes the post-ready welcome screen using the term
+// package's WelcomeScreen primitive (see internal/ui/term/welcome.go).
+//
+// Bridges registry-shaped data (state.Ports, the orderedEndpointKeys
+// scheme map) into the term-package's renderer-shaped data (Endpoint
+// records grouped by Category). Kept in this package rather than the
+// term package because the endpoint→category mapping is domain
+// knowledge (Splice's UI structure), not a generic terminal primitive.
+func renderWelcome(out io.Writer, name, spliceVersion string, state *registry.State, elapsed time.Duration) {
+	// Group endpoints by purpose. The order here drives display
+	// order in the welcome screen — keep the most-clicked surfaces
+	// (wallet, scan) at the top.
+	endpoints := []term.Endpoint{}
 	for _, e := range orderedEndpointKeys() {
-		if port, ok := state.Ports[e.key]; ok {
-			_, _ = fmt.Fprintf(out, "  %-20s %s://localhost:%d\n", e.label+":", e.scheme, port)
+		port, ok := state.Ports[e.key]
+		if !ok {
+			continue
+		}
+		url := fmt.Sprintf("%s://localhost:%d", e.scheme, port)
+		endpoints = append(endpoints, term.Endpoint{
+			Category: e.category,
+			Label:    e.label,
+			URL:      url,
+			External: e.external,
+		})
+	}
+
+	tryNext := []term.NextStep{
+		{Label: "Status", Command: fmt.Sprintf("canton-devkit localnet status --name %s", name)},
+		{Label: "Env", Command: fmt.Sprintf("eval $(canton-devkit localnet env --name %s)", name)},
+		{Label: "Live ACS", Command: fmt.Sprintf("canton-devkit localnet contracts watch --name %s", name)},
+		{Label: "Upload DAR", Command: fmt.Sprintf("canton-devkit localnet dar upload <path> --name %s", name)},
+		{Label: "Stop", Command: fmt.Sprintf("canton-devkit localnet down --name %s", name)},
+	}
+
+	term.WelcomeScreen{
+		InstanceName:  name,
+		SpliceVersion: spliceVersion,
+		Elapsed:       elapsed,
+		Endpoints:     endpoints,
+		TryNext:       tryNext,
+		StatePath:     registry.PathFor(state.Name),
+	}.Render(out)
+}
+
+// diagnoseUnhealthy inspects the project's containers for the
+// known failure patterns we can give targeted remediation for.
+// Called from RunUp's wait_healthy fail path — BIT-174.
+//
+// Returns "" when no recognized pattern matches; caller falls
+// back to ErrCodeContainerUnhealthy. Best-effort — if the docker
+// probe itself fails (daemon down, project gone), returns "" and
+// the wait_healthy failure surfaces with the generic code.
+//
+// # Why not just the JVM "-Xmx exceeds half" warning
+//
+// The JVM logs that warning on EVERY startup of a memory-tight
+// canton container — it's a JVM config-time advisory, not an OOM
+// event. Pattern-matching it would false-positive on every boot
+// of a 4 GiB Docker Desktop, AND would false-negative when canton
+// actually OOM-kills (the kernel kills the JVM before it can log
+// anything; the container restarts and the new JVM's startup log
+// has no OOM trace).
+//
+// True OOM detection signals (any ONE is sufficient):
+//
+//  1. docker inspect: State.OOMKilled == true on the last
+//     terminated state. This is the kernel's own OOM-killer
+//     event, not derived from logs.
+//  2. State.ExitCode == 137 (SIGKILL) AND State.Status == "exited"
+//     — Linux kernel OOM-kill manifests as SIGKILL.
+//  3. container is restarting AND its RestartCount is > 0 AND
+//     the JVM warning is present in the most recent boot's logs
+//     — the warning by itself isn't proof, but COMBINED with an
+//     observed restart cycle it strongly suggests OOM-loop.
+//
+// We use signal (3) here as the cheapest reliable indicator
+// (signals 1+2 would need a richer `docker inspect` parse than
+// `compose ps` gives us). Wired so the JVM warning alone never
+// fires a code — only "warning AND restart-loop" does.
+func diagnoseUnhealthy(ctx context.Context, project string) string {
+	infos, err := containers.List(ctx, project)
+	if err != nil {
+		return ""
+	}
+	for _, c := range infos {
+		obs := containerObs{
+			Service: c.Service,
+			State:   c.State,
+			Health:  c.Health,
+			Status:  c.Status,
+		}
+		// Only spend a docker logs subprocess when the cheap
+		// signal (Status) already suggests a kernel kill.
+		// diagnoseFromObs without LogTail can short-circuit
+		// in the common "container is healthy" / "container
+		// is just slow-starting" cases.
+		if diagnoseFromObs(obs) == "" && !isRestartingOOM(c.Status) {
+			continue
+		}
+		logCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		body, _ := containers.Logs(logCtx, c.Name, containers.LogsOptions{Tail: 80})
+		cancel()
+		obs.LogTail = body
+		if code := diagnoseFromObs(obs); code != "" {
+			return code
 		}
 	}
-	_, _ = fmt.Fprintln(out)
-	_, _ = fmt.Fprintln(out, "Instance files:")
-	_, _ = fmt.Fprintf(out, "  State:           %s\n", registry.PathFor(state.Name))
-	_, _ = fmt.Fprintf(out, "  Compose project: %s\n", state.ProjectDir)
-	_, _ = fmt.Fprintln(out)
-	_, _ = fmt.Fprintf(out, "Stop with: canton-devkit localnet down --name %s\n", state.Name)
+	return ""
+}
+
+// PreflightCodeFromReport (exported variant of the same logic
+// used by RunUp internally) extracts the most specific BIT-172
+// error code from a failed docker.Report. Priority order matches
+// "what's the most actionable diagnosis the user can fix first":
+//
+//	Docker CLI missing       → ErrCodeDockerNotInstalled (install Docker)
+//	Docker daemon down       → ErrCodeDockerDown        (start Docker)
+//	Docker Compose v1/missing → ErrCodeComposeMissing    (install compose v2)
+//	Docker memory below floor → ErrCodeMemoryLow        (raise Resources → Memory)
+//	Disk space low           → ErrCodeDiskLow           (free space)
+//	anything else            → ErrCodePreflightFailed   (catch-all)
+//
+// Exported so internal/ui/handlers/preflight.go can call it for
+// the HTTP-422 response — single source of truth (BIT-172 review
+// fix). The lowercase wrapper below preserves the local callsite
+// for compatibility within this file.
+func PreflightCodeFromReport(r *docker.Report) string {
+	// Walk in priority order — the first FAIL we hit wins.
+	for _, c := range r.Results {
+		if c.Status != docker.StatusFail {
+			continue
+		}
+		switch c.Name {
+		case "Docker CLI":
+			return ErrCodeDockerNotInstalled
+		case "Docker daemon":
+			return ErrCodeDockerDown
+		case "Docker Compose v2":
+			return ErrCodeComposeMissing
+		case "Docker memory":
+			return ErrCodeMemoryLow
+		case "Disk space":
+			return ErrCodeDiskLow
+		}
+	}
+	return ErrCodePreflightFailed
 }
 
 // orderedEndpointKeys returns the endpoint pretty-print order — stable
-// regardless of map iteration order.
+// regardless of map iteration order. Carries the welcome-screen
+// metadata (Category, External) alongside the registry key so the
+// renderer can group rows by purpose and render hyperlinks only for
+// browsable URLs (not for sockets like postgres).
 func orderedEndpointKeys() []endpointDisplay {
 	return []endpointDisplay{
-		{"app_user_ui", "App User UI", "http"},
-		{"app_provider_ui", "App Provider UI", "http"},
-		{"sv_ui", "Super Validator UI", "http"},
-		{"swagger_ui", "Swagger UI", "http"},
-		{"postgres", "Postgres", "postgresql"},
+		{key: "app_user_ui", label: "Wallet (app-user)", scheme: "http", category: "WEB UIs", external: true},
+		{key: "app_provider_ui", label: "Wallet (app-provider)", scheme: "http", category: "WEB UIs", external: true},
+		{key: "sv_ui", label: "Wallet (super-validator)", scheme: "http", category: "WEB UIs", external: true},
+		{key: "swagger_ui", label: "Swagger (OpenAPI)", scheme: "http", category: "WEB UIs", external: true},
+		{key: "postgres", label: "Postgres", scheme: "postgresql", category: "INFRASTRUCTURE", external: false},
 	}
 }
 
 type endpointDisplay struct {
-	key    string
-	label  string
-	scheme string
+	key      string
+	label    string
+	scheme   string
+	category string // welcome-screen section header — "WEB UIs", "INFRASTRUCTURE"
+	external bool   // browsable URL → render "↗" + OSC 8 hyperlink
 }
 
 // shortSHA returns the first 7 characters of a git SHA (or the whole
