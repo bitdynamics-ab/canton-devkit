@@ -114,6 +114,41 @@ export const fetchInstances = () => apiFetch<ListResponse>("/api/instances");
 export const fetchInstance = (name: string) =>
   apiFetch<Instance>(`/api/instances/${encodeURIComponent(name)}`);
 
+// ContainerHealth mirrors internal/ui/handlers/instances.go
+// ContainerHealth — one row from `docker compose ps --all`.
+// state + health are the diagnostic pair the UI surfaces:
+//   state    = docker container state (running, restarting,
+//              exited, paused, dead, created)
+//   health   = healthcheck verdict (healthy, starting,
+//              unhealthy, "" when no healthcheck)
+// status     = raw human string from docker
+//              (e.g. "Up 4 minutes (health: starting)")
+export interface ContainerHealth {
+  name: string;
+  service: string;
+  state: string;
+  health?: string;
+  status: string;
+  image?: string;
+}
+
+export interface ContainersResponse {
+  schema_version: number;
+  instance: string;
+  containers: ContainerHealth[];
+  healthy_count: number;
+  starting_count: number;
+  unhealthy_count: number;
+  restarting_count: number;
+  exited_count: number;
+}
+
+// fetchContainers powers the live ContainerHealth panel — polled
+// every ~3s while the panel is visible. Stateless on the server
+// (re-runs docker compose ps), so cheap to spam.
+export const fetchContainers = (name: string) =>
+  apiFetch<ContainersResponse>(`/api/instances/${encodeURIComponent(name)}/containers`);
+
 // JwtRequest mirrors internal/ui/handlers/auth.go jwtRequest.
 export interface JwtRequest {
   role?: string;

@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { type InstanceSummary } from "../api";
 import { W } from "../tokens";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
+import { ContainerHealth } from "./ContainerHealth";
 import { CreateLocalNetModal } from "./CreateLocalNetModal";
 import { CreatingPanel } from "./CreatingPanel";
 import { DeveloperSetup } from "./DeveloperSetup";
@@ -124,6 +125,7 @@ export function Dashboard() {
               statusHint={selectedRow?.status}
               onChanged={sel.refresh}
             />
+            <ContainerHealth name={sel.selected} />
             {!isCreating && <DeveloperSetup name={sel.selected} />}
           </>
         );

@@ -42,6 +42,26 @@ function mockListResponse(
           ),
         );
       }
+      // /api/instances/{name}/containers — ContainerHealth's
+      // 3s poll. Return empty list so the panel renders the
+      // "no containers" placeholder rather than the error path.
+      if (url.match(/\/api\/instances\/[^/?]+\/containers/)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              schema_version: 1,
+              instance: "demo",
+              containers: [],
+              healthy_count: 0,
+              starting_count: 0,
+              unhealthy_count: 0,
+              restarting_count: 0,
+              exited_count: 0,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
       // /api/instances list — primary fetch.
       if (url.includes("/api/instances")) {
         if (instances === "error") {

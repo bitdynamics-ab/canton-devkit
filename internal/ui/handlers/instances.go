@@ -32,6 +32,7 @@
 package handlers
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -40,7 +41,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os/exec"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
@@ -118,6 +121,9 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("DELETE /api/instances/{name}", stub)
 		mux.HandleFunc("POST /api/instances/{name}/down", stub)
 	}
+	// Container probe is hub-independent (pure docker read) —
+	// mount it for every deployment.
+	mux.HandleFunc("GET /api/instances/{name}/containers", handleInstanceContainers())
 }
 
 // handleList: GET /api/instances → types.ListResponse.
@@ -680,6 +686,210 @@ func firstLine(s string) string {
 		}
 	}
 	return s
+}
+
+// ContainerHealth is one row in the per-instance container
+// table the UI's ContainerHealth panel renders. Mirrors what
+// `docker compose ps --all --format json` emits, narrowed to the
+// fields the UI actually needs.
+//
+// State + Health are the high-leverage diagnostic pair:
+//   State    = docker container state — running, restarting,
+//              exited, dead, created, paused
+//   Health   = docker healthcheck verdict — healthy, unhealthy,
+//              starting, "" (no healthcheck defined)
+//
+// The user's frustration we're addressing: registry's hard-coded
+// `running|stopped|failed|...` enum hides truth like "canton is
+// in a restart loop while postgres is healthy and splice is
+// stuck waiting on canton's admin API." With this list the UI
+// can render the per-container truth.
+type ContainerHealth struct {
+	Name    string `json:"name"`
+	Service string `json:"service"`
+	State   string `json:"state"`
+	Health  string `json:"health,omitempty"`
+	Status  string `json:"status"` // raw human string from docker (e.g. "Up 4 minutes (health: starting)")
+	Image   string `json:"image,omitempty"`
+}
+
+type ContainersResponse struct {
+	SchemaVersion int               `json:"schema_version"`
+	Instance      string            `json:"instance"`
+	Containers    []ContainerHealth `json:"containers"`
+	// Counters the frontend uses for a one-glance summary pill.
+	HealthyCount  int `json:"healthy_count"`
+	StartingCount int `json:"starting_count"`
+	UnhealthyCount int `json:"unhealthy_count"`
+	RestartingCount int `json:"restarting_count"`
+	ExitedCount   int `json:"exited_count"`
+}
+
+// handleInstanceContainers: GET /api/instances/{name}/containers.
+//
+// Runs `docker compose -p <project> ps --all --format json`
+// against the registered compose project, parses each line as a
+// container record, and returns the narrow shape the
+// ContainerHealth panel renders.
+//
+// 200 with empty containers list if the project name resolves
+// but docker has no containers (the instance was scrubbed at the
+// docker level but state.json still names a project) — better
+// than 404 because the frontend can show "no containers" and
+// offer cleanup actions.
+//
+// Caching: no-store (covered by writeJSON). The frontend polls
+// every ~3s while a CreatingPanel or stuck-state row is visible.
+func handleInstanceContainers() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if err := registry.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+
+		state, err := registry.Read(name)
+		if err != nil {
+			if errors.Is(err, registry.ErrNotFound) {
+				writeErrorWithCode(w, http.StatusNotFound,
+					ErrCodeNotFound,
+					"instance "+name+" not registered")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "read state", err)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		containers, runErr := composePs(ctx, state.ComposeProject)
+		if runErr != nil {
+			// Docker call failed (daemon down? project label
+			// doesn't exist?). Surface the failure as a 503
+			// with the underlying error so the UI can render a
+			// degraded-mode message.
+			writeErrorWithCode(w, http.StatusServiceUnavailable,
+				"DOCKER_PROBE_FAILED",
+				"could not query docker for compose project "+state.ComposeProject,
+				runErr.Error())
+			return
+		}
+
+		resp := ContainersResponse{
+			SchemaVersion: types.SchemaVersion,
+			Instance:      name,
+			Containers:    containers,
+		}
+		for _, c := range containers {
+			switch c.Health {
+			case "healthy":
+				resp.HealthyCount++
+			case "starting":
+				resp.StartingCount++
+			case "unhealthy":
+				resp.UnhealthyCount++
+			}
+			switch c.State {
+			case "restarting":
+				resp.RestartingCount++
+			case "exited", "dead":
+				resp.ExitedCount++
+			}
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+// composePs runs `docker compose -p <project> ps --all --format
+// json` and parses each NDJSON line into a ContainerHealth.
+// Returns an empty slice (no error) when docker reports no
+// containers for the project — the project may have been torn
+// down out-of-band, or never created.
+//
+// Error path is reserved for docker-side failures (daemon down,
+// compose binary missing) — the handler surfaces those as 503.
+func composePs(ctx context.Context, project string) ([]ContainerHealth, error) {
+	cmd := exec.CommandContext(ctx,
+		"docker", "compose", "-p", project,
+		"ps", "--all", "--format", "json")
+	out, err := cmd.Output()
+	if err != nil {
+		// Empty output + non-zero exit usually means "no such
+		// project" which we treat as empty-list success. Other
+		// errors (daemon down) propagate.
+		if exitErr, ok := err.(*exec.ExitError); ok && len(out) == 0 {
+			stderrText := string(exitErr.Stderr)
+			if strings.Contains(stderrText, "no such") ||
+				strings.Contains(stderrText, "not exist") {
+				return nil, nil
+			}
+		}
+		return nil, fmt.Errorf("docker compose ps: %w", err)
+	}
+	if len(bytes.TrimSpace(out)) == 0 {
+		return nil, nil
+	}
+
+	// docker compose ps --format json emits a single JSON ARRAY
+	// in newer versions (>= v2.21) or NDJSON in older. Handle
+	// both: if the first non-whitespace byte is '[', parse as
+	// array; otherwise parse line-by-line.
+	trimmed := bytes.TrimLeft(out, " \t\r\n")
+	containers := []ContainerHealth{}
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		var arr []dockerComposePsEntry
+		if err := json.Unmarshal(trimmed, &arr); err != nil {
+			return nil, fmt.Errorf("parse compose ps JSON array: %w", err)
+		}
+		for _, e := range arr {
+			containers = append(containers, e.toHealth())
+		}
+		return containers, nil
+	}
+	// NDJSON fallback.
+	scanner := bufio.NewScanner(bytes.NewReader(trimmed))
+	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var e dockerComposePsEntry
+		if err := json.Unmarshal(line, &e); err != nil {
+			// Best-effort: skip a malformed line rather than
+			// fail the whole call.
+			continue
+		}
+		containers = append(containers, e.toHealth())
+	}
+	return containers, nil
+}
+
+// dockerComposePsEntry mirrors the JSON fields `docker compose ps
+// --format json` emits. Only the fields we render are mapped;
+// unknown extras (e.g. ExitCode, RunningFor) are ignored so a
+// docker version bump that adds new fields doesn't break us.
+type dockerComposePsEntry struct {
+	Name    string `json:"Name"`
+	Service string `json:"Service"`
+	State   string `json:"State"`
+	Health  string `json:"Health"`
+	Status  string `json:"Status"`
+	Image   string `json:"Image"`
+}
+
+func (e dockerComposePsEntry) toHealth() ContainerHealth {
+	return ContainerHealth{
+		Name:    e.Name,
+		Service: e.Service,
+		State:   e.State,
+		Health:  e.Health,
+		Status:  e.Status,
+		Image:   e.Image,
+	}
 }
 
 // handleScrubInstance: DELETE /api/instances/{name}.
