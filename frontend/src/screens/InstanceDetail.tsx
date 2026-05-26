@@ -3,6 +3,7 @@ import {
   ApiError,
   type Instance,
   fetchInstance,
+  scrubInstance,
   stopInstance,
 } from "../api";
 import { W, wMono } from "../tokens";
@@ -50,6 +51,27 @@ export function InstanceDetail({ name, onChanged }: Props) {
       onChanged?.();
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "failed to stop";
+      setStopping({ kind: "err", message: msg });
+      onChanged?.();
+    }
+  }
+
+  async function onRemove() {
+    if (
+      !confirm(
+        `Remove ${name} from the registry?\n\nThis deletes the instance entry + state.json. ` +
+          `Docker volumes (if any) are NOT touched — for that, use \`dpm localnet clean --name ${name}\` from a terminal.`,
+      )
+    ) {
+      return;
+    }
+    setStopping({ kind: "running" });
+    try {
+      await scrubInstance(name);
+      setStopping({ kind: "idle" });
+      onChanged?.();
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "failed to remove";
       setStopping({ kind: "err", message: msg });
       onChanged?.();
     }
@@ -103,25 +125,12 @@ export function InstanceDetail({ name, onChanged }: Props) {
           </span>
         )}
         <span style={{ marginLeft: "auto" }} />
-        {state.kind === "ok" && state.instance.status === "running" && (
-          <button
-            onClick={onStop}
-            disabled={stopping.kind === "running"}
-            style={{
-              background: "transparent",
-              color: stopping.kind === "running" ? W.dim : W.err,
-              border: `1px solid ${stopping.kind === "running" ? W.dim : W.err}`,
-              borderRadius: 6,
-              padding: "4px 12px",
-              fontSize: 11.5,
-              fontWeight: 600,
-              cursor: stopping.kind === "running" ? "wait" : "pointer",
-            }}
-            title="Bring containers down via docker compose. Data volumes preserved."
-          >
-            {stopping.kind === "running" ? "Stopping…" : "⏹ Stop"}
-          </button>
-        )}
+        {state.kind === "ok" && <ActionButton
+          status={state.instance.status}
+          busy={stopping.kind === "running"}
+          onStop={onStop}
+          onRemove={onRemove}
+        />}
       </header>
 
       {stopping.kind === "err" && (
@@ -187,4 +196,67 @@ function DetailGrid({ instance }: { instance: Instance }) {
       ))}
     </div>
   );
+}
+
+// ActionButton dispatches the right verb per instance status:
+//   - running        → Stop  (POST /down via stopInstance)
+//   - stopped/failed → Remove entry (DELETE / via scrubInstance)
+//   - creating       → no button (CreatingPanel owns that surface)
+//   - other states   → no button (defensive)
+//
+// The pair-vs-single choice keeps the surface honest: Stop on a
+// failed instance would be meaningless (there's nothing live to
+// stop), and Remove on a running instance would orphan containers.
+// Backend already refuses both cross-cases with 409, but hiding
+// the button is the kinder UX than letting the user click and
+// get an error toast.
+function ActionButton({
+  status,
+  busy,
+  onStop,
+  onRemove,
+}: {
+  status: string;
+  busy: boolean;
+  onStop: () => void;
+  onRemove: () => void;
+}) {
+  if (status === "running") {
+    return (
+      <button
+        onClick={onStop}
+        disabled={busy}
+        title="Bring containers down via docker compose. Data volumes preserved."
+        style={btnStyle(W.err, busy)}
+      >
+        {busy ? "Stopping…" : "⏹ Stop"}
+      </button>
+    );
+  }
+  if (status === "stopped" || status === "failed" || status === "partial") {
+    return (
+      <button
+        onClick={onRemove}
+        disabled={busy}
+        title="Remove the registry entry + state.json. Docker volumes (if any) untouched."
+        style={btnStyle(W.dim, busy)}
+      >
+        {busy ? "Removing…" : "✕ Remove entry"}
+      </button>
+    );
+  }
+  return null;
+}
+
+function btnStyle(accent: string, busy: boolean): React.CSSProperties {
+  return {
+    background: "transparent",
+    color: busy ? W.dim : accent,
+    border: `1px solid ${busy ? W.dim : accent}`,
+    borderRadius: 6,
+    padding: "4px 12px",
+    fontSize: 11.5,
+    fontWeight: 600,
+    cursor: busy ? "wait" : "pointer",
+  };
 }
