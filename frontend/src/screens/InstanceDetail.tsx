@@ -7,6 +7,7 @@ import {
   stopInstance,
 } from "../api";
 import { W, wMono } from "../tokens";
+import { BackupRestore } from "./BackupRestore";
 
 // InstanceDetail — the per-instance detail card the dashboard
 // pops above the Developer setup card when a row is selected.
@@ -191,6 +192,11 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
         <div style={{ color: W.err, fontSize: 13 }}>{state.error}</div>
       )}
       {state.kind === "ok" && <DetailGrid instance={state.instance} />}
+      {/* BIT-184: Backup & restore lives inside the detail card so
+          the instance-name context is implicit. Renders even on
+          loading/error so the user can still take a snapshot of a
+          mostly-broken instance for support tickets. */}
+      <BackupRestore instanceName={name} />
     </section>
   );
 }

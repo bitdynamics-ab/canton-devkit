@@ -29,6 +29,10 @@ func Build() *cobra.Command {
 	localnet.AddCommand(buildEnv())    // BIT-125 wedge; PR #34 replaces wholesale
 	localnet.AddCommand(buildDoctor()) // BIT-123 wedge; PR #39 replaces wholesale
 	localnet.AddCommand(buildLogs())
+	// BIT-147 — snapshot/restore. Source-copied from
+	// srikanth/bit-147-p1-10; BIT-184 wires UI parity on top.
+	localnet.AddCommand(buildSnapshot())
+	localnet.AddCommand(buildRestore())
 	localnet.AddCommand(buildVersions())
 	localnet.AddCommand(buildUI())
 	// CLI ↔ Web UI parity (see AGENTS.md): every per-container

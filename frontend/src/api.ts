@@ -429,6 +429,104 @@ export const fetchPreflight = (version: string) =>
 // On failure, the server's error envelope includes a one-line
 // summary the modal shows to the user; the full output goes to
 // the server log.
+// BIT-184 — snapshot / restore.
+//
+// downloadSnapshot triggers POST /api/instances/:name/snapshot and
+// hands the gzipped tar to the browser via an <a download> click. We
+// don't use fetch() + Blob here for one reason: a snapshot can be
+// 100s of MB, and putting the whole body into JS memory just to hand
+// it back to the browser is wasteful. The form-submit trick keeps the
+// response entirely in the browser's download pipeline.
+//
+// Returns a Promise that resolves when the request is dispatched
+// (not when the download completes — the browser owns that). Errors
+// from the server arrive as a JSON body the browser displays as a
+// download; we accept that UX limitation rather than buffer the tar
+// just to surface a structured error toast.
+export async function downloadSnapshot(name: string): Promise<void> {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = `/api/instances/${encodeURIComponent(name)}/snapshot`;
+  // Hidden iframe target avoids navigating away from the SPA on
+  // success. Browsers attach the download attribute on the response
+  // headers (Content-Disposition), so the iframe never actually
+  // renders anything — the file goes straight to the downloads bar.
+  form.target = "_dpm_dl";
+  let frame = document.querySelector(
+    'iframe[name="_dpm_dl"]',
+  ) as HTMLIFrameElement | null;
+  if (!frame) {
+    frame = document.createElement("iframe");
+    frame.name = "_dpm_dl";
+    frame.style.display = "none";
+    document.body.appendChild(frame);
+  }
+  document.body.appendChild(form);
+  form.submit();
+  document.body.removeChild(form);
+}
+
+export interface RestoreResponse {
+  name: string;
+  restored: boolean;
+}
+
+// restoreSnapshot uploads a snapshot tar to POST /api/instances/restore
+// via multipart/form-data. We use XMLHttpRequest (not fetch) for
+// upload progress events — fetch has no equivalent in Safari ≤17 and
+// the snapshot UX needs a progress bar for 100-MB-class uploads.
+//
+// onProgress receives a fraction in [0, 1]; callers render whatever
+// they like (bar, %, spinner with %). Resolves with the parsed
+// response body on 2xx; rejects with ApiError otherwise.
+export function restoreSnapshot(
+  file: File,
+  name: string,
+  opts: { force?: boolean; onProgress?: (frac: number) => void } = {},
+): Promise<RestoreResponse> {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    fd.append("name", name);
+    fd.append("file", file);
+    if (opts.force) fd.append("force", "true");
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/instances/restore");
+    if (opts.onProgress) {
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable && opts.onProgress) {
+          opts.onProgress(e.loaded / e.total);
+        }
+      });
+    }
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as RestoreResponse);
+        } catch (e) {
+          reject(
+            new ApiError(xhr.status, {
+              code: "UNKNOWN",
+              error: "response was not JSON",
+            }),
+          );
+        }
+        return;
+      }
+      let body: ApiErrorBody = { code: "UNKNOWN", error: xhr.statusText };
+      try {
+        body = JSON.parse(xhr.responseText);
+      } catch {
+        /* non-JSON; keep default */
+      }
+      reject(new ApiError(xhr.status, body));
+    });
+    xhr.addEventListener("error", () => {
+      reject(new ApiError(0, { code: "NETWORK", error: "network error" }));
+    });
+    xhr.send(fd);
+  });
+}
+
 export async function stopInstance(name: string, keepData = false): Promise<void> {
   const resp = await fetch(
     `/api/instances/${encodeURIComponent(name)}/down`,
