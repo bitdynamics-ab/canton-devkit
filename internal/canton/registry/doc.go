@@ -32,6 +32,29 @@
 // premature work against an evolving Splice API. See README.md inside
 // the package for the "how to add an endpoint" recipe.
 //
+// # CRITICAL — Host header / virtual-host routing
+//
+// Splice's nginx config defines multiple `server_name` blocks under one
+// listen port. The /api/scan/* routes only match when the request Host
+// header is `scan.localhost`; /api/validator/* needs `wallet.localhost`
+// (per-tenant routing). With `Host: localhost` (the implicit default
+// when BaseURL is `http://localhost:PORT`), requests fall through to
+// the default server block which serves the tenant's SPA HTML — your
+// 200-OK response will be `<!DOCTYPE html>` instead of JSON, and the
+// decode error message is opaque.
+//
+// Pass the right virtual host via BaseURL. The `.localhost` TLD
+// resolves to 127.0.0.1 per RFC 6761 (verified on macOS + Linux):
+//
+//	registry.Dial(registry.DialOptions{
+//	    BaseURL: "http://scan.localhost:<sv-port>",        // for /api/scan/*
+//	    BaseURL: "http://wallet.localhost:<tenant-port>",  // for /api/validator/*
+//	})
+//
+// If `.localhost` resolution fails in your environment (rare; some
+// container runtimes strip it), use IP + the manual Host-header
+// workaround via a wrapping http.RoundTripper in DialOptions.HTTPClient.
+//
 // # Auth
 //
 // Identical model to [internal/canton/ledger]: the [TokenSource]

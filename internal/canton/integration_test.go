@@ -37,8 +37,17 @@ import (
 
 // localnetParticipantEndpoint is the gRPC endpoint to hit. Overridable
 // via env so a developer with non-default ports can still run the
-// tests. Defaults match the canonical app-user participant port on a
-// fresh `localnet up --name dev`.
+// tests. The Splice docker-compose convention assigns participant
+// ledger-API gRPC to container port 4901 (app-user participant) which
+// the canton-devkit registry maps to a host-allocated ephemeral port.
+//
+// To discover the actual host port:
+//
+//	docker port <project>-canton 4901
+//
+// Then export it, e.g.:
+//
+//	export CANTON_DEVKIT_TEST_LEDGER_ENDPOINT=localhost:57894
 func localnetParticipantEndpoint() string {
 	if v := os.Getenv("CANTON_DEVKIT_TEST_LEDGER_ENDPOINT"); v != "" {
 		return v
@@ -46,14 +55,33 @@ func localnetParticipantEndpoint() string {
 	return "localhost:5001"
 }
 
-// localnetScanBaseURL is the Splice scan HTTP root. Same env-override
-// pattern as the gRPC endpoint; default points at the SV tenant's nginx
-// (which is the only tenant that exposes /api/scan/...).
+// localnetScanBaseURL is the Splice scan HTTP root.
+//
+// CRITICAL — the URL scheme/host matters for nginx routing on the SV
+// tenant. The /api/scan/* path only matches when the request Host
+// header is `scan.localhost` (see Splice conf/nginx/sv.conf — there
+// are multiple `server_name` blocks under one listen port; only the
+// `scan.localhost` block proxies to the splice scan app). Hitting
+// `http://localhost:<sv-port>/api/scan/v0/dso` returns the
+// sv-html static index (200 with HTML body) because the default
+// server_name block serves the SV UI assets.
+//
+// The Go http.Client uses the URL's host as the Host header by
+// default, so the right form is:
+//
+//	export CANTON_DEVKIT_TEST_SCAN_URL=http://scan.localhost:<sv-port>
+//
+// `scan.localhost` resolves to 127.0.0.1 per RFC 6761; verified on
+// macOS + Linux. To find the SV UI host port on a running instance:
+//
+//	docker port <project>-nginx <SV_UI_PORT-from-compose-env>
+//
+// or simply read state.Ports["sv_ui"] from the canton-devkit registry.
 func localnetScanBaseURL() string {
 	if v := os.Getenv("CANTON_DEVKIT_TEST_SCAN_URL"); v != "" {
 		return v
 	}
-	return "http://localhost:4000"
+	return "http://scan.localhost:4000"
 }
 
 // devLocalNetTokenSource returns a TokenSource that signs JWTs with the
