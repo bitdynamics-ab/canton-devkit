@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
+	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
 // DoctorOptions captures `localnet doctor` flags. Reserved (currently
@@ -31,6 +32,7 @@ func RunDoctor(ctx context.Context, out io.Writer, _ io.Writer, _ *DoctorOptions
 	// allocates them ephemerally — so a green doctor implies `up` will
 	// also pass preflight.
 	report := docker.RunPreflight(ctx, docker.Options{
+		DataDir:        registry.Root(),
 		MinDiskBytes:   docker.DefaultMinDiskBytes,
 		MinMemoryBytes: docker.DefaultMinMemoryBytes,
 	})
