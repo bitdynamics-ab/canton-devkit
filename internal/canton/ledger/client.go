@@ -7,6 +7,7 @@ import (
 	"time"
 
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
+	adminv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2/admin"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -89,15 +90,22 @@ type Client struct {
 
 	// Service stubs from dazl-client. Held as fields rather than constructed
 	// per-call so each method site doesn't repeat the constructor.
-	state      lapiv2.StateServiceClient
-	update     lapiv2.UpdateServiceClient
-	eventQuery lapiv2.EventQueryServiceClient
-	pkg        lapiv2.PackageServiceClient
-	cmdSubmit  lapiv2.CommandSubmissionServiceClient
+	state       lapiv2.StateServiceClient
+	update      lapiv2.UpdateServiceClient
+	eventQuery  lapiv2.EventQueryServiceClient
+	pkg         lapiv2.PackageServiceClient
+	cmdSubmit   lapiv2.CommandSubmissionServiceClient
 	cmdComplete lapiv2.CommandCompletionServiceClient
-	version    lapiv2.VersionServiceClient
-	// PartyManagementService lives under the admin/ subpackage; wired in
-	// admin.go to keep this file focused on the v2 root services.
+	cmd         lapiv2.CommandServiceClient
+	version     lapiv2.VersionServiceClient
+
+	// Admin-subpackage stubs. The v2 admin RPCs (party, package
+	// management, user, identity provider) live in a separate proto
+	// package (`com.daml.ledger.api.v2.admin`) — held here so admin.go
+	// can stay focused on the typed method wrappers without duplicating
+	// the constructor wiring.
+	partyMgmt   adminv2.PartyManagementServiceClient
+	packageMgmt adminv2.PackageManagementServiceClient
 }
 
 // Dial establishes a gRPC connection to the participant's Ledger API.
@@ -152,7 +160,10 @@ func Dial(ctx context.Context, opts DialOptions) (*Client, error) {
 		pkg:         lapiv2.NewPackageServiceClient(conn),
 		cmdSubmit:   lapiv2.NewCommandSubmissionServiceClient(conn),
 		cmdComplete: lapiv2.NewCommandCompletionServiceClient(conn),
+		cmd:         lapiv2.NewCommandServiceClient(conn),
 		version:     lapiv2.NewVersionServiceClient(conn),
+		partyMgmt:   adminv2.NewPartyManagementServiceClient(conn),
+		packageMgmt: adminv2.NewPackageManagementServiceClient(conn),
 	}, nil
 }
 
