@@ -1481,13 +1481,13 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
                 <Mono>{focused.workflow_id}</Mono>
               </Section>
             )}
-            {hovered.events && hovered.events.length > 0 && (
-              <Section label={`Events (${hovered.events.length})`}>
-                {hovered.events.map((ev, i) => (
+            {focused.events && focused.events.length > 0 && (
+              <Section label={`Events (${focused.events.length})`}>
+                {focused.events.map((ev, i) => (
                   <EventTreeNode
                     key={i}
                     ev={ev}
-                    last={i === hovered.events!.length - 1}
+                    last={i === focused.events!.length - 1}
                   />
                 ))}
               </Section>

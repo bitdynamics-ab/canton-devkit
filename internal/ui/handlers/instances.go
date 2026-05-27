@@ -187,6 +187,22 @@ func handleList(w http.ResponseWriter, _ *http.Request) {
 // (gRPC admin/ledger ports per BIT-190 are intentionally not
 // here; they need credentialed handlers, not direct browser
 // linking).
+//
+// IMPORTANT: Splice's nginx multiplexes several apps on the same
+// port via virtual-host routing (server_name). At `localhost:<port>`
+// you get the *static landing page* (SV bootstrap, or ANS UI on
+// app-provider), NOT the wallet. The wallet only lives under the
+// `wallet.localhost` virtual host. Modern browsers (Chrome,
+// Firefox, Edge, recent Safari) resolve `*.localhost` to 127.0.0.1
+// per RFC 6761, so `wallet.localhost:<port>` works without any
+// /etc/hosts edits. See:
+//   conf/nginx/sv.conf          (server_name wallet.localhost)
+//   conf/nginx/app-user.conf    (server_name localhost wallet.localhost)
+//   conf/nginx/app-provider.conf (server_name wallet.localhost)
+// Previously we emitted `http://localhost:<port>` which on sv +
+// app-provider rendered the wrong app (the SV landing page on sv
+// triggers an unrelated "Failed to connect to MetaMask" toast from
+// its web3 boilerplate, which we saw reported).
 func walletEndpointsFromPorts(ports map[string]int) []types.Endpoint {
 	type spec struct {
 		key   string
@@ -205,7 +221,7 @@ func walletEndpointsFromPorts(ports map[string]int) []types.Endpoint {
 		}
 		out = append(out, types.Endpoint{
 			Label:  s.label,
-			URL:    fmt.Sprintf("http://localhost:%d", port),
+			URL:    fmt.Sprintf("http://wallet.localhost:%d", port),
 			Port:   port,
 			Scheme: "http",
 		})

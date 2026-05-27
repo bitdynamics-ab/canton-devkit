@@ -18,6 +18,20 @@ import { W, wMono } from "../tokens";
 // fallback covers that case.
 const ROLES: Role[] = ["app-user", "app-provider", "sv"];
 
+// LocalNet wallet login — Splice's LocalNet ships a self-signed
+// auth flow (NOT MetaMask, NOT a real OAuth provider). On the
+// wallet landing page click "Log in" and enter the role's
+// validator user name when prompted. These are the hardcoded
+// names from `env/<role>-auth-on.env`:
+//   AUTH_<ROLE>_WALLET_ADMIN_USER_NAME
+// (`app-user`, `app-provider`, `sv`). Password is ignored —
+// auth is dev-only HS-256 with the literal secret "unsafe".
+const LOGIN_USER_FOR: Record<Role, string> = {
+  "app-user": "app-user",
+  "app-provider": "app-provider",
+  sv: "sv",
+};
+
 // roleLabel matches the backend's Endpoint.Label format:
 // "Wallet · <role>". Resolves a role to the matching endpoint URL.
 function walletURLFor(role: Role, endpoints: Instance["endpoints"]): string | null {
@@ -126,6 +140,43 @@ export function WalletScreen() {
         <span style={{ marginLeft: "auto" }} />
         <RoleSwitcher role={role} onChange={setRole} />
       </header>
+
+      {/* Login help — Splice's LocalNet wallet uses a self-signed
+          dev-mode auth flow (NOT MetaMask). Surface the credentials
+          inline so users don't have to dig through env files. */}
+      <div
+        style={{
+          background: `${W.brand}10`,
+          border: `1px solid ${W.brand}40`,
+          borderRadius: 10,
+          padding: "10px 14px",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          fontSize: 12,
+          color: W.text2,
+        }}
+      >
+        <span style={{ color: W.brand, fontSize: 14 }}>🔑</span>
+        <div style={{ lineHeight: 1.5 }}>
+          <strong style={{ color: W.text }}>Login:</strong> on the wallet
+          landing page, click <em>Log in</em> and enter user name{" "}
+          <code
+            style={{
+              fontFamily: wMono,
+              color: W.text,
+              background: W.border,
+              padding: "1px 6px",
+              borderRadius: 4,
+            }}
+          >
+            {LOGIN_USER_FOR[role]}
+          </code>
+          . Password is unused — LocalNet auth is dev-mode HS-256 with the
+          shared secret <code style={{ fontFamily: wMono }}>"unsafe"</code>.
+          No MetaMask required.
+        </div>
+      </div>
 
       {/* Active wallet info strip */}
       <div
