@@ -703,6 +703,49 @@ export const fetchContracts = (
     `/api/instances/${encodeURIComponent(name)}/contracts?role=${role}&limit=${limit}`,
   );
 
+// BIT-186 follow-up — Transactions + Timeline.
+//
+// Each row in `transactions` represents one Canton update:
+// transaction / reassignment / topology event. The frontend
+// branches on `kind` to render either the table row or the
+// timeline-strip glyph.
+export interface TransactionEvent {
+  kind: "create" | "archive" | "exercise";
+  contract_id: string;
+  template?: string;
+  witnesses?: string[];
+}
+
+export interface TransactionRow {
+  kind: "transaction" | "reassignment" | "topology" | "checkpoint";
+  offset: number;
+  update_id?: string;
+  workflow_id?: string;
+  command_id?: string;
+  record_time?: string;
+  synchronizer?: string;
+  event_count?: number;
+  events?: TransactionEvent[];
+}
+
+export interface TransactionsListResponse {
+  schema_version: number;
+  instance: string;
+  role: Role;
+  ledger_end: number;
+  transactions: TransactionRow[];
+  count: number;
+}
+
+export const fetchTransactions = (
+  name: string,
+  role: Role = "app-user",
+  limit = 100,
+) =>
+  apiFetch<TransactionsListResponse>(
+    `/api/instances/${encodeURIComponent(name)}/transactions?role=${role}&limit=${limit}`,
+  );
+
 export const fetchMetricsSummary = (name: string) =>
   apiFetch<MetricsSummary>(
     `/api/instances/${encodeURIComponent(name)}/metrics/summary`,

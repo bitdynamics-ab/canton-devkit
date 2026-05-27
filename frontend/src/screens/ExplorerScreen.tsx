@@ -2,9 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   fetchContracts,
+  fetchTransactions,
   type ContractRow,
   type ContractsListResponse,
   type Role,
+  type TransactionEvent,
+  type TransactionRow,
+  type TransactionsListResponse,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { W, wMono } from "../tokens";
@@ -413,8 +417,11 @@ export function ExplorerScreen() {
         </div>
       )}
 
-      {state.kind === "ok" && view !== "contracts" && (
-        <ViewPlaceholder view={view} />
+      {state.kind === "ok" && view === "transactions" && (
+        <TransactionsView name={name} role={role} />
+      )}
+      {state.kind === "ok" && view === "timeline" && (
+        <TimelineView name={name} role={role} />
       )}
     </section>
   );
@@ -838,30 +845,679 @@ function DetailDrawer({ row }: { row: ContractRow | null }) {
   );
 }
 
-function ViewPlaceholder({ view }: { view: View }) {
+// TransactionsView — table of recent ledger updates (transactions,
+// reassignments, topology events) projected from
+// UpdateService.GetUpdates. Each transaction row expands inline
+// to show its event tree.
+function TransactionsView({ name, role }: { name: string; role: Role }) {
+  const [state, setState] = useState<
+    | { kind: "loading" }
+    | { kind: "ok"; data: TransactionsListResponse }
+    | { kind: "needs-jwt"; remediation: string }
+    | { kind: "port-missing"; remediation: string }
+    | { kind: "err"; error: string }
+  >({ kind: "loading" });
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ kind: "loading" });
+    fetchTransactions(name, role, 200)
+      .then((data) => {
+        if (cancelled) return;
+        setState({ kind: "ok", data });
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        if (
+          e instanceof ApiError &&
+          e.code === "PARTICIPANT_PORT_NOT_RECORDED"
+        ) {
+          setState({
+            kind: "port-missing",
+            remediation:
+              e.remediation?.[0] ??
+              `Restart the instance to capture Canton API ports.`,
+          });
+          return;
+        }
+        if (e instanceof ApiError && e.code === "EXPLORER_NEEDS_PARTY_JWT") {
+          setState({
+            kind: "needs-jwt",
+            remediation: e.remediation?.[0] ?? "Wrap UserManagementService.",
+          });
+          return;
+        }
+        setState({
+          kind: "err",
+          error: e instanceof ApiError ? e.message : "failed to load updates",
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [name, role]);
+
+  if (state.kind === "loading") {
+    return <Status>Loading updates stream…</Status>;
+  }
+  if (state.kind === "err") {
+    return <ErrorPanel msg={state.error} />;
+  }
+  if (state.kind === "port-missing") {
+    return (
+      <EmptyPanel
+        title="Participant ports not recorded"
+        body="This instance pre-dates the Canton-port persistence fix."
+        remediation={state.remediation}
+      />
+    );
+  }
+  if (state.kind === "needs-jwt") {
+    return (
+      <EmptyPanel
+        title="JWT lacks party-rights"
+        body="Resolving user → party rights needs UserManagementService."
+        remediation={state.remediation}
+      />
+    );
+  }
+
   return (
     <div
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
         borderRadius: 10,
-        padding: 32,
-        textAlign: "center",
-        color: W.dim,
-        fontSize: 13,
+        overflow: "hidden",
       }}
     >
-      <div style={{ fontSize: 14, color: W.text2, marginBottom: 6 }}>
-        {view === "transactions" ? "Transactions" : "Timeline"} view
+      <div
+        style={{
+          padding: "11px 14px",
+          borderBottom: `1px solid ${W.border}`,
+          display: "flex",
+          alignItems: "baseline",
+          gap: 12,
+        }}
+      >
+        <div>
+          <div style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}>
+            Transactions
+          </div>
+          <div style={{ color: W.dim, fontSize: 11.5, marginTop: 2 }}>
+            {state.data.transactions.length} updates · newest first · ledger
+            end {state.data.ledger_end.toLocaleString()}
+          </div>
+        </div>
       </div>
-      <div>
-        Streaming via{" "}
-        <code style={{ fontFamily: wMono, color: W.text2 }}>UpdateService</code>{" "}
-        is on the roadmap — tracked as a follow-up to BIT-186. Use the
-        Contracts tab for the live ACS in the meantime.
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "70px 110px 1.4fr 1.2fr 0.8fr 60px",
+          gap: 14,
+          padding: "9px 14px",
+          color: W.dim,
+          fontSize: 10.5,
+          letterSpacing: 1.4,
+          textTransform: "uppercase",
+          fontWeight: 600,
+          borderBottom: `1px solid ${W.border}`,
+        }}
+      >
+        <span>Kind</span>
+        <span>Offset</span>
+        <span>Command / Update id</span>
+        <span>Workflow</span>
+        <span>Time</span>
+        <span style={{ textAlign: "right" }}>Events</span>
+      </div>
+
+      {state.data.transactions.length === 0 && (
+        <div style={{ padding: 18, color: W.dim, fontSize: 12.5 }}>
+          No updates in the current ledger window.
+        </div>
+      )}
+
+      <div style={{ maxHeight: "65vh", overflowY: "auto" }}>
+        {state.data.transactions.map((tx) => (
+          <TxRowComponent
+            key={`${tx.offset}-${tx.update_id ?? ""}`}
+            tx={tx}
+            open={openId === (tx.update_id ?? `o-${tx.offset}`)}
+            onToggle={() =>
+              setOpenId((cur) =>
+                cur === (tx.update_id ?? `o-${tx.offset}`)
+                  ? null
+                  : tx.update_id ?? `o-${tx.offset}`,
+              )
+            }
+          />
+        ))}
+      </div>
+      <div
+        style={{
+          padding: "10px 14px",
+          color: W.dim,
+          fontSize: 11.5,
+          borderTop: `1px solid ${W.border}`,
+        }}
+      >
+        Click a row to expand its event tree.
       </div>
     </div>
   );
+}
+
+function TxRowComponent({
+  tx,
+  open,
+  onToggle,
+}: {
+  tx: TransactionRow;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const kindColor: Record<TransactionRow["kind"], string> = {
+    transaction: "#62E2A0",
+    reassignment: "#7CB5F7",
+    topology: "#C4A8F5",
+    checkpoint: W.dim,
+  };
+  return (
+    <>
+      <div
+        onClick={onToggle}
+        style={{
+          display: "grid",
+          gridTemplateColumns: "70px 110px 1.4fr 1.2fr 0.8fr 60px",
+          gap: 14,
+          padding: "9px 14px",
+          alignItems: "center",
+          background: open ? `${W.brand}10` : "transparent",
+          borderBottom: `1px solid ${W.border}`,
+          cursor: "pointer",
+        }}
+      >
+        <span
+          style={{
+            color: kindColor[tx.kind],
+            fontFamily: wMono,
+            fontSize: 11,
+            fontWeight: 600,
+          }}
+        >
+          {tx.kind}
+        </span>
+        <code style={{ fontFamily: wMono, color: W.text2, fontSize: 11 }}>
+          {tx.offset.toLocaleString()}
+        </code>
+        <code
+          style={{
+            fontFamily: wMono,
+            color: "#C4A8F5",
+            fontSize: 11,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+          title={tx.command_id ?? tx.update_id ?? ""}
+        >
+          {tx.command_id ?? tx.update_id?.slice(0, 16) ?? "—"}
+        </code>
+        <span
+          style={{
+            color: W.text2,
+            fontSize: 11.5,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {tx.workflow_id || (tx.synchronizer ? `→ ${tx.synchronizer}` : "—")}
+        </span>
+        <span style={{ color: W.dim, fontSize: 11.5, fontFamily: wMono }}>
+          {tx.record_time ? hhmmss(tx.record_time) : "—"}
+        </span>
+        <span
+          style={{
+            color: W.text,
+            fontFamily: wMono,
+            fontSize: 11,
+            textAlign: "right",
+          }}
+        >
+          {tx.event_count ?? "—"}
+        </span>
+      </div>
+      {open && tx.events && tx.events.length > 0 && (
+        <div
+          style={{
+            background: `${W.brand}05`,
+            padding: "10px 14px 12px 84px",
+            borderBottom: `1px solid ${W.border}`,
+          }}
+        >
+          {tx.events.map((ev, i) => (
+            <EventTreeNode key={i} ev={ev} last={i === tx.events!.length - 1} />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function EventTreeNode({
+  ev,
+  last,
+}: {
+  ev: TransactionEvent;
+  last: boolean;
+}) {
+  const c: Record<TransactionEvent["kind"], string> = {
+    create: "#62E2A0",
+    archive: "#F08FB5",
+    exercise: "#7CB5F7",
+  };
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 10,
+        alignItems: "baseline",
+        marginBottom: 3,
+        fontSize: 11.5,
+      }}
+    >
+      <span
+        style={{
+          color: W.dim,
+          fontFamily: wMono,
+          fontSize: 11,
+          width: 14,
+        }}
+      >
+        {last ? "└─" : "├─"}
+      </span>
+      <span style={{ color: c[ev.kind], fontWeight: 600, fontFamily: wMono }}>
+        {ev.kind}
+      </span>
+      <span
+        style={{ color: W.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+        title={ev.template}
+      >
+        {ev.template
+          ? ev.template.split(":").slice(1).join(":")
+          : "—"}
+      </span>
+      <code
+        style={{
+          fontFamily: wMono,
+          color: "#C4A8F5",
+          fontSize: 10.5,
+          marginLeft: "auto",
+        }}
+        title={ev.contract_id}
+      >
+        {ev.contract_id.slice(0, 16)}…
+      </code>
+    </div>
+  );
+}
+
+// TimelineView — time-axis strip showing every update as a coloured
+// glyph along the offset/time axis. Clicking a glyph highlights it +
+// shows quick metadata in a side card. Useful for "what happened in
+// the last minute" debugging.
+function TimelineView({ name, role }: { name: string; role: Role }) {
+  const [state, setState] = useState<
+    | { kind: "loading" }
+    | { kind: "ok"; data: TransactionsListResponse }
+    | { kind: "needs-jwt"; remediation: string }
+    | { kind: "port-missing"; remediation: string }
+    | { kind: "err"; error: string }
+  >({ kind: "loading" });
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ kind: "loading" });
+    fetchTransactions(name, role, 500)
+      .then((data) => {
+        if (cancelled) return;
+        setState({ kind: "ok", data });
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        if (
+          e instanceof ApiError &&
+          e.code === "PARTICIPANT_PORT_NOT_RECORDED"
+        ) {
+          setState({
+            kind: "port-missing",
+            remediation: e.remediation?.[0] ?? "Restart the instance.",
+          });
+          return;
+        }
+        if (e instanceof ApiError && e.code === "EXPLORER_NEEDS_PARTY_JWT") {
+          setState({
+            kind: "needs-jwt",
+            remediation: e.remediation?.[0] ?? "Resolve user rights.",
+          });
+          return;
+        }
+        setState({
+          kind: "err",
+          error: e instanceof ApiError ? e.message : "failed",
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [name, role]);
+
+  if (state.kind === "loading") return <Status>Loading timeline…</Status>;
+  if (state.kind === "err") return <ErrorPanel msg={state.error} />;
+  if (state.kind === "port-missing")
+    return (
+      <EmptyPanel
+        title="Participant ports not recorded"
+        body="This instance pre-dates the Canton-port persistence fix."
+        remediation={state.remediation}
+      />
+    );
+  if (state.kind === "needs-jwt")
+    return (
+      <EmptyPanel
+        title="JWT lacks party-rights"
+        body="Resolving user → party rights needs UserManagementService."
+        remediation={state.remediation}
+      />
+    );
+
+  const txs = state.data.transactions;
+  // Bucket updates into time slots for the strip — newest on the right.
+  const buckets = bucketByTime(txs, 60);
+  const hovered = hoverIdx !== null ? txs[hoverIdx] ?? null : null;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 320px",
+        gap: 14,
+        alignItems: "start",
+      }}
+    >
+      <div
+        style={{
+          background: W.surface,
+          border: `1px solid ${W.border}`,
+          borderRadius: 10,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            padding: "11px 14px",
+            borderBottom: `1px solid ${W.border}`,
+          }}
+        >
+          <div style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}>
+            Timeline
+          </div>
+          <div style={{ color: W.dim, fontSize: 11.5, marginTop: 2 }}>
+            {txs.length} updates · {buckets.length}-bucket density strip ·
+            hover any glyph for details
+          </div>
+        </div>
+
+        {/* Activity strip */}
+        <div
+          style={{
+            padding: "16px 14px",
+            display: "flex",
+            gap: 2,
+            alignItems: "flex-end",
+            height: 100,
+            background: `linear-gradient(180deg, transparent 0%, ${W.border}20 100%)`,
+          }}
+        >
+          {buckets.map((b, i) => {
+            const h = Math.max(4, Math.min(80, b.count * 8));
+            return (
+              <div
+                key={i}
+                title={`${b.count} updates`}
+                style={{
+                  flex: 1,
+                  height: h,
+                  background:
+                    b.count === 0
+                      ? W.border
+                      : `linear-gradient(180deg, ${W.brand}66 0%, ${W.brand} 100%)`,
+                  borderRadius: 2,
+                }}
+              />
+            );
+          })}
+        </div>
+
+        <div
+          style={{
+            padding: "4px 14px 0",
+            color: W.dim,
+            fontSize: 10.5,
+            fontFamily: wMono,
+            display: "flex",
+            justifyContent: "space-between",
+          }}
+        >
+          {txs.length > 0 ? (
+            <>
+              <span>oldest · {hhmmss(txs[txs.length - 1].record_time ?? "")}</span>
+              <span>newest · {hhmmss(txs[0].record_time ?? "")}</span>
+            </>
+          ) : (
+            <span>—</span>
+          )}
+        </div>
+
+        {/* Event glyph row */}
+        <div
+          style={{
+            padding: "12px 14px",
+            display: "flex",
+            gap: 3,
+            flexWrap: "wrap",
+            borderTop: `1px solid ${W.border}`,
+            maxHeight: 280,
+            overflowY: "auto",
+          }}
+        >
+          {txs.map((tx, i) => {
+            const color =
+              tx.kind === "transaction"
+                ? "#62E2A0"
+                : tx.kind === "reassignment"
+                  ? "#7CB5F7"
+                  : "#C4A8F5";
+            return (
+              <span
+                key={`${tx.offset}-${tx.update_id ?? i}`}
+                onMouseEnter={() => setHoverIdx(i)}
+                onMouseLeave={() => setHoverIdx(null)}
+                title={`${tx.kind} · offset ${tx.offset} · ${tx.event_count ?? 0} events`}
+                style={{
+                  width: 10,
+                  height: 18,
+                  background: color,
+                  opacity: hoverIdx === i ? 1 : 0.7,
+                  borderRadius: 1.5,
+                  cursor: "pointer",
+                  transition: "opacity 80ms",
+                }}
+              />
+            );
+          })}
+        </div>
+        <div
+          style={{
+            padding: "10px 14px",
+            color: W.dim,
+            fontSize: 11.5,
+            display: "flex",
+            justifyContent: "space-between",
+            borderTop: `1px solid ${W.border}`,
+          }}
+        >
+          <span>
+            <LegendDot color="#62E2A0" label="transaction" />
+            <LegendDot color="#7CB5F7" label="reassignment" />
+            <LegendDot color="#C4A8F5" label="topology" />
+          </span>
+          <span>Hover a glyph for the right-panel detail.</span>
+        </div>
+      </div>
+
+      {/* Side panel — hovered detail */}
+      <div
+        style={{
+          background: W.surface,
+          border: `1px solid ${W.border}`,
+          borderRadius: 10,
+          overflow: "hidden",
+        }}
+      >
+        {hovered ? (
+          <>
+            <header style={{ padding: "14px 16px", borderBottom: `1px solid ${W.border}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Pill
+                  color={
+                    hovered.kind === "transaction"
+                      ? "#62E2A0"
+                      : hovered.kind === "reassignment"
+                        ? "#7CB5F7"
+                        : "#C4A8F5"
+                  }
+                >
+                  {hovered.kind}
+                </Pill>
+                <span style={{ color: W.dim, fontSize: 11.5, fontFamily: wMono }}>
+                  offset {hovered.offset.toLocaleString()}
+                </span>
+              </div>
+              {hovered.record_time && (
+                <div
+                  style={{
+                    color: W.text2,
+                    fontSize: 11,
+                    fontFamily: wMono,
+                    marginTop: 6,
+                  }}
+                >
+                  {hovered.record_time}
+                </div>
+              )}
+            </header>
+            {hovered.command_id && (
+              <Section label="Command ID">
+                <Mono>{hovered.command_id}</Mono>
+              </Section>
+            )}
+            {hovered.workflow_id && (
+              <Section label="Workflow">
+                <Mono>{hovered.workflow_id}</Mono>
+              </Section>
+            )}
+            {hovered.events && hovered.events.length > 0 && (
+              <Section label={`Events (${hovered.events.length})`}>
+                {hovered.events.map((ev, i) => (
+                  <EventTreeNode
+                    key={i}
+                    ev={ev}
+                    last={i === hovered.events!.length - 1}
+                  />
+                ))}
+              </Section>
+            )}
+          </>
+        ) : (
+          <div
+            style={{
+              padding: 32,
+              textAlign: "center",
+              color: W.dim,
+              fontSize: 13,
+            }}
+          >
+            Hover any glyph on the left to inspect it.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, marginRight: 12 }}>
+      <span style={{ width: 8, height: 8, borderRadius: 2, background: color }} />
+      <span style={{ color: W.dim, fontSize: 11 }}>{label}</span>
+    </span>
+  );
+}
+
+function Mono({ children }: { children: React.ReactNode }) {
+  return (
+    <code
+      style={{
+        fontFamily: wMono,
+        color: W.text2,
+        fontSize: 11,
+        wordBreak: "break-all",
+      }}
+    >
+      {children}
+    </code>
+  );
+}
+
+function bucketByTime(
+  txs: TransactionRow[],
+  bucketCount: number,
+): Array<{ count: number }> {
+  if (txs.length === 0) return Array.from({ length: bucketCount }, () => ({ count: 0 }));
+  const times = txs.map((t) =>
+    t.record_time ? new Date(t.record_time).getTime() : NaN,
+  );
+  const valid = times.filter((t) => Number.isFinite(t));
+  if (valid.length === 0)
+    return Array.from({ length: bucketCount }, () => ({ count: 0 }));
+  const min = Math.min(...valid);
+  const max = Math.max(...valid);
+  const span = Math.max(1, max - min);
+  const buckets = Array.from({ length: bucketCount }, () => ({ count: 0 }));
+  for (const t of times) {
+    if (!Number.isFinite(t)) continue;
+    const i = Math.min(
+      bucketCount - 1,
+      Math.floor(((t - min) / span) * bucketCount),
+    );
+    buckets[i].count++;
+  }
+  return buckets;
+}
+
+function hhmmss(iso: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return iso;
+  return d
+    .toISOString()
+    .slice(11, 19); // "HH:MM:SS"
 }
 
 // ─────── Tiny shared primitives ───────────────────────────────
