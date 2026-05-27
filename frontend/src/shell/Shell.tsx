@@ -36,15 +36,25 @@ export function Shell({ children }: ShellProps) {
         fontFamily: wSans,
       }}
     >
+      <SkipLink />
       <TopBar />
       <Sidebar />
       <main
+        id="main-content"
+        // tabIndex=-1 so the SkipLink can programmatically focus
+        // it; without this the link jumps the scroll but
+        // keyboard focus stays in the topbar.
+        tabIndex={-1}
         style={{
           gridColumn: "2",
           gridRow: "2",
           overflow: "auto",
           padding: 24,
           background: W.bg,
+          // Suppress the focus outline on the scroll container —
+          // the SkipLink target getting outlined is visual noise;
+          // it's a focus *destination*, not a focusable control.
+          outline: "none",
         }}
       >
         {children}
@@ -53,6 +63,36 @@ export function Shell({ children }: ShellProps) {
           rendered inside the grid but escaping it visually. */}
       <CommandPalette />
     </div>
+  );
+}
+
+function SkipLink() {
+  // First focusable element on the page. Tab once from a fresh
+  // load → a teal pill drops in from the top-left; Enter jumps
+  // keyboard focus past the sidebar into <main>. The link is
+  // visually hidden (positioned off-screen) until focused.
+  //
+  // Anchor (not button) so the URL hash updates — a screen reader
+  // user navigating with VO/JAWS announces "main, region" after
+  // activation, the standard pattern.
+  return (
+    <a
+      href="#main-content"
+      className="skip-link"
+      onClick={(e) => {
+        // Hash-jump alone scrolls but doesn't move keyboard
+        // focus. Explicit .focus() ensures the next Tab continues
+        // from inside the main region.
+        e.preventDefault();
+        const main = document.getElementById("main-content");
+        if (main) {
+          main.focus();
+          main.scrollIntoView({ block: "start" });
+        }
+      }}
+    >
+      Skip to main content
+    </a>
   );
 }
 
