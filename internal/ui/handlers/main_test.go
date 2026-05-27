@@ -1,9 +1,13 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
 
 // TestMain installs a process-wide CANTON_DEVKIT_REGISTRY pointing at
@@ -26,6 +30,19 @@ func TestMain(m *testing.M) {
 		_, _ = fmt.Fprintln(os.Stderr, "TestMain: setenv:", err)
 		os.Exit(2)
 	}
+
+	// Stub the preflight seam so handler tests don't depend on the
+	// CI runner's docker daemon meeting the version-specific memory
+	// floor. Production code path is the real implementation; the
+	// real path is exercised by integration tests, not unit tests.
+	// (BIT-184 CI break: the self-hosted runner returned
+	// DOCKER_MEMORY_LOW from RunPreflight, causing handleCreate to
+	// short-circuit with 422 before the test could reach its
+	// 202-assertion.)
+	runPreflightForVersion = func(_ context.Context, _ splice.Version) types.PreflightReport {
+		return types.PreflightReport{SchemaVersion: types.SchemaVersion, OK: true}
+	}
+
 	code := m.Run()
 	_ = os.RemoveAll(root)
 	os.Exit(code)

@@ -56,11 +56,19 @@ func handlePreflight(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, report)
 }
 
-// runPreflightForVersion produces a types.PreflightReport tailored
-// to the given Splice version. It's also called from handleCreate
-// before queueing the bring-up goroutine so the same gate applies
+// runPreflightForVersion is a package-level test seam. Production
+// resolves to runPreflightForVersionImpl below; tests in main_test.go
+// override it with a no-op so handler tests (TestCancelUp,
+// TestCreate_*) don't fail on CI runners that legitimately don't
+// meet the docker memory floor.
+var runPreflightForVersion = runPreflightForVersionImpl
+
+// runPreflightForVersionImpl produces a types.PreflightReport tailored
+// to the given Splice version. It's called via the runPreflightForVersion
+// seam from handleCreate (before queueing the bring-up goroutine) and
+// from handlePreflight (the explicit GET endpoint). Same gate applies
 // regardless of which client path triggered the create.
-func runPreflightForVersion(ctx context.Context, v splice.Version) types.PreflightReport {
+func runPreflightForVersionImpl(ctx context.Context, v splice.Version) types.PreflightReport {
 	ctx, cancel := context.WithTimeout(ctx, preflightTimeout)
 	defer cancel()
 

@@ -64,6 +64,14 @@ jobs:
       - name: Check out repository
         # actions/checkout@v5
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Set up Node
+        # actions/setup-node@v4
+        # Self-hosted runner has no Node by default; previous
+        # `node --check` step also failed silently here. Pin to the
+        # frontend's .nvmrc so all JS-touching jobs share one Node.
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version-file: frontend/.nvmrc
       - name: esbuild --loader=jsx on every mockup .jsx
         run: |
           set -euo pipefail
