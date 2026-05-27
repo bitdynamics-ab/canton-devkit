@@ -1178,11 +1178,27 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
     | { kind: "port-missing"; remediation: string }
     | { kind: "err"; error: string }
   >({ kind: "loading" });
+  // Click = persistent selection. Hover = preview (only renders
+  // detail when nothing is selected). Click again to clear, Esc
+  // also clears.
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && selectedIdx !== null) {
+        setSelectedIdx(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedIdx]);
 
   useEffect(() => {
     let cancelled = false;
     setState({ kind: "loading" });
+    setSelectedIdx(null);
+    setHoverIdx(null);
     fetchTransactions(name, role, 500)
       .then((data) => {
         if (cancelled) return;
@@ -1239,7 +1255,13 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
   const txs = state.data.transactions;
   // Bucket updates into time slots for the strip — newest on the right.
   const buckets = bucketByTime(txs, 60);
-  const hovered = hoverIdx !== null ? txs[hoverIdx] ?? null : null;
+  // Selection wins over hover: once a glyph is clicked, the right
+  // panel sticks to that update so the user can read the events
+  // without keeping the cursor over the strip. Hover is preview-
+  // only when nothing is selected.
+  const focusedIdx =
+    selectedIdx !== null ? selectedIdx : hoverIdx;
+  const focused = focusedIdx !== null ? txs[focusedIdx] ?? null : null;
 
   return (
     <div
@@ -1346,17 +1368,40 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
             return (
               <span
                 key={`${tx.offset}-${tx.update_id ?? i}`}
+                role="button"
+                tabIndex={0}
+                aria-label={`${tx.kind} at offset ${tx.offset}, ${tx.event_count ?? 0} events`}
+                aria-pressed={selectedIdx === i}
                 onMouseEnter={() => setHoverIdx(i)}
                 onMouseLeave={() => setHoverIdx(null)}
+                onClick={() =>
+                  setSelectedIdx((cur) => (cur === i ? null : i))
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedIdx((cur) => (cur === i ? null : i));
+                  }
+                }}
                 title={`${tx.kind} · offset ${tx.offset} · ${tx.event_count ?? 0} events`}
                 style={{
                   width: 10,
                   height: 18,
                   background: color,
-                  opacity: hoverIdx === i ? 1 : 0.7,
+                  opacity:
+                    selectedIdx === i || hoverIdx === i ? 1 : 0.65,
                   borderRadius: 1.5,
                   cursor: "pointer",
-                  transition: "opacity 80ms",
+                  transition: "opacity 80ms, transform 80ms",
+                  outline:
+                    selectedIdx === i ? `2px solid ${W.brand}` : "none",
+                  outlineOffset: selectedIdx === i ? 1 : 0,
+                  transform:
+                    selectedIdx === i
+                      ? "translateY(-2px)"
+                      : hoverIdx === i
+                        ? "translateY(-1px)"
+                        : "none",
                 }}
               />
             );
@@ -1377,7 +1422,11 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
             <LegendDot color="#7CB5F7" label="reassignment" />
             <LegendDot color="#C4A8F5" label="topology" />
           </span>
-          <span>Hover a glyph for the right-panel detail.</span>
+          <span>
+            {selectedIdx !== null
+              ? "Selected — click again or press Esc to clear."
+              : "Hover for preview · click to pin."}
+          </span>
         </div>
       </div>
 
@@ -1390,26 +1439,26 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
           overflow: "hidden",
         }}
       >
-        {hovered ? (
+        {focused ? (
           <>
             <header style={{ padding: "14px 16px", borderBottom: `1px solid ${W.border}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Pill
                   color={
-                    hovered.kind === "transaction"
+                    focused.kind === "transaction"
                       ? "#62E2A0"
-                      : hovered.kind === "reassignment"
+                      : focused.kind === "reassignment"
                         ? "#7CB5F7"
                         : "#C4A8F5"
                   }
                 >
-                  {hovered.kind}
+                  {focused.kind}
                 </Pill>
                 <span style={{ color: W.dim, fontSize: 11.5, fontFamily: wMono }}>
-                  offset {hovered.offset.toLocaleString()}
+                  offset {focused.offset.toLocaleString()}
                 </span>
               </div>
-              {hovered.record_time && (
+              {focused.record_time && (
                 <div
                   style={{
                     color: W.text2,
@@ -1418,18 +1467,18 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
                     marginTop: 6,
                   }}
                 >
-                  {hovered.record_time}
+                  {focused.record_time}
                 </div>
               )}
             </header>
-            {hovered.command_id && (
+            {focused.command_id && (
               <Section label="Command ID">
-                <Mono>{hovered.command_id}</Mono>
+                <Mono>{focused.command_id}</Mono>
               </Section>
             )}
-            {hovered.workflow_id && (
+            {focused.workflow_id && (
               <Section label="Workflow">
-                <Mono>{hovered.workflow_id}</Mono>
+                <Mono>{focused.workflow_id}</Mono>
               </Section>
             )}
             {hovered.events && hovered.events.length > 0 && (

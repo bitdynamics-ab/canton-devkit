@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
@@ -322,17 +323,40 @@ func proxyPrometheus(ctx context.Context, project, path string) ([]byte, error) 
 	return body, nil
 }
 
+// discoverPrometheus resolves the per-instance Prometheus address.
+// 9090 is the CONTAINER-internal port; the host port is whatever
+// Docker ephemerally assigned, captured into state.Ports["prometheus_ui"]
+// during `localnet up` (PR #20 stable-ports contract).
+//
+// We need a project → instance-name reverse lookup because containers.List
+// is keyed by compose project, not by registry name. The convention
+// is canton-<name>, codified at internal/localnet/up.go ~L315.
 func discoverPrometheus(ctx context.Context, project string) (string, int, error) {
 	infos, err := containers.List(ctx, project)
 	if err != nil {
 		return "", 0, err
 	}
+	running := false
 	for _, c := range infos {
 		if c.Service == "prometheus" {
-			return "127.0.0.1", 9090, nil
+			running = true
+			break
 		}
 	}
-	return "", 0, errPrometheusNotRunning
+	if !running {
+		return "", 0, errPrometheusNotRunning
+	}
+	// project naming convention: "canton-<name>"
+	name := strings.TrimPrefix(project, "canton-")
+	st, err := registry.Read(name)
+	if err != nil {
+		return "", 0, fmt.Errorf("discover prometheus: %w", err)
+	}
+	port, ok := st.Ports["prometheus_ui"]
+	if !ok || port == 0 {
+		return "", 0, errPrometheusNotRunning
+	}
+	return "127.0.0.1", port, nil
 }
 
 var errPrometheusNotRunning = errors.New("prometheus container not present in compose project")
