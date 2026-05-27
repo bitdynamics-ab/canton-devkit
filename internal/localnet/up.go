@@ -291,7 +291,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		}
 	}
 	if hasObservabilityProfile {
-		overlay, err := MaterializeObservabilityOverlay(dataDir)
+		overlay, err := MaterializeObservabilityOverlay(dataDir, projectDir)
 		if err != nil {
 			prog.FailStep(StepPersistState,
 				"Failed to extract observability overlay", err)

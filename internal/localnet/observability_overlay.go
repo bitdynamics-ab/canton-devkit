@@ -21,7 +21,16 @@ import (
 // — overlay lands under `<dataDir>/observability/` so per-instance
 // overrides (e.g. custom dashboard JSONs) can be slotted in
 // alongside the embedded baseline.
-func MaterializeObservabilityOverlay(dataDir string) (string, error) {
+//
+// projectDir is the splice-base compose project directory. Docker
+// compose resolves relative volume paths in volume mounts (e.g.
+// `./prometheus.yml`) against the FIRST compose file's directory,
+// not the overlay's. We therefore ALSO write prometheus.yml into
+// projectDir so the mount resolves cleanly. Without this, Docker
+// auto-creates an empty directory at projectDir/prometheus.yml and
+// the bind-mount fails on subsequent ups with "Are you trying to
+// mount a directory onto a file?".
+func MaterializeObservabilityOverlay(dataDir, projectDir string) (string, error) {
 	if dataDir == "" {
 		return "", fmt.Errorf("MaterializeObservabilityOverlay: empty dataDir")
 	}
@@ -57,6 +66,34 @@ func MaterializeObservabilityOverlay(dataDir string) (string, error) {
 	if _, err := os.Stat(composeFile); err != nil {
 		return "", fmt.Errorf("observability overlay missing after extract: %w", err)
 	}
+
+	// Drop prometheus.yml into projectDir so Docker's relative
+	// volume-mount resolution finds it. The overlay's bind mount
+	// declares `./prometheus.yml` which docker compose resolves
+	// against the FIRST -f file's directory (the splice base, ie
+	// projectDir), NOT the overlay's own directory. If the file
+	// isn't there, Docker auto-creates an empty directory at that
+	// path on first try and every subsequent up fails with "mount
+	// directory onto file".
+	if projectDir != "" {
+		promSrc, err := fs.ReadFile(assets.Observability, "compose/prometheus.yml")
+		if err != nil {
+			return "", fmt.Errorf("read embedded prometheus.yml: %w", err)
+		}
+		promDst := filepath.Join(projectDir, "prometheus.yml")
+		// Defensive cleanup: if a prior failed run left an empty
+		// directory in projectDir, Docker can't replace it with a
+		// file via WriteFile alone. Remove first if it's a dir.
+		if st, err := os.Stat(promDst); err == nil && st.IsDir() {
+			if err := os.RemoveAll(promDst); err != nil {
+				return "", fmt.Errorf("clear stale prometheus.yml directory: %w", err)
+			}
+		}
+		if err := os.WriteFile(promDst, promSrc, 0o644); err != nil {
+			return "", fmt.Errorf("write prometheus.yml to project dir: %w", err)
+		}
+	}
+
 	return composeFile, nil
 }
 
