@@ -36,3 +36,21 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+/* Connection-health pill (shell/Shell.tsx::HealthPill). Pulses
+   when the topbar pill is in a degraded state. Kept here rather
+   than inline because @keyframes can't be expressed in a React
+   style object. */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* Respect prefers-reduced-motion — the pulse is ambient and
+   not load-bearing for the state communication (color carries
+   the signal too). */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+  }
+}
