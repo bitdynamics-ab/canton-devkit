@@ -37,6 +37,48 @@ a {
   text-decoration: none;
 }
 
+/* a11y: keyboard focus rings.
+ *
+ * :focus-visible — only when the focus came from keyboard (Tab,
+ * arrow keys) or programmatic .focus(). Mouse clicks don't paint
+ * the ring, matching what sighted users expect from native UI.
+ *
+ * The 2px brand-coloured outline is high-contrast against every
+ * surface in the dark palette. Offset 2px so it doesn't merge
+ * into the element's own border. */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid #5BD7C5;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Skip-to-content link (shell/Shell.tsx::SkipLink). Visually
+ * hidden until focused via Tab — first focusable element on the
+ * page so a keyboard user can jump past the sidebar to the main
+ * content. The .focus state pulls it on-screen as a pill. */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 8px;
+  background: #5BD7C5;
+  color: #082018;
+  padding: 8px 14px;
+  font-weight: 600;
+  border-radius: 6px;
+  z-index: 1000;
+  transition: top 0.15s ease-out;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  top: 8px;
+  outline: none;
+}
+
 /* Connection-health pill (shell/Shell.tsx::HealthPill). Pulses
    when the topbar pill is in a degraded state. Kept here rather
    than inline because @keyframes can't be expressed in a React
