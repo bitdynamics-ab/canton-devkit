@@ -49,6 +49,11 @@ func MountMetrics(mux *http.ServeMux) {
 // CLI's per-call timeout.
 const metricsTimeout = 10 * time.Second
 
+// maxQueryLen caps PromQL input length before it ever reaches the
+// regex matcher. Defence against catastrophic backtracking + a
+// trivial sanity bound — the largest panel we ship is ~280 bytes.
+const maxQueryLen = 4096
+
 // promQueryRE pins the allowed character set for the `query`
 // param — alphanumeric + PromQL operators + whitespace. Blocks
 // shell metachars and request-smuggling attempts before we hand
@@ -72,6 +77,16 @@ func handleMetricsQuery() http.HandlerFunc {
 				ErrCodeInvalidRequest,
 				"missing query parameter",
 				"pass ?query=<PromQL> — e.g. ?query=up")
+			return
+		}
+		// Guard the regex from pathological inputs (review yellow): a
+		// 4 KiB ceiling is generous for any panel we ship and stops
+		// catastrophic-backtracking probes early.
+		if len(query) > maxQueryLen {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"query exceeds maximum length",
+				fmt.Sprintf("query must be <= %d bytes", maxQueryLen))
 			return
 		}
 		if !promQueryRE.MatchString(query) {
@@ -112,6 +127,7 @@ func handleMetricsQuery() http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write(body)
 	}
 }
@@ -144,6 +160,13 @@ func handleMetricsRange() http.HandlerFunc {
 			return
 		}
 		q := r.URL.Query().Get("query")
+		if len(q) > maxQueryLen {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"query exceeds maximum length",
+				fmt.Sprintf("query must be <= %d bytes", maxQueryLen))
+			return
+		}
 		if q == "" || !promQueryRE.MatchString(q) {
 			writeErrorWithCode(w, http.StatusBadRequest,
 				ErrCodeInvalidRequest,
@@ -297,8 +320,16 @@ func handleMetricsSummary() http.HandlerFunc {
 // map to the OBSERVABILITY_PROFILE_OFF code.
 //
 // Discovery: walks `compose ps` for a service named "prometheus".
-// When found we hit it via 127.0.0.1:<host-port>. The default
-// 9090 matches the compose overlay's host bind.
+// When found we hit it via 127.0.0.1:<host-port>.
+//
+// Defence (review blocker #6):
+//   - dedicated http.Client with Timeout = metricsTimeout (no longer
+//     leaks http.DefaultClient's unbounded behaviour on a misbehaving
+//     upstream)
+//   - response body bounded by io.LimitReader so a runaway Prometheus
+//     cannot OOM the devkit. 16 MiB is well above the largest range
+//     response we observe in practice (a 24h × 5s step × 50-series
+//     scrape is ~6 MiB) but small enough to fail closed.
 func proxyPrometheus(ctx context.Context, project, path string) ([]byte, error) {
 	host, port, err := discoverPrometheus(ctx, project)
 	if err != nil {
@@ -309,14 +340,20 @@ func proxyPrometheus(ctx context.Context, project, path string) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: metricsTimeout}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	// Cap body at 16 MiB + 1 so we can detect overrun.
+	const maxBody = 16 << 20
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
 	if err != nil {
 		return nil, err
+	}
+	if len(body) > maxBody {
+		return nil, fmt.Errorf("prometheus response exceeded %d bytes", maxBody)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.New(resp.Status)

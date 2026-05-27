@@ -102,16 +102,30 @@ export function MetricsScreen() {
 
   useEffect(() => {
     if (!name) return;
-    let cancelled = false;
+    // AbortController (review blocker #2). The previous `cancelled`
+    // boolean was passed BY VALUE to each loader, so flipping it on
+    // unmount didn't reach in-flight loaders that had already
+    // started — they would resolve and setState on a dead
+    // component. AbortSignal solves both: fetch aborts mid-flight
+    // and loaders short-circuit on signal.aborted.
+    //
+    // We also gate polling on document.visibilityState (yellow): no
+    // point hammering Prometheus when the tab is hidden.
+    let outer: AbortController | null = null;
     const tick = async () => {
-      if (cancelled) return;
+      // Abort the prior tick's in-flight requests before starting a
+      // new one — otherwise a slow Prometheus query from t=0 could
+      // resolve after the t=5s query and clobber it.
+      outer?.abort();
+      outer = new AbortController();
+      const signal = outer.signal;
       try {
-        const s = await fetchMetricsSummary(name);
-        if (cancelled) return;
+        const s = await fetchMetricsSummary(name, signal);
+        if (signal.aborted) return;
         setSummary({ kind: "ok", data: s });
         setObservabilityOff(null);
       } catch (e) {
-        if (cancelled) return;
+        if (signal.aborted) return;
         if (
           e instanceof ApiError &&
           e.code === "OBSERVABILITY_PROFILE_OFF"
@@ -128,10 +142,10 @@ export function MetricsScreen() {
         });
       }
       await Promise.all([
-        loadSeries(name, Q.throughputSeries, "tx/s", setThroughputSeries, cancelled),
-        loadSeries(name, Q.p99, "p99", setP99Series, cancelled),
-        loadSeries(name, Q.acsCount, "ACS", setAcsSeries, cancelled),
-        loadSeries(name, Q.errorsRate, "errors", setErrorsSeries, cancelled),
+        loadSeries(name, Q.throughputSeries, "tx/s", setThroughputSeries, signal),
+        loadSeries(name, Q.p99, "p99", setP99Series, signal),
+        loadSeries(name, Q.acsCount, "ACS", setAcsSeries, signal),
+        loadSeries(name, Q.errorsRate, "errors", setErrorsSeries, signal),
         loadMultiSeries(
           name,
           [
@@ -139,41 +153,44 @@ export function MetricsScreen() {
             { query: Q.latencyP99, label: "p99", color: CHART_PALETTE[3] },
           ],
           setLatencyPhase,
-          cancelled,
+          signal,
         ),
         loadBars(
           name,
           Q.perTemplate,
           (m) => m.template ?? "unknown",
           setPerTemplate,
-          cancelled,
+          signal,
         ),
         loadBars(
           name,
           Q.errors1m + " by (reason)",
           (m) => m.reason ?? "(unknown)",
           setTopErrors,
-          cancelled,
+          signal,
         ),
         loadMultiSeriesGrouped(
           name,
           Q.cpu,
           (m) => m.container ?? "container",
           setCpuSeries,
-          cancelled,
+          signal,
         ),
         loadHeatmap(
           name,
           'sum(increase(canton_mediator_approval_duration_bucket[1m])) by (le)',
           setHeatmap,
-          cancelled,
+          signal,
         ),
       ]);
     };
     tick();
-    const t = setInterval(tick, 5000);
+    const t = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      tick();
+    }, 5000);
     return () => {
-      cancelled = true;
+      outer?.abort();
       clearInterval(t);
     };
   }, [name]);
@@ -476,23 +493,30 @@ function ObservabilityOffPanel({
 
 // ── Loaders ──────────────────────────────────────────────────────
 
+// isAborted treats an AbortError thrown by fetch the same as the
+// signal being already aborted at the moment we check it.
+function isAborted(signal: AbortSignal, e: unknown): boolean {
+  if (signal.aborted) return true;
+  return e instanceof DOMException && e.name === "AbortError";
+}
+
 async function loadSeries(
   name: string,
   query: string,
   label: string,
   set: (s: CardState<Series>) => void,
-  cancelled: boolean,
+  signal: AbortSignal,
 ) {
   try {
-    const r = await fetchMetricsRange(name, query, "1h");
-    if (cancelled) return;
+    const r = await fetchMetricsRange(name, query, "1h", undefined, signal);
+    if (signal.aborted) return;
     const decoded = decodePrometheusRange(
       r as unknown as PrometheusRangeResponse,
       () => label,
     );
     set({ kind: "ok", data: decoded[0] ?? { label, color: TPS_COLOR, points: [] } });
   } catch (e) {
-    if (cancelled) return;
+    if (isAborted(signal, e)) return;
     set({
       kind: "err",
       error: e instanceof ApiError ? e.message : "failed",
@@ -504,13 +528,13 @@ async function loadMultiSeries(
   name: string,
   specs: Array<{ query: string; label: string; color: string }>,
   set: (s: CardState<Series[]>) => void,
-  cancelled: boolean,
+  signal: AbortSignal,
 ) {
   try {
     const rs = await Promise.all(
-      specs.map((s) => fetchMetricsRange(name, s.query, "1h")),
+      specs.map((s) => fetchMetricsRange(name, s.query, "1h", undefined, signal)),
     );
-    if (cancelled) return;
+    if (signal.aborted) return;
     const out: Series[] = rs.map((r, i) => {
       const decoded = decodePrometheusRange(
         r as unknown as PrometheusRangeResponse,
@@ -521,7 +545,7 @@ async function loadMultiSeries(
     });
     set({ kind: "ok", data: out });
   } catch (e) {
-    if (cancelled) return;
+    if (isAborted(signal, e)) return;
     set({
       kind: "err",
       error: e instanceof ApiError ? e.message : "failed",
@@ -534,18 +558,18 @@ async function loadMultiSeriesGrouped(
   query: string,
   labelFn: (m: Record<string, string>) => string,
   set: (s: CardState<Series[]>) => void,
-  cancelled: boolean,
+  signal: AbortSignal,
 ) {
   try {
-    const r = await fetchMetricsRange(name, query, "1h");
-    if (cancelled) return;
+    const r = await fetchMetricsRange(name, query, "1h", undefined, signal);
+    if (signal.aborted) return;
     const decoded = decodePrometheusRange(
       r as unknown as PrometheusRangeResponse,
       labelFn,
     );
     set({ kind: "ok", data: decoded });
   } catch (e) {
-    if (cancelled) return;
+    if (isAborted(signal, e)) return;
     set({
       kind: "err",
       error: e instanceof ApiError ? e.message : "failed",
@@ -558,11 +582,11 @@ async function loadBars(
   query: string,
   labelFn: (m: Record<string, string>) => string,
   set: (s: CardState<Bar[]>) => void,
-  cancelled: boolean,
+  signal: AbortSignal,
 ) {
   try {
-    const r = await fetchMetricsRange(name, query, "5m");
-    if (cancelled) return;
+    const r = await fetchMetricsRange(name, query, "5m", undefined, signal);
+    if (signal.aborted) return;
     const decoded = decodePrometheusRange(
       r as unknown as PrometheusRangeResponse,
       labelFn,
@@ -579,7 +603,7 @@ async function loadBars(
       .slice(0, 8);
     set({ kind: "ok", data: bars });
   } catch (e) {
-    if (cancelled) return;
+    if (isAborted(signal, e)) return;
     set({
       kind: "err",
       error: e instanceof ApiError ? e.message : "failed",
@@ -591,11 +615,11 @@ async function loadHeatmap(
   name: string,
   query: string,
   set: (s: CardState<Cell[]>) => void,
-  cancelled: boolean,
+  signal: AbortSignal,
 ) {
   try {
-    const r = await fetchMetricsRange(name, query, "1h", "1m");
-    if (cancelled) return;
+    const r = await fetchMetricsRange(name, query, "1h", "1m", signal);
+    if (signal.aborted) return;
     const decoded = decodePrometheusRange(
       r as unknown as PrometheusRangeResponse,
       (m) => m.le ?? "+Inf",
@@ -630,7 +654,7 @@ async function loadHeatmap(
     }
     set({ kind: "ok", data: cells });
   } catch (e) {
-    if (cancelled) return;
+    if (isAborted(signal, e)) return;
     set({
       kind: "err",
       error: e instanceof ApiError ? e.message : "failed",

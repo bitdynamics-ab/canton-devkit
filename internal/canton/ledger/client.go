@@ -126,12 +126,21 @@ func Dial(ctx context.Context, opts DialOptions) (*Client, error) {
 
 	dialOpts := []grpc.DialOption{}
 
-	// Default to plaintext for LocalNet. Production callers either flip
-	// PlainText=false and pass real TLS creds via ExtraDialOptions, OR
-	// override via ExtraDialOptions which can include a creds option (the
-	// "last creds option wins" gRPC behaviour applies; documented at the
-	// DialOptions struct).
-	if opts.PlainText || !hasCredentials(opts.ExtraDialOptions) {
+	// Transport credentials contract (review blocker #10):
+	//   - PlainText=true  → we inject WithTransportCredentials(insecure).
+	//   - PlainText=false → we add NOTHING here; the caller MUST supply a
+	//     real credentials.NewTLS(...) via ExtraDialOptions. If they
+	//     forget, grpc.NewClient will fail at Dial time with "no
+	//     transport security set (use grpc.WithTransportCredentials
+	//     (insecure.NewCredentials()) explicitly or set credentials)" —
+	//     which is the fail-closed behaviour we want. The previous code
+	//     called hasCredentials() which always returned false and so
+	//     silently fell back to insecure even when PlainText was false,
+	//     defeating the TLS contract.
+	//
+	// The grpc rule that "last creds option wins" still applies if the
+	// caller wants to override our insecure default (rare; mostly tests).
+	if opts.PlainText {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
@@ -181,24 +190,6 @@ func (c *Client) Close() error {
 		return nil
 	}
 	return c.conn.Close()
-}
-
-// hasCredentials returns true if any of the supplied dial options already
-// sets transport credentials. Used to avoid double-setting (insecure +
-// real-TLS) which gRPC rejects with "the credentials require transport
-// level security."
-//
-// Implementation note: grpc.DialOption is an opaque interface — there is no
-// public API to introspect what each option does. We can't read it; we just
-// check the count and rely on the documented contract that ExtraDialOptions
-// "wins" via the trailing-option behaviour. So this returns false always
-// today; the function exists as a forward-compatibility hook + intent
-// marker. Real introspection requires either a typed wrapper or reflection
-// on the unexported types, both of which are footguns. The documented
-// "PlainText defaults to true; override via ExtraDialOptions" contract is
-// the contract; this function is documentation by code.
-func hasCredentials(_ []grpc.DialOption) bool {
-	return false
 }
 
 // unaryAuthInterceptor attaches `authorization: Bearer <token>` to every

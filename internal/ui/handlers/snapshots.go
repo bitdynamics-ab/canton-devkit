@@ -173,7 +173,9 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filename := fmt.Sprintf("%s-%s.tgz", name, time.Now().UTC().Format("2006-01-02"))
+	// Timestamp resolution = seconds so two same-day downloads don't
+	// collide in the user's Downloads folder (review yellow).
+	filename := fmt.Sprintf("%s-%s.tgz", name, time.Now().UTC().Format("2006-01-02T150405Z"))
 	w.Header().Set("Content-Type", "application/gzip")
 	w.Header().Set("Content-Disposition",
 		fmt.Sprintf(`attachment; filename=%q`, filename))

@@ -3,6 +3,7 @@ package ledger
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	adminv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2/admin"
 )
@@ -121,18 +122,8 @@ func (c *Client) ResolveActAndReadParties(ctx context.Context) ([]string, error)
 	for p := range seen {
 		out = append(out, p)
 	}
-	sortStrings(out)
+	sort.Strings(out)
 	return out, nil
-}
-
-// sortStrings is the deterministic-order helper. Avoids importing
-// "sort" just for one call here; tiny + branch-free for small slices.
-func sortStrings(s []string) {
-	for i := 1; i < len(s); i++ {
-		for j := i; j > 0 && s[j-1] > s[j]; j-- {
-			s[j-1], s[j] = s[j], s[j-1]
-		}
-	}
 }
 
 // ListKnownPackages enumerates packages from the admin perspective — same

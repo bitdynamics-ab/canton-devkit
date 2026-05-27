@@ -264,6 +264,15 @@ export function WalletScreen() {
             key={walletURL}
             src={walletURL}
             title={`Splice Wallet — ${role}`}
+            // sandbox — review blocker #3. allow-same-origin is
+            // required because the wallet uses cookies + XHR to its
+            // own origin (wallet.localhost). With these flags the
+            // wallet can still run scripts, submit forms, and pop
+            // new tabs for OAuth, but cannot navigate the parent
+            // (no allow-top-navigation), spawn modal dialogs, or
+            // download arbitrary files.
+            sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+            referrerPolicy="no-referrer"
             style={{ flex: 1, border: 0, background: "#FAFAF8" }}
           />
         ) : (

@@ -746,9 +746,10 @@ export const fetchTransactions = (
     `/api/instances/${encodeURIComponent(name)}/transactions?role=${role}&limit=${limit}`,
   );
 
-export const fetchMetricsSummary = (name: string) =>
+export const fetchMetricsSummary = (name: string, signal?: AbortSignal) =>
   apiFetch<MetricsSummary>(
     `/api/instances/${encodeURIComponent(name)}/metrics/summary`,
+    { signal },
   );
 
 // Prometheus range-query response (subset). The backend's
@@ -771,11 +772,13 @@ export const fetchMetricsRange = (
   query: string,
   window = "1h",
   step?: string,
+  signal?: AbortSignal,
 ) => {
   const params = new URLSearchParams({ query, window });
   if (step) params.set("step", step);
   return apiFetch<PrometheusRangeResponse>(
     `/api/instances/${encodeURIComponent(name)}/metrics/range?${params.toString()}`,
+    { signal },
   );
 };
 

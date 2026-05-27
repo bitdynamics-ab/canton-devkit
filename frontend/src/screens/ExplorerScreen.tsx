@@ -108,10 +108,19 @@ export function ExplorerScreen() {
     };
   }, [name, role]);
 
-  // Keyboard: / focuses search; Esc clears selection.
+  // Keyboard: / focuses search; Esc clears selection. The "/"
+  // shortcut must NOT trigger when the user is typing into any
+  // editable surface — INPUT, TEXTAREA, or a contenteditable
+  // element (review yellow).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "/" && document.activeElement?.tagName !== "INPUT") {
+      const active = document.activeElement as HTMLElement | null;
+      const inEditable =
+        active &&
+        (active.tagName === "INPUT" ||
+          active.tagName === "TEXTAREA" ||
+          active.isContentEditable);
+      if (e.key === "/" && !inEditable) {
         e.preventDefault();
         searchRef.current?.focus();
       } else if (e.key === "Escape" && selectedCid) {

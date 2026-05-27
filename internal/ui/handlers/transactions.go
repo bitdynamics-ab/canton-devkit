@@ -133,8 +133,25 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 
 	// BIT-191: resolve user-id → party-rights set so the filter
 	// matches what the JWT can actually see.
+	//
+	// Disambiguate the three failure modes (review blocker #5,
+	// mirrors handlers/contracts.go):
+	//   - transport / dial error  → 502 BAD_GATEWAY
+	//   - PermissionDenied        → 503 EXPLORER_NEEDS_PARTY_JWT
+	//   - no party rights granted → 503 EXPLORER_NEEDS_PARTY_JWT
 	parties, err := client.ResolveActAndReadParties(ctx)
-	if err != nil || len(parties) == 0 {
+	if err != nil {
+		if isPermissionDenied(err) {
+			writeErrorWithCode(w, http.StatusServiceUnavailable,
+				"EXPLORER_NEEDS_PARTY_JWT",
+				"participant denied user-rights lookup",
+				"the JWT's user has no party-rights — grant actAs/readAs via UserManagementService")
+			return
+		}
+		writeError(w, http.StatusBadGateway, "resolve party rights", err)
+		return
+	}
+	if len(parties) == 0 {
 		writeErrorWithCode(w, http.StatusServiceUnavailable,
 			"EXPLORER_NEEDS_PARTY_JWT",
 			"this JWT has no party-rights",
@@ -152,7 +169,15 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	endInc := end.Offset
-	stream, err := client.Updates(ctx, ledger.UpdatesRequest{
+	// Stream context is derived from the request context so we can
+	// cancel mid-iteration when we've reached `limit` without
+	// disturbing the rest of the handler (the parent ctx still
+	// drives writeJSON). Without this we'd churn rows forever on a
+	// busy participant — the original `rows = rows[len(rows)-limit:]`
+	// reslice never broke the loop. (Review blocker #4.)
+	streamCtx, cancelStream := context.WithCancel(ctx)
+	defer cancelStream()
+	stream, err := client.Updates(streamCtx, ledger.UpdatesRequest{
 		BeginExclusive: 0,
 		EndInclusive:   &endInc,
 		UpdateFormat: &lapiv2.UpdateFormat{
@@ -177,7 +202,21 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows := make([]txRow, 0, limit)
+	// Fixed-size ring buffer (review blocker #4). The stream is
+	// already bounded by EndInclusive = snapshotted ledger end so it
+	// terminates naturally; the ring just keeps memory at O(limit)
+	// instead of growing unboundedly + churning slices on every
+	// over-limit row (the previous `rows = rows[len(rows)-limit:]`
+	// reslice was O(limit) per row).
+	//
+	// We also enforce a hard streamCap so a pathologically large
+	// history can't spin the loop indefinitely. 100k is well above
+	// any reasonable LocalNet history; we cancel the stream and
+	// surface the most-recent `limit` rows we've buffered.
+	const streamCap = 100_000
+	buf := make([]txRow, limit)
+	head, count := 0, 0
+	processed := 0
 	for item := range stream {
 		if item.Err != nil {
 			if errors.Is(item.Err, io.EOF) {
@@ -194,14 +233,24 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if row := projectUpdate(item.Value); row != nil {
-			rows = append(rows, *row)
-			if len(rows) >= limit {
-				// Keep newest at the top — we'll truncate the
-				// oldest. Updates() returns in ascending order so
-				// dropping the head gets us the latest N.
-				rows = rows[len(rows)-limit:]
+			buf[head] = *row
+			head = (head + 1) % limit
+			if count < limit {
+				count++
 			}
 		}
+		processed++
+		if processed >= streamCap {
+			cancelStream()
+			break
+		}
+	}
+	// Unwrap the ring into chronological order (oldest first), then
+	// reverse below to newest-first for the table.
+	rows := make([]txRow, 0, count)
+	start := (head - count + limit) % limit
+	for i := 0; i < count; i++ {
+		rows = append(rows, buf[(start+i)%limit])
 	}
 
 	// Reverse so newest is first — the table reads top-to-bottom.

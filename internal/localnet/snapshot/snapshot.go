@@ -85,6 +85,20 @@ var archiverFn volumeArchiver = dockerVolumeArchiver{}
 // copy header + state.json + intermediate into the real archive in
 // strict on-disk order.
 func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest string) int {
+	// Per-instance exclusive lock (review blocker #7). Snapshot
+	// reads volumes via temporary `docker run` containers and
+	// concurrent execution against the same instance can produce a
+	// half-snapshotted archive. The lock is the SAME one held by
+	// `localnet up`/`down`, so a snapshot while the instance is
+	// being torn down will refuse with "instance busy" — exactly
+	// the behaviour we want.
+	release, lockErr := registry.Lock(name)
+	if lockErr != nil {
+		_, _ = fmt.Fprintf(errw, "%s\n", lockErr)
+		return localnet.ExitUserError
+	}
+	defer release()
+
 	state, err := registry.Read(name)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
@@ -283,6 +297,18 @@ func streamVolumeToTemp(ctx context.Context, vol, dir string) (string, int64, st
 // instance, re-registers from embedded state.json, restores each
 // volume while re-hashing to verify ContentSHA.
 func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src string, force bool) int {
+	// Per-instance exclusive lock (review blocker #7). Without this,
+	// `dpm localnet restore --name X` and `POST /api/instances/X/
+	// snapshot/restore` can run simultaneously and half-merge two
+	// volume sets, with the registry pointing at whichever Write
+	// wins the race.
+	release, lockErr := registry.Lock(name)
+	if lockErr != nil {
+		_, _ = fmt.Fprintf(errw, "%s\n", lockErr)
+		return localnet.ExitUserError
+	}
+	defer release()
+
 	f, err := os.Open(src)
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "open %s: %s\n", src, err)
@@ -402,18 +428,19 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 	// isn't available. The unpack loop will still surface ENOSPC
 	// with a useful error.
 
-	// Re-register from embedded state, keyed by the user-supplied
-	// --name so "restore as a different name" works without extra
-	// flags.
+	// Build the registry record we WOULD write — but defer the
+	// actual Write until after all volumes restore successfully
+	// (review blocker #8). The old code wrote to the registry first
+	// and then unpacked volumes, so any volume failure left a
+	// registry entry pointing at a half-restored instance with no
+	// rollback. Now we either commit the registry on full success
+	// or leave it untouched.
 	//
 	// BIT-185: when --name differs from the embedded original, the
 	// compose-project / network / container-prefix fields must be
-	// rewritten too. The naming convention is fixed (mirrors
-	// internal/localnet/up.go ~L315): ComposeProject = "canton-"+name,
-	// DockerNetwork = name, ContainerPrefix = name+"-". Leaving the
-	// embedded values in place produced the previous failure mode:
-	// the restored instance shared its compose project with the
-	// source and couldn't be brought up while the source was running.
+	// rewritten too. Naming convention codified at
+	// internal/localnet/up.go ~L315: ComposeProject = "canton-"+name,
+	// DockerNetwork = name, ContainerPrefix = name+"-".
 	toWrite := *embedded
 	toWrite.Name = name
 	toWrite.Status = registry.StatusStopped
@@ -423,10 +450,25 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 		toWrite.DockerNetwork = name
 		toWrite.ContainerPrefix = name + "-"
 	}
-	if err := registry.Write(&toWrite); err != nil {
-		_, _ = fmt.Fprintf(errw, "register restored instance: %s\n", err)
-		return localnet.ExitRuntimeFailure
+
+	// Cumulative tar-size budget (review blocker #9). The
+	// per-entry maxArchiveEntry cap (16 GiB) doesn't bound N×16 GiB
+	// across the archive. Re-derive available disk now and track
+	// extracted bytes across the loop; abort if we'd exceed the
+	// budget. avail==0 means availableDiskBytes failed earlier; we
+	// fall back to a hard 256 GiB cumulative ceiling — well above
+	// any reasonable LocalNet snapshot but a backstop against a
+	// hostile archive with under-reported SizeBytes.
+	const cumulativeFloor = int64(256) << 30 // 256 GiB
+	cumulativeBudget := cumulativeFloor
+	if a, err := availableDiskBytes(filepath.Dir(src)); err == nil && a > 0 {
+		// Leave a 20% margin to avoid filling the filesystem.
+		margin := uint64(float64(a) * 0.8)
+		if margin > 0 && int64(margin) < cumulativeBudget {
+			cumulativeBudget = int64(margin)
+		}
 	}
+	var cumulativeRestored int64
 
 	restored := 0
 	for {
@@ -460,6 +502,18 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 		if hdr.Size > maxArchiveEntry {
 			_, _ = fmt.Fprintf(errw, "volume %q size %d exceeds %d-byte ceiling\n",
 				dstVolName, hdr.Size, maxArchiveEntry)
+			return localnet.ExitRuntimeFailure
+		}
+		// Blocker #9: cumulative budget check BEFORE extracting.
+		// Using hdr.Size (the tar-declared size); the streaming
+		// copy is also bounded to hdr.Size via io.LimitReader, so a
+		// rogue archive cannot blow past this number even with a
+		// truncated header.
+		if cumulativeRestored+hdr.Size > cumulativeBudget {
+			_, _ = fmt.Fprintf(errw,
+				"cumulative restore size %d + this volume %d would exceed budget %d "+
+					"(remaining disk minus 20%% margin); aborting before disk fills\n",
+				cumulativeRestored, hdr.Size, cumulativeBudget)
 			return localnet.ExitRuntimeFailure
 		}
 		_, _ = fmt.Fprintln(out, term.Step(term.StepBusy, "Restoring volume", dstVolName, ""))
@@ -497,7 +551,18 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 			return localnet.ExitRuntimeFailure
 		}
 		restored++
+		cumulativeRestored += hdr.Size
 		_, _ = fmt.Fprintln(out, term.Step(term.StepCheck, "Restored volume", dstVolName, ""))
+	}
+
+	// Blocker #8 commit point: only NOW do we write the registry.
+	// Up to here any failure leaves the existing registry entry (if
+	// any) and the volumes we did unpack in place — but no
+	// half-committed registry row claiming an instance is restored
+	// when it isn't.
+	if err := registry.Write(&toWrite); err != nil {
+		_, _ = fmt.Fprintf(errw, "register restored instance: %s\n", err)
+		return localnet.ExitRuntimeFailure
 	}
 
 	_, _ = fmt.Fprintln(out)
