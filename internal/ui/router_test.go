@@ -29,13 +29,13 @@ func TestVersion_MatchesTypesSchema(t *testing.T) {
 // rebuilt. The contract is: name (string) + schema_version (int).
 func TestVersion_HandlerShape(t *testing.T) {
 	srv, addr := startTestServer(t)
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	resp, err := http.Get("http://" + addr + "/api/version")
 	if err != nil {
 		t.Fatalf("GET /api/version: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var got map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
@@ -57,14 +57,14 @@ func TestVersion_HandlerShape(t *testing.T) {
 // running as script.
 func TestRouter_CommonHeadersOnEveryResponse(t *testing.T) {
 	srv, addr := startTestServer(t)
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	for _, path := range []string{"/healthz", "/api/version", "/"} {
 		resp, err := http.Get("http://" + addr + path)
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.Header.Get("X-Content-Type-Options") != "nosniff" {
 			t.Errorf("%s missing X-Content-Type-Options=nosniff", path)
 		}
@@ -81,13 +81,13 @@ func TestRouter_CommonHeadersOnEveryResponse(t *testing.T) {
 // even though the React app would handle them.
 func TestAssets_SPAFallbackServesIndex(t *testing.T) {
 	srv, addr := startTestServer(t)
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	resp, err := http.Get("http://" + addr + "/some/spa/route/that/does/not/exist")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("SPA fallback returned %d, want 200", resp.StatusCode)
 	}
@@ -118,13 +118,13 @@ func TestAssets_SPAFallbackServesIndex(t *testing.T) {
 // serving branch was taken (vs the SPA fallback).
 func TestAssets_KnownFileServed(t *testing.T) {
 	srv, addr := startTestServer(t)
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	resp, err := http.Get("http://" + addr + "/index.html")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}

@@ -308,7 +308,11 @@ func writeError(w http.ResponseWriter, status int, summary string, cause error) 
 
 // writeErrorWithCode is the variant used when the handler wants
 // to pin a specific stable code rather than the status-derived
-// default.
+// default. Currently called from sibling handlers (snapshots,
+// metrics, …) that may not exist on every branch — keep as
+// exported-to-package even when no caller is in this file.
+//
+//nolint:unused // intentional package-public; consumed by sibling handlers
 func writeErrorWithCode(w http.ResponseWriter, status int, code, summary string, remediation ...string) {
 	writeJSON(w, status, errorBody{
 		Code:        code,
