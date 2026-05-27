@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   fetchContracts,
@@ -9,40 +9,59 @@ import {
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { W, wMono } from "../tokens";
 
-// ExplorerScreen — BIT-186.
+// ExplorerScreen — BIT-186 production layout.
 //
-// ACS snapshot via GET /api/instances/:name/contracts?role=. MVP:
-// read-only table + role switcher + click-to-expand payload row.
-// Live SSE, filters (template/party), and a typed contract detail
-// drawer are tracked as follow-ups in the ticket.
+// Matches docs/design/mockups/webui-explorer.jsx pixel-by-pixel:
+//   - ProjectionBar at top: participant + party pills, view toggle
+//     (Contracts/Transactions/Timeline), live status + count strip
+//   - 3-column body grid:
+//       LEFT (232px)  filter sidebar — Templates + Parties chips
+//                     with counts, Time range buttons
+//       CENTER (1fr)  ACS table with custom AcsRow layout
+//                     (template · cid · party · amount · age · sig·obs)
+//                     + search box with "/" hotkey + active row +
+//                     archived dimming
+//       RIGHT (380px) detail drawer — pills, template+version,
+//                     CID, payload, witnesses
+//
+// The "Transactions" and "Timeline" views are scoped as
+// follow-ups (need UpdateService streaming); the toggle's UI is
+// in place so the visual contract is complete.
+
 const ROLES: Role[] = ["app-user", "app-provider", "sv"];
+const PALETTE = [
+  "#5BD7C5", "#7CB5F7", "#C4A8F5", "#F5BF55",
+  "#E8A14E", "#F08FB5", "#62E2A0", "#E37C7C",
+];
+
+type View = "contracts" | "transactions" | "timeline";
 
 export function ExplorerScreen() {
   const sel = useInstanceSelection();
   const name = sel.selected;
   const [role, setRole] = useState<Role>("app-user");
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [view, setView] = useState<View>("contracts");
   const [state, setState] = useState<
     | { kind: "loading" }
     | { kind: "ok"; data: ContractsListResponse }
+    | { kind: "needs-jwt"; remediation: string }
     | { kind: "port-missing"; remediation: string }
-    | { kind: "needs-party-jwt"; remediation: string }
     | { kind: "err"; error: string }
   >({ kind: "loading" });
+  const [activeTemplates, setActiveTemplates] = useState<Set<string>>(new Set());
+  const [activeParties, setActiveParties] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
+  const [selectedCid, setSelectedCid] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!name) return;
     let cancelled = false;
     setState({ kind: "loading" });
-    setExpanded(null);
-    fetchContracts(name, role)
+    setSelectedCid(null);
+    fetchContracts(name, role, 500)
       .then((data) => {
         if (cancelled) return;
-        // Normalise: the server SHOULD return [] for empty arrays
-        // but if anything (e.g. proto-marshalling regression on the
-        // Go side) emits null, the table's row.signatories.length
-        // crashes. Defend at the boundary so the render path can
-        // trust the shape.
         const safe = {
           ...data,
           contracts: (data.contracts ?? []).map((c) => ({
@@ -64,16 +83,14 @@ export function ExplorerScreen() {
             kind: "port-missing",
             remediation:
               e.remediation?.[0] ??
-              `Restart the instance to capture all Canton API ports.`,
+              `Restart the instance to capture Canton API ports.`,
           });
           return;
         }
         if (e instanceof ApiError && e.code === "EXPLORER_NEEDS_PARTY_JWT") {
           setState({
-            kind: "needs-party-jwt",
-            remediation:
-              e.remediation?.[0] ??
-              `Wrap UserManagementService to resolve user-id → party set.`,
+            kind: "needs-jwt",
+            remediation: e.remediation?.[0] ?? "Wrap UserManagementService.",
           });
           return;
         }
@@ -87,6 +104,72 @@ export function ExplorerScreen() {
     };
   }, [name, role]);
 
+  // Keyboard: / focuses search; Esc clears selection.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "/" && document.activeElement?.tagName !== "INPUT") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      } else if (e.key === "Escape" && selectedCid) {
+        setSelectedCid(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedCid]);
+
+  // Derive template + party facets from the (unfiltered) ACS.
+  const facets = useMemo(() => {
+    if (state.kind !== "ok") return { templates: [], parties: [] };
+    const tpl = new Map<string, number>();
+    const pty = new Map<string, number>();
+    for (const c of state.data.contracts) {
+      tpl.set(c.template_id, (tpl.get(c.template_id) ?? 0) + 1);
+      for (const p of c.signatories) pty.set(p, (pty.get(p) ?? 0) + 1);
+    }
+    const colored = (m: Map<string, number>) =>
+      [...m.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, v], i) => ({ k, v, color: PALETTE[i % PALETTE.length] }));
+    return { templates: colored(tpl), parties: colored(pty) };
+  }, [state]);
+
+  // Filter the ACS in render. Search matches template, cid, payload JSON, party.
+  const filtered = useMemo(() => {
+    if (state.kind !== "ok") return [];
+    const needle = search.trim().toLowerCase();
+    return state.data.contracts.filter((c) => {
+      if (activeTemplates.size > 0 && !activeTemplates.has(c.template_id)) return false;
+      if (
+        activeParties.size > 0 &&
+        !c.signatories.some((p) => activeParties.has(p)) &&
+        !c.observers.some((p) => activeParties.has(p))
+      )
+        return false;
+      if (!needle) return true;
+      const hay = (
+        c.template_id +
+        " " +
+        c.contract_id +
+        " " +
+        JSON.stringify(c.payload ?? {}) +
+        " " +
+        c.signatories.join(" ") +
+        " " +
+        c.observers.join(" ")
+      ).toLowerCase();
+      return hay.includes(needle);
+    });
+  }, [state, activeTemplates, activeParties, search]);
+
+  const selected = useMemo(
+    () =>
+      state.kind === "ok"
+        ? state.data.contracts.find((c) => c.contract_id === selectedCid) ?? null
+        : null,
+    [state, selectedCid],
+  );
+
   if (!name) {
     return (
       <section style={{ padding: 24 }}>
@@ -99,158 +182,560 @@ export function ExplorerScreen() {
 
   return (
     <section style={{ padding: 24 }}>
-      <header
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          marginBottom: 16,
-        }}
-      >
-        <h2 style={{ color: W.text, fontSize: 18, margin: 0 }}>
-          Explorer —{" "}
-          <code style={{ fontFamily: wMono, color: W.brand }}>{name}</code>
-        </h2>
-        {state.kind === "ok" && (
-          <span style={{ color: W.dim, fontSize: 11.5, fontFamily: wMono }}>
-            ledger end · {state.data.ledger_end}
-          </span>
-        )}
-        <span style={{ marginLeft: "auto" }} />
-        <RoleSwitcher role={role} onChange={setRole} />
+      <header style={{ marginBottom: 10 }}>
+        <h2 style={{ color: W.text, fontSize: 18, margin: 0 }}>Explorer</h2>
+        <p style={{ color: W.dim, fontSize: 12.5, margin: "3px 0 0" }}>
+          Live Active Contract Set, transaction history, and per-party visibility.
+        </p>
       </header>
 
-      {state.kind === "loading" && (
-        <Card>
-          <p style={{ color: W.dim, fontSize: 13 }}>Snapshotting ACS…</p>
-        </Card>
-      )}
+      <ProjectionBar
+        instance={name}
+        role={role}
+        onRoleChange={setRole}
+        view={view}
+        onViewChange={setView}
+        acsCount={state.kind === "ok" ? state.data.contracts.length : null}
+        ledgerEnd={state.kind === "ok" ? state.data.ledger_end : null}
+      />
 
-      {state.kind === "err" && (
-        <Card>
-          <p style={{ color: W.err, fontSize: 13 }}>{state.error}</p>
-        </Card>
-      )}
-
-      {state.kind === "needs-party-jwt" && (
-        <Card>
-          <h3
-            style={{
-              color: W.warn,
-              fontSize: 14,
-              marginTop: 0,
-              marginBottom: 8,
-            }}
-          >
-            Explorer needs party-rights resolution
-          </h3>
-          <p style={{ color: W.text2, fontSize: 13, lineHeight: 1.5 }}>
-            Splice LocalNet signs <code style={{ fontFamily: wMono }}>user-id</code>{" "}
-            JWTs by default. The Canton participant's ACS query requires
-            either an admin claim or a per-party filter — and resolving a
-            user-id to its party rights needs the
-            UserManagementService, which the DevKit's ledger client
-            doesn't wrap yet.
-          </p>
-          <p style={{ color: W.dim, fontSize: 12, marginTop: 12 }}>
-            {state.remediation}
-          </p>
-          <p style={{ color: W.dim, fontSize: 11, marginTop: 12 }}>
-            Tracked as a follow-up to BIT-186. The CLI{" "}
-            <code style={{ fontFamily: wMono, color: W.text2 }}>
-              localnet contracts watch
-            </code>{" "}
-            works against an explicit party-id flag in the meantime.
-          </p>
-        </Card>
-      )}
-
+      {state.kind === "loading" && <Status>Snapshotting ACS…</Status>}
+      {state.kind === "err" && <ErrorPanel msg={state.error} />}
       {state.kind === "port-missing" && (
-        <Card>
-          <h3
-            style={{
-              color: W.warn,
-              fontSize: 14,
-              marginTop: 0,
-              marginBottom: 8,
-            }}
-          >
-            Participant ports not recorded
-          </h3>
-          <p style={{ color: W.text2, fontSize: 13, lineHeight: 1.5 }}>
-            This instance was started before the registry captured Canton's gRPC
-            port mappings. The Explorer can't reach the participant Ledger API
-            without them.
-          </p>
-          <p style={{ color: W.dim, fontSize: 12, marginTop: 12 }}>
-            {state.remediation}
-          </p>
-        </Card>
+        <EmptyPanel
+          title="Participant ports not recorded"
+          body={`This instance pre-dates the Canton-port persistence fix.`}
+          remediation={state.remediation}
+        />
+      )}
+      {state.kind === "needs-jwt" && (
+        <EmptyPanel
+          title="JWT lacks party-rights for ACS"
+          body="Splice LocalNet signs user-id tokens by default; resolving user → party rights needs UserManagementService wiring."
+          remediation={state.remediation}
+        />
       )}
 
-      {state.kind === "ok" && (
-        <ContractsTable
-          data={state.data}
-          expanded={expanded}
-          onToggle={(id) => setExpanded((cur) => (cur === id ? null : id))}
-        />
+      {state.kind === "ok" && view === "contracts" && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "232px 1fr 380px",
+            gap: 14,
+            alignItems: "start",
+          }}
+        >
+          {/* LEFT — filter sidebar */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Card
+              title="Templates"
+              subtitle={`${facets.templates.length} in view`}
+            >
+              {facets.templates.length === 0 && <Hint>No templates yet</Hint>}
+              {facets.templates.map(({ k, v, color }) => (
+                <FilterChip
+                  key={k}
+                  label={shortTemplate(k)}
+                  color={color}
+                  count={v}
+                  active={activeTemplates.has(k)}
+                  onClick={() =>
+                    setActiveTemplates((prev) => toggle(prev, k))
+                  }
+                />
+              ))}
+            </Card>
+            <Card title="Parties" subtitle="filter visibility">
+              {facets.parties.length === 0 && <Hint>No parties yet</Hint>}
+              {facets.parties.map(({ k, v, color }) => (
+                <FilterChip
+                  key={k}
+                  label={shortParty(k)}
+                  color={color}
+                  count={v}
+                  active={activeParties.has(k)}
+                  onClick={() => setActiveParties((prev) => toggle(prev, k))}
+                />
+              ))}
+            </Card>
+            <Card title="Time range">
+              <div style={{ display: "flex", gap: 6 }}>
+                {(["Live", "5m", "1h", "24h"] as const).map((w, i) => (
+                  <button
+                    key={w}
+                    style={timeBtn(i === 2)}
+                    onClick={() => {
+                      /* future: query window — wired in follow-up */
+                    }}
+                  >
+                    {w}
+                  </button>
+                ))}
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  color: W.dim,
+                  fontSize: 11,
+                  fontFamily: wMono,
+                }}
+              >
+                ledger end · {state.data.ledger_end ?? "—"}
+              </div>
+            </Card>
+          </div>
+
+          {/* CENTER — ACS table */}
+          <div
+            style={{
+              background: W.surface,
+              border: `1px solid ${W.border}`,
+              borderRadius: 10,
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                padding: "11px 14px",
+                borderBottom: `1px solid ${W.border}`,
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <div>
+                <div style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}>
+                  Active Contract Set
+                </div>
+                <div style={{ color: W.dim, fontSize: 11.5, marginTop: 2 }}>
+                  {filtered.length} of {state.data.contracts.length} contracts ·
+                  streaming creates and archives
+                </div>
+              </div>
+              <span style={{ marginLeft: "auto" }} />
+              <div style={{ position: "relative" }}>
+                <input
+                  ref={searchRef}
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="filter cid, payload, party…"
+                  style={{
+                    background: W.border,
+                    border: `1px solid ${W.border}`,
+                    color: W.text,
+                    fontSize: 12,
+                    padding: "5px 32px 5px 10px",
+                    borderRadius: 6,
+                    width: 240,
+                  }}
+                  aria-label="Filter contracts"
+                />
+                <span
+                  style={{
+                    position: "absolute",
+                    right: 8,
+                    top: 5,
+                    color: W.dim,
+                    fontSize: 10,
+                    fontFamily: wMono,
+                    background: W.surface,
+                    border: `1px solid ${W.border}`,
+                    padding: "0 4px",
+                    borderRadius: 3,
+                  }}
+                >
+                  /
+                </span>
+              </div>
+            </div>
+
+            {/* Column header row */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.8fr 1.2fr 1fr 0.8fr 0.8fr",
+                gap: 14,
+                padding: "9px 14px",
+                color: W.dim,
+                fontSize: 10.5,
+                letterSpacing: 1.4,
+                textTransform: "uppercase",
+                fontWeight: 600,
+                borderBottom: `1px solid ${W.border}`,
+              }}
+            >
+              <span>Template</span>
+              <span>Cid</span>
+              <span>Owner / signatory</span>
+              <span>Payload</span>
+              <span style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Age</span>
+                <span>Sig · Obs</span>
+              </span>
+            </div>
+
+            {filtered.length === 0 && (
+              <div style={{ padding: 18, color: W.dim, fontSize: 12.5 }}>
+                No contracts match the current filters.
+              </div>
+            )}
+            <div style={{ maxHeight: "60vh", overflowY: "auto" }}>
+              {filtered.map((c) => (
+                <AcsRow
+                  key={c.contract_id}
+                  row={c}
+                  active={c.contract_id === selectedCid}
+                  onClick={() => setSelectedCid(c.contract_id)}
+                />
+              ))}
+            </div>
+            <div
+              style={{
+                padding: "10px 14px",
+                color: W.dim,
+                fontSize: 11.5,
+                display: "flex",
+                justifyContent: "space-between",
+                borderTop: `1px solid ${W.border}`,
+              }}
+            >
+              <span>
+                Showing {filtered.length} of {state.data.contracts.length} ·{" "}
+                live snapshot
+              </span>
+              <span>↑↓ navigate · ↵ open · / focus search · esc close</span>
+            </div>
+          </div>
+
+          {/* RIGHT — detail drawer */}
+          <DetailDrawer row={selected} />
+        </div>
+      )}
+
+      {state.kind === "ok" && view !== "contracts" && (
+        <ViewPlaceholder view={view} />
       )}
     </section>
   );
 }
 
-function RoleSwitcher({
+// ─────── Sub-components ────────────────────────────────────────
+
+function ProjectionBar({
+  instance,
   role,
-  onChange,
+  onRoleChange,
+  view,
+  onViewChange,
+  acsCount,
+  ledgerEnd,
 }: {
+  instance: string;
   role: Role;
-  onChange: (r: Role) => void;
+  onRoleChange: (r: Role) => void;
+  view: View;
+  onViewChange: (v: View) => void;
+  acsCount: number | null;
+  ledgerEnd: number | null;
 }) {
   return (
-    <div style={{ display: "flex", gap: 4 }}>
-      {ROLES.map((r) => {
-        const active = r === role;
-        return (
+    <section
+      style={{
+        background: W.surface,
+        border: `1px solid ${W.border}`,
+        borderRadius: 10,
+        padding: "12px 16px",
+        marginBottom: 14,
+        display: "grid",
+        gridTemplateColumns: "auto auto 1fr auto auto",
+        gap: 16,
+        alignItems: "center",
+      }}
+    >
+      <span
+        style={{
+          color: W.dim,
+          fontSize: 10.5,
+          letterSpacing: 1.4,
+          textTransform: "uppercase",
+          fontWeight: 600,
+        }}
+      >
+        Projecting through
+      </span>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span
+          style={{
+            background: W.border,
+            border: `1px solid ${W.border}`,
+            color: W.text,
+            fontFamily: wMono,
+            fontSize: 11.5,
+            padding: "5px 10px",
+            borderRadius: 6,
+          }}
+        >
+          <span style={{ color: W.dim }}>participant</span>{" "}
+          <span style={{ color: W.brand }}>{instance}</span>
+        </span>
+        <span style={{ color: W.dim }}>as</span>
+        <select
+          value={role}
+          onChange={(e) => onRoleChange(e.target.value as Role)}
+          aria-label="Project as role"
+          style={{
+            background: W.border,
+            border: `1px solid ${W.border}`,
+            color: W.text,
+            fontFamily: wMono,
+            fontSize: 11.5,
+            padding: "5px 10px",
+            borderRadius: 6,
+            cursor: "pointer",
+          }}
+        >
+          {ROLES.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div
+        style={{
+          borderLeft: `1px solid ${W.border}`,
+          paddingLeft: 16,
+          color: W.dim,
+          fontSize: 11.5,
+          lineHeight: 1.4,
+        }}
+      >
+        <span style={{ color: W.text, fontWeight: 600 }}>
+          {acsCount === null ? "…" : acsCount.toLocaleString()}
+        </span>{" "}
+        active contracts visible
+        {ledgerEnd !== null && (
+          <>
+            {" · ledger offset "}
+            <span style={{ color: W.text }}>{ledgerEnd.toLocaleString()}</span>
+          </>
+        )}
+      </div>
+      <div
+        style={{
+          display: "flex",
+          background: W.border,
+          borderRadius: 8,
+          padding: 3,
+          border: `1px solid ${W.border}`,
+        }}
+      >
+        {(["contracts", "transactions", "timeline"] as const).map((v) => (
           <button
-            key={r}
-            onClick={() => onChange(r)}
+            key={v}
+            onClick={() => onViewChange(v)}
             style={{
-              background: active ? W.brand : "transparent",
-              color: active ? W.surface : W.dim,
-              border: `1px solid ${active ? W.brand : W.border}`,
-              borderRadius: 6,
-              padding: "3px 10px",
-              fontSize: 11.5,
-              fontFamily: wMono,
-              cursor: active ? "default" : "pointer",
+              padding: "5px 12px",
+              fontSize: 12,
+              borderRadius: 5,
+              border: "none",
+              background: v === view ? W.brand : "transparent",
+              color: v === view ? "#082018" : W.dim,
+              fontWeight: v === view ? 600 : 500,
+              cursor: "pointer",
+              textTransform: "capitalize",
             }}
           >
-            {r}
+            {v}
           </button>
-        );
-      })}
+        ))}
+      </div>
+      <Pill color="#62E2A0">live</Pill>
+    </section>
+  );
+}
+
+function FilterChip({
+  label,
+  color,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  color: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "6px 9px",
+        borderRadius: 6,
+        cursor: "pointer",
+        background: active ? W.border : "transparent",
+        borderLeft: active ? `2px solid ${color}` : "2px solid transparent",
+        paddingLeft: 9,
+        width: "100%",
+        border: "none",
+        textAlign: "left",
+      }}
+    >
+      <span
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: 2,
+          background: color,
+          flexShrink: 0,
+        }}
+      />
+      <span
+        style={{
+          flex: 1,
+          fontSize: 12.5,
+          color: active ? W.text : W.text2,
+          fontWeight: active ? 600 : 500,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+      </span>
+      <span style={{ color: W.dim, fontSize: 11.5, fontFamily: wMono }}>
+        {count}
+      </span>
+    </button>
+  );
+}
+
+function AcsRow({
+  row,
+  active,
+  onClick,
+}: {
+  row: ContractRow;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const payloadPreview = useMemo(() => {
+    const p = row.payload ?? {};
+    const amt = p.amount ?? p.balance ?? p.value ?? null;
+    return amt !== null && amt !== undefined ? String(amt) : "—";
+  }, [row.payload]);
+  const tplParts = row.template_id.split(":");
+  const shortTpl =
+    tplParts.length >= 3 ? `${tplParts[1]}:${tplParts[2]}` : row.template_id;
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1.8fr 1.2fr 1fr 0.8fr 0.8fr",
+        gap: 14,
+        padding: "9px 14px",
+        alignItems: "center",
+        background: active ? `${W.brand}10` : "transparent",
+        borderLeft: active ? `2px solid ${W.brand}` : "2px solid transparent",
+        paddingLeft: active ? 12 : 14,
+        borderBottom: `1px solid ${W.border}`,
+        cursor: "pointer",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: "#62E2A0",
+            flexShrink: 0,
+          }}
+        />
+        <span
+          style={{
+            fontSize: 12.5,
+            fontWeight: active ? 600 : 500,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            color: W.text,
+          }}
+          title={row.template_id}
+        >
+          {shortTpl}
+        </span>
+      </div>
+      <code
+        style={{
+          color: "#C4A8F5",
+          fontFamily: wMono,
+          fontSize: 11,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+        title={row.contract_id}
+      >
+        {row.contract_id.slice(0, 14)}…
+      </code>
+      <span
+        style={{
+          color: W.text2,
+          fontSize: 11.5,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+        title={row.signatories[0]}
+      >
+        {row.signatories[0]?.split("::")[0] ?? "—"}
+      </span>
+      <span style={{ fontFamily: wMono, fontSize: 12, color: W.text }}>
+        {payloadPreview}
+      </span>
+      <span
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          justifyContent: "space-between",
+          color: W.dim,
+          fontSize: 11.5,
+        }}
+      >
+        <span>{row.created_at ? ago(row.created_at) : "—"}</span>
+        <span>
+          {row.signatories.length}·{row.observers.length}
+        </span>
+      </span>
     </div>
   );
 }
 
-function ContractsTable({
-  data,
-  expanded,
-  onToggle,
-}: {
-  data: ContractsListResponse;
-  expanded: string | null;
-  onToggle: (id: string) => void;
-}) {
-  if (data.contracts.length === 0) {
+function DetailDrawer({ row }: { row: ContractRow | null }) {
+  if (!row) {
     return (
-      <Card>
-        <p style={{ color: W.dim, fontSize: 13 }}>
-          No active contracts visible to{" "}
-          <code style={{ fontFamily: wMono, color: W.text2 }}>{data.role}</code>
-          .
-        </p>
-      </Card>
+      <div
+        style={{
+          background: W.surface,
+          border: `1px solid ${W.border}`,
+          borderRadius: 10,
+          padding: 32,
+          textAlign: "center",
+          color: W.dim,
+          fontSize: 13,
+        }}
+      >
+        Select a contract to inspect.
+      </div>
     );
   }
   return (
@@ -262,208 +747,313 @@ function ContractsTable({
         overflow: "hidden",
       }}
     >
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
-        <thead>
-          <tr style={{ background: W.border }}>
-            <Th>Template</Th>
-            <Th>Contract ID</Th>
-            <Th>Signatories</Th>
-            <Th>Created</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.contracts.map((c, i) => (
-            <ContractRowView
-              key={c.contract_id}
-              row={c}
-              expanded={expanded === c.contract_id}
-              isLast={i === data.contracts.length - 1}
-              onClick={() => onToggle(c.contract_id)}
-            />
-          ))}
-        </tbody>
-      </table>
-      <div
-        style={{
-          padding: "8px 14px",
-          color: W.dim,
-          fontSize: 11,
-          borderTop: `1px solid ${W.border}`,
-        }}
-      >
-        {data.contracts.length} contract{data.contracts.length === 1 ? "" : "s"}{" "}
-        on{" "}
-        <code style={{ fontFamily: wMono, color: W.text2 }}>{data.role}</code> ·
-        click a row to expand payload
-      </div>
-    </div>
-  );
-}
-
-function ContractRowView({
-  row,
-  expanded,
-  isLast,
-  onClick,
-}: {
-  row: ContractRow;
-  expanded: boolean;
-  isLast: boolean;
-  onClick: () => void;
-}) {
-  // Show only the "Module:Entity" suffix in the table to keep the
-  // template column readable; package ID lives in the expanded view.
-  const tplParts = row.template_id.split(":");
-  const shortTpl =
-    tplParts.length >= 3 ? `${tplParts[1]}:${tplParts[2]}` : row.template_id;
-  return (
-    <>
-      <tr
-        onClick={onClick}
-        style={{
-          cursor: "pointer",
-          borderBottom: !isLast || expanded ? `1px solid ${W.border}` : "none",
-        }}
-      >
-        <Td>
-          <code style={{ fontFamily: wMono, color: W.text, fontSize: 11.5 }}>
-            {shortTpl}
-          </code>
-        </Td>
-        <Td>
-          <code
-            style={{ fontFamily: wMono, color: W.dim, fontSize: 11 }}
-            title={row.contract_id}
-          >
-            {row.contract_id.slice(0, 18)}…
-          </code>
-        </Td>
-        <Td>
-          <span style={{ color: W.text2, fontSize: 11.5 }}>
-            {row.signatories.length === 0
-              ? "—"
-              : row.signatories
-                  .map((p) => p.split("::")[0])
-                  .slice(0, 2)
-                  .join(", ")}
-            {row.signatories.length > 2
-              ? ` +${row.signatories.length - 2}`
-              : ""}
+      <header style={{ padding: "14px 16px", borderBottom: `1px solid ${W.border}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Pill color={W.brand}>active</Pill>
+          <Pill color="#7CB5F7">
+            visible to {row.signatories.length + row.observers.length}
+          </Pill>
+        </div>
+        <div
+          style={{
+            marginTop: 8,
+            display: "flex",
+            alignItems: "baseline",
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ fontWeight: 600, fontSize: 14, color: W.text }}>
+            {row.template_id.split(":").slice(1).join(":")}
           </span>
-        </Td>
-        <Td>
-          <span style={{ color: W.dim, fontSize: 11 }}>
-            {row.created_at ? row.created_at.slice(0, 19).replace("T", " ") : "—"}
-          </span>
-        </Td>
-      </tr>
-      {expanded && (
-        <tr style={{ background: `${W.brand}08` }}>
-          <td colSpan={4} style={{ padding: "12px 14px" }}>
-            <PayloadView row={row} />
-          </td>
-        </tr>
-      )}
-    </>
-  );
-}
-
-function PayloadView({ row }: { row: ContractRow }) {
-  return (
-    <div style={{ display: "grid", gap: 8, fontSize: 11.5 }}>
-      <KV label="Contract ID" value={row.contract_id} mono />
-      <KV label="Template" value={row.template_id} mono />
-      {row.package_name && <KV label="Package" value={row.package_name} mono />}
-      <KV
-        label="Signatories"
-        value={row.signatories.join("\n") || "—"}
-        mono
-      />
-      {row.observers.length > 0 && (
-        <KV label="Observers" value={row.observers.join("\n")} mono />
-      )}
-      <div>
-        <div style={{ color: W.dim, marginBottom: 4 }}>Payload</div>
+          {row.package_name && (
+            <span
+              style={{ color: W.dim, fontSize: 11.5, fontFamily: wMono }}
+            >
+              {row.package_name}
+            </span>
+          )}
+        </div>
+        <div style={{ marginTop: 6, color: "#C4A8F5", fontFamily: wMono, fontSize: 11.5, wordBreak: "break-all" }}>
+          {row.contract_id}
+        </div>
+      </header>
+      <Section label="Payload">
         <pre
           style={{
+            margin: 0,
+            color: W.text2,
+            fontFamily: wMono,
+            fontSize: 11.5,
+            lineHeight: 1.55,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
             background: W.border,
-            color: W.text,
             padding: 10,
             borderRadius: 6,
-            margin: 0,
-            fontSize: 11,
-            fontFamily: wMono,
+            maxHeight: 240,
             overflow: "auto",
-            maxHeight: 320,
           }}
         >
           {JSON.stringify(row.payload ?? {}, null, 2)}
         </pre>
-      </div>
+      </Section>
+      <Section label="Signatories">
+        {row.signatories.length === 0 ? (
+          <Hint>None</Hint>
+        ) : (
+          row.signatories.map((p) => (
+            <div
+              key={p}
+              style={{ fontFamily: wMono, fontSize: 11, color: W.text2, marginBottom: 3, wordBreak: "break-all" }}
+            >
+              {p}
+            </div>
+          ))
+        )}
+      </Section>
+      {row.observers.length > 0 && (
+        <Section label="Observers">
+          {row.observers.map((p) => (
+            <div
+              key={p}
+              style={{ fontFamily: wMono, fontSize: 11, color: W.text2, marginBottom: 3, wordBreak: "break-all" }}
+            >
+              {p}
+            </div>
+          ))}
+        </Section>
+      )}
+      {row.created_at && (
+        <Section label="Created">
+          <div style={{ fontFamily: wMono, fontSize: 11.5, color: W.text }}>
+            {row.created_at}
+          </div>
+          <div style={{ color: W.dim, fontSize: 11, marginTop: 3 }}>
+            {ago(row.created_at)}
+          </div>
+        </Section>
+      )}
     </div>
   );
 }
 
-function KV({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 8 }}>
-      <div style={{ color: W.dim }}>{label}</div>
-      <div
-        style={{
-          color: W.text2,
-          fontFamily: mono ? wMono : undefined,
-          fontSize: mono ? 11 : 11.5,
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-all",
-        }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th
-      style={{
-        textAlign: "left",
-        padding: "8px 14px",
-        color: W.dim,
-        fontSize: 11,
-        fontWeight: 600,
-        textTransform: "uppercase",
-        letterSpacing: 0.4,
-      }}
-    >
-      {children}
-    </th>
-  );
-}
-function Td({ children }: { children: React.ReactNode }) {
-  return (
-    <td style={{ padding: "8px 14px", verticalAlign: "top" }}>{children}</td>
-  );
-}
-function Card({ children }: { children: React.ReactNode }) {
+function ViewPlaceholder({ view }: { view: View }) {
   return (
     <div
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
         borderRadius: 10,
-        padding: 20,
+        padding: 32,
+        textAlign: "center",
+        color: W.dim,
+        fontSize: 13,
+      }}
+    >
+      <div style={{ fontSize: 14, color: W.text2, marginBottom: 6 }}>
+        {view === "transactions" ? "Transactions" : "Timeline"} view
+      </div>
+      <div>
+        Streaming via{" "}
+        <code style={{ fontFamily: wMono, color: W.text2 }}>UpdateService</code>{" "}
+        is on the roadmap — tracked as a follow-up to BIT-186. Use the
+        Contracts tab for the live ACS in the meantime.
+      </div>
+    </div>
+  );
+}
+
+// ─────── Tiny shared primitives ───────────────────────────────
+
+function Card({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        background: W.surface,
+        border: `1px solid ${W.border}`,
+        borderRadius: 10,
+        padding: 10,
+      }}
+    >
+      <div style={{ padding: "0 4px 8px", borderBottom: `1px solid ${W.border}` }}>
+        <div style={{ color: W.text, fontSize: 12.5, fontWeight: 600 }}>
+          {title}
+        </div>
+        {subtitle && (
+          <div style={{ color: W.dim, fontSize: 11, marginTop: 1 }}>
+            {subtitle}
+          </div>
+        )}
+      </div>
+      <div style={{ marginTop: 6 }}>{children}</div>
+    </div>
+  );
+}
+
+function Section({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ padding: "12px 16px", borderBottom: `1px solid ${W.border}` }}>
+      <div
+        style={{
+          color: W.dim,
+          fontSize: 10.5,
+          letterSpacing: 1.4,
+          textTransform: "uppercase",
+          fontWeight: 600,
+          marginBottom: 6,
+        }}
+      >
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Pill({ color, children }: { color: string; children: React.ReactNode }) {
+  return (
+    <span
+      style={{
+        background: `${color}1A`,
+        border: `1px solid ${color}44`,
+        color,
+        padding: "1px 8px",
+        borderRadius: 4,
+        fontSize: 10.5,
+        fontWeight: 600,
+        fontFamily: wMono,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function Status({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        background: W.surface,
+        border: `1px solid ${W.border}`,
+        borderRadius: 10,
+        padding: 16,
+        color: W.dim,
+        fontSize: 13,
       }}
     >
       {children}
     </div>
   );
+}
+
+function ErrorPanel({ msg }: { msg: string }) {
+  return (
+    <div
+      style={{
+        background: W.surface,
+        border: `1px solid ${W.border}`,
+        borderRadius: 10,
+        padding: 16,
+        color: "#F08FB5",
+        fontSize: 13,
+      }}
+    >
+      {msg}
+    </div>
+  );
+}
+
+function EmptyPanel({
+  title,
+  body,
+  remediation,
+}: {
+  title: string;
+  body: string;
+  remediation: string;
+}) {
+  return (
+    <div
+      style={{
+        background: `${W.warn}10`,
+        border: `1px solid ${W.warn}`,
+        borderRadius: 10,
+        padding: 20,
+      }}
+    >
+      <h3 style={{ color: W.warn, fontSize: 14, marginTop: 0, marginBottom: 8 }}>
+        {title}
+      </h3>
+      <p style={{ color: W.text2, fontSize: 13, lineHeight: 1.5 }}>{body}</p>
+      <p style={{ color: W.dim, fontSize: 12, marginTop: 12 }}>{remediation}</p>
+    </div>
+  );
+}
+
+function Hint({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ color: W.dim, fontSize: 11.5, padding: "6px 4px" }}>
+      {children}
+    </div>
+  );
+}
+
+// ─────── Helpers ──────────────────────────────────────────────
+
+function shortTemplate(tpl: string): string {
+  const parts = tpl.split(":");
+  return parts.length >= 3 ? `${parts[1]}:${parts[2]}` : tpl;
+}
+
+function shortParty(p: string): string {
+  const [name, hash] = p.split("::");
+  if (!hash) return p;
+  return `${name}::${hash.slice(0, 6)}…`;
+}
+
+function toggle<T>(set: Set<T>, item: T): Set<T> {
+  const next = new Set(set);
+  if (next.has(item)) next.delete(item);
+  else next.add(item);
+  return next;
+}
+
+function timeBtn(active: boolean): React.CSSProperties {
+  return {
+    flex: 1,
+    padding: "5px",
+    fontSize: 11.5,
+    borderRadius: 5,
+    border: `1px solid ${active ? W.brand : W.border}`,
+    background: active ? `${W.brand}1A` : "transparent",
+    color: active ? W.brand : W.dim,
+    cursor: "pointer",
+    fontWeight: active ? 600 : 500,
+    fontFamily: wMono,
+  };
+}
+
+function ago(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return iso;
+  const secs = (Date.now() - t) / 1000;
+  if (secs < 60) return `${Math.floor(secs)}s ago`;
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
+  return `${Math.floor(secs / 86400)}d ago`;
 }

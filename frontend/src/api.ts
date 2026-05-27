@@ -618,6 +618,63 @@ export const fetchDARList = (name: string, role: Role = "app-user") =>
     `/api/instances/${encodeURIComponent(name)}/dar?role=${role}`,
   );
 
+export interface DARUploadResponse {
+  schema_version: number;
+  instance: string;
+  role: Role;
+  dar_ids: string[];
+  count: number;
+}
+
+// uploadDARs posts a multipart body with one or more .dar files
+// to /api/instances/:name/dar. Uses XMLHttpRequest for upload
+// progress (the same pattern as BIT-184's BackupRestore).
+export function uploadDARs(
+  name: string,
+  files: File[],
+  role: Role = "app-user",
+  onProgress?: (frac: number) => void,
+): Promise<DARUploadResponse> {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    fd.append("role", role);
+    for (const f of files) fd.append("file", f);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api/instances/${encodeURIComponent(name)}/dar`);
+    if (onProgress) {
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) onProgress(e.loaded / e.total);
+      });
+    }
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as DARUploadResponse);
+        } catch (e) {
+          reject(
+            new ApiError(xhr.status, {
+              code: "UNKNOWN",
+              error: "response was not JSON",
+            }),
+          );
+        }
+        return;
+      }
+      let body: ApiErrorBody = { code: "UNKNOWN", error: xhr.statusText };
+      try {
+        body = JSON.parse(xhr.responseText);
+      } catch {
+        /* keep default */
+      }
+      reject(new ApiError(xhr.status, body));
+    });
+    xhr.addEventListener("error", () =>
+      reject(new ApiError(0, { code: "NETWORK", error: "network error" })),
+    );
+    xhr.send(fd);
+  });
+}
+
 // BIT-186 — Explorer ACS snapshot.
 export interface ContractRow {
   contract_id: string;
