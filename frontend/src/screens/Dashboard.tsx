@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import { ApiError, type InstanceSummary, fetchInstances } from "../api";
+import { type InstanceSummary } from "../api";
 import { W } from "../tokens";
+import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { DeveloperSetup } from "./DeveloperSetup";
 import { InstanceDetail } from "./InstanceDetail";
 
@@ -8,58 +8,17 @@ import { InstanceDetail } from "./InstanceDetail";
 // top of docs/design/mockups/webui-dashboard.jsx. Renders the
 // list of registered instances pulled from GET /api/instances.
 //
-// First slice of BIT-133: list only. The full mockup also shows
-// the Developer setup card (JWT generator + app config exporter)
-// driven by /api/instances/{name}/jwt and /api/instances/{name}/
-// app-config — added in the follow-on slice once this lands.
+// Selection state lives in the URL (?instance=<name>) via
+// useInstanceSelection so the topbar switcher and Dashboard
+// agree on a single source of truth — and so shared links
+// preserve the user's pick. Pre-lift this lived in local
+// useState; the topbar couldn't see it.
 //
-// SSE wiring for live updates also deferred to follow-on (BIT-130
-// publishes "instances" topic events when an instance's status
-// flips; the dashboard subscribes and refetches).
+// SSE wiring for live updates is deferred to a follow-on slice
+// (BIT-130 publishes "instances" topic events when an instance's
+// status flips — needs a producer in internal/localnet first).
 export function Dashboard() {
-  const [state, setState] = useState<
-    | { kind: "loading" }
-    | { kind: "ok"; instances: InstanceSummary[]; warning?: string }
-    | { kind: "err"; error: string; detail?: string }
-  >({ kind: "loading" });
-  // selected = user's explicit pick. When null we auto-select the
-  // first running instance so the Developer setup card always has
-  // a target if one exists. User clicks override the auto-pick and
-  // stick across re-fetches (until that instance disappears).
-  const [selected, setSelected] = useState<string | null>(null);
-
-  const instances = state.kind === "ok" ? state.instances : [];
-  const effectiveName = useMemo(() => {
-    if (selected && instances.some((i) => i.name === selected)) return selected;
-    const running = instances.find((i) => i.status === "running");
-    return running?.name ?? null;
-  }, [selected, instances]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchInstances()
-      .then((r) => {
-        if (!cancelled) {
-          setState({
-            kind: "ok",
-            instances: r.instances,
-            warning: r.warning,
-          });
-        }
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        const err = e instanceof ApiError ? e : null;
-        setState({
-          kind: "err",
-          error: err?.message ?? "failed to load instances",
-          detail: err?.detail,
-        });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const sel = useInstanceSelection();
 
   return (
     <div>
@@ -67,17 +26,13 @@ export function Dashboard() {
         LocalNet instances
       </h1>
 
-      {state.kind === "loading" && (
-        <p style={{ color: W.dim }}>Loading…</p>
-      )}
+      {sel.loading && <p style={{ color: W.dim }}>Loading…</p>}
 
-      {state.kind === "err" && (
-        <ErrorPanel error={state.error} detail={state.detail} />
-      )}
+      {sel.error && <ErrorPanel error={sel.error} />}
 
-      {state.kind === "ok" && (
+      {!sel.loading && !sel.error && (
         <>
-          {state.warning && (
+          {sel.warning && (
             <div
               style={{
                 background: `${W.warn}1A`,
@@ -89,25 +44,25 @@ export function Dashboard() {
                 fontSize: 13,
               }}
             >
-              {state.warning}
+              {sel.warning}
             </div>
           )}
-          {state.instances.length === 0 ? (
+          {sel.instances.length === 0 ? (
             <EmptyState />
           ) : (
             <InstanceTable
-              instances={state.instances}
-              selected={effectiveName}
-              onSelect={setSelected}
+              instances={sel.instances}
+              selected={sel.selected}
+              onSelect={sel.select}
             />
           )}
         </>
       )}
 
-      {effectiveName && (
+      {sel.selected && (
         <>
-          <InstanceDetail name={effectiveName} />
-          <DeveloperSetup name={effectiveName} />
+          <InstanceDetail name={sel.selected} />
+          <DeveloperSetup name={sel.selected} />
         </>
       )}
     </div>
@@ -239,7 +194,7 @@ function EmptyState() {
   );
 }
 
-function ErrorPanel({ error, detail }: { error: string; detail?: string }) {
+function ErrorPanel({ error }: { error: string }) {
   return (
     <div
       style={{
@@ -252,19 +207,6 @@ function ErrorPanel({ error, detail }: { error: string; detail?: string }) {
     >
       <strong>Failed to load instances</strong>
       <div style={{ color: W.text2, marginTop: 6 }}>{error}</div>
-      {detail && (
-        <pre
-          style={{
-            color: W.dim,
-            marginTop: 8,
-            marginBottom: 0,
-            fontSize: 12,
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {detail}
-        </pre>
-      )}
     </div>
   );
 }

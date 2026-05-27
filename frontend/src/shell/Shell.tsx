@@ -1,6 +1,8 @@
 import { NavLink } from "react-router-dom";
+import { useState } from "react";
 import { W, wMono, wSans } from "../tokens";
 import { type ConnectionState, useConnectionHealth } from "./useConnectionHealth";
+import { type InstanceSelection, useInstanceSelection } from "./useInstanceSelection";
 
 // Shell — sidebar + topbar layout from docs/design/mockups/webui-shell.jsx
 // (AppShell + TopBar). Children render in the main content area.
@@ -52,6 +54,7 @@ export function Shell({ children }: ShellProps) {
 
 function TopBar() {
   const conn = useConnectionHealth();
+  const sel = useInstanceSelection();
   return (
     <header
       style={{
@@ -69,6 +72,7 @@ function TopBar() {
       <span style={{ color: W.dim, fontSize: 12 }}>
         canton-devkit · local development
       </span>
+      <InstanceSwitcher sel={sel} />
       <div style={{ flex: 1 }} />
       <span style={{ color: W.faint, fontSize: 11 }}>
         loopback only · ssh -L for remote
@@ -76,6 +80,138 @@ function TopBar() {
       <HealthPill conn={conn} />
     </header>
   );
+}
+
+function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
+  const [open, setOpen] = useState(false);
+  // Empty / loading / error states all degrade to a muted label
+  // rather than a dropdown. The Dashboard owns the "go run dpm
+  // localnet up" empty-state messaging; the topbar just shrugs.
+  if (sel.loading) {
+    return <span style={pillStyle(W.dim)}>loading instances…</span>;
+  }
+  if (sel.error || sel.instances.length === 0) {
+    return <span style={pillStyle(W.dim)}>no instances</span>;
+  }
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        onBlur={() => {
+          // Defer so a click on a menu item registers before we
+          // unmount. 100ms = below the click-vs-tap perception
+          // threshold.
+          setTimeout(() => setOpen(false), 100);
+        }}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        style={{
+          ...pillStyle(W.brand),
+          background: `${W.brand}1A`,
+          cursor: "pointer",
+        }}
+      >
+        <span style={{ color: W.brand }}>instance:</span>{" "}
+        <strong style={{ color: W.text }}>{sel.selected ?? "—"}</strong>
+        <span style={{ marginLeft: 6, color: W.dim }}>▾</span>
+      </button>
+      {open && (
+        <ul
+          role="listbox"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            margin: 0,
+            padding: 4,
+            listStyle: "none",
+            background: W.surface,
+            border: `1px solid ${W.border}`,
+            borderRadius: 8,
+            minWidth: 220,
+            zIndex: 10,
+            boxShadow: "0 6px 24px rgba(0,0,0,0.4)",
+          }}
+        >
+          {sel.instances.map((i) => (
+            <li key={i.name}>
+              <button
+                role="option"
+                aria-selected={i.name === sel.selected}
+                onMouseDown={(e) => {
+                  // mouseDown beats the button's own onBlur from
+                  // firing first and closing the menu. Without
+                  // this the click never lands.
+                  e.preventDefault();
+                  sel.select(i.name);
+                  setOpen(false);
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  width: "100%",
+                  padding: "6px 10px",
+                  background:
+                    i.name === sel.selected ? W.surface2 : "transparent",
+                  border: "none",
+                  borderRadius: 6,
+                  color: W.text,
+                  fontFamily: wMono,
+                  fontSize: 12,
+                  textAlign: "left",
+                  cursor: "pointer",
+                }}
+              >
+                <StatusDot status={i.status} />
+                <span style={{ flex: 1 }}>{i.name}</span>
+                <span style={{ color: W.dim, fontSize: 11 }}>
+                  {i.splice_version}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function StatusDot({ status }: { status: string }) {
+  const color =
+    status === "running"
+      ? W.ok
+      : status === "failed"
+      ? W.err
+      : status === "stopped"
+      ? W.dim
+      : W.warn;
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: 6,
+        height: 6,
+        borderRadius: "50%",
+        background: color,
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
+function pillStyle(color: string): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "3px 10px",
+    borderRadius: 999,
+    border: `1px solid ${color}`,
+    color,
+    fontFamily: wMono,
+    fontSize: 11,
+  };
 }
 
 function HealthPill({ conn }: { conn: ConnectionState }) {

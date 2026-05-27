@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Route, Routes } from "react-router-dom";
 import { SCHEMA_VERSION, fetchVersion } from "./api";
 import { Shell } from "./shell/Shell";
+import { InstanceSelectionProvider } from "./shell/useInstanceSelection";
 import { Dashboard } from "./screens/Dashboard";
 import { Placeholder } from "./screens/Placeholder";
 import { W } from "./tokens";
@@ -45,8 +46,9 @@ export function App() {
   }
 
   return (
-    <Shell>
-      <Routes>
+    <InstanceSelectionProvider>
+      <Shell>
+        <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/explorer/*" element={<Placeholder name="Explorer" ticket="BIT-132" />} />
         <Route path="/dar/*" element={<Placeholder name="DAR Manager" ticket="BIT-127" />} />
@@ -54,8 +56,9 @@ export function App() {
         <Route path="/tokens/*" element={<Placeholder name="Tokens" ticket="BIT-140" />} />
         <Route path="/agent/*" element={<Placeholder name="Agent Skills" ticket="BIT-135" />} />
         <Route path="*" element={<Placeholder name="Not found" />} />
-      </Routes>
-    </Shell>
+        </Routes>
+      </Shell>
+    </InstanceSelectionProvider>
   );
 }
 
