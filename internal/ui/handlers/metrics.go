@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
-	"strings"
+	"sync"
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
@@ -366,10 +366,17 @@ func proxyPrometheus(ctx context.Context, project, path string) ([]byte, error) 
 // Docker ephemerally assigned, captured into state.Ports["prometheus_ui"]
 // during `localnet up` (PR #20 stable-ports contract).
 //
-// We need a project → instance-name reverse lookup because containers.List
-// is keyed by compose project, not by registry name. The convention
-// is canton-<name>, codified at internal/localnet/up.go ~L315.
+// Yellow Y6+Y7: project→state reverse lookup goes through the
+// authoritative registry index (instead of brittle "canton-<name>"
+// TrimPrefix), and the whole result is cached for 5s. With the
+// Metrics screen polling 9 charts every 5s, that previously fired
+// 9 × `docker compose ps` subprocesses per second per instance.
+// One cached lookup per 5s is enough — the host:port pair doesn't
+// change between Prometheus restarts.
 func discoverPrometheus(ctx context.Context, project string) (string, int, error) {
+	if host, port, err, ok := lookupPromCache(project); ok {
+		return host, port, err
+	}
 	infos, err := containers.List(ctx, project)
 	if err != nil {
 		return "", 0, err
@@ -382,19 +389,62 @@ func discoverPrometheus(ctx context.Context, project string) (string, int, error
 		}
 	}
 	if !running {
+		// Cache the negative result too — observability-off
+		// screens hammer this just as hard as -on screens.
+		storePromCache(project, "", 0, errPrometheusNotRunning)
 		return "", 0, errPrometheusNotRunning
 	}
-	// project naming convention: "canton-<name>"
-	name := strings.TrimPrefix(project, "canton-")
-	st, err := registry.Read(name)
+	st, err := registry.LookupByComposeProject(project)
 	if err != nil {
 		return "", 0, fmt.Errorf("discover prometheus: %w", err)
 	}
 	port, ok := st.Ports["prometheus_ui"]
 	if !ok || port == 0 {
+		storePromCache(project, "", 0, errPrometheusNotRunning)
 		return "", 0, errPrometheusNotRunning
 	}
+	storePromCache(project, "127.0.0.1", port, nil)
 	return "127.0.0.1", port, nil
+}
+
+// promCache caches the (host, port) discovery result with a short
+// TTL so the Metrics screen's 9-chart, 5-second polling cadence
+// doesn't run 1.8 docker-compose-ps subprocesses per second per
+// instance. TTL chosen to match the polling interval — a stopped
+// Prometheus surfaces within one tick.
+const promCacheTTL = 5 * time.Second
+
+type promCacheEntry struct {
+	host    string
+	port    int
+	err     error
+	expires time.Time
+}
+
+var (
+	promCacheMu sync.Mutex
+	promCache   = map[string]promCacheEntry{}
+)
+
+func lookupPromCache(project string) (host string, port int, err error, ok bool) {
+	promCacheMu.Lock()
+	defer promCacheMu.Unlock()
+	e, found := promCache[project]
+	if !found || time.Now().After(e.expires) {
+		return "", 0, nil, false
+	}
+	return e.host, e.port, e.err, true
+}
+
+func storePromCache(project, host string, port int, err error) {
+	promCacheMu.Lock()
+	defer promCacheMu.Unlock()
+	promCache[project] = promCacheEntry{
+		host:    host,
+		port:    port,
+		err:     err,
+		expires: time.Now().Add(promCacheTTL),
+	}
 }
 
 var errPrometheusNotRunning = errors.New("prometheus container not present in compose project")

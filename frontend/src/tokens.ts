@@ -34,3 +34,24 @@ export const wMono =
   "'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace";
 export const wSans =
   "'IBM Plex Sans', 'Inter Tight', system-ui, sans-serif";
+
+// Role-to-color map. Was duplicated as inline ternaries in
+// WalletScreen.tsx + ExplorerScreen.tsx (yellow Y13); centralised
+// so a future role addition or palette swap is a one-line change.
+export const ROLE_COLOR: Record<"app-user" | "app-provider" | "sv", string> = {
+  "app-user": W.info,
+  "app-provider": W.brand,
+  sv: W.mag,
+};
+
+// Transaction-kind palette used by the Explorer Timeline + table.
+// Single source of truth so table and strip never disagree.
+export const TX_KIND_COLOR: Record<
+  "transaction" | "reassignment" | "topology" | "checkpoint",
+  string
+> = {
+  transaction: W.brand,
+  reassignment: W.info,
+  topology: W.mag,
+  checkpoint: W.dim,
+};

@@ -80,6 +80,18 @@ export function BackupRestore({ instanceName }: Props) {
 
   async function onFileChosen(file: File | null) {
     if (!file) return;
+    // Yellow Y15: client-side size cap. Snapshots can be large but
+    // 4 GiB is the practical ceiling for an XHR upload (browsers
+    // buffer the whole body in memory). Refuse client-side rather
+    // than OOM the tab on a stray drop.
+    const MAX_TARBALL_BYTES = 4 * 1024 * 1024 * 1024;
+    if (file.size > MAX_TARBALL_BYTES) {
+      setRestore({
+        kind: "error",
+        message: `${file.name} is ${(file.size / 1024 / 1024 / 1024).toFixed(2)} GiB; per-file cap is 4 GiB. Restore directly from the CLI: dpm localnet restore --name ${targetName} --from ${file.name}`,
+      });
+      return;
+    }
     setRestore({ kind: "uploading", progress: 0, filename: file.name });
     try {
       const response = await restoreSnapshot(file, targetName, {

@@ -56,6 +56,11 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
   const [name, setName] = useState("");
   const [version, setVersion] = useState("");
   const [allowUncurated, setAllowUncurated] = useState(false);
+  // observability: when on, bring-up adds the Prometheus + Grafana
+  // overlay (`--profile observability`). Default OFF because the
+  // overlay pulls extra container images and adds memory pressure
+  // — opt-in is friendlier for the "just spin one up" path.
+  const [observability, setObservability] = useState(false);
   const [versions, setVersions] = useState<SpliceVersionEntry[]>([]);
   const [stage, setStage] = useState<Stage>({ kind: "form" });
   // Per-version system-requirements check. "idle" = no version
@@ -83,6 +88,7 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
       setName("");
       setVersion("");
       setAllowUncurated(false);
+      setObservability(false);
       setStage({ kind: "form" });
       requestAnimationFrame(() => inputRef.current?.focus());
       // Refresh the version catalogue on open. Cached on the
@@ -209,6 +215,7 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
         name,
         ...(version ? { version } : {}),
         ...(allowUncurated ? { allow_uncurated: true } : {}),
+        ...(observability ? { profiles: ["observability"] } : {}),
       });
       setStage({ kind: "progress", accepted });
     } catch (e) {
@@ -270,6 +277,8 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
               versions={versions}
               allowUncurated={allowUncurated}
               setAllowUncurated={setAllowUncurated}
+              observability={observability}
+              setObservability={setObservability}
               preflight={preflight}
               onSubmit={submit}
             />
@@ -439,6 +448,8 @@ interface FormBodyProps {
   versions: SpliceVersionEntry[];
   allowUncurated: boolean;
   setAllowUncurated: (b: boolean) => void;
+  observability: boolean;
+  setObservability: (b: boolean) => void;
   preflight: PreflightState;
   onSubmit: (e: React.FormEvent) => void;
 }
@@ -453,6 +464,8 @@ function FormBody({
   versions,
   allowUncurated,
   setAllowUncurated,
+  observability,
+  setObservability,
   preflight,
   onSubmit,
 }: FormBodyProps) {
@@ -487,6 +500,53 @@ function FormBody({
       </Field>
 
       <PreflightPanel state={preflight} />
+
+      {/* Observability profile — opt-in. Prometheus + Grafana
+          overlay; off by default to keep the cold-start small. */}
+      <label
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 10,
+          padding: "10px 12px",
+          background: W.surface2,
+          borderRadius: 8,
+          border: `1px solid ${observability ? W.brand : W.border}`,
+          cursor: "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={observability}
+          onChange={(e) => setObservability(e.target.checked)}
+          style={{ marginTop: 2 }}
+        />
+        <div style={{ flex: 1, fontSize: 12.5, color: W.text2 }}>
+          <strong style={{ color: W.text }}>Enable observability</strong>
+          <span
+            style={{
+              marginLeft: 8,
+              fontSize: 10.5,
+              padding: "1px 6px",
+              borderRadius: 3,
+              background: `${W.brand}1A`,
+              color: W.brand,
+              fontFamily: wMono,
+            }}
+          >
+            +Prometheus +Grafana
+          </span>
+          <div style={{ color: W.dim, fontSize: 11.5, marginTop: 3, lineHeight: 1.5 }}>
+            Adds the metrics overlay so the Metrics screen renders live
+            charts (throughput, latency, ACS, errors). Extra ~400 MB of
+            container images; ~300 MB extra RAM at idle. Equivalent to
+            <code style={{ fontFamily: wMono, marginLeft: 4 }}>
+              --profile observability
+            </code>{" "}
+            on the CLI.
+          </div>
+        </div>
+      </label>
 
       <details style={{ marginTop: 4 }}>
         <summary
@@ -542,6 +602,7 @@ function FormBody({
         <span style={{ color: W.brand }}>
           dpm localnet up --name {name || "<name>"} --version{" "}
           {version || "latest"}
+          {observability ? " --profile observability" : ""}
         </span>
       </div>
     </form>

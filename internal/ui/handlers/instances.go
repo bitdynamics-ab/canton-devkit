@@ -479,9 +479,18 @@ func codeForStatus(status int) string {
 // `dpm localnet up` flags exactly so CLI and Web UI surface the
 // same controls.
 type upRequest struct {
-	Name           string `json:"name"`
-	Version        string `json:"version,omitempty"`         // empty → "latest" server-side
-	AllowUncurated bool   `json:"allow_uncurated,omitempty"` // resolve unknown tags upstream
+	Name           string   `json:"name"`
+	Version        string   `json:"version,omitempty"`         // empty → "latest" server-side
+	AllowUncurated bool     `json:"allow_uncurated,omitempty"` // resolve unknown tags upstream
+	Profiles       []string `json:"profiles,omitempty"`        // docker-compose profiles; e.g. ["observability"]
+}
+
+// allowedProfiles caps what the HTTP surface will accept. Mirrors
+// the CLI's documented set so a stray "production" or arbitrary
+// string can't ride through. Keep in sync with internal/localnet's
+// known profile constants.
+var allowedProfiles = map[string]bool{
+	localnet.ObservabilityProfileName: true,
 }
 
 // upAcceptedResponse is the 202 body the POST returns. The frontend
@@ -623,10 +632,28 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 			return
 		}
 
+		// Validate any caller-supplied profiles against the
+		// allowlist. Unknown profiles are an explicit 400 rather
+		// than a silent drop — a typo'd "observabilty" should NOT
+		// quietly produce an instance without Prometheus.
+		for _, p := range req.Profiles {
+			if !allowedProfiles[p] {
+				cancelJob()
+				hub.ClearBuffer(topic)
+				jobs.Unregister(req.Name)
+				writeErrorWithCode(w, http.StatusBadRequest,
+					ErrCodeInvalidRequest,
+					"unknown profile: "+p,
+					"supported profiles: observability")
+				return
+			}
+		}
+
 		opts := &localnet.UpOptions{
 			Name:           req.Name,
 			Version:        req.Version,
 			AllowUncurated: req.AllowUncurated,
+			Profiles:       req.Profiles,
 		}
 
 		go func() {
@@ -688,8 +715,28 @@ func handleResumeInstance(hub *stream.Hub) http.HandlerFunc {
 				"invalid instance name: "+err.Error())
 			return
 		}
+		// Yellow Y8 — invert read-then-acquire order. The original
+		// code read state, decided to proceed, then registered the
+		// job. Between those two points a concurrent /up could
+		// register first, get the lock, and flip the instance to
+		// running — leaving us racing to start a duplicate. Now:
+		// reserve the job slot FIRST, then read state, recheck
+		// status. If anything changed after we won the slot we
+		// release and surface the right 409.
+		jobCtx, cancelJob := context.WithTimeout(context.Background(), upJobTimeout)
+		if !jobs.Register(name, cancelJob) {
+			cancelJob()
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_CREATING",
+				"instance "+name+" is already being brought up",
+				"open /api/instances/"+name+"/events to watch the existing run")
+			return
+		}
+
 		prior, err := registry.Read(name)
 		if err != nil {
+			jobs.Unregister(name)
+			cancelJob()
 			if errors.Is(err, registry.ErrNotFound) {
 				writeErrorWithCode(w, http.StatusNotFound,
 					ErrCodeNotFound,
@@ -701,33 +748,17 @@ func handleResumeInstance(hub *stream.Hub) http.HandlerFunc {
 			return
 		}
 		if prior.Status == registry.StatusRunning {
+			jobs.Unregister(name)
+			cancelJob()
 			writeErrorWithCode(w, http.StatusConflict,
 				"INSTANCE_RUNNING",
 				"instance "+name+" is already running",
 				"to restart, stop it first via POST /api/instances/"+name+"/down")
 			return
 		}
-		if jobs.Active(name) {
-			writeErrorWithCode(w, http.StatusConflict,
-				"INSTANCE_CREATING",
-				"instance "+name+" is already being brought up",
-				"open /api/instances/"+name+"/events to watch the existing run")
-			return
-		}
 
 		topic := progress.TopicFor(name)
 		hub.EnableBuffering(topic, progressBufferCap)
-
-		jobCtx, cancelJob := context.WithTimeout(context.Background(), upJobTimeout)
-		if !jobs.Register(name, cancelJob) {
-			cancelJob()
-			hub.ClearBuffer(topic)
-			writeErrorWithCode(w, http.StatusConflict,
-				"INSTANCE_CREATING",
-				"instance "+name+" is already being brought up",
-				"open /api/instances/"+name+"/events to watch the existing run")
-			return
-		}
 
 		// Reuse the recorded Splice version so a resume doesn't
 		// silently upgrade. The user explicitly upgrades by going
@@ -1386,6 +1417,23 @@ func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
 				"call DELETE /api/instances/"+name+"/up to cancel, then retry this DELETE")
 			return
 		}
+
+		// Yellow Y9 — acquire the per-instance flock so the read +
+		// status check + index/state delete is a true CAS. Without
+		// this a concurrent POST /api/instances or POST /up that
+		// races the goroutine-Active probe above could re-register
+		// the same name between our Read and Delete. The lock
+		// excludes both create and resume paths (they take the
+		// same lock around their work).
+		release, lerr := registry.Lock(name)
+		if lerr != nil {
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_BUSY",
+				"instance "+name+" is busy — another operation holds the lock",
+				"wait for the in-flight operation to finish, then retry")
+			return
+		}
+		defer release()
 
 		state, err := registry.Read(name)
 		if err != nil {

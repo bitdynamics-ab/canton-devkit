@@ -314,12 +314,14 @@ func dialLedger(ctx context.Context, instance, endpoint, token string) (*ledger.
 	return client, cleanup, nil
 }
 
-// contractRow is the per-contract JSON/text shape. Reusable by
-// both the Web UI (when its handler is written) and the CLI text
-// renderer below.
+// contractRow is the per-contract JSON/text shape. Mirrors the
+// Web UI handler's projection (handlers/contracts.go) so CLI and
+// browser surfaces always see the same JSON shape — AGENTS.md
+// CLI↔UI parity rule. The field name is `template_id`, matching
+// Canton/Daml convention and the gRPC Identifier message.
 type contractRow struct {
 	ContractID  string   `json:"contract_id"`
-	Template    string   `json:"template"`
+	TemplateID  string   `json:"template_id"`
 	Signatories []string `json:"signatories,omitempty"`
 	Observers   []string `json:"observers,omitempty"`
 }
@@ -348,7 +350,7 @@ func renderACSStream(
 			Observers:   ev.Observers,
 		}
 		if ev.TemplateId != nil {
-			row.Template = fmt.Sprintf("%s:%s:%s",
+			row.TemplateID = fmt.Sprintf("%s:%s:%s",
 				ev.TemplateId.PackageId,
 				ev.TemplateId.ModuleName,
 				ev.TemplateId.EntityName)
@@ -388,7 +390,7 @@ func renderACSText(out io.Writer, instance string, parties []string, offset int6
 	for _, r := range rows {
 		body = append(body, []string{
 			truncMiddle(r.ContractID, 24),
-			truncTail(r.Template, 60),
+			truncTail(r.TemplateID, 60),
 			strings.Join(r.Signatories, ","),
 		})
 	}

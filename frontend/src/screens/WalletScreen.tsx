@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, fetchInstance, type Instance, type Role } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { W, wMono } from "../tokens";
+import { ROLE_COLOR, W, wMono } from "../tokens";
 
 // WalletScreen — BIT-192 (new in design drop 2026-05-26).
 //
@@ -342,12 +342,7 @@ function RoleSwitcher({
 }
 
 function RoleAvatar({ role }: { role: Role }) {
-  const color =
-    role === "app-user"
-      ? "#7CB5F7"
-      : role === "app-provider"
-        ? "#5BD7C5"
-        : "#C4A8F5";
+  const color = ROLE_COLOR[role];
   return (
     <div
       style={{
@@ -369,12 +364,7 @@ function RoleAvatar({ role }: { role: Role }) {
 }
 
 function RoleAvatarMini({ role }: { role: Role }) {
-  const color =
-    role === "app-user"
-      ? "#7CB5F7"
-      : role === "app-provider"
-        ? "#5BD7C5"
-        : "#C4A8F5";
+  const color = ROLE_COLOR[role];
   return (
     <span
       style={{

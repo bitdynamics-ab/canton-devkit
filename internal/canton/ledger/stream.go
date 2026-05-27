@@ -97,8 +97,19 @@ func pumpStream[Resp any](
 			select {
 			case out <- StreamItem[Resp]{Value: resp}:
 			case <-ctx.Done():
-				// Caller cancelled. Stop reading; gRPC will close the
-				// underlying stream when the request ctx cancels.
+				// Caller cancelled mid-stream. Surface ctx.Err() to
+				// the consumer (typically context.Canceled or
+				// DeadlineExceeded — context.Cause if a custom
+				// reason was attached) so they can distinguish a
+				// natural EOF from a forced shutdown. (Yellow Y4.)
+				cause := context.Cause(ctx)
+				if cause == nil {
+					cause = ctx.Err()
+				}
+				select {
+				case out <- StreamItem[Resp]{Err: cause}:
+				default:
+				}
 				return
 			}
 		}

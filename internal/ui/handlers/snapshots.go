@@ -233,10 +233,22 @@ func handleRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Field naming (yellow Y12): CLI uses --from for the source
+	// archive; HTTP multipart historically used "file". We accept
+	// BOTH so scripts written against either surface keep working
+	// — the CLI mental model ("from where do I restore?") and the
+	// HTTP convention ("the file part") are both legitimate.
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "missing file field", err)
-		return
+		// Try the CLI-aligned alias before giving up.
+		var altErr error
+		file, header, altErr = r.FormFile("from")
+		if altErr != nil {
+			writeError(w, http.StatusBadRequest,
+				"missing snapshot upload",
+				fmt.Errorf("provide the snapshot tarball as multipart field 'file' (or its alias 'from'): %w", err))
+			return
+		}
 	}
 	defer func() { _ = file.Close() }()
 	if header.Size == 0 {

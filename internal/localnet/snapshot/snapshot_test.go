@@ -83,11 +83,25 @@ func seedSnapshotInstance(t *testing.T, name string) {
 	s.DataDir = t.TempDir()
 	s.Status = registry.StatusStopped
 	// Population matters: ports + credentials need to survive the
-	// round-trip via embedded state.json.
-	s.Ports = map[string]int{"app_user_ui": 4485}
-	s.Credentials = map[string]registry.Credential{
-		"sv": {Role: "sv", User: "sv-user", Audience: "sv-aud", JWT: "eyJ.sigsv"},
+	// round-trip via embedded state.json. We deliberately populate
+	// every per-role map AND the DSO party so the round-trip test
+	// (yellow Y11) can assert each one preserved verbatim.
+	s.Ports = map[string]int{
+		"app_user_ui":                    4485,
+		"app_provider_ui":                4486,
+		"sv_ui":                          4487,
+		"participant_admin_app-user":     4488,
+		"participant_ledger_app-user":    4489,
+		"participant_json_app-user":      4490,
 	}
+	s.Credentials = map[string]registry.Credential{
+		"app-user":     {Role: "app-user", User: "ledger-api-user", Audience: "aud", JWT: "eyJ.app-user-jwt"},
+		"app-provider": {Role: "app-provider", User: "ledger-api-user", Audience: "aud", JWT: "eyJ.app-provider-jwt"},
+		"sv":           {Role: "sv", User: "sv-user", Audience: "sv-aud", JWT: "eyJ.sigsv"},
+	}
+	// (DSO party is not yet a field on registry.State — once it
+	// lands, add it to this seed and to the round-trip assertion
+	// below.)
 	if err := registry.Write(s); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -150,11 +164,40 @@ func TestSnapshot_RoundTripsRegistryAndVolumes(t *testing.T) {
 	if got.Status != registry.StatusStopped {
 		t.Errorf("restored Status = %q, want stopped", got.Status)
 	}
-	if got.Ports["app_user_ui"] != 4485 {
-		t.Errorf("ports not preserved: %+v", got.Ports)
+	// Yellow Y11: assert EVERY port + credential round-trips
+	// byte-for-byte, not just one. Previously only one port and
+	// one credential were checked, so a serializer regression that
+	// silently dropped half the map would have passed.
+	wantPorts := map[string]int{
+		"app_user_ui":                 4485,
+		"app_provider_ui":             4486,
+		"sv_ui":                       4487,
+		"participant_admin_app-user":  4488,
+		"participant_ledger_app-user": 4489,
+		"participant_json_app-user":   4490,
 	}
-	if _, hasSv := got.Credentials["sv"]; !hasSv {
-		t.Errorf("credentials not preserved: %+v", got.Credentials)
+	for k, v := range wantPorts {
+		if got.Ports[k] != v {
+			t.Errorf("port %q: got %d, want %d", k, got.Ports[k], v)
+		}
+	}
+	wantJWTs := map[string]string{
+		"app-user":     "eyJ.app-user-jwt",
+		"app-provider": "eyJ.app-provider-jwt",
+		"sv":           "eyJ.sigsv",
+	}
+	for role, wantJWT := range wantJWTs {
+		c, ok := got.Credentials[role]
+		if !ok {
+			t.Errorf("credential %q: missing after round-trip", role)
+			continue
+		}
+		if c.JWT != wantJWT {
+			t.Errorf("credential %q JWT: got %q, want %q", role, c.JWT, wantJWT)
+		}
+		if c.Role != role {
+			t.Errorf("credential %q Role field: got %q, want %q", role, c.Role, role)
+		}
 	}
 }
 

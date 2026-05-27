@@ -199,6 +199,7 @@ func handleContractsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows := make([]contractRow, 0, limit)
+	truncated := false
 	for item := range stream {
 		if item.Err != nil {
 			if errors.Is(item.Err, io.EOF) {
@@ -223,6 +224,7 @@ func handleContractsList(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if len(rows) >= limit {
+			truncated = true
 			break
 		}
 		// Each ACS response carries a oneof — we only project
@@ -268,6 +270,9 @@ func handleContractsList(w http.ResponseWriter, r *http.Request) {
 		"role":           role,
 		"ledger_end":     end.Offset,
 		"contracts":      rows,
+		// truncated:true means the participant had more matching
+		"truncated": truncated,
+		"limit":     limit,
 	})
 }
 

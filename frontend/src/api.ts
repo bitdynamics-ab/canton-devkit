@@ -320,10 +320,13 @@ export const fetchSpliceVersions = () =>
 
 // CreateInstanceRequest mirrors handlers/instances.go upRequest.
 // version="" defers to the server's "latest" alias.
+// profiles maps to `dpm localnet up --profile ...` — currently the
+// only allowed entry is "observability" (Prometheus + Grafana).
 export interface CreateInstanceRequest {
   name: string;
   version?: string;
   allow_uncurated?: boolean;
+  profiles?: string[];
 }
 
 // CreateInstanceAcceptedResponse is what POST /api/instances

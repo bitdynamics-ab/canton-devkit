@@ -530,6 +530,16 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 			copyErr <- err
 		}()
 		restErr := archiverFn.RestoreVolume(ctx, dstVolName, pr)
+		// Yellow Y10: if the alpine `tar xf -` exited early (e.g.
+		// disk full mid-stream), pr's reader side is closed but
+		// the goroutine on the other end may still be blocked
+		// writing into the pipe buffer. Closing pr with the error
+		// unblocks the writer so we don't leak a goroutine on the
+		// error path. (Successful path: io.Copy returned EOF, the
+		// goroutine already exited via CloseWithError(nil).)
+		if restErr != nil {
+			_ = pr.CloseWithError(restErr)
+		}
 		streamErr := <-copyErr
 		if restErr != nil {
 			_, _ = fmt.Fprintf(errw, "restore %q: %s\n", dstVolName, restErr)

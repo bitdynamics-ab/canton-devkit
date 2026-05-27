@@ -40,6 +40,15 @@ func MaterializeObservabilityOverlay(dataDir, projectDir string) (string, error)
 	}
 	// Walk the embedded FS — entries live under "compose/" and
 	// "grafana/" at the FS root (see assets/assets.go).
+	//
+	// Yellow Y5: write-if-different. Previously this clobbered any
+	// hand-edited dashboard JSON on every `localnet up`, which is
+	// hostile to operators who tweak the Grafana panels for their
+	// workload. We now read each destination, hash both sides, and
+	// only rewrite when the bytes differ. A real config-management
+	// solution (per-instance overrides directory) is tracked in
+	// follow-up; this stops the silent stomp without that bigger
+	// change.
 	if err := fs.WalkDir(assets.Observability, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -57,6 +66,9 @@ func MaterializeObservabilityOverlay(dataDir, projectDir string) (string, error)
 		}
 		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 			return err
+		}
+		if existing, err := os.ReadFile(dest); err == nil && bytesEqual(existing, data) {
+			return nil
 		}
 		return os.WriteFile(dest, data, 0o644)
 	}); err != nil {
@@ -89,12 +101,31 @@ func MaterializeObservabilityOverlay(dataDir, projectDir string) (string, error)
 				return "", fmt.Errorf("clear stale prometheus.yml directory: %w", err)
 			}
 		}
-		if err := os.WriteFile(promDst, promSrc, 0o644); err != nil {
+		// Yellow Y5: only rewrite when bytes differ — don't clobber
+		// hand edits silently.
+		if existing, err := os.ReadFile(promDst); err == nil && bytesEqual(existing, promSrc) {
+			// no-op
+		} else if err := os.WriteFile(promDst, promSrc, 0o644); err != nil {
 			return "", fmt.Errorf("write prometheus.yml to project dir: %w", err)
 		}
 	}
 
 	return composeFile, nil
+}
+
+// bytesEqual is a tiny shim so we don't have to import bytes for
+// one call. Equivalent to bytes.Equal but lets us keep the import
+// list focused on filesystem APIs.
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // ObservabilityProfileName is the docker compose profile name

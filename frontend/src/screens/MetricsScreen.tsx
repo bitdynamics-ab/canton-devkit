@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ApiError,
   fetchMetricsRange,
@@ -195,6 +195,17 @@ export function MetricsScreen() {
     };
   }, [name]);
 
+  // Yellow Y14: memoize the 4 delta calls. MUST sit ABOVE every
+  // conditional return below so hook order is stable across the
+  // (!name) and (observabilityOff) early-exit paths — rules of
+  // hooks. Without memo the body of deltaFromSeries (walks the
+  // series, computes time deltas, runs comparisons) ran four times
+  // per render and we re-render at least every 5s when polling.
+  const tpsDelta = useMemo(() => deltaFromSeries(throughputSeries.data), [throughputSeries.data]);
+  const p99Delta = useMemo(() => deltaFromSeries(p99Series.data, 1000), [p99Series.data]);
+  const acsDelta = useMemo(() => deltaFromSeries(acsSeries.data), [acsSeries.data]);
+  const errDelta = useMemo(() => deltaFromSeries(errorsSeries.data), [errorsSeries.data]);
+
   if (!name) {
     return (
       <section style={{ padding: 24 }}>
@@ -236,7 +247,7 @@ export function MetricsScreen() {
           sparkline={throughputSeries.data?.points}
           sparklineColor={TPS_COLOR}
           error={throughputSeries.kind === "err" ? throughputSeries.error : undefined}
-          delta={deltaFromSeries(throughputSeries.data)}
+          delta={tpsDelta}
           deltaPolarity="up-is-good"
         />
         <MetricCard
@@ -246,7 +257,7 @@ export function MetricsScreen() {
           sparkline={p99Series.data?.points.map((p) => ({ t: p.t, v: p.v * 1000 }))}
           sparklineColor={P99_COLOR}
           error={p99Series.kind === "err" ? p99Series.error : undefined}
-          delta={deltaFromSeries(p99Series.data, 1000)}
+          delta={p99Delta}
           deltaPolarity="down-is-good"
           format={(v) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1))}
         />
@@ -256,7 +267,7 @@ export function MetricsScreen() {
           sparkline={acsSeries.data?.points}
           sparklineColor={ACS_COLOR}
           error={acsSeries.kind === "err" ? acsSeries.error : undefined}
-          delta={deltaFromSeries(acsSeries.data)}
+          delta={acsDelta}
           deltaPolarity="up-is-good"
           format={(v) => v.toLocaleString()}
         />
@@ -269,7 +280,7 @@ export function MetricsScreen() {
           sparkline={errorsSeries.data?.points}
           sparklineColor={ERR_COLOR}
           error={errorsSeries.kind === "err" ? errorsSeries.error : undefined}
-          delta={deltaFromSeries(errorsSeries.data)}
+          delta={errDelta}
           deltaPolarity="down-is-good"
         />
       </div>

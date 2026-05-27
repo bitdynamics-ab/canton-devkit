@@ -11,7 +11,7 @@ import {
   type TransactionsListResponse,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { W, wMono } from "../tokens";
+import { TX_KIND_COLOR, W, wMono } from "../tokens";
 
 // ExplorerScreen — BIT-186 production layout.
 //
@@ -531,7 +531,7 @@ function ProjectionBar({
           {acsCount === null ? "…" : acsCount.toLocaleString()}
         </span>{" "}
         active contracts visible
-        {ledgerEnd !== null && (
+        {ledgerEnd != null && (
           <>
             {" · ledger offset "}
             <span style={{ color: W.text }}>{ledgerEnd.toLocaleString()}</span>
@@ -1028,12 +1028,7 @@ function TxRowComponent({
   open: boolean;
   onToggle: () => void;
 }) {
-  const kindColor: Record<TransactionRow["kind"], string> = {
-    transaction: "#62E2A0",
-    reassignment: "#7CB5F7",
-    topology: "#C4A8F5",
-    checkpoint: W.dim,
-  };
+  const kindColor = TX_KIND_COLOR;
   return (
     <>
       <div
