@@ -106,6 +106,10 @@ type Client struct {
 	// the constructor wiring.
 	partyMgmt   adminv2.PartyManagementServiceClient
 	packageMgmt adminv2.PackageManagementServiceClient
+	// userMgmt resolves user-id ↔ party-rights. Wired for BIT-191
+	// so the Web UI Explorer can map a Splice LocalNet user-id JWT
+	// to the set of parties it can actAs / readAs.
+	userMgmt adminv2.UserManagementServiceClient
 }
 
 // Dial establishes a gRPC connection to the participant's Ledger API.
@@ -164,6 +168,7 @@ func Dial(ctx context.Context, opts DialOptions) (*Client, error) {
 		version:     lapiv2.NewVersionServiceClient(conn),
 		partyMgmt:   adminv2.NewPartyManagementServiceClient(conn),
 		packageMgmt: adminv2.NewPackageManagementServiceClient(conn),
+		userMgmt:    adminv2.NewUserManagementServiceClient(conn),
 	}, nil
 }
 

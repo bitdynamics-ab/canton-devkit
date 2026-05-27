@@ -105,6 +105,7 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("DELETE /api/instances/{name}/up", handleCancelUp(hub))
 		mux.HandleFunc("DELETE /api/instances/{name}", handleScrubInstance(hub))
 		mux.HandleFunc("POST /api/instances/{name}/down", handleDownInstance())
+		mux.HandleFunc("POST /api/instances/{name}/up", handleResumeInstance(hub))
 	} else {
 		// Stub so a misconfigured deployment fails loudly
 		// rather than 404 (which the frontend would mistake
@@ -120,6 +121,7 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("DELETE /api/instances/{name}/up", stub)
 		mux.HandleFunc("DELETE /api/instances/{name}", stub)
 		mux.HandleFunc("POST /api/instances/{name}/down", stub)
+		mux.HandleFunc("POST /api/instances/{name}/up", stub)
 	}
 	// Container probe + log tail + restart are hub-independent
 	// (pure docker calls) — mount them for every deployment.
@@ -598,6 +600,100 @@ const downTimeout = 3 * time.Minute
 // future --keep-data flag once the frontend has a UI for it).
 type downRequest struct {
 	KeepData bool `json:"keep_data,omitempty"`
+}
+
+// handleResumeInstance: POST /api/instances/{name}/up.
+//
+// Brings a previously-stopped instance back up, reusing its
+// recorded Splice version and ports. Symmetric counterpart to
+// `POST /api/instances/{name}/down`. The general create flow
+// (`POST /api/instances`) refuses when the name already exists,
+// so the UI needs this dedicated verb to surface a "Start"
+// button on the stopped row.
+//
+// Path-existence semantics:
+//
+//   - 404 — name not in the registry (user typoed)
+//   - 409 INSTANCE_RUNNING — already running; use /down first
+//   - 409 INSTANCE_CREATING — a bring-up is in flight; subscribe
+//     to the existing events stream instead
+//   - 202 — kicked off; events stream at /api/instances/{name}/events
+//
+// Uses the same goroutine / SSE shape as handleCreate so the
+// frontend reuses its create-progress modal verbatim.
+func handleResumeInstance(hub *stream.Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if err := localnet.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+		prior, err := registry.Read(name)
+		if err != nil {
+			if errors.Is(err, registry.ErrNotFound) {
+				writeErrorWithCode(w, http.StatusNotFound,
+					ErrCodeNotFound,
+					"instance "+name+" not registered",
+					"create it first via POST /api/instances")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "read state", err)
+			return
+		}
+		if prior.Status == registry.StatusRunning {
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_RUNNING",
+				"instance "+name+" is already running",
+				"to restart, stop it first via POST /api/instances/"+name+"/down")
+			return
+		}
+		if jobs.Active(name) {
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_CREATING",
+				"instance "+name+" is already being brought up",
+				"open /api/instances/"+name+"/events to watch the existing run")
+			return
+		}
+
+		topic := progress.TopicFor(name)
+		hub.EnableBuffering(topic, progressBufferCap)
+
+		jobCtx, cancelJob := context.WithTimeout(context.Background(), upJobTimeout)
+		if !jobs.Register(name, cancelJob) {
+			cancelJob()
+			hub.ClearBuffer(topic)
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_CREATING",
+				"instance "+name+" is already being brought up",
+				"open /api/instances/"+name+"/events to watch the existing run")
+			return
+		}
+
+		// Reuse the recorded Splice version so a resume doesn't
+		// silently upgrade. The user explicitly upgrades by going
+		// through the create flow with a new --version.
+		opts := &localnet.UpOptions{
+			Name:    name,
+			Version: prior.SpliceVersion,
+		}
+
+		go func() {
+			defer cancelJob()
+			defer hub.ClearBuffer(topic)
+			defer jobs.Unregister(name)
+			prog := progress.New(hub, name)
+			exitCode := localnet.RunUp(jobCtx, prog, opts)
+			log.Printf("resume instance %q: exit_code=%d", name, exitCode)
+		}()
+
+		writeJSON(w, http.StatusAccepted, upAcceptedResponse{
+			SchemaVersion: types.SchemaVersion,
+			Instance:      name,
+			EventsURL:     "/api/instances/" + name + "/events",
+		})
+	}
 }
 
 // handleDownInstance: POST /api/instances/{name}/down.
@@ -1236,6 +1332,33 @@ func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
 		state, err := registry.Read(name)
 		if err != nil {
 			if errors.Is(err, registry.ErrNotFound) {
+				// Two flavours of "not found":
+				//   1. The name is unknown entirely — neither
+				//      a state.json nor an index entry exists.
+				//      Return 404; nothing to clean.
+				//   2. ORPHAN: state.json is missing but the
+				//      index.json still references the name —
+				//      a previous interrupted teardown or a
+				//      manual filesystem wipe. The Web UI shows
+				//      this in `localnet list` and the user
+				//      clicks Remove with no way to repair it.
+				//      Treat Delete as idempotent here: scrub
+				//      the index entry so list reflects truth.
+				if idx, ierr := registry.ReadIndex(); ierr == nil {
+					for _, e := range idx.Entries {
+						if e.Name == name {
+							hub.ClearBuffer(progress.TopicFor(name))
+							if derr := registry.Delete(name); derr != nil {
+								writeError(w, http.StatusInternalServerError,
+									"scrub orphan index entry", derr)
+								return
+							}
+							log.Printf("scrub orphan index entry %q via DELETE (state.json was missing)", name)
+							w.WriteHeader(http.StatusNoContent)
+							return
+						}
+					}
+				}
 				writeErrorWithCode(w, http.StatusNotFound,
 					ErrCodeNotFound,
 					"instance "+name+" not registered")

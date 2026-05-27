@@ -527,6 +527,121 @@ export function restoreSnapshot(
   });
 }
 
+export interface ResumeAcceptedResponse {
+  schema_version: number;
+  instance: string;
+  events_url: string;
+}
+
+// resumeInstance invokes POST /api/instances/{name}/up — the
+// "restart a stopped instance" verb. Backend kicks off the same
+// goroutine + SSE shape as the create-instance flow, so the
+// frontend can hand `response.events_url` straight to the
+// existing progress modal without a separate code path.
+//
+// The recorded Splice version + ports are reused, so a resume
+// won't silently upgrade or shuffle ports. Errors mirror the
+// create flow: 404 if unregistered, 409 if running or already
+// being brought up.
+export async function resumeInstance(name: string): Promise<ResumeAcceptedResponse> {
+  const resp = await fetch(
+    `/api/instances/${encodeURIComponent(name)}/up`,
+    { method: "POST" },
+  );
+  if (!resp.ok) {
+    const text = await resp.text();
+    let body: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try {
+      body = JSON.parse(text);
+    } catch {
+      /* non-JSON; keep default */
+    }
+    throw new ApiError(resp.status, body);
+  }
+  return (await resp.json()) as ResumeAcceptedResponse;
+}
+
+// BIT-188 — Metrics summary.
+//
+// The four curated headline numbers the CLI's
+// `dpm localnet metrics --format json` also returns. Naming
+// mirrors the `metricsq.Headline` Go constants so a frontend
+// rename can't drift from the backend.
+export interface MetricsSummary {
+  schema_version: number;
+  instance: string;
+  metrics: {
+    ledger_tps_5m?: number;
+    mediator_p95_seconds?: number;
+    jvm_heap_used_bytes?: number;
+    postgres_conn_count?: number;
+  };
+}
+
+// fetchMetricsSummary returns the headline panel data. The
+// caller MUST handle ApiError with body.code === "OBSERVABILITY_PROFILE_OFF"
+// to render the "raise observability" empty state — that's not
+// a hard failure, just a missing profile.
+// BIT-187 — DAR Manager.
+//
+// The Web UI lists DARs uploaded to a participant. Role defaults
+// to app-user (the common dev target). The backend reads the
+// per-role admin port from state.json (BIT-190) so the browser
+// doesn't need to know about gRPC.
+export type Role = "app-user" | "app-provider" | "sv";
+
+export interface DARRow {
+  main: string; // package id
+  name: string;
+  version: string;
+  description?: string;
+}
+
+export interface DARListResponse {
+  schema_version: number;
+  instance: string;
+  role: Role;
+  dars: DARRow[];
+}
+
+export const fetchDARList = (name: string, role: Role = "app-user") =>
+  apiFetch<DARListResponse>(
+    `/api/instances/${encodeURIComponent(name)}/dar?role=${role}`,
+  );
+
+// BIT-186 — Explorer ACS snapshot.
+export interface ContractRow {
+  contract_id: string;
+  template_id: string;
+  payload?: Record<string, unknown>;
+  signatories: string[];
+  observers: string[];
+  created_at?: string;
+  package_name?: string;
+}
+
+export interface ContractsListResponse {
+  schema_version: number;
+  instance: string;
+  role: Role;
+  ledger_end: number;
+  contracts: ContractRow[];
+}
+
+export const fetchContracts = (
+  name: string,
+  role: Role = "app-user",
+  limit = 100,
+) =>
+  apiFetch<ContractsListResponse>(
+    `/api/instances/${encodeURIComponent(name)}/contracts?role=${role}&limit=${limit}`,
+  );
+
+export const fetchMetricsSummary = (name: string) =>
+  apiFetch<MetricsSummary>(
+    `/api/instances/${encodeURIComponent(name)}/metrics/summary`,
+  );
+
 export async function stopInstance(name: string, keepData = false): Promise<void> {
   const resp = await fetch(
     `/api/instances/${encodeURIComponent(name)}/down`,

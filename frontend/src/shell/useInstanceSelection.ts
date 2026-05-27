@@ -77,6 +77,19 @@ export function InstanceSelectionProvider({ children }: { children: ReactNode })
 
   useEffect(() => {
     load();
+    // Backend reconciler (internal/ui/handlers/reconciler.go) probes
+    // docker every 15s and rewrites status when the registry diverges
+    // from reality (e.g. user killed containers via Docker Desktop).
+    // Without a poll here, the Dashboard would render a stale
+    // "running" until the user manually refreshes the page — which
+    // surprised the first user who hit it. 15 s matches the backend
+    // tick so we're never more than two ticks behind truth. Cheap:
+    // /api/instances is a pure-registry read with no docker call.
+    //
+    // Future: replace with an SSE subscription on a `list:changes`
+    // topic the reconciler publishes to. Tracked separately.
+    const t = setInterval(load, 15_000);
+    return () => clearInterval(t);
   }, [load]);
 
   const selected = useMemo(() => {

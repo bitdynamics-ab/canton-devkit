@@ -170,6 +170,21 @@ describe("BackupRestore card", () => {
     });
   });
 
+  it("resyncs target name when the parent switches instances", async () => {
+    // Repro for the user-reported bug: open the UI on "dev", click
+    // pebble, BackupRestore's targetName state was stuck at "dev"
+    // because useState only honors its initial value on first mount.
+    // After the fix, switching instances must update the input.
+    const { rerender } = render(<BackupRestore instanceName="dev" />);
+    const input = screen.getByLabelText(
+      /restore target instance name/i,
+    ) as HTMLInputElement;
+    expect(input.value).toBe("dev");
+
+    rerender(<BackupRestore instanceName="pebble" />);
+    expect(input.value).toBe("pebble");
+  });
+
   it("lets the user override the target instance name before restoring", async () => {
     const fd: FormData[] = [];
     vi.spyOn(XMLHttpRequest.prototype, "send").mockImplementation(

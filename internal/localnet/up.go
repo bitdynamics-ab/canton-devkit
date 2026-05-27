@@ -440,10 +440,20 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	}
 	prog.FinishStep(StepWaitHealthy, "")
 
-	// 8. Capture JWTs and persist running state. (UI ports were
-	// pre-allocated in step 5; canton participant ports run on
-	// Docker-ephemeral host ports and aren't surfaced — they're
-	// network-internal.)
+	// 8. Capture Canton participant ports (BIT-190). The Canton
+	// container exposes Ledger/Admin/JSON APIs per party role on
+	// Docker-ephemeral host ports — we ask docker what they ended
+	// up as and persist them so the Web UI (Explorer, DAR Manager,
+	// future M3 token surfaces) can dial without a manual
+	// `--admin-host=localhost:<port>` flag. Best-effort: any port
+	// that fails to query is silently omitted, not stamped as 0.
+	for key, port := range CaptureCantonPorts(ctx, state.ComposeProject) {
+		state.Ports[key] = port
+	}
+
+	// 9. Capture JWTs and persist running state. (UI ports were
+	// pre-allocated in step 5; Canton participant gRPC/JSON API
+	// ports were just captured in step 8.)
 	prog.StartStep(StepCaptureJWTs, "")
 	if creds := captureCredentials(projectDir, prog.Err()); creds != nil {
 		state.Credentials = creds

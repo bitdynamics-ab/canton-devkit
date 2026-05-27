@@ -69,6 +69,72 @@ func (c *Client) UploadDarFile(ctx context.Context, req *adminv2.UploadDarFileRe
 	return resp, nil
 }
 
+// ListMyUserRights returns the party-rights and admin claims attached
+// to the JWT's claimed user (the empty UserId asks the participant
+// to use the token's own user). Wired for BIT-191 so the Web UI
+// Explorer can resolve a Splice LocalNet user-id token to the
+// concrete party set it can read.
+//
+// Each Right is a oneof — typical entries:
+//
+//	CanActAs.Party       — can submit commands as that party
+//	CanReadAs.Party      — can subscribe to that party's ACS / stream
+//	ParticipantAdmin     — admin claim (rare for vanilla tokens)
+//	CanReadAsAnyParty    — wildcard read (also rare; admin-equivalent)
+//
+// Callers walk Rights and union the parties via [ResolveActAndReadParties].
+func (c *Client) ListMyUserRights(ctx context.Context) (*adminv2.ListUserRightsResponse, error) {
+	resp, err := c.userMgmt.ListUserRights(ctx, &adminv2.ListUserRightsRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("ledger.ListMyUserRights: %w", err)
+	}
+	return resp, nil
+}
+
+// ResolveActAndReadParties walks the JWT's user-rights and returns the
+// union of parties the token can ActAs or ReadAs. Empty result means
+// the JWT carries no party claims and the caller should treat the
+// query as "nothing visible".
+//
+// Returns a deterministic-order slice (sorted) so consumers using the
+// result as a map key get stable behaviour across calls.
+//
+// If the user has CanReadAsAnyParty or ParticipantAdmin, this still
+// returns the explicit per-party set — those claims expand "across all
+// parties" semantics inside Canton itself; we can't enumerate "any
+// party" client-side without a separate ListKnownParties call.
+func (c *Client) ResolveActAndReadParties(ctx context.Context) ([]string, error) {
+	resp, err := c.ListMyUserRights(ctx)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{}, len(resp.GetRights()))
+	for _, r := range resp.GetRights() {
+		if a := r.GetCanActAs(); a != nil {
+			seen[a.GetParty()] = struct{}{}
+		}
+		if rd := r.GetCanReadAs(); rd != nil {
+			seen[rd.GetParty()] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for p := range seen {
+		out = append(out, p)
+	}
+	sortStrings(out)
+	return out, nil
+}
+
+// sortStrings is the deterministic-order helper. Avoids importing
+// "sort" just for one call here; tiny + branch-free for small slices.
+func sortStrings(s []string) {
+	for i := 1; i < len(s); i++ {
+		for j := i; j > 0 && s[j-1] > s[j]; j-- {
+			s[j-1], s[j] = s[j], s[j-1]
+		}
+	}
+}
+
 // ListKnownPackages enumerates packages from the admin perspective — same
 // set as [Client.ListPackages] but with extra metadata (source DAR hash,
 // upload time, vetting state per synchronizer) only the admin API

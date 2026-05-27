@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ApiError,
   downloadSnapshot,
@@ -51,6 +51,20 @@ export function BackupRestore({ instanceName }: Props) {
   const [force, setForce] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync targetName when the user navigates between instances.
+  // Without this, the card mounted under "dev" keeps the initial
+  // value forever — clicking into "pebble" still shows "dev" in
+  // the target-name input. useState only honors its initial value
+  // on first mount; the parent's prop change must be reflected
+  // explicitly. Also resets the result banner on switch so a
+  // success message from a previous restore doesn't bleed across
+  // instances.
+  useEffect(() => {
+    setTargetName(instanceName);
+    setRestore({ kind: "idle" });
+    setForce(false);
+  }, [instanceName]);
 
   async function onDownload() {
     setDownloading(true);
