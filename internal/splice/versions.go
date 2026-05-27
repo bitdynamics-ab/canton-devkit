@@ -41,6 +41,20 @@ type Version struct {
 	ContentSHA string `json:"content_sha"` // sha-256 of the extracted localnet subtree (sorted, path+content)
 	Size       int64  `json:"size"`        // informational; used only to print a hint before download
 	Major      string `json:"major"`       // routes to internal/splice/v0X adapter
+
+	// MinMemoryBytes is the minimum Docker daemon memory the version
+	// needs to start cleanly. Empirically derived: Splice 0.6.x boots
+	// a single canton container hosting 2 sequencers + 2 mediators +
+	// 3 participants each at -Xmx 2.5 GiB, so the container OOM-loops
+	// on a stock Docker Desktop install (4 GiB default). 0.5.x is
+	// lighter. 0 means "use docker.DefaultMinMemoryBytes" — the
+	// historical 4 GiB floor.
+	MinMemoryBytes uint64 `json:"min_memory_bytes,omitempty"`
+	// RecommendedMemoryBytes is the value at which the version
+	// runs without resource warnings. UI surfaces this as the
+	// "raise Docker memory to ≥ N" remediation hint when Min*
+	// passes but the recommended threshold is not met.
+	RecommendedMemoryBytes uint64 `json:"recommended_memory_bytes,omitempty"`
 }
 
 // catalogueFile is the embedded JSON catalogue. Kept as a separate file
@@ -108,6 +122,44 @@ func Resolve(req string) (Version, error) {
 	}
 	return v, nil
 }
+
+// MinMemoryFor returns the version-specific Docker daemon memory
+// floor for v, falling back to docker.DefaultMinMemoryBytes when
+// the entry has no override. Called from both `dpm localnet up`
+// (CLI gate) and the Web UI's GET /api/preflight handler so the
+// two surfaces enforce identical numbers (see AGENTS.md "CLI ↔
+// Web UI parity"). The fallback constant is duplicated as a
+// runtime value below to avoid an import cycle with internal/docker.
+//
+// Invariant pinned by TestThresholdParity_VersionMinAtLeastDefault:
+// every catalogued MinMemoryBytes must be >= the global default,
+// so a version override can only TIGHTEN the gate, never weaken
+// it. A user on a 4 GiB host always sees a refusal regardless of
+// which version they pick.
+func MinMemoryFor(v Version) uint64 {
+	if v.MinMemoryBytes > 0 {
+		return v.MinMemoryBytes
+	}
+	return defaultMinMemoryBytesFallback
+}
+
+// RecommendedMemoryFor returns the version's recommended memory
+// (above which there are no resource warnings) or 0 when no
+// recommendation is set. 0 disables the WARN tier in
+// docker.checkDockerMemory — see internal/docker/checks.go.
+func RecommendedMemoryFor(v Version) uint64 {
+	return v.RecommendedMemoryBytes
+}
+
+// defaultMinMemoryBytesFallback mirrors docker.DefaultMinMemoryBytes.
+// Duplicated as a constant here so this package can compute the
+// effective min without importing internal/docker (which would
+// create a cycle: docker → splice ← splice already imports nothing
+// from docker, but a docker import here would also be ugly layering).
+//
+// TestThresholdParity_VersionMinAtLeastDefault asserts equality
+// with docker.DefaultMinMemoryBytes so this never drifts.
+const defaultMinMemoryBytesFallback uint64 = 4 * 1024 * 1024 * 1024
 
 // Supported returns the supported tags sorted ascending. Stable order
 // makes it easy to grep error messages and renders the version list

@@ -3,6 +3,7 @@ package localnet
 import (
 	"fmt"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cli/localnet/dar"
 	"github.com/spf13/cobra"
 )
 
@@ -19,16 +20,49 @@ func Build() *cobra.Command {
 		},
 	}
 
+	// Lifecycle.
 	localnet.AddCommand(buildUp())
 	localnet.AddCommand(buildDown())
 	localnet.AddCommand(buildRestart())
 	localnet.AddCommand(buildClean())
+
+	// Inspection — real implementations landed on main via
+	// BIT-111/112 (status, list), BIT-109/113 (creds, logs),
+	// BIT-31 (doctor), BIT-125 (env).
 	localnet.AddCommand(buildStatus())
-	localnet.AddCommand(buildLogs())
-	localnet.AddCommand(buildVersions())
 	localnet.AddCommand(buildList())
-	localnet.AddCommand(buildCreds())
+	localnet.AddCommand(buildEnv())
 	localnet.AddCommand(buildDoctor())
+	localnet.AddCommand(buildLogs())
+	localnet.AddCommand(buildCreds())
+
+	// BIT-147 — snapshot/restore. Source-copied from
+	// srikanth/bit-147-p1-10; BIT-184 wires UI parity on top.
+	localnet.AddCommand(buildSnapshot())
+	localnet.AddCommand(buildRestore())
+
+	localnet.AddCommand(buildVersions())
+	localnet.AddCommand(buildUI())
+
+	// CLI ↔ Web UI parity (see AGENTS.md): every per-container
+	// HTTP endpoint has a CLI mirror under `container <verb>`,
+	// and the on-demand reconciler runs via `refresh`.
+	localnet.AddCommand(buildContainer())
+	localnet.AddCommand(buildRefresh())
+	localnet.AddCommand(buildMetrics())
+
+	// BIT-136: contracts/tx CLI — uses internal/canton/ledger
+	// from PR #66. Endpoint discovery (auto-resolving the
+	// participant gRPC port from registry state) is a follow-up;
+	// callers pass --endpoint host:port for now.
+	localnet.AddCommand(buildContracts())
+	localnet.AddCommand(buildTx())
+
+	// BIT-127: DAR admin commands (upload/list/download/info/diff/
+	// remove/build-upload/watch/connect) — adopted from the
+	// `srikanth/bit-track-b-dar-admin` branch.
+	localnet.AddCommand(dar.Build())
+
 	return localnet
 }
 

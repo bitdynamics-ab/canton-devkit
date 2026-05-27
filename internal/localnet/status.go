@@ -18,16 +18,8 @@ type StatusOptions struct {
 	Format string // "text" (default) or "json"
 }
 
-// ValidateFormat returns an error if format isn't one of the listed
-// values. Used by Cobra builders after flag parsing.
-func ValidateFormat(format string, allowed ...string) error {
-	for _, a := range allowed {
-		if format == a {
-			return nil
-		}
-	}
-	return fmt.Errorf("--format must be one of %v (got %q)", allowed, format)
-}
+// ValidateFormat is defined in format.go (single source of truth shared
+// with internal/dar/*).
 
 // composeServiceStatus is the per-service summary we present in `status`.
 type composeServiceStatus struct {

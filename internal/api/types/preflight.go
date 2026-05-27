@@ -9,6 +9,13 @@ type PreflightReport struct {
 	OK            bool               `json:"ok"`
 	Sections      []PreflightSection `json:"sections"`
 	Summary       string             `json:"summary,omitempty"`
+	// ErrorCode (BIT-172) is the stable machine-readable code the
+	// frontend switches on when OK=false. Empty when OK=true.
+	// Values are from internal/localnet's ErrCode* constants
+	// (PORTS_IN_USE / DOCKER_DOWN / DOCKER_NOT_INSTALLED /
+	// COMPOSE_V1_OR_MISSING / DOCKER_MEMORY_LOW / DISK_LOW /
+	// PREFLIGHT_FAILED).
+	ErrorCode string `json:"error_code,omitempty"`
 }
 
 // PreflightSection groups related checks under a header (System,

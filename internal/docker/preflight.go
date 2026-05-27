@@ -116,6 +116,12 @@ type Options struct {
 	MinDiskBytes uint64
 	// MinMemoryBytes is the minimum Docker daemon memory required. 0 disables.
 	MinMemoryBytes uint64
+	// RecommendedMemoryBytes is the threshold below which the memory
+	// check emits a WARN even when the minimum passes. 0 disables.
+	// Used by the per-version preflight gate so a host that *barely*
+	// meets the floor still gets a heads-up that it'll run hot. Must
+	// be >= MinMemoryBytes — otherwise it's silently ignored.
+	RecommendedMemoryBytes uint64
 }
 
 // RunPreflight runs all preflight checks and returns a Report. It never
@@ -145,7 +151,7 @@ func RunPreflight(ctx context.Context, opts Options) *Report {
 	report.ComposeVersion = composeVersion
 
 	if daemonResult.Status == StatusOK {
-		report.Results = append(report.Results, checkDockerMemory(ctx, opts.MinMemoryBytes))
+		report.Results = append(report.Results, checkDockerMemory(ctx, opts.MinMemoryBytes, opts.RecommendedMemoryBytes))
 	} else {
 		report.Results = append(report.Results, skip("Docker memory", "daemon unavailable"))
 	}

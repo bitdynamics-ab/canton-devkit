@@ -43,6 +43,17 @@ func TestThresholdParity_DoctorMatchesUp(t *testing.T) {
 		"MinDiskBytes":   "DefaultMinDiskBytes",
 	}
 
+	// BIT-181: up.go uses splice.MinMemoryFor(version) /
+	// splice.RecommendedMemoryFor(version) instead of the literal
+	// docker.DefaultMin*Bytes. Allowed by the parity contract because
+	// the splice helpers are invariant-pinned to be >= DefaultMin*Bytes
+	// for every catalogued version — they can only RAISE the floor
+	// above the doctor gate, never lower it.
+	allowedCalls := map[string]struct{}{
+		"splice.MinMemoryFor":         {},
+		"splice.RecommendedMemoryFor": {},
+	}
+
 	for _, path := range files {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			body, err := os.ReadFile(path)
@@ -81,6 +92,18 @@ func TestThresholdParity_DoctorMatchesUp(t *testing.T) {
 				// inside the docker package itself).
 				if usesAllowedSelector(kv.Value, wantSel) {
 					return true
+				}
+				// BIT-181: also allow a call to one of the
+				// splice.{Min,Recommended}MemoryFor helpers.
+				if call, ok := kv.Value.(*ast.CallExpr); ok {
+					if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+						if x, ok := sel.X.(*ast.Ident); ok {
+							qname := x.Name + "." + sel.Sel.Name
+							if _, ok := allowedCalls[qname]; ok {
+								return true
+							}
+						}
+					}
 				}
 				// Drift detected — produce a useful error with
 				// the literal we found.

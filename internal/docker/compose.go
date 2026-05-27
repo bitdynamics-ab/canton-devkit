@@ -13,9 +13,13 @@ import (
 const (
 	// Splice LocalNet's onboarding flow (DAML package vetting, SV
 	// keygen, validator registration) routinely takes 3–5 minutes on a
-	// cold start. 15 minutes gives slow hosts plenty of headroom; the
-	// caller can still ^C earlier.
-	readinessTimeout  = 15 * time.Minute
+	// cold start. Splice 0.6.4 cold-start with no cached images was
+	// observed taking 18+ minutes on a resource-constrained machine
+	// (Splice container stuck in `health: starting` while canton +
+	// participants reached healthy), so 25 minutes gives realistic
+	// headroom without leaking goroutines indefinitely on a genuinely
+	// stuck daemon. The caller can still ^C earlier.
+	readinessTimeout  = 25 * time.Minute
 	readinessPollWait = 3 * time.Second
 )
 
@@ -36,6 +40,13 @@ type ComposeRunner struct {
 	Env       []string
 	WorkDir   string
 	LogWriter io.Writer
+	// Profiles, when non-empty, becomes one or more `--profile P`
+	// args on every compose invocation. Compose services scoped
+	// under a profile via `profiles: [P]` are skipped unless that
+	// profile is enabled — used by BIT-134's `observability`
+	// overlay to opt users into the Prometheus + Grafana stack
+	// without forcing the extra ~600 MiB on the default path.
+	Profiles []string
 
 	// commandFn is the seam tests use to inject a fake docker. Production
 	// callers leave it nil; tests set it to capture (and optionally script
@@ -73,6 +84,12 @@ func (c *ComposeRunner) composeBase() []string {
 	}
 	for _, ef := range c.EnvFiles {
 		args = append(args, "--env-file", ef)
+	}
+	for _, p := range c.Profiles {
+		// `--profile <name>` is a per-invocation toggle; we emit
+		// it as a leading arg so subsequent `up` / `ps` / `down`
+		// all see the same enabled profile set.
+		args = append(args, "--profile", p)
 	}
 	return args
 }
