@@ -27,7 +27,8 @@ func TestLocalnetHelp_RendersMockupShape(t *testing.T) {
 	body := out.String()
 
 	for _, want := range []string{
-		"canton-devkit · localnet",
+		"canton-devkit",
+		"localnet",
 		"LIFECYCLE",
 		"DEVELOPING",
 		"Usage",
@@ -247,6 +248,9 @@ func TestLocalnetHelp_AsciiBoxWhenCLocale(t *testing.T) {
 	header := strings.Join(strings.SplitN(body, "\n", 7)[:6], "\n")
 	if strings.ContainsAny(header, "┌┐└┘│") {
 		t.Errorf("LANG=C help box should use ASCII corners, got Unicode:\n%s", header)
+	}
+	if strings.ContainsAny(body, "─·") {
+		t.Errorf("LANG=C help should be fully ASCII-safe, got:\n%s", body)
 	}
 	if !strings.Contains(header, "+-") || !strings.Contains(header, "-+") {
 		t.Errorf("ASCII box should contain +/- corners, got:\n%s", header)

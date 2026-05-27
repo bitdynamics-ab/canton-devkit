@@ -129,7 +129,7 @@ func renderLocalnetHelp(w interface {
 // faithfully and a clipped box is worse than a plain list.
 func renderNarrowHelp() string {
 	var b strings.Builder
-	b.WriteString(term.Brandc("canton-devkit · localnet"))
+	b.WriteString(term.Brandc(helpTitle()))
 	b.WriteString("\n")
 	for _, cat := range helpCategories() {
 		for _, row := range cat.Commands {
@@ -187,7 +187,7 @@ func renderBoxedHelp() string {
 	// Dynamic-width ASCII box (review pin: hardcoded 42 was a bug
 	// waiting to happen for any title edit).
 	boxBody := []string{
-		"canton-devkit · localnet",
+		helpTitle(),
 		"manage Canton LocalNets like a normal",
 		"process, not a Docker compose project",
 	}
@@ -208,7 +208,7 @@ func renderBoxedHelp() string {
 		for _, row := range cat.Commands {
 			rows = append(rows, renderHelpRow(row.name, row.desc))
 		}
-		b.WriteString(term.Section(cat.Title, "", strings.Join(rows, "\n"), 0))
+		b.WriteString(renderHelpSection(cat.Title, strings.Join(rows, "\n")))
 		if i < len(categories)-1 {
 			b.WriteString("\n\n")
 		}
@@ -252,23 +252,63 @@ var (
 // LC_ALL signals a C / POSIX locale (no UTF-8). Either signal
 // suggests the terminal probably can't render U+2500-range glyphs.
 func pickBoxGlyphs() boxGlyphs {
-	if !term.ShouldColor(os.Stderr) {
+	if !term.ShouldColor(os.Stderr) || localeForcesASCII() {
 		return asciiBox
 	}
+	return unicodeBox
+}
+
+func localeForcesASCII() bool {
 	for _, k := range []string{"LC_ALL", "LANG"} {
 		v := os.Getenv(k)
 		if v == "" {
 			continue
 		}
 		if v == "C" || v == "POSIX" {
-			return asciiBox
+			return true
 		}
 		if !strings.Contains(strings.ToUpper(v), "UTF-8") &&
 			!strings.Contains(strings.ToUpper(v), "UTF8") {
-			return asciiBox
+			return true
 		}
 	}
-	return unicodeBox
+	return false
+}
+
+func helpTitle() string {
+	if localeForcesASCII() {
+		return "canton-devkit - localnet"
+	}
+	return "canton-devkit · localnet"
+}
+
+func renderHelpSection(title, children string) string {
+	if !localeForcesASCII() {
+		return term.Section(title, "", children, 0)
+	}
+	header := term.Brandc(strings.ToUpper(title))
+	width := term.VisibleLen(title) + 4
+	if width < 20 {
+		width = 20
+	}
+	if width > 80 {
+		width = 80
+	}
+	return header + "\n" + term.Faintc(strings.Repeat("-", width)) + "\n" + indentHelp(children, 2)
+}
+
+func indentHelp(s string, n int) string {
+	if s == "" {
+		return ""
+	}
+	pad := strings.Repeat(" ", n)
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		if line != "" {
+			lines[i] = pad + line
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // dynamicBox renders a box-drawing frame around `lines`, auto-sized
