@@ -220,7 +220,17 @@ export function MetricsScreen() {
     return (
       <section style={{ padding: 24 }}>
         <Header name={name} />
-        <ObservabilityOffPanel name={name} remediation={observabilityOff} />
+        <ObservabilityOffPanel
+          name={name}
+          remediation={observabilityOff}
+          onEnabled={() => {
+            // Clearing the empty-state re-runs the effect via the
+            // `observabilityOff` dependency; the next tick will
+            // start pulling metrics from the newly-running
+            // Prometheus.
+            setObservabilityOff(null);
+          }}
+        />
       </section>
     );
   }
@@ -458,10 +468,44 @@ function ErrLine({ msg }: { msg: string }) {
 function ObservabilityOffPanel({
   name,
   remediation,
+  onEnabled,
 }: {
   name: string;
   remediation: string;
+  onEnabled: () => void;
 }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function enable() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const resp = await fetch(
+        `/api/instances/${encodeURIComponent(name)}/observability`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: true }),
+        },
+      );
+      if (!resp.ok) {
+        let msg = `HTTP ${resp.status}`;
+        try {
+          const body = (await resp.json()) as { error?: string; remediation?: string[] };
+          msg = body.error ?? msg;
+        } catch {
+          /* keep status */
+        }
+        throw new Error(msg);
+      }
+      onEnabled();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "failed");
+      setBusy(false);
+    }
+  }
+
   return (
     <div
       style={{
@@ -480,8 +524,39 @@ function ObservabilityOffPanel({
         was started without the observability profile. Prometheus and Grafana
         aren't running, so there's nothing to scrape.
       </p>
-      <p style={{ color: W.dim, fontSize: 12, marginTop: 12 }}>
-        Restart with{" "}
+
+      <div style={{ display: "flex", gap: 10, marginTop: 14, alignItems: "center" }}>
+        <button
+          type="button"
+          onClick={enable}
+          disabled={busy}
+          style={{
+            background: busy ? W.surface2 : W.brand,
+            color: busy ? W.dim : "#0B0E13",
+            border: "none",
+            borderRadius: 6,
+            padding: "7px 14px",
+            fontSize: 12.5,
+            fontWeight: 600,
+            cursor: busy ? "wait" : "pointer",
+          }}
+        >
+          {busy ? "Enabling…" : "Enable observability now"}
+        </button>
+        <span style={{ color: W.dim, fontSize: 11.5 }}>
+          Brings up Prometheus + Grafana on this instance without
+          restarting Canton.
+        </span>
+      </div>
+
+      {err && (
+        <div role="alert" style={{ color: W.err, fontSize: 12, marginTop: 8 }}>
+          ✗ {err}
+        </div>
+      )}
+
+      <p style={{ color: W.dim, fontSize: 12, marginTop: 14 }}>
+        Or restart from the CLI:{" "}
         <code
           style={{
             fontFamily: wMono,
@@ -495,8 +570,7 @@ function ObservabilityOffPanel({
             .replace(/^.*`/, "")
             .replace(/`.*$/, "")
             .trim() || `dpm localnet up --profile observability --name ${name}`}
-        </code>{" "}
-        to enable.
+        </code>
       </p>
     </div>
   );

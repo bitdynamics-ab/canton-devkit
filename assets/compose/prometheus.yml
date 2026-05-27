@@ -1,33 +1,27 @@
 # BIT-134 — Prometheus scrape config for the observability profile.
 #
-# HONEST SCOPE NOTE (review v3):
-# Splice 0.6.4's stock compose does NOT expose any Prometheus
-# endpoints. Canton has built-in OpenTelemetry support but only
-# emits if its `metrics-reporter` config is overridden — the
-# stock Splice config doesn't enable that. So this scrape config
-# only includes targets that we KNOW exist:
+# Both the Canton and Splice container images ship a
+# `/app/monitoring.conf` file that the canton entrypoint conditionally
+# appends as an extra `--config` arg (`[ -s /app/monitoring.conf ]`).
+# That file enables the built-in Prometheus reporter on port 10013
+# (0.0.0.0:10013/metrics) with JVM metrics, all qualifiers
+# (errors/latency/saturation/traffic/debug), and 40k cardinality.
 #
-#   1. Prometheus itself (`localhost:9090`) — proves the stack
-#      is up and Grafana can query something.
+# We discovered this by inspecting the upstream image — prior
+# versions of this comment assumed metrics were OFF in stock Splice;
+# they're not. The reporter is ON by default in both images and
+# active for the canton and splice JVM services without any extra
+# configuration overlay on our side.
 #
-# To actually scrape canton / splice metrics requires one of:
+# Both `canton` and `splice` containers join the project's default
+# docker network when the observability overlay is applied, so the
+# service-name DNS resolves to the container IP and 10013 is
+# reachable from the prometheus container without exposing the
+# port to the host.
 #
-#   (A) Override canton's config to enable `metrics-reporter` of
-#       type=prometheus on a known port. Splice's compose mounts
-#       conf files from $LOCALNET_DIR/conf/canton/; the override
-#       would go in a sibling overlay file `assets/compose/
-#       canton-metrics.yaml` that mounts a config snippet enabling
-#       the reporter. Tracked as BIT-134-followup-1 (canton config
-#       overlay).
-#   (B) Run a JMX exporter sidecar that reads canton's JMX MBeans
-#       and exposes a /metrics endpoint. Tracked as
-#       BIT-134-followup-2 (jmx-exporter sidecar).
-#
-# Until (A) or (B) lands, this config produces an EMPTY Grafana
-# dashboard with the panels in place but no data. That's honest
-# and reviewable — the previous fictional `canton:9000` /
-# `splice:5014` / `postgres:9187` targets would have silently
-# failed every scrape and left no diagnostic trail.
+# Multi-instance: external_labels.instance is templated off
+# COMPOSE_PROJECT_NAME so when two LocalNets each run their own
+# Prometheus + Grafana, dashboards can group by instance.
 
 global:
   scrape_interval: 15s
@@ -39,10 +33,29 @@ global:
 scrape_configs:
   # Prometheus self-scrape — proves the stack is up. Always
   # produces data so a user opening Grafana can see SOMETHING
-  # even before they enable canton metrics via the follow-up
-  # overlays.
+  # even if canton/splice are still starting.
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]
         labels:
           component: prometheus
+
+  # Canton (participants + synchronizer). Metrics surface daml.*
+  # (ledger api), canton.* (sync + participant), and jvm_* (heap,
+  # GC). Reporter is enabled by the image's own monitoring.conf —
+  # no overlay needed.
+  - job_name: canton
+    static_configs:
+      - targets: ["canton:10013"]
+        labels:
+          component: canton
+
+  # Splice JVM (super-validator + validator + Scan + ANS).
+  # Same monitoring.conf shape; emits business-level metrics
+  # (round counts, traffic, super-validator activity) alongside
+  # standard JVM + Daml ledger client metrics.
+  - job_name: splice
+    static_configs:
+      - targets: ["splice:10013"]
+        labels:
+          component: splice
