@@ -3,12 +3,24 @@ package localnet
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	apitypes "github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	corelocalnet "github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
+
+var errEnvWriter = errors.New("env writer failed")
+
+type failingEnvWriter struct{}
+
+func (failingEnvWriter) Write([]byte) (int, error) {
+	return 0, errEnvWriter
+}
 
 func seedEnvInstance(t *testing.T, name string) {
 	t.Helper()
@@ -57,19 +69,19 @@ func TestEnv_ShellOutputIsPosixQuoted(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"CANTON_INSTANCE='demo'",
-		"CANTON_SPLICE_VERSION='0.6.4'",
-		// Use filepath.Join via Sprintf so the assertion holds
+		"export CANTON_INSTANCE='demo'",
+		"export CANTON_SPLICE_VERSION='0.6.4'",
+		// Use filepath.Join so the assertion holds
 		// on Windows (\) and POSIX (/) -- mirrors the
 		// production filepath.Join in env.go::collectEnv.
-		"CANTON_AUTH_FILE='" + filepath.Join("/test/demo", "auth.json") + "'",
-		"CANTON_APP_USER_UI_PORT='4485'",
-		"CANTON_APP_PROVIDER_UI_PORT='3485'",
-		"CANTON_POSTGRES_PORT='5432'",
-		"CANTON_SV_JWT='<redacted>'",
-		"CANTON_SV_USER='sv-user'",
-		"CANTON_SV_AUDIENCE='sv-aud'",
-		"CANTON_APP_USER_JWT='<redacted>'",
+		"export CANTON_AUTH_FILE='" + filepath.Join("/test/demo", "auth.json") + "'",
+		"export CANTON_APP_USER_UI_PORT='4485'",
+		"export CANTON_APP_PROVIDER_UI_PORT='3485'",
+		"export CANTON_POSTGRES_PORT='5432'",
+		"export CANTON_SV_JWT='<redacted>'",
+		"export CANTON_SV_USER='sv-user'",
+		"export CANTON_SV_AUDIENCE='sv-aud'",
+		"export CANTON_APP_USER_JWT='<redacted>'",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output missing %q\nfull:\n%s", want, out.String())
@@ -103,7 +115,7 @@ func TestEnv_ShellQuotesNeutraliseInjection(t *testing.T) {
 	// Must contain the hostile substring AS A LITERAL inside
 	// single quotes. The `$()` and backticks must NOT appear
 	// outside surrounding quotes.
-	wantLiteral := "CANTON_AUTH_FILE='" + filepath.Join("/tmp/$(rm -rf ~); echo pwned `id`", "auth.json") + "'"
+	wantLiteral := "export CANTON_AUTH_FILE='" + filepath.Join("/tmp/$(rm -rf ~); echo pwned `id`", "auth.json") + "'"
 	if !strings.Contains(out.String(), wantLiteral) {
 		t.Errorf("hostile DataDir not POSIX-quoted; output:\n%s\nwant substring: %s", out.String(), wantLiteral)
 	}
@@ -145,7 +157,7 @@ func TestEnv_IncludeJWTOptIn(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 
-	if !strings.Contains(out.String(), "CANTON_SV_JWT='eyJ.svtoken.sig'") {
+	if !strings.Contains(out.String(), "export CANTON_SV_JWT='eyJ.svtoken.sig'") {
 		t.Errorf("expected raw JWT under --include-jwt, got\n%s", out.String())
 	}
 }
@@ -255,9 +267,12 @@ func TestEnv_JSONShape(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 
-	var got EnvExport
+	var got apitypes.EnvExport
 	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
 		t.Fatalf("unmarshal: %v\nbody=%s", err, out.String())
+	}
+	if got.SchemaVersion != apitypes.SchemaVersion {
+		t.Errorf("SchemaVersion = %d, want %d", got.SchemaVersion, apitypes.SchemaVersion)
 	}
 	if got.Instance != "demo" {
 		t.Errorf("Instance = %q, want demo", got.Instance)
@@ -282,7 +297,7 @@ func TestEnv_JSONIncludeJWT(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	var got EnvExport
+	var got apitypes.EnvExport
 	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
 		t.Fatalf("unmarshal: %v\nbody=%s", err, out.String())
 	}
@@ -301,8 +316,12 @@ func TestEnv_NotFoundIsUserError(t *testing.T) {
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{"--name", "ghost"})
-	if err := cmd.Execute(); err == nil {
+	err := cmd.Execute()
+	if err == nil {
 		t.Fatal("expected error for unknown instance")
+	}
+	if exit, ok := err.(corelocalnet.ExitCodeError); !ok || int(exit) != corelocalnet.ExitUserError {
+		t.Fatalf("error = %T %[1]v, want ExitUserError", err)
 	}
 	if !strings.Contains(errBuf.String(), `"ghost"`) {
 		t.Errorf("stderr should name the missing instance, got %q", errBuf.String())
@@ -320,8 +339,69 @@ func TestEnv_RejectsUnknownFormat(t *testing.T) {
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{"--name", "demo", "--format=xml"})
-	if err := cmd.Execute(); err == nil {
+	err := cmd.Execute()
+	if err == nil {
 		t.Fatal("expected error for unknown --format")
+	}
+	if exit, ok := err.(corelocalnet.ExitCodeError); !ok || int(exit) != corelocalnet.ExitUserError {
+		t.Fatalf("error = %T %[1]v, want ExitUserError", err)
+	}
+	if !strings.Contains(out.String(), `--format must be shell, dotenv, or json (got "xml")`) {
+		t.Errorf("stderr = %q, want format validation message", out.String())
+	}
+}
+
+func TestEnv_RejectsInvalidNameAsUserError(t *testing.T) {
+	cmd := buildEnv()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	cmd.SetArgs([]string{"--name", "bad/name"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for invalid name")
+	}
+	if exit, ok := err.(corelocalnet.ExitCodeError); !ok || int(exit) != corelocalnet.ExitUserError {
+		t.Fatalf("error = %T %[1]v, want ExitUserError", err)
+	}
+	if out.String() == "" {
+		t.Fatal("expected validation message on stderr")
+	}
+}
+
+func TestEnv_WriterErrorsPropagate(t *testing.T) {
+	ex := apitypes.EnvExport{
+		SchemaVersion: apitypes.SchemaVersion,
+		Instance:      "demo",
+		Vars:          map[string]string{"CANTON_INSTANCE": "demo"},
+	}
+	for name, write := range map[string]func(io.Writer, apitypes.EnvExport) error{
+		"shell":  writeEnvShell,
+		"dotenv": writeEnvDotenv,
+		"json":   writeEnvJSON,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := write(failingEnvWriter{}, ex); !errors.Is(err, errEnvWriter) {
+				t.Fatalf("error = %v, want %v", err, errEnvWriter)
+			}
+		})
+	}
+}
+
+func TestEnv_CommandWriterErrorPropagates(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedEnvInstance(t, "demo")
+
+	cmd := buildEnv()
+	cmd.SetOut(failingEnvWriter{})
+	cmd.SetErr(io.Discard)
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	cmd.SetArgs([]string{"--name", "demo"})
+	if err := cmd.Execute(); !errors.Is(err, errEnvWriter) {
+		t.Fatalf("error = %v, want %v", err, errEnvWriter)
 	}
 }
 

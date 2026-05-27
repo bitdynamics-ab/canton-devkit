@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	apitypes "github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/spf13/cobra"
@@ -16,7 +17,7 @@ import (
 
 // buildEnv wires `dpm localnet env --name <inst>` -- BIT-125.
 //
-// Emits a block of KEY=value lines describing every endpoint and
+// Emits a block of exported KEY=value lines describing every endpoint and
 // credential of the instance, designed for the common shell idiom:
 //
 //	eval "$(dpm localnet env --name hubble)"
@@ -24,10 +25,9 @@ import (
 // Output style matches docs/design/mockups/screens-tokens-help.jsx
 // (ScreenEnv). Three formats:
 //
-//	shell  (default)  KEY=value  ;  comment lines start with #
-//	dotenv            same as shell (kept distinct so a future
-//	                  --quote variant doesn't break shell users)
-//	json              types.EnvExport for scripted consumers
+//	shell  (default)  export KEY='value' with POSIX quoting
+//	dotenv            KEY="value" with dotenv escaping
+//	json              api/types.EnvExport for scripted consumers
 //
 // The Web UI handler (BIT-131 GET /api/instances/:name/env) will
 // later call collectEnv() directly and emit the json variant.
@@ -40,7 +40,7 @@ func buildEnv() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "env",
 		Short: "Export LocalNet endpoints and credentials as env vars",
-		Long: `Prints a KEY=value block summarising the named LocalNet
+		Long: `Prints an exported KEY=value block summarising the named LocalNet
 instance -- every host port from the Ports map plus the user/
 audience for each captured credential. Use with:
 
@@ -48,15 +48,14 @@ audience for each captured credential. Use with:
 
 Formats:
 
-  shell    POSIX single-quoted KEY='value'  (default; eval-safe)
+  shell    POSIX single-quoted export KEY='value'  (default; eval-safe)
   dotenv   double-quoted KEY="value" with $/\/" escapes (dotenv spec)
   json     machine-readable shape; matches the Web UI handler
 
 JWTs are REDACTED by default (CANTON_<ROLE>_JWT=<redacted>) so
 CI logs / shared terminals don't leak the dev-only signing
-secret. Pass --include-jwt to opt in; the command refuses to
-emit a real JWT to a non-TTY stdout unless the flag is set, so
-piping to a file always requires opt-in.`,
+secret. Pass --include-jwt to opt in before piping or sourcing
+raw token values.`,
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -104,16 +103,6 @@ piping to a file always requires opt-in.`,
 // <redacted>" -> 401) instead of silently passing an empty header.
 const jwtRedaction = "<redacted>"
 
-// EnvExport is the typed shape returned by `--format=json` and the
-// future Web UI handler. Lives here (instead of internal/api/types)
-// because the underlying source is the instance-shaped State; once
-// status (BIT-144) lands, the shape moves into types/ alongside
-// Instance to avoid duplication.
-type EnvExport struct {
-	Instance string            `json:"instance"`
-	Vars     map[string]string `json:"vars"`
-}
-
 // collectEnv builds the export from the registry. Two sources:
 //
 //  1. state.Ports map -> CANTON_<UPPER>_PORT for each logical name.
@@ -128,14 +117,15 @@ type EnvExport struct {
 // Plus a small set of stable convenience keys (CANTON_INSTANCE,
 // CANTON_SPLICE_VERSION, CANTON_AUTH_FILE) so shell scripts can
 // branch on them without re-reading state.json.
-func collectEnv(name string, includeJWT bool) (EnvExport, error) {
+func collectEnv(name string, includeJWT bool) (apitypes.EnvExport, error) {
 	state, err := registry.Read(name)
 	if err != nil {
-		return EnvExport{}, err
+		return apitypes.EnvExport{}, err
 	}
-	out := EnvExport{
-		Instance: name,
-		Vars:     make(map[string]string, len(state.Ports)*2+len(state.Credentials)*3+3),
+	out := apitypes.EnvExport{
+		SchemaVersion: apitypes.SchemaVersion,
+		Instance:      name,
+		Vars:          make(map[string]string, len(state.Ports)*2+len(state.Credentials)*3+3),
 	}
 
 	out.Vars["CANTON_INSTANCE"] = name
@@ -193,7 +183,7 @@ func credEnvKeyPrefix(role string) string {
 	return "CANTON_" + upper
 }
 
-// writeEnvShell prints KEY='value' POSIX-single-quoted so the
+// writeEnvShell prints export KEY='value' POSIX-single-quoted so the
 // output is safe for `eval "$(dpm localnet env ...)"` even when a
 // value contains shell metacharacters ($ ` " \ space ;) -- which a
 // hostile registry.State or DataDir can absolutely contain (e.g.
@@ -206,7 +196,7 @@ func credEnvKeyPrefix(role string) string {
 //
 // Header comments document the instance + the eval idiom so the
 // output remains useful when piped to a file the user reads later.
-func writeEnvShell(w io.Writer, ex EnvExport) error {
+func writeEnvShell(w io.Writer, ex apitypes.EnvExport) error {
 	if _, err := fmt.Fprintf(w, "# Canton DevKit · localnet %s\n", shellQuote(ex.Instance)); err != nil {
 		return err
 	}
@@ -217,7 +207,7 @@ func writeEnvShell(w io.Writer, ex EnvExport) error {
 		return err
 	}
 	for _, k := range sortedKeys(ex.Vars) {
-		if _, err := fmt.Fprintf(w, "%s=%s\n", k, shellQuote(ex.Vars[k])); err != nil {
+		if _, err := fmt.Fprintf(w, "export %s=%s\n", k, shellQuote(ex.Vars[k])); err != nil {
 			return err
 		}
 	}
@@ -232,7 +222,7 @@ func writeEnvShell(w io.Writer, ex EnvExport) error {
 // $ ourselves -- interpolation is only possible for values that
 // were already $-quoted in the registry, which our writer values
 // never are.
-func writeEnvDotenv(w io.Writer, ex EnvExport) error {
+func writeEnvDotenv(w io.Writer, ex apitypes.EnvExport) error {
 	if _, err := fmt.Fprintf(w, "# Canton DevKit · localnet %s\n", ex.Instance); err != nil {
 		return err
 	}
@@ -272,7 +262,7 @@ func dotenvQuote(s string) string {
 // writeEnvJSON serialises EnvExport. We use indented JSON so the
 // `--format=json` output is a usable diff artefact when stashed in
 // a fixture or CI log.
-func writeEnvJSON(w io.Writer, ex EnvExport) error {
+func writeEnvJSON(w io.Writer, ex apitypes.EnvExport) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(ex)
