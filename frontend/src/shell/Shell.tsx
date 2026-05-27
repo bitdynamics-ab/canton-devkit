@@ -3,6 +3,7 @@ import { useState } from "react";
 import { W, wMono, wSans } from "../tokens";
 import { type ConnectionState, useConnectionHealth } from "./useConnectionHealth";
 import { type InstanceSelection, useInstanceSelection } from "./useInstanceSelection";
+import { CommandPalette } from "./CommandPalette";
 
 // Shell — sidebar + topbar layout from docs/design/mockups/webui-shell.jsx
 // (AppShell + TopBar). Children render in the main content area.
@@ -48,6 +49,9 @@ export function Shell({ children }: ShellProps) {
       >
         {children}
       </main>
+      {/* Palette is a portal-style overlay (position: fixed),
+          rendered inside the grid but escaping it visually. */}
+      <CommandPalette />
     </div>
   );
 }
@@ -74,6 +78,7 @@ function TopBar() {
       </span>
       <InstanceSwitcher sel={sel} />
       <div style={{ flex: 1 }} />
+      <PaletteHint />
       <span style={{ color: W.faint, fontSize: 11 }}>
         loopback only · ssh -L for remote
       </span>
@@ -197,6 +202,43 @@ function StatusDot({ status }: { status: string }) {
         flexShrink: 0,
       }}
     />
+  );
+}
+
+function PaletteHint() {
+  // Static visual hint that the ⌘K palette exists. Not a button —
+  // pressing the actual key opens the modal; this is purely for
+  // discovery. UA-sniff for the glyph because Mac users expect ⌘
+  // and Windows/Linux users expect Ctrl.
+  const isMac =
+    typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
+  const mod = isMac ? "⌘" : "Ctrl";
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        color: W.dim,
+        fontSize: 11,
+      }}
+      aria-hidden
+    >
+      <kbd
+        style={{
+          background: W.surface2,
+          border: `1px solid ${W.border}`,
+          borderRadius: 4,
+          padding: "1px 5px",
+          fontFamily: wMono,
+          fontSize: 10,
+          color: W.text2,
+        }}
+      >
+        {mod} K
+      </kbd>
+      <span>commands</span>
+    </span>
   );
 }
 
