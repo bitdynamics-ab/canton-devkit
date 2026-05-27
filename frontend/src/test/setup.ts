@@ -37,9 +37,15 @@ if (!window.matchMedia) {
 // hit this. jsdom omits the Clipboard API entirely, so tests that
 // click Copy would otherwise throw. Tests can spy on this via
 // vi.spyOn(navigator.clipboard, "writeText").
+//
+// configurable: true is critical — userEvent.setup() reassigns
+// navigator.clipboard internally for paste handling, and a
+// non-configurable property throws "Cannot redefine property:
+// clipboard" the moment any test calls userEvent.setup().
 if (!navigator.clipboard) {
   Object.defineProperty(navigator, "clipboard", {
     writable: true,
+    configurable: true,
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
   });
 }

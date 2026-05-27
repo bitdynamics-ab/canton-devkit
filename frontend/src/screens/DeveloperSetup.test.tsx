@@ -57,6 +57,7 @@ describe("DeveloperSetup — JwtPanel", () => {
     // Clipboard mock reset per test so spy.mock.calls is clean.
     Object.defineProperty(navigator, "clipboard", {
       writable: true,
+      configurable: true,
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
     });
   });
