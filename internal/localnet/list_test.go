@@ -127,6 +127,7 @@ func TestStatusGlyphHandlesStopping(t *testing.T) {
 func TestFormatPortRangeIgnoresNonUIKeys(t *testing.T) {
 	got := formatPortRange(map[string]int{
 		"canton_admin":      31337,
+		"postgres":          5432,
 		"postgres_internal": 5432,
 		"grpc":              9999,
 		"app_user_ui":       4441,
@@ -134,6 +135,26 @@ func TestFormatPortRangeIgnoresNonUIKeys(t *testing.T) {
 	})
 	if got != "4441–4487" {
 		t.Fatalf("formatPortRange = %q, want 4441–4487", got)
+	}
+}
+
+func TestRunListTextIncludesWarning(t *testing.T) {
+	regRoot := t.TempDir()
+	t.Setenv("CANTON_DEVKIT_REGISTRY", regRoot)
+	seedListInstance(t, "bad", registry.StatusRunning, map[string]int{"app_user_ui": 5441})
+
+	badPath := filepath.Join(regRoot, "bad", "state.json")
+	if err := os.WriteFile(badPath, []byte("{ not valid json"), 0o600); err != nil {
+		t.Fatalf("corrupt state: %v", err)
+	}
+
+	var out, errw bytes.Buffer
+	code := RunList(context.Background(), &out, &errw, &ListOptions{Format: "text", All: true})
+	if code != ExitSuccess {
+		t.Fatalf("RunList exit = %d, want %d; stderr=%s", code, ExitSuccess, errw.String())
+	}
+	if !strings.Contains(out.String(), "bad") || !strings.Contains(out.String(), "warning:") {
+		t.Fatalf("text output = %q, want row and warning", out.String())
 	}
 }
 

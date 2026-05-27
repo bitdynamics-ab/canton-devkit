@@ -93,7 +93,10 @@ func collectListRows(ctx context.Context, idx *registry.Index, opts *ListOptions
 			unreadable = append(unreadable, e.Name)
 		}
 
-		startedAgo := humanSince(e.CreatedAt)
+		startedAgo := ""
+		if e.Status == registry.StatusRunning {
+			startedAgo = humanSince(e.CreatedAt)
+		}
 		row := listRow{
 			Name:          e.Name,
 			SpliceVersion: e.SpliceVersion,
@@ -178,7 +181,6 @@ var portRangeKeys = []string{
 	"app_provider_ui",
 	"sv_ui",
 	"swagger_ui",
-	"postgres",
 }
 
 func formatPortRange(ports map[string]int) string {
