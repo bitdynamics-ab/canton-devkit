@@ -75,7 +75,7 @@ func TestTextProgress_Done_Styled_RendersBox(t *testing.T) {
 
 	got := out.String()
 	for _, want := range []string{
-		"✦",                                      // the brand glyph from the mockup
+		"✦",                                     // the brand glyph from the mockup
 		`Canton LocalNet "demo" (Splice 0.6.4)`, // detail string verbatim
 		"is ready",                              // detail tail
 		"localnet env",                          // the secondary CTA line

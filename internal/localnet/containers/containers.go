@@ -38,9 +38,9 @@ import (
 type Info struct {
 	Name    string `json:"name"`
 	Service string `json:"service"`
-	State   string `json:"state"`             // running / restarting / exited / dead / paused / created
-	Health  string `json:"health,omitempty"`  // healthy / unhealthy / starting / "" (no healthcheck)
-	Status  string `json:"status"`            // raw human string ("Up 4 minutes (health: starting)")
+	State   string `json:"state"`            // running / restarting / exited / dead / paused / created
+	Health  string `json:"health,omitempty"` // healthy / unhealthy / starting / "" (no healthcheck)
+	Status  string `json:"status"`           // raw human string ("Up 4 minutes (health: starting)")
 	Image   string `json:"image,omitempty"`
 }
 
@@ -233,12 +233,5 @@ type dockerComposePsEntry struct {
 }
 
 func (e dockerComposePsEntry) toInfo() Info {
-	return Info{
-		Name:    e.Name,
-		Service: e.Service,
-		State:   e.State,
-		Health:  e.Health,
-		Status:  e.Status,
-		Image:   e.Image,
-	}
+	return Info(e)
 }

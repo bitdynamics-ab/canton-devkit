@@ -199,9 +199,11 @@ func handleList(w http.ResponseWriter, _ *http.Request) {
 // Firefox, Edge, recent Safari) resolve `*.localhost` to 127.0.0.1
 // per RFC 6761, so `wallet.localhost:<port>` works without any
 // /etc/hosts edits. See:
-//   conf/nginx/sv.conf          (server_name wallet.localhost)
-//   conf/nginx/app-user.conf    (server_name localhost wallet.localhost)
-//   conf/nginx/app-provider.conf (server_name wallet.localhost)
+//
+//	conf/nginx/sv.conf          (server_name wallet.localhost)
+//	conf/nginx/app-user.conf    (server_name localhost wallet.localhost)
+//	conf/nginx/app-provider.conf (server_name wallet.localhost)
+//
 // Previously we emitted `http://localhost:<port>` which on sv +
 // app-provider rendered the wrong app (the SV landing page on sv
 // triggers an unrelated "Failed to connect to MetaMask" toast from
@@ -270,9 +272,7 @@ func handleDetail(w http.ResponseWriter, r *http.Request) {
 	// here — the credentials map carries them and stays redacted at
 	// this surface. TODO(BIT-144-merge): unify with CollectStatus's
 	// projection once that lands.
-	for _, e := range walletEndpointsFromPorts(s.Ports) {
-		inst.Endpoints = append(inst.Endpoints, e)
-	}
+	inst.Endpoints = append(inst.Endpoints, walletEndpointsFromPorts(s.Ports)...)
 	writeJSON(w, http.StatusOK, inst)
 }
 
@@ -511,19 +511,19 @@ type upAcceptedResponse struct {
 // Validation order (cheapest first; each rejection fails the
 // request before any work):
 //
-//	1. body decode + size cap
-//	2. RFC 1123 DNS-label name validation
-//	3. duplicate-name check (registry has an entry OR jobs
-//	   registry has an in-flight goroutine)
+//  1. body decode + size cap
+//  2. RFC 1123 DNS-label name validation
+//  3. duplicate-name check (registry has an entry OR jobs
+//     registry has an in-flight goroutine)
 //
 // Then:
 //
-//	4. hub.EnableBuffering(topic, 128)
-//	5. context.WithCancel — cancel stored in jobs registry for
-//	   the future DELETE handler (BIT-163e); context.WithTimeout
-//	   wraps that with the 10-minute job ceiling
-//	6. spawn goroutine → RunUp(ctx, SSEProgress, opts)
-//	7. return 202 with {instance, events_url}
+//  4. hub.EnableBuffering(topic, 128)
+//  5. context.WithCancel — cancel stored in jobs registry for
+//     the future DELETE handler (BIT-163e); context.WithTimeout
+//     wraps that with the 10-minute job ceiling
+//  6. spawn goroutine → RunUp(ctx, SSEProgress, opts)
+//  7. return 202 with {instance, events_url}
 //
 // The goroutine's deferred cleanup:
 //
@@ -855,9 +855,10 @@ func handleDownInstance() http.HandlerFunc {
 		// RunDown writes friendly errors to errw; surface those
 		// directly so the frontend can render them.
 		status := http.StatusInternalServerError
-		if exit == localnet.ExitUserError {
+		switch exit {
+		case localnet.ExitUserError:
 			status = http.StatusBadRequest
-		} else if exit == localnet.ExitTimeout {
+		case localnet.ExitTimeout:
 			status = http.StatusRequestTimeout
 		}
 		cause := errBuf.String()
@@ -984,10 +985,11 @@ func looksLikeWarningLine(line string) bool {
 // fields the UI actually needs.
 //
 // State + Health are the high-leverage diagnostic pair:
-//   State    = docker container state — running, restarting,
-//              exited, dead, created, paused
-//   Health   = docker healthcheck verdict — healthy, unhealthy,
-//              starting, "" (no healthcheck defined)
+//
+//	State    = docker container state — running, restarting,
+//	           exited, dead, created, paused
+//	Health   = docker healthcheck verdict — healthy, unhealthy,
+//	           starting, "" (no healthcheck defined)
 //
 // The user's frustration we're addressing: registry's hard-coded
 // `running|stopped|failed|...` enum hides truth like "canton is
@@ -1008,11 +1010,11 @@ type ContainersResponse struct {
 	Instance      string            `json:"instance"`
 	Containers    []ContainerHealth `json:"containers"`
 	// Counters the frontend uses for a one-glance summary pill.
-	HealthyCount  int `json:"healthy_count"`
-	StartingCount int `json:"starting_count"`
-	UnhealthyCount int `json:"unhealthy_count"`
+	HealthyCount    int `json:"healthy_count"`
+	StartingCount   int `json:"starting_count"`
+	UnhealthyCount  int `json:"unhealthy_count"`
 	RestartingCount int `json:"restarting_count"`
-	ExitedCount   int `json:"exited_count"`
+	ExitedCount     int `json:"exited_count"`
 }
 
 // handleInstanceContainers: GET /api/instances/{name}/containers.
@@ -1728,22 +1730,23 @@ type observabilityToggleRequest struct {
 //
 // Body: {"enabled": true|false}
 //
-//   enabled=true  → MaterializeObservabilityOverlay into dataDir,
-//                   append the overlay to state.ComposeFiles if
-//                   absent, run `docker compose ... --profile
-//                   observability up -d prometheus grafana`,
-//                   discover the new host port, persist into
-//                   state.Ports["prometheus_ui"].
-//   enabled=false → `docker compose ... stop prometheus grafana`
-//                   then `... rm -f prometheus grafana`. Clear the
-//                   port from state.json. Canton + splice are
-//                   untouched.
+//	enabled=true  → MaterializeObservabilityOverlay into dataDir,
+//	                append the overlay to state.ComposeFiles if
+//	                absent, run `docker compose ... --profile
+//	                observability up -d prometheus grafana`,
+//	                discover the new host port, persist into
+//	                state.Ports["prometheus_ui"].
+//	enabled=false → `docker compose ... stop prometheus grafana`
+//	                then `... rm -f prometheus grafana`. Clear the
+//	                port from state.json. Canton + splice are
+//	                untouched.
 //
 // Failure modes:
-//   404 INSTANCE_NOT_FOUND       — name unknown
-//   409 INSTANCE_NOT_RUNNING     — toggle requires a live stack
-//   409 INSTANCE_BUSY            — another op holds the lock
-//   502 OBSERVABILITY_TOGGLE_FAIL — docker compose returned non-zero
+//
+//	404 INSTANCE_NOT_FOUND       — name unknown
+//	409 INSTANCE_NOT_RUNNING     — toggle requires a live stack
+//	409 INSTANCE_BUSY            — another op holds the lock
+//	502 OBSERVABILITY_TOGGLE_FAIL — docker compose returned non-zero
 func handleObservabilityToggle() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")

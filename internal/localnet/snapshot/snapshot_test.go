@@ -87,12 +87,12 @@ func seedSnapshotInstance(t *testing.T, name string) {
 	// every per-role map AND the DSO party so the round-trip test
 	// (yellow Y11) can assert each one preserved verbatim.
 	s.Ports = map[string]int{
-		"app_user_ui":                    4485,
-		"app_provider_ui":                4486,
-		"sv_ui":                          4487,
-		"participant_admin_app-user":     4488,
-		"participant_ledger_app-user":    4489,
-		"participant_json_app-user":      4490,
+		"app_user_ui":                 4485,
+		"app_provider_ui":             4486,
+		"sv_ui":                       4487,
+		"participant_admin_app-user":  4488,
+		"participant_ledger_app-user": 4489,
+		"participant_json_app-user":   4490,
 	}
 	s.Credentials = map[string]registry.Credential{
 		"app-user":     {Role: "app-user", User: "ledger-api-user", Audience: "aud", JWT: "eyJ.app-user-jwt"},

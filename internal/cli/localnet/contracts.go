@@ -30,9 +30,9 @@ const contractsTxSchemaVersion = 1
 //
 // Sub-verbs:
 //
-//   watch — stream Active Contract Set changes (StateService.GetActiveContracts
-//           + UpdateService.GetUpdates for ongoing deltas).
-//   ls    — paginated snapshot of the current ACS (StateService.GetActiveContracts).
+//	watch — stream Active Contract Set changes (StateService.GetActiveContracts
+//	        + UpdateService.GetUpdates for ongoing deltas).
+//	ls    — paginated snapshot of the current ACS (StateService.GetActiveContracts).
 //
 // Both default to text output (term.Table); --format json emits a
 // stable JSON shape with schema_version suitable for jq / CI

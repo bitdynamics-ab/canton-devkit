@@ -20,10 +20,11 @@ type containerObs struct {
 }
 
 // diagnoseFromObs is the pure decision table. Returns one of:
-//   ErrCodeCantonOOM        — restart loop with kernel SIGKILL signal
-//                              AND the JVM warning OR canton service
-//   ErrCodeContainerUnhealthy — generic "unhealthy but not OOM"
-//   ""                       — no signal, caller picks the fallback
+//
+//	ErrCodeCantonOOM        — restart loop with kernel SIGKILL signal
+//	                           AND the JVM warning OR canton service
+//	ErrCodeContainerUnhealthy — generic "unhealthy but not OOM"
+//	""                       — no signal, caller picks the fallback
 //
 // New signals slot in here without touching the IO layer.
 func diagnoseFromObs(c containerObs) string {

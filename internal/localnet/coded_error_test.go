@@ -141,7 +141,7 @@ func TestPreflightCodeFromReport(t *testing.T) {
 			want:   ErrCodePreflightFailed,
 		},
 		{
-			name: "All passing → catch-all (same as empty — defensive)",
+			name:   "All passing → catch-all (same as empty — defensive)",
 			report: mk(pass("Docker CLI"), pass("Docker daemon")),
 			want:   ErrCodePreflightFailed,
 		},

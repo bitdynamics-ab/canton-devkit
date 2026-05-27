@@ -24,7 +24,7 @@ func TestServer_BindsToLoopbackByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -62,7 +62,7 @@ func TestServer_PortZeroAssignsFreePort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	_, portStr, _ := net.SplitHostPort(addr)
 	if portStr == "0" || portStr == "" {
@@ -141,14 +141,15 @@ func TestServer_HealthzReturnsOK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	go srv.Serve() //nolint:errcheck — checked below via Shutdown.
-	defer srv.Shutdown(context.Background())
+	// Errors checked below via Shutdown.
+	go func() { _ = srv.Serve() }()
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	resp, err := http.Get("http://" + addr + "/healthz")
 	if err != nil {
 		t.Fatalf("GET /healthz: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("status = %d, want 200", resp.StatusCode)
 	}

@@ -24,11 +24,10 @@ import (
 // requests during a refresh see the stale value rather than
 // queueing behind a slow GitHub call.
 type upstreamCache struct {
-	mu       sync.RWMutex
-	rows     []splice.VersionStatus
-	fetched  time.Time
-	ttl      time.Duration
-	inflight bool
+	mu      sync.RWMutex
+	rows    []splice.VersionStatus
+	fetched time.Time
+	ttl     time.Duration
 }
 
 // upstreamCacheTTL is how long a successful CrossReferenceUpstream

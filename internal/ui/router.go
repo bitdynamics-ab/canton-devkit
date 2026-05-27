@@ -40,10 +40,10 @@ func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
 	handlers.MountSpliceVersions(mux)
 	handlers.MountPreflight(mux)
 	handlers.MountMetrics(mux)
-	handlers.MountSnapshots(mux) // BIT-184 — UI parity for snapshot/restore
-	handlers.MountDAR(mux)       // BIT-187 — DAR Manager (list uploaded DARs)
-	handlers.MountContracts(mux)     // BIT-186 — Explorer (ACS snapshot)
-	handlers.MountTransactions(mux)  // BIT-186 — Explorer (Transactions/Timeline)
+	handlers.MountSnapshots(mux)    // BIT-184 — UI parity for snapshot/restore
+	handlers.MountDAR(mux)          // BIT-187 — DAR Manager (list uploaded DARs)
+	handlers.MountContracts(mux)    // BIT-186 — Explorer (ACS snapshot)
+	handlers.MountTransactions(mux) // BIT-186 — Explorer (Transactions/Timeline)
 	// /events (SSE) — added by BIT-130. Handler does its own
 	// Origin check (sse.go) since EventSource sends GET and the
 	// global CSRF middleware is GET-exempt.

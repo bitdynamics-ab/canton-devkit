@@ -193,7 +193,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	// existing CLI line. TextProgress writes it verbatim; SSEProgress
 	// gets it as a console-style event so the browser sees the same
 	// banner.
-	fmt.Fprintf(prog.Out(), "Starting Canton LocalNet %q (Splice %s, adapter %s)...\n",
+	_, _ = fmt.Fprintf(prog.Out(), "Starting Canton LocalNet %q (Splice %s, adapter %s)...\n",
 		opts.Name, version.Tag, adapter.MajorVersion())
 
 	// 2. Per-instance lock. Released on any return path.

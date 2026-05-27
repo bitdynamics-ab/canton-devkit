@@ -233,10 +233,10 @@ func (t *TextProgress) StartStep(step Step, detail string) {
 		// Plain path — historical byte-stable output for non-TTY
 		// callers (tests, pipes, CI).
 		if detail == "" {
-			fmt.Fprintf(t.OutW, "%s...\n", label)
+			_, _ = fmt.Fprintf(t.OutW, "%s...\n", label)
 			return
 		}
-		fmt.Fprintf(t.OutW, "%s (%s)...\n", label, detail)
+		_, _ = fmt.Fprintf(t.OutW, "%s (%s)...\n", label, detail)
 		return
 	}
 	// BIT-122 styled path — mockup-aligned section header. Maps
@@ -249,8 +249,8 @@ func (t *TextProgress) StartStep(step Step, detail string) {
 		right = detail
 	}
 	body := term.Dimc("(running…)")
-	fmt.Fprintln(t.OutW)
-	fmt.Fprintln(t.OutW, term.Section(label, right, body, 0))
+	_, _ = fmt.Fprintln(t.OutW)
+	_, _ = fmt.Fprintln(t.OutW, term.Section(label, right, body, 0))
 }
 
 // UpdateStep is a no-op in the CLI: the existing up.go doesn't
@@ -272,16 +272,16 @@ func (t *TextProgress) FinishStep(_ Step, _ string) {}
 // scattered through up.go today.
 func (t *TextProgress) FailStep(_ Step, summary string, cause error) {
 	if cause == nil {
-		fmt.Fprintln(t.ErrW, summary)
+		_, _ = fmt.Fprintln(t.ErrW, summary)
 		return
 	}
-	fmt.Fprintf(t.ErrW, "%s: %s\n", summary, cause)
+	_, _ = fmt.Fprintf(t.ErrW, "%s: %s\n", summary, cause)
 }
 
 // Warn writes a "warning: ..." line to stderr. Mirrors the existing
 // dev-secret warning + JWT capture warnings in up.go.
 func (t *TextProgress) Warn(message string) {
-	fmt.Fprintf(t.ErrW, "warning: %s\n", message)
+	_, _ = fmt.Fprintf(t.ErrW, "warning: %s\n", message)
 }
 
 // Done is the success marker. Today's up.go ends with:
@@ -299,16 +299,16 @@ func (t *TextProgress) Done(detail string) {
 		return
 	}
 	if !t.tty {
-		fmt.Fprintf(t.OutW, "\n%s\n\n", detail)
+		_, _ = fmt.Fprintf(t.OutW, "\n%s\n\n", detail)
 		return
 	}
 	body := term.Brandc("✦ ") + term.Textc(detail) + "\n" +
 		term.Dimc("Run ") + term.Textc("dpm localnet env") +
 		term.Dimc(" to export config, or ") + term.Textc("dpm localnet ui") +
 		term.Dimc(" to open the dashboard.")
-	fmt.Fprintln(t.OutW)
-	fmt.Fprintln(t.OutW, term.Box(term.BoxBrand, body))
-	fmt.Fprintln(t.OutW)
+	_, _ = fmt.Fprintln(t.OutW)
+	_, _ = fmt.Fprintln(t.OutW, term.Box(term.BoxBrand, body))
+	_, _ = fmt.Fprintln(t.OutW)
 }
 
 // Out returns the underlying stdout writer — for already-formatted
@@ -336,11 +336,11 @@ func labelFor(step Step) string {
 // io.Discard so any verbatim block writes don't crash.
 type NopProgress struct{}
 
-func (NopProgress) StartStep(Step, string)            {}
-func (NopProgress) UpdateStep(Step, string, int)      {}
-func (NopProgress) FinishStep(Step, string)           {}
-func (NopProgress) FailStep(Step, string, error)      {}
-func (NopProgress) Warn(string)                       {}
-func (NopProgress) Done(string)                       {}
-func (NopProgress) Out() io.Writer                    { return io.Discard }
-func (NopProgress) Err() io.Writer                    { return io.Discard }
+func (NopProgress) StartStep(Step, string)       {}
+func (NopProgress) UpdateStep(Step, string, int) {}
+func (NopProgress) FinishStep(Step, string)      {}
+func (NopProgress) FailStep(Step, string, error) {}
+func (NopProgress) Warn(string)                  {}
+func (NopProgress) Done(string)                  {}
+func (NopProgress) Out() io.Writer               { return io.Discard }
+func (NopProgress) Err() io.Writer               { return io.Discard }

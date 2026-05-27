@@ -24,7 +24,7 @@ import (
 // (avoids CORS + lets the handler enforce auth/JWT once that
 // lands).
 //
-//   GET /api/instances/{name}/metrics?query=<PromQL>
+//	GET /api/instances/{name}/metrics?query=<PromQL>
 //
 // Returns Prometheus's `/api/v1/query` response verbatim when the
 // scrape succeeds. Returns 503 with a structured envelope when
@@ -139,13 +139,13 @@ func handleMetricsQuery() http.HandlerFunc {
 //
 // Parameters:
 //   - query    : PromQL expression (same allowlist as the instant
-//                handler; promQueryRE)
+//     handler; promQueryRE)
 //   - window   : duration string ("5m", "1h", "24h"); clamped to
-//                [1m, 24h]
+//     [1m, 24h]
 //   - step     : duration string ("10s", "1m"); clamped to [5s, 1h];
-//                defaults to window/60 so a default window yields
-//                ~60 samples (good chart resolution without
-//                hammering Prometheus)
+//     defaults to window/60 so a default window yields
+//     ~60 samples (good chart resolution without
+//     hammering Prometheus)
 //
 // Same OBSERVABILITY_PROFILE_OFF semantics as the summary endpoint:
 // 503 with structured envelope when Prometheus isn't running for
@@ -345,7 +345,7 @@ func proxyPrometheus(ctx context.Context, project, path string) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	// Cap body at 16 MiB + 1 so we can detect overrun.
 	const maxBody = 16 << 20
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))

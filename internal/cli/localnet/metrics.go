@@ -209,7 +209,7 @@ func promQuery(ctx context.Context, base, query string) (*float64, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("prometheus returned %s", resp.Status)
 	}

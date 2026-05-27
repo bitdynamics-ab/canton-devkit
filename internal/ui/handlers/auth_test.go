@@ -86,12 +86,12 @@ func TestJWT_DefaultRoleIssued(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var got jwtResponse
-	json.NewDecoder(resp.Body).Decode(&got)
+	_ = json.NewDecoder(resp.Body).Decode(&got)
 	if got.Role != "app-provider" {
 		t.Errorf("default Role = %q, want app-provider", got.Role)
 	}
@@ -128,9 +128,9 @@ func TestJWT_ExplicitRoleAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var got jwtResponse
-	json.NewDecoder(resp.Body).Decode(&got)
+	_ = json.NewDecoder(resp.Body).Decode(&got)
 	if got.Role != "sv" {
 		t.Errorf("Role = %q, want sv", got.Role)
 	}
@@ -153,7 +153,7 @@ func TestJWT_UnknownRoleReturns400(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
@@ -167,7 +167,7 @@ func TestJWT_MissingInstanceReturns404(t *testing.T) {
 
 	resp, _ := http.Post(srv.URL+"/api/instances/ghost/jwt",
 		"application/json", strings.NewReader(""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
@@ -185,7 +185,7 @@ func TestAppConfig_EnvFormatIsDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
 		t.Errorf("default Content-Type = %q, want text/plain", ct)
 	}
@@ -207,12 +207,12 @@ func TestAppConfig_JSONFormat(t *testing.T) {
 	srv := authMux(t)
 
 	resp, _ := http.Get(srv.URL + "/api/instances/demo/app-config?format=json")
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
 		t.Errorf("Content-Type = %q, want application/json", ct)
 	}
 	var got appConfigPayload
-	json.NewDecoder(resp.Body).Decode(&got)
+	_ = json.NewDecoder(resp.Body).Decode(&got)
 	if got.Name != "demo" {
 		t.Errorf("Name = %q, want demo", got.Name)
 	}
@@ -233,7 +233,7 @@ func TestAppConfig_YAMLFormat(t *testing.T) {
 	srv := authMux(t)
 
 	resp, _ := http.Get(srv.URL + "/api/instances/demo/app-config?format=yaml")
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/yaml") {
 		t.Errorf("Content-Type = %q, want application/yaml", ct)
 	}
@@ -254,7 +254,7 @@ func TestAppConfig_UnknownFormatReturns400(t *testing.T) {
 	srv := authMux(t)
 
 	resp, _ := http.Get(srv.URL + "/api/instances/demo/app-config?format=xml")
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400 for unknown format", resp.StatusCode)
 	}
@@ -277,10 +277,10 @@ func TestJWT_RedactedByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var got jwtResponse
-	json.NewDecoder(resp.Body).Decode(&got)
+	_ = json.NewDecoder(resp.Body).Decode(&got)
 	if !got.Redacted {
 		t.Error("Redacted = false by default — token will leak through screenshots/logs")
 	}
@@ -313,7 +313,7 @@ func TestJWT_BodyCapEnforced(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	// Either 400 (decode failed because cap clipped JSON) or
 	// 413 (MaxBytesReader explicitly returned). Both are acceptable
 	// rejections; what's NOT acceptable is 200 (cap regressed).
@@ -346,7 +346,7 @@ func TestJWT_AuditLogEmittedOnIssue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	logLine := logBuf.String()
 	for _, want := range []string{
@@ -360,11 +360,11 @@ func TestJWT_AuditLogEmittedOnIssue(t *testing.T) {
 		}
 	}
 	// Audit MUST NOT include the raw token (even an audit log
-	// shouldn't carry the secret).
+	// shouldn't carry the secret). JWTs have 2 dots; audit format
+	// adds a few from the audience URL — a leaked JWT pushes well
+	// past 4. Tight threshold is fine as a smell check.
 	if strings.Count(logLine, ".") > 4 {
-		// JWTs have 2 dots; the audit format has a few more from
-		// the audience URL. A leaked JWT would push >>4. Tight
-		// threshold is fine here as a smell check.
+		t.Errorf("audit line has too many dots (looks like a leaked JWT): %s", logLine)
 	}
 	if strings.Contains(logLine, "eyJ") {
 		t.Error("audit log contains a raw JWT (starts with eyJ) — secret leaked into logs")
@@ -391,7 +391,7 @@ func TestJWT_AuditLogNotesRedactedByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if !strings.Contains(logBuf.String(), "raw=false") {
 		t.Errorf("audit log missing raw=false on redacted issue:\n%s", logBuf.String())
@@ -416,7 +416,7 @@ func TestErrorBody_AlignedWithFriendlyTaxonomy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
 	}
@@ -493,7 +493,7 @@ func TestAuth_CacheControlNoStore(t *testing.T) {
 			t.Fatalf("%s: %v", url, err)
 		}
 		got := resp.Header.Get("Cache-Control")
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if got != "no-store" {
 			t.Errorf("%s Cache-Control = %q, want no-store — credentials cacheable", url, got)
 		}

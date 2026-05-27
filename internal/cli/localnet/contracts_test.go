@@ -66,18 +66,18 @@ func TestBuildEventFormat_PartyHandling(t *testing.T) {
 // the contract.
 func TestBuildTemplateFilters_ParseShapes(t *testing.T) {
 	cases := []struct {
-		name     string
-		in       []string
-		wantErr  bool
-		wantPkg  string // for the first parsed filter
-		wantMod  string
+		name       string
+		in         []string
+		wantErr    bool
+		wantPkg    string // for the first parsed filter
+		wantMod    string
 		wantEntity string
 		wantCount  int
 	}{
 		{
-			name:       "empty input → nil filters (wildcard)",
-			in:         nil,
-			wantCount:  0,
+			name:      "empty input → nil filters (wildcard)",
+			in:        nil,
+			wantCount: 0,
 		},
 		{
 			name:       "Module:Entity (no package pin)",
@@ -96,14 +96,14 @@ func TestBuildTemplateFilters_ParseShapes(t *testing.T) {
 			wantCount:  1,
 		},
 		{
-			name:      "single segment is invalid",
-			in:        []string{"Token"},
-			wantErr:   true,
+			name:    "single segment is invalid",
+			in:      []string{"Token"},
+			wantErr: true,
 		},
 		{
-			name:      "too many segments invalid",
-			in:        []string{"a:b:c:d:e"},
-			wantErr:   true,
+			name:    "too many segments invalid",
+			in:      []string{"a:b:c:d:e"},
+			wantErr: true,
 		},
 		{
 			name:       "multiple templates accumulate",
@@ -178,35 +178,35 @@ func TestBuildUpdateFormat_HasACSDeltaShape(t *testing.T) {
 // that BIT-136 review flagged as missing.
 func TestResolveOffsetWindow(t *testing.T) {
 	cases := []struct {
-		name                              string
-		fromOff, toOff, limit, ledgerEnd  int64
-		wantBegin                         int64
-		wantEnd                           int64
-		wantErr                           bool
+		name                             string
+		fromOff, toOff, limit, ledgerEnd int64
+		wantBegin                        int64
+		wantEnd                          int64
+		wantErr                          bool
 	}{
 		{
-			name:      "no flags → end-limit window",
-			limit:     50, ledgerEnd: 1000,
+			name:  "no flags → end-limit window",
+			limit: 50, ledgerEnd: 1000,
 			wantBegin: 950, wantEnd: 1000,
 		},
 		{
-			name:      "limit larger than end → clamps to 0",
-			limit:     2000, ledgerEnd: 100,
+			name:  "limit larger than end → clamps to 0",
+			limit: 2000, ledgerEnd: 100,
 			wantBegin: 0, wantEnd: 100,
 		},
 		{
-			name:      "explicit --to overrides ledger end",
-			limit:     10, toOff: 500, ledgerEnd: 1000,
+			name:  "explicit --to overrides ledger end",
+			limit: 10, toOff: 500, ledgerEnd: 1000,
 			wantBegin: 490, wantEnd: 500,
 		},
 		{
-			name:      "explicit --from overrides --limit",
-			fromOff:   200, limit: 10, ledgerEnd: 1000,
+			name:    "explicit --from overrides --limit",
+			fromOff: 200, limit: 10, ledgerEnd: 1000,
 			wantBegin: 200, wantEnd: 1000,
 		},
 		{
-			name:      "explicit --from and --to",
-			fromOff:   100, toOff: 300, ledgerEnd: 1000,
+			name:    "explicit --from and --to",
+			fromOff: 100, toOff: 300, ledgerEnd: 1000,
 			wantBegin: 100, wantEnd: 300,
 		},
 		{
@@ -250,11 +250,11 @@ func TestTruncMiddle(t *testing.T) {
 		n    int
 		want string
 	}{
-		{"short", 10, "short"},                       // fits
-		{"exactlength", 11, "exactlength"},           // exactly fits
-		{"abcdefghijklmnopqrst", 9, "abcd…qrst"},     // middle-trunc with keep=4 + tail=4
-		{"abcdefghij", 5, "ab…ij"},                   // middle-trunc with keep=2 + tail=2
-		{"abc", 2, "a…"},                             // n<5 falls through to truncTail
+		{"short", 10, "short"},                   // fits
+		{"exactlength", 11, "exactlength"},       // exactly fits
+		{"abcdefghijklmnopqrst", 9, "abcd…qrst"}, // middle-trunc with keep=4 + tail=4
+		{"abcdefghij", 5, "ab…ij"},               // middle-trunc with keep=2 + tail=2
+		{"abc", 2, "a…"},                         // n<5 falls through to truncTail
 	}
 	for _, c := range cases {
 		t.Run(c.in, func(t *testing.T) {

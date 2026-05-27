@@ -8,11 +8,11 @@
 //
 // Endpoints
 //
-//   GET /api/instances/{name}/dar?role=<app_user|app_provider|sv>
-//     → 200 {schema_version, instance, role, dars: [{main, name, version, description}]}
-//     → 503 PARTICIPANT_PORT_NOT_RECORDED if state.json lacks the
-//       per-role admin port (instance brought up before BIT-190
-//       landed; re-`up` to capture)
+//	GET /api/instances/{name}/dar?role=<app_user|app_provider|sv>
+//	  → 200 {schema_version, instance, role, dars: [{main, name, version, description}]}
+//	  → 503 PARTICIPANT_PORT_NOT_RECORDED if state.json lacks the
+//	    per-role admin port (instance brought up before BIT-190
+//	    landed; re-`up` to capture)
 //
 // Role defaults to "app_user" since that's the common dev target.
 // Upload + diff endpoints are deferred to a follow-up — the MVP is

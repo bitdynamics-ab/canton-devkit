@@ -138,8 +138,8 @@ func TestIsRestartingOOM(t *testing.T) {
 	no := []string{
 		"Up 5 minutes (healthy)",
 		"Restarting (0) 1 second ago",
-		"Restarting (1) 3 seconds ago",  // generic app error, not OOM
-		"Exited (137) 10 minutes ago",   // exited, not restart-looping
+		"Restarting (1) 3 seconds ago", // generic app error, not OOM
+		"Exited (137) 10 minutes ago",  // exited, not restart-looping
 		"",
 	}
 	for _, s := range yes {

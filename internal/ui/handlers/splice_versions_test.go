@@ -106,13 +106,13 @@ func TestSpliceVersions_SortedDescendingNewestFirst(t *testing.T) {
 		a, b string
 		want bool // true if a should come before b
 	}{
-		{"0.6.4", "0.6.3", true},     // same major, patch differs
-		{"0.6.4", "0.5.18", true},    // major differs (don't compare lexically: 0.5.18 > 0.6.4 lex would be wrong)
-		{"0.4.12", "0.4.2", true},    // 12 > 2 numerically
-		{"0.6.10", "0.6.9", true},    // 10 > 9 numerically
-		{"0.6.0", "0.5.99", true},    // major beats minor
-		{"0.6.4", "0.6.4", false},    // equal → not before
-		{"0.5.3", "0.6.0", false},    // 0.5.x is older
+		{"0.6.4", "0.6.3", true},  // same major, patch differs
+		{"0.6.4", "0.5.18", true}, // major differs (don't compare lexically: 0.5.18 > 0.6.4 lex would be wrong)
+		{"0.4.12", "0.4.2", true}, // 12 > 2 numerically
+		{"0.6.10", "0.6.9", true}, // 10 > 9 numerically
+		{"0.6.0", "0.5.99", true}, // major beats minor
+		{"0.6.4", "0.6.4", false}, // equal → not before
+		{"0.5.3", "0.6.0", false}, // 0.5.x is older
 	}
 	for _, tc := range cases {
 		got := compareVersionTagsDesc(tc.a, tc.b)

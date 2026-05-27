@@ -38,11 +38,11 @@ func TestMetrics_RejectsMalformedQuery(t *testing.T) {
 	mux := http.NewServeMux()
 	MountMetrics(mux)
 	badQueries := []string{
-		"up;rm -rf /",           // shell semicolon
-		"up\nwhoami",            // newline injection
-		"up`whoami`",            // backticks
-		"up$(whoami)",           // command sub
-		"up\x00null",            // NUL byte
+		"up;rm -rf /", // shell semicolon
+		"up\nwhoami",  // newline injection
+		"up`whoami`",  // backticks
+		"up$(whoami)", // command sub
+		"up\x00null",  // NUL byte
 	}
 	for _, q := range badQueries {
 		t.Run(q, func(t *testing.T) {

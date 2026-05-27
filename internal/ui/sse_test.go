@@ -22,7 +22,7 @@ func TestSSE_ReceivesPublishedEvent(t *testing.T) {
 	srv := New(Config{Port: 0, Router: NewRouter(assets, hub)})
 	addr, _ := srv.Listen()
 	go srv.Serve() //nolint:errcheck
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -31,7 +31,7 @@ func TestSSE_ReceivesPublishedEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /events: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
 		t.Errorf("Content-Type = %q, want text/event-stream", ct)
@@ -76,7 +76,7 @@ func TestSSE_TopicFilter(t *testing.T) {
 	srv := New(Config{Port: 0, Router: NewRouter(assets, hub)})
 	addr, _ := srv.Listen()
 	go srv.Serve() //nolint:errcheck
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -86,7 +86,7 @@ func TestSSE_TopicFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Second)
 	if !hub.WaitForSubscribers(waitCtx, 1) {
@@ -124,7 +124,7 @@ func TestSSE_DisconnectFreesSubscription(t *testing.T) {
 	srv := New(Config{Port: 0, Router: NewRouter(assets, hub)})
 	addr, _ := srv.Listen()
 	go srv.Serve() //nolint:errcheck
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+addr+"/events", nil)
@@ -145,7 +145,7 @@ func TestSSE_DisconnectFreesSubscription(t *testing.T) {
 
 	// Disconnect.
 	cancel()
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	// The handler's defer cancel() should fire on the next loop
 	// iteration when ctx.Done is selected. Poll briefly.
@@ -168,13 +168,13 @@ func TestSSE_NilHubReturns503(t *testing.T) {
 	srv := New(Config{Port: 0, Router: NewRouter(assets, nil)})
 	addr, _ := srv.Listen()
 	go srv.Serve() //nolint:errcheck
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	resp, err := http.Get("http://" + addr + "/events")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("status = %d, want 503", resp.StatusCode)
 	}
@@ -191,13 +191,13 @@ func TestSSE_MultiLineDataGetsPerLinePrefix(t *testing.T) {
 	srv := New(Config{Port: 0, Router: NewRouter(assets, hub)})
 	addr, _ := srv.Listen()
 	go srv.Serve() //nolint:errcheck
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+addr+"/events", nil)
 	resp, _ := http.DefaultClient.Do(req)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Second)
 	if !hub.WaitForSubscribers(waitCtx, 1) {
@@ -221,6 +221,7 @@ func TestSSE_MultiLineDataGetsPerLinePrefix(t *testing.T) {
 		}
 	}
 }
+
 // TestSSE_RejectsCrossOriginConnection is the reviewer pin
 // (PR #42 #c): a browser tab on evil.example.com can open
 // EventSource("http://127.0.0.1:7777/events") and read our event
@@ -232,7 +233,7 @@ func TestSSE_RejectsCrossOriginConnection(t *testing.T) {
 	srv := New(Config{Port: 0, Router: NewRouter(assets, hub)})
 	addr, _ := srv.Listen()
 	go srv.Serve() //nolint:errcheck
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	req, _ := http.NewRequest("GET", "http://"+addr+"/events", nil)
 	req.Header.Set("Origin", "https://evil.example.com")
@@ -240,7 +241,7 @@ func TestSSE_RejectsCrossOriginConnection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /events: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("cross-origin /events status = %d, want 403", resp.StatusCode)
 	}
@@ -257,7 +258,7 @@ func TestSSE_NoOriginAllowedForCurl(t *testing.T) {
 	srv := New(Config{Port: 0, Router: NewRouter(assets, hub)})
 	addr, _ := srv.Listen()
 	go srv.Serve() //nolint:errcheck
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -267,7 +268,7 @@ func TestSSE_NoOriginAllowedForCurl(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /events: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusForbidden {
 		t.Errorf("/events with no Origin returned 403 — curl/CLI clients blocked")
 	}
@@ -286,13 +287,13 @@ func TestSSE_ContentTypeCharsetUTF8(t *testing.T) {
 	srv := New(Config{Port: 0, Router: NewRouter(assets, hub)})
 	addr, _ := srv.Listen()
 	go srv.Serve() //nolint:errcheck
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	resp, err := http.Get("http://" + addr + "/events")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	ct := resp.Header.Get("Content-Type")
 	if !strings.Contains(ct, "charset=utf-8") {
 		t.Errorf("Content-Type = %q, want charset=utf-8 — non-UTF-8 clients mangle multi-byte data",
@@ -310,13 +311,13 @@ func TestSSE_TrailingNewlineStripped(t *testing.T) {
 	srv := New(Config{Port: 0, Router: NewRouter(assets, hub)})
 	addr, _ := srv.Listen()
 	go srv.Serve() //nolint:errcheck
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+addr+"/events", nil)
 	resp, _ := http.DefaultClient.Do(req)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	waitCtx, wc := context.WithTimeout(context.Background(), time.Second)
 	if !hub.WaitForSubscribers(waitCtx, 1) {

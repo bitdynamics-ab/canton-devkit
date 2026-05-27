@@ -8,12 +8,12 @@
 //
 // Endpoints
 //
-//   GET /api/instances/{name}/contracts?role=<app-user|app-provider|sv>&limit=N
-//     → 200 {schema_version, instance, role, ledger_end, contracts: [{
-//             contract_id, template_id, payload, signatories, observers,
-//             created_at, package_name, package_version
-//           }]}
-//     → 503 PARTICIPANT_PORT_NOT_RECORDED if state.json predates BIT-190
+//	GET /api/instances/{name}/contracts?role=<app-user|app-provider|sv>&limit=N
+//	  → 200 {schema_version, instance, role, ledger_end, contracts: [{
+//	          contract_id, template_id, payload, signatories, observers,
+//	          created_at, package_name, package_version
+//	        }]}
+//	  → 503 PARTICIPANT_PORT_NOT_RECORDED if state.json predates BIT-190
 //
 // MVP scope: ACS snapshot only — no filters by template/party (the
 // JWT's claim already filters server-side), no live SSE stream, no

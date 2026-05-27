@@ -40,15 +40,15 @@ func MountTransactions(mux *http.ServeMux) {
 // oneof. Each row has a kind discriminator so the frontend can
 // pick its render path without re-walking the proto.
 type txRow struct {
-	Kind          string         `json:"kind"` // "transaction" | "reassignment" | "topology" | "checkpoint"
-	Offset        int64          `json:"offset"`
-	UpdateID      string         `json:"update_id,omitempty"`
-	WorkflowID    string         `json:"workflow_id,omitempty"`
-	CommandID     string         `json:"command_id,omitempty"`
-	RecordTime    string         `json:"record_time,omitempty"`
-	Synchronizer  string         `json:"synchronizer,omitempty"`
-	EventCount    int            `json:"event_count,omitempty"`
-	Events        []txEventRow   `json:"events,omitempty"`
+	Kind         string       `json:"kind"` // "transaction" | "reassignment" | "topology" | "checkpoint"
+	Offset       int64        `json:"offset"`
+	UpdateID     string       `json:"update_id,omitempty"`
+	WorkflowID   string       `json:"workflow_id,omitempty"`
+	CommandID    string       `json:"command_id,omitempty"`
+	RecordTime   string       `json:"record_time,omitempty"`
+	Synchronizer string       `json:"synchronizer,omitempty"`
+	EventCount   int          `json:"event_count,omitempty"`
+	Events       []txEventRow `json:"events,omitempty"`
 }
 
 // txEventRow projects a CreatedEvent / ArchivedEvent into a flat
@@ -358,11 +358,11 @@ func projectUpdate(resp *lapiv2.GetUpdatesResponse) *txRow {
 	}
 	if rs := resp.GetReassignment(); rs != nil {
 		row := txRow{
-			Kind:         "reassignment",
-			Offset:       rs.GetOffset(),
-			UpdateID:     rs.GetUpdateId(),
-			WorkflowID:   rs.GetWorkflowId(),
-			CommandID:    rs.GetCommandId(),
+			Kind:       "reassignment",
+			Offset:     rs.GetOffset(),
+			UpdateID:   rs.GetUpdateId(),
+			WorkflowID: rs.GetWorkflowId(),
+			CommandID:  rs.GetCommandId(),
 		}
 		if rs.GetRecordTime() != nil {
 			row.RecordTime = rs.GetRecordTime().AsTime().Format(time.RFC3339Nano)

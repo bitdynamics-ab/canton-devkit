@@ -20,19 +20,19 @@ import (
 //  1. Lockup        — multi-line ASCII title in brand colour.
 //  2. One-line ✦ summary  — instance name, Splice version, elapsed time.
 //  3. Primary CTA   — "Open dashboard" in brand colour with the
-//                     `localnet ui` URL on the same line. ONE call-to-
-//                     action lives here; secondary actions go in
-//                     "Try next" below.
+//     `localnet ui` URL on the same line. ONE call-to-
+//     action lives here; secondary actions go in
+//     "Try next" below.
 //  4. Endpoint cards — grouped by purpose: Web UIs (interactive),
-//                     Infrastructure (sockets/DBs). Each row uses
-//                     `↗` to signal an external link; modern
-//                     terminals honour OSC 8 to make the URL
-//                     clickable.
+//     Infrastructure (sockets/DBs). Each row uses
+//     `↗` to signal an external link; modern
+//     terminals honour OSC 8 to make the URL
+//     clickable.
 //  5. Try next      — 5 high-value commands every user should know
-//                     after their first `up`. Keep small (≤6 rows);
-//                     this is a glance-and-scan, not exhaustive help.
+//     after their first `up`. Keep small (≤6 rows);
+//     this is a glance-and-scan, not exhaustive help.
 //  6. State path    — single dim line at the bottom; out-of-the-way
-//                     anchor for support tickets and snapshots.
+//     anchor for support tickets and snapshots.
 //
 // # Non-TTY behaviour
 //
@@ -98,9 +98,9 @@ func (s WelcomeScreen) Render(w io.Writer) {
 func (s WelcomeScreen) renderRich(w io.Writer) {
 	// 1. Lockup — single colour over the whole multi-line block.
 	for _, line := range strings.Split(canonicalLockup, "\n") {
-		fmt.Fprintln(w, Brandc(line))
+		_, _ = fmt.Fprintln(w, Brandc(line))
 	}
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 
 	// 2. One-line summary.
 	parts := []string{
@@ -113,22 +113,22 @@ func (s WelcomeScreen) renderRich(w io.Writer) {
 	if s.Elapsed > 0 {
 		parts = append(parts, Dimc("·"), Dimc("ready in "+humanDuration(s.Elapsed)))
 	}
-	fmt.Fprintln(w, "  "+strings.Join(parts, "  "))
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "  "+strings.Join(parts, "  "))
+	_, _ = fmt.Fprintln(w)
 
 	// 3. Primary CTA — single brand-coloured action.
-	fmt.Fprintln(w,
+	_, _ = fmt.Fprintln(w,
 		"  "+Brandc("→")+"  "+Bold("Open dashboard")+
 			"      "+osc8("http://localhost:7777", "http://localhost:7777"))
-	fmt.Fprintln(w, "     "+Dimc("(canton-devkit localnet ui)"))
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "     "+Dimc("(canton-devkit localnet ui)"))
+	_, _ = fmt.Fprintln(w)
 
 	// 4. Endpoint cards (grouped by Category transitions).
 	s.renderEndpoints(w)
 
 	// 5. Try-next cheat sheet.
 	if len(s.TryNext) > 0 {
-		fmt.Fprintln(w, "  "+Dimc("── ")+Bold("TRY NEXT")+" "+
+		_, _ = fmt.Fprintln(w, "  "+Dimc("── ")+Bold("TRY NEXT")+" "+
 			Dimc(strings.Repeat("─", maxTryNextHeaderPad)))
 		labelW := 0
 		for _, step := range s.TryNext {
@@ -138,15 +138,15 @@ func (s WelcomeScreen) renderRich(w io.Writer) {
 		}
 		for _, step := range s.TryNext {
 			pad := strings.Repeat(" ", labelW-VisibleLen(step.Label))
-			fmt.Fprintf(w, "  %s%s   %s\n",
+			_, _ = fmt.Fprintf(w, "  %s%s   %s\n",
 				Textc(step.Label), pad, Dimc(step.Command))
 		}
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
 
 	// 6. State footer.
 	if s.StatePath != "" {
-		fmt.Fprintln(w, "  "+Dimc("State: "+s.StatePath))
+		_, _ = fmt.Fprintln(w, "  "+Dimc("State: "+s.StatePath))
 	}
 }
 
@@ -165,10 +165,10 @@ func (s WelcomeScreen) renderEndpoints(w io.Writer) {
 	for _, e := range s.Endpoints {
 		if e.Category != currentCat {
 			if currentCat != "" {
-				fmt.Fprintln(w) // blank line between groups
+				_, _ = fmt.Fprintln(w) // blank line between groups
 			}
 			currentCat = e.Category
-			fmt.Fprintln(w, "  "+Dimc("── ")+Bold(e.Category)+" "+
+			_, _ = fmt.Fprintln(w, "  "+Dimc("── ")+Bold(e.Category)+" "+
 				Dimc(strings.Repeat("─", maxSectionHeaderPad-len(e.Category))))
 		}
 		pad := strings.Repeat(" ", labelW-VisibleLen(e.Label))
@@ -176,16 +176,16 @@ func (s WelcomeScreen) renderEndpoints(w io.Writer) {
 		if e.External {
 			glyph = Brandc("↗") + " "
 		}
-		fmt.Fprintf(w, "  %s%s  %s  %s\n",
+		_, _ = fmt.Fprintf(w, "  %s%s  %s  %s\n",
 			Textc(e.Label), pad, glyph, osc8(e.URL, e.URL))
 	}
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 }
 
 func (s WelcomeScreen) renderPlain(w io.Writer) {
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "=== canton-devkit ===")
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "=== canton-devkit ===")
+	_, _ = fmt.Fprintln(w)
 	summary := fmt.Sprintf(`"%s" is ready`, s.InstanceName)
 	if s.SpliceVersion != "" {
 		summary += " · Splice " + s.SpliceVersion
@@ -193,11 +193,11 @@ func (s WelcomeScreen) renderPlain(w io.Writer) {
 	if s.Elapsed > 0 {
 		summary += " · ready in " + humanDuration(s.Elapsed)
 	}
-	fmt.Fprintln(w, summary)
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Open dashboard: http://localhost:7777")
-	fmt.Fprintln(w, "                (canton-devkit localnet ui)")
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, summary)
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "Open dashboard: http://localhost:7777")
+	_, _ = fmt.Fprintln(w, "                (canton-devkit localnet ui)")
+	_, _ = fmt.Fprintln(w)
 	if len(s.Endpoints) > 0 {
 		currentCat := ""
 		labelW := 0
@@ -209,17 +209,17 @@ func (s WelcomeScreen) renderPlain(w io.Writer) {
 		for _, e := range s.Endpoints {
 			if e.Category != currentCat {
 				if currentCat != "" {
-					fmt.Fprintln(w)
+					_, _ = fmt.Fprintln(w)
 				}
 				currentCat = e.Category
-				fmt.Fprintln(w, "["+e.Category+"]")
+				_, _ = fmt.Fprintln(w, "["+e.Category+"]")
 			}
-			fmt.Fprintf(w, "  %-*s  %s\n", labelW, e.Label, e.URL)
+			_, _ = fmt.Fprintf(w, "  %-*s  %s\n", labelW, e.Label, e.URL)
 		}
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
 	if len(s.TryNext) > 0 {
-		fmt.Fprintln(w, "[TRY NEXT]")
+		_, _ = fmt.Fprintln(w, "[TRY NEXT]")
 		labelW := 0
 		for _, step := range s.TryNext {
 			if n := len(step.Label); n > labelW {
@@ -227,12 +227,12 @@ func (s WelcomeScreen) renderPlain(w io.Writer) {
 			}
 		}
 		for _, step := range s.TryNext {
-			fmt.Fprintf(w, "  %-*s   %s\n", labelW, step.Label, step.Command)
+			_, _ = fmt.Fprintf(w, "  %-*s   %s\n", labelW, step.Label, step.Command)
 		}
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
 	if s.StatePath != "" {
-		fmt.Fprintln(w, "State: "+s.StatePath)
+		_, _ = fmt.Fprintln(w, "State: "+s.StatePath)
 	}
 }
 

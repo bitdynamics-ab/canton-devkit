@@ -300,10 +300,10 @@ func TestRunUp_CLIByteEquivalence(t *testing.T) {
 
 	// VISIBLE step lines — must be present.
 	mustContain := []string{
-		"Starting Canton LocalNet",   // the verbatim header preserved via prog.Out()
-		"Starting services...",       // StepStartServices via TextProgress.StartStep
+		"Starting Canton LocalNet",                  // the verbatim header preserved via prog.Out()
+		"Starting services...",                      // StepStartServices via TextProgress.StartStep
 		"Waiting for services to become healthy...", // StepWaitHealthy
-		"is ready",                   // Done() success marker (welcome line: `"x" is ready · Splice …`)
+		"is ready", // Done() success marker (welcome line: `"x" is ready · Splice …`)
 	}
 	// SkipPreflight is true in this test, so "Running preflight checks..."
 	// is intentionally absent. The non-test CLI run hits that path and

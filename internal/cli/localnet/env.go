@@ -24,7 +24,7 @@ import (
 // # Quoting (PR #34 #1 lesson re-applied)
 //
 // Every value goes through shellQuote — single-quoted with embedded
-// `'` escaped as `'\''`. Round-trip tested: a value containing
+// `'` escaped as `'\”`. Round-trip tested: a value containing
 // `$(rm -rf ~)` lands inside the quotes inert. The user reported
 // regression in PR #34's review on this exact issue; we don't ship
 // the wedge without the same defence.
@@ -75,7 +75,7 @@ func buildEnv() *cobra.Command {
 // reviewable when piped to `tee env.sh`.
 func writeEnv(out io.Writer, st *registry.State, includeJWT bool) {
 	pairs := map[string]string{
-		"CANTON_DEVKIT_INSTANCE":      st.Name,
+		"CANTON_DEVKIT_INSTANCE":       st.Name,
 		"CANTON_DEVKIT_SPLICE_VERSION": st.SpliceVersion,
 		"CANTON_DEVKIT_DATA_DIR":       st.DataDir,
 	}
@@ -113,23 +113,23 @@ func writeEnv(out io.Writer, st *registry.State, includeJWT bool) {
 	}
 	sort.Strings(keys)
 
-	fmt.Fprintf(out, "# canton-devkit · %s · splice %s\n",
+	_, _ = fmt.Fprintf(out, "# canton-devkit · %s · splice %s\n",
 		st.Name, st.SpliceVersion)
 	if !includeJWT {
-		fmt.Fprintln(out,
+		_, _ = fmt.Fprintln(out,
 			"# JWTs omitted by default. Re-run with --include-jwt to include them.")
 	}
 	for _, k := range keys {
-		fmt.Fprintf(out, "export %s=%s\n", k, shellQuote(pairs[k]))
+		_, _ = fmt.Fprintf(out, "export %s=%s\n", k, shellQuote(pairs[k]))
 	}
 }
 
 // shellQuote wraps s in single quotes and escapes any embedded `'`
-// using the POSIX `'\''` idiom. The result round-trips through
+// using the POSIX `'\”` idiom. The result round-trips through
 // `eval` byte-for-byte for any input that doesn't contain a NUL —
 // which the registry can't produce because state.json is JSON.
 //
-// Empty input yields `''` (a valid empty shell string).
+// Empty input yields `”` (a valid empty shell string).
 //
 // Same shape as the helper PR #34 reviewers asked for in round 1;
 // kept identical so the proper PR #34 impl is a drop-in replacement.

@@ -21,17 +21,17 @@ import (
 // buildEventFormat constructs the EventFormat that ActiveContracts
 // + Updates take. Semantics:
 //
-//   parties: nil/empty → FiltersForAnyParty (wildcard).
-//   parties non-empty  → FiltersByParty with one Filters entry per
-//                        party. Each per-party entry applies the
-//                        same `templates` filter (or wildcard if
-//                        none).
-//   templates: nil/empty → no template restriction; "Module:Entity"
-//                        or "package:Module:Entity" forms accepted
-//                        (the latter pins the package id explicitly,
-//                        the former is package-name based and
-//                        matches whatever package the participant
-//                        upgrades to).
+//	parties: nil/empty → FiltersForAnyParty (wildcard).
+//	parties non-empty  → FiltersByParty with one Filters entry per
+//	                     party. Each per-party entry applies the
+//	                     same `templates` filter (or wildcard if
+//	                     none).
+//	templates: nil/empty → no template restriction; "Module:Entity"
+//	                     or "package:Module:Entity" forms accepted
+//	                     (the latter pins the package id explicitly,
+//	                     the former is package-name based and
+//	                     matches whatever package the participant
+//	                     upgrades to).
 //
 // `verbose=true` requests RecordWithType verbosity so the CLI can
 // render template-id strings without a separate package lookup.
@@ -68,7 +68,7 @@ func buildUpdateFormat(parties, templates []string, verbose bool) *lapiv2.Update
 	ef := buildEventFormat(parties, templates, verbose)
 	return &lapiv2.UpdateFormat{
 		IncludeTransactions: &lapiv2.TransactionFormat{
-			EventFormat:     ef,
+			EventFormat:      ef,
 			TransactionShape: lapiv2.TransactionShape_TRANSACTION_SHAPE_ACS_DELTA,
 		},
 	}
@@ -77,12 +77,12 @@ func buildUpdateFormat(parties, templates []string, verbose bool) *lapiv2.Update
 // buildTemplateFilters parses the user-supplied --template values
 // into the proto Filters shape. Accepts:
 //
-//   "Module:Entity"                — package-name match (any
-//                                     vetted package containing
-//                                     this template).
-//   "pkg-name:Module:Entity"       — same, more verbose.
-//   "<package-id>:Module:Entity"   — exact package-id pin (when
-//                                     the value is 64-hex).
+//	"Module:Entity"                — package-name match (any
+//	                                  vetted package containing
+//	                                  this template).
+//	"pkg-name:Module:Entity"       — same, more verbose.
+//	"<package-id>:Module:Entity"   — exact package-id pin (when
+//	                                  the value is 64-hex).
 //
 // Returns nil for an empty/nil input — caller interprets as
 // "wildcard, no template restriction".
