@@ -5,6 +5,7 @@ import {
   uploadDARs,
   type DARListResponse,
   type DARRow,
+  type DARUploadRoleResult,
   type Role,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
@@ -31,13 +32,29 @@ const ROLES: Role[] = ["app-user", "app-provider", "sv"];
 type UploadState =
   | { kind: "idle" }
   | { kind: "uploading"; progress: number; filenames: string[] }
-  | { kind: "success"; count: number }
+  | { kind: "success"; total: number; results: DARUploadRoleResult[] }
+  | { kind: "partial"; total: number; results: DARUploadRoleResult[] }
   | { kind: "error"; message: string };
 
 export function DARScreen() {
   const sel = useInstanceSelection();
   const name = sel.selected;
   const [role, setRole] = useState<Role>("app-user");
+  // vetTargets — which participants the upload fans out to. The
+  // backend dials each in parallel and returns a per-role result.
+  // Default ON for all three so the common "vet everywhere"
+  // workflow is one drag-and-drop. The selected `role` above
+  // drives the package LIST (read endpoint), not the upload set;
+  // they're orthogonal — the user can read one participant's
+  // packages while uploading to a different subset.
+  const [vetTargets, setVetTargets] = useState<Record<Role, boolean>>({
+    "app-user": true,
+    "app-provider": true,
+    sv: true,
+  });
+  const selectedRoles = (Object.entries(vetTargets) as Array<[Role, boolean]>)
+    .filter(([, on]) => on)
+    .map(([r]) => r);
   const [state, setState] = useState<
     | { kind: "loading" }
     | { kind: "ok"; data: DARListResponse }
@@ -94,6 +111,14 @@ export function DARScreen() {
       });
       return;
     }
+    if (selectedRoles.length === 0) {
+      setUpload({
+        kind: "error",
+        message:
+          "select at least one target participant under 'Vet on upload' before dropping a DAR",
+      });
+      return;
+    }
     // Client-side size cap (review yellow): refuse > 256 MiB before
     // we ever touch the network. The backend enforces a 64 MiB
     // multipart cap anyway, but a 4 GiB drop would OOM the tab
@@ -113,12 +138,17 @@ export function DARScreen() {
       filenames: arr.map((f) => f.name),
     });
     try {
-      const resp = await uploadDARs(name, arr, role, (frac) => {
+      const resp = await uploadDARs(name, arr, selectedRoles, (frac) => {
         setUpload((s) =>
           s.kind === "uploading" ? { ...s, progress: frac } : s,
         );
       });
-      setUpload({ kind: "success", count: resp.count });
+      const anyFail = resp.results.some((r) => !r.ok);
+      setUpload(
+        anyFail
+          ? { kind: "partial", total: resp.total_uploaded, results: resp.results }
+          : { kind: "success", total: resp.total_uploaded, results: resp.results },
+      );
       setTick((n) => n + 1);
     } catch (e) {
       setUpload({
@@ -280,9 +310,16 @@ export function DARScreen() {
                 <div
                   style={{ display: "flex", flexDirection: "column", gap: 6 }}
                 >
-                  <VetToggle on label="sv participant" />
-                  <VetToggle on label="app-provider participant" />
-                  <VetToggle on label="app-user participant" />
+                  {(["sv", "app-provider", "app-user"] as Role[]).map((r) => (
+                    <VetToggle
+                      key={r}
+                      on={vetTargets[r]}
+                      onChange={(v) =>
+                        setVetTargets((s) => ({ ...s, [r]: v }))
+                      }
+                      label={`${r} participant`}
+                    />
+                  ))}
                 </div>
                 <div
                   style={{
@@ -291,19 +328,37 @@ export function DARScreen() {
                     background: W.border,
                     borderRadius: 6,
                     fontSize: 11.5,
-                    color: W.text2,
+                    color: selectedRoles.length === 0 ? W.warn : W.text2,
                     lineHeight: 1.5,
                   }}
                 >
-                  <span style={{ color: W.brand }}>ⓘ</span> Vetting happens
-                  automatically when DARs are uploaded via this screen. Manual
-                  per-participant toggles are a follow-up.
+                  {selectedRoles.length === 0 ? (
+                    <>
+                      <span style={{ color: W.warn }}>⚠</span> Pick at least one
+                      target. Drops will be refused until a participant is
+                      selected.
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ color: W.brand }}>ⓘ</span> Each dropped DAR
+                      uploads in parallel to <strong>{selectedRoles.length}</strong>{" "}
+                      participant{selectedRoles.length === 1 ? "" : "s"} with
+                      <code style={{ fontFamily: wMono, marginLeft: 4 }}>
+                        vet_all_packages=true
+                      </code>
+                      .
+                    </>
+                  )}
                 </div>
               </div>
             </Card>
 
-            {upload.kind === "success" && (
-              <SuccessBanner count={upload.count} />
+            {(upload.kind === "success" || upload.kind === "partial") && (
+              <UploadResultBanner
+                kind={upload.kind}
+                total={upload.total}
+                results={upload.results}
+              />
             )}
             {upload.kind === "error" && <ErrorBanner msg={upload.message} />}
 
@@ -638,20 +693,66 @@ function UploadProgress({
   );
 }
 
-function SuccessBanner({ count }: { count: number }) {
+// UploadResultBanner renders the per-participant outcome of a
+// multi-target upload. "success" = every role succeeded;
+// "partial" = at least one role failed but others succeeded
+// (the backend still returns 200 — partial failures land here,
+// not in the error banner — so the user sees what landed and
+// what didn't).
+function UploadResultBanner({
+  kind,
+  total,
+  results,
+}: {
+  kind: "success" | "partial";
+  total: number;
+  results: DARUploadRoleResult[];
+}) {
+  const okCount = results.filter((r) => r.ok).length;
+  const accent = kind === "success" ? W.brand : W.warn;
+  const heading =
+    kind === "success"
+      ? `✓ Uploaded ${total} package${total === 1 ? "" : "s"} to ${okCount} participant${okCount === 1 ? "" : "s"}. Refreshing list…`
+      : `⚠ Partial upload — ${okCount}/${results.length} participant${results.length === 1 ? "" : "s"} succeeded`;
   return (
     <div
-      role="status"
+      role={kind === "success" ? "status" : "alert"}
       style={{
-        background: `${W.brand}10`,
-        border: `1px solid ${W.brand}`,
+        background: `${accent}10`,
+        border: `1px solid ${accent}`,
         borderRadius: 6,
         padding: "8px 12px",
         fontSize: 12,
         color: W.text2,
       }}
     >
-      ✓ Uploaded {count} package{count === 1 ? "" : "s"}. Refreshing list…
+      <div style={{ color: accent, fontWeight: 600, marginBottom: results.length > 0 ? 6 : 0 }}>
+        {heading}
+      </div>
+      {results.map((r) => (
+        <div
+          key={r.role}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontFamily: wMono,
+            fontSize: 11,
+            marginTop: 3,
+            color: r.ok ? W.text2 : W.err,
+          }}
+        >
+          <span style={{ color: r.ok ? W.brand : W.err, width: 12 }}>
+            {r.ok ? "✓" : "✗"}
+          </span>
+          <span style={{ width: 110 }}>{r.role}</span>
+          <span>
+            {r.ok
+              ? `${r.count} package${r.count === 1 ? "" : "s"}`
+              : (r.error ?? "failed")}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -718,27 +819,46 @@ function RoleSwitcher({
   );
 }
 
-function VetToggle({ on, label }: { on: boolean; label: string }) {
+function VetToggle({
+  on,
+  label,
+  onChange,
+}: {
+  on: boolean;
+  label: string;
+  onChange: (next: boolean) => void;
+}) {
   return (
-    <div
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={`vet on upload — ${label}`}
+      onClick={() => onChange(!on)}
       style={{
         display: "flex",
         alignItems: "center",
         gap: 9,
         padding: "5px 8px",
         background: W.border,
+        border: "none",
         borderRadius: 6,
         fontSize: 12,
+        cursor: "pointer",
+        width: "100%",
+        textAlign: "left",
+        outline: "none",
       }}
     >
       <span
         style={{
           width: 24,
           height: 14,
-          background: on ? `${W.brand}` : "#3A4248",
+          background: on ? W.brand : "#3A4248",
           borderRadius: 7,
           position: "relative",
           flexShrink: 0,
+          transition: "background 120ms",
         }}
       >
         <span
@@ -754,8 +874,8 @@ function VetToggle({ on, label }: { on: boolean; label: string }) {
           }}
         />
       </span>
-      <span style={{ color: W.text2 }}>{label}</span>
-    </div>
+      <span style={{ color: on ? W.text : W.dim }}>{label}</span>
+    </button>
   );
 }
 

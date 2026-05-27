@@ -25,8 +25,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/admin"
@@ -169,21 +171,35 @@ func handleDARList(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDARUpload accepts a multipart/form-data POST containing one
-// or more `.dar` files plus an optional `role` field (defaults to
-// app-user). Each file is uploaded to the named participant's
-// Admin API via UploadDar. `vet_all_packages` is forced ON — the
-// dev-workflow expectation is "I dropped this DAR, please make it
-// usable"; advanced vetting flows belong on a dedicated screen.
+// or more `.dar` files and a set of target participant roles. The
+// handler uploads each DAR to every selected participant's Admin
+// API in parallel and aggregates per-participant results.
 //
 // Wire shape:
 //
 //	POST /api/instances/{name}/dar
 //	multipart fields:
-//	  role  — optional, default "app-user"
-//	  file  — repeatable; each is one DAR
+//	  roles — REPEATED; one or more of "app-user", "app-provider", "sv".
+//	          If omitted, falls back to single `role` (back-compat with
+//	          the original single-target endpoint).
+//	  role  — single role; only honoured when `roles` is absent.
+//	  file  — repeatable; each is one DAR.
 //
-//	→ 200 {schema_version, instance, role, dar_ids: [pkg-id, …]}
-//	→ 4xx with the standard error taxonomy
+//	→ 200 {
+//	    schema_version, instance,
+//	    results: [
+//	      {role, ok: true,  dar_ids: [...], count: N},
+//	      {role, ok: false, error: "..."},
+//	    ],
+//	    total_uploaded: <sum of dar_ids across ok=true entries>
+//	  }
+//	→ 4xx on outer-level validation; partial gRPC failures land in
+//	  per-role `ok:false` entries with a 200 envelope.
+//
+// VetAllPackages + SynchronizeVetting are forced ON: the dev-flow
+// expectation is "I dropped this DAR, please make it usable on
+// every participant I picked". Per-package vetting toggles are a
+// separate, deeper screen (tracked as a follow-up).
 func handleDARUpload(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := registry.ValidateName(name); err != nil {
@@ -202,17 +218,45 @@ func handleDARUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "parse multipart", err)
 		return
 	}
-	role := strings.TrimSpace(r.FormValue("role"))
-	if role == "" {
-		role = "app-user"
+
+	// Resolve target roles: `roles` (repeated) preferred, else fall
+	// back to single `role`. Validate + de-dup.
+	rawRoles := r.MultipartForm.Value["roles"]
+	if len(rawRoles) == 0 {
+		if single := strings.TrimSpace(r.FormValue("role")); single != "" {
+			rawRoles = []string{single}
+		} else {
+			rawRoles = []string{"app-user"}
+		}
 	}
-	if !validRole[role] {
+	seen := map[string]bool{}
+	roles := make([]string, 0, len(rawRoles))
+	for _, raw := range rawRoles {
+		for _, v := range strings.Split(raw, ",") {
+			v = strings.TrimSpace(v)
+			if v == "" || seen[v] {
+				continue
+			}
+			if !validRole[v] {
+				writeErrorWithCode(w, http.StatusBadRequest,
+					ErrCodeInvalidRequest,
+					"invalid role: "+v,
+					"roles must be a subset of app-user, app-provider, sv")
+				return
+			}
+			seen[v] = true
+			roles = append(roles, v)
+		}
+	}
+	if len(roles) == 0 {
 		writeErrorWithCode(w, http.StatusBadRequest,
 			ErrCodeInvalidRequest,
-			"invalid role: "+role,
-			"role must be one of app-user, app-provider, sv")
+			"no target participants selected",
+			"pass `roles` (repeated) or `role` with one of app-user, app-provider, sv")
 		return
 	}
+	sort.Strings(roles)
+
 	files := r.MultipartForm.File["file"]
 	if len(files) == 0 {
 		writeError(w, http.StatusBadRequest, "no file uploaded", nil)
@@ -230,26 +274,11 @@ func handleDARUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read state", err)
 		return
 	}
-	portKey := "participant_admin_" + role
-	adminPort, hasPort := state.Ports[portKey]
-	if !hasPort || adminPort == 0 {
-		writeErrorWithCode(w, http.StatusServiceUnavailable,
-			"PARTICIPANT_PORT_NOT_RECORDED",
-			"instance "+name+" was started before participant ports were recorded",
-			"restart the instance to capture all Canton API ports")
-		return
-	}
-	cred, hasCred := state.Credentials[role]
-	if !hasCred {
-		writeError(w, http.StatusInternalServerError,
-			"no JWT recorded for role "+role,
-			fmt.Errorf("missing credential for role %q", role))
-		return
-	}
 
-	// Read each uploaded file into memory. Bounded by the
-	// MaxBytesReader on the request body, so the worst case is
-	// one ~64 MiB allocation.
+	// Read each uploaded file into memory ONCE. The same byte slice
+	// is shared across the per-role goroutines below — proto's
+	// UploadDarData.Bytes is read-only and gRPC's HTTP/2 frame
+	// encoder doesn't mutate the slice, so this is safe.
 	uploads := make([]*adminproto.UploadDarRequest_UploadDarData, 0, len(files))
 	for _, fh := range files {
 		f, err := fh.Open()
@@ -273,32 +302,80 @@ func handleDARUpload(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), darUploadTimeout)
 	defer cancel()
 
-	client, err := admin.Connect(ctx, admin.Config{
-		Host:     "localhost:" + strconv.Itoa(adminPort),
-		Token:    cred.JWT,
-		Insecure: true,
-	})
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "dial canton admin", err)
-		return
+	type roleResult struct {
+		Role   string   `json:"role"`
+		OK     bool     `json:"ok"`
+		DarIDs []string `json:"dar_ids,omitempty"`
+		Count  int      `json:"count"`
+		Error  string   `json:"error,omitempty"`
 	}
-	defer func() { _ = client.Close() }()
 
-	resp, err := client.Package.UploadDar(ctx, &adminproto.UploadDarRequest{
-		Dars:               uploads,
-		VetAllPackages:     true,
-		SynchronizeVetting: true,
-	})
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "upload dar", err)
-		return
+	// Fan out: one goroutine per role. Each does its own dial,
+	// upload, and close. The aggregate response carries per-role
+	// success/failure so a partial failure (e.g. one participant
+	// down) doesn't masquerade as a total failure.
+	results := make([]roleResult, len(roles))
+	var wg sync.WaitGroup
+	for i, role := range roles {
+		wg.Add(1)
+		go func(i int, role string) {
+			defer wg.Done()
+			res := roleResult{Role: role}
+			portKey := "participant_admin_" + role
+			adminPort, hasPort := state.Ports[portKey]
+			if !hasPort || adminPort == 0 {
+				res.Error = "participant_admin port not recorded for role " + role +
+					" — restart the instance to capture Canton API ports"
+				results[i] = res
+				return
+			}
+			cred, hasCred := state.Credentials[role]
+			if !hasCred {
+				res.Error = "no JWT recorded for role " + role
+				results[i] = res
+				return
+			}
+			client, err := admin.Connect(ctx, admin.Config{
+				Host:     "localhost:" + strconv.Itoa(adminPort),
+				Token:    cred.JWT,
+				Insecure: true,
+			})
+			if err != nil {
+				res.Error = "dial canton admin: " + err.Error()
+				results[i] = res
+				return
+			}
+			defer func() { _ = client.Close() }()
+			resp, err := client.Package.UploadDar(ctx, &adminproto.UploadDarRequest{
+				Dars:               uploads,
+				VetAllPackages:     true,
+				SynchronizeVetting: true,
+			})
+			if err != nil {
+				res.Error = "upload dar: " + err.Error()
+				results[i] = res
+				return
+			}
+			res.OK = true
+			res.DarIDs = resp.GetDarIds()
+			res.Count = len(res.DarIDs)
+			results[i] = res
+		}(i, role)
 	}
+	wg.Wait()
+
+	total := 0
+	for _, r := range results {
+		if r.OK {
+			total += r.Count
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"schema_version": 1,
 		"instance":       name,
-		"role":           role,
-		"dar_ids":        resp.GetDarIds(),
-		"count":          len(resp.GetDarIds()),
+		"results":        results,
+		"total_uploaded": total,
 	})
 }
 

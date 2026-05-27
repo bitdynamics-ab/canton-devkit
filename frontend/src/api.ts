@@ -621,26 +621,45 @@ export const fetchDARList = (name: string, role: Role = "app-user") =>
     `/api/instances/${encodeURIComponent(name)}/dar?role=${role}`,
   );
 
+export interface DARUploadRoleResult {
+  role: Role;
+  ok: boolean;
+  dar_ids?: string[];
+  count: number;
+  error?: string;
+}
+
 export interface DARUploadResponse {
   schema_version: number;
   instance: string;
-  role: Role;
-  dar_ids: string[];
-  count: number;
+  results: DARUploadRoleResult[];
+  total_uploaded: number;
 }
 
 // uploadDARs posts a multipart body with one or more .dar files
 // to /api/instances/:name/dar. Uses XMLHttpRequest for upload
 // progress (the same pattern as BIT-184's BackupRestore).
+//
+// `roles` is the set of target participants — the backend dials
+// each in parallel and returns a per-role success/error envelope.
+// At least one role is required.
 export function uploadDARs(
   name: string,
   files: File[],
-  role: Role = "app-user",
+  roles: Role[],
   onProgress?: (frac: number) => void,
 ): Promise<DARUploadResponse> {
+  if (roles.length === 0) {
+    return Promise.reject(
+      new ApiError(400, {
+        code: "INVALID_REQUEST",
+        error: "select at least one target participant",
+      }),
+    );
+  }
   return new Promise((resolve, reject) => {
     const fd = new FormData();
-    fd.append("role", role);
+    for (const r of roles) fd.append("roles", r);
     for (const f of files) fd.append("file", f);
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/instances/${encodeURIComponent(name)}/dar`);
