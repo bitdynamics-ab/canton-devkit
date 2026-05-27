@@ -651,6 +651,34 @@ export const fetchMetricsSummary = (name: string) =>
     `/api/instances/${encodeURIComponent(name)}/metrics/summary`,
   );
 
+// Prometheus range-query response (subset). The backend's
+// /metrics/range endpoint passes Prometheus's response through
+// verbatim, so the frontend decodes the same shape Prometheus
+// publishes.
+export interface PrometheusRangeResponse {
+  status: string;
+  data?: {
+    resultType?: string;
+    result?: Array<{
+      metric?: Record<string, string>;
+      values?: Array<[number, string]>;
+    }>;
+  };
+}
+
+export const fetchMetricsRange = (
+  name: string,
+  query: string,
+  window = "1h",
+  step?: string,
+) => {
+  const params = new URLSearchParams({ query, window });
+  if (step) params.set("step", step);
+  return apiFetch<PrometheusRangeResponse>(
+    `/api/instances/${encodeURIComponent(name)}/metrics/range?${params.toString()}`,
+  );
+};
+
 export async function stopInstance(name: string, keepData = false): Promise<void> {
   const resp = await fetch(
     `/api/instances/${encodeURIComponent(name)}/down`,

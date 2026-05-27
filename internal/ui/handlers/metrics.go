@@ -35,6 +35,11 @@ import (
 func MountMetrics(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/instances/{name}/metrics", handleMetricsQuery())
 	mux.HandleFunc("GET /api/instances/{name}/metrics/summary", handleMetricsSummary())
+	// Range query — backs every chart on the Web UI Metrics screen.
+	// Wraps Prometheus's /api/v1/query_range so the frontend gets a
+	// time series instead of a scalar. Inputs are bounded by the
+	// same promQueryRE allowlist as the instant query handler.
+	mux.HandleFunc("GET /api/instances/{name}/metrics/range", handleMetricsRange())
 }
 
 // metricsTimeout caps how long the handler will wait on the
@@ -105,6 +110,111 @@ func handleMetricsQuery() http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
+	}
+}
+
+// handleMetricsRange wraps Prometheus's range-query endpoint
+// (/api/v1/query_range). Returned shape matches Prometheus's own
+// response so the frontend can decode {data.result[].values[][t,v]}
+// without an extra projection layer.
+//
+// Parameters:
+//   - query    : PromQL expression (same allowlist as the instant
+//                handler; promQueryRE)
+//   - window   : duration string ("5m", "1h", "24h"); clamped to
+//                [1m, 24h]
+//   - step     : duration string ("10s", "1m"); clamped to [5s, 1h];
+//                defaults to window/60 so a default window yields
+//                ~60 samples (good chart resolution without
+//                hammering Prometheus)
+//
+// Same OBSERVABILITY_PROFILE_OFF semantics as the summary endpoint:
+// 503 with structured envelope when Prometheus isn't running for
+// the project.
+func handleMetricsRange() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if err := registry.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+		q := r.URL.Query().Get("query")
+		if q == "" || !promQueryRE.MatchString(q) {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"missing or invalid query parameter",
+				"pass ?query=<PromQL> using the standard PromQL grammar")
+			return
+		}
+		windowStr := r.URL.Query().Get("window")
+		if windowStr == "" {
+			windowStr = "1h"
+		}
+		window, err := time.ParseDuration(windowStr)
+		if err != nil || window < time.Minute || window > 24*time.Hour {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid window",
+				"window must be a duration between 1m and 24h (e.g. 5m, 1h, 24h)")
+			return
+		}
+		stepStr := r.URL.Query().Get("step")
+		var step time.Duration
+		if stepStr != "" {
+			step, err = time.ParseDuration(stepStr)
+			if err != nil || step < 5*time.Second || step > time.Hour {
+				writeErrorWithCode(w, http.StatusBadRequest,
+					ErrCodeInvalidRequest,
+					"invalid step",
+					"step must be a duration between 5s and 1h (e.g. 10s, 1m)")
+				return
+			}
+		} else {
+			step = window / 60
+			if step < 5*time.Second {
+				step = 5 * time.Second
+			}
+		}
+
+		state, err := registry.Read(name)
+		if err != nil {
+			if errors.Is(err, registry.ErrNotFound) {
+				writeErrorWithCode(w, http.StatusNotFound,
+					ErrCodeNotFound,
+					"instance "+name+" not registered")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "read state", err)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), metricsTimeout)
+		defer cancel()
+
+		now := time.Now()
+		path := "/api/v1/query_range" +
+			"?query=" + url.QueryEscape(q) +
+			"&start=" + strconv.FormatInt(now.Add(-window).Unix(), 10) +
+			"&end=" + strconv.FormatInt(now.Unix(), 10) +
+			"&step=" + strconv.FormatFloat(step.Seconds(), 'f', -1, 64) + "s"
+
+		body, err := proxyPrometheus(ctx, state.ComposeProject, path)
+		if err != nil {
+			if errors.Is(err, errPrometheusNotRunning) {
+				writeErrorWithCode(w, http.StatusServiceUnavailable,
+					"OBSERVABILITY_PROFILE_OFF",
+					"observability profile not running for instance "+name,
+					"restart the instance with `dpm localnet up --profile observability --name "+name+"`")
+				return
+			}
+			writeError(w, http.StatusBadGateway, "prometheus query_range", err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write(body)
 	}
 }
