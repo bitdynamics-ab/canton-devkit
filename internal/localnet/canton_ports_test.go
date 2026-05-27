@@ -81,9 +81,11 @@ func TestCaptureCantonPorts_MissingPortsOmitted(t *testing.T) {
 	}
 
 	got := CaptureCantonPorts(context.Background(), "test-project")
+	// Role keys use hyphens to match state.Credentials keys
+	// ("app-user", "app-provider", "sv") — see canton_ports.go.
 	want := map[string]int{
-		"participant_admin_app_user":     55001,
-		"participant_admin_app_provider": 55002,
+		"participant_admin_app-user":     55001,
+		"participant_admin_app-provider": 55002,
 		"participant_admin_sv":           55003,
 	}
 	if len(got) != len(want) {
@@ -96,9 +98,9 @@ func TestCaptureCantonPorts_MissingPortsOmitted(t *testing.T) {
 	}
 	// Negative: ledger keys must NOT appear (the contract).
 	for _, key := range []string{
-		"participant_ledger_app_user", "participant_ledger_app_provider",
-		"participant_ledger_sv", "participant_json_app_user",
-		"participant_json_app_provider", "participant_json_sv",
+		"participant_ledger_app-user", "participant_ledger_app-provider",
+		"participant_ledger_sv", "participant_json_app-user",
+		"participant_json_app-provider", "participant_json_sv",
 	} {
 		if _, has := got[key]; has {
 			t.Errorf("got[%q] should be absent (compose-port failed)", key)

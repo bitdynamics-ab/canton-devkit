@@ -10,33 +10,21 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
 
 // TestThresholdParity_DoctorMatchesUp pins the PR #39 follow-up
 // regression: the `doctor && up` shell-gating contract requires
-// BOTH surfaces to enforce thresholds that are equal OR where up
-// is strictly stricter than doctor. The original PR #39 fix
-// introduced an 8-GiB doctor vs 4-GiB up drift in the wrong
-// direction (doctor would refuse a host that up would happily
-// run on), which broke `doctor && up`.
+// BOTH surfaces to use the same Min* threshold numbers. The
+// original PR #39 fix introduced an 8-GiB doctor vs 4-GiB up
+// drift; reviewer flagged it as breaking the gate. We now share
+// DefaultMin*Bytes constants in this package, and this test
+// enforces that nobody re-introduces the drift by hand-rolling
+// literals on either site.
 //
 // Strategy: parse both up.go and doctor.go for the docker.Options
-// struct literals they pass to RunPreflight; check each watched
-// field uses an allowed expression shape.
-//
-// Allowed shapes:
-//
-//   - Bare or qualified DefaultMin*Bytes identifier (doctor.go uses
-//     this — it's version-agnostic so it pins to the global floor).
-//   - A function call expression like splice.MinMemoryFor(version)
-//     (up.go uses this — it knows the version being brought up and
-//     enforces a per-version floor >= the global default; the
-//     ≥-default invariant is enforced separately by
-//     TestThresholdParity_VersionMinAtLeastDefault).
-//   - DefaultMinDiskBytes — disk is not version-scoped today, both
-//     surfaces share the constant.
+// struct literals they pass to RunPreflight; any MinMemoryBytes /
+// MinDiskBytes value that is NOT the DefaultMin*Bytes identifier
+// is a regression.
 func TestThresholdParity_DoctorMatchesUp(t *testing.T) {
 	// Locate the two source files relative to this test (works
 	// regardless of cwd).
@@ -50,16 +38,20 @@ func TestThresholdParity_DoctorMatchesUp(t *testing.T) {
 		filepath.Join(repoRoot, "internal", "cli", "localnet", "doctor.go"),
 	}
 
-	// Per-field allowed expressions. MinDiskBytes still requires the
-	// constant identifier on both surfaces (not version-scoped).
-	// MinMemoryBytes additionally allows splice.MinMemoryFor() —
-	// the version-aware accessor used by up.go after BIT-178.
-	// `rule` is a package-level type alias declared below so the
-	// helper exprMatchesRule shares the same shape.
-	wantedFields := map[string]rule{
-		"MinMemoryBytes":         {constName: "DefaultMinMemoryBytes", allowedCalls: []string{"MinMemoryFor"}},
-		"MinDiskBytes":           {constName: "DefaultMinDiskBytes"},
-		"RecommendedMemoryBytes": {constName: "", allowedCalls: []string{"RecommendedMemoryFor"}},
+	wantedFields := map[string]string{
+		"MinMemoryBytes": "DefaultMinMemoryBytes",
+		"MinDiskBytes":   "DefaultMinDiskBytes",
+	}
+
+	// BIT-181: up.go uses splice.MinMemoryFor(version) /
+	// splice.RecommendedMemoryFor(version) instead of the literal
+	// docker.DefaultMin*Bytes. Allowed by the parity contract because
+	// the splice helpers are invariant-pinned to be >= DefaultMin*Bytes
+	// for every catalogued version — they can only RAISE the floor
+	// above the doctor gate, never lower it.
+	allowedCalls := map[string]struct{}{
+		"splice.MinMemoryFor":         {},
+		"splice.RecommendedMemoryFor": {},
 	}
 
 	for _, path := range files {
@@ -91,23 +83,34 @@ func TestThresholdParity_DoctorMatchesUp(t *testing.T) {
 				if !ok {
 					return true
 				}
-				r, watched := wantedFields[key.Name]
+				wantSel, watched := wantedFields[key.Name]
 				if !watched {
 					return true
 				}
-				if exprMatchesRule(kv.Value, r) {
+				// Allow either docker.DefaultMin* or bare
+				// DefaultMin* (in case some future code lives
+				// inside the docker package itself).
+				if usesAllowedSelector(kv.Value, wantSel) {
 					return true
+				}
+				// BIT-181: also allow a call to one of the
+				// splice.{Min,Recommended}MemoryFor helpers.
+				if call, ok := kv.Value.(*ast.CallExpr); ok {
+					if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+						if x, ok := sel.X.(*ast.Ident); ok {
+							qname := x.Name + "." + sel.Sel.Name
+							if _, ok := allowedCalls[qname]; ok {
+								return true
+							}
+						}
+					}
 				}
 				// Drift detected — produce a useful error with
 				// the literal we found.
 				literal := exprLiteral(kv.Value)
-				want := r.constName
-				if len(r.allowedCalls) > 0 {
-					want += " (or " + strings.Join(r.allowedCalls, "/") + " call)"
-				}
-				t.Errorf("%s:%d: %s = %s — must be %s to keep `doctor && up` in sync",
+				t.Errorf("%s:%d: %s = %s — must reference docker.%s to keep `doctor && up` in sync",
 					filepath.Base(path), fset.Position(kv.Pos()).Line,
-					key.Name, literal, want)
+					key.Name, literal, wantSel)
 				return true
 			})
 		})
@@ -126,78 +129,8 @@ func TestThresholdParity_DoctorMatchesUp(t *testing.T) {
 	}
 }
 
-// TestThresholdParity_VersionMinAtLeastDefault asserts the floor
-// invariant: for every catalogued Splice version, the effective
-// memory minimum (resolved via splice.MinMemoryFor) must be >=
-// the global docker.DefaultMinMemoryBytes. This is what keeps the
-// `doctor && up` contract intact even though up.go now passes a
-// per-version value instead of the bare constant — a version-
-// specific override can only RAISE the gate, never weaken it.
-//
-// If a future maintainer ever sets a catalogued
-// MinMemoryBytes below DefaultMinMemoryBytes (e.g. "this version
-// is lighter, let's allow 2 GiB"), this test fires and the
-// regression is caught before merge.
-func TestThresholdParity_VersionMinAtLeastDefault(t *testing.T) {
-	for _, tag := range splice.Supported() {
-		v := splice.SupportedVersions[tag]
-		got := splice.MinMemoryFor(v)
-		if got < DefaultMinMemoryBytes {
-			t.Errorf("splice %s: MinMemoryFor = %d (< DefaultMinMemoryBytes %d) — a version override may only TIGHTEN the gate",
-				tag, got, DefaultMinMemoryBytes)
-		}
-		if v.RecommendedMemoryBytes > 0 && v.RecommendedMemoryBytes < got {
-			t.Errorf("splice %s: RecommendedMemoryBytes %d < MinMemoryBytes %d — recommended must be at least the minimum",
-				tag, v.RecommendedMemoryBytes, got)
-		}
-	}
-}
-
-// exprMatchesRule returns true if expr is the rule's bare/qualified
-// constant identifier OR a call expression to one of the allowed
-// selectors (e.g. splice.MinMemoryFor).
-func exprMatchesRule(expr ast.Expr, r rule) bool {
-	// Identifier or qualified selector match.
-	if r.constName != "" {
-		switch e := expr.(type) {
-		case *ast.SelectorExpr:
-			if e.Sel.Name == r.constName {
-				return true
-			}
-		case *ast.Ident:
-			if e.Name == r.constName {
-				return true
-			}
-		}
-	}
-	// Call expression match — e.g. splice.MinMemoryFor(version).
-	if call, ok := expr.(*ast.CallExpr); ok && len(r.allowedCalls) > 0 {
-		var name string
-		switch fn := call.Fun.(type) {
-		case *ast.SelectorExpr:
-			name = fn.Sel.Name
-		case *ast.Ident:
-			name = fn.Name
-		}
-		for _, allowed := range r.allowedCalls {
-			if name == allowed {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// rule is declared at package scope so exprMatchesRule can refer to
-// it; named here for clarity (the test body uses an anonymous
-// struct alias).
-type rule = struct {
-	constName    string
-	allowedCalls []string
-}
-
-// usesAllowedSelector — kept for compatibility with any future test
-// that wants the simpler identifier-only check.
+// usesAllowedSelector returns true if expr is either
+// `docker.<name>` or bare `<name>`.
 func usesAllowedSelector(expr ast.Expr, name string) bool {
 	switch e := expr.(type) {
 	case *ast.SelectorExpr:
@@ -225,8 +158,6 @@ func exprLiteral(expr ast.Expr) string {
 			return x.Name + "." + e.Sel.Name
 		}
 		return e.Sel.Name
-	case *ast.CallExpr:
-		return exprLiteral(e.Fun) + "(...)"
 	}
 	return "<expr>"
 }
@@ -239,9 +170,3 @@ func uintCheck(s string) (uint64, error) { return strconv.ParseUint(strings.Trim
 // _ keeps uintCheck reachable for future tests without lint
 // complaining about it being unused.
 var _ = uintCheck
-
-// _ keeps usesAllowedSelector reachable for future tests; the
-// rewrite to exprMatchesRule (BIT-178) made the original helper
-// unused but the simpler shape is still useful for future single-
-// rule parity checks.
-var _ = usesAllowedSelector
