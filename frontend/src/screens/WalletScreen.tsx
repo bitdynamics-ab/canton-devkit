@@ -264,14 +264,35 @@ export function WalletScreen() {
             key={walletURL}
             src={walletURL}
             title={`Splice Wallet — ${role}`}
-            // sandbox — review blocker #3. allow-same-origin is
-            // required because the wallet uses cookies + XHR to its
-            // own origin (wallet.localhost). With these flags the
-            // wallet can still run scripts, submit forms, and pop
-            // new tabs for OAuth, but cannot navigate the parent
-            // (no allow-top-navigation), spawn modal dialogs, or
-            // download arbitrary files.
-            sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+            // Cross-origin sandbox analysis (review follow-up to B3).
+            //
+            // The well-known "allow-same-origin + allow-scripts
+            // neutralises the sandbox" foot-gun applies when the
+            // iframe origin EQUALS the parent's. Here the parent is
+            // `127.0.0.1:7777` (our devkit server) and the iframe is
+            // `wallet.localhost:<per-role port>` (Splice's nginx vhost).
+            // The HTML spec's origin tuple is (scheme, host, port) —
+            // host AND port differ — so they are cross-origin. With
+            // `allow-same-origin`, the iframe's own scripts can read
+            // ITS OWN document.cookie / localStorage (which the wallet
+            // needs for its auth session), but it CANNOT touch the
+            // parent's origin (the devkit's cookies, our /api/* JWTs
+            // in localStorage, or `window.top`). Without
+            // `allow-same-origin`, the iframe would be in a unique
+            // opaque origin and the wallet's cookie-based auth would
+            // break on every render.
+            //
+            // What we deliberately did NOT include:
+            //   - allow-top-navigation       (would let wallet redirect us)
+            //   - allow-modals               (no alert/confirm spam)
+            //   - allow-downloads            (no arbitrary downloads)
+            //   - allow-storage-access-by-user-activation (not needed)
+            //   - allow-popups-to-escape-sandbox — dropped here. We
+            //     don't expect the wallet to open auth popups (Splice
+            //     LocalNet uses self-signed inline auth, no OAuth
+            //     redirect). If a future wallet release needs popups
+            //     that escape, we'll add it back deliberately.
+            sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
             referrerPolicy="no-referrer"
             style={{ flex: 1, border: 0, background: "#FAFAF8" }}
           />

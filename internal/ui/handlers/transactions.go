@@ -202,24 +202,60 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fixed-size ring buffer (review blocker #4). The stream is
-	// already bounded by EndInclusive = snapshotted ledger end so it
-	// terminates naturally; the ring just keeps memory at O(limit)
-	// instead of growing unboundedly + churning slices on every
-	// over-limit row (the previous `rows = rows[len(rows)-limit:]`
-	// reslice was O(limit) per row).
+	// Fixed-size ring buffer (review blocker #4; tightened in
+	// follow-up).
 	//
-	// We also enforce a hard streamCap so a pathologically large
-	// history can't spin the loop indefinitely. 100k is well above
-	// any reasonable LocalNet history; we cancel the stream and
-	// surface the most-recent `limit` rows we've buffered.
-	const streamCap = 100_000
+	// Why we DON'T break at `count >= limit`:
+	// ------------------------------------------------------------
+	// Updates returns rows in ASCENDING offset order. We want the
+	// NEWEST `limit` transactions (that's what the table renders).
+	// Breaking at the first time `count == limit` would give us
+	// the OLDEST `limit` rows in the window, not the newest — a
+	// silent semantic regression the user would notice as "the
+	// Explorer always shows the same ancient transactions, not my
+	// recent ones." (Contracts/ACS doesn't have this trade-off:
+	// ACS is a SNAPSHOT, not a time-ordered stream, so its
+	// `break at limit` is correct.)
+	//
+	// What we DO bound:
+	//   1. Memory — fixed ring of `limit` rows; new arrivals
+	//      overwrite the oldest. O(limit) regardless of history.
+	//   2. Loop iterations — `streamCap` is a hard wall (sized at
+	//      max(100*limit, 10_000) so a busy ledger doesn't spin
+	//      forever, but generous enough that we drain typical
+	//      LocalNet histories naturally to EOF).
+	//   3. Wall clock — `streamCtx` is derived from the request
+	//      ctx (which has a 15s timeout); we poll ctx.Err() on
+	//      every item so a slow upstream surfaces promptly as
+	//      DeadlineExceeded.
+	//
+	// The "stop when we have what we need" reviewer hint is
+	// genuinely incompatible with newest-N semantics on a
+	// strictly-ascending stream. If a future Canton release adds
+	// reverse-iteration (or a server-side "latest N" RPC), we can
+	// move to a real early-break path.
+	streamCap := 100 * limit
+	if streamCap < 10_000 {
+		streamCap = 10_000
+	}
 	buf := make([]txRow, limit)
 	head, count := 0, 0
 	processed := 0
 	for item := range stream {
+		// Honour parent-context cancellation promptly — a slow
+		// upstream shouldn't keep the goroutine alive past the
+		// request timeout.
+		if err := streamCtx.Err(); err != nil {
+			break
+		}
 		if item.Err != nil {
 			if errors.Is(item.Err, io.EOF) {
+				break
+			}
+			// Treat our own cancellation (DeadlineExceeded /
+			// Canceled) as a non-error termination — we have
+			// whatever rows fit in the ring.
+			if errors.Is(item.Err, context.Canceled) || errors.Is(item.Err, context.DeadlineExceeded) {
 				break
 			}
 			if isPermissionDenied(item.Err) {
