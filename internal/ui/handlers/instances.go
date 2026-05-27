@@ -175,6 +175,44 @@ func handleList(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// walletEndpointsFromPorts projects the per-role UI ports as
+// Endpoint rows. Used by the detail handler so the Wallet screen
+// (BIT-192) can resolve role → URL without an extra ports
+// endpoint. The Label format matches the rest of the API
+// (`<service> · <role>`) so the frontend's parsing is uniform
+// across surfaces.
+//
+// Only emits keys we expect — keeps the response stable when
+// state.json grows new port keys we don't yet want to surface
+// (gRPC admin/ledger ports per BIT-190 are intentionally not
+// here; they need credentialed handlers, not direct browser
+// linking).
+func walletEndpointsFromPorts(ports map[string]int) []types.Endpoint {
+	type spec struct {
+		key   string
+		label string
+	}
+	specs := []spec{
+		{"app_user_ui", "Wallet · app-user"},
+		{"app_provider_ui", "Wallet · app-provider"},
+		{"sv_ui", "Wallet · sv"},
+	}
+	out := make([]types.Endpoint, 0, len(specs))
+	for _, s := range specs {
+		port, ok := ports[s.key]
+		if !ok || port == 0 {
+			continue
+		}
+		out = append(out, types.Endpoint{
+			Label:  s.label,
+			URL:    fmt.Sprintf("http://localhost:%d", port),
+			Port:   port,
+			Scheme: "http",
+		})
+	}
+	return out
+}
+
 // handleDetail: GET /api/instances/{name} → types.Instance.
 //
 // Returns 404 if the instance isn't registered. The 400 vs 404
@@ -207,11 +245,15 @@ func handleDetail(w http.ResponseWriter, r *http.Request) {
 		ProjectDir:      s.ProjectDir,
 		DataDir:         s.DataDir,
 	}
-	// TODO(BIT-144-merge): once status.go's CollectStatus lands,
-	// delegate to it for the Endpoints/Credentials/Services
-	// projection (also handles JWT redaction). For now, we surface
-	// the cheap fields only — the frontend's dashboard tile renders
-	// fine without Services until the live probe lands.
+	// Project the per-role UI ports as Endpoint rows so the Wallet
+	// screen (and any future surface) can resolve role → URL without
+	// a separate /ports endpoint. JWTs are intentionally OMITTED
+	// here — the credentials map carries them and stays redacted at
+	// this surface. TODO(BIT-144-merge): unify with CollectStatus's
+	// projection once that lands.
+	for _, e := range walletEndpointsFromPorts(s.Ports) {
+		inst.Endpoints = append(inst.Endpoints, e)
+	}
 	writeJSON(w, http.StatusOK, inst)
 }
 

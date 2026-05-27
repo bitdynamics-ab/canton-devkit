@@ -103,6 +103,7 @@ function Pill({ children, color = W.brand, soft = true }) {
 function AppShell({ active = 'overview', instance = 'hubble', children, topRight }) {
   const nav = [
     { id:'overview',   icon:'⌂', label:'Overview' },
+    { id:'wallet',     icon:'◉', label:'Wallet' },
     { id:'explorer',   icon:'◉', label:'Explorer' },
     { id:'dar',        icon:'❒', label:'DAR Manager' },
     { id:'tokens',     icon:'◆', label:'Tokens' },

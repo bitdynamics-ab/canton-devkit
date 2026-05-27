@@ -37,7 +37,22 @@ export function ExplorerScreen() {
     setExpanded(null);
     fetchContracts(name, role)
       .then((data) => {
-        if (!cancelled) setState({ kind: "ok", data });
+        if (cancelled) return;
+        // Normalise: the server SHOULD return [] for empty arrays
+        // but if anything (e.g. proto-marshalling regression on the
+        // Go side) emits null, the table's row.signatories.length
+        // crashes. Defend at the boundary so the render path can
+        // trust the shape.
+        const safe = {
+          ...data,
+          contracts: (data.contracts ?? []).map((c) => ({
+            ...c,
+            signatories: c.signatories ?? [],
+            observers: c.observers ?? [],
+            payload: c.payload ?? {},
+          })),
+        };
+        setState({ kind: "ok", data: safe });
       })
       .catch((e: unknown) => {
         if (cancelled) return;

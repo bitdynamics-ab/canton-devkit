@@ -233,11 +233,23 @@ func handleContractsList(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		ev := ac.CreatedEvent
+		// nilToEmpty: Go marshals nil slices as JSON `null`, which
+		// then crashes the frontend with `null.length is undefined`
+		// on render. Convert to empty slice up-front so the wire
+		// contract is "always an array".
+		sigs := ev.GetSignatories()
+		if sigs == nil {
+			sigs = []string{}
+		}
+		obs := ev.GetObservers()
+		if obs == nil {
+			obs = []string{}
+		}
 		row := contractRow{
 			ContractID:     ev.GetContractId(),
 			TemplateID:     formatTemplateID(ev.TemplateId),
-			Signatories:    ev.GetSignatories(),
-			Observers:      ev.GetObservers(),
+			Signatories:    sigs,
+			Observers:      obs,
 			PackageName:    ev.GetPackageName(),
 			PackageVersion: "", // CreatedEvent has no version; left empty in MVP
 		}

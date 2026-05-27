@@ -89,6 +89,13 @@ export interface ListResponse {
 // Instance mirrors internal/api/types.Instance (subset; full shape
 // has Services/Endpoints/Parties/Credentials once the live probe
 // lands — added per-screen as those land).
+export interface Endpoint {
+  label: string;
+  url: string;
+  port?: number;
+  scheme?: string;
+}
+
 export interface Instance {
   schema_version: number;
   name: string;
@@ -102,6 +109,8 @@ export interface Instance {
   project_dir: string;
   data_dir: string;
   live_probe_failed?: boolean;
+  /** Per-role wallet UI endpoints; populated by detail handler post-BIT-192. */
+  endpoints?: Endpoint[];
 }
 
 // fetchVersion is the bootstrap handshake. Returns the server's
