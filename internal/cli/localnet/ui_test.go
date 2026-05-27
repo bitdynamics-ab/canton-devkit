@@ -90,7 +90,7 @@ func TestUI_BindsAndShutdownsCleanly(t *testing.T) {
 		t.Fatalf("GET /healthz at %s: %v", url, err)
 	}
 	body, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || string(body) != "ok" {
 		t.Errorf("healthz: status=%d body=%q", resp.StatusCode, body)
 	}
