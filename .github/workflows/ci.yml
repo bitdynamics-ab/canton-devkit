@@ -68,6 +68,12 @@ jobs:
       - name: Check out repository
         # actions/checkout@v5
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Set up Node
+        # actions/setup-node@v4 — self-hosted runners don't ship
+        # with npm; same pin as the frontend job.
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version-file: frontend/.nvmrc
       - name: Esbuild syntax-check every mockup .jsx
         run: |
           set -euo pipefail
