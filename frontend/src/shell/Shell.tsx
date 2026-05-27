@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
-import { W, wSans } from "../tokens";
+import { W, wMono, wSans } from "../tokens";
+import { type ConnectionState, useConnectionHealth } from "./useConnectionHealth";
 
 // Shell — sidebar + topbar layout from docs/design/mockups/webui-shell.jsx
 // (AppShell + TopBar). Children render in the main content area.
@@ -50,6 +51,7 @@ export function Shell({ children }: ShellProps) {
 }
 
 function TopBar() {
+  const conn = useConnectionHealth();
   return (
     <header
       style={{
@@ -71,7 +73,68 @@ function TopBar() {
       <span style={{ color: W.faint, fontSize: 11 }}>
         loopback only · ssh -L for remote
       </span>
+      <HealthPill conn={conn} />
     </header>
+  );
+}
+
+function HealthPill({ conn }: { conn: ConnectionState }) {
+  const { color, label, tooltip } = (() => {
+    switch (conn.health) {
+      case "ok":
+        return {
+          color: W.ok,
+          label: `v${conn.serverVersion}`,
+          tooltip: `Connected · schema v${conn.serverVersion}`,
+        };
+      case "mismatch":
+        return {
+          color: W.warn,
+          label: `v${conn.serverVersion} ≠ ours`,
+          tooltip: `Server speaks schema v${conn.serverVersion}; this bundle was built for a different version. Reload after rebuilding.`,
+        };
+      case "offline":
+        return {
+          color: W.err,
+          label: "offline",
+          tooltip:
+            conn.serverVersion != null
+              ? `Lost connection · last seen schema v${conn.serverVersion}`
+              : "Server unreachable",
+        };
+    }
+  })();
+  return (
+    <span
+      title={tooltip}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "3px 9px",
+        borderRadius: 999,
+        border: `1px solid ${color}`,
+        background: `${color}1A`,
+        color,
+        fontFamily: wMono,
+        fontSize: 11,
+        cursor: "help",
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: 7,
+          height: 7,
+          borderRadius: "50%",
+          background: color,
+          // Pulse only when degraded so a healthy connection
+          // doesn't add ambient motion to the chrome.
+          animation: conn.health === "ok" ? undefined : "pulse 1.6s ease-in-out infinite",
+        }}
+      />
+      {label}
+    </span>
   );
 }
 
