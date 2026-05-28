@@ -109,14 +109,14 @@ func TestRunLocalnetDoctorDispatch(t *testing.T) {
 
 	// Doctor exits 0 (PASS) or 2 (FAIL) depending on the host. Either is
 	// fine for a dispatch test — we just need to confirm the doctor code
-	// path ran (header line present).
+	// path ran (readiness line present).
 	code := New(&out, &errBuf, "test").Run([]string{"localnet", "doctor"})
 
 	if code != 0 && code != 2 {
 		t.Fatalf("expected exit 0 or 2, got %d (stderr=%q)", code, errBuf.String())
 	}
-	if !strings.Contains(out.String(), "canton-devkit doctor") {
-		t.Fatalf("expected doctor header, got stdout=%q", out.String())
+	if !strings.Contains(out.String(), "Checking host readiness for Canton LocalNet") {
+		t.Fatalf("expected doctor readiness output, got stdout=%q", out.String())
 	}
 }
 
