@@ -54,12 +54,11 @@ func TestRunRejectsUnknownCommand(t *testing.T) {
 	}
 }
 
-// TestRunLocalnetPlaceholderCommands covers the still-stubbed
+// TestRunLocalnetPlaceholderCommands covers any still-stubbed
 // subcommands. `up`, `down`, `status`, `logs`, `list`, `creds`,
-// `doctor`, `clean` are real commands; `restart` remains a
-// DisableFlagParsing stub.
+// `doctor`, `clean`, `restart` are all real commands now.
 func TestRunLocalnetPlaceholderCommands(t *testing.T) {
-	placeholders := []string{"restart"}
+	placeholders := []string{}
 	for _, command := range placeholders {
 		t.Run(command, func(t *testing.T) {
 			var out bytes.Buffer
