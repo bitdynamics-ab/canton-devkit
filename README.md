@@ -111,6 +111,11 @@ Optional `--profile observability` adds **Prometheus + Grafana** with a curated 
 
 ## 🚀 Quickstart
 
+> 📖 Full walkthrough — DPM + standalone install on macOS/Linux/Windows,
+> Docker prerequisites, compatibility matrix, troubleshooting, and a
+> zero-to-running LocalNet guide — lives in
+> [docs/getting-started.md](docs/getting-started.md).
+
 ### 1 · Install
 
 <details open>
