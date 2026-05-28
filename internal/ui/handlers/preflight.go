@@ -87,38 +87,10 @@ func runPreflightForVersionImpl(ctx context.Context, v splice.Version) types.Pre
 	return toAPIReport(rpt, v)
 }
 
-// toAPIReport adapts the internal docker.Report shape to the
-// stable JSON shape consumed by the CLI `--json` flag and the
-// Web UI. Splits checks into the two sections the mockup renders
-// ("System" — daemon/CLI/compose; "Resources" — memory/disk/host).
+// toAPIReport adapts the shared docker.Report shape to the Web UI preflight
+// response, then stamps the version-specific summary and error code.
 func toAPIReport(r *docker.Report, v splice.Version) types.PreflightReport {
-	system := types.PreflightSection{Title: "System"}
-	resources := types.PreflightSection{Title: "Resources"}
-
-	for _, c := range r.Results {
-		check := types.PreflightCheck{
-			Label:  c.Name,
-			Result: statusToResult(c.Status),
-			Detail: c.Detail,
-		}
-		if c.Remediation != "" {
-			check.Remediation = splitNonEmptyLines(c.Remediation)
-		}
-		switch c.Name {
-		case "Docker memory", "Disk space":
-			resources.Checks = append(resources.Checks, check)
-		case "Host prerequisites (linux)", "Host prerequisites (darwin)", "Host prerequisites (windows)":
-			resources.Checks = append(resources.Checks, check)
-		default:
-			system.Checks = append(system.Checks, check)
-		}
-	}
-
-	report := types.PreflightReport{
-		SchemaVersion: types.SchemaVersion,
-		OK:            r.OK(),
-		Sections:      []types.PreflightSection{system, resources},
-	}
+	report := localnet.PreflightReportFromDocker(r)
 	if !report.OK {
 		report.Summary = "host does not meet Splice " + v.Tag + " requirements"
 		// BIT-172: stamp the most-specific structured code from
@@ -143,39 +115,3 @@ func toAPIReport(r *docker.Report, v splice.Version) types.PreflightReport {
 // free. Sharing one function means SSE + HTTP can never disagree
 // on the code emitted for the same docker.Report. BIT-172 review.
 var preflightCodeFromReport = localnet.PreflightCodeFromReport
-
-func statusToResult(s docker.Status) string {
-	switch s {
-	case docker.StatusOK:
-		return "pass"
-	case docker.StatusWarn:
-		return "warn"
-	case docker.StatusFail:
-		return "fail"
-	case docker.StatusSkipped:
-		return "skip"
-	}
-	return "skip"
-}
-
-func splitNonEmptyLines(s string) []string {
-	var out []string
-	start := 0
-	for i := 0; i <= len(s); i++ {
-		if i == len(s) || s[i] == '\n' {
-			line := s[start:i]
-			// trim trailing spaces; cheap manual trim avoids importing strings
-			for len(line) > 0 && (line[len(line)-1] == ' ' || line[len(line)-1] == '\t') {
-				line = line[:len(line)-1]
-			}
-			for len(line) > 0 && (line[0] == ' ' || line[0] == '\t') {
-				line = line[1:]
-			}
-			if line != "" {
-				out = append(out, line)
-			}
-			start = i + 1
-		}
-	}
-	return out
-}

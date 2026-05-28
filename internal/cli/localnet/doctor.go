@@ -81,20 +81,14 @@ ExitPreflightFail semantics).`,
 	return cmd
 }
 
-// CollectDoctor is the exported entry point — for the future Web UI
-// handler (BIT-131 GET /api/doctor).
+// CollectDoctor is the exported entry point for callers that need the same
+// doctor report as the CLI without terminal rendering.
 func CollectDoctor(ctx context.Context) types.PreflightReport {
 	return runDoctor(ctx)
 }
 
-// runDoctor wraps docker.RunPreflight and translates its Report
-// into the public types.PreflightReport shape. Categorisation is
-// keyword-driven on the docker.CheckResult.Name field — slightly
-// brittle, but the alternative (changing the docker package
-// signature to carry a category) would force every existing
-// preflight caller to acknowledge the new field. The categories
-// map below is the only place that needs editing when the docker
-// check set grows.
+// runDoctor wraps docker.RunPreflight and translates its Report into the public
+// types.PreflightReport shape shared with Web UI preflight responses.
 func runDoctor(ctx context.Context) types.PreflightReport {
 	prober := doctorProberFn
 	if prober == nil {
@@ -112,167 +106,7 @@ func runDoctor(ctx context.Context) types.PreflightReport {
 		MinDiskBytes:   docker.DefaultMinDiskBytes,
 		MinMemoryBytes: docker.DefaultMinMemoryBytes,
 	})
-
-	rep := types.PreflightReport{
-		SchemaVersion: types.SchemaVersion,
-		OK:            dockerRep.OK(),
-		Sections:      []types.PreflightSection{},
-	}
-
-	system := types.PreflightSection{Title: "System"}
-	resources := types.PreflightSection{Title: "Resources"}
-	network := types.PreflightSection{Title: "Network"}
-	other := types.PreflightSection{Title: "Other"}
-
-	for _, c := range dockerRep.Results {
-		check := types.PreflightCheck{
-			Label:  c.Name,
-			Result: resultToken(c.Status),
-			Detail: c.Detail,
-		}
-		if c.Remediation != "" && (c.Status == docker.StatusFail || c.Status == docker.StatusWarn) {
-			check.Remediation = splitLines(c.Remediation)
-		}
-		// Bucket-precedence is the contract here (reviewer found
-		// a real bug in the original system-first ordering):
-		// upstream's "Docker memory" check contains BOTH "docker"
-		// and "memory", and routing on "docker" first sent it to
-		// System rather than the semantically-correct Resources.
-		//
-		// Resources + Network use more-specific keywords, so try
-		// them FIRST; fall through to System (the broadest bucket)
-		// only after both have rejected. Anything that still falls
-		// through lands in Other and surfaces as a "you should
-		// teach the categoriser about this" signal.
-		switch {
-		case isResourceCheck(c.Name):
-			resources.Checks = append(resources.Checks, check)
-		case isNetworkCheck(c.Name):
-			network.Checks = append(network.Checks, check)
-		case isSystemCheck(c.Name):
-			system.Checks = append(system.Checks, check)
-		default:
-			other.Checks = append(other.Checks, check)
-		}
-	}
-
-	// Append sections only if non-empty so an "Other" header doesn't
-	// appear when nothing falls through the categoriser.
-	for _, sec := range []types.PreflightSection{system, resources, network, other} {
-		if len(sec.Checks) > 0 {
-			rep.Sections = append(rep.Sections, sec)
-		}
-	}
-
-	// Friendly summary appended for both renderers.
-	failed, warned := 0, 0
-	for _, sec := range rep.Sections {
-		for _, c := range sec.Checks {
-			switch c.Result {
-			case "fail":
-				failed++
-			case "warn":
-				warned++
-			}
-		}
-	}
-	switch {
-	case failed > 0:
-		rep.Summary = fmt.Sprintf("%d issue%s · %d warning%s — host is NOT ready",
-			failed, doctorPluralS(failed), warned, doctorPluralS(warned))
-	case warned > 0:
-		rep.Summary = fmt.Sprintf("0 issues · %d warning%s — host is ready (advisories above)",
-			warned, doctorPluralS(warned))
-	default:
-		rep.Summary = "All checks passed — host is ready for `localnet up`"
-	}
-	return rep
-}
-
-// doctorPluralS is a tiny pluraliser inlined here rather than
-// imported from list.go because that file lives on a different
-// branch under the per-ticket PR flow.
-//
-// TODO(BIT-141): DRY this up once BIT-146 (list) and BIT-123
-// (doctor) both merge to main. Use the canonical TODO(<ticket>)
-// token so `grep -rn 'TODO(BIT-' .` enumerates outstanding
-// cross-branch follow-ups for the umbrella ticket. Reviewer pin
-// (PR #39 #6 round-4): the previous narrative phrasing wasn't
-// grep-discoverable.
-func doctorPluralS(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
-}
-
-// resultToken maps docker.Status to the public PreflightCheck.Result
-// token ("pass" | "warn" | "fail" | "skip"). String constants match
-// the JSON shape in types/preflight.go.
-func resultToken(s docker.Status) string {
-	switch s {
-	case docker.StatusOK:
-		return "pass"
-	case docker.StatusWarn:
-		return "warn"
-	case docker.StatusFail:
-		return "fail"
-	case docker.StatusSkipped:
-		return "skip"
-	}
-	return "unknown"
-}
-
-// splitLines breaks a multi-line Remediation field into the public
-// Remediation []string the JSON shape expects.
-func splitLines(s string) []string {
-	out := make([]string, 0, 2)
-	for _, l := range strings.Split(strings.TrimSpace(s), "\n") {
-		l = strings.TrimSpace(l)
-		if l != "" {
-			out = append(out, l)
-		}
-	}
-	return out
-}
-
-// Categoriser predicates — substring match on the check Name.
-// Order of evaluation in collectDoctor matters; see the switch
-// above. The keyword sets are tuned against the REAL upstream
-// check names (grepped from internal/docker/checks.go) — adding
-// new docker checks may require updating this list.
-//
-// Real names this code is verified against (grep anchor for
-// TestDoctor_CategoriserUpstreamNames):
-//
-//   "Docker CLI"              → System
-//   "Docker daemon"           → System
-//   "Docker Compose v2"       → System
-//   "Docker memory"           → Resources (NOT System — first cut bug)
-//   "Disk space"              → Resources
-//   "Host prerequisites (…)"  → System (NOT Other — first cut bug)
-//   "Port <n> free"           → Network
-
-func isResourceCheck(name string) bool {
-	n := strings.ToLower(name)
-	return strings.Contains(n, "memory") || strings.Contains(n, "disk") ||
-		strings.Contains(n, "cpu") || strings.Contains(n, "ram") ||
-		strings.Contains(n, "swap")
-}
-
-func isNetworkCheck(name string) bool {
-	n := strings.ToLower(name)
-	return strings.Contains(n, "port") || strings.Contains(n, "network") ||
-		strings.Contains(n, "dns") || strings.Contains(n, "ipv")
-}
-
-func isSystemCheck(name string) bool {
-	n := strings.ToLower(name)
-	return strings.Contains(n, "docker") || strings.Contains(n, "compose") ||
-		strings.Contains(n, "os") || strings.Contains(n, "platform") ||
-		// "Host prerequisites (linux)" / "(darwin)" — upstream
-		// checks.go uses `Host prerequisites (` + runtime.GOOS + `)`.
-		strings.Contains(n, "host")
+	return localnet.PreflightReportFromDocker(dockerRep)
 }
 
 // writeDoctorTable renders ScreenDoctor: one Section per category
@@ -398,8 +232,7 @@ func stepGlyph(result string) string {
 	return term.Dimc(term.Glyphs.Pending)
 }
 
-// writeDoctorJSON serialises the report. We omit a trailing newline
-// for grep-friendliness (jq tolerates either).
+// writeDoctorJSON serialises the report with stable indentation.
 func writeDoctorJSON(w io.Writer, rep types.PreflightReport) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
