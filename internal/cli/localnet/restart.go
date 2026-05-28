@@ -24,6 +24,16 @@ restart). Use --service to restart only specific compose services.`,
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
+			// Format-validate each --service up front (cheap, no
+			// docker) — same regex container/logs use. RunRestart
+			// additionally checks membership against the live project.
+			for _, svc := range opts.Services {
+				if !validServiceArg.MatchString(svc) {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+						"invalid --service %q: must be a compose service name (alphanumeric, dot, dash, underscore)\n", svc)
+					return localnet.AsExitError(localnet.ExitUserError)
+				}
+			}
 			return localnet.AsExitError(
 				localnet.RunRestart(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), opts))
 		},

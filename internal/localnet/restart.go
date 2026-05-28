@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"io"
 	"os/signal"
+	"sort"
+	"strings"
 	"syscall"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
@@ -78,6 +81,36 @@ func RunRestart(ctx context.Context, out io.Writer, errw io.Writer, opts *Restar
 		return ExitRuntimeFailure
 	}
 
+	// Validate requested services against the live compose project
+	// (review fix, mirrors internal/cli/localnet/container.go's
+	// resolveContainerName). A typo'd `--service cantn` should get a
+	// friendly "known services: [...]" instead of a raw compose error.
+	// Best-effort: if the docker probe fails (daemon hiccup), fall
+	// through and let compose surface the error rather than blocking.
+	if len(opts.Services) > 0 {
+		if known, perr := containers.List(ctx, state.ComposeProject); perr == nil && len(known) > 0 {
+			valid := make(map[string]bool, len(known))
+			for _, c := range known {
+				if c.Service != "" {
+					valid[c.Service] = true
+				}
+			}
+			for _, svc := range opts.Services {
+				if !valid[svc] {
+					names := make([]string, 0, len(valid))
+					for s := range valid {
+						names = append(names, s)
+					}
+					sort.Strings(names)
+					_, _ = fmt.Fprintf(errw,
+						"unknown service %q for instance %q. Known services: %s\n",
+						svc, state.Name, strings.Join(names, ", "))
+					return ExitUserError
+				}
+			}
+		}
+	}
+
 	target := "instance"
 	if len(opts.Services) > 0 {
 		target = fmt.Sprintf("service(s) %v", opts.Services)
@@ -120,6 +153,13 @@ func RunRestart(ctx context.Context, out io.Writer, errw io.Writer, opts *Restar
 				_, _ = fmt.Fprintln(errw, "Interrupted while waiting for services to become healthy")
 				return ExitTimeout
 			}
+			// NOTE: we intentionally do NOT re-capture Canton ports
+			// on the readiness-timeout path. The containers aren't
+			// healthy yet, so a CaptureCantonPorts now could read
+			// half-bound or still-shifting ephemeral ports. The
+			// background reconciler (internal/ui/handlers/reconciler.go)
+			// re-captures once the instance reaches `running`, so the
+			// registry self-heals without us persisting bad ports here.
 			_, _ = fmt.Fprintf(errw, "Services did not become healthy after restart: %s\n", err)
 			state.Status = registry.StatusPartial
 			_ = registry.Write(state)
