@@ -973,3 +973,35 @@ interface ApiErrorBody {
   detail?: string;
   remediation?: string[];
 }
+
+// ── Agent Skills (BIT-189) ─────────────────────────────────────────
+// Mirrors internal/skills.Skill + the /api/skills handler. The same
+// embedded docs back the CLI `localnet skills` command.
+export interface Skill {
+  filename: string;
+  name: string;
+  description: string;
+  body: string;
+}
+
+export interface SkillsListResponse {
+  schema_version: number;
+  skills: Skill[];
+}
+
+export interface SkillsInstallResponse {
+  schema_version: number;
+  target: string;
+  dir: string;
+  installed: string[];
+  count: number;
+}
+
+export const fetchSkills = () => apiFetch<SkillsListResponse>("/api/skills");
+
+export const installSkills = (target: "claude" | "codex") =>
+  apiFetch<SkillsInstallResponse>("/api/skills/install", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target }),
+  });
