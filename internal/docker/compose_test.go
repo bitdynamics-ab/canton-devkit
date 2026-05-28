@@ -434,6 +434,45 @@ func TestEndpointsParsesNamePublishersPairs(t *testing.T) {
 	}
 }
 
+func TestPsUsesComposeRunnerCommandSeam(t *testing.T) {
+	skipIfNoShell(t)
+	wantOut := "demo-canton\trunning\thealthy\tsplice/canton:0.6.4\t4400->4400/tcp\n"
+	rec := &scriptedRecorder{
+		script: func(args []string) (string, int) {
+			return wantOut, 0
+		},
+	}
+	c := &ComposeRunner{
+		ProjectName: "canton-demo",
+		WorkDir:     t.TempDir(),
+		Env:         []string{"DOCKER_HOST=unix:///tmp/docker.sock"},
+		commandFn:   rec.factory,
+	}
+	out, err := c.Ps(context.Background())
+	if err != nil {
+		t.Fatalf("Ps: %v", err)
+	}
+	if string(out) != wantOut {
+		t.Errorf("Ps output = %q, want %q", string(out), wantOut)
+	}
+	if len(rec.argvs) != 1 {
+		t.Fatalf("expected 1 docker call, got %d", len(rec.argvs))
+	}
+	wantArgv := []string{
+		"docker", "compose", "-p", "canton-demo", "ps", "--all",
+		"--format", "{{.Name}}\t{{.State}}\t{{.Health}}\t{{.Image}}\t{{.Publishers}}",
+	}
+	if !reflect.DeepEqual(rec.argvs[0], wantArgv) {
+		t.Errorf("argv mismatch:\n  got:  %v\n  want: %v", rec.argvs[0], wantArgv)
+	}
+	if rec.calls[0].Dir != c.WorkDir {
+		t.Errorf("cmd.Dir = %q, want %q", rec.calls[0].Dir, c.WorkDir)
+	}
+	if !reflect.DeepEqual(rec.calls[0].Env, []string{"DOCKER_HOST=unix:///tmp/docker.sock"}) {
+		t.Errorf("cmd.Env = %v", rec.calls[0].Env)
+	}
+}
+
 // Confirm scripted commands also receive WorkDir/Env — covers the
 // previously buggy Endpoints / Down paths end-to-end.
 func TestScriptedCommandsAlsoPropagateDirAndEnv(t *testing.T) {

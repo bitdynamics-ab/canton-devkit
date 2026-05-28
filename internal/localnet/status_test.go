@@ -164,6 +164,12 @@ func TestStatus_NoLiveSkipsProber(t *testing.T) {
 	if !strings.Contains(errBuf.String(), "no-live") {
 		t.Errorf("--no-live should warn on stderr, got %q", errBuf.String())
 	}
+	if strings.Contains(out.String(), "docker query failed") {
+		t.Errorf("--no-live should not claim docker failed, got %q", out.String())
+	}
+	if !strings.Contains(out.String(), "registry view only") {
+		t.Errorf("--no-live table should explain registry-only mode, got %q", out.String())
+	}
 }
 
 func TestStatus_NoLiveWarning_JSONStdoutClean(t *testing.T) {
