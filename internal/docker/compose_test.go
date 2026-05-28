@@ -133,6 +133,7 @@ func TestEveryMethodPropagatesWorkDirAndEnv(t *testing.T) {
 	}{
 		{"Up", func(c *ComposeRunner) { _ = c.Up(context.Background()) }},
 		{"Down", func(c *ComposeRunner) { _ = c.Down(context.Background()) }},
+		{"Restart", func(c *ComposeRunner) { _ = c.Restart(context.Background()) }},
 	}
 	// healthSnapshot / Endpoints / DiscoverPort require .Output(), which
 	// invokes the underlying command. Those are covered by the
@@ -173,6 +174,46 @@ func TestDownArgvShape(t *testing.T) {
 		"-p", "canton-test",
 		"down", "--volumes", "--remove-orphans",
 	}, "Down")
+}
+
+func TestRestartArgvShape(t *testing.T) {
+	rec := &recorder{}
+	c := runnerForWiring(t, rec)
+	_ = c.Restart(context.Background())
+
+	if len(rec.calls) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(rec.calls))
+	}
+	assertArgvContains(t, argvOf(rec.calls[0]), []string{
+		"docker", "compose",
+		"-p", "canton-test",
+		"-f", "compose.yaml",
+		"-f", "overlay.yaml",
+		"--env-file", "compose.env",
+		"--env-file", "env/common.env",
+		"restart",
+	}, "Restart")
+}
+
+func TestRestartArgvWithServices(t *testing.T) {
+	rec := &recorder{}
+	c := runnerForWiring(t, rec)
+	_ = c.Restart(context.Background(), "canton", "splice")
+
+	if len(rec.calls) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(rec.calls))
+	}
+	argv := argvOf(rec.calls[0])
+	assertArgvContains(t, argv, []string{"restart", "canton", "splice"}, "Restart(services)")
+
+	// Service args must follow "restart" in order.
+	ri := indexOf(argv, "restart")
+	if ri < 0 || ri+2 >= len(argv) {
+		t.Fatalf("restart not found or not enough trailing args: %v", argv)
+	}
+	if argv[ri+1] != "canton" || argv[ri+2] != "splice" {
+		t.Errorf("service args out of order: got %v after 'restart'", argv[ri+1:])
+	}
 }
 
 // --- behaviour: classifyHealth parser ------------------------------------
