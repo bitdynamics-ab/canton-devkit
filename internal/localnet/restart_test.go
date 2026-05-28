@@ -5,10 +5,28 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
+
+// stubProjectContainers swaps the listProjectContainers seam for the
+// duration of a test, returning the given services as live compose
+// containers. Restores the real containers.List on cleanup.
+func stubProjectContainers(t *testing.T, services ...string) {
+	t.Helper()
+	prev := listProjectContainers
+	t.Cleanup(func() { listProjectContainers = prev })
+	infos := make([]containers.Info, 0, len(services))
+	for _, s := range services {
+		infos = append(infos, containers.Info{Service: s, State: "running"})
+	}
+	listProjectContainers = func(context.Context, string) ([]containers.Info, error) {
+		return infos, nil
+	}
+}
 
 // restarterFn adapts inline functions to composeRestarter so each
 // test can script the Restart + WaitForHealthy outcomes.
@@ -135,6 +153,57 @@ func TestRunRestart_ReadinessTimeoutMarksPartial(t *testing.T) {
 	st, _ := registry.Read("rs-unhealthy")
 	if st.Status != registry.StatusPartial {
 		t.Errorf("status = %q, want partial after readiness failure", st.Status)
+	}
+}
+
+func TestRunRestart_UnknownServiceRejected(t *testing.T) {
+	seedRunningInstance(t, "rs-typo")
+	stubProjectContainers(t, "canton", "splice", "postgres")
+
+	restartCalled := false
+	var out, errBuf bytes.Buffer
+	code := RunRestart(context.Background(), &out, &errBuf, &RestartOptions{
+		Name:     "rs-typo",
+		Services: []string{"cantn"}, // typo of "canton"
+		NewRunner: func(string, []string, []string, []string, string, io.Writer) composeRestarter {
+			return restarterFn{
+				restart: func(context.Context, ...string) error { restartCalled = true; return nil },
+				wait:    func(context.Context) error { return nil },
+			}
+		},
+	})
+	if code != ExitUserError {
+		t.Fatalf("RunRestart = %d, want ExitUserError; stderr=%q", code, errBuf.String())
+	}
+	if restartCalled {
+		t.Error("compose Restart must not run when a service name is unknown")
+	}
+	stderr := errBuf.String()
+	if !strings.Contains(stderr, `unknown service "cantn"`) {
+		t.Errorf("expected the typo'd service in the error; stderr=%q", stderr)
+	}
+	// Known services listed, sorted, for the user to copy.
+	if !strings.Contains(stderr, "Known services: canton, postgres, splice") {
+		t.Errorf("expected sorted known-services hint; stderr=%q", stderr)
+	}
+}
+
+func TestRunRestart_KnownServiceAccepted(t *testing.T) {
+	seedRunningInstance(t, "rs-known")
+	stubProjectContainers(t, "canton", "splice")
+
+	var got []string
+	var out, errBuf bytes.Buffer
+	code := RunRestart(context.Background(), &out, &errBuf, &RestartOptions{
+		Name:      "rs-known",
+		Services:  []string{"canton"},
+		NewRunner: okRestarter(nil, &got),
+	})
+	if code != ExitSuccess {
+		t.Fatalf("RunRestart = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
+	}
+	if len(got) != 1 || got[0] != "canton" {
+		t.Errorf("services passed to Restart = %v, want [canton]", got)
 	}
 }
 

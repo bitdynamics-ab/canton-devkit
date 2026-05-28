@@ -14,6 +14,12 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
+// listProjectContainers is a test seam over containers.List. The
+// unknown-service validation branch needs live project membership,
+// which normally requires a running docker daemon; tests override
+// this to script the known-service set.
+var listProjectContainers = containers.List
+
 // composeRestarter is the subset of *docker.ComposeRunner that
 // RunRestart drives. Extracted for the test seam (mirrors
 // DownOptions.NewRunner). *docker.ComposeRunner satisfies it.
@@ -88,7 +94,7 @@ func RunRestart(ctx context.Context, out io.Writer, errw io.Writer, opts *Restar
 	// Best-effort: if the docker probe fails (daemon hiccup), fall
 	// through and let compose surface the error rather than blocking.
 	if len(opts.Services) > 0 {
-		if known, perr := containers.List(ctx, state.ComposeProject); perr == nil && len(known) > 0 {
+		if known, perr := listProjectContainers(ctx, state.ComposeProject); perr == nil && len(known) > 0 {
 			valid := make(map[string]bool, len(known))
 			for _, c := range known {
 				if c.Service != "" {
