@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -204,6 +205,58 @@ func TestRunRestart_KnownServiceAccepted(t *testing.T) {
 	}
 	if len(got) != 1 || got[0] != "canton" {
 		t.Errorf("services passed to Restart = %v, want [canton]", got)
+	}
+}
+
+func TestRunRestart_PortRecapturePersisted(t *testing.T) {
+	seedRunningInstance(t, "rs-ports")
+
+	// Seed stale ports into the registry.
+	st, _ := registry.Read("rs-ports")
+	st.Ports = map[string]int{
+		"participant_ledger_app-user": 11111, // stale
+		"app_user_ui":                 2000,  // fixed UI port, should survive
+	}
+	if err := registry.Write(st); err != nil {
+		t.Fatalf("seed ports: %v", err)
+	}
+
+	// Stub composePortCmd so CaptureCantonPorts returns refreshed
+	// values without requiring a running docker daemon.
+	prev := composePortCmd
+	t.Cleanup(func() { composePortCmd = prev })
+	composePortCmd = func(_ context.Context, project, service string, internal int) ([]byte, error) {
+		// Return a new host port = internal + 50000 for every known
+		// Canton internal port.
+		return []byte(fmt.Sprintf("0.0.0.0:%d\n", internal+50000)), nil
+	}
+
+	var out, errBuf bytes.Buffer
+	code := RunRestart(context.Background(), &out, &errBuf, &RestartOptions{
+		Name:      "rs-ports",
+		NewRunner: okRestarter(nil, nil),
+	})
+	if code != ExitSuccess {
+		t.Fatalf("RunRestart = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
+	}
+
+	after, err := registry.Read("rs-ports")
+	if err != nil {
+		t.Fatalf("read after restart: %v", err)
+	}
+
+	// The stale ledger port should be replaced by the refreshed value.
+	// Internal port 2901 → host 52901.
+	if got := after.Ports["participant_ledger_app-user"]; got != 52901 {
+		t.Errorf("participant_ledger_app-user = %d, want 52901 (refreshed)", got)
+	}
+	// A fixed UI port that CaptureCantonPorts doesn't touch should survive.
+	if got := after.Ports["app_user_ui"]; got != 2000 {
+		t.Errorf("app_user_ui = %d, want 2000 (preserved)", got)
+	}
+	// Spot-check another Canton port was captured.
+	if got := after.Ports["participant_admin_sv"]; got != 54902 {
+		t.Errorf("participant_admin_sv = %d, want 54902", got)
 	}
 }
 

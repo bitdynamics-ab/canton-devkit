@@ -148,7 +148,7 @@ func RunRestart(ctx context.Context, out io.Writer, errw io.Writer, opts *Restar
 			return ExitTimeout
 		}
 		_, _ = fmt.Fprintf(errw,
-			"docker compose restart failed: %s\nIf containers were removed, run `localnet up --name %s` instead.\n",
+			"%s\nIf containers were removed, run `localnet up --name %s` instead.\n",
 			err, state.Name)
 		return ExitRuntimeFailure
 	}
