@@ -122,33 +122,56 @@ func TargetDir(t Target, override string) (string, error) {
 	}
 }
 
-// Install writes every embedded skill into dir (created if missing)
-// and returns the absolute paths written. Each skill lands in its own
-// subdirectory named after the doc (minus .md), matching the
-// agent-skill convention of one directory per skill containing a
-// SKILL.md. Overwrites existing files so re-running picks up updates.
-func Install(dir string) ([]string, error) {
+// InstallResult reports the outcome of an Install call.
+type InstallResult struct {
+	// Written are the SKILL.md paths created or updated.
+	Written []string `json:"written"`
+	// Skipped are paths that already exist with DIFFERENT content and
+	// were left untouched because force was false. Re-run with force
+	// to overwrite them.
+	Skipped []string `json:"skipped,omitempty"`
+}
+
+// Install writes every embedded skill into dir (created if missing).
+// Each skill lands in its own subdirectory named after the doc (minus
+// .md), matching the agent-skill convention of one directory per skill
+// containing a SKILL.md.
+//
+// Clobber safety (review fix): a destination that already exists with
+// DIFFERENT content is NOT overwritten unless force is true — instead
+// its path is returned in Skipped. This protects a user's hand-edited
+// SKILL.md from silently vanishing on a re-install (CLI or one-click
+// Web UI). Identical content is a no-op rewrite (counted as Written),
+// so re-running to pick up DevKit updates stays frictionless.
+func Install(dir string, force bool) (InstallResult, error) {
+	var res InstallResult
 	if dir == "" {
-		return nil, fmt.Errorf("install dir is empty")
+		return res, fmt.Errorf("install dir is empty")
 	}
 	all, err := List()
 	if err != nil {
-		return nil, err
+		return res, err
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("create skills dir: %w", err)
+		return res, fmt.Errorf("create skills dir: %w", err)
 	}
-	written := make([]string, 0, len(all))
 	for _, s := range all {
 		skillDir := filepath.Join(dir, strings.TrimSuffix(s.Filename, ".md"))
 		if err := os.MkdirAll(skillDir, 0o755); err != nil {
-			return written, fmt.Errorf("create %s: %w", skillDir, err)
+			return res, fmt.Errorf("create %s: %w", skillDir, err)
 		}
 		dest := filepath.Join(skillDir, "SKILL.md")
-		if err := os.WriteFile(dest, []byte(s.Body), 0o644); err != nil {
-			return written, fmt.Errorf("write %s: %w", dest, err)
+		if !force {
+			if existing, rerr := os.ReadFile(dest); rerr == nil && string(existing) != s.Body {
+				// Present + differs + no force → preserve the user's edit.
+				res.Skipped = append(res.Skipped, dest)
+				continue
+			}
 		}
-		written = append(written, dest)
+		if err := os.WriteFile(dest, []byte(s.Body), 0o644); err != nil {
+			return res, fmt.Errorf("write %s: %w", dest, err)
+		}
+		res.Written = append(res.Written, dest)
 	}
-	return written, nil
+	return res, nil
 }

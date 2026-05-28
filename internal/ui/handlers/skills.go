@@ -36,10 +36,12 @@ func handleSkillsList(w http.ResponseWriter, _ *http.Request) {
 }
 
 // skillsInstallRequest is the POST body. target is "claude" or
-// "codex"; dir overrides the resolved path (rarely used from the UI).
+// "codex"; dir overrides the resolved path (rarely used from the UI);
+// force overwrites locally-modified SKILL.md files.
 type skillsInstallRequest struct {
 	Target string `json:"target"`
 	Dir    string `json:"dir,omitempty"`
+	Force  bool   `json:"force,omitempty"`
 }
 
 func handleSkillsInstall(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +66,7 @@ func handleSkillsInstall(w http.ResponseWriter, r *http.Request) {
 			err.Error())
 		return
 	}
-	written, err := skills.Install(dest)
+	res, err := skills.Install(dest, req.Force)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "install skills", err)
 		return
@@ -73,7 +75,10 @@ func handleSkillsInstall(w http.ResponseWriter, r *http.Request) {
 		"schema_version": 1,
 		"target":         req.Target,
 		"dir":            dest,
-		"installed":      written,
-		"count":          len(written),
+		"installed":      res.Written,
+		"count":          len(res.Written),
+		// skipped = locally-modified files preserved; re-POST with
+		// {"force":true} to overwrite them.
+		"skipped": res.Skipped,
 	})
 }
