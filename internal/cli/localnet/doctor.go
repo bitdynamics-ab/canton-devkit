@@ -1,17 +1,13 @@
 package localnet
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
-	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
-	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
-	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 	"github.com/spf13/cobra"
 )
@@ -25,13 +21,10 @@ import (
 // UI (BIT-131 GET /api/doctor) can call CollectDoctor and render
 // the same data.
 //
-// The check set lives in internal/docker.RunPreflight; this file
-// is only the CLI surface — categorisation + rendering + JSON.
+// The check set lives in internal/localnet.CollectDoctor; this file is only the
+// CLI surface — flags + rendering + JSON.
 
-// doctorProberFn is the test seam — production calls docker.RunPreflight,
-// tests inject a fake Report so they don't need a real docker daemon.
-// Same pattern as down.go::stopperFn and status.go::statusProberFn.
-var doctorProberFn func(ctx context.Context, opts docker.Options) *docker.Report
+var doctorCollectFn = localnet.CollectDoctor
 
 func buildDoctor() *cobra.Command {
 	var format string
@@ -58,7 +51,7 @@ ExitPreflightFail semantics).`,
 					"--format must be table or json (got %q)\n", format)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
-			rep, err := runDoctor(cmd.Context(), version)
+			rep, err := doctorCollectFn(cmd.Context(), localnet.DoctorOptions{Version: version})
 			if err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s\n", err)
 				return localnet.AsExitError(localnet.ExitUserError)
@@ -83,36 +76,6 @@ ExitPreflightFail semantics).`,
 	cmd.Flags().StringVar(&format, "format", "table", "Output format: table | json")
 	cmd.Flags().StringVar(&version, "version", "latest", "Splice version used for memory thresholds")
 	return cmd
-}
-
-// CollectDoctor is the exported entry point for callers that need the same
-// doctor report as the CLI without terminal rendering.
-func CollectDoctor(ctx context.Context) types.PreflightReport {
-	rep, _ := runDoctor(ctx, splice.LatestAlias)
-	return rep
-}
-
-// runDoctor wraps docker.RunPreflight and translates its Report into the public
-// types.PreflightReport shape shared with Web UI preflight responses.
-func runDoctor(ctx context.Context, requestedVersion string) (types.PreflightReport, error) {
-	prober := doctorProberFn
-	if prober == nil {
-		prober = docker.RunPreflight
-	}
-	version, err := splice.Resolve(requestedVersion)
-	if err != nil {
-		return types.PreflightReport{}, fmt.Errorf("resolve splice version: %w", err)
-	}
-	// Shared thresholds with `localnet up` — the `doctor && up`
-	// gating contract requires both surfaces to use the same
-	// version-aware numbers.
-	dockerRep := prober(ctx, docker.Options{
-		DataDir:                registry.Root(),
-		MinDiskBytes:           docker.DefaultMinDiskBytes,
-		MinMemoryBytes:         splice.MinMemoryFor(version),
-		RecommendedMemoryBytes: splice.RecommendedMemoryFor(version),
-	})
-	return localnet.PreflightReportFromDocker(dockerRep), nil
 }
 
 // writeDoctorTable renders ScreenDoctor: one Section per category

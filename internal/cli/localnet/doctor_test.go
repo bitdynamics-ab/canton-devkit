@@ -11,14 +11,15 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
-	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
 
 func installFakeDoctorProber(t *testing.T, fn func(ctx context.Context, opts docker.Options) *docker.Report) {
 	t.Helper()
-	prev := doctorProberFn
-	doctorProberFn = fn
-	t.Cleanup(func() { doctorProberFn = prev })
+	prev := doctorCollectFn
+	doctorCollectFn = func(ctx context.Context, _ localnet.DoctorOptions) (types.PreflightReport, error) {
+		return localnet.PreflightReportFromDocker(fn(ctx, docker.Options{})), nil
+	}
+	t.Cleanup(func() { doctorCollectFn = prev })
 }
 
 // TestDoctor_AllPassExitsZero pins the happy-path UX: every check
@@ -139,18 +140,16 @@ func TestDoctor_JSONShape(t *testing.T) {
 	}
 }
 
-func TestDoctor_UsesVersionAwareUpThresholds(t *testing.T) {
-	latest, err := splice.Resolve(splice.LatestAlias)
-	if err != nil {
-		t.Fatalf("resolve latest: %v", err)
-	}
-	var got docker.Options
-	installFakeDoctorProber(t, func(_ context.Context, opts docker.Options) *docker.Report {
+func TestDoctor_PassesVersionToCollector(t *testing.T) {
+	prev := doctorCollectFn
+	var got localnet.DoctorOptions
+	doctorCollectFn = func(_ context.Context, opts localnet.DoctorOptions) (types.PreflightReport, error) {
 		got = opts
-		return &docker.Report{Results: []docker.CheckResult{
+		return localnet.PreflightReportFromDocker(&docker.Report{Results: []docker.CheckResult{
 			{Name: "Docker CLI", Status: docker.StatusOK},
-		}}
-	})
+		}}), nil
+	}
+	t.Cleanup(func() { doctorCollectFn = prev })
 
 	cmd := buildDoctor()
 	var out, errBuf bytes.Buffer
@@ -158,20 +157,13 @@ func TestDoctor_UsesVersionAwareUpThresholds(t *testing.T) {
 	cmd.SetErr(&errBuf)
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
-	cmd.SetArgs([]string{"--format=json"})
+	cmd.SetArgs([]string{"--format=json", "--version=0.6.4"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 
-	if got.MinDiskBytes != docker.DefaultMinDiskBytes {
-		t.Errorf("MinDiskBytes = %d, want %d", got.MinDiskBytes, docker.DefaultMinDiskBytes)
-	}
-	if got.MinMemoryBytes != splice.MinMemoryFor(latest) {
-		t.Errorf("MinMemoryBytes = %d, want latest up threshold %d", got.MinMemoryBytes, splice.MinMemoryFor(latest))
-	}
-	if got.RecommendedMemoryBytes != splice.RecommendedMemoryFor(latest) {
-		t.Errorf("RecommendedMemoryBytes = %d, want latest up recommendation %d",
-			got.RecommendedMemoryBytes, splice.RecommendedMemoryFor(latest))
+	if got.Version != "0.6.4" {
+		t.Errorf("Version = %q, want 0.6.4", got.Version)
 	}
 }
 
