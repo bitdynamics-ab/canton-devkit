@@ -119,7 +119,7 @@ func isResourceCheck(name string) bool {
 
 func isNetworkCheck(name string) bool {
 	n := strings.ToLower(name)
-	return strings.Contains(n, "port") || strings.Contains(n, "network") ||
+	return strings.Contains(n, "port ") || strings.Contains(n, "ports") || strings.Contains(n, "network") ||
 		strings.Contains(n, "dns") || strings.Contains(n, "ipv")
 }
 
