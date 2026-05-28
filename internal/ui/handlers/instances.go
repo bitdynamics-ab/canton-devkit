@@ -16,19 +16,11 @@
 // JWT signer. That's the cheapest meaningful slice to land and review;
 // it also gives the M2 frontend something to consume on day one.
 //
-// # Why we read the registry directly here
+// # Why detail delegates to localnet.CollectStatus
 //
-// `internal/cli/localnet/status.go` exposes a `CollectStatus` function
-// intended as the single source of truth for both the CLI's status
-// command and the future Web UI handler. As of this PR's branch base
-// (post-mockup-refresh on m1-foundation), that function lives on the
-// not-yet-merged srikanth/bit-144 branch — depending on it would
-// couple this PR to a different review cycle.
-//
-// Instead, the handler reads registry directly with the same shape.
-// When BIT-144 merges, this file should be refactored to delegate to
-// localnet.CollectStatus (which also handles the docker `compose ps`
-// soft-fail and the JWT redaction). Tracked by TODO(BIT-144-merge).
+// The CLI status command and Web UI detail endpoint share
+// localnet.CollectStatus so JSON shape, Docker soft-fail handling,
+// endpoint projection, and JWT redaction do not drift.
 package handlers
 
 import (
@@ -178,62 +170,6 @@ func handleList(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// walletEndpointsFromPorts projects the per-role UI ports as
-// Endpoint rows. Used by the detail handler so the Wallet screen
-// (BIT-192) can resolve role → URL without an extra ports
-// endpoint. The Label format matches the rest of the API
-// (`<service> · <role>`) so the frontend's parsing is uniform
-// across surfaces.
-//
-// Only emits keys we expect — keeps the response stable when
-// state.json grows new port keys we don't yet want to surface
-// (gRPC admin/ledger ports per BIT-190 are intentionally not
-// here; they need credentialed handlers, not direct browser
-// linking).
-//
-// IMPORTANT: Splice's nginx multiplexes several apps on the same
-// port via virtual-host routing (server_name). At `localhost:<port>`
-// you get the *static landing page* (SV bootstrap, or ANS UI on
-// app-provider), NOT the wallet. The wallet only lives under the
-// `wallet.localhost` virtual host. Modern browsers (Chrome,
-// Firefox, Edge, recent Safari) resolve `*.localhost` to 127.0.0.1
-// per RFC 6761, so `wallet.localhost:<port>` works without any
-// /etc/hosts edits. See:
-//
-//	conf/nginx/sv.conf          (server_name wallet.localhost)
-//	conf/nginx/app-user.conf    (server_name localhost wallet.localhost)
-//	conf/nginx/app-provider.conf (server_name wallet.localhost)
-//
-// Previously we emitted `http://localhost:<port>` which on sv +
-// app-provider rendered the wrong app (the SV landing page on sv
-// triggers an unrelated "Failed to connect to MetaMask" toast from
-// its web3 boilerplate, which we saw reported).
-func walletEndpointsFromPorts(ports map[string]int) []types.Endpoint {
-	type spec struct {
-		key   string
-		label string
-	}
-	specs := []spec{
-		{"app_user_ui", "Wallet · app-user"},
-		{"app_provider_ui", "Wallet · app-provider"},
-		{"sv_ui", "Wallet · sv"},
-	}
-	out := make([]types.Endpoint, 0, len(specs))
-	for _, s := range specs {
-		port, ok := ports[s.key]
-		if !ok || port == 0 {
-			continue
-		}
-		out = append(out, types.Endpoint{
-			Label:  s.label,
-			URL:    fmt.Sprintf("http://wallet.localhost:%d", port),
-			Port:   port,
-			Scheme: "http",
-		})
-	}
-	return out
-}
-
 // handleDetail: GET /api/instances/{name} → types.Instance.
 //
 // Returns 404 if the instance isn't registered. The 400 vs 404
@@ -245,7 +181,7 @@ func handleDetail(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid instance name", err)
 		return
 	}
-	s, err := registry.Read(name)
+	inst, err := localnet.CollectStatus(r.Context(), name, true, false)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "instance not registered", err)
@@ -254,25 +190,6 @@ func handleDetail(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read state", err)
 		return
 	}
-	inst := types.Instance{
-		SchemaVersion:   types.SchemaVersion,
-		Name:            s.Name,
-		SpliceVersion:   s.SpliceVersion,
-		Status:          string(s.Status),
-		CreatedAt:       s.CreatedAt,
-		ComposeProject:  s.ComposeProject,
-		DockerNetwork:   s.DockerNetwork,
-		ContainerPrefix: s.ContainerPrefix,
-		ProjectDir:      s.ProjectDir,
-		DataDir:         s.DataDir,
-	}
-	// Project the per-role UI ports as Endpoint rows so the Wallet
-	// screen (and any future surface) can resolve role → URL without
-	// a separate /ports endpoint. JWTs are intentionally OMITTED
-	// here — the credentials map carries them and stays redacted at
-	// this surface. TODO(BIT-144-merge): unify with CollectStatus's
-	// projection once that lands.
-	inst.Endpoints = append(inst.Endpoints, walletEndpointsFromPorts(s.Ports)...)
 	writeJSON(w, http.StatusOK, inst)
 }
 

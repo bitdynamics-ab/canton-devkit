@@ -259,9 +259,13 @@ func writeStatusTable(w io.Writer, inst types.Instance) {
 	_, _ = fmt.Fprintln(w)
 
 	if inst.Services == nil {
-		_, _ = fmt.Fprintln(w, term.Section("Services",
-			"docker query failed — registry view follows",
-			term.Dimc("(no live data; run `docker info` to diagnose)"), 0))
+		right := "registry view only"
+		body := term.Dimc("(live data skipped; run without --no-live to query docker)")
+		if inst.LiveProbeFailed {
+			right = "docker query failed — registry view follows"
+			body = term.Dimc("(no live data; run `docker info` to diagnose)")
+		}
+		_, _ = fmt.Fprintln(w, term.Section("Services", right, body, 0))
 	} else if len(inst.Services) == 0 {
 		_, _ = fmt.Fprintln(w, term.Section("Services", "",
 			term.Dimc("(no running containers for this project)"), 0))
