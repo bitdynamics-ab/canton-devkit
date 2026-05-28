@@ -55,10 +55,11 @@ func TestRunRejectsUnknownCommand(t *testing.T) {
 }
 
 // TestRunLocalnetPlaceholderCommands covers the still-stubbed
-// subcommands. `up`, `down`, `status`, `logs`, `list`, `creds`, `doctor`
-// are real commands; `restart` and `clean` remain DisableFlagParsing stubs.
+// subcommands. `up`, `down`, `status`, `logs`, `list`, `creds`,
+// `doctor`, `clean` are real commands; `restart` remains a
+// DisableFlagParsing stub.
 func TestRunLocalnetPlaceholderCommands(t *testing.T) {
-	placeholders := []string{"restart", "clean"}
+	placeholders := []string{"restart"}
 	for _, command := range placeholders {
 		t.Run(command, func(t *testing.T) {
 			var out bytes.Buffer
@@ -76,6 +77,23 @@ func TestRunLocalnetPlaceholderCommands(t *testing.T) {
 				t.Fatalf("expected no stderr output, got %q", err.String())
 			}
 		})
+	}
+}
+
+// TestRunLocalnetClean_RequiresTarget pins that `clean` is a real
+// command now: invoked with no --name/--all it exits non-zero with
+// guidance (not the old "not implemented yet" placeholder).
+func TestRunLocalnetClean_RequiresTarget(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := New(&out, &errb, "test").Run([]string{"localnet", "clean"})
+	if code == 0 {
+		t.Fatalf("clean with no target should exit non-zero, got 0")
+	}
+	if strings.Contains(out.String(), "not implemented yet") {
+		t.Fatalf("clean should no longer be a placeholder; got %q", out.String())
+	}
+	if !strings.Contains(errb.String(), "--name") && !strings.Contains(errb.String(), "--all") {
+		t.Fatalf("clean should hint at --name/--all; stderr=%q", errb.String())
 	}
 }
 
