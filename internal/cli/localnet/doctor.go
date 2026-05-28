@@ -11,6 +11,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
+	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 	"github.com/spf13/cobra"
 )
@@ -34,6 +35,7 @@ var doctorProberFn func(ctx context.Context, opts docker.Options) *docker.Report
 
 func buildDoctor() *cobra.Command {
 	var format string
+	var version string
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check host readiness for LocalNet (docker, resources, network)",
@@ -49,27 +51,28 @@ ExitPreflightFail semantics).`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			rep := runDoctor(cmd.Context())
+			switch format {
+			case "", "table", "json":
+			default:
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+					"--format must be table or json (got %q)\n", format)
+				return localnet.AsExitError(localnet.ExitUserError)
+			}
+			rep, err := runDoctor(cmd.Context(), version)
+			if err != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s\n", err)
+				return localnet.AsExitError(localnet.ExitUserError)
+			}
 			switch format {
 			case "", "table":
 				writeDoctorTable(cmd.OutOrStdout(), rep)
 			case "json":
 				if err := writeDoctorJSON(cmd.OutOrStdout(), rep); err != nil {
-					// Reviewer pin (PR #39 #5): the original
-					// code returned ExitRuntimeFailure without
-					// surfacing the error string — users saw
-					// exit-4 with no explanation. Print the
-					// underlying error to stderr so a partial
-					// JSON write (e.g. disk full mid-encode,
-					// broken pipe to jq) is diagnosable.
+					// Print the underlying error so partial JSON writes are diagnosable.
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 						"write JSON output: %s\n", err)
 					return localnet.AsExitError(localnet.ExitRuntimeFailure)
 				}
-			default:
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-					"--format must be table or json (got %q)\n", format)
-				return localnet.AsExitError(localnet.ExitUserError)
 			}
 			if !rep.OK {
 				return localnet.AsExitError(localnet.ExitPreflightFail)
@@ -78,35 +81,38 @@ ExitPreflightFail semantics).`,
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "table", "Output format: table | json")
+	cmd.Flags().StringVar(&version, "version", splice.LatestAlias, "Splice version used for memory thresholds")
 	return cmd
 }
 
 // CollectDoctor is the exported entry point for callers that need the same
 // doctor report as the CLI without terminal rendering.
 func CollectDoctor(ctx context.Context) types.PreflightReport {
-	return runDoctor(ctx)
+	rep, _ := runDoctor(ctx, splice.LatestAlias)
+	return rep
 }
 
 // runDoctor wraps docker.RunPreflight and translates its Report into the public
 // types.PreflightReport shape shared with Web UI preflight responses.
-func runDoctor(ctx context.Context) types.PreflightReport {
+func runDoctor(ctx context.Context, requestedVersion string) (types.PreflightReport, error) {
 	prober := doctorProberFn
 	if prober == nil {
 		prober = docker.RunPreflight
 	}
+	version, err := splice.Resolve(requestedVersion)
+	if err != nil {
+		return types.PreflightReport{}, fmt.Errorf("resolve splice version: %w", err)
+	}
 	// Shared thresholds with `localnet up` — the `doctor && up`
 	// gating contract requires both surfaces to use the same
-	// numbers. PR #39 review flagged the original 8 GiB hard-
-	// code as breaking the gate on 4-7 GiB hosts where up
-	// would pass. docker.TestThresholdParity_DoctorMatchesUp
-	// AST-parses both files and refuses anything that isn't
-	// the shared constant.
+	// version-aware numbers.
 	dockerRep := prober(ctx, docker.Options{
-		DataDir:        registry.Root(),
-		MinDiskBytes:   docker.DefaultMinDiskBytes,
-		MinMemoryBytes: docker.DefaultMinMemoryBytes,
+		DataDir:                registry.Root(),
+		MinDiskBytes:           docker.DefaultMinDiskBytes,
+		MinMemoryBytes:         splice.MinMemoryFor(version),
+		RecommendedMemoryBytes: splice.RecommendedMemoryFor(version),
 	})
-	return localnet.PreflightReportFromDocker(dockerRep)
+	return localnet.PreflightReportFromDocker(dockerRep), nil
 }
 
 // writeDoctorTable renders ScreenDoctor: one Section per category

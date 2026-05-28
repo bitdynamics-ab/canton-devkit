@@ -11,6 +11,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
+	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
 
 func installFakeDoctorProber(t *testing.T, fn func(ctx context.Context, opts docker.Options) *docker.Report) {
@@ -135,6 +136,42 @@ func TestDoctor_JSONShape(t *testing.T) {
 	}
 	if len(memCheck.Remediation) == 0 || !strings.Contains(memCheck.Remediation[0], "Increase Docker") {
 		t.Errorf("remediation not propagated: %+v", memCheck.Remediation)
+	}
+}
+
+func TestDoctor_UsesVersionAwareUpThresholds(t *testing.T) {
+	latest, err := splice.Resolve(splice.LatestAlias)
+	if err != nil {
+		t.Fatalf("resolve latest: %v", err)
+	}
+	var got docker.Options
+	installFakeDoctorProber(t, func(_ context.Context, opts docker.Options) *docker.Report {
+		got = opts
+		return &docker.Report{Results: []docker.CheckResult{
+			{Name: "Docker CLI", Status: docker.StatusOK},
+		}}
+	})
+
+	cmd := buildDoctor()
+	var out, errBuf bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errBuf)
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	cmd.SetArgs([]string{"--format=json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	if got.MinDiskBytes != docker.DefaultMinDiskBytes {
+		t.Errorf("MinDiskBytes = %d, want %d", got.MinDiskBytes, docker.DefaultMinDiskBytes)
+	}
+	if got.MinMemoryBytes != splice.MinMemoryFor(latest) {
+		t.Errorf("MinMemoryBytes = %d, want latest up threshold %d", got.MinMemoryBytes, splice.MinMemoryFor(latest))
+	}
+	if got.RecommendedMemoryBytes != splice.RecommendedMemoryFor(latest) {
+		t.Errorf("RecommendedMemoryBytes = %d, want latest up recommendation %d",
+			got.RecommendedMemoryBytes, splice.RecommendedMemoryFor(latest))
 	}
 }
 
@@ -333,7 +370,9 @@ func TestDoctor_JSONErrorIsSurfacedOnStderr(t *testing.T) {
 }
 
 func TestDoctor_InvalidFormatExitsUserError(t *testing.T) {
+	called := false
 	installFakeDoctorProber(t, func(context.Context, docker.Options) *docker.Report {
+		called = true
 		return &docker.Report{Results: []docker.CheckResult{
 			{Name: "Docker daemon reachable", Status: docker.StatusOK},
 		}}
@@ -362,6 +401,9 @@ func TestDoctor_InvalidFormatExitsUserError(t *testing.T) {
 	}
 	if out.Len() != 0 {
 		t.Errorf("stdout = %q, want empty", out.String())
+	}
+	if called {
+		t.Error("prober was called for invalid --format; want fail-fast validation")
 	}
 }
 
