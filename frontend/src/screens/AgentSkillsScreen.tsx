@@ -23,7 +23,13 @@ export function AgentSkillsScreen() {
   const [install, setInstall] = useState<
     | { kind: "idle" }
     | { kind: "busy"; target: string }
-    | { kind: "done"; dir: string; count: number }
+    | {
+        kind: "done";
+        target: "claude" | "codex";
+        dir: string;
+        count: number;
+        skipped: string[];
+      }
     | { kind: "err"; message: string }
   >({ kind: "idle" });
 
@@ -47,11 +53,17 @@ export function AgentSkillsScreen() {
     };
   }, []);
 
-  async function doInstall(target: "claude" | "codex") {
+  async function doInstall(target: "claude" | "codex", force = false) {
     setInstall({ kind: "busy", target });
     try {
-      const resp = await installSkills(target);
-      setInstall({ kind: "done", dir: resp.dir, count: resp.count });
+      const resp = await installSkills(target, force);
+      setInstall({
+        kind: "done",
+        target,
+        dir: resp.dir,
+        count: resp.count,
+        skipped: resp.skipped ?? [],
+      });
     } catch (e) {
       setInstall({
         kind: "err",
@@ -120,6 +132,39 @@ export function AgentSkillsScreen() {
         {install.kind === "done" && (
           <span style={{ color: W.ok, fontSize: 12, fontFamily: wMono }}>
             ✓ {install.count} installed → {install.dir}
+          </span>
+        )}
+        {install.kind === "done" && install.skipped.length > 0 && (
+          <span
+            role="status"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              color: W.warn,
+              fontSize: 12,
+              fontFamily: wMono,
+            }}
+          >
+            ⚠ {install.skipped.length} preserved (locally modified):{" "}
+            {install.skipped.join(", ")}
+            <button
+              type="button"
+              onClick={() => doInstall(install.target, true)}
+              style={{
+                background: "transparent",
+                color: W.warn,
+                border: `1px solid ${W.warn}`,
+                borderRadius: 6,
+                padding: "3px 9px",
+                fontSize: 11,
+                fontWeight: 600,
+                fontFamily: wMono,
+                cursor: "pointer",
+              }}
+            >
+              Overwrite
+            </button>
           </span>
         )}
         {install.kind === "err" && (

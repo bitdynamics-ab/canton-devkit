@@ -23,7 +23,14 @@ const SKILLS = [
   },
 ];
 
-function stubFetch(installSpy?: (body: unknown) => void) {
+// stubFetch lets a test observe each install body and decide the
+// `skipped` set per request. By default nothing is skipped; tests that
+// exercise the clobber-safe path return skipped files unless the
+// request carried force=true.
+function stubFetch(opts?: {
+  installSpy?: (body: { target: string; force?: boolean }) => void;
+  skippedUnlessForced?: string[];
+}) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string, init?: RequestInit) => {
@@ -36,16 +43,24 @@ function stubFetch(installSpy?: (body: unknown) => void) {
         );
       }
       if (url === "/api/skills/install") {
-        if (installSpy && init?.body) installSpy(JSON.parse(init.body as string));
+        const body = init?.body
+          ? (JSON.parse(init.body as string) as { target: string; force?: boolean })
+          : { target: "claude" };
+        opts?.installSpy?.(body);
+        const skipped =
+          opts?.skippedUnlessForced && !body.force ? opts.skippedUnlessForced : [];
+        const installed = SKILLS.filter((s) => !skipped.includes(s.filename)).map(
+          (s) => `/home/u/.${body.target}/skills/${s.filename}`,
+        );
         return Promise.resolve(
           new Response(
             JSON.stringify({
               schema_version: 1,
-              target: "claude",
-              dir: "/home/u/.claude/skills",
-              installed: ["/home/u/.claude/skills/localnet-lifecycle/SKILL.md"],
-              count: 1,
-              skipped: [],
+              target: body.target,
+              dir: `/home/u/.${body.target}/skills`,
+              installed,
+              count: installed.length,
+              skipped,
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
           ),
@@ -79,9 +94,7 @@ describe("AgentSkillsScreen", () => {
 
   it("posts a claude install with the right body shape", async () => {
     let posted: unknown = null;
-    stubFetch((b) => {
-      posted = b;
-    });
+    stubFetch({ installSpy: (b) => (posted = b) });
     render(<AgentSkillsScreen />);
     await waitFor(() => screen.getByText("canton-localnet-lifecycle"));
 
@@ -89,11 +102,40 @@ describe("AgentSkillsScreen", () => {
     await user.click(screen.getByText("~/.claude/skills"));
 
     await waitFor(() => {
-      expect(posted).toEqual({ target: "claude" });
+      expect(posted).toEqual({ target: "claude", force: false });
     });
     // Success indicator shows the returned dir.
     await waitFor(() => {
       expect(screen.getByText(/installed/i)).toBeTruthy();
+    });
+  });
+
+  it("surfaces skipped files and force-reinstalls on Overwrite", async () => {
+    const posts: Array<{ target: string; force?: boolean }> = [];
+    stubFetch({
+      installSpy: (b) => posts.push(b),
+      skippedUnlessForced: ["dar-upload.md"],
+    });
+    render(<AgentSkillsScreen />);
+    await waitFor(() => screen.getByText("canton-localnet-lifecycle"));
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText("~/.claude/skills"));
+
+    // First install reports a preserved (locally-modified) file.
+    await waitFor(() => {
+      expect(screen.getByText(/preserved/i)).toBeTruthy();
+    });
+    expect(screen.getByText(/dar-upload\.md/)).toBeTruthy();
+    expect(posts[0]).toEqual({ target: "claude", force: false });
+
+    // Overwrite re-posts with force=true; the skipped warning clears.
+    await user.click(screen.getByRole("button", { name: /overwrite/i }));
+    await waitFor(() => {
+      expect(posts[1]).toEqual({ target: "claude", force: true });
+    });
+    await waitFor(() => {
+      expect(screen.queryByText(/preserved/i)).toBeNull();
     });
   });
 });

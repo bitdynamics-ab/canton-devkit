@@ -995,13 +995,20 @@ export interface SkillsInstallResponse {
   dir: string;
   installed: string[];
   count: number;
+  // Files left untouched because an existing copy differs from the
+  // bundled doc (server is clobber-safe by default). Re-install with
+  // force=true to overwrite them. Mirrors skills.InstallResult.Skipped.
+  skipped: string[];
 }
 
 export const fetchSkills = () => apiFetch<SkillsListResponse>("/api/skills");
 
-export const installSkills = (target: "claude" | "codex") =>
+// force overwrites locally-modified SKILL.md files that the server
+// would otherwise preserve. Defaults to false to match the safe-by-
+// default CLI (`skills install` without --force).
+export const installSkills = (target: "claude" | "codex", force = false) =>
   apiFetch<SkillsInstallResponse>("/api/skills/install", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ target }),
+    body: JSON.stringify({ target, force }),
   });
