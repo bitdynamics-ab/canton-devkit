@@ -59,6 +59,24 @@ jobs:
               -o "$output" ./cmd/canton-devkit
           done
 
+      - name: Generate SHA256SUMS
+        run: |
+          # Single checksum manifest covering every binary, in the
+          # format `sha256sum -c` / `shasum -a 256 -c` expect:
+          #   <hash>  <filename>
+          # Filenames are basenames (we cd into dist) so consumers can
+          # verify after downloading just the one binary they need:
+          #   shasum -a 256 -c SHA256SUMS --ignore-missing
+          # The install guide (docs/getting-started.md) and the CI
+          # examples (examples/ci/) reference this exact asset name.
+          cd dist
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum canton-devkit_* > SHA256SUMS
+          else
+            shasum -a 256 canton-devkit_* > SHA256SUMS
+          fi
+          cat SHA256SUMS
+
       - name: Upload main branch artifacts
         if: github.ref == 'refs/heads/main'
         # actions/upload-artifact@v4
