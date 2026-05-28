@@ -44,6 +44,10 @@ func Build() *cobra.Command {
 	localnet.AddCommand(buildVersions())
 	localnet.AddCommand(buildUI())
 
+	// BIT-135 — AI-agent skill docs. Same embedded docs back the
+	// Web UI Agent Skills screen (BIT-189).
+	localnet.AddCommand(buildSkills())
+
 	// CLI ↔ Web UI parity (see AGENTS.md): every per-container
 	// HTTP endpoint has a CLI mirror under `container <verb>`,
 	// and the on-demand reconciler runs via `refresh`.
