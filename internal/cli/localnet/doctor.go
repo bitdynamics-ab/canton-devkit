@@ -81,7 +81,7 @@ ExitPreflightFail semantics).`,
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "table", "Output format: table | json")
-	cmd.Flags().StringVar(&version, "version", splice.LatestAlias, "Splice version used for memory thresholds")
+	cmd.Flags().StringVar(&version, "version", "latest", "Splice version used for memory thresholds")
 	return cmd
 }
 
