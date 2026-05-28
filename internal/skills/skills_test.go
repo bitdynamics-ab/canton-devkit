@@ -62,13 +62,16 @@ func TestListIsSortedByFilename(t *testing.T) {
 
 func TestInstallWritesOneSkillDirPerDoc(t *testing.T) {
 	dir := t.TempDir()
-	written, err := Install(dir)
+	res, err := Install(dir, false)
 	if err != nil {
 		t.Fatalf("Install: %v", err)
 	}
 	list, _ := List()
-	if len(written) != len(list) {
-		t.Fatalf("wrote %d, expected %d", len(written), len(list))
+	if len(res.Written) != len(list) {
+		t.Fatalf("wrote %d, expected %d", len(res.Written), len(list))
+	}
+	if len(res.Skipped) != 0 {
+		t.Errorf("fresh install should skip nothing, got %v", res.Skipped)
 	}
 	for _, s := range list {
 		dest := filepath.Join(dir, strings.TrimSuffix(s.Filename, ".md"), "SKILL.md")
@@ -83,23 +86,62 @@ func TestInstallWritesOneSkillDirPerDoc(t *testing.T) {
 	}
 }
 
-func TestInstallOverwritesOnRerun(t *testing.T) {
+func TestInstallReinstallIdenticalIsNoConflict(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := Install(dir); err != nil {
+	if _, err := Install(dir, false); err != nil {
 		t.Fatalf("first install: %v", err)
 	}
-	// Clobber one file, re-install, expect it restored.
-	list, _ := List()
-	victim := filepath.Join(dir, strings.TrimSuffix(list[0].Filename, ".md"), "SKILL.md")
-	if err := os.WriteFile(victim, []byte("tampered"), 0o644); err != nil {
-		t.Fatalf("tamper: %v", err)
-	}
-	if _, err := Install(dir); err != nil {
+	// Re-install over identical content: everything counts as written
+	// (idempotent), nothing skipped — picking up DevKit updates stays
+	// frictionless.
+	res, err := Install(dir, false)
+	if err != nil {
 		t.Fatalf("second install: %v", err)
 	}
-	b, _ := os.ReadFile(victim)
-	if string(b) == "tampered" {
-		t.Error("re-install did not overwrite tampered file")
+	if len(res.Skipped) != 0 {
+		t.Errorf("identical re-install should skip nothing, got %v", res.Skipped)
+	}
+}
+
+func TestInstallPreservesLocalEditsWithoutForce(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Install(dir, false); err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	list, _ := List()
+	victim := filepath.Join(dir, strings.TrimSuffix(list[0].Filename, ".md"), "SKILL.md")
+	if err := os.WriteFile(victim, []byte("my local edit"), 0o644); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+
+	// Without --force: the edited file must be PRESERVED + reported skipped.
+	res, err := Install(dir, false)
+	if err != nil {
+		t.Fatalf("reinstall: %v", err)
+	}
+	if b, _ := os.ReadFile(victim); string(b) != "my local edit" {
+		t.Error("local edit was clobbered without --force")
+	}
+	found := false
+	for _, p := range res.Skipped {
+		if p == victim {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("edited file not reported in Skipped: %v", res.Skipped)
+	}
+
+	// With force=true: the edit is overwritten back to the bundled body.
+	res2, err := Install(dir, true)
+	if err != nil {
+		t.Fatalf("force reinstall: %v", err)
+	}
+	if b, _ := os.ReadFile(victim); string(b) == "my local edit" {
+		t.Error("--force did not overwrite the local edit")
+	}
+	if len(res2.Skipped) != 0 {
+		t.Errorf("force install should skip nothing, got %v", res2.Skipped)
 	}
 }
 

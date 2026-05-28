@@ -72,6 +72,7 @@ func buildSkillsInstall() *cobra.Command {
 	var (
 		target string
 		dir    string
+		force  bool
 	)
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -79,7 +80,10 @@ func buildSkillsInstall() *cobra.Command {
 		Long: `Copy the bundled skill documents into an agent skills directory.
 Defaults to the Claude convention (~/.claude/skills); use --target codex
 for ~/.codex/skills, or --dir to install to an explicit path. Each skill
-lands in its own <name>/SKILL.md subdirectory and overwrites on re-run.`,
+lands in its own <name>/SKILL.md subdirectory.
+
+A SKILL.md that already exists with DIFFERENT content is preserved (not
+overwritten) unless --force is passed, so hand edits aren't lost.`,
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -89,20 +93,29 @@ lands in its own <name>/SKILL.md subdirectory and overwrites on re-run.`,
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
-			written, err := skills.Install(dest)
+			res, err := skills.Install(dest, force)
 			if err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitRuntimeFailure)
 			}
 			out := cmd.OutOrStdout()
-			_, _ = fmt.Fprintf(out, "Installed %d skill(s) into %s:\n", len(written), dest)
-			for _, p := range written {
+			_, _ = fmt.Fprintf(out, "Installed %d skill(s) into %s:\n", len(res.Written), dest)
+			for _, p := range res.Written {
 				_, _ = fmt.Fprintf(out, "  %s\n", p)
+			}
+			if len(res.Skipped) > 0 {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+					"\nSkipped %d locally-modified skill(s) (re-run with --force to overwrite):\n",
+					len(res.Skipped))
+				for _, p := range res.Skipped {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "  %s\n", p)
+				}
 			}
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&target, "target", "claude", "agent target: claude or codex")
 	cmd.Flags().StringVar(&dir, "dir", "", "explicit install directory (overrides --target)")
+	cmd.Flags().BoolVar(&force, "force", false, "overwrite skill files that have local modifications")
 	return cmd
 }
