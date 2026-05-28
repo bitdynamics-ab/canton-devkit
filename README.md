@@ -328,23 +328,6 @@ The `splice` container runs **one Java process** (`SpliceApp daemon`) that hosts
 
 ---
 
-## 🔄 How it compares
-
-|  | `canton-devkit` | bare [`splice`](https://github.com/canton-network/splice) | [`cn-quickstart`](https://github.com/digital-asset/cn-quickstart) |
-|---|:---:|:---:|:---:|
-| One-command up | ✅ | ❌ | ⚠️ |
-| Web UI for inspection | ✅ embedded | ❌ | ❌ |
-| Snapshot / restore | ✅ | ❌ | ❌ |
-| Auto JWT signing | ✅ | ⚠️ manual | ✅ |
-| CI-friendly `--json` everywhere | ✅ | ❌ | ⚠️ partial |
-| App-provider scaffolds | ❌ | ❌ | ✅ |
-| Multi-instance parallel | ✅ | ⚠️ manual ports | ❌ |
-| Single static binary | ✅ | n/a | ❌ |
-
-> **TL;DR** — `canton-devkit` is the **infrastructure layer**. Use it as the LocalNet under your `cn-quickstart` app, your own Daml workflows, or your CI integration tests. They're complementary, not competing.
-
----
-
 ## 🗺️ Roadmap
 
 | Milestone | Status | Highlights |
