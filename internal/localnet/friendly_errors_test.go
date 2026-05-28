@@ -110,10 +110,11 @@ func TestFriendlyExit_BoxRendersOnTTYWithoutColor(t *testing.T) {
 	if err2 != nil {
 		t.Skipf("os.Pipe unavailable: %v", err2)
 	}
-	defer r.Close()
-	defer w.Close()
+	defer func() { _ = r.Close() }()
 	_ = FriendlyExit(w, err, 99)
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("close pipe writer: %v", err)
+	}
 	out := readAll(t, r)
 	if strings.Contains(out, "┃") {
 		t.Errorf("os.Pipe (not a TTY) should not render box, got: %q", out)
