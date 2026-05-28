@@ -27,15 +27,12 @@ import (
 // FriendlyErr* constructors at the failure site; everything else
 // keeps using plain fmt.Errorf and gets unchanged behaviour.
 
-// ErrorCode is the stable identifier scripts can branch on. New codes
-// belong in the table below + the docs site (devkit.dev/e/<CODE>);
-// codes are NEVER renamed once shipped because users may have built
-// alerts around them.
-type ErrorCode string
+// ErrorCode is the stable identifier scripts can branch on. Known code
+// constants live next to CodedError in coded_error.go; codes are NEVER
+// renamed once shipped because users may have built alerts around them.
+type ErrorCode = string
 
 const (
-	ErrCodePortsInUse   ErrorCode = "PORTS_IN_USE"
-	ErrCodeDockerDown   ErrorCode = "DOCKER_DOWN"
 	ErrCodeComposeFail  ErrorCode = "COMPOSE_FAILED"
 	ErrCodeInstanceBusy ErrorCode = "INSTANCE_BUSY"
 	ErrCodeNotFound     ErrorCode = "INSTANCE_NOT_FOUND"
