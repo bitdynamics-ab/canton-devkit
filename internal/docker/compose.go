@@ -393,3 +393,21 @@ func (c *ComposeRunner) Stop(ctx context.Context, removeVolumes bool) error {
 func (c *ComposeRunner) Down(ctx context.Context) error {
 	return c.Stop(ctx, true)
 }
+
+// Restart runs `docker compose restart [services...]`. With no
+// services it restarts the whole project. Unlike down+up it keeps
+// containers, networks, and volumes — only the processes bounce —
+// so it's the right primitive for `localnet restart`. Containers
+// keep their identities but Docker MAY re-assign published host
+// ports on restart, so callers should re-capture ports afterward.
+func (c *ComposeRunner) Restart(ctx context.Context, services ...string) error {
+	args := append(c.composeBase(), "restart")
+	args = append(args, services...)
+	cmd := c.command(ctx, args...)
+	cmd.Stdout = c.LogWriter
+	cmd.Stderr = c.LogWriter
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("docker compose restart failed: %w", err)
+	}
+	return nil
+}
