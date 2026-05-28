@@ -1,0 +1,49 @@
+# Example: run your Daml/Canton app tests against a throwaway Canton
+# LocalNet in GitLab CI, using canton-devkit.
+#
+# Copy the relevant job into your .gitlab-ci.yml and adapt the test
+# script. Requires a runner with Docker + Compose v2 available
+# (e.g. a shell or docker-in-docker runner with the daemon reachable).
+#
+# Same two contracts as the GitHub example:
+#   1. `localnet up` blocks until healthy (or fails non-zero).
+#   2. Deterministic exit codes fail the job on error.
+#
+# `after_script` runs even when the job fails, so teardown is
+# guaranteed (GitLab's equivalent of GitHub's if: always()).
+
+variables:
+  DEVKIT_VERSION: "v0.2.0"
+  SPLICE_VERSION: "0.6.4"
+  INSTANCE: "ci"
+
+localnet-tests:
+  stage: test
+  # Use an image with curl + bash; the canton-devkit binary is static.
+  # Docker/Compose must be reachable from the runner.
+  image: ubuntu:24.04
+  before_script:
+    - apt-get update && apt-get install -y curl ca-certificates
+    - |
+      set -euo pipefail
+      base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${DEVKIT_VERSION}"
+      curl -fL -o /usr/local/bin/canton-devkit "${base}/canton-devkit_linux_amd64"
+      curl -fL -o /tmp/SHA256SUMS "${base}/SHA256SUMS"
+      (cd /usr/local/bin && sha256sum -c /tmp/SHA256SUMS --ignore-missing)
+      chmod +x /usr/local/bin/canton-devkit
+      canton-devkit version
+  script:
+    - canton-devkit localnet doctor
+    - canton-devkit localnet up --name "${INSTANCE}" --version "${SPLICE_VERSION}"
+    # Source the exported endpoints into this shell.
+    - canton-devkit localnet env --name "${INSTANCE}" > localnet.env
+    - set -a && . ./localnet.env && set +a
+    - |
+      if [ -f ./dist/my-app.dar ]; then
+        canton-devkit localnet dar upload ./dist/my-app.dar --name "${INSTANCE}"
+      fi
+    # Replace with your test runner (npm test / pytest / daml test).
+    - echo "Run your integration tests here against the live LocalNet."
+  after_script:
+    # Runs even on failure — guaranteed teardown.
+    - canton-devkit localnet clean --name "${INSTANCE}" --force || true

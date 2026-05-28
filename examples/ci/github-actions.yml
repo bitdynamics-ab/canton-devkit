@@ -1,0 +1,93 @@
+# Example: run your Daml/Canton app tests against a throwaway Canton
+# LocalNet in GitHub Actions, using canton-devkit.
+#
+# Copy this into your app repo at .github/workflows/localnet-tests.yml
+# and adapt the "Run application tests" step. It relies on two
+# canton-devkit contracts:
+#   1. `localnet up` BLOCKS until the stack is healthy (or fails with
+#      a non-zero exit + timeout message) — no manual sleep needed.
+#   2. Every command returns deterministic exit codes, so a failed
+#      step fails the job.
+#
+# The teardown step uses `if: always()` so the LocalNet is always
+# cleaned up — even when the test step fails — leaving no dangling
+# containers/volumes on a self-hosted runner.
+
+name: LocalNet tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  localnet-tests:
+    # Docker must be available on the runner. GitHub-hosted ubuntu
+    # runners ship Docker + Compose v2. For macOS/Windows hosted
+    # runners, or self-hosted, ensure Docker Desktop / Engine is up.
+    runs-on: ubuntu-latest
+
+    env:
+      # Pin the canton-devkit release you test against (reproducible CI).
+      DEVKIT_VERSION: v0.2.0
+      # Pin the Splice LocalNet version (must be in the curated catalogue;
+      # see `canton-devkit localnet versions`).
+      SPLICE_VERSION: "0.6.4"
+      INSTANCE: ci
+
+    steps:
+      - name: Check out app repository
+        uses: actions/checkout@v4
+
+      - name: Install canton-devkit
+        run: |
+          set -euo pipefail
+          base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${DEVKIT_VERSION}"
+          curl -fL -o canton-devkit "${base}/canton-devkit_linux_amd64"
+          curl -fL -o SHA256SUMS "${base}/SHA256SUMS"
+          sha256sum -c SHA256SUMS --ignore-missing
+          chmod +x canton-devkit
+          sudo mv canton-devkit /usr/local/bin/
+          canton-devkit version
+
+      - name: Host preflight (Docker, Compose, memory, disk)
+        run: canton-devkit localnet doctor
+
+      - name: Start LocalNet (blocks until healthy)
+        run: |
+          canton-devkit localnet up \
+            --name "${INSTANCE}" \
+            --version "${SPLICE_VERSION}"
+
+      - name: Export endpoints for the test step
+        run: |
+          # `localnet env` prints .env-style KEY=VALUE lines (Ledger API,
+          # JSON API, admin API, wallet/scan URLs, party IDs). Append them
+          # to $GITHUB_ENV so subsequent steps see them as env vars.
+          canton-devkit localnet env --name "${INSTANCE}" >> "${GITHUB_ENV}"
+
+      - name: (Optional) Upload your DAR
+        run: |
+          if [ -f ./dist/my-app.dar ]; then
+            canton-devkit localnet dar upload ./dist/my-app.dar --name "${INSTANCE}"
+          else
+            echo "No DAR to upload — skipping."
+          fi
+
+      - name: Run application tests
+        run: |
+          # Replace with your test runner. The endpoints exported above
+          # are available as env vars (e.g. PARTICIPANT_LEDGER_API_*,
+          # JSON_API_URL, party IDs — see `localnet env` output).
+          #
+          #   npm test
+          #   pytest
+          #   daml test
+          echo "Run your integration tests here against the live LocalNet."
+
+      - name: Tear down LocalNet
+        if: always()
+        run: |
+          # always() ensures cleanup even if tests failed. `clean`
+          # removes containers, volumes, and registry state for the
+          # instance in one shot.
+          canton-devkit localnet clean --name "${INSTANCE}" --force || true
