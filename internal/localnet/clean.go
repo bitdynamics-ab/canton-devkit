@@ -14,8 +14,10 @@ import (
 
 // CleanOptions captures `localnet clean` flags. Cobra binds directly.
 type CleanOptions struct {
-	// Name targets a single instance. Mutually-exclusive-ish with
-	// All: when All is set, Name is ignored.
+	// Name targets a single instance. The CLI layer rejects --name
+	// together with --all as mutually exclusive; if both are set on
+	// the struct directly (e.g. a programmatic caller), cleanTargets
+	// honours All and walks every instance.
 	Name string
 	// All cleans every registered instance (walks the index).
 	All bool
