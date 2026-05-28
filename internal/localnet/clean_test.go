@@ -144,6 +144,63 @@ func TestRunClean_DryRunChangesNothing(t *testing.T) {
 	}
 }
 
+func TestRunClean_DryRunOrphanDoesNotCreateLockArtifacts(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstanceStatus(t, "dry-ghost", registry.StatusStopped)
+	dataDir := registry.DataDirFor("dry-ghost")
+	// Leave the index entry behind but remove the state directory. A
+	// dry-run must report the planned scrub without recreating the dir.
+	if err := os.RemoveAll(dataDir); err != nil {
+		t.Fatalf("wipe dataDir: %v", err)
+	}
+
+	var out, errBuf bytes.Buffer
+	code := RunClean(context.Background(), &out, &errBuf, &CleanOptions{
+		Name:      "dry-ghost",
+		DryRun:    true,
+		NewRunner: nilDowner(),
+	})
+	if code != ExitSuccess {
+		t.Fatalf("RunClean = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
+	}
+	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
+		t.Fatalf("dry-run must not recreate orphan data dir, stat err=%v", err)
+	}
+	idx, _ := registry.ReadIndex()
+	found := false
+	for _, e := range idx.Entries {
+		if e.Name == "dry-ghost" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("dry-run must not scrub the orphan index entry")
+	}
+	if !bytes.Contains(out.Bytes(), []byte("would scrub orphan registry entry")) {
+		t.Errorf("dry-run output should describe orphan scrub; got %q", out.String())
+	}
+}
+
+func TestRunClean_MissingNameDoesNotCreateLockArtifacts(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	dataDir := registry.DataDirFor("never-registered")
+
+	var out, errBuf bytes.Buffer
+	code := RunClean(context.Background(), &out, &errBuf, &CleanOptions{
+		Name:      "never-registered",
+		NewRunner: nilDowner(),
+	})
+	if code != ExitSuccess {
+		t.Fatalf("RunClean = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
+	}
+	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
+		t.Fatalf("missing-name clean must not create data dir, stat err=%v", err)
+	}
+	if !bytes.Contains(out.Bytes(), []byte("No instance named \"never-registered\" is registered")) {
+		t.Errorf("missing-name output should say no instance is registered; got %q", out.String())
+	}
+}
+
 func TestRunClean_OrphanIndexEntryScrubbed(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstanceStatus(t, "ghost", registry.StatusStopped)
