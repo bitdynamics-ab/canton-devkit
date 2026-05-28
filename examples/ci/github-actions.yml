@@ -36,7 +36,10 @@ jobs:
 
     steps:
       - name: Check out app repository
-        uses: actions/checkout@v4
+        # SHA-pin third-party actions (supply-chain hygiene). Resolve
+        # the SHA for the tag you want and keep the human-readable tag
+        # in a comment. This pin = actions/checkout@v5.
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
       - name: Install canton-devkit
         run: |
