@@ -125,6 +125,21 @@ func cleanTargets(opts *CleanOptions) ([]string, error) {
 
 // cleanOne cleans a single instance under its per-instance lock.
 func cleanOne(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOptions, name string) int {
+	indexed, err := cleanIndexHasEntry(name)
+	if err != nil {
+		_, _ = fmt.Fprintf(errw, "%s: read registry index: %s\n", name, err)
+		return ExitRuntimeFailure
+	}
+
+	if opts.DryRun {
+		return dryRunCleanOne(out, errw, opts, name, indexed)
+	}
+
+	if !indexed {
+		_, _ = fmt.Fprintf(out, "No instance named %q is registered. Nothing to clean.\n", name)
+		return ExitSuccess
+	}
+
 	release, err := registry.Lock(name)
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "%s: %s\n", name, err)
@@ -136,10 +151,6 @@ func cleanOne(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOpt
 	if err == registry.ErrNotFound {
 		// Orphan: index row present but state.json gone (crashed up,
 		// manual rm, etc.). Scrub the index idempotently.
-		if opts.DryRun {
-			_, _ = fmt.Fprintf(out, "would scrub orphan registry entry %q (state.json missing)\n", name)
-			return ExitSuccess
-		}
 		if delErr := registry.Delete(name); delErr != nil {
 			_, _ = fmt.Fprintf(errw, "%s: scrub orphan entry: %s\n", name, delErr)
 			return ExitRuntimeFailure
@@ -159,17 +170,6 @@ func cleanOne(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOpt
 				"or pass --force to tear it down and clean in one step.\n",
 			name, name)
 		return ExitUserError
-	}
-
-	if opts.DryRun {
-		extra := ""
-		if running {
-			extra = " (running — would be torn down via --force)"
-		}
-		_, _ = fmt.Fprintf(out,
-			"would remove %q%s: state.json + data dir %s + docker resources for project %s\n",
-			name, extra, state.DataDir, state.ComposeProject)
-		return ExitSuccess
 	}
 
 	// Best-effort teardown of any lingering docker resources. Even a
@@ -220,5 +220,53 @@ func cleanOne(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOpt
 		return ExitRuntimeFailure
 	}
 	_, _ = fmt.Fprintf(out, "Cleaned %q.\n", name)
+	return ExitSuccess
+}
+
+func cleanIndexHasEntry(name string) (bool, error) {
+	idx, err := registry.ReadIndex()
+	if err != nil {
+		return false, err
+	}
+	for _, e := range idx.Entries {
+		if e.Name == name {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func dryRunCleanOne(out io.Writer, errw io.Writer, opts *CleanOptions, name string, indexed bool) int {
+	if !indexed {
+		_, _ = fmt.Fprintf(out, "No instance named %q is registered. Nothing to clean.\n", name)
+		return ExitSuccess
+	}
+
+	state, err := registry.Read(name)
+	if err == registry.ErrNotFound {
+		_, _ = fmt.Fprintf(out, "would scrub orphan registry entry %q (state.json missing)\n", name)
+		return ExitSuccess
+	}
+	if err != nil {
+		_, _ = fmt.Fprintf(errw, "%s: read state: %s\n", name, err)
+		return ExitRuntimeFailure
+	}
+
+	running := state.Status == registry.StatusRunning
+	if running && !opts.Force {
+		_, _ = fmt.Fprintf(errw,
+			"%s is running — refusing to clean. Run `localnet down --name %s` first, "+
+				"or pass --force to tear it down and clean in one step.\n",
+			name, name)
+		return ExitUserError
+	}
+
+	extra := ""
+	if running {
+		extra = " (running — would be torn down via --force)"
+	}
+	_, _ = fmt.Fprintf(out,
+		"would remove %q%s: state.json + data dir %s + docker resources for project %s\n",
+		name, extra, state.DataDir, state.ComposeProject)
 	return ExitSuccess
 }
