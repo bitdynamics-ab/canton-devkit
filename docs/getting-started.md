@@ -162,8 +162,11 @@ eval "$(canton-devkit localnet env --name demo)"
 # 5. Upload a DAR
 canton-devkit localnet dar upload ./my-app.dar --name demo
 
-# 6. Watch live contracts
-canton-devkit localnet contracts watch --name demo
+# 6. Watch live contracts. The participant gRPC endpoint isn't
+#    host-published by default, so pass --endpoint host:port
+#    (auto-discovery from --name is a pending follow-up). Find the
+#    port under "participant_ledger_app-user" in `status` output.
+canton-devkit localnet contracts watch --name demo --endpoint localhost:<ledger-port>
 
 # 7. Tear it down
 canton-devkit localnet down --name demo
