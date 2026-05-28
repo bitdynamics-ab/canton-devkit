@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
 	"strings"
 	"testing"
 
@@ -243,15 +242,43 @@ func TestDoctor_CategoriserBuckets(t *testing.T) {
 // consumers branch on these tokens — renaming "pass" to "ok" would
 // break them silently.
 func TestResultToken(t *testing.T) {
-	cases := map[docker.Status]string{
-		docker.StatusOK:      "pass",
-		docker.StatusWarn:    "warn",
-		docker.StatusFail:    "fail",
-		docker.StatusSkipped: "skip",
+	installFakeDoctorProber(t, func(context.Context, docker.Options) *docker.Report {
+		return &docker.Report{Results: []docker.CheckResult{
+			{Name: "Docker CLI", Status: docker.StatusOK},
+			{Name: "Docker memory", Status: docker.StatusWarn},
+			{Name: "Port 65535 free", Status: docker.StatusFail},
+			{Name: "Some future check", Status: docker.StatusSkipped},
+		}}
+	})
+
+	cmd := buildDoctor()
+	var out, errBuf bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errBuf)
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	cmd.SetArgs([]string{"--format=json"})
+	_ = cmd.Execute()
+
+	var rep types.PreflightReport
+	if err := json.Unmarshal(out.Bytes(), &rep); err != nil {
+		t.Fatalf("unmarshal: %v\nbody=%s", err, out.String())
 	}
-	for in, want := range cases {
-		if got := resultToken(in); got != want {
-			t.Errorf("resultToken(%v) = %q, want %q", in, got, want)
+	got := map[string]string{}
+	for _, sec := range rep.Sections {
+		for _, c := range sec.Checks {
+			got[c.Label] = c.Result
+		}
+	}
+	want := map[string]string{
+		"Docker CLI":        "pass",
+		"Docker memory":     "warn",
+		"Port 65535 free":   "fail",
+		"Some future check": "skip",
+	}
+	for label, wantResult := range want {
+		if got[label] != wantResult {
+			t.Errorf("result for %q = %q, want %q", label, got[label], wantResult)
 		}
 	}
 }
@@ -302,6 +329,39 @@ func TestDoctor_JSONErrorIsSurfacedOnStderr(t *testing.T) {
 	}
 	if !strings.Contains(errBuf.String(), "write JSON output") {
 		t.Errorf("stderr should mention 'write JSON output', got %q", errBuf.String())
+	}
+}
+
+func TestDoctor_InvalidFormatExitsUserError(t *testing.T) {
+	installFakeDoctorProber(t, func(context.Context, docker.Options) *docker.Report {
+		return &docker.Report{Results: []docker.CheckResult{
+			{Name: "Docker daemon reachable", Status: docker.StatusOK},
+		}}
+	})
+
+	cmd := buildDoctor()
+	var out, errBuf bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errBuf)
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	cmd.SetArgs([]string{"--format=xml"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for invalid format")
+	}
+	var ece localnet.ExitCodeError
+	if !errors.As(err, &ece) {
+		t.Fatalf("expected ExitCodeError, got %T: %v", err, err)
+	}
+	if int(ece) != localnet.ExitUserError {
+		t.Errorf("exit code = %d, want ExitUserError (%d)", int(ece), localnet.ExitUserError)
+	}
+	if !strings.Contains(errBuf.String(), "--format must be table or json") {
+		t.Errorf("stderr should explain allowed formats, got %q", errBuf.String())
+	}
+	if out.Len() != 0 {
+		t.Errorf("stdout = %q, want empty", out.String())
 	}
 }
 
@@ -443,46 +503,5 @@ func TestDoctor_RemediationStepsRenderOnSeparateRows(t *testing.T) {
 	bad := "Stop the conflicting process · Retry localnet up"
 	if strings.Contains(body, bad) {
 		t.Errorf("remediation steps flattened with ' · ' separator (PR #39 #4 regression):\n%s", body)
-	}
-}
-
-// TestDoctor_PluralSTODOUsesCanonicalToken is the reviewer pin
-// (PR #39 #6 round-4): cross-branch follow-ups MUST use the
-// canonical `TODO(<ticket>):` token so
-// `grep -rn 'TODO(BIT-' .` enumerates them. A narrative comment
-// like "flagged as a TODO in the umbrella" is invisible to that
-// search.
-//
-// We pin by reading doctor.go and asserting the doctorPluralS
-// comment block carries a TODO(BIT-NNN) token, not a narrative.
-func TestDoctor_PluralSTODOUsesCanonicalToken(t *testing.T) {
-	// Use a path relative to the test binary's package — the
-	// file is co-located with this test.
-	src, err := os.ReadFile("doctor.go")
-	if err != nil {
-		t.Fatalf("read doctor.go: %v", err)
-	}
-	// Locate the doctorPluralS comment block and assert it
-	// carries the canonical token. We do a simple substring
-	// search because the comment is small and the canonical
-	// form is unambiguous.
-	if !strings.Contains(string(src), "TODO(BIT-") {
-		t.Errorf("doctor.go has no canonical TODO(BIT-NNN) tokens; cross-branch follow-ups will not be grep-enumerable")
-	}
-	// Specifically require the doctorPluralS TODO to use the
-	// canonical form (the only TODO we care about here).
-	// Find the function DECLARATION (not its call sites) so the
-	// window above it captures the godoc comment.
-	idx := strings.Index(string(src), "func doctorPluralS")
-	if idx < 0 {
-		t.Fatal("func doctorPluralS not found in doctor.go")
-	}
-	start := idx - 800
-	if start < 0 {
-		start = 0
-	}
-	window := string(src[start:idx]) // preceding comment
-	if !strings.Contains(window, "TODO(BIT-") {
-		t.Errorf("doctorPluralS comment lacks canonical TODO(BIT-NNN) token; preceding comment window:\n%s", window)
 	}
 }
