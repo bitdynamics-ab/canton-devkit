@@ -21,14 +21,14 @@ The user asks to "upload my DAR", "deploy the package to LocalNet",
 
 2. **Upload a DAR** (vets it so it's usable):
    ```
-   dpm localnet dar upload ./dist/my-app.dar --name dev
+   dpm localnet dar upload ./dist/my-app.dar --instance dev
    ```
    Compilation is NOT this tool's job — build with `dpm build` /
    `daml build` first, then upload the resulting `.dar`.
 
 3. **List deployed packages**:
    ```
-   dpm localnet dar list --name dev
+   dpm localnet dar list --instance dev
    ```
    Shows package id, name, version, and vetting status.
 
@@ -36,7 +36,7 @@ The user asks to "upload my DAR", "deploy the package to LocalNet",
    ```
    dpm localnet dar info ./dist/my-app.dar       # modules, templates, deps
    dpm localnet dar diff ./v1.dar ./v2.dar       # SCU-aware structural diff
-   dpm localnet dar download <package-id> --name dev
+   dpm localnet dar download <package-id> --instance dev
    ```
 
 ## Guardrails

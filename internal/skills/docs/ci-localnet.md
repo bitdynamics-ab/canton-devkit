@@ -25,7 +25,7 @@ pipeline", or "run integration tests in GitHub Actions/GitLab".
 4. **Export + test**:
    ```
    canton-devkit localnet env --name ci >> "$GITHUB_ENV"
-   canton-devkit localnet dar upload ./dist/app.dar --name ci   # optional
+   canton-devkit localnet dar upload ./dist/app.dar --instance ci   # optional
    # run your tests against the exported endpoints
    ```
 5. **Teardown in an always-run step** so failures still clean up:
