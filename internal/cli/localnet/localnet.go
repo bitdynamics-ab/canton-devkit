@@ -65,15 +65,3 @@ func Build() *cobra.Command {
 
 	return localnet
 }
-
-func newStubCommand(use string, short string) *cobra.Command {
-	return &cobra.Command{
-		Use:                use,
-		Short:              short,
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			_, err := fmt.Fprintf(cmd.OutOrStdout(), "localnet %s: %s is not implemented yet\n", use, short)
-			return err
-		},
-	}
-}

@@ -54,31 +54,6 @@ func TestRunRejectsUnknownCommand(t *testing.T) {
 	}
 }
 
-// TestRunLocalnetPlaceholderCommands covers any still-stubbed
-// subcommands. `up`, `down`, `status`, `logs`, `list`, `creds`,
-// `doctor`, `clean`, `restart` are all real commands now.
-func TestRunLocalnetPlaceholderCommands(t *testing.T) {
-	placeholders := []string{}
-	for _, command := range placeholders {
-		t.Run(command, func(t *testing.T) {
-			var out bytes.Buffer
-			var err bytes.Buffer
-
-			code := New(&out, &err, "test").Run([]string{"localnet", command})
-
-			if code != 0 {
-				t.Fatalf("expected exit code 0, got %d", code)
-			}
-			if !strings.Contains(out.String(), "not implemented yet") {
-				t.Fatalf("expected placeholder output, got %q", out.String())
-			}
-			if err.Len() != 0 {
-				t.Fatalf("expected no stderr output, got %q", err.String())
-			}
-		})
-	}
-}
-
 // TestRunLocalnetClean_RequiresTarget pins that `clean` is a real
 // command now: invoked with no --name/--all it exits non-zero with
 // guidance (not the old "not implemented yet" placeholder).
