@@ -29,8 +29,11 @@ The user asks to "watch contracts", "see transactions for a party",
 
 3. **Per-party visibility projection** (debug "what this party sees"):
    ```
-   dpm localnet tx replay <tx-id> --name dev
+   dpm localnet tx ls --name dev --party alice
    ```
+   Filtering by `--party` projects the transaction stream through that
+   party's visibility — the same transaction looks different to
+   different parties, which is the point.
 
 ## Guardrails
 - Visibility is always projected through an explicit (participant,

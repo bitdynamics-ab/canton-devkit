@@ -16,20 +16,20 @@ and upload in one step" while iterating on Daml code.
 
 1. **One-shot build + upload** (delegates compilation to dpm/daml):
    ```
-   dpm localnet dar build-upload --project . --name dev
+   dpm localnet dar build-upload --project . --instance dev
    ```
    Skipped with a clear message if `dpm`/`daml` isn't available.
 
 2. **Continuous watch** — rebuild + re-upload on every source change:
    ```
-   dpm localnet dar watch --project . --name dev
+   dpm localnet dar watch --project . --instance dev
    ```
    Leave it running in a terminal; Ctrl-C to stop. Each change triggers
    a `dpm build` and re-upload to the selected participant(s).
 
 3. **Verify the new package landed**:
    ```
-   dpm localnet dar list --name dev
+   dpm localnet dar list --instance dev
    ```
 
 ## Guardrails
