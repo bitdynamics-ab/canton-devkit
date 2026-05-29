@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	api "github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/skills"
 	"github.com/spf13/cobra"
@@ -51,7 +52,10 @@ func buildSkillsList() *cobra.Command {
 			if format == "json" {
 				enc := json.NewEncoder(out)
 				enc.SetIndent("", "  ")
-				_ = enc.Encode(map[string]any{"schema_version": 1, "skills": list})
+				_ = enc.Encode(api.SkillsListResponse{
+					SchemaVersion: api.SchemaVersion,
+					Skills:        list,
+				})
 				return nil
 			}
 			_, _ = fmt.Fprintf(out, "%d skill document(s):\n\n", len(list))
