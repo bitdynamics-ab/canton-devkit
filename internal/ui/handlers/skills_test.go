@@ -102,24 +102,32 @@ func TestSkillsInstall_BadTarget(t *testing.T) {
 func TestSkillsInstall_PreservesEditsWithoutForce(t *testing.T) {
 	srv := skillsMux(t)
 	target := t.TempDir()
-	install := func(force bool) map[string]any {
+	type installResponse struct {
+		Installed []string `json:"installed"`
+		Skipped   []string `json:"skipped"`
+	}
+	install := func(force bool) installResponse {
 		reqBody, _ := json.Marshal(map[string]any{"dir": target, "force": force})
 		resp, err := http.Post(srv.URL+"/api/skills/install", "application/json", bytes.NewReader(reqBody))
 		if err != nil {
 			t.Fatalf("POST: %v", err)
 		}
 		defer func() { _ = resp.Body.Close() }()
-		var body map[string]any
-		_ = json.NewDecoder(resp.Body).Decode(&body)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		}
+		var body installResponse
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
 		return body
 	}
 	first := install(false)
 	// Tamper with one installed file.
-	installed, _ := first["installed"].([]any)
-	if len(installed) == 0 {
+	if len(first.Installed) == 0 {
 		t.Fatal("nothing installed")
 	}
-	victim := installed[0].(string)
+	victim := first.Installed[0]
 	if err := os.WriteFile(victim, []byte("edited"), 0o644); err != nil {
 		t.Fatalf("tamper: %v", err)
 	}
@@ -128,9 +136,17 @@ func TestSkillsInstall_PreservesEditsWithoutForce(t *testing.T) {
 	if b, _ := os.ReadFile(victim); string(b) != "edited" {
 		t.Error("edit clobbered without force")
 	}
-	skipped, _ := second["skipped"].([]any)
-	if len(skipped) == 0 {
+	if len(second.Skipped) == 0 {
 		t.Error("expected skipped to report the edited file")
+	}
+
+	// Re-install with force: edit overwritten and no files skipped.
+	third := install(true)
+	if b, _ := os.ReadFile(victim); string(b) == "edited" {
+		t.Error("edit was not overwritten with force")
+	}
+	if len(third.Skipped) != 0 {
+		t.Errorf("force install skipped %d file(s), want 0", len(third.Skipped))
 	}
 	_ = filepath.Base(victim)
 }

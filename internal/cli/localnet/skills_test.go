@@ -78,8 +78,8 @@ func TestSkillsInstall_ExplicitDir(t *testing.T) {
 func TestSkillsInstall_DefaultTargetUsesHome(t *testing.T) {
 	// Inject a fake HOME so we never touch the real ~/.claude.
 	home := t.TempDir()
-	t.Setenv("HOME", home)               // unix
-	t.Setenv("USERPROFILE", home)        // windows (os.UserHomeDir)
+	t.Setenv("HOME", home)                  // unix
+	t.Setenv("USERPROFILE", home)           // windows (os.UserHomeDir)
 	_, errb, err := runSkills(t, "install") // default --target claude
 	if err != nil {
 		t.Fatalf("install: %v (stderr=%q)", err, errb)

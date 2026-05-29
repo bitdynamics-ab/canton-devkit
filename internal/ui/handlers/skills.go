@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	api "github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/skills"
 )
 
@@ -29,9 +30,9 @@ func handleSkillsList(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusInternalServerError, "list skills", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"schema_version": 1,
-		"skills":         list,
+	writeJSON(w, http.StatusOK, api.SkillsListResponse{
+		SchemaVersion: api.SchemaVersion,
+		Skills:        list,
 	})
 }
 
@@ -52,7 +53,7 @@ func handleSkillsInstall(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest,
 			ErrCodeInvalidRequest,
 			"invalid request body",
-			`expected {"target":"claude"|"codex","dir"?:"..."}`)
+			`expected {"target":"claude"|"codex","dir"?:"...","force"?:true}`)
 		return
 	}
 	if req.Target == "" {
@@ -71,14 +72,14 @@ func handleSkillsInstall(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "install skills", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"schema_version": 1,
-		"target":         req.Target,
-		"dir":            dest,
-		"installed":      res.Written,
-		"count":          len(res.Written),
+	writeJSON(w, http.StatusOK, api.SkillsInstallResponse{
+		SchemaVersion: api.SchemaVersion,
+		Target:        req.Target,
+		Dir:           dest,
+		Installed:     res.Written,
+		Count:         len(res.Written),
 		// skipped = locally-modified files preserved; re-POST with
 		// {"force":true} to overwrite them.
-		"skipped": res.Skipped,
+		Skipped: res.Skipped,
 	})
 }

@@ -3,10 +3,12 @@ package ui
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -364,5 +366,62 @@ func TestCSRF_JWTEndpointProtectedEndToEnd(t *testing.T) {
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("cross-origin POST /api/instances/demo/jwt status = %d, want 403 — withOriginCheck not reaching credential route",
 			resp.StatusCode)
+	}
+}
+
+// TestCSRF_SkillsInstallProtectedEndToEnd pins the new filesystem-writing
+// skills install route behind the same router-level CSRF middleware as the
+// rest of the mutating API surface.
+func TestCSRF_SkillsInstallProtectedEndToEnd(t *testing.T) {
+	srv, addr := startTestServer(t)
+	defer func() { _ = srv.Shutdown(context.Background()) }()
+
+	req, _ := http.NewRequest("POST",
+		"http://"+addr+"/api/skills/install", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("cross-origin POST /api/skills/install status = %d, want 403 — withOriginCheck not reaching skills install route",
+			resp.StatusCode)
+	}
+}
+
+func TestRouter_SkillsInstallRouteMountedEndToEnd(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	srv, addr := startTestServer(t)
+	defer func() { _ = srv.Shutdown(context.Background()) }()
+
+	reqBody, _ := json.Marshal(map[string]string{"target": "claude"})
+	req, _ := http.NewRequest("POST",
+		"http://"+addr+"/api/skills/install", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://"+addr)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200; body=%s", resp.StatusCode, body)
+	}
+	var body struct {
+		Dir   string `json:"dir"`
+		Count int    `json:"count"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Dir != filepath.Join(home, ".claude", "skills") {
+		t.Errorf("dir = %q, want fake home claude skills dir", body.Dir)
+	}
+	if body.Count != 6 {
+		t.Errorf("count = %d, want 6", body.Count)
 	}
 }

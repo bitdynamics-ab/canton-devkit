@@ -28,6 +28,8 @@ func TestAllTopLevelResponses_CarrySchemaVersion(t *testing.T) {
 		Instance{},
 		ListResponse{},
 		PreflightReport{},
+		SkillsInstallResponse{},
+		SkillsListResponse{},
 		Snapshot{},
 	}
 	for _, v := range topLevel {
@@ -95,6 +97,27 @@ func TestSchemaVersion_ConsistentAcrossResponses(t *testing.T) {
 				return json.Marshal(PreflightReport{
 					SchemaVersion: SchemaVersion,
 					OK:            true,
+				})
+			},
+			want: SchemaVersion,
+		},
+		{
+			name: "SkillsInstallResponse",
+			marshal: func() ([]byte, error) {
+				return json.Marshal(SkillsInstallResponse{
+					SchemaVersion: SchemaVersion,
+					Target:        "claude",
+					Dir:           "/tmp/skills",
+				})
+			},
+			want: SchemaVersion,
+		},
+		{
+			name: "SkillsListResponse",
+			marshal: func() ([]byte, error) {
+				return json.Marshal(SkillsListResponse{
+					SchemaVersion: SchemaVersion,
+					Skills:        nil,
 				})
 			},
 			want: SchemaVersion,
