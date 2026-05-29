@@ -78,18 +78,27 @@ Download the binary for your platform from the
 verify its checksum, mark it executable, and put it on your `PATH`.
 
 Release assets are named `canton-devkit_<os>_<arch>` (with `.exe` on
-Windows) and ship alongside a `SHA256SUMS` file.
+Windows). GitHub exposes each asset checksum through the release API as
+an asset `digest` field. The macOS and Linux examples use `jq` to read
+that value from the API response.
 
 ### macOS (Apple Silicon)
 
 ```bash
 VERSION=v0.2.0   # replace with the latest release tag
+ASSET=canton-devkit_darwin_arm64
 curl -fL -o canton-devkit \
-  "https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}/canton-devkit_darwin_arm64"
+  "https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}/${ASSET}"
 # verify (optional but recommended)
-curl -fL -o SHA256SUMS \
-  "https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}/SHA256SUMS"
-shasum -a 256 -c SHA256SUMS --ignore-missing
+EXPECTED_SHA256="$(
+  curl -fsSL "https://api.github.com/repos/bitdynamics-ab/canton-devkit/releases/tags/${VERSION}" |
+    jq -r --arg asset "$ASSET" '.assets[] | select(.name == $asset) | .digest | sub("^sha256:"; "")'
+)"
+ACTUAL_SHA256="$(shasum -a 256 canton-devkit | cut -d ' ' -f 1)"
+test "$ACTUAL_SHA256" = "$EXPECTED_SHA256" || {
+  printf "checksum mismatch\nexpected: %s\nactual:   %s\n" "$EXPECTED_SHA256" "$ACTUAL_SHA256"
+  exit 1
+}
 chmod +x canton-devkit
 sudo mv canton-devkit /usr/local/bin/
 # Gatekeeper: first run may need this once
@@ -101,11 +110,14 @@ canton-devkit version
 
 ```bash
 VERSION=v0.2.0
+ASSET=canton-devkit_linux_amd64
 curl -fL -o canton-devkit \
-  "https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}/canton-devkit_linux_amd64"
-curl -fL -o SHA256SUMS \
-  "https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}/SHA256SUMS"
-sha256sum -c SHA256SUMS --ignore-missing
+  "https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}/${ASSET}"
+EXPECTED_SHA256="$(
+  curl -fsSL "https://api.github.com/repos/bitdynamics-ab/canton-devkit/releases/tags/${VERSION}" |
+    jq -r --arg asset "$ASSET" '.assets[] | select(.name == $asset) | .digest | sub("^sha256:"; "")'
+)"
+printf "%s  canton-devkit\n" "$EXPECTED_SHA256" | sha256sum -c -
 chmod +x canton-devkit
 sudo mv canton-devkit /usr/local/bin/
 canton-devkit version
@@ -115,11 +127,12 @@ canton-devkit version
 
 ```powershell
 $Version = "v0.2.0"
+$Asset = "canton-devkit_windows_amd64.exe"
 $base = "https://github.com/bitdynamics-ab/canton-devkit/releases/download/$Version"
-Invoke-WebRequest -Uri "$base/canton-devkit_windows_amd64.exe" -OutFile canton-devkit.exe
-Invoke-WebRequest -Uri "$base/SHA256SUMS" -OutFile SHA256SUMS
+Invoke-WebRequest -Uri "$base/$Asset" -OutFile canton-devkit.exe
 # verify
-$expected = (Select-String -Path SHA256SUMS -Pattern "canton-devkit_windows_amd64.exe").Line.Split(" ")[0]
+$release = Invoke-RestMethod -Uri "https://api.github.com/repos/bitdynamics-ab/canton-devkit/releases/tags/$Version"
+$expected = ($release.assets | Where-Object { $_.name -eq $Asset }).digest -replace "^sha256:", ""
 $actual = (Get-FileHash canton-devkit.exe -Algorithm SHA256).Hash.ToLower()
 if ($expected -ne $actual) { throw "checksum mismatch" }
 # put it somewhere on PATH, e.g. a tools dir you've added to PATH
