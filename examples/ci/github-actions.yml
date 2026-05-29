@@ -44,10 +44,16 @@ jobs:
       - name: Install canton-devkit
         run: |
           set -euo pipefail
+          asset="canton-devkit_linux_amd64"
           base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${DEVKIT_VERSION}"
-          curl -fL -o canton-devkit "${base}/canton-devkit_linux_amd64"
-          curl -fL -o SHA256SUMS "${base}/SHA256SUMS"
-          sha256sum -c SHA256SUMS --ignore-missing
+          curl -fL -o canton-devkit "${base}/${asset}"
+          # GitHub publishes each release asset's SHA-256 as a `digest`
+          # field in the release API; read it and verify the download.
+          expected_sha256="$(
+            curl -fsSL "https://api.github.com/repos/bitdynamics-ab/canton-devkit/releases/tags/${DEVKIT_VERSION}" |
+              jq -r --arg asset "$asset" '.assets[] | select(.name == $asset) | .digest | sub("^sha256:"; "")'
+          )"
+          printf "%s  canton-devkit\n" "$expected_sha256" | sha256sum -c -
           chmod +x canton-devkit
           sudo mv canton-devkit /usr/local/bin/
           canton-devkit version

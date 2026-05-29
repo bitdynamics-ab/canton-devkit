@@ -12,7 +12,8 @@ throwaway Canton LocalNet managed by `canton-devkit`.
 
 Every example follows the same five beats:
 
-1. **Install** the pinned `canton-devkit` release (verify checksum).
+1. **Install** the pinned `canton-devkit` release (verify the GitHub
+   release asset `digest` via the release API).
 2. **`localnet doctor`** — fail fast if the runner's Docker host isn't ready.
 3. **`localnet up --name ci`** — start LocalNet. This **blocks until the
    stack is healthy** (or exits non-zero with a timeout message), so you

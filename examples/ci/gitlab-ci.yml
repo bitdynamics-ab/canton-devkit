@@ -23,13 +23,19 @@ localnet-tests:
   # Docker/Compose must be reachable from the runner.
   image: ubuntu:24.04
   before_script:
-    - apt-get update && apt-get install -y curl ca-certificates
+    - apt-get update && apt-get install -y curl ca-certificates jq
     - |
       set -euo pipefail
+      asset="canton-devkit_linux_amd64"
       base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${DEVKIT_VERSION}"
-      curl -fL -o /usr/local/bin/canton-devkit "${base}/canton-devkit_linux_amd64"
-      curl -fL -o /tmp/SHA256SUMS "${base}/SHA256SUMS"
-      (cd /usr/local/bin && sha256sum -c /tmp/SHA256SUMS --ignore-missing)
+      curl -fL -o /usr/local/bin/canton-devkit "${base}/${asset}"
+      # GitHub publishes each release asset's SHA-256 as a `digest`
+      # field in the release API; read it and verify the download.
+      expected_sha256="$(
+        curl -fsSL "https://api.github.com/repos/bitdynamics-ab/canton-devkit/releases/tags/${DEVKIT_VERSION}" |
+          jq -r --arg asset "$asset" '.assets[] | select(.name == $asset) | .digest | sub("^sha256:"; "")'
+      )"
+      printf "%s  /usr/local/bin/canton-devkit\n" "$expected_sha256" | sha256sum -c -
       chmod +x /usr/local/bin/canton-devkit
       canton-devkit version
   script:
