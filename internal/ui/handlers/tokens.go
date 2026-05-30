@@ -262,11 +262,15 @@ func handleTokenBurn(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
+	role := roleFromQuery(r)
 	err = token.RunBurn(r.Context(), nil, token.BurnOptions{
 		Instance:   instance,
 		Instrument: r.PathValue("symbol"),
 		From:       body.From,
 		Amount:     body.Amount,
+		Endpoint:   liveLedgerEndpoint(instance, role),
+		Role:       role,
+		Insecure:   true,
 	})
 	mapTokenError(w, err, "burn")
 }

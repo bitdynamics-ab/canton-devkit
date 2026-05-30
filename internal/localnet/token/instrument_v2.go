@@ -112,6 +112,28 @@ func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regst
 	return nil
 }
 
+// runBurnLive: the splice-test-token-v2 example does NOT support a
+// standalone burn. Its transfer-accept transition unconditionally
+// creates a holding for the receiver (`create Token with account =
+// receiver`), which violates the Token template's `ensure isSome
+// account.owner` when the receiver is the special burn account
+// (owner = None). Burning in this token is only reachable through the
+// AllocationV2 / SettlementFactory_SettleBatch (delivery-versus-payment)
+// machinery, where the burn leg is handled specially — a much larger
+// surface than mint. Until that lands we surface an honest, specific
+// error instead of leaving a half-settled offer that locks holdings.
+func runBurnLive(_ context.Context, out io.Writer, opts BurnOptions, ref regstate.TokenRef) error {
+	emit(out, "burn", map[string]any{
+		"instrument": ref.Symbol, "from": opts.From, "amount": opts.Amount,
+	})
+	return fmt.Errorf(
+		"burn is not yet wired for splice-test-token-v2: this token only "+
+			"implements mint + transfer directly; burning requires the V2 "+
+			"AllocationV2 / SettlementFactory_SettleBatch (delivery-versus-"+
+			"payment) flow, which is a separate follow-up (BIT-216). The "+
+			"holder %s keeps their %s %s", opts.From, opts.Amount, ref.Symbol)
+}
+
 // acceptMintOffer accepts a TokenTransferOffer created by OfferMint via
 // its TransferInstruction interface — the offer implements
 // TransferInstructionV2, so the receiver exercises

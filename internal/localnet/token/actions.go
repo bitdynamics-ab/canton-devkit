@@ -101,6 +101,14 @@ type BurnOptions struct {
 	Instrument string
 	From       string // party whose holding is burned
 	Amount     string
+
+	// Endpoint, when set, runs the live burn for an on-ledger
+	// test-token instrument: a transfer of the holder's tokens to the
+	// instrument's special burn account. Amulet / registry-only
+	// instruments yield ErrUnsupportedOnInstrument.
+	Endpoint string
+	Role     string
+	Insecure bool
 }
 type BalanceOptions struct {
 	Instance   string
@@ -241,8 +249,10 @@ func RunAccept(ctx context.Context, out io.Writer, opts AcceptOptions) error {
 	return runAcceptLive(ctx, out, opts)
 }
 
-// RunBurn always returns ErrUnsupportedOnInstrument — same reasoning
-// as RunMint.
+// RunBurn burns supply of an on-ledger test-token instrument by
+// transferring the holder's tokens to the instrument's special burn
+// account. Amulet / registry-only instruments have no such path and
+// yield ErrUnsupportedOnInstrument.
 func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 	if err := requireFields("burn", opts.Instance, opts.Instrument, opts.From, opts.Amount); err != nil {
 		return err
@@ -256,6 +266,12 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
 	if err != nil {
 		ref = registry.TokenRef{InstrumentID: opts.Instrument}
+	}
+	if opts.Endpoint != "" && ref.Status == "on-ledger" {
+		if opts.Role == "" {
+			opts.Role = "app-user"
+		}
+		return runBurnLive(ctx, out, opts, ref)
 	}
 	emit(out, "burn", map[string]any{
 		"instrument": ref, "from": opts.From, "amount": opts.Amount,
