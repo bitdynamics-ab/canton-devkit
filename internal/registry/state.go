@@ -78,9 +78,38 @@ type State struct {
 	// Captured JWTs (BIT-109; empty for now).
 	Credentials map[string]Credential `json:"credentials,omitempty"`
 
+	// Tokens is the per-instance V2 instrument registry (BIT-138).
+	// Each entry is a TokenRef indexed by symbol — created via
+	// `localnet token create`, consumed by `mint/transfer/burn/
+	// balance` and the Web UI Tokens screen. Persisted so users
+	// don't have to retype the (admin, instrument_id) pair on every
+	// command. Keyed by symbol; symbols must be unique within an
+	// instance. Additive — older state.json files without this key
+	// decode cleanly with Tokens == nil.
+	Tokens map[string]TokenRef `json:"tokens,omitempty"`
+
 	// Current lifecycle status.
 	Status            Status `json:"status"`
 	LastHealthCheckAt string `json:"last_health_check_at,omitempty"`
+}
+
+// TokenRef is the on-disk shape of a registered V2 token instrument.
+// MIRRORS internal/api/types.TokenRef byte-for-byte (same JSON tags);
+// we redeclare it here rather than import api/types so the registry
+// package stays free of an upward dependency on api/types (which
+// could otherwise cause cycles via shared-types growth). The
+// single-source-of-truth is the api/types declaration — registry
+// just round-trips it through state.json. Adding a field requires
+// updating both.
+type TokenRef struct {
+	Name          string `json:"name"`
+	Symbol        string `json:"symbol"`
+	Decimals      int    `json:"decimals"`
+	InitialSupply string `json:"initial_supply"`
+	IssuerParty   string `json:"issuer_party"`
+	InstrumentID  string `json:"instrument_id"`
+	CreatedAt     string `json:"created_at"`
+	Status        string `json:"status"`
 }
 
 // Credential is a single role's auth token + the metadata needed to
