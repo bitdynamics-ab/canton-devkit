@@ -6,8 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
+	"strings"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
+	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
 
 // ErrNeedsV2LocalNet signals that the requested action needs the V2
@@ -53,6 +57,15 @@ type BalanceOptions struct {
 	Instance   string
 	Party      string // optional; empty = every party visible on the participant
 	Instrument string // optional; empty = every instrument
+
+	// Endpoint, Token, Insecure are the live-ACS path. When Endpoint
+	// is set, RunBalance ACS-queries the participant for every
+	// HoldingInterfaceV2 contract and sums the views per (party,
+	// instrument). Empty Endpoint falls back to the registry-derived
+	// pseudo-balances (the BIT-139 boot path).
+	Endpoint string
+	Token    string
+	Insecure bool
 }
 
 // BalanceRow is one row of the balance response — instrument + party
@@ -148,6 +161,13 @@ func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]Bala
 	if opts.Instance == "" {
 		return nil, errors.New("instance is required")
 	}
+	// Live-ACS path takes precedence when the caller has dialed a
+	// participant. Symbol/admin pairs are joined back to the local
+	// state.Tokens registry so the rendered rows can still carry
+	// the friendly symbol when one exists.
+	if opts.Endpoint != "" {
+		return runBalanceLive(ctx, opts)
+	}
 	state, err := registry.Read(opts.Instance)
 	if err != nil {
 		return nil, fmt.Errorf("read instance state: %w", err)
@@ -173,6 +193,167 @@ func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]Bala
 		})
 	}
 	return rows, nil
+}
+
+// runBalanceLive is the V2-native ACS path: stream every contract
+// that implements HoldingInterfaceV2 from the participant at
+// Endpoint, parse the V2 Holding view, and sum amounts per (party,
+// instrument).
+//
+// Symbols come from the local registry — when a streamed instrument
+// matches a recorded TokenRef.InstrumentID we surface its symbol;
+// otherwise the row just carries the raw `(admin, id)` pair so an
+// unknown-instrument holding still renders.
+//
+// Numeric amounts are summed as decimal strings via summary
+// concatenation? No — we add them. The participant emits each holding
+// as a Daml Decimal (textual, up to 10 fractional digits in V1, 38 in
+// V2). Adding them in Go without losing precision means using a big-
+// decimal-style approach: split on '.', align scale, add as big.Ints.
+// The helper addDecimal does that.
+func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, error) {
+	state, err := registry.Read(opts.Instance)
+	if err != nil {
+		return nil, fmt.Errorf("read instance state: %w", err)
+	}
+	// Resolve the optional --instrument filter once into the form we
+	// match against streamed views. The user can pass a symbol or a
+	// raw InstrumentID; both turn into the same (admin, id) pair we
+	// compare HoldingViewV2 against.
+	var wantAdmin, wantID string
+	if opts.Instrument != "" {
+		if ref, ok := state.Tokens[opts.Instrument]; ok {
+			wantAdmin, wantID = ref.IssuerParty, ref.InstrumentID
+		} else {
+			wantID = opts.Instrument
+		}
+	}
+
+	conn := LedgerConn{
+		Endpoint: opts.Endpoint,
+		Token:    opts.Token,
+		Insecure: opts.Insecure,
+	}
+	client, cleanup, err := dialLedger(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+
+	end, err := client.LedgerEnd(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("ledger end: %w", err)
+	}
+
+	var parties []string
+	if opts.Party != "" {
+		parties = []string{opts.Party}
+	}
+	req := ledger.ActiveContractsRequest{
+		ActiveAtOffset: end.Offset,
+		EventFormat:    holdingInterfaceFilterV2(parties),
+	}
+	stream, err := client.ActiveContracts(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("ACS query: %w", err)
+	}
+
+	type bucketKey struct{ admin, id, party string }
+	bucket := map[bucketKey]string{}
+
+	for item := range stream {
+		if item.Err != nil {
+			return nil, fmt.Errorf("ACS stream: %w", item.Err)
+		}
+		// ContractEntry is a oneof — only the ActiveContract branch
+		// carries the CreatedEvent we need. IncompleteAssigned /
+		// IncompleteUnassigned events are mid-reassignment and don't
+		// affect the V2 wallet balance.
+		entry, ok := item.Value.ContractEntry.(*lapiv2.GetActiveContractsResponse_ActiveContract)
+		if !ok || entry.ActiveContract == nil {
+			continue
+		}
+		// CreatedEvent carries the parsed interface views.
+		for _, iv := range entry.ActiveContract.GetCreatedEvent().GetInterfaceViews() {
+			hv, ok := extractHoldingViewV2(iv)
+			if !ok || hv.Owner == "" {
+				continue
+			}
+			if wantID != "" && hv.InstrumentID != wantID {
+				continue
+			}
+			if wantAdmin != "" && hv.Admin != wantAdmin {
+				continue
+			}
+			k := bucketKey{admin: hv.Admin, id: hv.InstrumentID, party: hv.Owner}
+			sum, err := addDecimal(bucket[k], hv.Amount)
+			if err != nil {
+				return nil, fmt.Errorf("sum holding amounts: %w", err)
+			}
+			bucket[k] = sum
+		}
+	}
+
+	// Join back to local symbol table for friendly rendering.
+	symByID := make(map[string]string, len(state.Tokens))
+	for _, t := range state.Tokens {
+		symByID[t.IssuerParty+"\x00"+t.InstrumentID] = t.Symbol
+	}
+	rows := make([]BalanceRow, 0, len(bucket))
+	for k, amount := range bucket {
+		rows = append(rows, BalanceRow{
+			InstrumentSymbol: symByID[k.admin+"\x00"+k.id],
+			InstrumentID:     k.id,
+			Party:            k.party,
+			Amount:           amount,
+		})
+	}
+	return rows, nil
+}
+
+// addDecimal returns a + b for two Daml Decimal strings (e.g. "1.5",
+// "1000000"). Empty a is treated as "0". Aligns fractional widths so
+// "1.0" + "1" → "2.0" without losing scale. Uses big.Int over an
+// aligned representation so we don't depend on a big-decimal library.
+func addDecimal(a, b string) (string, error) {
+	if a == "" {
+		a = "0"
+	}
+	if b == "" {
+		b = "0"
+	}
+	intA, fracA := splitDecimal(a)
+	intB, fracB := splitDecimal(b)
+	// Pad fractional parts to the same length.
+	if len(fracA) < len(fracB) {
+		fracA = fracA + strings.Repeat("0", len(fracB)-len(fracA))
+	} else if len(fracB) < len(fracA) {
+		fracB = fracB + strings.Repeat("0", len(fracA)-len(fracB))
+	}
+	scale := len(fracA)
+	aBig := new(big.Int)
+	if _, ok := aBig.SetString(intA+fracA, 10); !ok {
+		return "", fmt.Errorf("invalid decimal %q", a)
+	}
+	bBig := new(big.Int)
+	if _, ok := bBig.SetString(intB+fracB, 10); !ok {
+		return "", fmt.Errorf("invalid decimal %q", b)
+	}
+	sum := new(big.Int).Add(aBig, bBig).String()
+	if scale == 0 {
+		return sum, nil
+	}
+	if len(sum) <= scale {
+		sum = strings.Repeat("0", scale+1-len(sum)) + sum
+	}
+	return sum[:len(sum)-scale] + "." + sum[len(sum)-scale:], nil
+}
+
+func splitDecimal(s string) (intPart, fracPart string) {
+	if i := strings.IndexByte(s, '.'); i >= 0 {
+		return s[:i], s[i+1:]
+	}
+	return s, ""
 }
 
 // resolveInstrument turns the user's --instrument string into a full
