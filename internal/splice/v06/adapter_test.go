@@ -83,6 +83,37 @@ func TestOverlayEnv_FullValueSurface(t *testing.T) {
 	if _, ok := env["TEST_PORT"]; ok {
 		t.Errorf("non-ephemeral OverlayEnv unexpectedly set TEST_PORT=%q", env["TEST_PORT"])
 	}
+
+	// Stable catalogue entries (Version.ImageRepo == "") must NOT
+	// emit IMAGE_REPO so Splice's compose env keeps its default of
+	// ghcr.io/digital-asset/decentralized-canton-sync/docker.
+	if _, ok := env["IMAGE_REPO"]; ok {
+		t.Errorf("stable Version.ImageRepo=\"\" must not override IMAGE_REPO; got %q", env["IMAGE_REPO"])
+	}
+}
+
+// TestOverlayEnv_ImageRepoOverride pins the BIT-210 contract: when a
+// catalogue entry sets ImageRepo (e.g. the Token Standard V2 alpha
+// snapshot), the adapter emits IMAGE_REPO so `docker compose pull`
+// hits the alpha `-dev` registry instead of the stable one. Empty
+// ImageRepo (covered above) leaves the compose default in place.
+func TestOverlayEnv_ImageRepoOverride(t *testing.T) {
+	a := New()
+	const altRepo = "ghcr.io/digital-asset/decentralized-canton-sync-dev/docker"
+	p := splice.InstanceParams{
+		Name: "v2",
+		Version: splice.Version{
+			Tag:       "token-standard-v2",
+			Major:     "0.6",
+			Channel:   "alpha",
+			ImageRepo: altRepo,
+		},
+		ProjectDir: "/cache/v2",
+	}
+	env := a.OverlayEnv(p)
+	if got := env["IMAGE_REPO"]; got != altRepo {
+		t.Errorf("IMAGE_REPO = %q, want %q", got, altRepo)
+	}
 }
 
 func TestOverlayEnv_EphemeralFlipsTestPortAndApplyOverrides(t *testing.T) {

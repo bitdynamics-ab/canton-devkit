@@ -181,6 +181,16 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			"using uncurated Splice tag %q (resolved upstream to commit %s); not tested by DevKit",
 			version.Tag, shortSHA(version.Commit)))
 	}
+	// Alpha-channel warning. Catalogue entries marked `channel: "alpha"`
+	// are opt-in pre-releases (e.g. the Token Standard V2 snapshot) —
+	// images come from a different ghcr registry and the upstream
+	// branch can be reset on a weekly cadence. Surface this once at
+	// startup so it shows up in CI logs alongside the version banner.
+	if version.IsAlpha() {
+		prog.Warn(fmt.Sprintf(
+			"selecting alpha-channel Splice %q (pre-release; expect upstream resets and additional configuration — see docs/versions.md)",
+			version.Tag))
+	}
 	adapter, err := adapterFor(version)
 	if err != nil {
 		prog.FailStep(StepResolveVersion, err.Error(), nil)
