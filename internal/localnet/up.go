@@ -439,7 +439,15 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			Env:          env,
 			WorkDir:      projectDir,
 			LogWriter:    prog.Out(),
-			Profiles:     opts.Profiles,
+			// docker compose v5 treats CLI --profile as REPLACING (not
+			// augmenting) COMPOSE_PROFILES from the env, so an
+			// `up --profile tokens-v2` invocation activates only
+			// tokens-v2 and every base service (sv / app-provider /
+			// app-user / swagger-ui) is filtered out → "no service
+			// selected". Merge the adapter's base profiles with the
+			// user's opt-ins on the CLI so the union is what docker
+			// compose sees.
+			Profiles: append(adapter.Profiles(), opts.Profiles...),
 		}
 	}
 

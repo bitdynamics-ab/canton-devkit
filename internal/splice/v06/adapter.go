@@ -39,10 +39,20 @@ func (*Adapter) Profiles() []string {
 }
 
 func (a *Adapter) OverlayEnv(p splice.InstanceParams) map[string]string {
+	// Resolve the Docker image tag for this entry. Most catalogue
+	// entries set Version.Tag = the upstream ghcr tag, so Tag IS
+	// the image tag. Alpha pre-release entries (V2 snapshot) decouple
+	// the two: the friendly catalogue tag is `token-standard-v2` but
+	// the actual ghcr tag is `0.6.5-snapshot...`. Version.ImageTag
+	// is the explicit override; empty falls back to Tag.
+	imageTag := p.Version.Tag
+	if p.Version.ImageTag != "" {
+		imageTag = p.Version.ImageTag
+	}
 	env := map[string]string{
 		"LOCALNET_DIR":     p.ProjectDir,
 		"LOCALNET_ENV_DIR": filepath.Join(p.ProjectDir, "env"),
-		"IMAGE_TAG":        p.Version.Tag,
+		"IMAGE_TAG":        imageTag,
 		"DOCKER_NETWORK":   p.Name,
 		"PARTY_HINT":       splice.PartyHintFor(p.Name),
 		"COMPOSE_PROFILES": "sv,app-provider,app-user,swagger-ui",
@@ -52,13 +62,20 @@ func (a *Adapter) OverlayEnv(p splice.InstanceParams) map[string]string {
 	}
 	// Per-version image-repo override. Splice's compose env files
 	// default IMAGE_REPO to the stable
-	// ghcr.io/digital-asset/decentralized-canton-sync/docker repo;
-	// alpha entries (e.g. the Token Standard V2 snapshot) ship from
-	// a different registry. Forward Version.ImageRepo here so the
-	// `docker compose pull` resolves the correct images for the
-	// selected entry. Empty leaves the upstream default in place.
+	// ghcr.io/digital-asset/decentralized-canton-sync/docker/ repo
+	// (note the trailing slash — image strings in compose concat
+	// `${IMAGE_REPO}<image-name>` without an intermediate separator,
+	// so a missing slash produces `dockersv-web-ui` etc.). Alpha
+	// entries ship from a different registry. Forward Version.ImageRepo
+	// here, normalising the trailing slash so a catalogue entry
+	// written without it (the common case) still produces valid
+	// image paths.
 	if p.Version.ImageRepo != "" {
-		env["IMAGE_REPO"] = p.Version.ImageRepo
+		repo := p.Version.ImageRepo
+		if repo[len(repo)-1] != '/' {
+			repo += "/"
+		}
+		env["IMAGE_REPO"] = repo
 	}
 	if p.Ephemeral {
 		// Empty (not "1"): `${TEST_PORT-DEFAULT}` returns DEFAULT only

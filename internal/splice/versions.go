@@ -73,6 +73,16 @@ type Version struct {
 	// `-dev` repo, so its catalogue entry sets this explicitly. The
 	// adapter forwards it as the `IMAGE_REPO` compose env.
 	ImageRepo string `json:"image_repo,omitempty"`
+
+	// ImageTag overrides the Docker image tag used for this entry.
+	// Empty falls back to Tag, which is right for stable releases
+	// (where the catalogue Tag === the upstream ghcr tag). The
+	// Token Standard V2 alpha publishes its images under a snapshot
+	// tag distinct from the catalogue tag (e.g.
+	// `0.6.5-snapshot.20260526.2931.0.ve28a6722`), so its entry sets
+	// this explicitly. The adapter forwards it as the `IMAGE_TAG`
+	// compose env.
+	ImageTag string `json:"image_tag,omitempty"`
 }
 
 // IsAlpha reports whether the entry is in the alpha channel — an

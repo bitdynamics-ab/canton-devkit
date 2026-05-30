@@ -35,5 +35,9 @@ services:
       ADDITIONAL_CONFIG_TOKEN_STANDARD_V2_DEVNET: |
         canton.parameters.alpha-version-support=true
         canton.parameters.non-standard-config=true
-        canton.participants.participant.parameters.alpha-version-support=true
-        canton.participants.participant.parameters.initial-protocol-version=35
+        canton.participants.app-user.parameters.alpha-version-support=true
+        canton.participants.app-user.parameters.initial-protocol-version=35
+        canton.participants.app-provider.parameters.alpha-version-support=true
+        canton.participants.app-provider.parameters.initial-protocol-version=35
+        canton.participants.sv.parameters.alpha-version-support=true
+        canton.participants.sv.parameters.initial-protocol-version=35
