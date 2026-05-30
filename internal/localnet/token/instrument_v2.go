@@ -75,7 +75,7 @@ func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regst
 	defer cleanup()
 
 	admin := ref.IssuerParty
-	tokenRulesCID, err := findTokenRules(ctx, client, admin)
+	tokenRulesCID, tokenRulesDisc, err := findTokenRulesDisclosed(ctx, client, admin)
 	if err != nil {
 		return fmt.Errorf("look up TokenRules: %w", err)
 	}
@@ -92,20 +92,19 @@ func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regst
 		"offer_cid": offerCID, "to": opts.To, "amount": opts.Amount,
 	})
 
-	// Settle the offer by accepting it. The test token gates settlement
-	// behind its configurable AccountConfig authorization model: the
-	// accept needs AccountConfig contracts (signatory owner+provider)
-	// for the involved accounts, referenced by id in the choice
-	// context under "testTokenV2/accountConfigs". Wiring that account-
-	// config state machine is the remaining step (tracked separately);
-	// until then the mint authorization lands on-ledger as a
-	// TokenTransferOffer the receiver can settle once configs exist.
-	if err := acceptMintOffer(ctx, client, opts.To, offerCID); err != nil {
-		return fmt.Errorf(
-			"mint authorized on-ledger (offer %s created) but settlement "+
-				"failed: the splice-test-token-v2 accept requires AccountConfig "+
-				"contracts for the involved accounts — wiring that account-config "+
-				"model is the remaining step. Underlying error: %w", offerCID, err)
+	// Settle the offer. The test token gates accept behind its
+	// configurable AccountConfig model: the receiver's account needs an
+	// AccountConfig contract, referenced by id in the accept's choice
+	// context under "testTokenV2/accountConfigs". Create it (owner=
+	// receiver, provider=admin) then accept with its cid threaded in.
+	configCID, err := createAccountConfig(ctx, client, admin, opts.To, admin)
+	if err != nil {
+		return fmt.Errorf("create receiver account config: %w", err)
+	}
+	emit(out, "mint: account-config", map[string]any{"config_cid": configCID})
+
+	if err := acceptMintOffer(ctx, client, opts.To, offerCID, configCID, tokenRulesCID, tokenRulesDisc); err != nil {
+		return fmt.Errorf("accept mint offer: %w", err)
 	}
 	emit(out, "mint: accepted", map[string]any{
 		"instrument": ref.Symbol, "to": opts.To, "amount": opts.Amount,
@@ -118,11 +117,32 @@ func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regst
 // TransferInstructionV2, so the receiver exercises
 // TransferInstruction_Accept on it with an empty choice context (the
 // test token needs no off-ledger context).
-func acceptMintOffer(ctx context.Context, client *ledger.Client, receiver, offerCID string) error {
+func acceptMintOffer(ctx context.Context, client *ledger.Client, receiver, offerCID, accountConfigCID, tokenRulesCID string, tokenRulesDisc *lapiv2.DisclosedContract) error {
+	// The accept's choice context must carry two well-known entries the
+	// test token's state machine looks up:
+	//   testTokenV2/tokenRules     → the TokenRules contract id
+	//   testTokenV2/accountConfigs → list of AccountConfig contract ids
+	// both as tagged AnyValue (AV_ContractId / AV_List).
+	contextValues := &lapiv2.Value{Sum: &lapiv2.Value_TextMap{TextMap: &lapiv2.TextMap{
+		Entries: []*lapiv2.TextMap_Entry{
+			{
+				Key:   tokenRulesContextKey,
+				Value: variantValue("AV_ContractId", contractIDValue(tokenRulesCID)),
+			},
+			{
+				Key: accountConfigsContextKey,
+				Value: variantValue("AV_List", &lapiv2.Value{Sum: &lapiv2.Value_List{List: &lapiv2.List{
+					Elements: []*lapiv2.Value{
+						variantValue("AV_ContractId", contractIDValue(accountConfigCID)),
+					},
+				}}}),
+			},
+		},
+	}}}
 	choiceArg := recordValue([]field{
 		{"actors", listValue([]string{receiver}, partyValue)},
 		{"extraArgs", recordValue([]field{
-			{"context", recordValue([]field{{"values", emptyTextMap()}})},
+			{"context", recordValue([]field{{"values", contextValues}})},
 			{"meta", buildMetadataRecord(registry.Metadata{Values: map[string]string{}})},
 		})},
 	})
@@ -137,16 +157,24 @@ func acceptMintOffer(ctx context.Context, client *ledger.Client, receiver, offer
 			},
 		},
 	}
-	_, err := submitForTransaction(ctx, client, receiver, []*lapiv2.Command{exercise}, nil,
+	var disclosed []*lapiv2.DisclosedContract
+	if tokenRulesDisc != nil {
+		disclosed = []*lapiv2.DisclosedContract{tokenRulesDisc}
+	}
+	_, err := submitForTransaction(ctx, client, receiver, []*lapiv2.Command{exercise}, disclosed,
 		createdContractFormat(receiver, ""))
 	return err
 }
 
-// emptyTextMap builds an empty `TextMap AnyValue` for the choice
-// context of a no-context accept.
-func emptyTextMap() *lapiv2.Value {
-	return &lapiv2.Value{Sum: &lapiv2.Value_TextMap{TextMap: &lapiv2.TextMap{}}}
-}
+// Test token's well-known choice-context keys (see
+// TestTokenV2.Util.tokenRulesContextKey +
+// TestTokenV2.AccountConfig.accountConfigsContextKey). The accept/
+// transfer state machine looks these up to find the TokenRules
+// contract and the involved accounts' AccountConfig contracts.
+const (
+	accountConfigsContextKey = "testTokenV2/accountConfigs"
+	tokenRulesContextKey     = "testTokenV2/tokenRules"
+)
 
 // createTokenRules creates the issuer-owned TokenRules contract that
 // anchors a test-token instrument. Returns the created contract id.
@@ -241,6 +269,60 @@ func findTokenRules(ctx context.Context, client *ledger.Client, admin string) (s
 		}
 	}
 	return "", nil
+}
+
+// findTokenRulesDisclosed returns the issuer's TokenRules contract id
+// PLUS a DisclosedContract for it. The mint receiver isn't a
+// stakeholder on the TokenRules (signatory = admin), so the accept
+// submission must disclose it (with its createdEventBlob) for the
+// receiver's transaction to reference it via the choice context.
+func findTokenRulesDisclosed(ctx context.Context, client *ledger.Client, admin string) (string, *lapiv2.DisclosedContract, error) {
+	end, err := client.LedgerEnd(ctx)
+	if err != nil {
+		return "", nil, fmt.Errorf("ledger end: %w", err)
+	}
+	pkg, mod, entity := splitInterfaceID(TestTokenV2RulesTemplateID)
+	req := ledger.ActiveContractsRequest{
+		ActiveAtOffset: end.Offset,
+		EventFormat: &lapiv2.EventFormat{
+			FiltersByParty: map[string]*lapiv2.Filters{
+				admin: {Cumulative: []*lapiv2.CumulativeFilter{{
+					IdentifierFilter: &lapiv2.CumulativeFilter_TemplateFilter{
+						TemplateFilter: &lapiv2.TemplateFilter{
+							TemplateId:              &lapiv2.Identifier{PackageId: pkg, ModuleName: mod, EntityName: entity},
+							IncludeCreatedEventBlob: true,
+						},
+					},
+				}}},
+			},
+		},
+	}
+	stream, err := client.ActiveContracts(ctx, req)
+	if err != nil {
+		return "", nil, fmt.Errorf("query TokenRules: %w", err)
+	}
+	for item := range stream {
+		if item.Err != nil {
+			return "", nil, item.Err
+		}
+		entry, ok := item.Value.ContractEntry.(*lapiv2.GetActiveContractsResponse_ActiveContract)
+		if !ok {
+			continue
+		}
+		ac := entry.ActiveContract
+		ce := ac.GetCreatedEvent()
+		if ce == nil {
+			continue
+		}
+		disc := &lapiv2.DisclosedContract{
+			TemplateId:       ce.GetTemplateId(),
+			ContractId:       ce.GetContractId(),
+			CreatedEventBlob: ce.GetCreatedEventBlob(),
+			SynchronizerId:   ac.GetSynchronizerId(),
+		}
+		return ce.GetContractId(), disc, nil
+	}
+	return "", nil, nil
 }
 
 // mintViaOfferMint exercises TokenRules_OfferMint on the issuer's
@@ -371,6 +453,22 @@ func submitForTransaction(
 	disclosed []*lapiv2.DisclosedContract,
 	txFormat *lapiv2.TransactionFormat,
 ) (*lapiv2.SubmitAndWaitForTransactionResponse, error) {
+	return submitForTransactionMulti(ctx, client, []string{actAs}, commands, disclosed, txFormat)
+}
+
+// submitForTransactionMulti is the multi-actAs variant — needed when a
+// contract has several required authorizers (e.g. AccountConfig, whose
+// signatory is account.owner AND account.provider). On LocalNet all
+// parties are operator-controlled, so acting as several at once is
+// legitimate.
+func submitForTransactionMulti(
+	ctx context.Context,
+	client *ledger.Client,
+	actAs []string,
+	commands []*lapiv2.Command,
+	disclosed []*lapiv2.DisclosedContract,
+	txFormat *lapiv2.TransactionFormat,
+) (*lapiv2.SubmitAndWaitForTransactionResponse, error) {
 	cmdID, err := newCommandID()
 	if err != nil {
 		return nil, fmt.Errorf("generate command id: %w", err)
@@ -379,7 +477,7 @@ func submitForTransaction(
 		Commands: &lapiv2.Commands{
 			UserId:             exerciseUserID,
 			CommandId:          cmdID,
-			ActAs:              []string{actAs},
+			ActAs:              actAs,
 			Commands:           commands,
 			DisclosedContracts: disclosed,
 		},
@@ -388,6 +486,51 @@ func submitForTransaction(
 	subCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	return client.SubmitAndWaitForTransaction(subCtx, req)
+}
+
+// accountConfigTemplateID is the package-name-qualified id of the test
+// token's AccountConfig template.
+const accountConfigTemplateID = "#splice-test-token-v2:Splice.Testing.Tokens.TestTokenV2.AccountConfig:AccountConfig"
+
+// createAccountConfig creates an AccountConfig contract for the
+// receiver account so the mint/transfer accept can authorize. The
+// template's signatory is account.owner AND account.provider, so the
+// submit acts as both (operator controls both on LocalNet). Config
+// flags: owner can initiate AND approves (mustApprove), provider does
+// neither — so the owner alone settles, satisfying
+// isValidAccountConfig ((owner.canInitiate||…) && (owner.mustApprove||…)).
+func createAccountConfig(ctx context.Context, client *ledger.Client, admin, owner, provider string) (string, error) {
+	pkgID, err := resolvePackageID(ctx, client, "splice-test-token-v2")
+	if err != nil {
+		return "", err
+	}
+	_, mod, entity := splitInterfaceID(accountConfigTemplateID)
+	ownerParty := owner
+	providerParty := provider
+	account := registry.Account{Owner: &ownerParty, Provider: &providerParty, ID: ""}
+	create := &lapiv2.Command{
+		Command: &lapiv2.Command_Create{
+			Create: &lapiv2.CreateCommand{
+				TemplateId: &lapiv2.Identifier{PackageId: pkgID, ModuleName: mod, EntityName: entity},
+				CreateArguments: &lapiv2.Record{Fields: []*lapiv2.RecordField{
+					{Label: "admin", Value: partyValue(admin)},
+					{Label: "account", Value: buildAccountRecord(account)},
+					{Label: "ownerConfig", Value: buildPartyConfigRecord(true, true)},
+					{Label: "providerConfig", Value: buildPartyConfigRecord(false, false)},
+				}},
+			},
+		},
+	}
+	resp, err := submitForTransactionMulti(ctx, client, []string{owner, provider},
+		[]*lapiv2.Command{create}, nil, createdContractFormat(owner, ""))
+	if err != nil {
+		return "", fmt.Errorf("create AccountConfig: %w", err)
+	}
+	cid := firstCreatedOfTemplate(resp, "AccountConfig")
+	if cid == "" {
+		return "", fmt.Errorf("AccountConfig created but contract id not found")
+	}
+	return cid, nil
 }
 
 // createdContractFormat builds a TransactionFormat that returns the
