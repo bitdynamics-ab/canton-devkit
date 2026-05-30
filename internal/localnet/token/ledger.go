@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
+	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
+	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
 
@@ -20,6 +22,15 @@ type LedgerConn struct {
 	Endpoint string // host:port, e.g. "localhost:61169"
 	Token    string // Bearer JWT; empty allowed when the participant runs unauthenticated
 	Insecure bool   // plaintext gRPC (LocalNet default)
+
+	// Instance + Role let dialLedger resolve a per-role JWT
+	// automatically when Token is empty: it tries the registry's
+	// captured credentials first, then falls back to issuing a
+	// fresh JWT via splice.SignToken against the cached project's
+	// env files. Either path produces a Daml user-token with the
+	// per-role audience the participant expects.
+	Instance string
+	Role     string // "sv" / "app-provider" / "app-user"
 }
 
 // dialLedger opens a ledger client against the given endpoint. Mirrors
@@ -27,10 +38,26 @@ type LedgerConn struct {
 // the action layer (which the HTTP handler also calls) can dial without
 // pulling cli/localnet into the import graph. Caller MUST defer the
 // returned cleanup.
+//
+// Token resolution order (the BIT-139 follow-up that drove this):
+//  1. conn.Token explicit (`--token` flag wins).
+//  2. registry.State.Credentials[Role] — populated by `localnet up`'s
+//     captureCredentials when the alpha boot is clean. The CLI mints
+//     against this via `localnet creds --role <role> --format raw`.
+//  3. splice.SignToken fallback — issues a fresh user-token from the
+//     project's env/<role>-auth-on.env files. Same shape as path #2;
+//     used when creds-capture races / fails (the V2 alpha is wobbly
+//     on cold boots and step (2) may be empty even after up succeeds).
+//  4. error pointing at `localnet creds --raw` for the user to override.
 func dialLedger(ctx context.Context, conn LedgerConn) (*ledger.Client, func(), error) {
 	if conn.Endpoint == "" {
 		return nil, func() {}, fmt.Errorf("ledger endpoint is required (host:port)")
 	}
+	token, err := resolveLedgerToken(conn)
+	if err != nil {
+		return nil, func() {}, err
+	}
+
 	dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	opts := ledger.DialOptions{
@@ -41,14 +68,71 @@ func dialLedger(ctx context.Context, conn LedgerConn) (*ledger.Client, func(), e
 		// the same gate.
 		PlainText: conn.Insecure || !strings.HasPrefix(conn.Endpoint, "https://"),
 	}
-	if conn.Token != "" {
-		opts.Token = ledger.StaticToken(conn.Token)
+	if token != "" {
+		opts.Token = ledger.StaticToken(token)
 	}
 	client, err := ledger.Dial(dialCtx, opts)
 	if err != nil {
 		return nil, func() {}, fmt.Errorf("dial ledger %s: %w", conn.Endpoint, err)
 	}
 	return client, func() { _ = client.Close() }, nil
+}
+
+// resolveLedgerToken implements the four-step token resolution order
+// documented on dialLedger. Returns "" when no token is needed
+// (participant runs without auth) — the caller treats empty as "no
+// auth header" rather than an error.
+func resolveLedgerToken(conn LedgerConn) (string, error) {
+	if conn.Token != "" {
+		return conn.Token, nil
+	}
+	if conn.Instance == "" {
+		// No instance + no token: legitimate for an unauthenticated
+		// participant or a hand-injected ledger. The dial proceeds
+		// with no Authorization header; the participant errors with
+		// 401 if it wanted one and the caller surfaces that as-is.
+		return "", nil
+	}
+	state, err := registry.Read(conn.Instance)
+	if err != nil {
+		return "", fmt.Errorf("read instance state: %w", err)
+	}
+
+	role := conn.Role
+	if role == "" {
+		role = string(splice.RoleAppUser)
+	}
+
+	// Path #2: captured credentials from RunUp's captureCredentials.
+	if c, ok := state.Credentials[role]; ok && c.JWT != "" {
+		return c.JWT, nil
+	}
+
+	// Path #3: fall back to signing a fresh token from the project's
+	// env files. This is the "creds were not captured / lost" path
+	// the V2 alpha hits when onboarding interrupts up's tail steps.
+	inputs, err := splice.LoadCredentialInputs(state.ProjectDir)
+	if err != nil {
+		return "", fmt.Errorf(
+			"no captured credentials for role %q and could not load env files (%w). "+
+				"Run `canton-devkit localnet creds --name %s --role %s --format raw` "+
+				"to confirm token issuance, or pass --token explicitly.",
+			role, err, conn.Instance, role)
+	}
+	for _, in := range inputs {
+		if string(in.Role) == role {
+			tok, signErr := splice.SignToken(in)
+			if signErr != nil {
+				return "", fmt.Errorf("sign token for role %q: %w", role, signErr)
+			}
+			return tok, nil
+		}
+	}
+	return "", fmt.Errorf(
+		"no captured credentials AND no env entry for role %q on instance %q. "+
+			"Run `canton-devkit localnet creds --name %s --role %s --format raw` "+
+			"to confirm what's available, or pass --token explicitly.",
+		role, conn.Instance, conn.Instance, role)
 }
 
 // holdingInterfaceFilterV2 builds the EventFormat the participant

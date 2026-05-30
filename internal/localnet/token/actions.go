@@ -58,13 +58,20 @@ type BalanceOptions struct {
 	Party      string // optional; empty = every party visible on the participant
 	Instrument string // optional; empty = every instrument
 
-	// Endpoint, Token, Insecure are the live-ACS path. When Endpoint
-	// is set, RunBalance ACS-queries the participant for every
-	// HoldingInterfaceV2 contract and sums the views per (party,
-	// instrument). Empty Endpoint falls back to the registry-derived
-	// pseudo-balances (the BIT-139 boot path).
+	// Endpoint, Token, Role, Insecure are the live-ACS path. When
+	// Endpoint is set, RunBalance ACS-queries the participant for
+	// every HoldingInterfaceV2 contract and sums the views per
+	// (party, instrument). Empty Endpoint falls back to the
+	// registry-derived pseudo-balances.
+	//
+	// Token is optional: empty triggers per-role JWT auto-issuance
+	// via registry.State.Credentials → splice.SignToken (see
+	// dialLedger's token resolution chain). Role defaults to
+	// "app-user" — pass "sv" or "app-provider" to dial a different
+	// participant.
 	Endpoint string
 	Token    string
+	Role     string
 	Insecure bool
 }
 
@@ -233,6 +240,8 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, err
 		Endpoint: opts.Endpoint,
 		Token:    opts.Token,
 		Insecure: opts.Insecure,
+		Instance: opts.Instance,
+		Role:     opts.Role,
 	}
 	client, cleanup, err := dialLedger(ctx, conn)
 	if err != nil {
