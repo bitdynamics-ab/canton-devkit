@@ -103,4 +103,11 @@ const (
 	//   offeredAt      : Time
 	//   receiverConfig : AccountConfig         — account-level auth rules
 	TestTokenV2OfferMintChoice = "TokenRules_OfferMint"
+
+	// TestTokenV2RulesTemplateID is the package-name-qualified template
+	// id for create/exercise against the bundled splice-test-token-v2
+	// TokenRules. The `#package-name` form lets Canton resolve to
+	// whichever vetted package satisfies the name, surviving the V2
+	// alpha's weekly snapshot rotation.
+	TestTokenV2RulesTemplateID = "#splice-test-token-v2:Splice.Testing.Tokens.TestTokenV2:TokenRules"
 )

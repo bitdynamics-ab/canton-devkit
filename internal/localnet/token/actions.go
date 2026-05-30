@@ -49,6 +49,15 @@ type MintOptions struct {
 	Instrument string // symbol OR raw instrument id; symbol resolves via ResolveBySymbol
 	To         string // recipient party
 	Amount     string // decimal string
+
+	// Endpoint, when set, runs the live asset-specific mint
+	// (TokenRules_OfferMint) for a splice-test-token-v2 instrument the
+	// issuer created on-ledger. Empty Endpoint, or an instrument with
+	// no asset-specific mint path (e.g. Amulet), yields
+	// ErrUnsupportedOnInstrument.
+	Endpoint string
+	Role     string
+	Insecure bool
 }
 type TransferOptions struct {
 	Instance   string
@@ -162,9 +171,17 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	}
 	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
 	if err != nil {
-		// Unresolved → fall through to the unsupported error since
-		// we have no path to mint into an unknown instrument either.
 		ref = registry.TokenRef{InstrumentID: opts.Instrument}
+	}
+	// Live mint path: only for instruments created on-ledger via the
+	// test-token (status "on-ledger"). Amulet and registry-only
+	// instruments have no asset-specific mint, so they keep returning
+	// ErrUnsupportedOnInstrument.
+	if opts.Endpoint != "" && ref.Status == "on-ledger" {
+		if opts.Role == "" {
+			opts.Role = "app-user"
+		}
+		return runMintLive(ctx, out, opts, ref)
 	}
 	emit(out, "mint", map[string]any{
 		"instrument": ref, "to": opts.To, "amount": opts.Amount,
