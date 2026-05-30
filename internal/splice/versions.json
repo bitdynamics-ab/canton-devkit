@@ -29,6 +29,17 @@
       "major": "0.6",
       "min_memory_bytes": 8589934592,
       "recommended_memory_bytes": 12884901888
+    },
+    {
+      "tag": "token-standard-v2",
+      "commit": "de911e38af78ec79b6f0e6a9515e104b1e4c3d62",
+      "content_sha": "4fae533b28de046360524c0e4b9d56a5799865bfff6007b5372959bf150165c7",
+      "size": 154042565,
+      "major": "0.6",
+      "min_memory_bytes": 8589934592,
+      "recommended_memory_bytes": 12884901888,
+      "channel": "alpha",
+      "image_repo": "ghcr.io/digital-asset/decentralized-canton-sync-dev/docker"
     }
   ]
 }

@@ -50,6 +50,16 @@ func (a *Adapter) OverlayEnv(p splice.InstanceParams) map[string]string {
 	if a.SupportsAlphaProtocol() {
 		env["ALPHA_PROTOCOL_VERSION_ENV"] = filepath.Join(p.ProjectDir, "env", "alpha-protocol-version.env")
 	}
+	// Per-version image-repo override. Splice's compose env files
+	// default IMAGE_REPO to the stable
+	// ghcr.io/digital-asset/decentralized-canton-sync/docker repo;
+	// alpha entries (e.g. the Token Standard V2 snapshot) ship from
+	// a different registry. Forward Version.ImageRepo here so the
+	// `docker compose pull` resolves the correct images for the
+	// selected entry. Empty leaves the upstream default in place.
+	if p.Version.ImageRepo != "" {
+		env["IMAGE_REPO"] = p.Version.ImageRepo
+	}
 	if p.Ephemeral {
 		// Empty (not "1"): `${TEST_PORT-DEFAULT}` returns DEFAULT only
 		// when TEST_PORT is unset. Set-but-empty makes the expression

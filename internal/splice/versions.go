@@ -55,7 +55,31 @@ type Version struct {
 	// "raise Docker memory to ≥ N" remediation hint when Min*
 	// passes but the recommended threshold is not met.
 	RecommendedMemoryBytes uint64 `json:"recommended_memory_bytes,omitempty"`
+
+	// Channel labels the maturity of a catalogue entry. Empty (the
+	// historical default) and "stable" both mean a production-ready
+	// release; "alpha" marks an opt-in pre-release that the user is
+	// expected to know they are pulling (e.g. the Token Standard V2
+	// snapshot, which runs on a separate -dev image repo and needs
+	// `--profile tokens-v2` for the alpha Canton protocol). The
+	// `versions` command surfaces this and `up` warns on selection.
+	Channel string `json:"channel,omitempty"`
+
+	// ImageRepo overrides the default Docker image repository for
+	// this entry. Empty falls back to the stable repo that Splice's
+	// compose env files default to (currently
+	// `ghcr.io/digital-asset/decentralized-canton-sync/docker`). The
+	// Token Standard V2 pre-release stream publishes to a separate
+	// `-dev` repo, so its catalogue entry sets this explicitly. The
+	// adapter forwards it as the `IMAGE_REPO` compose env.
+	ImageRepo string `json:"image_repo,omitempty"`
 }
+
+// IsAlpha reports whether the entry is in the alpha channel — an
+// opt-in pre-release the user must consciously select. Equivalent to
+// `v.Channel == "alpha"` but kept as a method so the comparison string
+// only lives in one place.
+func (v Version) IsAlpha() bool { return v.Channel == "alpha" }
 
 // catalogueFile is the embedded JSON catalogue. Kept as a separate file
 // (rather than literal Go code) so the maintainer refresh script can
