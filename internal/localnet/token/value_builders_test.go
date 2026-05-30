@@ -18,8 +18,8 @@ import (
 // match the declared signature.
 func TestBuildTransferRecord_Shape(t *testing.T) {
 	in := registry.TransferArgs{
-		Sender:           "alice::1220",
-		Receiver:         "bob::1220",
+		Sender:           registry.NewOwnedAccount("alice::1220"),
+		Receiver:         registry.NewOwnedAccount("bob::1220"),
 		Amount:           "10.00",
 		InstrumentID:     registry.InstrumentID{Admin: "DSO::1220", ID: "Amulet"},
 		RequestedAt:      time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC),
@@ -41,11 +41,16 @@ func TestBuildTransferRecord_Shape(t *testing.T) {
 			t.Errorf("field[%d] label: got %q, want %q", i, rec.Fields[i].Label, want)
 		}
 	}
-	// Inner type spot-checks: sender is Party, amount is Numeric,
-	// instrumentId is Record, inputHoldingCids is List of ContractId,
-	// requestedAt is Timestamp (microseconds).
-	if rec.Fields[0].Value.GetParty() != "alice::1220" {
-		t.Errorf("sender not a Party: %v", rec.Fields[0].Value.Sum)
+	// Inner type spot-checks: sender is an Account record (owner is an
+	// Optional Party), amount is Numeric, instrumentId is Record,
+	// inputHoldingCids is List of ContractId, requestedAt is Timestamp.
+	senderAcct := rec.Fields[0].Value.GetRecord()
+	if senderAcct == nil || len(senderAcct.Fields) != 3 || senderAcct.Fields[0].Label != "owner" {
+		t.Fatalf("sender not a 3-field Account record: %v", rec.Fields[0].Value.Sum)
+	}
+	ownerOpt := senderAcct.Fields[0].Value.GetOptional()
+	if ownerOpt == nil || ownerOpt.Value.GetParty() != "alice::1220" {
+		t.Errorf("sender.owner not Some(Party alice): %v", senderAcct.Fields[0].Value.Sum)
 	}
 	if rec.Fields[2].Value.GetNumeric() != "10.00" {
 		t.Errorf("amount not a Numeric: %v", rec.Fields[2].Value.Sum)
@@ -257,21 +262,22 @@ func TestBuildChoiceContextRecord_PreservesKeyOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
-	// Outer Record { values: GenMap<...> }
+	// Outer Record { values: TextMap AnyValue } — the Daml type is
+	// TextMap, NOT GenMap; the participant rejects a GenMap here.
 	rec := v.GetRecord()
 	if rec == nil || len(rec.Fields) != 1 || rec.Fields[0].Label != "values" {
 		t.Fatalf("shape: %v", v.Sum)
 	}
-	genMap := rec.Fields[0].Value.GetGenMap()
-	if genMap == nil {
-		t.Fatalf("values not a GenMap: %v", rec.Fields[0].Value.Sum)
+	textMap := rec.Fields[0].Value.GetTextMap()
+	if textMap == nil {
+		t.Fatalf("values not a TextMap: %v", rec.Fields[0].Value.Sum)
 	}
-	if len(genMap.Entries) != 3 {
-		t.Fatalf("entry count: %d", len(genMap.Entries))
+	if len(textMap.Entries) != 3 {
+		t.Fatalf("entry count: %d", len(textMap.Entries))
 	}
 	wantKeys := []string{"a", "m", "z"} // lexicographic
 	for i, want := range wantKeys {
-		gotKey := genMap.Entries[i].Key.GetText()
+		gotKey := textMap.Entries[i].Key
 		if gotKey != want {
 			t.Errorf("entries[%d].key: got %q, want %q", i, gotKey, want)
 		}

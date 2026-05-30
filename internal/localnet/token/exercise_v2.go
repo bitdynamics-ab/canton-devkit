@@ -20,14 +20,14 @@ import (
 // disclosed contracts) tuple into a SubmitAndWaitForTransaction request
 // the participant accepts.
 //
-// User id is hardcoded to "canton-devkit" — Splice participants accept
-// any user id under the `unsafe-jwt-hmac-256` auth mode (it's a label,
-// not an auth check; the JWT's `sub` is what auth checks). We set it
-// so log forensics on Canton side can attribute commands to this CLI.
-// (Field is still wire-named `application_id` upstream but the dazl
-// proto bindings expose it as UserId after the v2 ledger API rename.)
-
-const exerciseUserID = "canton-devkit"
+// Commands.UserId MUST match the JWT's subject claim — Canton's
+// authorizer rejects a mismatch with "Claims are only valid for userId
+// '<sub>', actual userId is '<UserId>'". The Splice LocalNet per-role
+// tokens are all issued with subject "ledger-api-user", so that's the
+// user id every submission carries. (Field is wire-named
+// `application_id` upstream but the dazl proto bindings expose it as
+// UserId after the v2 ledger API rename.)
+const exerciseUserID = "ledger-api-user"
 
 // exerciseV2TransferFactory submits TransferFactory_Transfer against
 // the factory contract returned by the registry. The participant
@@ -45,18 +45,22 @@ func exerciseV2TransferFactory(
 	transferArgs registry.TransferArgs,
 	factoryResp *registry.TransferFactoryResponse,
 ) (*lapiv2.SubmitAndWaitForTransactionResponse, error) {
-	// Build the choice argument record: { expectedAdmin, transfer, extraArgs }.
-	extraArgs, err := buildExtraArgsRecord(factoryResp.ChoiceContextData, registry.Metadata{Values: map[string]string{}})
+	// Build the choice argument record. Per TransferInstructionV2.daml,
+	// TransferFactory_Transfer takes { transfer, actors, extraArgs } —
+	// actors is the controller list (the sender, who authorizes the
+	// transfer). There is NO expectedAdmin field on the choice (the
+	// admin is carried inside transfer.instrumentId).
+	extraArgs, err := buildExtraArgsRecord(factoryResp.ChoiceContextData(), registry.Metadata{Values: map[string]string{}})
 	if err != nil {
 		return nil, fmt.Errorf("build extraArgs: %w", err)
 	}
 	choiceArg := recordValue([]field{
-		{"expectedAdmin", partyValue(transferArgs.InstrumentID.Admin)},
 		{"transfer", buildTransferRecord(transferArgs)},
+		{"actors", listValue([]string{actAs}, partyValue)},
 		{"extraArgs", extraArgs},
 	})
 
-	disclosed, err := disclosedContractsToProto(factoryResp.DisclosedContracts)
+	disclosed, err := disclosedContractsToProto(factoryResp.DisclosedContractsList())
 	if err != nil {
 		return nil, fmt.Errorf("convert disclosed contracts: %w", err)
 	}
@@ -94,8 +98,12 @@ func exerciseV2AcceptInstruction(
 	if err != nil {
 		return nil, fmt.Errorf("build extraArgs: %w", err)
 	}
-	// Accept's choice argument is just { extraArgs }.
-	choiceArg := recordValue([]field{{"extraArgs", extraArgs}})
+	// Per TransferInstructionV2.daml, TransferInstruction_Accept takes
+	// { actors, extraArgs } — actors is the controller (the receiver).
+	choiceArg := recordValue([]field{
+		{"actors", listValue([]string{actAs}, partyValue)},
+		{"extraArgs", extraArgs},
+	})
 
 	disclosed, err := disclosedContractsToProto(ctxResp.DisclosedContracts)
 	if err != nil {

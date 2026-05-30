@@ -56,8 +56,8 @@ import (
 // upstream-canonical order to stay greppable against the .daml source.
 func buildTransferRecord(t registry.TransferArgs) *lapiv2.Value {
 	return recordValue([]field{
-		{"sender", partyValue(t.Sender)},
-		{"receiver", partyValue(t.Receiver)},
+		{"sender", buildAccountRecord(t.Sender)},
+		{"receiver", buildAccountRecord(t.Receiver)},
 		{"amount", numericValue(t.Amount)},
 		{"instrumentId", buildInstrumentIDRecord(t.InstrumentID)},
 		{"requestedAt", timestampValue(t.RequestedAt)},
@@ -65,6 +65,33 @@ func buildTransferRecord(t registry.TransferArgs) *lapiv2.Value {
 		{"inputHoldingCids", listValue(t.InputHoldingCids, contractIDValue)},
 		{"meta", buildMetadataRecord(t.Meta)},
 	})
+}
+
+// buildAccountRecord:
+//
+//	data Account = Account with
+//	  owner    : Optional Party
+//	  provider : Optional Party
+//	  id       : Text
+//
+// owner/provider are Optional Party — encoded as an Optional Value
+// (Some → inner party Value, None → empty Optional). A nil *string
+// pointer becomes None.
+func buildAccountRecord(a registry.Account) *lapiv2.Value {
+	return recordValue([]field{
+		{"owner", optionalPartyValue(a.Owner)},
+		{"provider", optionalPartyValue(a.Provider)},
+		{"id", textValue(a.ID)},
+	})
+}
+
+// optionalPartyValue builds a Daml `Optional Party`: Some when the
+// pointer is non-nil, None (empty Optional) otherwise.
+func optionalPartyValue(p *string) *lapiv2.Value {
+	if p == nil {
+		return &lapiv2.Value{Sum: &lapiv2.Value_Optional{Optional: &lapiv2.Optional{}}}
+	}
+	return &lapiv2.Value{Sum: &lapiv2.Value_Optional{Optional: &lapiv2.Optional{Value: partyValue(*p)}}}
 }
 
 // buildInstrumentIDRecord:
@@ -112,6 +139,19 @@ func buildExtraArgsRecord(ctxData map[string]any, meta registry.Metadata) (*lapi
 	}), nil
 }
 
+// choiceContextValues extracts the inner `values` map from a registry
+// choiceContextData blob. The registry returns the choice context as a
+// full ChoiceContext-shaped JSON object — `{"values": {key: AnyValue}}`
+// — so the actual key→AnyValue entries live under `values`, not at the
+// top level. When the blob is already a bare map (no `values` wrapper,
+// e.g. an empty context), it's returned as-is.
+func choiceContextValues(ctxData map[string]any) map[string]any {
+	if inner, ok := ctxData["values"].(map[string]any); ok {
+		return inner
+	}
+	return ctxData
+}
+
 // buildChoiceContextRecord:
 //
 //	data ChoiceContext = ChoiceContext with
@@ -141,22 +181,35 @@ func buildExtraArgsRecord(ctxData map[string]any, meta registry.Metadata) (*lapi
 // `{"AV_Text": "hello"}`) round-trip directly; legacy registries that
 // hand us bare scalars get sniffed into the closest matching variant.
 func buildChoiceContextRecord(data map[string]any) (*lapiv2.Value, error) {
-	mapEntries := make([]*lapiv2.GenMap_Entry, 0, len(data))
-	keys := sortedKeys(data)
-	for _, k := range keys {
+	// The registry hands back the choice context as a full
+	// ChoiceContext JSON (`{"values": {...}}`), so unwrap the inner
+	// `values` map before building the TextMap — otherwise we'd
+	// double-wrap and the Daml choice's context lookups
+	// (e.g. "amulet-rules", "open-round") would miss.
+	values, err := anyValueTextMap(choiceContextValues(data))
+	if err != nil {
+		return nil, err
+	}
+	return recordValue([]field{{"values", values}}), nil
+}
+
+// anyValueTextMap builds a Daml `TextMap AnyValue` from a JSON map.
+// ChoiceContext.values and the AV_Map variant both use this type —
+// NOT GenMap. The participant's preprocessor rejects a GenMap where a
+// TextMap is declared ("mismatching type: TextMap ... and value:
+// GenMap()"). Entries are sorted by key for deterministic wire form.
+func anyValueTextMap(data map[string]any) (*lapiv2.Value, error) {
+	entries := make([]*lapiv2.TextMap_Entry, 0, len(data))
+	for _, k := range sortedKeys(data) {
 		anyVal, err := jsonToAnyValue(data[k])
 		if err != nil {
 			return nil, fmt.Errorf("key %q: %w", k, err)
 		}
-		mapEntries = append(mapEntries, &lapiv2.GenMap_Entry{
-			Key:   textValue(k),
-			Value: anyVal,
-		})
+		entries = append(entries, &lapiv2.TextMap_Entry{Key: k, Value: anyVal})
 	}
-	values := &lapiv2.Value{
-		Sum: &lapiv2.Value_GenMap{GenMap: &lapiv2.GenMap{Entries: mapEntries}},
-	}
-	return recordValue([]field{{"values", values}}), nil
+	return &lapiv2.Value{
+		Sum: &lapiv2.Value_TextMap{TextMap: &lapiv2.TextMap{Entries: entries}},
+	}, nil
 }
 
 // jsonToAnyValue converts a JSON-decoded `any` into the AnyValue
@@ -173,6 +226,15 @@ func buildChoiceContextRecord(data map[string]any) (*lapiv2.Value, error) {
 func jsonToAnyValue(v any) (*lapiv2.Value, error) {
 	switch x := v.(type) {
 	case map[string]any:
+		// Tagged form (what the Splice registry actually emits):
+		// {"tag": "AV_ContractId", "value": "..."}.
+		if tag, ok := x["tag"].(string); ok && strings.HasPrefix(tag, "AV_") {
+			innerVal, err := scalarToAnyValueInner(tag, x["value"])
+			if err != nil {
+				return nil, err
+			}
+			return variantValue(tag, innerVal), nil
+		}
 		// Wrapped form: {"AV_Text": "..."}.
 		if len(x) == 1 {
 			for ctor, inner := range x {
@@ -185,18 +247,12 @@ func jsonToAnyValue(v any) (*lapiv2.Value, error) {
 				}
 			}
 		}
-		// Bare map → AV_Map.
-		entries := make([]*lapiv2.GenMap_Entry, 0, len(x))
-		for _, k := range sortedKeys(x) {
-			innerVal, err := jsonToAnyValue(x[k])
-			if err != nil {
-				return nil, err
-			}
-			entries = append(entries, &lapiv2.GenMap_Entry{Key: textValue(k), Value: innerVal})
+		// Bare map → AV_Map (TextMap AnyValue).
+		inner, err := anyValueTextMap(x)
+		if err != nil {
+			return nil, err
 		}
-		return variantValue("AV_Map", &lapiv2.Value{
-			Sum: &lapiv2.Value_GenMap{GenMap: &lapiv2.GenMap{Entries: entries}},
-		}), nil
+		return variantValue("AV_Map", inner), nil
 	case []any:
 		items := make([]*lapiv2.Value, 0, len(x))
 		for _, it := range x {

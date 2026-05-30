@@ -40,8 +40,9 @@ import (
 // Endpoint is set. Returns the response's resulting TransferInstruction
 // CID (or new Holding CID for Direct kind) — caller prints / returns.
 func runTransferLive(ctx context.Context, out io.Writer, opts TransferOptions) (string, error) {
-	if opts.RegistryURL == "" {
-		return "", errors.New("RegistryURL is required for live transfer (asset's off-ledger registry base URL, e.g. http://localhost:5003/api/validator for Amulet)")
+	regBaseURL, regHost, err := resolveRegistryURL(opts.Instance, opts.RegistryURL)
+	if err != nil {
+		return "", err
 	}
 	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
 	if err != nil {
@@ -83,8 +84,9 @@ func runTransferLive(ctx context.Context, out io.Writer, opts TransferOptions) (
 
 	// Off-ledger factory lookup.
 	regCli, err := registry.Dial(registry.DialOptions{
-		BaseURL: opts.RegistryURL,
-		Token:   registry.StaticToken(opts.Token),
+		BaseURL:    regBaseURL,
+		HostHeader: regHost,
+		Token:      registry.StaticToken(resolveRegistryToken(opts.Token, opts.Instance, opts.Role)),
 	})
 	if err != nil {
 		return "", fmt.Errorf("dial registry: %w", err)
@@ -98,8 +100,8 @@ func runTransferLive(ctx context.Context, out io.Writer, opts TransferOptions) (
 	}
 	requestedAt, executeBefore := transferTimes()
 	transferArgs := registry.TransferArgs{
-		Sender:           opts.From,
-		Receiver:         opts.To,
+		Sender:           registry.NewOwnedAccount(opts.From),
+		Receiver:         registry.NewOwnedAccount(opts.To),
 		Amount:           opts.Amount,
 		InstrumentID:     registry.InstrumentID{Admin: admin, ID: ref.InstrumentID},
 		RequestedAt:      requestedAt,
@@ -109,8 +111,8 @@ func runTransferLive(ctx context.Context, out io.Writer, opts TransferOptions) (
 	}
 	factoryReq := registry.TransferFactoryRequest{
 		ChoiceArguments: registry.TransferFactoryChoiceArgs{
-			ExpectedAdmin: admin,
-			Transfer:      transferArgs,
+			Transfer: transferArgs,
+			Actors:   []string{opts.From},
 			ExtraArgs: registry.ExtraArgs{
 				Context: registry.Metadata{Values: map[string]string{}},
 				Meta:    registry.Metadata{Values: map[string]string{}},
@@ -124,7 +126,7 @@ func runTransferLive(ctx context.Context, out io.Writer, opts TransferOptions) (
 	emit(out, "transfer: factory", map[string]any{
 		"factory_id":    factoryResp.FactoryID,
 		"transfer_kind": factoryResp.TransferKind,
-		"disclosed":     len(factoryResp.DisclosedContracts),
+		"disclosed":     len(factoryResp.DisclosedContractsList()),
 	})
 
 	// On-ledger exercise.
@@ -145,8 +147,9 @@ func runTransferLive(ctx context.Context, out io.Writer, opts TransferOptions) (
 
 // runAcceptLive is the receiver-side counterpart.
 func runAcceptLive(ctx context.Context, out io.Writer, opts AcceptOptions) error {
-	if opts.RegistryURL == "" {
-		return errors.New("RegistryURL is required for live accept")
+	regBaseURL, regHost, err := resolveRegistryURL(opts.Instance, opts.RegistryURL)
+	if err != nil {
+		return err
 	}
 	conn := LedgerConn{
 		Endpoint: opts.Endpoint,
@@ -162,8 +165,9 @@ func runAcceptLive(ctx context.Context, out io.Writer, opts AcceptOptions) error
 	defer cleanup()
 
 	regCli, err := registry.Dial(registry.DialOptions{
-		BaseURL: opts.RegistryURL,
-		Token:   registry.StaticToken(opts.Token),
+		BaseURL:    regBaseURL,
+		HostHeader: regHost,
+		Token:      registry.StaticToken(resolveRegistryToken(opts.Token, opts.Instance, opts.Role)),
 	})
 	if err != nil {
 		return fmt.Errorf("dial registry: %w", err)

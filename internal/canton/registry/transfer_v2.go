@@ -42,7 +42,7 @@ const (
 	TransferKindSelf   TransferKind = "Self"
 )
 
-// InstrumentID mirrors the V2 standard's `Splice.Api.Token.MetadataV1.
+// InstrumentID mirrors the V2 standard's `Splice.Api.Token.HoldingV2.
 // InstrumentId` record: the admin party + asset id pair that uniquely
 // names an instrument on a participant.
 type InstrumentID struct {
@@ -50,12 +50,35 @@ type InstrumentID struct {
 	ID    string `json:"id"`
 }
 
+// Account mirrors the V2 standard's `Splice.Api.Token.HoldingV2.Account`
+// record. In V2 the transfer sender/receiver are Accounts, not bare
+// parties — an Account is { owner: Optional Party, provider: Optional
+// Party, id: Text }.
+//
+// JSON encoding follows the Daml JSON API: Optional Party is the party
+// string when Some, or null when None (omitempty + pointer gives us
+// that for free). For a regular wallet transfer, owner is set,
+// provider is left None, and id is the empty-string default account.
+type Account struct {
+	Owner    *string `json:"owner"`
+	Provider *string `json:"provider"`
+	ID       string  `json:"id"`
+}
+
+// NewOwnedAccount builds the common Account: owner set, no provider,
+// default ("") account id. This is what a wallet uses for a plain
+// party-to-party transfer.
+func NewOwnedAccount(party string) Account {
+	p := party
+	return Account{Owner: &p, Provider: nil, ID: ""}
+}
+
 // TransferArgs is the structured `transfer` field of the
 // transfer-factory choice. Mirrors `Splice.Api.Token.TransferInstructionV2.
 // Transfer` from the standard. Field order matches the OpenAPI spec.
 type TransferArgs struct {
-	Sender           string       `json:"sender"`
-	Receiver         string       `json:"receiver"`
+	Sender           Account      `json:"sender"`
+	Receiver         Account      `json:"receiver"`
 	Amount           string       `json:"amount"`
 	InstrumentID     InstrumentID `json:"instrumentId"`
 	RequestedAt      time.Time    `json:"requestedAt"`
@@ -87,13 +110,17 @@ type TransferFactoryRequest struct {
 	ChoiceArguments TransferFactoryChoiceArgs `json:"choiceArguments"`
 }
 
-// TransferFactoryChoiceArgs is the wrapper the OpenAPI spec defines:
-// the actual choice argument is nested under `transfer` + `extraArgs`,
-// with the expected-admin sentinel at the top.
+// TransferFactoryChoiceArgs is the JSON encoding of the Daml
+// TransferFactory_Transfer choice argument (per
+// TransferInstructionV2.daml): { transfer, actors, extraArgs }. The
+// registry validates this against the real choice signature, so the
+// field set must match exactly — `actors` is the controller list (the
+// sender party authorizing the transfer); there is no `expectedAdmin`
+// field (the admin lives inside transfer.instrumentId).
 type TransferFactoryChoiceArgs struct {
-	ExpectedAdmin string       `json:"expectedAdmin"`
-	Transfer      TransferArgs `json:"transfer"`
-	ExtraArgs     ExtraArgs    `json:"extraArgs"`
+	Transfer  TransferArgs `json:"transfer"`
+	Actors    []string     `json:"actors"`
+	ExtraArgs ExtraArgs    `json:"extraArgs"`
 }
 
 // DisclosedContract is the OpenAPI shape registries return when they
@@ -108,14 +135,28 @@ type DisclosedContract struct {
 }
 
 // TransferFactoryResponse is what the registry hands back: the factory
-// contract to exercise, the kind of transfer to expect, an opaque
-// choice-context blob to thread through, and the disclosed contracts
-// the participant needs to look up the factory + dependencies.
+// contract to exercise, the kind of transfer to expect, and the choice
+// context (opaque data blob + disclosed contracts). Per the OpenAPI
+// `TransferFactoryWithChoiceContext` schema, choiceContextData +
+// disclosedContracts are nested under `choiceContext` — NOT at the top
+// level. The convenience accessors below flatten them so callers don't
+// have to reach through the nesting.
 type TransferFactoryResponse struct {
-	FactoryID          string              `json:"factoryId"`
-	TransferKind       TransferKind        `json:"transferKind"`
-	ChoiceContextData  map[string]any      `json:"choiceContextData"`
-	DisclosedContracts []DisclosedContract `json:"disclosedContracts"`
+	FactoryID     string                `json:"factoryId"`
+	TransferKind  TransferKind          `json:"transferKind"`
+	ChoiceContext ChoiceContextResponse `json:"choiceContext"`
+}
+
+// ChoiceContextData returns the choice-context data blob (flattened
+// accessor over the nested choiceContext).
+func (r *TransferFactoryResponse) ChoiceContextData() map[string]any {
+	return r.ChoiceContext.ChoiceContextData
+}
+
+// DisclosedContractsList returns the disclosed contracts the participant
+// needs to look up the factory + dependencies (flattened accessor).
+func (r *TransferFactoryResponse) DisclosedContractsList() []DisclosedContract {
+	return r.ChoiceContext.DisclosedContracts
 }
 
 // ChoiceContextRequest is the body POST'd to the per-instruction

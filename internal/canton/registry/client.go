@@ -62,16 +62,26 @@ type DialOptions struct {
 	// Helpful for Splice-side log forensics ("which devkit version /
 	// command made this call?"). Defaults to "canton-devkit/registry".
 	UserAgent string
+
+	// HostHeader, when non-empty, overrides the HTTP Host header sent
+	// on every request (req.Host). Needed for Splice LocalNet's nginx
+	// virtual-host routing: the scan app's `/registry` routes are gated
+	// behind `server_name scan.localhost`, so a request to the SV UI
+	// port must carry `Host: scan.localhost` to reach the scan
+	// upstream rather than the SV-info default vhost. On a real DevNet
+	// (where scan has its own DNS name) this stays empty.
+	HostHeader string
 }
 
 // Client is the typed Splice HTTP API wrapper. Safe for concurrent use
 // across goroutines (the underlying http.Client multiplexes via its
 // connection pool).
 type Client struct {
-	baseURL   string
-	token     TokenSource
-	http      *http.Client
-	userAgent string
+	baseURL    string
+	token      TokenSource
+	http       *http.Client
+	userAgent  string
+	hostHeader string
 }
 
 // Dial constructs a Client. There is no network call here — the
@@ -102,10 +112,11 @@ func Dial(opts DialOptions) (*Client, error) {
 	}
 
 	return &Client{
-		baseURL:   strings.TrimRight(opts.BaseURL, "/"),
-		token:     opts.Token,
-		http:      httpClient,
-		userAgent: ua,
+		baseURL:    strings.TrimRight(opts.BaseURL, "/"),
+		token:      opts.Token,
+		http:       httpClient,
+		userAgent:  ua,
+		hostHeader: opts.HostHeader,
 	}, nil
 }
 
@@ -148,6 +159,14 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, into any
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	// Host-header override for nginx virtual-host routing (LocalNet
+	// scan registry sits behind `server_name scan.localhost`). Setting
+	// req.Host — not req.Header.Set("Host", …) — is the correct knob;
+	// net/http reads the Host field, not the header map, for the
+	// request line's authority.
+	if c.hostHeader != "" {
+		req.Host = c.hostHeader
 	}
 	if c.token != nil {
 		tok, err := c.token.Token(ctx)

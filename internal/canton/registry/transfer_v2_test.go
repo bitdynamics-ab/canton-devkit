@@ -24,13 +24,18 @@ func TestGetTransferFactory_HappyPath(t *testing.T) {
 		capturedCT = r.Header.Get("Content-Type")
 		capturedBody, _ = io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
+		// Per the OpenAPI TransferFactoryWithChoiceContext schema,
+		// choiceContextData + disclosedContracts are nested under
+		// `choiceContext`, NOT at the top level.
 		_, _ = w.Write([]byte(`{
 			"factoryId": "00abc-factory",
 			"transferKind": "Offer",
-			"choiceContextData": {"k": "v"},
-			"disclosedContracts": [
-				{"contractId": "00cid-1", "createdEventBlob": "Zm9v", "synchronizerId": "global-domain"}
-			]
+			"choiceContext": {
+				"choiceContextData": {"k": "v"},
+				"disclosedContracts": [
+					{"contractId": "00cid-1", "createdEventBlob": "Zm9v", "synchronizerId": "global-domain"}
+				]
+			}
 		}`))
 	}))
 	defer srv.Close()
@@ -42,10 +47,10 @@ func TestGetTransferFactory_HappyPath(t *testing.T) {
 
 	req := TransferFactoryRequest{
 		ChoiceArguments: TransferFactoryChoiceArgs{
-			ExpectedAdmin: "DSO::1220",
+			Actors: []string{"alice::1220"},
 			Transfer: TransferArgs{
-				Sender:           "alice::1220",
-				Receiver:         "bob::1220",
+				Sender:           NewOwnedAccount("alice::1220"),
+				Receiver:         NewOwnedAccount("bob::1220"),
 				Amount:           "10.00",
 				InstrumentID:     InstrumentID{Admin: "DSO::1220", ID: "Amulet"},
 				RequestedAt:      time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC),
@@ -80,8 +85,11 @@ func TestGetTransferFactory_HappyPath(t *testing.T) {
 	if err := json.Unmarshal(capturedBody, &decoded); err != nil {
 		t.Fatalf("body unmarshal: %v\nbody=%s", err, capturedBody)
 	}
-	if decoded.ChoiceArguments.Transfer.Sender != "alice::1220" {
-		t.Errorf("sender: got %q", decoded.ChoiceArguments.Transfer.Sender)
+	if decoded.ChoiceArguments.Transfer.Sender.Owner == nil || *decoded.ChoiceArguments.Transfer.Sender.Owner != "alice::1220" {
+		t.Errorf("sender.owner: got %+v", decoded.ChoiceArguments.Transfer.Sender)
+	}
+	if len(decoded.ChoiceArguments.Actors) != 1 || decoded.ChoiceArguments.Actors[0] != "alice::1220" {
+		t.Errorf("actors: got %v", decoded.ChoiceArguments.Actors)
 	}
 	if decoded.ChoiceArguments.Transfer.InstrumentID.ID != "Amulet" {
 		t.Errorf("instrumentId.id: got %q", decoded.ChoiceArguments.Transfer.InstrumentID.ID)
@@ -96,14 +104,18 @@ func TestGetTransferFactory_HappyPath(t *testing.T) {
 	if resp.TransferKind != TransferKindOffer {
 		t.Errorf("transferKind: got %q, want %q", resp.TransferKind, TransferKindOffer)
 	}
-	if len(resp.DisclosedContracts) != 1 {
-		t.Fatalf("disclosedContracts: got %d, want 1", len(resp.DisclosedContracts))
+	disclosed := resp.DisclosedContractsList()
+	if len(disclosed) != 1 {
+		t.Fatalf("disclosedContracts: got %d, want 1", len(disclosed))
 	}
-	if resp.DisclosedContracts[0].ContractID != "00cid-1" {
-		t.Errorf("disclosed[0].contractId: got %q", resp.DisclosedContracts[0].ContractID)
+	if disclosed[0].ContractID != "00cid-1" {
+		t.Errorf("disclosed[0].contractId: got %q", disclosed[0].ContractID)
 	}
-	if resp.DisclosedContracts[0].CreatedEventBlob != "Zm9v" {
-		t.Errorf("disclosed[0].createdEventBlob: got %q", resp.DisclosedContracts[0].CreatedEventBlob)
+	if disclosed[0].CreatedEventBlob != "Zm9v" {
+		t.Errorf("disclosed[0].createdEventBlob: got %q", disclosed[0].CreatedEventBlob)
+	}
+	if v, _ := resp.ChoiceContextData()["k"].(string); v != "v" {
+		t.Errorf("choiceContextData[k]: got %q, want v", v)
 	}
 }
 
