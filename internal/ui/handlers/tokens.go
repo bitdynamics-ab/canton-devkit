@@ -286,11 +286,12 @@ func decodeJSON(r io.ReadCloser, into any) error {
 // identical so a future ErrXxx → status mapping change only touches
 // this one function.
 //
-//   - nil                         → 204 No Content (idempotent success
-//     for mutations that don't return a body)
-//   - token.ErrNeedsV2LocalNet   → 412 Precondition Failed
-//   - token.ErrSymbolInUse       → 409 Conflict
-//   - other                      → 400 / 500 with the message
+//   - nil                              → 204 No Content (idempotent
+//     success for mutations that don't return a body)
+//   - token.ErrNeedsV2LocalNet         → 412 Precondition Failed
+//   - token.ErrUnsupportedOnInstrument → 422 Unprocessable Entity
+//   - token.ErrSymbolInUse             → 409 Conflict
+//   - other                            → 400 / 500 with the message
 //
 // partyIDFingerprint matches the fingerprint half of a fully-qualified
 // Daml party id (`<hint>::<fingerprint>`). The hint is human-readable;
@@ -313,6 +314,9 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 	case errors.Is(err, token.ErrNeedsV2LocalNet):
 		writeErrorWithCode(w, http.StatusPreconditionFailed,
 			"NEEDS_V2_LOCALNET", err.Error())
+	case errors.Is(err, token.ErrUnsupportedOnInstrument):
+		writeErrorWithCode(w, http.StatusUnprocessableEntity,
+			"UNSUPPORTED_ON_INSTRUMENT", err.Error())
 	case errors.Is(err, token.ErrSymbolInUse):
 		writeErrorWithCode(w, http.StatusConflict,
 			"SYMBOL_IN_USE", err.Error())

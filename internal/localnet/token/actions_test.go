@@ -78,11 +78,13 @@ func TestRunBalance_FilterByInstrument(t *testing.T) {
 	}
 }
 
-// TestRunMint_NotWiredYet pins the BIT-139 follow-up boundary: the
-// action validates + resolves the instrument, but returns
-// ErrNeedsV2LocalNet so callers can render the remediation. Once the
-// live ledger submission lands this test changes shape, not name.
-func TestRunMint_NotWiredYet(t *testing.T) {
+// TestRunMint_UnsupportedOnInstrument pins the V2-alpha behaviour:
+// Amulet (the only seeded instrument) doesn't implement
+// BurnMintFactoryV1, and V2 has no generic mint interface, so RunMint
+// surfaces ErrUnsupportedOnInstrument. Validation errors (missing
+// --to) must still preempt — callers need to distinguish "you forgot
+// --to" from "this asset can't be minted".
+func TestRunMint_UnsupportedOnInstrument(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo")
 	if _, err := RunCreate(nil, happyOpts("demo")); err != nil {
@@ -92,23 +94,26 @@ func TestRunMint_NotWiredYet(t *testing.T) {
 	err := RunMint(context.Background(), nil, MintOptions{
 		Instance: "demo", Instrument: "RTK", To: "bob::xyz", Amount: "100",
 	})
-	if !errors.Is(err, ErrNeedsV2LocalNet) {
-		t.Errorf("RunMint should surface ErrNeedsV2LocalNet until V2 submit lands; got %v", err)
+	if !errors.Is(err, ErrUnsupportedOnInstrument) {
+		t.Errorf("RunMint should surface ErrUnsupportedOnInstrument for assets without standard mint; got %v", err)
 	}
 
-	// Missing required field is rejected BEFORE the V2-needed error,
-	// so callers can distinguish "you forgot --to" from "V2 isn't up".
+	// Missing required field is rejected BEFORE the unsupported error,
+	// so callers can distinguish "you forgot --to" from "asset can't mint".
 	err = RunMint(context.Background(), nil, MintOptions{
 		Instance: "demo", Instrument: "RTK", Amount: "100",
 	})
-	if errors.Is(err, ErrNeedsV2LocalNet) {
-		t.Errorf("missing --to should be a validation error, not V2-needed; got %v", err)
+	if errors.Is(err, ErrUnsupportedOnInstrument) {
+		t.Errorf("missing --to should be a validation error, not unsupported-instrument; got %v", err)
 	}
 }
 
-// TestRunTransfer_UnknownSymbol surfaces the 'use token create
-// first' hint, not the V2-needed remediation — getting the wording
-// wrong here is a usability bug.
+// TestRunTransfer_UnknownSymbol covers the no-endpoint path: when no
+// live endpoint is set, RunTransfer falls back to ErrNeedsV2LocalNet
+// after passing field-validation. With an unknown symbol AND no
+// endpoint, ErrNeedsV2LocalNet is the deliberate surface (so the user
+// adds --endpoint and re-runs, where the orchestration treats unknown
+// symbols as raw instrument ids).
 func TestRunTransfer_UnknownSymbol(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo")
@@ -116,9 +121,9 @@ func TestRunTransfer_UnknownSymbol(t *testing.T) {
 		Instance: "demo", Instrument: "GHOST", From: "a", To: "b", Amount: "1",
 	})
 	if err == nil {
-		t.Fatal("expected error for unknown symbol")
+		t.Fatal("expected error")
 	}
-	if errors.Is(err, ErrNeedsV2LocalNet) {
-		t.Errorf("unknown symbol should NOT surface V2-needed; got %v", err)
+	if !errors.Is(err, ErrNeedsV2LocalNet) {
+		t.Errorf("no-endpoint transfer should surface ErrNeedsV2LocalNet; got %v", err)
 	}
 }

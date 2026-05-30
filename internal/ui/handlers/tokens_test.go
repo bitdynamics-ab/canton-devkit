@@ -109,10 +109,16 @@ func TestTokens_CreateDuplicateIsConflict(t *testing.T) {
 	}
 }
 
-// TestTokens_MintNeedsV2 pins the 412 Precondition Failed mapping for
-// ErrNeedsV2LocalNet — the frontend uses this to render a "bring up
-// the V2 LocalNet" remediation pill rather than a generic 500.
-func TestTokens_MintNeedsV2(t *testing.T) {
+// TestTokens_MintUnsupportedOnInstrument pins the 422 mapping for
+// ErrUnsupportedOnInstrument. The Web UI uses this to render
+// "this asset doesn't support mint via the V2 standard — use the
+// asset's wallet UI" instead of a generic error.
+//
+// (Previously this test asserted 412 / NEEDS_V2_LOCALNET; that was the
+// transitional shape while V2 wasn't wired. Now that mint is wired to
+// a precise "unsupported on this asset" verdict, 422 is the right
+// surface and what the UI's TokensScreen handles.)
+func TestTokens_MintUnsupportedOnInstrument(t *testing.T) {
 	seedForTokens(t, "demo")
 	srv := tokensSrv(t)
 	// Create first so the symbol resolves.
@@ -125,14 +131,14 @@ func TestTokens_MintNeedsV2(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST mint: %v", err)
 	}
-	if resp.StatusCode != http.StatusPreconditionFailed {
-		t.Errorf("mint status = %d, want 412 (needs V2 LocalNet)", resp.StatusCode)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("mint status = %d, want 422 (unsupported on instrument)", resp.StatusCode)
 	}
 	out := new(bytes.Buffer)
 	_, _ = out.ReadFrom(resp.Body)
 	_ = resp.Body.Close()
-	if !strings.Contains(out.String(), "NEEDS_V2_LOCALNET") {
-		t.Errorf("body should carry NEEDS_V2_LOCALNET code; got %s", out.String())
+	if !strings.Contains(out.String(), "UNSUPPORTED_ON_INSTRUMENT") {
+		t.Errorf("body should carry UNSUPPORTED_ON_INSTRUMENT code; got %s", out.String())
 	}
 }
 

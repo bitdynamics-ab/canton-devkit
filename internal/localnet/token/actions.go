@@ -24,6 +24,22 @@ var ErrNeedsV2LocalNet = errors.New(
 		"then re-run; the V2 instrument-creation + transfer submission " +
 		"lands incrementally on top of this PR")
 
+// ErrUnsupportedOnInstrument signals that the asset implementing the
+// instrument doesn't expose a standard mint or burn choice. Amulet is
+// the most common case — it doesn't implement BurnMintFactoryV1, and
+// the V2 Token Standard has no generic mint/burn interface. Real
+// tokens that want these operations either implement BurnMintFactoryV1
+// or expose asset-specific choices on the issuer's TokenRules contract.
+// CLI maps to ExitUserError; HTTP handler maps to 422 Unprocessable
+// Entity so the UI can render "this instrument doesn't support that
+// operation — use the asset's wallet UI" instead of a wiring error.
+var ErrUnsupportedOnInstrument = errors.New(
+	"this instrument doesn't implement the V2 standard's mint/burn surface " +
+		"(Amulet has no BurnMintFactoryV1, and V2 defines no generic mint/burn). " +
+		"Use the asset's own wallet UI for issuance changes, or create a " +
+		"splice-test-token-v2 instrument via `localnet token create` for a token " +
+		"that implements asset-specific mint via TokenRules_OfferMint")
+
 // MintOptions / TransferOptions / BurnOptions / BalanceOptions are
 // the input shapes for each action. Lifted into the orchestration
 // layer (not the CLI package) so the HTTP handler can populate them
@@ -42,10 +58,27 @@ type TransferOptions struct {
 	Amount     string
 	NoWait     bool // if true, return the TransferInstruction id without waiting for accept
 	Reason     string
+
+	// Live-submit fields. When Endpoint is set, RunTransfer performs
+	// the full V2 flow: ACS query → POST /transfer-factory → ledger
+	// exercise. Empty Endpoint surfaces the legacy ErrNeedsV2LocalNet
+	// stub for callers that haven't been updated to provide one.
+	Endpoint    string
+	Token       string
+	Role        string
+	Insecure    bool
+	RegistryURL string // off-ledger token registry base URL (asset-specific)
 }
 type AcceptOptions struct {
 	Instance              string
 	TransferInstructionID string
+
+	// Same live-submit envelope as TransferOptions.
+	Endpoint    string
+	Token       string
+	Role        string
+	Insecure    bool
+	RegistryURL string
 }
 type BurnOptions struct {
 	Instance   string
@@ -104,6 +137,12 @@ type BalanceRow struct {
 // registry so unit-level wiring tests cover the flow. Callers that
 // only want validation can pass a nil writer.
 
+// RunMint always returns ErrUnsupportedOnInstrument for the V2 alpha:
+// Amulet (the only seeded instrument) doesn't implement BurnMintFactoryV1
+// and there's no generic V2 mint interface. The asset-specific
+// TokenRules_OfferMint choice on splice-test-token-v2 is a future
+// follow-up gated on the test-token DAR being uploaded + an instrument
+// being created via the wizard.
 func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	if err := requireFields("mint", opts.Instance, opts.Instrument, opts.To, opts.Amount); err != nil {
 		return err
@@ -116,14 +155,20 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	}
 	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
 	if err != nil {
-		return err
+		// Unresolved → fall through to the unsupported error since
+		// we have no path to mint into an unknown instrument either.
+		ref = registry.TokenRef{InstrumentID: opts.Instrument}
 	}
 	emit(out, "mint", map[string]any{
 		"instrument": ref, "to": opts.To, "amount": opts.Amount,
 	})
-	return ErrNeedsV2LocalNet
+	return ErrUnsupportedOnInstrument
 }
 
+// RunTransfer dispatches: if opts.Endpoint is set, run the live V2
+// transfer flow (ACS → registry → exercise). Otherwise surface
+// ErrNeedsV2LocalNet so callers that haven't been updated to thread
+// through the endpoint get a clear remediation.
 func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error {
 	if err := requireFields("transfer", opts.Instance, opts.Instrument, opts.From, opts.To, opts.Amount); err != nil {
 		return err
@@ -137,27 +182,43 @@ func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error
 	if err := validateAmount("transfer", opts.Amount); err != nil {
 		return err
 	}
-	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
+	if opts.Endpoint == "" {
+		emit(out, "transfer", map[string]any{
+			"from": opts.From, "to": opts.To, "amount": opts.Amount,
+		})
+		return ErrNeedsV2LocalNet
+	}
+	if opts.Role == "" {
+		opts.Role = "app-user"
+	}
+	instructionID, err := runTransferLive(ctx, out, opts)
 	if err != nil {
 		return err
 	}
-	emit(out, "transfer", map[string]any{
-		"instrument": ref, "from": opts.From, "to": opts.To,
-		"amount": opts.Amount, "no_wait": opts.NoWait, "reason": opts.Reason,
+	emit(out, "transfer complete", map[string]any{
+		"transfer_instruction_id": instructionID,
 	})
-	return ErrNeedsV2LocalNet
+	return nil
 }
 
 func RunAccept(ctx context.Context, out io.Writer, opts AcceptOptions) error {
 	if err := requireFields("transfer accept", opts.Instance, opts.TransferInstructionID); err != nil {
 		return err
 	}
-	emit(out, "transfer accept", map[string]any{
-		"transfer_instruction_id": opts.TransferInstructionID,
-	})
-	return ErrNeedsV2LocalNet
+	if opts.Endpoint == "" {
+		emit(out, "transfer accept", map[string]any{
+			"transfer_instruction_id": opts.TransferInstructionID,
+		})
+		return ErrNeedsV2LocalNet
+	}
+	if opts.Role == "" {
+		opts.Role = "app-user"
+	}
+	return runAcceptLive(ctx, out, opts)
 }
 
+// RunBurn always returns ErrUnsupportedOnInstrument — same reasoning
+// as RunMint.
 func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 	if err := requireFields("burn", opts.Instance, opts.Instrument, opts.From, opts.Amount); err != nil {
 		return err
@@ -170,12 +231,12 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 	}
 	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
 	if err != nil {
-		return err
+		ref = registry.TokenRef{InstrumentID: opts.Instrument}
 	}
 	emit(out, "burn", map[string]any{
 		"instrument": ref, "from": opts.From, "amount": opts.Amount,
 	})
-	return ErrNeedsV2LocalNet
+	return ErrUnsupportedOnInstrument
 }
 
 // RunBalance is the one action that's fully functional today: it
