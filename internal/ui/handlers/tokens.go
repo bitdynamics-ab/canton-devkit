@@ -205,6 +205,7 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
+	role := roleFromQuery(r)
 	err = token.RunTransfer(r.Context(), nil, token.TransferOptions{
 		Instance:   instance,
 		Instrument: r.PathValue("symbol"),
@@ -213,6 +214,13 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 		Amount:     body.Amount,
 		NoWait:     body.NoWait,
 		Reason:     body.Reason,
+		// Live-submit: resolve the role's ledger endpoint so the
+		// handler runs the real V2 transfer (registry-URL auto-derives
+		// from the instance). Absent port → RunTransfer surfaces the
+		// not-wired remediation, mapped to 412.
+		Endpoint: liveLedgerEndpoint(instance, role),
+		Role:     role,
+		Insecure: true,
 	})
 	mapTokenError(w, err, "transfer")
 }
@@ -223,9 +231,13 @@ func handleTokenAccept(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
+	role := roleFromQuery(r)
 	err = token.RunAccept(r.Context(), nil, token.AcceptOptions{
 		Instance:              instance,
 		TransferInstructionID: r.PathValue("id"),
+		Endpoint:              liveLedgerEndpoint(instance, role),
+		Role:                  role,
+		Insecure:              true,
 	})
 	mapTokenError(w, err, "accept")
 }
@@ -254,6 +266,30 @@ func handleTokenBurn(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- helpers ---------------------------------------------------------
+
+// roleFromQuery returns the `?role=` value, defaulting to app-user.
+func roleFromQuery(r *http.Request) string {
+	role := r.URL.Query().Get("role")
+	if role == "" {
+		role = "app-user"
+	}
+	return role
+}
+
+// liveLedgerEndpoint resolves the role's participant ledger gRPC
+// endpoint (host:port) from the instance's recorded ports. Empty when
+// the port wasn't captured — callers then fall back to the not-wired
+// stub. Same port-discovery shape as handleTokenHoldings + contracts.go.
+func liveLedgerEndpoint(instance, role string) string {
+	state, err := registry.Read(instance)
+	if err != nil {
+		return ""
+	}
+	if port, ok := state.Ports["participant_ledger_"+role]; ok && port > 0 {
+		return "localhost:" + strconv.Itoa(port)
+	}
+	return ""
+}
 
 // instanceFromQuery validates `?instance=` and protects the per-name
 // path-traversal surface via registry.ValidateName.
