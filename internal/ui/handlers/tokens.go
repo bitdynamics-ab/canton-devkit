@@ -179,11 +179,17 @@ func handleTokenMint(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
+	role := roleFromQuery(r)
 	err = token.RunMint(r.Context(), nil, token.MintOptions{
 		Instance:   instance,
 		Instrument: r.PathValue("symbol"),
 		To:         body.To,
 		Amount:     body.Amount,
+		// Live mint for on-ledger test-token instruments. Amulet /
+		// registry-only instruments still take the unsupported path.
+		Endpoint: liveLedgerEndpoint(instance, role),
+		Role:     role,
+		Insecure: true,
 	})
 	mapTokenError(w, err, "mint")
 }
@@ -359,8 +365,7 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 	default:
 		// Once the actions submit for real, failures arrive as gRPC
 		// status errors — map their codes to the matching HTTP status
-		// instead of flattening everything to 400. (Today the actions
-		// stub at ErrNeedsV2LocalNet → 412, so this is forward-looking.)
+		// instead of flattening everything to 400.
 		if s, ok := status.FromError(err); ok && s.Code() != codes.OK {
 			switch s.Code() {
 			case codes.NotFound:
@@ -386,8 +391,7 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 		// Non-gRPC orchestration error: user-actionable (bad amount,
 		// unknown party, malformed instrument id). Surface the cause —
 		// `writeError` would redact it to just the op name, which is
-		// correct for 5xx but unhelpful for a 400. Consistent with the
-		// explicit 400s in the per-handler decode paths.
+		// correct for 5xx but unhelpful for a 400.
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 	}
 }
