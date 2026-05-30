@@ -86,6 +86,7 @@ twice is rejected by the underlying Daml choice.`,
 	}
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")
 	cmd.Flags().StringVar(&opts.TransferInstructionID, "id", "", "TransferInstruction contract id. Required.")
+	cmd.Flags().StringVar(&opts.Party, "party", "", "Receiver party acting on the instruction. Defaults to the JWT's first granted party (set explicitly on multi-party participants).")
 	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). When set, run the live accept; otherwise print the not-wired remediation.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
 	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the submit.")

@@ -151,6 +151,13 @@ func submitExercise(
 			Commands:           commands,
 			DisclosedContracts: disclosed,
 		},
+		// Request the resulting transaction with the actAs party's
+		// created events + the TransferInstructionV2 interface view, so
+		// findCreatedInstructionID can extract the offer instruction's
+		// contract id from the response. Without an explicit
+		// TransactionFormat the participant returns a minimal
+		// (event-less) transaction and the CID would be lost.
+		TransactionFormat: transferInstructionTxFormat(actAs),
 	}
 	// Default submission timeout: 60s. Commit latency on a healthy
 	// LocalNet is sub-second; the headroom covers GC / image-pull
@@ -159,6 +166,40 @@ func submitExercise(
 	subCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	return client.SubmitAndWaitForTransaction(subCtx, req)
+}
+
+// transferInstructionTxFormat builds the TransactionFormat that makes
+// the submit response carry the actAs party's created events with the
+// TransferInstructionV2 interface view attached. findCreatedInstructionID
+// walks those views to surface the offer instruction's contract id.
+//
+// ACS_DELTA shape is sufficient: an offer transfer's create of the
+// TransferInstruction is an ACS-positive event, so it shows up without
+// needing the heavier LEDGER_EFFECTS tree shape.
+func transferInstructionTxFormat(actAs string) *lapiv2.TransactionFormat {
+	pkg, mod, entity := splitInterfaceID(TransferInstructionInterfaceV2)
+	return &lapiv2.TransactionFormat{
+		TransactionShape: lapiv2.TransactionShape_TRANSACTION_SHAPE_ACS_DELTA,
+		EventFormat: &lapiv2.EventFormat{
+			FiltersByParty: map[string]*lapiv2.Filters{
+				actAs: {
+					Cumulative: []*lapiv2.CumulativeFilter{{
+						IdentifierFilter: &lapiv2.CumulativeFilter_InterfaceFilter{
+							InterfaceFilter: &lapiv2.InterfaceFilter{
+								InterfaceId: &lapiv2.Identifier{
+									PackageId:  pkg,
+									ModuleName: mod,
+									EntityName: entity,
+								},
+								IncludeInterfaceView: true,
+							},
+						},
+					}},
+				},
+			},
+			Verbose: false,
+		},
+	}
 }
 
 // splitInterfaceID parses our `#package-name:Module:Entity` form into

@@ -160,11 +160,13 @@ func (r *TransferFactoryResponse) DisclosedContractsList() []DisclosedContract {
 }
 
 // ChoiceContextRequest is the body POST'd to the per-instruction
-// choice-context endpoints. The OpenAPI spec defines this as `meta`
-// only — no `extraArgs` here since the instruction itself already
-// names sender/receiver/amount.
+// choice-context endpoints. Per the OpenAPI GetChoiceContextRequest
+// schema, `meta` is a flat string→string map (additionalProperties:
+// string) — NOT the {values:...} Metadata wrapper the on-ledger
+// records use. Empty map serialises to `{}`, which the registry
+// accepts.
 type ChoiceContextRequest struct {
-	Meta Metadata `json:"meta"`
+	Meta map[string]string `json:"meta"`
 }
 
 // ChoiceContextResponse is the leaner shape /choice-contexts/accept

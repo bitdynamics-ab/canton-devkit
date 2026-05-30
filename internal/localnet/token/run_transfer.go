@@ -173,18 +173,21 @@ func runAcceptLive(ctx context.Context, out io.Writer, opts AcceptOptions) error
 		return fmt.Errorf("dial registry: %w", err)
 	}
 	ctxResp, err := regCli.GetAcceptChoiceContext(ctx, opts.TransferInstructionID,
-		registry.ChoiceContextRequest{Meta: registry.Metadata{Values: map[string]string{}}})
+		registry.ChoiceContextRequest{Meta: map[string]string{}})
 	if err != nil {
 		return fmt.Errorf("registry accept choice-context: %w", err)
 	}
 
-	// We don't know the receiver party off-the-bat — the JWT user's
-	// granted parties tell us who we can act as. Use the first granted
-	// party (the dialer auto-granted the role's local party set, so
-	// this resolves to the local party that owns the instruction).
-	receiver, err := pickActAsParty(ctx, client)
-	if err != nil {
-		return fmt.Errorf("resolve receiver party: %w", err)
+	// The receiver acts on the instruction. Use the explicit --party
+	// when given (required when the participant hosts multiple
+	// parties); otherwise fall back to the first Act-As party granted
+	// to the JWT (correct for a single-party participant).
+	receiver := opts.Party
+	if receiver == "" {
+		receiver, err = pickActAsParty(ctx, client)
+		if err != nil {
+			return fmt.Errorf("resolve receiver party: %w", err)
+		}
 	}
 
 	resp, err := exerciseV2AcceptInstruction(ctx, client, receiver, opts.TransferInstructionID, ctxResp)
@@ -330,11 +333,14 @@ func pickActAsParty(ctx context.Context, client *ledger.Client) (string, error) 
 // — context.Now() would also work but pulling clock from time.Now keeps
 // the helper simple for the CLI / handler paths.
 //
-// `executeBefore` gives the participant 5 minutes to commit before the
-// registry considers the request stale.
+// `executeBefore` gives a 24-hour window (matching the upstream Splice
+// CLI) before the transfer is considered stale. For an Offer-kind
+// transfer this is the window in which the receiver must accept the
+// resulting TransferInstruction — 5 minutes is too tight for a
+// human-driven accept, so we use the upstream default.
 func transferTimes() (time.Time, time.Time) {
 	now := time.Now().UTC()
-	return now, now.Add(5 * time.Minute)
+	return now, now.Add(24 * time.Hour)
 }
 
 // findCreatedInstructionID scans the SubmitAndWaitForTransaction

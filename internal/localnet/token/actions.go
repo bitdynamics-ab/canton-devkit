@@ -73,6 +73,13 @@ type AcceptOptions struct {
 	Instance              string
 	TransferInstructionID string
 
+	// Party is the receiver acting on the instruction. Optional —
+	// empty falls back to the first Act-As party granted to the JWT
+	// (correct for single-party participants). Set explicitly when the
+	// participant hosts several parties and the receiver isn't the
+	// alphabetically-first one.
+	Party string
+
 	// Same live-submit envelope as TransferOptions.
 	Endpoint    string
 	Token       string

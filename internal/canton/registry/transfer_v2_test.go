@@ -140,7 +140,7 @@ func TestGetAcceptChoiceContext_HappyPath(t *testing.T) {
 	resp, err := c.GetAcceptChoiceContext(
 		context.Background(),
 		"00txn-instruction-1",
-		ChoiceContextRequest{Meta: Metadata{Values: map[string]string{}}},
+		ChoiceContextRequest{Meta: map[string]string{}},
 	)
 	if err != nil {
 		t.Fatalf("GetAcceptChoiceContext: %v", err)
