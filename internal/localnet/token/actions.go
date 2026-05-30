@@ -132,10 +132,18 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 // returns the recorded TokenRefs from registry.State.Tokens as
 // pseudo-balances (Amount = InitialSupply when --party matches the
 // issuer; otherwise zero). Callers that want the live ACS-derived
-// balance need a running V2 LocalNet + the future ledger ACS query
-// — that's the BIT-139 follow-up. Returning *something* here makes
-// the Web UI's holdings table render right away on whatever instance
-// the user is browsing, and gives a deterministic surface for tests.
+// balance need a running V2 LocalNet + the future ledger ACS query —
+// that's the BIT-139 follow-up.
+//
+// When that follow-up lands, the ACS query uses HoldingInterfaceV2
+// (see v2_surface.go for the qualified interface id and why V2 rather
+// than V1) and sums the HoldingViewV2.amount for every contract whose
+// view.account.owner matches --party. The synthetic issuer-only case
+// goes away.
+//
+// Returning *something* here makes the Web UI's holdings table render
+// right away on whatever instance the user is browsing, and gives a
+// deterministic surface for tests.
 func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]BalanceRow, error) {
 	if opts.Instance == "" {
 		return nil, errors.New("instance is required")
