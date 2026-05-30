@@ -11,6 +11,7 @@ import { DARScreen } from "./screens/DARScreen";
 import { ExplorerScreen } from "./screens/ExplorerScreen";
 import { WalletScreen } from "./screens/WalletScreen";
 import { AgentSkillsScreen } from "./screens/AgentSkillsScreen";
+import { TokensScreen } from "./screens/TokensScreen";
 import { W } from "./tokens";
 
 // App boots by doing the schema-version handshake against the
@@ -78,7 +79,7 @@ function RoutedSurface() {
       <Route path="/explorer/*" element={<Guard routeKey={loc.pathname}><ExplorerScreen /></Guard>} />
       <Route path="/dar/*" element={<Guard routeKey={loc.pathname}><DARScreen /></Guard>} />
       <Route path="/metrics/*" element={<Guard routeKey={loc.pathname}><MetricsScreen /></Guard>} />
-      <Route path="/tokens/*" element={<Guard routeKey={loc.pathname}><Placeholder name="Tokens" ticket="BIT-140" /></Guard>} />
+      <Route path="/tokens/*" element={<Guard routeKey={loc.pathname}><TokensScreen /></Guard>} />
       <Route path="/agent/*" element={<Guard routeKey={loc.pathname}><AgentSkillsScreen /></Guard>} />
       <Route path="*" element={<Guard routeKey={loc.pathname}><Placeholder name="Not found" /></Guard>} />
     </Routes>
