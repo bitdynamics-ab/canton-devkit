@@ -77,6 +77,16 @@ func dialLedger(ctx context.Context, conn LedgerConn) (*ledger.Client, func(), e
 	if err != nil {
 		return nil, func() {}, fmt.Errorf("dial ledger %s: %w", conn.Endpoint, err)
 	}
+	// V2-alpha gap: the Splice `-dev` boot does NOT auto-grant
+	// `ledger-api-user` CanActAs/CanReadAs on the local party (stable
+	// 0.6.4 does). Without grants, every ACS / submit returns
+	// PermissionDenied even though the JWT is accepted. Probe the
+	// user's rights and grant the local party set on first dial.
+	// Idempotent: subsequent dials see existing grants and short-circuit.
+	if err := ensureLocalPartyRights(ctx, client, conn.Role); err != nil {
+		_ = client.Close()
+		return nil, func() {}, err
+	}
 	return client, func() { _ = client.Close() }, nil
 }
 
@@ -101,6 +111,55 @@ func redactJWTs(err error) error {
 		return err // nothing matched — preserve the original error (and its wrapping)
 	}
 	return errors.New(masked)
+}
+
+// ensureLocalPartyRights inspects the JWT's user-rights and, if no
+// per-party Act/Read rights are present, grants them for the parties
+// hosted on this participant whose names match the role. A no-op when
+// the user already has Act/Read rights (stable Splice grants these at
+// boot; second-and-later dials see prior grants).
+func ensureLocalPartyRights(ctx context.Context, c *ledger.Client, role string) error {
+	rights, err := c.ResolveActAndReadParties(ctx)
+	if err != nil {
+		return fmt.Errorf("probe user rights: %w", err)
+	}
+	if len(rights) > 0 {
+		return nil
+	}
+	parties, err := localPartiesForRole(ctx, c, role)
+	if err != nil {
+		return fmt.Errorf("discover local parties for role %q: %w", role, err)
+	}
+	if len(parties) == 0 {
+		return fmt.Errorf("no local parties found for role %q on this participant — "+
+			"V2 onboarding may not have completed; check `localnet status`", role)
+	}
+	if err := c.GrantUserActAndReadAs(ctx, "", parties); err != nil {
+		return fmt.Errorf("grant Act/Read rights for parties %v: %w", parties, err)
+	}
+	return nil
+}
+
+// localPartiesForRole returns the locally-hosted party IDs whose name
+// matches the role's expected prefix (e.g. role=app-user matches
+// `app_user_*`). IsLocal=true filters out cross-participant proxies —
+// only locally-hosted parties can be the subject of grants.
+func localPartiesForRole(ctx context.Context, c *ledger.Client, role string) ([]string, error) {
+	resp, err := c.ListKnownParties(ctx)
+	if err != nil {
+		return nil, err
+	}
+	prefix := strings.ReplaceAll(role, "-", "_") + "_"
+	var out []string
+	for _, p := range resp.GetPartyDetails() {
+		if !p.GetIsLocal() {
+			continue
+		}
+		if strings.HasPrefix(p.GetParty(), prefix) {
+			out = append(out, p.GetParty())
+		}
+	}
+	return out, nil
 }
 
 // resolveLedgerToken implements the four-step token resolution order
@@ -145,8 +204,8 @@ func resolveLedgerTokenRaw(conn LedgerConn) (string, error) {
 	inputs, err := splice.LoadCredentialInputs(state.ProjectDir)
 	if err != nil {
 		return "", fmt.Errorf(
-			"no captured credentials for role %q and could not load env files (%w). "+
-				"Run `canton-devkit localnet creds --name %s --role %s --format raw` "+
+			"no captured credentials for role %q and could not load env files (%w); "+
+				"run `canton-devkit localnet creds --name %s --role %s --format raw` "+
 				"to confirm token issuance, or pass --token explicitly",
 			role, err, conn.Instance, role)
 	}
@@ -160,8 +219,8 @@ func resolveLedgerTokenRaw(conn LedgerConn) (string, error) {
 		}
 	}
 	return "", fmt.Errorf(
-		"no captured credentials AND no env entry for role %q on instance %q. "+
-			"Run `canton-devkit localnet creds --name %s --role %s --format raw` "+
+		"no captured credentials AND no env entry for role %q on instance %q; "+
+			"run `canton-devkit localnet creds --name %s --role %s --format raw` "+
 			"to confirm what's available, or pass --token explicitly",
 		role, conn.Instance, conn.Instance, role)
 }

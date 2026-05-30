@@ -278,6 +278,26 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, err
 	var parties []string
 	if opts.Party != "" {
 		parties = []string{opts.Party}
+	} else {
+		// Canton's wildcard ("FiltersForAnyParty") path requires the
+		// JWT to carry the super-reader / ParticipantAdmin claim. The
+		// per-role user-tokens we mint only carry CanActAs/CanReadAs
+		// on the local parties — so a wildcard query is rejected even
+		// after the grant. Enumerate the role's local parties via
+		// PartyManagement and submit them in FiltersByParty so Canton
+		// gates per-party instead.
+		discovered, err := localPartiesForRole(ctx, client, opts.Role)
+		if err != nil {
+			return nil, fmt.Errorf("discover local parties for role %q: %w", opts.Role, err)
+		}
+		parties = discovered
+	}
+	if len(parties) == 0 {
+		// No parties means an empty FiltersByParty, which Canton
+		// rejects. Return an empty balance set — the participant has
+		// no parties hosted (or none matching the role prefix) so
+		// there are no holdings to report.
+		return nil, nil
 	}
 	req := ledger.ActiveContractsRequest{
 		ActiveAtOffset: end.Offset,

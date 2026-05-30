@@ -148,12 +148,98 @@ func (c *ComposeRunner) WaitForHealthy(ctx context.Context) error {
 			return nil
 		}
 
+		// Out-of-band readyz fallback for the V2 alpha track: the
+		// upstream `-dev` splice image's in-container HEALTHCHECK
+		// probe is broken (the probe URL resolves to a non-existent
+		// path inside the container and never returns 0), so the
+		// docker-reported health stays `starting` forever even after
+		// the validator's external `/api/validator/readyz` returns 200.
+		// When the only non-ready service(s) are splice-shaped and in
+		// running/starting, probe the validator's readyz endpoint via
+		// `docker exec` and treat a 200 as ready. Stable splice
+		// (0.6.4) is unaffected — its healthcheck works, so the
+		// snapshot flips healthy before this fallback runs.
+		if c.allBlockersAreSpliceStarting(lastSnapshot) && c.spliceReadyzOK(ctx, lastSnapshot) {
+			return nil
+		}
+
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("timed out waiting for services to become healthy.\nLast `docker compose ps` snapshot:\n%s", formatHealthSnapshot(lastSnapshot))
 		case <-time.After(readinessPollWait):
 		}
 	}
+}
+
+// allBlockersAreSpliceStarting returns true iff every non-ready service
+// in the snapshot is a `*-splice`-named container in state=running and
+// health=starting. The narrow gate keeps the readyz fallback from
+// masking real failures in other services (canton, postgres, nginx).
+func (c *ComposeRunner) allBlockersAreSpliceStarting(raw []byte) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
+	sawSplice := false
+	for scanner.Scan() {
+		line := strings.TrimRight(scanner.Text(), "\r")
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) != 3 {
+			return false
+		}
+		name, state, health := parts[0], parts[1], strings.TrimSpace(parts[2])
+		// Ready-bucket entries don't block — skip.
+		if state == "running" && (health == "healthy" || health == "") {
+			continue
+		}
+		// Anything else must be splice/running/starting.
+		if state != "running" || health != "starting" || !strings.HasSuffix(name, "-splice") {
+			return false
+		}
+		sawSplice = true
+	}
+	return sawSplice
+}
+
+// spliceReadyzOK execs into the splice container and probes
+// `http://localhost:2903/api/validator/readyz`. 200 → ready.
+// Best-effort: any error (curl missing, network, non-200) → false,
+// which simply means "keep polling" — same outcome as before.
+func (c *ComposeRunner) spliceReadyzOK(ctx context.Context, raw []byte) bool {
+	name := spliceContainerName(raw)
+	if name == "" {
+		return false
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	// curl is present in the splice image (verified against the
+	// 0.6.5-snapshot `-dev` image). -sf keeps stdout empty and
+	// returns non-zero on HTTP errors, so a successful exit means 200.
+	cmd := c.command(probeCtx,
+		"exec", name,
+		"curl", "-sf", "-o", "/dev/null",
+		"http://localhost:2903/api/validator/readyz")
+	return cmd.Run() == nil
+}
+
+// spliceContainerName extracts the first `*-splice` container name from
+// the snapshot. Returns "" when none present.
+func spliceContainerName(raw []byte) string {
+	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
+	for scanner.Scan() {
+		line := strings.TrimRight(scanner.Text(), "\r")
+		parts := strings.Split(line, "\t")
+		if len(parts) != 3 {
+			continue
+		}
+		if strings.HasSuffix(parts[0], "-splice") {
+			return parts[0]
+		}
+	}
+	return ""
 }
 
 // formatHealthSnapshot turns the raw tab-separated `docker compose ps`
