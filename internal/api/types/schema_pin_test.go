@@ -24,9 +24,12 @@ import (
 // fails either way if you forget.
 func TestAllTopLevelResponses_CarrySchemaVersion(t *testing.T) {
 	topLevel := []interface{}{
+		EnvExport{},
 		Instance{},
 		ListResponse{},
 		PreflightReport{},
+		SkillsInstallResponse{},
+		SkillsListResponse{},
 		Snapshot{},
 	}
 	for _, v := range topLevel {
@@ -68,6 +71,17 @@ func TestSchemaVersion_ConsistentAcrossResponses(t *testing.T) {
 		want    int // expected emitted schema_version
 	}{
 		{
+			name: "EnvExport",
+			marshal: func() ([]byte, error) {
+				return json.Marshal(EnvExport{
+					SchemaVersion: SchemaVersion,
+					Instance:      "x",
+					Vars:          nil,
+				})
+			},
+			want: SchemaVersion,
+		},
+		{
 			name: "ListResponse",
 			marshal: func() ([]byte, error) {
 				return json.Marshal(ListResponse{
@@ -83,6 +97,27 @@ func TestSchemaVersion_ConsistentAcrossResponses(t *testing.T) {
 				return json.Marshal(PreflightReport{
 					SchemaVersion: SchemaVersion,
 					OK:            true,
+				})
+			},
+			want: SchemaVersion,
+		},
+		{
+			name: "SkillsInstallResponse",
+			marshal: func() ([]byte, error) {
+				return json.Marshal(SkillsInstallResponse{
+					SchemaVersion: SchemaVersion,
+					Target:        "claude",
+					Dir:           "/tmp/skills",
+				})
+			},
+			want: SchemaVersion,
+		},
+		{
+			name: "SkillsListResponse",
+			marshal: func() ([]byte, error) {
+				return json.Marshal(SkillsListResponse{
+					SchemaVersion: SchemaVersion,
+					Skills:        nil,
 				})
 			},
 			want: SchemaVersion,

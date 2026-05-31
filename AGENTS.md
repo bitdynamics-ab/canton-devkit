@@ -12,6 +12,27 @@ canton-devkit is a CLI tool for managing Canton LocalNet developer environments.
 
 ## Code Change Rules
 
+### CLI ↔ Web UI parity (load-bearing)
+
+**Any user-facing feature must land on BOTH the CLI and the Web UI surface when it applies to both.** Single-surface features are a long-term debt: an operator who learns the feature in one place can't find it in the other, and the surfaces drift in subtle ways (different validation, different error shapes, different timeouts).
+
+When adding or changing a feature, ask:
+
+1. **Is this a per-instance operation a user might want from either surface?** (start / stop / restart / scrub / log tail / health probe / per-container action / pre-flight check / reconcile / etc.) → wire both.
+2. **Is it a pure-backend internal detail?** (registry locking, atomic-write semantics, hub topic naming) → backend only.
+3. **Is it a pure-UI affordance?** (modal animations, layout, color palette) → frontend only.
+
+If unsure, default to "both."
+
+When the work spans both:
+
+- **Share the data shape** via `internal/api/types/` so the CLI's `--json` flag and the Web UI's REST/SSE payload emit the same Go struct. Drift between the two shapes is what `internal/api/types/schema_pin_test.go` exists to catch.
+- **Share the business logic** by extracting to a neutral package (e.g. `internal/localnet/`, `internal/docker/`, `internal/registry/`) and calling it from both surfaces. Avoid duplicating the logic in `internal/cli/localnet/*.go` and `internal/ui/handlers/*.go`.
+- **Mirror the verbs.** If the UI gets `POST /api/instances/{name}/containers/{c}/restart`, the CLI should get `dpm localnet container restart <inst> <c>`. The CLI name is a wrapper around the same handler logic; both pass through the same shared function.
+- **Mirror the guards.** If the Web UI's pre-flight gate refuses to start a Splice 0.6.4 instance on a 4 GiB host, `dpm localnet up --version 0.6.4` must refuse it for the same reason. Don't let one surface be lenient where the other is strict.
+
+**When you can't reach parity in the same PR**, file a follow-up ticket and add a `// TODO(BIT-NNN): CLI parity — <description>` comment at the divergence point so reviewers can see it. Never close out a feature as "done" while one surface is silently missing it.
+
 ### Testing Requirements
 
 - **All bug fixes must include regression tests**
@@ -73,3 +94,4 @@ Before submitting:
 3. No test coverage regression (check with `go tool cover`)
 4. Relevant documentation added/updated
 5. PR title is clear and understandable
+6. **CLI ↔ Web UI parity:** if the change touches a user-facing feature, both surfaces are updated (or a follow-up ticket is filed with a `TODO(BIT-NNN): CLI parity` / `TODO(BIT-NNN): UI parity` comment at the divergence point). See "CLI ↔ Web UI parity" rule above.

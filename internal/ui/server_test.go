@@ -141,9 +141,7 @@ func TestServer_HealthzReturnsOK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	// errcheck false-positive: Serve returns http.ErrServerClosed on
-	// the Shutdown path below — that's the expected exit, not a
-	// failure. The defer + Shutdown captures the real error.
+	// Errors checked below via Shutdown.
 	go func() { _ = srv.Serve() }()
 	defer func() { _ = srv.Shutdown(context.Background()) }()
 

@@ -28,7 +28,7 @@ import (
 func authMux(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	MountInstances(mux)
+	MountInstances(mux, nil)
 	MountAuth(mux)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -360,12 +360,11 @@ func TestJWT_AuditLogEmittedOnIssue(t *testing.T) {
 		}
 	}
 	// Audit MUST NOT include the raw token (even an audit log
-	// shouldn't carry the secret).
-	// JWTs have 2 dots; the audit format has a few more from
-	// the audience URL. A leaked JWT would push >>4. Tight
-	// threshold is fine here as a smell check.
+	// shouldn't carry the secret). JWTs have 2 dots; audit format
+	// adds a few from the audience URL — a leaked JWT pushes well
+	// past 4. Tight threshold is fine as a smell check.
 	if strings.Count(logLine, ".") > 4 {
-		t.Errorf("audit log dot-count exceeds smell threshold (>4): %s", logLine)
+		t.Errorf("audit line has too many dots (looks like a leaked JWT): %s", logLine)
 	}
 	if strings.Contains(logLine, "eyJ") {
 		t.Error("audit log contains a raw JWT (starts with eyJ) — secret leaked into logs")

@@ -50,18 +50,14 @@ jobs:
 
   mockup-syntax:
     # PR #31 #10 review pin: docs/design/mockups/*.jsx are
-    # acceptance specs. CI doesn't render them, but we syntax-
-    # check each file so a hand-edit that breaks the design-
-    # canvas viewer fails here rather than in a reviewer's
-    # browser.
+    # acceptance specs. CI doesn't render them, but esbuild parses
+    # each file so a hand-edit that breaks the design-canvas viewer
+    # fails here rather than in a reviewer's browser.
     #
-    # The original `node --check` approach was wrong — vanilla
-    # Node can't parse JSX (the `<` operator at expression
-    # position is a syntax error). Replaced with esbuild, which
-    # is fast (single binary, ~10MB), JSX-native, and produces
-    # the same exit-code signal we want from a syntax check.
-    # `--bundle=false` keeps it as a parse-only pass; output
-    # routed to /dev/null since we never use the transpiled JS.
+    # Originally used `node --check`, but plain Node can't parse JSX
+    # (the May 25 mockup refresh introduced real JSX expressions that
+    # tripped the syntax check). esbuild's `--loader=jsx` is the
+    # cheapest JSX-aware parser; no node_modules install needed.
     name: Mockup JSX syntax
     runs-on: [self-hosted, Linux]
     steps:
@@ -69,23 +65,18 @@ jobs:
         # actions/checkout@v5
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       - name: Set up Node
-        # actions/setup-node@v4 — self-hosted runners don't ship
-        # with npm; same pin as the frontend job.
+        # actions/setup-node@v4
+        # Self-hosted runner has no Node by default; previous
+        # `node --check` step also failed silently here. Pin to the
+        # frontend's .nvmrc so all JS-touching jobs share one Node.
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
           node-version-file: frontend/.nvmrc
-      - name: Esbuild syntax-check every mockup .jsx
+      - name: esbuild --loader=jsx on every mockup .jsx
         run: |
           set -euo pipefail
-          # --no-save: don't write package.json; --silent:
-          # keep CI output focused on the syntax errors only.
-          npm install --no-save --silent esbuild@0.23.1
-          # esbuild auto-detects JSX from the .jsx extension; the
-          # --loader=jsx flag is stdin-only and errors on file
-          # inputs.
           for f in docs/design/mockups/*.jsx; do
-            ./node_modules/.bin/esbuild --log-level=error "$f" \
-              > /dev/null \
+            npx --yes esbuild --loader:.jsx=jsx --log-level=warning "$f" > /dev/null \
               || { echo "::error file=$f::JSX syntax error"; exit 1; }
           done
 

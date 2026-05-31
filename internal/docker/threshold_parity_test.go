@@ -21,10 +21,10 @@ import (
 // enforces that nobody re-introduces the drift by hand-rolling
 // literals on either site.
 //
-// Strategy: parse both up.go and doctor.go for the docker.Options
-// struct literals they pass to RunPreflight; any MinMemoryBytes /
-// MinDiskBytes value that is NOT the DefaultMin*Bytes identifier
-// is a regression.
+// Strategy: parse up.go and localnet/doctor.go for the docker.Options
+// struct literals they pass to RunPreflight; any MinMemoryBytes / MinDiskBytes
+// value that is neither shared DefaultMin*Bytes nor the version-aware splice
+// helper used by both surfaces is a regression.
 func TestThresholdParity_DoctorMatchesUp(t *testing.T) {
 	// Locate the two source files relative to this test (works
 	// regardless of cwd).
@@ -35,12 +35,23 @@ func TestThresholdParity_DoctorMatchesUp(t *testing.T) {
 	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(here), "..", ".."))
 	files := []string{
 		filepath.Join(repoRoot, "internal", "localnet", "up.go"),
-		filepath.Join(repoRoot, "internal", "cli", "localnet", "doctor.go"),
+		filepath.Join(repoRoot, "internal", "localnet", "doctor.go"),
 	}
 
 	wantedFields := map[string]string{
 		"MinMemoryBytes": "DefaultMinMemoryBytes",
 		"MinDiskBytes":   "DefaultMinDiskBytes",
+	}
+
+	// BIT-181: up.go uses splice.MinMemoryFor(version) /
+	// splice.RecommendedMemoryFor(version) instead of the literal
+	// docker.DefaultMin*Bytes. Allowed by the parity contract because
+	// the splice helpers are invariant-pinned to be >= DefaultMin*Bytes
+	// for every catalogued version — they can only RAISE the floor
+	// above the doctor gate, never lower it.
+	allowedCalls := map[string]struct{}{
+		"splice.MinMemoryFor":         {},
+		"splice.RecommendedMemoryFor": {},
 	}
 
 	for _, path := range files {
@@ -82,10 +93,21 @@ func TestThresholdParity_DoctorMatchesUp(t *testing.T) {
 				if usesAllowedSelector(kv.Value, wantSel) {
 					return true
 				}
-				// Drift detected — produce a useful error with
-				// the literal we found.
+				// BIT-181: also allow a call to one of the
+				// splice.{Min,Recommended}MemoryFor helpers.
+				if call, ok := kv.Value.(*ast.CallExpr); ok {
+					if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+						if x, ok := sel.X.(*ast.Ident); ok {
+							qname := x.Name + "." + sel.Sel.Name
+							if _, ok := allowedCalls[qname]; ok {
+								return true
+							}
+						}
+					}
+				}
+				// Drift detected — produce a useful error with the literal we found.
 				literal := exprLiteral(kv.Value)
-				t.Errorf("%s:%d: %s = %s — must reference docker.%s to keep `doctor && up` in sync",
+				t.Errorf("%s:%d: %s = %s — must reference docker.%s or the shared splice helper to keep `doctor && up` in sync",
 					filepath.Base(path), fset.Position(kv.Pos()).Line,
 					key.Name, literal, wantSel)
 				return true

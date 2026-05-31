@@ -41,6 +41,7 @@ interface Action {
 
 const NAV_ACTIONS: Array<Omit<Action, "perform"> & { path: string }> = [
   { id: "nav-overview", group: "Navigate", label: "Overview", hint: "/", path: "/" },
+  { id: "nav-wallet", group: "Navigate", label: "Wallet", hint: "/wallet", path: "/wallet" },
   { id: "nav-explorer", group: "Navigate", label: "Explorer", hint: "/explorer", path: "/explorer" },
   { id: "nav-dar", group: "Navigate", label: "DAR Manager", hint: "/dar", path: "/dar" },
   { id: "nav-metrics", group: "Navigate", label: "Metrics", hint: "/metrics", path: "/metrics" },

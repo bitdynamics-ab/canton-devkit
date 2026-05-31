@@ -6,6 +6,11 @@ import { InstanceSelectionProvider } from "./shell/useInstanceSelection";
 import { ErrorBoundary } from "./shell/ErrorBoundary";
 import { Dashboard } from "./screens/Dashboard";
 import { Placeholder } from "./screens/Placeholder";
+import { MetricsScreen } from "./screens/MetricsScreen";
+import { DARScreen } from "./screens/DARScreen";
+import { ExplorerScreen } from "./screens/ExplorerScreen";
+import { WalletScreen } from "./screens/WalletScreen";
+import { AgentSkillsScreen } from "./screens/AgentSkillsScreen";
 import { W } from "./tokens";
 
 // App boots by doing the schema-version handshake against the
@@ -69,11 +74,12 @@ function RoutedSurface() {
   return (
     <Routes>
       <Route path="/" element={<Guard routeKey={loc.pathname}><Dashboard /></Guard>} />
-      <Route path="/explorer/*" element={<Guard routeKey={loc.pathname}><Placeholder name="Explorer" ticket="BIT-132" /></Guard>} />
-      <Route path="/dar/*" element={<Guard routeKey={loc.pathname}><Placeholder name="DAR Manager" ticket="BIT-127" /></Guard>} />
-      <Route path="/metrics/*" element={<Guard routeKey={loc.pathname}><Placeholder name="Metrics" ticket="BIT-134" /></Guard>} />
+      <Route path="/wallet/*" element={<Guard routeKey={loc.pathname}><WalletScreen /></Guard>} />
+      <Route path="/explorer/*" element={<Guard routeKey={loc.pathname}><ExplorerScreen /></Guard>} />
+      <Route path="/dar/*" element={<Guard routeKey={loc.pathname}><DARScreen /></Guard>} />
+      <Route path="/metrics/*" element={<Guard routeKey={loc.pathname}><MetricsScreen /></Guard>} />
       <Route path="/tokens/*" element={<Guard routeKey={loc.pathname}><Placeholder name="Tokens" ticket="BIT-140" /></Guard>} />
-      <Route path="/agent/*" element={<Guard routeKey={loc.pathname}><Placeholder name="Agent Skills" ticket="BIT-135" /></Guard>} />
+      <Route path="/agent/*" element={<Guard routeKey={loc.pathname}><AgentSkillsScreen /></Guard>} />
       <Route path="*" element={<Guard routeKey={loc.pathname}><Placeholder name="Not found" /></Guard>} />
     </Routes>
   );

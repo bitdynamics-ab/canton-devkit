@@ -39,7 +39,7 @@ func seedInstance(t *testing.T, name, version string, ports map[string]int, stat
 func servingMux(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	MountInstances(mux)
+	MountInstances(mux, nil)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
@@ -112,9 +112,7 @@ func TestList_RegisteredInstancesAppearSorted(t *testing.T) {
 
 // TestDetail_ReturnsInstance is the happy path for /api/instances/{name}.
 // We seed an instance, GET its detail endpoint, and assert the
-// shape carries the registry fields without going through any
-// docker call (Services stays nil because no live probe is wired
-// in this PR — that lands when BIT-144 status.go merges).
+// shape carries the registry fields via the shared status projection.
 func TestDetail_ReturnsInstance(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo", "0.6.4",
@@ -142,6 +140,9 @@ func TestDetail_ReturnsInstance(t *testing.T) {
 	}
 	if got.SchemaVersion != types.SchemaVersion {
 		t.Errorf("SchemaVersion = %d, want %d", got.SchemaVersion, types.SchemaVersion)
+	}
+	if len(got.Endpoints) == 0 || got.Endpoints[0].URL != "http://localhost:4441" {
+		t.Errorf("Endpoints = %+v, want wallet URL", got.Endpoints)
 	}
 }
 

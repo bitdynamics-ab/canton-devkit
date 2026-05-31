@@ -96,7 +96,7 @@ func TestRunUp_RejectsConcurrentSameNameOp(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	code := RunUp(ctx, &out, &errBuf, &UpOptions{Name: name})
+	code := RunUp(ctx, &TextProgress{OutW: &out, ErrW: &errBuf}, &UpOptions{Name: name})
 
 	if code != ExitUserError {
 		t.Errorf("expected ExitUserError (%d), got %d\nstdout=%q\nstderr=%q",
@@ -164,7 +164,7 @@ func TestRunUp_HappyPath_FakeDriven(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	code := RunUp(ctx, &out, &errBuf, opts)
+	code := RunUp(ctx, &TextProgress{OutW: &out, ErrW: &errBuf}, opts)
 	if code != ExitSuccess {
 		t.Fatalf("RunUp = %d, want ExitSuccess\nstdout=%q\nstderr=%q",
 			code, out.String(), errBuf.String())
@@ -209,7 +209,7 @@ func TestRunUp_UncuratedTagWithoutOptInRejected(t *testing.T) {
 	t.Setenv("HOME", t.TempDir()) // isolate resolved-versions.json
 
 	var out, errBuf bytes.Buffer
-	code := RunUp(context.Background(), &out, &errBuf, &UpOptions{
+	code := RunUp(context.Background(), &TextProgress{OutW: &out, ErrW: &errBuf}, &UpOptions{
 		Name:           "uncurated-default",
 		Version:        "0.99.0-this-tag-does-not-exist",
 		SkipPreflight:  true,
@@ -245,6 +245,92 @@ func (s *composeRunnerStub) WaitForHealthy(context.Context) error {
 		s.firstCall = "WaitForHealthy"
 	}
 	return nil
+}
+
+// TestRunUp_CLIByteEquivalence pins the CLI output contract across
+// the BIT-163a/b refactor: the TextProgress-backed RunUp must emit
+// the same set of header lines today's users see, AND must NOT emit
+// new lines for the five "silent" steps (resolve, lock, fetch,
+// persist, capture_jwts) — adding terminal noise for those is a
+// deliberate CLI behaviour change, not a side-effect of the
+// refactor.
+//
+// Asserts on substring presence rather than full byte sequence so a
+// future tweak to the "Starting Canton LocalNet ..." header
+// formatting doesn't fail spuriously — the spirit of the contract
+// is "these phases are visible / those phases are silent."
+func TestRunUp_CLIByteEquivalence(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+
+	projectDir := t.TempDir()
+	envDir := filepath.Join(projectDir, "env")
+	if err := os.MkdirAll(envDir, 0o755); err != nil {
+		t.Fatalf("mkdir env: %v", err)
+	}
+	// Minimal env files so captureCredentials doesn't error mid-run.
+	for name, body := range map[string]string{
+		"sv-auth-on.env":           "AUTH_SV_VALIDATOR_USER_NAME=u\nAUTH_SV_AUDIENCE=a\n",
+		"app-provider-auth-on.env": "AUTH_APP_PROVIDER_VALIDATOR_USER_NAME=u\nAUTH_APP_PROVIDER_AUDIENCE=a\n",
+		"app-user-auth-on.env":     "AUTH_APP_USER_VALIDATOR_USER_NAME=u\nAUTH_APP_USER_AUDIENCE=a\n",
+	} {
+		if err := os.WriteFile(filepath.Join(envDir, name), []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	var out, errBuf bytes.Buffer
+	code := RunUp(context.Background(),
+		&TextProgress{OutW: &out, ErrW: &errBuf},
+		&UpOptions{
+			Name:          "cli-bytes",
+			Version:       splice.LatestAlias,
+			SkipPreflight: true,
+			FetchFn: func(_ context.Context, _ splice.Version, _ string, _ io.Writer) (string, error) {
+				return projectDir, nil
+			},
+			NewRunner: func(string, []string, []string, []string, string, io.Writer) composeOps {
+				return &composeRunnerStub{}
+			},
+		})
+	if code != ExitSuccess {
+		t.Fatalf("RunUp = %d; stdout=%q stderr=%q", code, out.String(), errBuf.String())
+	}
+
+	stdout := out.String()
+
+	// VISIBLE step lines — must be present.
+	mustContain := []string{
+		"Starting Canton LocalNet",                  // the verbatim header preserved via prog.Out()
+		"Starting services...",                      // StepStartServices via TextProgress.StartStep
+		"Waiting for services to become healthy...", // StepWaitHealthy
+		"is ready", // Done() success marker (welcome line: `"x" is ready · Splice …`)
+	}
+	// SkipPreflight is true in this test, so "Running preflight checks..."
+	// is intentionally absent. The non-test CLI run hits that path and
+	// TextProgress_StartStepOutput pins its byte form.
+	for _, want := range mustContain {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("CLI stdout missing %q\nfull:\n%s", want, stdout)
+		}
+	}
+
+	// SILENT step labels — must NOT appear in CLI output. Adding any
+	// of these would be a CLI behaviour change, not a refactor side-
+	// effect; this guard catches accidental promotion of a step into
+	// textVisibleSteps.
+	mustNotContain := []string{
+		stepLabel[StepResolveVersion],
+		stepLabel[StepAcquireLock],
+		stepLabel[StepFetchSplice],
+		stepLabel[StepPersistState],
+		stepLabel[StepCaptureJWTs],
+	}
+	for _, banned := range mustNotContain {
+		if strings.Contains(stdout, banned) {
+			t.Errorf("silent step leaked into CLI stdout: %q\nfull:\n%s",
+				banned, stdout)
+		}
+	}
 }
 
 // TestRunUp_LockReleasedAfterDownIsReusable proves the symmetric

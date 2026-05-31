@@ -1,0 +1,108 @@
+name: Integration
+
+# Long-running end-to-end test: brings up a real Splice LocalNet,
+# verifies status/creds/down. Takes 5-30 minutes per platform.
+# Deliberately kept off the every-PR path:
+#
+#   - schedule: nightly at 03:00 UTC against main.
+#   - workflow_dispatch: manual trigger for ad-hoc validation.
+#   - pull_request: only when the PR carries the `run-integration`
+#     label (apply via PR review UI).
+#
+# Tagged build tag: integration. Unit tests are unaffected (`go test
+# ./...` continues to skip this file).
+#
+# Platform matrix:
+#   - ubuntu-latest: native Linux Docker; primary target.
+#   - windows-latest: Docker Desktop with Linux containers via WSL2.
+#     Splice images are Linux-only; we rely on Windows Docker Desktop's
+#     Linux-container mode. fail-fast=false so a Windows hiccup doesn't
+#     mask a real Linux regression.
+#
+# macOS is intentionally NOT in the matrix. GitHub's macos-latest
+# runners do not ship Docker; setting it up via colima/lima is too
+# flaky for a CI gate. Local macOS dev validates via the same test;
+# `scripts/run-integration.sh` provides the standard one-liner.
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: e2e on ${{ matrix.os }}
+    # Only run when the trigger is the scheduled cron / manual /
+    # explicitly-labeled PR. Synchronize fires on every push to a
+    # labeled PR; we still gate on the label being present.
+    if: |
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       contains(github.event.pull_request.labels.*.name, 'run-integration'))
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        include:
+          # GitHub's windows-latest image doesn't always ship Docker
+          # Desktop preinstalled (DockerCli.exe missing). When the
+          # Switch step fails we don't want the whole matrix marked
+          # failed, since our codebase isn't the issue. ubuntu-latest
+          # stays strict.
+          - os: windows-latest
+            continue-on-error: true
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.continue-on-error || false }}
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        # actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Set up Go
+        # actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Switch Docker to Linux containers (windows-latest)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          # Docker Desktop on Windows runners has historically shipped
+          # in Windows-container mode; we need Linux containers for
+          # Splice. As of mid-2026, GitHub's windows-latest image may
+          # not even include Docker Desktop preinstalled, in which
+          # case DockerCli.exe is missing and there's nothing to do.
+          # The whole windows job is `continue-on-error: true` at the
+          # matrix level so this gracefully degrades to a skip.
+          $cli = "$Env:ProgramFiles\Docker\Docker\DockerCli.exe"
+          if (Test-Path $cli) {
+            & $cli -SwitchLinuxEngine
+            docker version
+          } else {
+            Write-Host "DockerCli.exe not present on this runner; skipping Linux-engine switch. The windows leg of the matrix is informational only."
+            exit 1
+          }
+
+      - name: Verify Docker daemon
+        run: |
+          docker version
+          docker compose version
+
+      - name: Run integration tests
+        run: go test -tags=integration -timeout=40m -v ./internal/localnet/...
+
+      - name: Dump container + compose state on failure
+        if: failure()
+        run: |
+          docker ps -a
+          docker compose ls

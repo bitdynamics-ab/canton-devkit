@@ -358,6 +358,7 @@ function HealthPill({ conn }: { conn: ConnectionState }) {
 
 const NAV: Array<{ to: string; label: string }> = [
   { to: "/", label: "Overview" },
+  { to: "/wallet", label: "Wallet" },
   { to: "/explorer", label: "Explorer" },
   { to: "/dar", label: "DAR Manager" },
   { to: "/metrics", label: "Metrics" },
