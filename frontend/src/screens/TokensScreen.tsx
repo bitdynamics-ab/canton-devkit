@@ -5,6 +5,7 @@ import {
   aliasMapFrom,
   createParty,
   createToken,
+  faucetToken,
   fetchActivity,
   fetchHoldingContracts,
   fetchParties,
@@ -100,6 +101,7 @@ export function TokensScreen() {
     | { kind: "mint"; symbol: string }
     | { kind: "transfer"; symbol: string }
     | { kind: "burn"; symbol: string }
+    | { kind: "faucet"; symbol: string }
     | { kind: "accept" }
     | null
   >(null);
@@ -397,6 +399,7 @@ export function TokensScreen() {
                       style={btnStyle(W.brand, false, false, !!mintReason)}
                     >↑ Mint</button>
                     <button onClick={() => setModal({ kind: "transfer", symbol: sym })} style={btnStyle(W.brand, false)}>→ Transfer</button>
+                    <button onClick={() => setModal({ kind: "faucet", symbol: sym })} title="Fund a party from a funded source (auto-accepted)" style={btnStyle(W.brand, false)}>⛲ Faucet</button>
                     <button
                       disabled
                       title={BURN_DISABLED_REASON}
@@ -536,6 +539,20 @@ export function TokensScreen() {
           onError={(e) => setTopNotice(renderActionError(e, "transfer failed"))}
         />
       )}
+      {modal?.kind === "faucet" && active && (
+        <ActionModal
+          title={`Faucet ${modal.symbol}`}
+          fields={[
+            { label: "To party", key: "to" },
+            { label: "Amount", key: "amount" },
+            { label: "Source (optional — defaults to funded party)", key: "source", optional: true },
+          ]}
+          onClose={() => setModal(null)}
+          submit={(v) => faucetToken(instance, modal.symbol, v.to, v.amount, v.source || undefined)}
+          onDone={() => { setModal(null); bump(); }}
+          onError={(e) => setTopNotice(renderActionError(e, "faucet failed"))}
+        />
+      )}
       {modal?.kind === "accept" && (
         <ActionModal
           title="Accept transfer"
@@ -567,6 +584,7 @@ function TransferModal({
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
+  const [autoAccept, setAutoAccept] = useState(true);
   const [busy, setBusy] = useState(false);
   const [plan, setPlan] = useState<import("../api").TransferPlan | null>(null);
 
@@ -589,7 +607,7 @@ function TransferModal({
     e.preventDefault();
     setBusy(true);
     try {
-      await transferToken(instance, symbol, from, to, amount, reason || undefined);
+      await transferToken(instance, symbol, from, to, amount, reason || undefined, autoAccept);
       onDone();
     } catch (err) {
       onError(err);
@@ -605,6 +623,10 @@ function TransferModal({
         <Field label="To party"><input value={to} onChange={(e) => setTo(e.target.value)} style={input} required /></Field>
         <Field label="Amount"><input value={amount} onChange={(e) => setAmount(e.target.value)} style={input} required /></Field>
         <Field label="Reason (optional)"><input value={reason} onChange={(e) => setReason(e.target.value)} style={input} /></Field>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, color: W.text2, fontSize: 12, cursor: "pointer" }}>
+          <input type="checkbox" checked={autoAccept} onChange={(e) => setAutoAccept(e.target.checked)} />
+          Auto-accept (settle in one step — you own the receiver on LocalNet)
+        </label>
 
         {plan && (
           <div style={{ background: W.surface2, border: `1px solid ${W.border}`, borderRadius: 8, padding: "10px 12px" }}>

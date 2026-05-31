@@ -165,6 +165,30 @@ describe("TokensScreen", () => {
     expect(burn.getAttribute("title") ?? "").toMatch(/AllocationV2|DvP|BIT-216/);
   });
 
+  it("opens the faucet modal from the instrument action rail", async () => {
+    const user = userEvent.setup();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    await user.click(await screen.findByRole("button", { name: /Faucet/i }, { timeout: 4000 }));
+    await waitFor(
+      () => expect(screen.queryByText(/Faucet RTK/i)).toBeInTheDocument(),
+      { timeout: 4000 },
+    );
+    // funded-party hint on the optional source field
+    expect(screen.queryByText(/defaults to funded party/i)).toBeInTheDocument();
+  });
+
+  it("offers an auto-accept toggle in the transfer modal", async () => {
+    const user = userEvent.setup();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    await user.click(await screen.findByRole("button", { name: "→ Transfer" }, { timeout: 4000 }));
+    await waitFor(
+      () => expect(screen.queryByText(/Auto-accept/i)).toBeInTheDocument(),
+      { timeout: 4000 },
+    );
+  });
+
   it("shows the coin-selection preview in the transfer modal", async () => {
     const user = userEvent.setup();
     stubFetch([{ symbol: "RTK", name: "Retail Token" }]);

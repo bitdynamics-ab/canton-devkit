@@ -68,6 +68,14 @@ type TransferOptions struct {
 	NoWait     bool // if true, return the TransferInstruction id without waiting for accept
 	Reason     string
 
+	// AutoAccept (BIT-215 #3) chains the receiver-side accept onto the
+	// transfer when the receiver is locally controlled — the common
+	// LocalNet case where you own both parties. The transfer produces a
+	// pending TransferInstruction; with AutoAccept the same flow then
+	// exercises Accept as the receiver, so a transfer lands in one step.
+	// Ignored when NoWait is set (the two are contradictory).
+	AutoAccept bool
+
 	// Live-submit fields. When Endpoint is set, RunTransfer performs
 	// the full V2 flow: ACS query → POST /transfer-factory → ledger
 	// exercise. Empty Endpoint surfaces the legacy ErrNeedsV2LocalNet
@@ -238,6 +246,31 @@ func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error
 	emit(out, "transfer complete", map[string]any{
 		"transfer_instruction_id": instructionID,
 	})
+
+	// Auto-accept chains the receiver-side accept (BIT-215 #3): on
+	// LocalNet you own the receiver, so the two-step offer→accept is just
+	// ceremony. NoWait opts out (the caller wants the instruction id to
+	// hand off). An empty instructionID means the transfer already
+	// settled (e.g. self-transfer) — nothing to accept.
+	if opts.AutoAccept && !opts.NoWait && instructionID != "" {
+		acc := AcceptOptions{
+			Instance:              opts.Instance,
+			TransferInstructionID: instructionID,
+			Party:                 opts.To,
+			Endpoint:              opts.Endpoint,
+			Token:                 opts.Token,
+			Role:                  opts.Role,
+			Insecure:              opts.Insecure,
+			RegistryURL:           opts.RegistryURL,
+		}
+		if err := runAcceptLive(ctx, out, acc); err != nil {
+			return fmt.Errorf("auto-accept transfer %s: %w", instructionID, err)
+		}
+		emit(out, "transfer accepted", map[string]any{
+			"transfer_instruction_id": instructionID,
+			"receiver":                opts.To,
+		})
+	}
 	return nil
 }
 

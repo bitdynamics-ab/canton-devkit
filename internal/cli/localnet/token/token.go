@@ -36,6 +36,7 @@ required for the on-ledger surfaces to function (see "localnet versions"
 	cmd.AddCommand(buildSummary())
 	cmd.AddCommand(buildActivity())
 	cmd.AddCommand(buildParty())
+	cmd.AddCommand(buildFaucet())
 	return cmd
 }
 

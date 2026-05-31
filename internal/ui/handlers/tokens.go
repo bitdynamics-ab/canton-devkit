@@ -56,6 +56,7 @@ func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	mux.HandleFunc("POST /api/tokens/{symbol}/transfer", idem.wrap(handleTokenTransfer))
 	mux.HandleFunc("POST /api/tokens/transfers/{id}/accept", idem.wrap(handleTokenAccept))
 	mux.HandleFunc("POST /api/tokens/{symbol}/burn", idem.wrap(handleTokenBurn))
+	mux.HandleFunc("POST /api/tokens/{symbol}/faucet", idem.wrap(handleTokenFaucet))
 	// Party alias registry (BIT-215 #1) — the workspace's god-mode
 	// party manager. Same RunPartyX functions the `token party` CLI calls.
 	mux.HandleFunc("GET /api/parties", handlePartiesList)
@@ -453,11 +454,12 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		From   string `json:"from"`
-		To     string `json:"to"`
-		Amount string `json:"amount"`
-		NoWait bool   `json:"no_wait"`
-		Reason string `json:"reason"`
+		From       string `json:"from"`
+		To         string `json:"to"`
+		Amount     string `json:"amount"`
+		NoWait     bool   `json:"no_wait"`
+		AutoAccept bool   `json:"auto_accept"`
+		Reason     string `json:"reason"`
 	}
 	if err := decodeJSON(r.Body, &body); err != nil {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
@@ -494,8 +496,45 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 	}
 	// Live-submit: opts already carries the resolved endpoint/role.
 	opts.NoWait = body.NoWait
+	opts.AutoAccept = body.AutoAccept
 	opts.Reason = body.Reason
 	mapTokenError(w, token.RunTransfer(r.Context(), nil, opts), "transfer")
+}
+
+// handleTokenFaucet funds a party from a well-known source, auto-accepted
+// (BIT-215 #5). POST /api/tokens/{symbol}/faucet {to, amount, source?}.
+func handleTokenFaucet(w http.ResponseWriter, r *http.Request) {
+	instance, err := instanceFromQuery(r)
+	if err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	var body struct {
+		To     string `json:"to"`
+		Amount string `json:"amount"`
+		Source string `json:"source"`
+	}
+	if err := decodeJSON(r.Body, &body); err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	role := roleFromQuery(r)
+	ep := liveLedgerEndpoint(instance, role)
+	if ep == "" {
+		writeErrorWithCode(w, http.StatusServiceUnavailable, "PARTICIPANT_PORT_NOT_RECORDED",
+			"no live ledger endpoint for instance "+instance)
+		return
+	}
+	mapTokenError(w, token.RunFaucet(r.Context(), nil, token.FaucetOptions{
+		Instance:   instance,
+		Instrument: r.PathValue("symbol"),
+		To:         body.To,
+		Amount:     body.Amount,
+		Source:     body.Source,
+		Role:       role,
+		Insecure:   true,
+		Endpoint:   ep,
+	}), "faucet")
 }
 
 func handleTokenAccept(w http.ResponseWriter, r *http.Request) {

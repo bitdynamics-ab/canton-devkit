@@ -1342,10 +1342,26 @@ export const transferToken = (
   amount: string,
   reason?: string,
   role?: string,
+  autoAccept?: boolean,
 ): Promise<void> =>
   apiFetchVoid(
     `/api/tokens/${encodeURIComponent(symbol)}/transfer?${tokenQuery(instance, role)}`,
-    { from, to, amount, reason: reason ?? "" },
+    { from, to, amount, reason: reason ?? "", auto_accept: !!autoAccept },
+  );
+
+// faucetToken funds a party from a well-known source (BIT-215 #5),
+// auto-accepted. Empty source defaults to the role's funded party.
+export const faucetToken = (
+  instance: string,
+  symbol: string,
+  to: string,
+  amount: string,
+  source?: string,
+  role?: string,
+): Promise<void> =>
+  apiFetchVoid(
+    `/api/tokens/${encodeURIComponent(symbol)}/faucet?${tokenQuery(instance, role)}`,
+    { to, amount, source: source ?? "" },
   );
 
 // TransferPlan — dry-run coin selection (BIT-219). Which Holding
