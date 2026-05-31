@@ -123,6 +123,52 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 	mux.HandleFunc("GET /api/instances/{name}/containers", handleInstanceContainers())
 	mux.HandleFunc("GET /api/instances/{name}/containers/{container}/logs", handleContainerLogs())
 	mux.HandleFunc("POST /api/instances/{name}/containers/{container}/restart", handleContainerRestart())
+	// Pause / resume (BIT-175) — docker compose pause/unpause; hub-
+	// independent. CLI counterpart: `localnet pause` / `localnet resume`.
+	mux.HandleFunc("POST /api/instances/{name}/pause", handlePauseInstance(true))
+	mux.HandleFunc("POST /api/instances/{name}/resume", handlePauseInstance(false))
+}
+
+// handlePauseInstance: POST /api/instances/{name}/pause|resume.
+// Synchronous wrapper around localnet.RunPause / RunResume — both are
+// near-instant (a SIGSTOP/SIGCONT signal to the containers), so no async
+// job is needed. 204 on success; the run's stderr is surfaced on failure.
+func handlePauseInstance(pause bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if err := registry.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), downTimeout)
+		defer cancel()
+
+		var outBuf, errBuf bytes.Buffer
+		opts := &localnet.PauseOptions{Name: name}
+		var exit int
+		if pause {
+			exit = localnet.RunPause(ctx, &outBuf, &errBuf, opts)
+		} else {
+			exit = localnet.RunResume(ctx, &outBuf, &errBuf, opts)
+		}
+		if exit == localnet.ExitSuccess {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		status := http.StatusInternalServerError
+		switch exit {
+		case localnet.ExitUserError:
+			status = http.StatusBadRequest
+		case localnet.ExitTimeout:
+			status = http.StatusRequestTimeout
+		}
+		cause := firstNonWarningLine(errBuf.String())
+		if cause == "" {
+			cause = "operation failed with exit code " + uintToString(uint64(exit))
+		}
+		writeErrorWithCode(w, status, "PAUSE_FAILED", cause)
+	}
 }
 
 // handleList: GET /api/instances → types.ListResponse.

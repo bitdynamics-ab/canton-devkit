@@ -48,6 +48,10 @@ const (
 	StatusStopped  Status = "stopped"
 	StatusFailed   Status = "failed"
 	StatusPartial  Status = "partial"
+	// StatusPaused is set by `localnet pause` (docker compose pause):
+	// containers are frozen (SIGSTOP) but alive, holding state and ports.
+	// `localnet resume` (unpause) returns to running with no boot cost.
+	StatusPaused Status = "paused"
 )
 
 // State is the persisted record for a single LocalNet instance.
