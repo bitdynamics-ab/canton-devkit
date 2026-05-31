@@ -175,7 +175,7 @@ func readDalf(f *zip.File, dalfPath string) (*PackageMeta, error) {
 		pkgID = hashFromName
 	}
 
-	return &PackageMeta{
+	meta := &PackageMeta{
 		PackageID: pkgID,
 		Name:      name,
 		Version:   version,
@@ -183,7 +183,14 @@ func readDalf(f *zip.File, dalfPath string) (*PackageMeta, error) {
 		LFMinor:   lfMinor,
 		SizeBytes: int64(len(data)),
 		SHA256:    hex.EncodeToString(hasher.Sum(nil)),
-	}, nil
+	}
+	// Deep Daml-LF inspection (BIT-115) — best-effort; nil for LF1 or
+	// unparseable archives. Cheap (microseconds) and small, so populate
+	// it eagerly; `dar info --deep` decides whether to render it.
+	if c, ok := InspectDalf(data); ok {
+		meta.Contents = c
+	}
+	return meta, nil
 }
 
 // bytesReader is a tiny zero-alloc adapter so we can hand a []byte to
