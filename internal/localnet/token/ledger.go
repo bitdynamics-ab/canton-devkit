@@ -324,6 +324,8 @@ func parseInterfaceID(qual string) (pkg, module, entity string) {
 // downstream consumer asks for them.
 type holdingViewV2 struct {
 	Owner        string // view.account.owner (Optional Party)
+	Provider     string // view.account.provider (Optional Party) — "" when None
+	AccountID    string // view.account.id (Text)
 	InstrumentID string // view.instrumentId.id
 	Admin        string // view.instrumentId.admin (the V2 InstrumentId admin = the issuer party)
 	Amount       string // view.amount as a Decimal string (we don't round on the wire)
@@ -355,8 +357,13 @@ func extractHoldingViewV2(view *lapiv2.InterfaceView) (holdingViewV2, bool) {
 				return out, false
 			}
 			for _, af := range rec.Fields {
-				if af.Label == "owner" {
+				switch af.Label {
+				case "owner":
 					out.Owner = optionalPartyOf(af.Value)
+				case "provider":
+					out.Provider = optionalPartyOf(af.Value)
+				case "id":
+					out.AccountID = textOf(af.Value)
 				}
 			}
 		case "instrumentId":

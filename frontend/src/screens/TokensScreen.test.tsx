@@ -157,12 +157,15 @@ describe("TokensScreen", () => {
     );
   });
 
-  it("disables Burn with the BIT-216 reason (no deployable token supports it)", async () => {
+  it("disables Burn for a non-native (recorded / Amulet) instrument", async () => {
+    // The stubbed RTK comes via the tokens fallback with status "recorded"
+    // (on_ledger=false), so Burn — like Mint — is gated to native on-ledger
+    // CIP-0112 v2 tokens.
     stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
     renderTokens();
     const burn = await screen.findByRole("button", { name: /Burn/i }, { timeout: 4000 });
     expect(burn).toBeDisabled();
-    expect(burn.getAttribute("title") ?? "").toMatch(/AllocationV2|DvP|BIT-216/);
+    expect(burn.getAttribute("title") ?? "").toMatch(/native|Amulet|CIP-0112/i);
   });
 
   it("opens the faucet modal from the instrument action rail", async () => {

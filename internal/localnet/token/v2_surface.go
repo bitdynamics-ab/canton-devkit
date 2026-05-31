@@ -110,4 +110,12 @@ const (
 	// whichever vetted package satisfies the name, surviving the V2
 	// alpha's weekly snapshot rotation.
 	TestTokenV2RulesTemplateID = "#splice-test-token-v2:Splice.Testing.Tokens.TestTokenV2:TokenRules"
+
+	// TestTokenV2HoldingTemplateID is the Token (holding) template —
+	// the UTXO unit. Its signatory is the account parties + the
+	// instrument admin, so the built-in Archive choice is authorizable
+	// by those parties together (all operator-controlled on LocalNet).
+	// This is the "archive path" burn (BIT-216): archive a holder's
+	// holdings to remove them from circulation.
+	TestTokenV2HoldingTemplateID = "#splice-test-token-v2:Splice.Testing.Tokens.TestTokenV2.Holding:Token"
 )

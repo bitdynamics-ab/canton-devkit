@@ -115,6 +115,7 @@ type BurnOptions struct {
 	// instrument's special burn account. Amulet / registry-only
 	// instruments yield ErrUnsupportedOnInstrument.
 	Endpoint string
+	Token    string
 	Role     string
 	Insecure bool
 }

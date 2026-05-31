@@ -3,6 +3,7 @@ import {
   ApiError,
   acceptTransfer,
   aliasMapFrom,
+  burnToken,
   createParty,
   createToken,
   faucetToken,
@@ -55,8 +56,8 @@ function mintDisabledReason(t: InstrumentRef): string | null {
   return null;
 }
 const BURN_DISABLED_REASON =
-  "Burn isn't wired yet: no deployable V2 token supports a standalone burn " +
-  "(it requires the AllocationV2 / DvP settlement flow — tracked in BIT-216).";
+  "Burn is only available on a native CIP-0112 v2 token created on this " +
+  "instance — Amulet has no burn surface.";
 
 // TokensScreen — BIT-140.
 //
@@ -401,9 +402,10 @@ export function TokensScreen() {
                     <button onClick={() => setModal({ kind: "transfer", symbol: sym })} style={btnStyle(W.brand, false)}>→ Transfer</button>
                     <button onClick={() => setModal({ kind: "faucet", symbol: sym })} title="Fund a party from a funded source (auto-accepted)" style={btnStyle(W.brand, false)}>⛲ Faucet</button>
                     <button
-                      disabled
-                      title={BURN_DISABLED_REASON}
-                      style={btnStyle(W.err, false, false, true)}
+                      onClick={() => setModal({ kind: "burn", symbol: sym })}
+                      disabled={!!mintReason}
+                      title={mintReason ? BURN_DISABLED_REASON : "Burn holdings (archive path)"}
+                      style={btnStyle(W.err, false, false, !!mintReason)}
                     >🔥 Burn</button>
                     <button onClick={() => setModal({ kind: "accept" })} style={btnStyle(W.warn, false)}>✓ Accept transfer</button>
                   </span>
@@ -537,6 +539,16 @@ export function TokensScreen() {
           onClose={() => setModal(null)}
           onDone={() => { setModal(null); bump(); }}
           onError={(e) => setTopNotice(renderActionError(e, "transfer failed"))}
+        />
+      )}
+      {modal?.kind === "burn" && active && (
+        <ActionModal
+          title={`Burn ${modal.symbol}`}
+          fields={[{ label: "From party", key: "from" }, { label: "Amount", key: "amount" }]}
+          onClose={() => setModal(null)}
+          submit={(v) => burnToken(instance, modal.symbol, v.from, v.amount)}
+          onDone={() => { setModal(null); bump(); }}
+          onError={(e) => setTopNotice(renderActionError(e, "burn failed"))}
         />
       )}
       {modal?.kind === "faucet" && active && (

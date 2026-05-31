@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/big"
+	"strings"
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
@@ -47,6 +49,11 @@ func ensureTokenRules(opts CreateOptions) error {
 	}
 	if existing != "" {
 		return nil // already anchored for this admin
+	}
+	// Auto-bundle the test-token DARs (BIT-216 #4) so the user never
+	// runs `dar upload` by hand. No-op when already vetted.
+	if err := ensureTokenDARs(ctx, client, opts.Instance, nil); err != nil {
+		return err
 	}
 	if _, err := createTokenRules(ctx, client, admin); err != nil {
 		return err
@@ -112,26 +119,155 @@ func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regst
 	return nil
 }
 
-// runBurnLive: the splice-test-token-v2 example does NOT support a
-// standalone burn. Its transfer-accept transition unconditionally
-// creates a holding for the receiver (`create Token with account =
-// receiver`), which violates the Token template's `ensure isSome
-// account.owner` when the receiver is the special burn account
-// (owner = None). Burning in this token is only reachable through the
-// AllocationV2 / SettlementFactory_SettleBatch (delivery-versus-payment)
-// machinery, where the burn leg is handled specially — a much larger
-// surface than mint. Until that lands we surface an honest, specific
-// error instead of leaving a half-settled offer that locks holdings.
-func runBurnLive(_ context.Context, out io.Writer, opts BurnOptions, ref regstate.TokenRef) error {
-	emit(out, "burn", map[string]any{
+// runBurnLive burns `amount` of the holder's tokens by archiving their
+// Holding contracts (BIT-216, "the test token's archive path").
+//
+// The splice-test-token-v2 example has no protocol-level standalone burn:
+// its transfer state machine unconditionally `create Token`s for the
+// receiver, which violates the Token template's `ensure isSome
+// account.owner` when the receiver is the special burn account — so you
+// cannot transfer-to-burn-account. But the Token (holding) template's
+// signatory is the account parties + the instrument admin, and on
+// LocalNet we control all of them, so we exercise the built-in Archive
+// choice directly to remove holdings from circulation. Supply = sum of
+// holdings, so archiving reduces it.
+//
+// To stay amount-precise we select the smallest set of the holder's
+// holdings covering `amount`, then in ONE atomic transaction archive them
+// all and (if they overshoot) create a single change holding back to the
+// holder. Atomicity means a partial burn can never strand the change.
+func runBurnLive(ctx context.Context, out io.Writer, opts BurnOptions, ref regstate.TokenRef) error {
+	conn := LedgerConn{
+		Endpoint: opts.Endpoint, Token: opts.Token,
+		Insecure: opts.Insecure, Instance: opts.Instance, Role: opts.Role,
+	}
+	client, cleanup, err := dialLedger(ctx, conn)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	holdings, err := listSenderHoldings(ctx, client, opts.From, ref.InstrumentID)
+	if err != nil {
+		return fmt.Errorf("list holdings for %s: %w", opts.From, err)
+	}
+	picked, change, err := computeBurn(holdings, opts.Amount)
+	if err != nil {
+		return err
+	}
+	admin := inferAdminFromHoldings(picked)
+	if admin == "" {
+		admin = ref.IssuerParty
+	}
+
+	pkgID, err := resolvePackageID(ctx, client, "splice-test-token-v2")
+	if err != nil {
+		return err
+	}
+	_, hMod, hEntity := splitInterfaceID(TestTokenV2HoldingTemplateID)
+	holdingTID := &lapiv2.Identifier{PackageId: pkgID, ModuleName: hMod, EntityName: hEntity}
+
+	// Archive every selected holding (built-in Archive choice).
+	commands := make([]*lapiv2.Command, 0, len(picked)+1)
+	for _, h := range picked {
+		commands = append(commands, &lapiv2.Command{
+			Command: &lapiv2.Command_Exercise{
+				Exercise: &lapiv2.ExerciseCommand{
+					TemplateId:     holdingTID,
+					ContractId:     h.ContractID,
+					Choice:         "Archive",
+					ChoiceArgument: recordValue(nil),
+				},
+			},
+		})
+	}
+	// Re-create the change holding (one Token back to the holder) when
+	// the selected holdings overshoot the burn amount.
+	if change != "" && change != "0" {
+		commands = append(commands, &lapiv2.Command{
+			Command: &lapiv2.Command_Create{
+				Create: &lapiv2.CreateCommand{
+					TemplateId:      holdingTID,
+					CreateArguments: buildHoldingRecord(picked[0], change),
+				},
+			},
+		})
+	}
+
+	// Archive (and the change create) require ALL Token signatories:
+	// the account parties plus the admin. Operator controls all on
+	// LocalNet, so act as their union.
+	actAs := burnActAs(picked, admin)
+	if _, err := submitForTransactionMulti(ctx, client, actAs, commands, nil,
+		createdContractFormat(opts.From, "")); err != nil {
+		return fmt.Errorf("archive holdings (burn): %w", err)
+	}
+
+	emit(out, "burn complete", map[string]any{
 		"instrument": ref.Symbol, "from": opts.From, "amount": opts.Amount,
+		"holdings_archived": len(picked), "change": change,
 	})
-	return fmt.Errorf(
-		"burn is not yet wired for splice-test-token-v2: this token only "+
-			"implements mint + transfer directly; burning requires the V2 "+
-			"AllocationV2 / SettlementFactory_SettleBatch (delivery-versus-"+
-			"payment) flow, which is a separate follow-up (BIT-216). The "+
-			"holder %s keeps their %s %s", opts.From, opts.Amount, ref.Symbol)
+	return nil
+}
+
+// computeBurn selects the smallest set of holdings covering `amount` and
+// returns the picked set + the change (selected sum − amount, "" or "0"
+// when exact). Pure — unit-testable.
+func computeBurn(holdings []holdingRef, amount string) ([]holdingRef, string, error) {
+	picked, sum, err := selectInputHoldings(holdings, amount)
+	if err != nil {
+		return nil, "", err
+	}
+	s, _ := new(big.Float).SetString(sum)
+	a, _ := new(big.Float).SetString(amount)
+	change := new(big.Float).Sub(s, a)
+	if change.Sign() <= 0 {
+		return picked, "0", nil
+	}
+	return picked, strings.TrimRight(strings.TrimRight(change.Text('f', 10), "0"), "."), nil
+}
+
+// burnActAs is the unique set of parties needed to authorize archiving
+// the picked holdings: each holding's account parties (owner + provider
+// when set) plus the instrument admin.
+func burnActAs(picked []holdingRef, admin string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	add := func(p string) {
+		if p == "" {
+			return
+		}
+		if _, ok := seen[p]; !ok {
+			seen[p] = struct{}{}
+			out = append(out, p)
+		}
+	}
+	for _, h := range picked {
+		add(h.Owner)
+		add(h.Provider)
+	}
+	add(admin)
+	return out
+}
+
+// buildHoldingRecord builds the Token create argument (a record with one
+// `holding : HoldingView` field) for the change holding, mirroring the
+// account + instrument of `from` with the given amount.
+func buildHoldingRecord(from holdingRef, amount string) *lapiv2.Record {
+	owner := from.Owner
+	acct := registry.Account{Owner: &owner, ID: from.AccountID}
+	if from.Provider != "" {
+		p := from.Provider
+		acct.Provider = &p
+	}
+	view := recordValue([]field{
+		{"account", buildAccountRecord(acct)},
+		{"instrumentId", buildInstrumentIDRecord(registry.InstrumentID{Admin: from.Admin, ID: from.Instrument})},
+		{"amount", numericValue(amount)},
+		{"lock", &lapiv2.Value{Sum: &lapiv2.Value_Optional{Optional: &lapiv2.Optional{}}}},
+		{"meta", buildMetadataRecord(registry.Metadata{Values: map[string]string{}})},
+	})
+	return &lapiv2.Record{Fields: []*lapiv2.RecordField{{Label: "holding", Value: view}}}
 }
 
 // acceptMintOffer accepts a TokenTransferOffer created by OfferMint via
