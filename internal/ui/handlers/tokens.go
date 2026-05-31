@@ -286,23 +286,38 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role := roleFromQuery(r)
-	err = token.RunTransfer(r.Context(), nil, token.TransferOptions{
+	opts := token.TransferOptions{
 		Instance:   instance,
 		Instrument: r.PathValue("symbol"),
 		From:       body.From,
 		To:         body.To,
 		Amount:     body.Amount,
-		NoWait:     body.NoWait,
-		Reason:     body.Reason,
-		// Live-submit: resolve the role's ledger endpoint so the
-		// handler runs the real V2 transfer (registry-URL auto-derives
-		// from the instance). Absent port → RunTransfer surfaces the
-		// not-wired remediation, mapped to 412.
-		Endpoint: liveLedgerEndpoint(instance, role),
-		Role:     role,
-		Insecure: true,
-	})
-	mapTokenError(w, err, "transfer")
+		Role:       role,
+		Insecure:   true,
+		Endpoint:   liveLedgerEndpoint(instance, role),
+	}
+	// plan=1 → dry-run coin selection (consume/change preview), no submit.
+	if r.URL.Query().Get("plan") == "1" {
+		if opts.Endpoint == "" {
+			writeErrorWithCode(w, http.StatusServiceUnavailable, "PARTICIPANT_PORT_NOT_RECORDED",
+				"no live ledger endpoint for instance "+instance)
+			return
+		}
+		plan, perr := token.RunTransferPlan(r.Context(), opts)
+		if perr != nil {
+			mapTokenError(w, perr, "transfer plan")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"schema_version": types.SchemaVersion,
+			"plan":           plan,
+		})
+		return
+	}
+	// Live-submit: opts already carries the resolved endpoint/role.
+	opts.NoWait = body.NoWait
+	opts.Reason = body.Reason
+	mapTokenError(w, token.RunTransfer(r.Context(), nil, opts), "transfer")
 }
 
 func handleTokenAccept(w http.ResponseWriter, r *http.Request) {

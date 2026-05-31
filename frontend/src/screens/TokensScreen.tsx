@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ApiError,
   acceptTransfer,
-  burnToken,
   createToken,
   fetchHoldingContracts,
   fetchHoldings,
   fetchInstruments,
   fetchMatrix,
   mintToken,
+  planTransfer,
   transferToken,
   type BalanceMatrix,
   type HoldingContract,
@@ -385,28 +385,12 @@ export function TokensScreen() {
         />
       )}
       {modal?.kind === "transfer" && active && (
-        <ActionModal
-          title={`Transfer ${modal.symbol}`}
-          fields={[
-            { label: "From party", key: "from" },
-            { label: "To party", key: "to" },
-            { label: "Amount", key: "amount" },
-            { label: "Reason (optional)", key: "reason", optional: true },
-          ]}
+        <TransferModal
+          instance={instance}
+          symbol={modal.symbol}
           onClose={() => setModal(null)}
-          submit={(v) => transferToken(instance, modal.symbol, v.from, v.to, v.amount, v.reason || undefined)}
           onDone={() => { setModal(null); bump(); }}
           onError={(e) => setTopNotice(renderActionError(e, "transfer failed"))}
-        />
-      )}
-      {modal?.kind === "burn" && active && (
-        <ActionModal
-          title={`Burn ${modal.symbol}`}
-          fields={[{ label: "From party", key: "from" }, { label: "Amount", key: "amount" }]}
-          onClose={() => setModal(null)}
-          submit={(v) => burnToken(instance, modal.symbol, v.from, v.amount)}
-          onDone={() => { setModal(null); bump(); }}
-          onError={(e) => setTopNotice(renderActionError(e, "burn failed"))}
         />
       )}
       {modal?.kind === "accept" && (
@@ -420,6 +404,113 @@ export function TokensScreen() {
         />
       )}
     </section>
+  );
+}
+
+// TransferModal — From/To/Amount + a live coin-selection preview
+// (BIT-219). As the user fills From + Amount, it dry-runs the transfer
+// (planTransfer) and shows which Holding contracts would be consumed and
+// the change returned — the Canton UTXO reality, before any submit.
+function TransferModal({
+  instance, symbol, onClose, onDone, onError,
+}: {
+  instance: string;
+  symbol: string;
+  onClose: () => void;
+  onDone: () => void;
+  onError: (e: unknown) => void;
+}) {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [plan, setPlan] = useState<import("../api").TransferPlan | null>(null);
+
+  // Debounced dry-run whenever from + amount are both present.
+  useEffect(() => {
+    if (!from || !amount) {
+      setPlan(null);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      planTransfer(instance, symbol, from, amount)
+        .then((p) => { if (!cancelled) setPlan(p); })
+        .catch(() => { if (!cancelled) setPlan(null); });
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [instance, symbol, from, amount]);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await transferToken(instance, symbol, from, to, amount, reason || undefined);
+      onDone();
+    } catch (err) {
+      onError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ModalShell title={`Transfer ${symbol}`} onClose={onClose}>
+      <form onSubmit={onSubmit} style={{ display: "grid", gap: 10 }}>
+        <Field label="From party"><input value={from} onChange={(e) => setFrom(e.target.value)} style={input} required /></Field>
+        <Field label="To party"><input value={to} onChange={(e) => setTo(e.target.value)} style={input} required /></Field>
+        <Field label="Amount"><input value={amount} onChange={(e) => setAmount(e.target.value)} style={input} required /></Field>
+        <Field label="Reason (optional)"><input value={reason} onChange={(e) => setReason(e.target.value)} style={input} /></Field>
+
+        {plan && (
+          <div style={{ background: W.surface2, border: `1px solid ${W.border}`, borderRadius: 8, padding: "10px 12px" }}>
+            <div style={{ color: W.dim, fontSize: 10.5, letterSpacing: 1, textTransform: "uppercase", fontWeight: 600, marginBottom: 6 }}>
+              Coin selection preview
+            </div>
+            {plan.sufficient ? (
+              <div style={{ display: "grid", gap: 4, fontFamily: wMono, fontSize: 11.5 }}>
+                {plan.inputs.map((i) => (
+                  <div key={i.contract_id} style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: W.text2 }}>{i.contract_id.slice(0, 14)}… consume</span>
+                    <span style={{ color: W.err }}>−{i.amount}</span>
+                  </div>
+                ))}
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: W.text2 }}>→ {shortParty(to || from)} receive</span>
+                  <span style={{ color: W.ok }}>+{amount}</span>
+                </div>
+                {plan.change !== "0.0000000000" && (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: W.text2 }}>→ {shortParty(from)} change</span>
+                    <span style={{ color: W.ok }}>+{plan.change}</span>
+                  </div>
+                )}
+                <div style={{ height: 1, background: W.border, margin: "3px 0" }} />
+                <div style={{ display: "flex", justifyContent: "space-between", color: W.dim }}>
+                  <span>{plan.inputs.length} input {plan.inputs.length === 1 ? "contract" : "contracts"} · total {plan.total_input}</span>
+                </div>
+              </div>
+            ) : (
+              <div style={{ color: W.warn, fontSize: 12 }}>
+                Insufficient: holds {plan.total_input}, short {plan.shortfall}.
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+          <button type="button" onClick={onClose} style={btnStyle(W.dim, false)}>Cancel</button>
+          <button
+            type="submit"
+            disabled={busy || (plan ? !plan.sufficient : false)}
+            style={btnStyle(W.brand, busy, true, plan ? !plan.sufficient : false)}
+          >
+            {busy ? "Submitting…" : "Transfer"}
+          </button>
+        </div>
+      </form>
+    </ModalShell>
   );
 }
 

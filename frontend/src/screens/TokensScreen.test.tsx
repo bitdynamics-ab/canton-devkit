@@ -46,6 +46,16 @@ function stubFetch(tokens: Array<{ symbol: string; name: string }>) {
           },
         });
       }
+      if (url.includes("/transfer") && url.includes("plan=1")) {
+        return json({
+          schema_version: 1,
+          plan: {
+            instrument: "RTK", from: "bob", amount: "100",
+            inputs: [{ contract_id: "00abc123def456", amount: "275.0" }],
+            total_input: "275.0", change: "175.0", sufficient: true,
+          },
+        });
+      }
       if (url.startsWith("/api/tokens/") && url.includes("/holdings")) {
         return json({ schema_version: 1, holdings: [] });
       }
@@ -110,6 +120,22 @@ describe("TokensScreen", () => {
     const burn = await screen.findByRole("button", { name: /Burn/i }, { timeout: 4000 });
     expect(burn).toBeDisabled();
     expect(burn.getAttribute("title") ?? "").toMatch(/AllocationV2|DvP|BIT-216/);
+  });
+
+  it("shows the coin-selection preview in the transfer modal", async () => {
+    const user = userEvent.setup();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    await user.click(await screen.findByRole("button", { name: "→ Transfer" }, { timeout: 4000 }));
+    // fill From + Amount → the dry-run plan fires (debounced)
+    const inputs = await screen.findAllByRole("textbox");
+    await user.type(inputs[0], "bob");
+    await user.type(inputs[2], "100");
+    await waitFor(
+      () => expect(screen.queryByText(/Coin selection preview/i)).toBeInTheDocument(),
+      { timeout: 4000 },
+    );
+    expect(screen.queryByText(/change/i)).toBeInTheDocument();
   });
 
   it("switches to the Holdings matrix lens and renders the pivot", async () => {

@@ -1228,6 +1228,43 @@ export const transferToken = (
     { from, to, amount, reason: reason ?? "" },
   );
 
+// TransferPlan — dry-run coin selection (BIT-219). Which Holding
+// contracts a transfer would consume, the change, and whether the
+// sender can cover it. Read-only; no ledger mutation.
+export interface TransferPlan {
+  instrument: string;
+  from: string;
+  amount: string;
+  inputs: { contract_id: string; amount: string }[];
+  total_input: string;
+  change: string;
+  sufficient: boolean;
+  shortfall?: string;
+}
+
+export async function planTransfer(
+  instance: string,
+  symbol: string,
+  from: string,
+  amount: string,
+  role = "app-user",
+): Promise<TransferPlan> {
+  const params = new URLSearchParams({ instance, role, plan: "1" });
+  const resp = await fetch(
+    `/api/tokens/${encodeURIComponent(symbol)}/transfer?${params}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: window.location.origin },
+      body: JSON.stringify({ from, to: from, amount }),
+    },
+  );
+  if (!resp.ok) {
+    throw new ApiError(resp.status, { code: "PLAN_FAILED", error: "could not compute transfer plan" });
+  }
+  const body = (await resp.json()) as { plan: TransferPlan };
+  return body.plan;
+}
+
 export const burnToken = (
   instance: string,
   symbol: string,
