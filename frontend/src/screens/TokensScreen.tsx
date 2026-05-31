@@ -2,9 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ApiError,
   acceptTransfer,
+  aliasMapFrom,
+  createParty,
   createToken,
   fetchActivity,
   fetchHoldingContracts,
+  fetchParties,
+  removeParty,
   fetchHoldings,
   fetchInstruments,
   fetchInstrumentSummary,
@@ -13,7 +17,9 @@ import {
   planTransfer,
   transferToken,
   type ActivityEvent,
+  type AliasMap,
   type BalanceMatrix,
+  type PartyRef,
   type HoldingContract,
   type InstrumentRef,
   type InstrumentSummary,
@@ -27,6 +33,13 @@ import { W, wMono } from "../tokens";
 function shortParty(p: string): string {
   const i = p.indexOf("::");
   return i > 0 ? p.slice(0, i) : p;
+}
+
+// partyLabel prefers a registered alias (BIT-215 #1) over the raw prefix:
+// `app_user_v2-localparty-1::1220…` → `app-user` when aliased, else the
+// `::`-prefix fallback.
+function partyLabel(aliases: AliasMap, p: string): string {
+  return aliases[p] ?? shortParty(p);
 }
 
 // Asset capability guards — verified live (BIT-219):
@@ -75,6 +88,9 @@ export function TokensScreen() {
   const [matrix, setMatrix] = useState<BalanceMatrix | null>(null);
   const [matrixErr, setMatrixErr] = useState<string | null>(null);
   const [summary, setSummary] = useState<InstrumentSummary | null>(null);
+  const [parties, setParties] = useState<PartyRef[]>([]);
+  const [showParties, setShowParties] = useState(false);
+  const aliases: AliasMap = useMemo(() => aliasMapFrom(parties), [parties]);
   const [detailTab, setDetailTab] = useState<"overview" | "activity">("overview");
   const [activity, setActivity] = useState<ActivityEvent[] | null>(null);
   const [activityErr, setActivityErr] = useState<string | null>(null);
@@ -162,6 +178,26 @@ export function TokensScreen() {
       cancelled = true;
     };
   }, [instance, activeSymbol, refreshTick]);
+
+  // Party alias registry (BIT-215 #1): one fetch per instance powers the
+  // alias labels across every lens and the party manager.
+  useEffect(() => {
+    if (!instance) {
+      setParties([]);
+      return;
+    }
+    let cancelled = false;
+    fetchParties(instance)
+      .then((p) => {
+        if (!cancelled) setParties(p);
+      })
+      .catch(() => {
+        if (!cancelled) setParties([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instance, refreshTick]);
 
   // Instrument-first KPI summary (BIT-219 lens 1): supply, holder +
   // contract counts, holder distribution. One ACS scan; best-effort —
@@ -266,13 +302,22 @@ export function TokensScreen() {
   return (
     <section style={{ padding: 24, display: "flex", flexDirection: "column", gap: 14 }}>
       <Header right={
-        <button
-          type="button"
-          onClick={() => setShowCreate(true)}
-          style={btnStyle(W.brand, false, true)}
-        >
-          + Create token
-        </button>
+        <span style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => setShowParties(true)}
+            style={btnStyle(W.dim, false)}
+          >
+            ⦿ Parties{parties.length > 0 ? ` (${parties.length})` : ""}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            style={btnStyle(W.brand, false, true)}
+          >
+            + Create token
+          </button>
+        </span>
       } />
 
       {topNotice && (
@@ -298,7 +343,7 @@ export function TokensScreen() {
       </div>
 
       {view === "matrix" ? (
-        <MatrixLens matrix={matrix} err={matrixErr} />
+        <MatrixLens matrix={matrix} err={matrixErr} aliases={aliases} />
       ) : list.length === 0 ? (
         <div style={{ color: W.dim, fontSize: 13 }}>
           No instruments on <code>{instance}</code> yet. Click <b>Create token</b> above
@@ -361,7 +406,7 @@ export function TokensScreen() {
                   </span>
                 </div>
                 <div style={{ color: W.dim, fontSize: 12, marginTop: 4, fontFamily: wMono }}>
-                  admin {shortParty(active.admin)} · id {active.instrument_id}
+                  admin {partyLabel(aliases, active.admin)} · id {active.instrument_id}
                 </div>
 
                 {/* Overview / Activity tab switcher */}
@@ -390,7 +435,7 @@ export function TokensScreen() {
                 {detailTab === "overview" && (
                   <>
                     {summary && <KpiRow s={summary} />}
-                    {summary && summary.holders.length > 0 && <HolderDistribution s={summary} />}
+                    {summary && summary.holders.length > 0 && <HolderDistribution s={summary} aliases={aliases} />}
 
                     <h4 style={{ color: W.text2, margin: "18px 0 8px" }}>
                       Holdings <span style={{ color: W.dim, fontWeight: 400, fontSize: 12 }}>· a balance is the sum of its Holding contracts — click a row to expand</span>
@@ -415,7 +460,7 @@ export function TokensScreen() {
                                 <span style={{ color: W.brand, display: "inline-block", width: 14 }}>
                                   {expanded === h.party ? "▾" : "▸"}
                                 </span>
-                                {shortParty(h.party)}
+                                {partyLabel(aliases, h.party)}
                               </td>
                               <td style={{ ...td, fontFamily: wMono }}>{h.amount}</td>
                             </tr>
@@ -442,7 +487,7 @@ export function TokensScreen() {
                 )}
 
                 {detailTab === "activity" && (
-                  <ActivityFeed events={activity} err={activityErr} />
+                  <ActivityFeed events={activity} err={activityErr} aliases={aliases} />
                 )}
               </>
               );
@@ -451,6 +496,15 @@ export function TokensScreen() {
         </div>
       )}
 
+      {showParties && (
+        <PartyManagerModal
+          instance={instance}
+          parties={parties}
+          onClose={() => setShowParties(false)}
+          onChanged={() => bump()}
+          onError={(e) => setTopNotice(renderActionError(e, "party action failed"))}
+        />
+      )}
       {showCreate && (
         <CreateTokenModal
           instance={instance}
@@ -646,7 +700,7 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
 // HolderDistribution — per-holder stake table (BIT-219 lens 1): balance,
 // share of supply (with an inline bar), and how many Holding contracts
 // back each holder. Sorted biggest-first by the backend.
-function HolderDistribution({ s }: { s: InstrumentSummary }) {
+function HolderDistribution({ s, aliases }: { s: InstrumentSummary; aliases: AliasMap }) {
   return (
     <>
       <h4 style={{ color: W.text2, margin: "16px 0 6px" }}>
@@ -667,7 +721,7 @@ function HolderDistribution({ s }: { s: InstrumentSummary }) {
             const pct = Number(h.pct_of_supply) || 0;
             return (
               <tr key={h.party}>
-                <td style={td}>{shortParty(h.party)}</td>
+                <td style={td}>{partyLabel(aliases, h.party)}</td>
                 <td style={{ ...td, fontFamily: wMono }}>{h.balance}</td>
                 <td style={td}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -699,7 +753,7 @@ function HolderDistribution({ s }: { s: InstrumentSummary }) {
 // ActivityFeed — the instrument's transfer/mint/burn history (BIT-219
 // Activity tab), reconstructed from the ledger transaction stream. Each
 // row is one netted transaction: kind, amount, and who sent → received.
-function ActivityFeed({ events, err }: { events: ActivityEvent[] | null; err: string | null }) {
+function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null; err: string | null; aliases: AliasMap }) {
   if (err) return <div role="alert" style={{ color: W.err, fontSize: 13, marginTop: 12 }}>{err}</div>;
   if (events === null) return <div style={{ color: W.dim, fontSize: 13, marginTop: 12 }}>Scanning ledger history…</div>;
   if (events.length === 0)
@@ -713,7 +767,7 @@ function ActivityFeed({ events, err }: { events: ActivityEvent[] | null; err: st
   const fmtParties = (ps?: { party: string; amount: string }[]) =>
     !ps || ps.length === 0
       ? "·"
-      : ps.map((p) => `${shortParty(p.party)} ${p.amount}`).join(", ");
+      : ps.map((p) => `${partyLabel(aliases, p.party)} ${p.amount}`).join(", ");
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 12 }}>
       <thead>
@@ -758,7 +812,7 @@ function ActivityFeed({ events, err }: { events: ActivityEvent[] | null; err: st
 // MatrixLens — the god-mode party × instrument balance table (BIT-219 /
 // BIT-215 #2). One ACS scan; rows = parties, columns = instruments,
 // plus a totals row. Only the parties the role's JWT can read appear.
-function MatrixLens({ matrix, err }: { matrix: BalanceMatrix | null; err: string | null }) {
+function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; err: string | null; aliases: AliasMap }) {
   if (err) return <div role="alert" style={{ color: W.err, fontSize: 13 }}>{err}</div>;
   if (!matrix) return <div style={{ color: W.dim, fontSize: 13 }}>Loading matrix…</div>;
 
@@ -789,7 +843,7 @@ function MatrixLens({ matrix, err }: { matrix: BalanceMatrix | null; err: string
         <tbody>
           {parties.map((p) => (
             <tr key={p}>
-              <td style={td}>{shortParty(p)}</td>
+              <td style={td}>{partyLabel(aliases, p)}</td>
               {syms.map((s) => (
                 <td key={s} style={{ ...td, textAlign: "right", fontFamily: wMono, color: amt[p]?.[s] ? W.text : W.dim }}>
                   {amt[p]?.[s] ?? "·"}
@@ -819,6 +873,105 @@ function Header({ right }: { right?: React.ReactNode }) {
       <span style={{ color: W.dim, fontSize: 12 }}>V2 Token Standard instruments + actions</span>
       <span style={{ marginLeft: "auto" }}>{right}</span>
     </header>
+  );
+}
+
+// PartyManagerModal — the god-mode party registry (BIT-215 #1): list the
+// instance's aliased parties, allocate a new one by name, or forget an
+// alias. New parties immediately become visible in the matrix / activity
+// (the scan grants read-as for every registered party).
+function PartyManagerModal({
+  instance,
+  parties,
+  onClose,
+  onChanged,
+  onError,
+}: {
+  instance: string;
+  parties: PartyRef[];
+  onClose: () => void;
+  onChanged: () => void;
+  onError: (e: unknown) => void;
+}) {
+  const [alias, setAlias] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    if (!alias.trim()) return;
+    setBusy(true);
+    try {
+      await createParty(instance, alias.trim());
+      setAlias("");
+      onChanged();
+    } catch (err) {
+      onError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(a: string) {
+    setBusy(true);
+    try {
+      await removeParty(instance, a);
+      onChanged();
+    } catch (err) {
+      onError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ModalShell title="Parties" onClose={onClose}>
+      <p style={{ color: W.dim, fontSize: 12, marginTop: 0 }}>
+        On LocalNet you own every party. Name one here and use the alias anywhere
+        a party is accepted — it appears in the matrix and activity automatically.
+      </p>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginBottom: 12 }}>
+        <thead>
+          <tr style={{ color: W.dim, textAlign: "left" }}>
+            <th style={th}>ALIAS</th>
+            <th style={th}>ROLE</th>
+            <th style={th}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {parties.map((p) => (
+            <tr key={p.alias}>
+              <td style={{ ...td, fontWeight: 600 }}>{p.alias}</td>
+              <td style={{ ...td, color: W.dim }}>{p.role}</td>
+              <td style={{ ...td, textAlign: "right" }}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => remove(p.alias)}
+                  title="Forget this alias (the on-ledger party persists)"
+                  style={{ background: "transparent", border: "none", color: W.err, cursor: "pointer", fontSize: 12 }}
+                >
+                  forget
+                </button>
+              </td>
+            </tr>
+          ))}
+          {parties.length === 0 && (
+            <tr><td colSpan={3} style={{ ...td, color: W.dim }}>No parties registered yet.</td></tr>
+          )}
+        </tbody>
+      </table>
+      <form onSubmit={add} style={{ display: "flex", gap: 8 }}>
+        <input
+          value={alias}
+          onChange={(e) => setAlias(e.target.value)}
+          placeholder="new alias (e.g. bob)"
+          style={{ flex: 1, background: W.bg, border: `1px solid ${W.border}`, borderRadius: 6, padding: "8px 10px", color: W.text, fontSize: 13 }}
+        />
+        <button type="submit" disabled={busy || !alias.trim()} style={btnStyle(W.brand, busy, true, !alias.trim())}>
+          {busy ? "…" : "+ Allocate"}
+        </button>
+      </form>
+    </ModalShell>
   );
 }
 

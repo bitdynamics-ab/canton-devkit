@@ -56,6 +56,15 @@ function stubFetch(tokens: Array<{ symbol: string; name: string }>) {
           },
         });
       }
+      if (url.startsWith("/api/parties")) {
+        return json({
+          schema_version: 1,
+          parties: [
+            { alias: "app-user", party_id: "alice::abc", role: "app-user", is_local: true, created_at: "2026-05-30T10:00:00Z" },
+            { alias: "treasury", party_id: "bob::def", role: "app-user", is_local: true, created_at: "2026-05-30T11:00:00Z" },
+          ],
+        });
+      }
       if (url.startsWith("/api/tokens/") && url.includes("/activity")) {
         return json({
           schema_version: 1,
@@ -210,5 +219,29 @@ describe("TokensScreen", () => {
       { timeout: 4000 },
     );
     expect(screen.queryAllByText("1275.0").length).toBeGreaterThan(0);
+  });
+
+  it("labels parties by their registered alias in the matrix", async () => {
+    const user = userEvent.setup();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    await user.click(await screen.findByRole("button", { name: /Holdings matrix/i }, { timeout: 4000 }));
+    // bob::def is aliased "treasury" → the matrix shows the alias, not "bob".
+    await waitFor(
+      () => expect(screen.queryAllByText(/treasury/).length).toBeGreaterThan(0),
+      { timeout: 4000 },
+    );
+  });
+
+  it("opens the party manager and lists registered aliases", async () => {
+    const user = userEvent.setup();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    await user.click(await screen.findByRole("button", { name: /Parties/i }, { timeout: 4000 }));
+    await waitFor(
+      () => expect(screen.queryByPlaceholderText(/new alias/i)).toBeInTheDocument(),
+      { timeout: 4000 },
+    );
+    expect(screen.queryAllByText(/treasury/).length).toBeGreaterThan(0);
   });
 });

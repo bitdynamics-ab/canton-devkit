@@ -56,6 +56,98 @@ func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	mux.HandleFunc("POST /api/tokens/{symbol}/transfer", idem.wrap(handleTokenTransfer))
 	mux.HandleFunc("POST /api/tokens/transfers/{id}/accept", idem.wrap(handleTokenAccept))
 	mux.HandleFunc("POST /api/tokens/{symbol}/burn", idem.wrap(handleTokenBurn))
+	// Party alias registry (BIT-215 #1) — the workspace's god-mode
+	// party manager. Same RunPartyX functions the `token party` CLI calls.
+	mux.HandleFunc("GET /api/parties", handlePartiesList)
+	mux.HandleFunc("POST /api/parties", handlePartiesCreate)
+	mux.HandleFunc("DELETE /api/parties/{alias}", handlePartiesRemove)
+}
+
+// aliasMap returns partyID → alias for an instance's registered parties,
+// attached to scan responses so the UI can label party ids without a
+// second round-trip. Empty map for an unknown / alias-less instance.
+func aliasMap(instance string) map[string]string {
+	out := map[string]string{}
+	state, err := registry.Read(instance)
+	if err != nil {
+		return out
+	}
+	for _, ref := range state.Parties {
+		if ref.PartyID != "" {
+			out[ref.PartyID] = ref.Alias
+		}
+	}
+	return out
+}
+
+func handlePartiesList(w http.ResponseWriter, r *http.Request) {
+	instance, err := instanceFromQuery(r)
+	if err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	role := roleFromQuery(r)
+	// Endpoint enables lazy-seeding the role parties; absent endpoint
+	// still lists whatever's recorded.
+	parties, err := token.RunPartyList(r.Context(), token.PartyOptions{
+		Instance: instance, Role: role, Insecure: true,
+		Endpoint: liveLedgerEndpoint(instance, role),
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "list parties", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema_version": types.SchemaVersion,
+		"parties":        parties,
+	})
+}
+
+func handlePartiesCreate(w http.ResponseWriter, r *http.Request) {
+	instance, err := instanceFromQuery(r)
+	if err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	var req struct {
+		Alias string `json:"alias"`
+		Role  string `json:"role"`
+	}
+	if err := decodeJSON(r.Body, &req); err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	role := req.Role
+	if role == "" {
+		role = "app-user"
+	}
+	ep := liveLedgerEndpoint(instance, role)
+	if ep == "" {
+		writeErrorWithCode(w, http.StatusServiceUnavailable, "PARTICIPANT_PORT_NOT_RECORDED",
+			"no live ledger endpoint for instance "+instance+" — restart it so ports are captured")
+		return
+	}
+	ref, err := token.RunPartyNew(r.Context(), token.PartyOptions{
+		Instance: instance, Alias: req.Alias, Role: role, Insecure: true, Endpoint: ep,
+	})
+	if err != nil {
+		mapTokenError(w, err, "party new")
+		return
+	}
+	writeJSON(w, http.StatusCreated, ref)
+}
+
+func handlePartiesRemove(w http.ResponseWriter, r *http.Request) {
+	instance, err := instanceFromQuery(r)
+	if err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	if err := token.RunPartyRemove(instance, r.PathValue("alias")); err != nil {
+		mapTokenError(w, err, "party rm")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- read paths ------------------------------------------------------
@@ -122,6 +214,7 @@ func handleTokenMatrix(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"schema_version": types.SchemaVersion,
 		"matrix":         matrix,
+		"aliases":        aliasMap(instance),
 	})
 }
 
@@ -176,6 +269,7 @@ func handleTokenSummary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"schema_version": types.SchemaVersion,
 		"summary":        summary,
+		"aliases":        aliasMap(instance),
 	})
 }
 
@@ -218,6 +312,7 @@ func handleTokenActivity(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"schema_version": types.SchemaVersion,
 		"events":         events,
+		"aliases":        aliasMap(instance),
 	})
 }
 
@@ -546,6 +641,15 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 	case errors.Is(err, token.ErrSymbolInUse):
 		writeErrorWithCode(w, http.StatusConflict,
 			"SYMBOL_IN_USE", err.Error())
+	case errors.Is(err, token.ErrAliasInvalid):
+		writeErrorWithCode(w, http.StatusBadRequest,
+			"ALIAS_INVALID", err.Error())
+	case errors.Is(err, token.ErrAliasInUse):
+		writeErrorWithCode(w, http.StatusConflict,
+			"ALIAS_IN_USE", err.Error())
+	case errors.Is(err, token.ErrAliasUnknown):
+		writeErrorWithCode(w, http.StatusNotFound,
+			"ALIAS_UNKNOWN", err.Error())
 	default:
 		// Off-ledger token-registry 4xx: surface the upstream status
 		// (so a 422 INSUFFICIENT_FUNDS stays a 422) and ship a short

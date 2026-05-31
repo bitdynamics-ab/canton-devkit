@@ -1131,6 +1131,54 @@ interface MatrixResponse {
   matrix: BalanceMatrix;
 }
 
+// PartyRef — one registered party alias → its on-ledger party id
+// (BIT-215 #1). The workspace's god-mode party registry.
+export interface PartyRef {
+  alias: string;
+  party_id: string;
+  role: string;
+  is_local?: boolean;
+  created_at: string;
+}
+
+interface PartiesResponse {
+  schema_version: number;
+  parties: PartyRef[];
+}
+
+// fetchParties lists the instance's registered party aliases (seeding the
+// role parties when a live endpoint is available).
+export const fetchParties = (instance: string, role = "app-user") =>
+  apiFetch<PartiesResponse>(
+    `/api/parties?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
+  ).then((r) => r.parties);
+
+// createParty allocates a party under an alias and grants the role's user
+// act/read-as for it.
+export const createParty = (instance: string, alias: string, role = "app-user") =>
+  apiFetch<PartyRef>(`/api/parties?instance=${encodeURIComponent(instance)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ alias, role }),
+  });
+
+// removeParty forgets an alias (the on-ledger party persists).
+export const removeParty = (instance: string, alias: string) =>
+  apiFetchVoid(
+    `/api/parties/${encodeURIComponent(alias)}?instance=${encodeURIComponent(instance)}`,
+    { method: "DELETE" },
+  );
+
+// AliasMap is partyID → alias, built from fetchParties for client-side
+// labelling of party ids in the matrix / holdings / activity views.
+export type AliasMap = Record<string, string>;
+
+export const aliasMapFrom = (parties: PartyRef[]): AliasMap => {
+  const m: AliasMap = {};
+  for (const p of parties) if (p.party_id) m[p.party_id] = p.alias;
+  return m;
+};
+
 interface HoldingContractsResponse {
   schema_version: number;
   contracts: HoldingContract[];
