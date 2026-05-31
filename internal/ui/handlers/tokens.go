@@ -42,6 +42,7 @@ const tokensBodyMax = 64 << 10 // 64 KiB
 // don't have to refactor their MountTokens call when that lands.
 func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	mux.HandleFunc("GET /api/tokens", handleTokensList)
+	mux.HandleFunc("GET /api/tokens/matrix", handleTokenMatrix)
 	mux.HandleFunc("GET /api/tokens/{symbol}", handleTokenDetail)
 	mux.HandleFunc("GET /api/tokens/{symbol}/holdings", handleTokenHoldings)
 	// State-changing POSTs are wrapped with Idempotency-Key dedup so a
@@ -63,6 +64,26 @@ func handleTokensList(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
+	// On-chain instrument discovery (BIT-219): when a live ledger
+	// endpoint is available, list instruments seen in the ACS — so
+	// Amulet and any minted token appear without a state.Tokens seed.
+	// Falls back to the registry-recorded list when no endpoint (the
+	// instance pre-dates port capture, or the ledger is unreachable).
+	role := roleFromQuery(r)
+	if ep := liveLedgerEndpoint(instance, role); ep != "" {
+		instruments, derr := token.RunInstruments(r.Context(), token.BalanceOptions{
+			Instance: instance, Role: role, Insecure: true, Endpoint: ep,
+		})
+		if derr == nil {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"schema_version": types.SchemaVersion,
+				"instruments":    instruments,
+			})
+			return
+		}
+		// Discovery failed (e.g. ledger momentarily unreachable) — fall
+		// through to the recorded list rather than erroring the screen.
+	}
 	refs, err := token.ListTokens(instance)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "list tokens", err)
@@ -71,6 +92,34 @@ func handleTokensList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"schema_version": types.SchemaVersion,
 		"tokens":         refs,
+	})
+}
+
+// handleTokenMatrix returns the party × instrument balance matrix
+// (BIT-219 / BIT-215 #2) — the god-mode reconciliation view.
+func handleTokenMatrix(w http.ResponseWriter, r *http.Request) {
+	instance, err := instanceFromQuery(r)
+	if err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	role := roleFromQuery(r)
+	ep := liveLedgerEndpoint(instance, role)
+	if ep == "" {
+		writeErrorWithCode(w, http.StatusServiceUnavailable, "PARTICIPANT_PORT_NOT_RECORDED",
+			"no live ledger endpoint for instance "+instance+" — restart it so ports are captured")
+		return
+	}
+	matrix, err := token.RunBalanceMatrix(r.Context(), token.BalanceOptions{
+		Instance: instance, Role: role, Insecure: true, Endpoint: ep,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "balance matrix", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema_version": types.SchemaVersion,
+		"matrix":         matrix,
 	})
 }
 
@@ -116,6 +165,21 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 		if port, ok := state.Ports["participant_ledger_"+role]; ok && port > 0 {
 			opts.Endpoint = "localhost:" + strconv.Itoa(port)
 		}
+	}
+	// expand=contracts → return the individual Holding contracts (the
+	// UTXO units) instead of the summed-per-party balance (BIT-219
+	// party-UTXO lens). A party's balance is the sum of these.
+	if r.URL.Query().Get("expand") == "contracts" && opts.Endpoint != "" {
+		contracts, cerr := token.RunWorkspaceHoldings(r.Context(), opts)
+		if cerr != nil {
+			mapTokenError(w, cerr, "holdings")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"schema_version": types.SchemaVersion,
+			"contracts":      contracts,
+		})
+		return
 	}
 	rows, truncated, err := token.RunBalance(r.Context(), nil, opts)
 	if err != nil {

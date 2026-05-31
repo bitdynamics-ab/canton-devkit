@@ -301,6 +301,7 @@ type holdingViewV2 struct {
 	InstrumentID string // view.instrumentId.id
 	Admin        string // view.instrumentId.admin (the V2 InstrumentId admin = the issuer party)
 	Amount       string // view.amount as a Decimal string (we don't round on the wire)
+	Locked       bool   // view.lock present (Some) — held by an active allocation/proposal
 }
 
 // extractHoldingViewV2 walks a participant InterfaceView Record and
@@ -347,6 +348,12 @@ func extractHoldingViewV2(view *lapiv2.InterfaceView) (holdingViewV2, bool) {
 			}
 		case "amount":
 			out.Amount = numericOf(f.Value)
+		case "lock":
+			// Optional Lock — Some(...) means the holding is locked
+			// into an active allocation/proposal and can't be spent.
+			if o, ok := f.Value.Sum.(*lapiv2.Value_Optional); ok && o.Optional != nil && o.Optional.Value != nil {
+				out.Locked = true
+			}
 		}
 	}
 	if out.InstrumentID == "" || out.Amount == "" {

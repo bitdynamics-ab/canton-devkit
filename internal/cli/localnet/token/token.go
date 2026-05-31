@@ -32,6 +32,7 @@ required for the on-ledger surfaces to function (see "localnet versions"
 	cmd.AddCommand(buildTransfer())
 	cmd.AddCommand(buildBurn())
 	cmd.AddCommand(buildBalance())
+	cmd.AddCommand(buildBalances())
 	return cmd
 }
 
