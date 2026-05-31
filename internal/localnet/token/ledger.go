@@ -134,7 +134,7 @@ func ensureLocalPartyRights(ctx context.Context, c *ledger.Client, role string) 
 		return fmt.Errorf("no local parties found for role %q on this participant — "+
 			"V2 onboarding may not have completed; check `localnet status`", role)
 	}
-	if err := c.GrantUserActAndReadAs(ctx, "", parties); err != nil {
+	if err := c.GrantUserActAndReadAs(ctx, exerciseUserID, parties); err != nil {
 		return fmt.Errorf("grant Act/Read rights for parties %v: %w", parties, err)
 	}
 	return nil
@@ -160,6 +160,32 @@ func localPartiesForRole(ctx context.Context, c *ledger.Client, role string) ([]
 		}
 	}
 	return out, nil
+}
+
+// resolveReadableParties returns the parties a scan should cover. It
+// first widens the role's user with CanReadAs for every registered party
+// alias (BIT-215 #1) so the god-mode matrix / activity feed see ALL
+// aliased parties, not just the role's own — then re-resolves the
+// authoritative granted set via ResolveActAndReadParties.
+//
+// Granting before resolving is deliberate: ResolveActAndReadParties stays
+// the single source of truth for "what's safe to put in the ACS filter,"
+// so a party that couldn't be granted here (e.g. one hosted on another
+// participant) simply never enters the filter — querying an ungranted
+// party would otherwise PermissionDenied the entire stream. The grant is
+// best-effort; its failure doesn't fail the scan.
+func resolveReadableParties(ctx context.Context, c *ledger.Client, instance, role string) ([]string, error) {
+	if extra := partiesFromState(instance); len(extra) > 0 {
+		_ = c.GrantUserActAndReadAs(ctx, exerciseUserID, extra)
+	}
+	parties, err := c.ResolveActAndReadParties(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve readable parties: %w", err)
+	}
+	if len(parties) == 0 {
+		parties, _ = localPartiesForRole(ctx, c, role)
+	}
+	return parties, nil
 }
 
 // resolveLedgerToken implements the four-step token resolution order

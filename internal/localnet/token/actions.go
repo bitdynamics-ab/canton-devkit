@@ -175,6 +175,7 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	if err := requireFields("mint", opts.Instance, opts.Instrument, opts.To, opts.Amount); err != nil {
 		return err
 	}
+	opts.To = ResolveAlias(aliasMapForInstance(opts.Instance), opts.To)
 	if err := validatePartyID("--to", opts.To); err != nil {
 		return err
 	}
@@ -209,6 +210,9 @@ func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error
 	if err := requireFields("transfer", opts.Instance, opts.Instrument, opts.From, opts.To, opts.Amount); err != nil {
 		return err
 	}
+	aliases := aliasMapForInstance(opts.Instance)
+	opts.From = ResolveAlias(aliases, opts.From)
+	opts.To = ResolveAlias(aliases, opts.To)
 	if err := validatePartyID("--from", opts.From); err != nil {
 		return err
 	}
@@ -261,6 +265,7 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 	if err := requireFields("burn", opts.Instance, opts.Instrument, opts.From, opts.Amount); err != nil {
 		return err
 	}
+	opts.From = ResolveAlias(aliasMapForInstance(opts.Instance), opts.From)
 	if err := validatePartyID("--from", opts.From); err != nil {
 		return err
 	}
@@ -303,6 +308,7 @@ func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]Bala
 	if opts.Instance == "" {
 		return nil, false, errors.New("instance is required")
 	}
+	opts.Party = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Party)
 	// Live-ACS path takes precedence when the caller has dialed a
 	// participant. Symbol/admin pairs are joined back to the local
 	// state.Tokens registry so the rendered rows can still carry

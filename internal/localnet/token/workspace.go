@@ -74,20 +74,15 @@ func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error)
 	}
 	defer cleanup()
 
-	// Scan only the parties the JWT is actually granted to read —
-	// ResolveActAndReadParties is the authoritative set (the role's
-	// auto-granted local party plus any explicitly granted, e.g. an
-	// ad-hoc `bob`). Querying a party the token can't read returns
-	// PermissionDenied for the whole stream. Full god-mode coverage
-	// (read-as every hosted party) is BIT-215 #1's grant-on-up work.
-	parties, err := client.ResolveActAndReadParties(ctx)
+	// Scan the parties the JWT is granted to read. resolveReadableParties
+	// first widens that set with CanReadAs for every registered party
+	// alias (BIT-215 #1) so the god-mode matrix sees ALL aliased parties,
+	// then re-resolves the authoritative granted set — a party that
+	// couldn't be granted never enters the filter (querying it would
+	// PermissionDenied the whole stream).
+	parties, err := resolveReadableParties(ctx, client, opts.Instance, opts.Role)
 	if err != nil {
-		return nil, fmt.Errorf("resolve readable parties: %w", err)
-	}
-	if len(parties) == 0 {
-		// Fall back to the role's local party set (covers the first
-		// scan before any grant has widened the readable set).
-		parties, _ = localPartiesForRole(ctx, client, opts.Role)
+		return nil, err
 	}
 	if len(parties) == 0 {
 		return &Workspace{}, nil

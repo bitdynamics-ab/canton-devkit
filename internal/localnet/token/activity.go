@@ -182,12 +182,12 @@ func RunActivity(ctx context.Context, opts BalanceOptions) ([]ActivityEvent, err
 	}
 	defer cleanup()
 
-	parties, err := client.ResolveActAndReadParties(ctx)
+	// Widen read-as to every registered party alias (BIT-215 #1) so the
+	// activity feed reconstructs movements across ALL aliased parties,
+	// then re-resolve the authoritative granted set.
+	parties, err := resolveReadableParties(ctx, client, opts.Instance, opts.Role)
 	if err != nil {
-		return nil, fmt.Errorf("resolve readable parties: %w", err)
-	}
-	if len(parties) == 0 {
-		parties, _ = localPartiesForRole(ctx, client, opts.Role)
+		return nil, err
 	}
 	if len(parties) == 0 {
 		return []ActivityEvent{}, nil

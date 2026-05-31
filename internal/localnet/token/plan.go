@@ -36,6 +36,7 @@ func RunTransferPlan(ctx context.Context, opts TransferOptions) (*TransferPlan, 
 	if opts.Role == "" {
 		opts.Role = "app-user"
 	}
+	opts.From = ResolveAlias(aliasMapForInstance(opts.Instance), opts.From)
 	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
 	if err != nil {
 		ref.InstrumentID = opts.Instrument
