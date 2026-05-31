@@ -736,3 +736,41 @@ func keysOf(m map[string][]byte) []string {
 	}
 	return out
 }
+
+// TestSnapshot_WarnsWhenRunning asserts the BIT-207 consistency caveat is
+// surfaced when snapshotting a running instance, and NOT when stopped.
+func TestSnapshot_WarnsWhenRunning(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedSnapshotInstance(t, "demo")
+	// seed is stopped; flip to running.
+	s, _ := registry.Read("demo")
+	s.Status = registry.StatusRunning
+	if err := registry.Write(s); err != nil {
+		t.Fatal(err)
+	}
+	installFakeArchiver(t, &fakeArchiver{volumes: map[string][]byte{"canton-demo_pg": []byte("x")}})
+
+	var out, errBuf bytes.Buffer
+	if code := RunSnapshot(context.Background(), &out, &errBuf, "demo",
+		filepath.Join(t.TempDir(), "snap.tgz")); code != localnet.ExitSuccess {
+		t.Fatalf("snapshot code = %d; stderr=%q", code, errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "running instance") {
+		t.Errorf("expected a running-instance consistency warning, got: %q", errBuf.String())
+	}
+}
+
+func TestSnapshot_NoWarnWhenStopped(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedSnapshotInstance(t, "demo") // stopped
+	installFakeArchiver(t, &fakeArchiver{volumes: map[string][]byte{"canton-demo_pg": []byte("x")}})
+
+	var out, errBuf bytes.Buffer
+	if code := RunSnapshot(context.Background(), &out, &errBuf, "demo",
+		filepath.Join(t.TempDir(), "snap.tgz")); code != localnet.ExitSuccess {
+		t.Fatalf("snapshot code = %d; stderr=%q", code, errBuf.String())
+	}
+	if strings.Contains(errBuf.String(), "running instance") {
+		t.Errorf("did not expect a running-instance warning for a stopped instance: %q", errBuf.String())
+	}
+}

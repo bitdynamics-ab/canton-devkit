@@ -109,6 +109,20 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 		return localnet.ExitRuntimeFailure
 	}
 
+	// Application-consistency caveat (BIT-207). Snapshotting a RUNNING
+	// instance copies its Docker volumes live: it captures a
+	// crash-consistent point-in-time, not an application-consistent one.
+	// In-flight ledger transactions or unflushed Postgres/Canton writes
+	// may be only partially present, so a restored copy can need crash
+	// recovery (or, rarely, be inconsistent). For a guaranteed-consistent
+	// snapshot, `localnet pause` (or `down`) the instance first.
+	if state.Status == registry.StatusRunning {
+		_, _ = fmt.Fprintln(errw, term.Step(term.StepWarn,
+			"Snapshotting a running instance",
+			"crash-consistent only — in-flight writes may be partial; "+
+				"`localnet pause --name "+name+"` first for an application-consistent copy", ""))
+	}
+
 	volumes, err := archiverFn.ListVolumes(ctx, state.ComposeProject)
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "list volumes for %q: %s\n", state.ComposeProject, err)
