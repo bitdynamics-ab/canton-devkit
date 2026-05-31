@@ -91,8 +91,18 @@ fi
 
 # --- optional: the V2 token flow ------------------------------------
 if [ "$WITH_TOKENS" = 1 ]; then
-  EP="$($CDK localnet status --name "$NAME" --format json 2>/dev/null \
-        | python3 -c 'import sys,json;d=json.load(sys.stdin);p=d.get("ports",{});print("localhost:%d"%p["participant_ledger_app-user"])' 2>/dev/null || true)"
+  # The participant ledger gRPC port lives in the instance registry
+  # (state.json). NOTE: Splice publishes it on an ephemeral host port that
+  # Docker can reassign across a restart; if this resolves stale, re-run
+  # `localnet restart --name <i>` to re-capture, or pass the live port.
+  EP="$(python3 - "$NAME" <<'PY' 2>/dev/null || true
+import json, os, sys
+name = sys.argv[1]
+p = os.path.expanduser(f"~/.canton-devkit/localnet/{name}/state.json")
+d = json.load(open(p))
+print("localhost:%d" % d["ports"]["participant_ledger_app-user"])
+PY
+)"
   if [ -z "$EP" ]; then
     echo "could not resolve the participant ledger port — skipping token flow" >&2
   else
