@@ -45,6 +45,7 @@ func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	mux.HandleFunc("GET /api/tokens/matrix", handleTokenMatrix)
 	mux.HandleFunc("GET /api/tokens/{symbol}", handleTokenDetail)
 	mux.HandleFunc("GET /api/tokens/{symbol}/summary", handleTokenSummary)
+	mux.HandleFunc("GET /api/tokens/{symbol}/activity", handleTokenActivity)
 	mux.HandleFunc("GET /api/tokens/{symbol}/holdings", handleTokenHoldings)
 	// State-changing POSTs are wrapped with Idempotency-Key dedup so a
 	// client retry can't mint/transfer/burn twice (opt-in: only requests
@@ -175,6 +176,48 @@ func handleTokenSummary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"schema_version": types.SchemaVersion,
 		"summary":        summary,
+	})
+}
+
+// handleTokenActivity reconstructs an instrument's transfer/mint/burn
+// history from the ledger transaction stream (BIT-219 Activity tab). No
+// off-ledger transfer-events registry needed — derived from HoldingV2
+// create/archive events. ?limit caps the result (default 50).
+func handleTokenActivity(w http.ResponseWriter, r *http.Request) {
+	instance, err := instanceFromQuery(r)
+	if err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	role := roleFromQuery(r)
+	ep := liveLedgerEndpoint(instance, role)
+	if ep == "" {
+		writeErrorWithCode(w, http.StatusServiceUnavailable, "PARTICIPANT_PORT_NOT_RECORDED",
+			"no live ledger endpoint for instance "+instance+" — restart it so ports are captured")
+		return
+	}
+	sym := r.PathValue("symbol")
+	instrumentID := sym
+	if ref, rerr := token.ResolveBySymbol(instance, sym); rerr == nil && ref.InstrumentID != "" {
+		instrumentID = ref.InstrumentID
+	}
+	limit := 50
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, perr := strconv.Atoi(v); perr == nil && n > 0 && n <= 500 {
+			limit = n
+		}
+	}
+	events, err := token.RunActivity(r.Context(), token.BalanceOptions{
+		Instance: instance, Role: role, Insecure: true, Endpoint: ep,
+		Instrument: instrumentID, Limit: limit,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "token activity", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema_version": types.SchemaVersion,
+		"events":         events,
 	})
 }
 

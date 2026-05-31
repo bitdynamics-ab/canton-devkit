@@ -56,6 +56,24 @@ function stubFetch(tokens: Array<{ symbol: string; name: string }>) {
           },
         });
       }
+      if (url.startsWith("/api/tokens/") && url.includes("/activity")) {
+        return json({
+          schema_version: 1,
+          events: [
+            {
+              offset: 1106, update_id: "u1106", record_time: "2026-05-30T16:50:45Z",
+              instrument_id: "RTK", kind: "mint", amount: "1000",
+              receivers: [{ party: "bob::def", amount: "1000" }],
+            },
+            {
+              offset: 1200, update_id: "u1200", record_time: "2026-05-30T17:00:00Z",
+              instrument_id: "RTK", kind: "transfer", amount: "100",
+              senders: [{ party: "bob::def", amount: "100" }],
+              receivers: [{ party: "alice::abc", amount: "100" }],
+            },
+          ],
+        });
+      }
       if (url.startsWith("/api/tokens/") && url.includes("/summary")) {
         return json({
           schema_version: 1,
@@ -166,6 +184,19 @@ describe("TokensScreen", () => {
     // Holder distribution table — share-of-supply.
     expect(screen.queryAllByText(/Holder distribution/i).length).toBeGreaterThan(0);
     expect(screen.queryAllByText(/100\.0%/).length).toBeGreaterThan(0);
+  });
+
+  it("switches to the Activity tab and renders the mint/transfer feed", async () => {
+    const user = userEvent.setup();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    // Wait for the detail pane (Overview tab) to mount, then switch tabs.
+    await user.click(await screen.findByRole("button", { name: /^activity$/i }, { timeout: 4000 }));
+    await waitFor(
+      () => expect(screen.queryAllByText(/mint/i).length).toBeGreaterThan(0),
+      { timeout: 4000 },
+    );
+    expect(screen.queryAllByText(/transfer/i).length).toBeGreaterThan(0);
   });
 
   it("switches to the Holdings matrix lens and renders the pivot", async () => {

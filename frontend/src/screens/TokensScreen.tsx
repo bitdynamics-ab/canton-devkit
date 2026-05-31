@@ -3,6 +3,7 @@ import {
   ApiError,
   acceptTransfer,
   createToken,
+  fetchActivity,
   fetchHoldingContracts,
   fetchHoldings,
   fetchInstruments,
@@ -11,6 +12,7 @@ import {
   mintToken,
   planTransfer,
   transferToken,
+  type ActivityEvent,
   type BalanceMatrix,
   type HoldingContract,
   type InstrumentRef,
@@ -73,6 +75,9 @@ export function TokensScreen() {
   const [matrix, setMatrix] = useState<BalanceMatrix | null>(null);
   const [matrixErr, setMatrixErr] = useState<string | null>(null);
   const [summary, setSummary] = useState<InstrumentSummary | null>(null);
+  const [detailTab, setDetailTab] = useState<"overview" | "activity">("overview");
+  const [activity, setActivity] = useState<ActivityEvent[] | null>(null);
+  const [activityErr, setActivityErr] = useState<string | null>(null);
 
   const [showCreate, setShowCreate] = useState(false);
   const [modal, setModal] = useState<
@@ -178,6 +183,32 @@ export function TokensScreen() {
       cancelled = true;
     };
   }, [instance, activeSymbol, refreshTick]);
+
+  // Activity feed (BIT-219 Activity tab): transfer/mint/burn history
+  // reconstructed from the ledger transaction stream. Fetched lazily —
+  // only when the Activity tab is open — since it's a full historical
+  // scan, heavier than the ACS snapshots the other lenses use.
+  useEffect(() => {
+    if (!instance || !activeSymbol || detailTab !== "activity") return;
+    let cancelled = false;
+    setActivity(null);
+    setActivityErr(null);
+    fetchActivity(instance, activeSymbol)
+      .then((ev) => {
+        if (!cancelled) setActivity(ev);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setActivityErr(e instanceof ApiError ? e.message : "failed to load activity");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instance, activeSymbol, detailTab, refreshTick]);
+
+  // Selecting a different instrument resets the detail tab to Overview.
+  useEffect(() => {
+    setDetailTab("overview");
+  }, [activeSymbol]);
 
   const active = useMemo(
     () => list.find((t) => (t.symbol ?? t.instrument_id) === activeSymbol) ?? null,
@@ -333,55 +364,86 @@ export function TokensScreen() {
                   admin {shortParty(active.admin)} · id {active.instrument_id}
                 </div>
 
-                {summary && <KpiRow s={summary} />}
-                {summary && summary.holders.length > 0 && <HolderDistribution s={summary} />}
+                {/* Overview / Activity tab switcher */}
+                <div style={{ display: "flex", gap: 4, margin: "16px 0 2px", borderBottom: `1px solid ${W.border}` }}>
+                  {(["overview", "activity"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setDetailTab(tab)}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        borderBottom: `2px solid ${detailTab === tab ? W.brand : "transparent"}`,
+                        color: detailTab === tab ? W.text : W.dim,
+                        padding: "6px 12px",
+                        fontSize: 13,
+                        fontWeight: detailTab === tab ? 600 : 400,
+                        cursor: "pointer",
+                        textTransform: "capitalize",
+                      }}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
 
-                <h4 style={{ color: W.text2, margin: "18px 0 8px" }}>
-                  Holdings <span style={{ color: W.dim, fontWeight: 400, fontSize: 12 }}>· a balance is the sum of its Holding contracts — click a row to expand</span>
-                </h4>
-                {holdingsErr && <div role="alert" style={{ color: W.err, fontSize: 12 }}>{holdingsErr}</div>}
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ color: W.dim, textAlign: "left" }}>
-                      <th style={th}>PARTY</th>
-                      <th style={th}>AMOUNT</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {holdings.map((h, i) => (
-                      <>
-                        <tr
-                          key={i}
-                          onClick={() => toggleExpand(h.party)}
-                          style={{ cursor: "pointer", background: expanded === h.party ? W.surface2 : "transparent" }}
-                        >
-                          <td style={td}>
-                            <span style={{ color: W.brand, display: "inline-block", width: 14 }}>
-                              {expanded === h.party ? "▾" : "▸"}
-                            </span>
-                            {shortParty(h.party)}
-                          </td>
-                          <td style={{ ...td, fontFamily: wMono }}>{h.amount}</td>
+                {detailTab === "overview" && (
+                  <>
+                    {summary && <KpiRow s={summary} />}
+                    {summary && summary.holders.length > 0 && <HolderDistribution s={summary} />}
+
+                    <h4 style={{ color: W.text2, margin: "18px 0 8px" }}>
+                      Holdings <span style={{ color: W.dim, fontWeight: 400, fontSize: 12 }}>· a balance is the sum of its Holding contracts — click a row to expand</span>
+                    </h4>
+                    {holdingsErr && <div role="alert" style={{ color: W.err, fontSize: 12 }}>{holdingsErr}</div>}
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ color: W.dim, textAlign: "left" }}>
+                          <th style={th}>PARTY</th>
+                          <th style={th}>AMOUNT</th>
                         </tr>
-                        {expanded === h.party && contracts.map((c) => (
-                          <tr key={c.contract_id} style={{ background: W.bg }}>
-                            <td style={{ ...td, paddingLeft: 34, fontFamily: wMono, color: W.mag, fontSize: 11 }}>
-                              └ {c.contract_id.slice(0, 16)}…
-                              {c.locked && <span style={{ color: W.warn, marginLeft: 8 }}>locked</span>}
-                            </td>
-                            <td style={{ ...td, fontFamily: wMono, color: W.text2 }}>{c.amount}</td>
-                          </tr>
+                      </thead>
+                      <tbody>
+                        {holdings.map((h, i) => (
+                          <>
+                            <tr
+                              key={i}
+                              onClick={() => toggleExpand(h.party)}
+                              style={{ cursor: "pointer", background: expanded === h.party ? W.surface2 : "transparent" }}
+                            >
+                              <td style={td}>
+                                <span style={{ color: W.brand, display: "inline-block", width: 14 }}>
+                                  {expanded === h.party ? "▾" : "▸"}
+                                </span>
+                                {shortParty(h.party)}
+                              </td>
+                              <td style={{ ...td, fontFamily: wMono }}>{h.amount}</td>
+                            </tr>
+                            {expanded === h.party && contracts.map((c) => (
+                              <tr key={c.contract_id} style={{ background: W.bg }}>
+                                <td style={{ ...td, paddingLeft: 34, fontFamily: wMono, color: W.mag, fontSize: 11 }}>
+                                  └ {c.contract_id.slice(0, 16)}…
+                                  {c.locked && <span style={{ color: W.warn, marginLeft: 8 }}>locked</span>}
+                                </td>
+                                <td style={{ ...td, fontFamily: wMono, color: W.text2 }}>{c.amount}</td>
+                              </tr>
+                            ))}
+                            {expanded === h.party && contracts.length === 0 && (
+                              <tr><td colSpan={2} style={{ ...td, paddingLeft: 34, color: W.dim, fontSize: 11 }}>loading contracts…</td></tr>
+                            )}
+                          </>
                         ))}
-                        {expanded === h.party && contracts.length === 0 && (
-                          <tr><td colSpan={2} style={{ ...td, paddingLeft: 34, color: W.dim, fontSize: 11 }}>loading contracts…</td></tr>
+                        {holdings.length === 0 && (
+                          <tr><td colSpan={2} style={{ ...td, color: W.dim }}>No holdings yet.</td></tr>
                         )}
-                      </>
-                    ))}
-                    {holdings.length === 0 && (
-                      <tr><td colSpan={2} style={{ ...td, color: W.dim }}>No holdings yet.</td></tr>
-                    )}
-                  </tbody>
-                </table>
+                      </tbody>
+                    </table>
+                  </>
+                )}
+
+                {detailTab === "activity" && (
+                  <ActivityFeed events={activity} err={activityErr} />
+                )}
               </>
               );
             })()}
@@ -631,6 +693,65 @@ function HolderDistribution({ s }: { s: InstrumentSummary }) {
         </tbody>
       </table>
     </>
+  );
+}
+
+// ActivityFeed — the instrument's transfer/mint/burn history (BIT-219
+// Activity tab), reconstructed from the ledger transaction stream. Each
+// row is one netted transaction: kind, amount, and who sent → received.
+function ActivityFeed({ events, err }: { events: ActivityEvent[] | null; err: string | null }) {
+  if (err) return <div role="alert" style={{ color: W.err, fontSize: 13, marginTop: 12 }}>{err}</div>;
+  if (events === null) return <div style={{ color: W.dim, fontSize: 13, marginTop: 12 }}>Scanning ledger history…</div>;
+  if (events.length === 0)
+    return <div style={{ color: W.dim, fontSize: 13, marginTop: 12 }}>No activity for this instrument yet.</div>;
+
+  const tone: Record<ActivityEvent["kind"], string> = {
+    mint: W.brand,
+    burn: W.err,
+    transfer: W.warn,
+  };
+  const fmtParties = (ps?: { party: string; amount: string }[]) =>
+    !ps || ps.length === 0
+      ? "·"
+      : ps.map((p) => `${shortParty(p.party)} ${p.amount}`).join(", ");
+  return (
+    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 12 }}>
+      <thead>
+        <tr style={{ color: W.dim, textAlign: "left" }}>
+          <th style={th}>TIME</th>
+          <th style={th}>KIND</th>
+          <th style={th}>AMOUNT</th>
+          <th style={th}>FROM</th>
+          <th style={th}>TO</th>
+        </tr>
+      </thead>
+      <tbody>
+        {events.map((e) => (
+          <tr key={e.offset}>
+            <td style={{ ...td, color: W.dim, fontSize: 11, fontFamily: wMono }}>
+              {e.record_time ? e.record_time.replace("T", " ").slice(0, 19) : `@${e.offset}`}
+            </td>
+            <td style={td}>
+              <span
+                style={{
+                  color: tone[e.kind],
+                  border: `1px solid ${tone[e.kind]}`,
+                  borderRadius: 4,
+                  padding: "1px 6px",
+                  fontSize: 11,
+                  textTransform: "uppercase",
+                }}
+              >
+                {e.kind}
+              </span>
+            </td>
+            <td style={{ ...td, fontFamily: wMono }}>{e.amount}</td>
+            <td style={{ ...td, fontFamily: wMono, color: W.text2 }}>{fmtParties(e.senders)}</td>
+            <td style={{ ...td, fontFamily: wMono, color: W.text2 }}>{fmtParties(e.receivers)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

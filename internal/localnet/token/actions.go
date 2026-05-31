@@ -130,6 +130,10 @@ type BalanceOptions struct {
 	Token    string
 	Role     string
 	Insecure bool
+
+	// Limit caps result counts on paged read paths (e.g. the activity
+	// feed). Zero means the caller's default applies.
+	Limit int
 }
 
 // maxHoldingsScan caps how many ACS contracts runBalanceLive will

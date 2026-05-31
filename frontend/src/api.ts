@@ -1198,6 +1198,43 @@ export const fetchInstrumentSummary = (
     )}&role=${encodeURIComponent(role)}`,
   ).then((r) => r.summary);
 
+// PartyDelta / ActivityEvent — the instrument activity feed (BIT-219
+// Activity tab). Each event is one ledger transaction netted into
+// senders/receivers + a kind (mint | burn | transfer), reconstructed
+// from HoldingV2 create/archive events (no off-ledger registry).
+export interface PartyDelta {
+  party: string;
+  amount: string;
+}
+
+export interface ActivityEvent {
+  offset: number;
+  update_id: string;
+  record_time: string;
+  instrument_id: string;
+  kind: "mint" | "burn" | "transfer";
+  amount: string;
+  senders?: PartyDelta[];
+  receivers?: PartyDelta[];
+}
+
+interface ActivityResponse {
+  schema_version: number;
+  events: ActivityEvent[];
+}
+
+export const fetchActivity = (
+  instance: string,
+  symbol: string,
+  role = "app-user",
+  limit = 50,
+) =>
+  apiFetch<ActivityResponse>(
+    `/api/tokens/${encodeURIComponent(symbol)}/activity?instance=${encodeURIComponent(
+      instance,
+    )}&role=${encodeURIComponent(role)}&limit=${limit}`,
+  ).then((r) => r.events);
+
 export const fetchHoldingContracts = (
   instance: string,
   symbol: string,
