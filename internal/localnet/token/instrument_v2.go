@@ -43,17 +43,22 @@ func ensureTokenRules(opts CreateOptions) error {
 	defer cleanup()
 
 	admin := opts.Issuer
+
+	// Auto-bundle the test-token DARs FIRST (BIT-216 #4) — findTokenRules
+	// filters the ACS by the #splice-test-token-v2 package name, which the
+	// participant rejects with PACKAGE_NAMES_NOT_FOUND until the package is
+	// vetted. Upload happens before any package-name-scoped query. No-op
+	// when already vetted.
+	if err := ensureTokenDARs(ctx, client, opts.Instance, nil); err != nil {
+		return err
+	}
+
 	existing, err := findTokenRules(ctx, client, admin)
 	if err != nil {
 		return fmt.Errorf("look up existing TokenRules: %w", err)
 	}
 	if existing != "" {
 		return nil // already anchored for this admin
-	}
-	// Auto-bundle the test-token DARs (BIT-216 #4) so the user never
-	// runs `dar upload` by hand. No-op when already vetted.
-	if err := ensureTokenDARs(ctx, client, opts.Instance, nil); err != nil {
-		return err
 	}
 	if _, err := createTokenRules(ctx, client, admin); err != nil {
 		return err
