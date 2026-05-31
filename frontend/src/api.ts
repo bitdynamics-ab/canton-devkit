@@ -1081,6 +1081,105 @@ export const fetchHoldings = (
   );
 };
 
+// BIT-219 token workspace — ACS-derived lenses (instrument discovery,
+// balance matrix, per-holding UTXO rows). These hit the live ledger;
+// when no endpoint is recorded the backend falls back to the recorded
+// token list (so `instruments` may be absent — callers handle both).
+
+// InstrumentRef is an on-chain-discovered instrument (workspace.go).
+export interface InstrumentRef {
+  admin: string;
+  instrument_id: string;
+  name?: string;
+  symbol?: string;
+  decimals?: number;
+  standard?: string; // "Splice Amulet" | "CIP-0112 v2"
+  on_ledger: boolean;
+}
+
+// HoldingContract is one HoldingV2 UTXO. A balance = sum of these.
+export interface HoldingContract {
+  contract_id: string;
+  party: string;
+  admin: string;
+  instrument_id: string;
+  amount: string;
+  locked: boolean;
+}
+
+export interface MatrixCell {
+  party: string;
+  instrument_id: string;
+  amount: string;
+}
+
+export interface BalanceMatrix {
+  parties: string[];
+  instruments: InstrumentRef[];
+  cells: MatrixCell[];
+  totals: MatrixCell[];
+}
+
+interface InstrumentsResponse {
+  schema_version: number;
+  instruments?: InstrumentRef[];
+  tokens?: TokenRef[]; // fallback shape when no live endpoint
+}
+
+interface MatrixResponse {
+  schema_version: number;
+  matrix: BalanceMatrix;
+}
+
+interface HoldingContractsResponse {
+  schema_version: number;
+  contracts: HoldingContract[];
+}
+
+// fetchInstruments returns ACS-discovered instruments. Falls back to the
+// recorded TokenRef list (mapped into InstrumentRef shape) when the
+// backend couldn't reach the ledger.
+export async function fetchInstruments(
+  instance: string,
+  role = "app-user",
+): Promise<InstrumentRef[]> {
+  const r = await apiFetch<InstrumentsResponse>(
+    `/api/tokens?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
+  );
+  if (r.instruments) return r.instruments;
+  return (r.tokens ?? []).map((t) => ({
+    admin: t.issuer_party,
+    instrument_id: t.instrument_id,
+    name: t.name,
+    symbol: t.symbol,
+    decimals: t.decimals,
+    standard: t.symbol === "Amulet" ? "Splice Amulet" : "CIP-0112 v2",
+    on_ledger: t.status === "on-ledger",
+  }));
+}
+
+export const fetchMatrix = (instance: string, role = "app-user") =>
+  apiFetch<MatrixResponse>(
+    `/api/tokens/matrix?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
+  ).then((r) => r.matrix);
+
+export const fetchHoldingContracts = (
+  instance: string,
+  symbol: string,
+  party: string,
+  role = "app-user",
+) => {
+  const params = new URLSearchParams({
+    instance,
+    role,
+    party,
+    expand: "contracts",
+  });
+  return apiFetch<HoldingContractsResponse>(
+    `/api/tokens/${encodeURIComponent(symbol)}/holdings?${params}`,
+  ).then((r) => r.contracts);
+};
+
 export interface TokenCreateInput {
   name: string;
   symbol: string;
