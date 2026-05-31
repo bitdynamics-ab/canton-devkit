@@ -3,6 +3,7 @@ package token
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"sort"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
@@ -325,4 +326,120 @@ func RunInstruments(ctx context.Context, opts BalanceOptions) ([]InstrumentRef, 
 		return nil, err
 	}
 	return ws.Instruments, nil
+}
+
+// HolderRow is one party's stake in an instrument: summed balance, how
+// many Holding contracts back it, and its share of total supply.
+type HolderRow struct {
+	Party         string `json:"party"`
+	Balance       string `json:"balance"`
+	ContractCount int    `json:"contract_count"`
+	PctOfSupply   string `json:"pct_of_supply"` // e.g. "99.4"
+}
+
+// InstrumentSummary is the instrument-first KPI view (BIT-219 lens 1):
+// total supply (= circulating, on a UTXO ledger), holder + contract
+// counts, and the per-holder distribution.
+type InstrumentSummary struct {
+	InstrumentID  string      `json:"instrument_id"`
+	Admin         string      `json:"admin"`
+	TotalSupply   string      `json:"total_supply"`
+	HolderCount   int         `json:"holder_count"`
+	ContractCount int         `json:"contract_count"`
+	Holders       []HolderRow `json:"holders"`
+}
+
+// RunInstrumentSummary scans the workspace and aggregates the holdings
+// of one instrument (opts.Instrument) into the KPI + distribution view.
+func RunInstrumentSummary(ctx context.Context, opts BalanceOptions) (*InstrumentSummary, error) {
+	if opts.Role == "" {
+		opts.Role = "app-user"
+	}
+	ws, err := scanWorkspace(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	return summarizeInstrument(ws, opts.Instrument), nil
+}
+
+// summarizeInstrument pivots a workspace scan into one instrument's
+// supply + per-holder distribution. Pure — unit-testable.
+func summarizeInstrument(ws *Workspace, instrumentID string) *InstrumentSummary {
+	bal := map[string]string{} // party → summed balance
+	cnt := map[string]int{}    // party → contract count
+	var admin string
+	total := ""
+	order := []string{}
+	for _, h := range ws.Holdings {
+		if h.InstrumentID != instrumentID {
+			continue
+		}
+		admin = h.Admin
+		if _, seen := bal[h.Party]; !seen {
+			order = append(order, h.Party)
+		}
+		if s, err := addDecimal(bal[h.Party], h.Amount); err == nil {
+			bal[h.Party] = s
+		}
+		cnt[h.Party]++
+		if s, err := addDecimal(total, h.Amount); err == nil {
+			total = s
+		}
+	}
+	totalF, _ := new(big.Float).SetString(zeroIfEmpty(total))
+	holders := make([]HolderRow, 0, len(order))
+	for _, p := range order {
+		holders = append(holders, HolderRow{
+			Party:         p,
+			Balance:       bal[p],
+			ContractCount: cnt[p],
+			PctOfSupply:   pctOf(bal[p], totalF),
+		})
+	}
+	// Descending by balance — biggest holder first.
+	sort.Slice(holders, func(i, j int) bool {
+		a, _ := new(big.Float).SetString(zeroIfEmpty(holders[i].Balance))
+		b, _ := new(big.Float).SetString(zeroIfEmpty(holders[j].Balance))
+		return a.Cmp(b) > 0
+	})
+	return &InstrumentSummary{
+		InstrumentID:  instrumentID,
+		Admin:         admin,
+		TotalSupply:   zeroIfEmpty(total),
+		HolderCount:   len(order),
+		ContractCount: countContracts(ws, instrumentID),
+		Holders:       holders,
+	}
+}
+
+func countContracts(ws *Workspace, instrumentID string) int {
+	n := 0
+	for _, h := range ws.Holdings {
+		if h.InstrumentID == instrumentID {
+			n++
+		}
+	}
+	return n
+}
+
+func zeroIfEmpty(s string) string {
+	if s == "" {
+		return "0"
+	}
+	return s
+}
+
+// pctOf returns balance/total*100 as a 1-decimal string, "0" when total
+// is zero.
+func pctOf(balance string, total *big.Float) string {
+	if total == nil || total.Sign() == 0 {
+		return "0"
+	}
+	b, ok := new(big.Float).SetString(zeroIfEmpty(balance))
+	if !ok {
+		return "0"
+	}
+	pct := new(big.Float).Quo(b, total)
+	pct.Mul(pct, big.NewFloat(100))
+	return pct.Text('f', 1)
 }

@@ -56,6 +56,22 @@ function stubFetch(tokens: Array<{ symbol: string; name: string }>) {
           },
         });
       }
+      if (url.startsWith("/api/tokens/") && url.includes("/summary")) {
+        return json({
+          schema_version: 1,
+          summary: {
+            instrument_id: "RTK",
+            admin: "alice::abc",
+            total_supply: "1275.0",
+            holder_count: 2,
+            contract_count: 3,
+            holders: [
+              { party: "bob::def", balance: "1275.0", contract_count: 3, pct_of_supply: "100.0" },
+              { party: "alice::abc", balance: "0.0", contract_count: 0, pct_of_supply: "0.0" },
+            ],
+          },
+        });
+      }
       if (url.startsWith("/api/tokens/") && url.includes("/holdings")) {
         return json({ schema_version: 1, holdings: [] });
       }
@@ -136,6 +152,20 @@ describe("TokensScreen", () => {
       { timeout: 4000 },
     );
     expect(screen.queryByText(/change/i)).toBeInTheDocument();
+  });
+
+  it("renders the instrument KPI strip and holder distribution", async () => {
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    // KPI strip — supply + holder/contract counts.
+    await waitFor(
+      () => expect(screen.queryAllByText(/Total supply/i).length).toBeGreaterThan(0),
+      { timeout: 4000 },
+    );
+    expect(screen.queryAllByText(/Holding contracts/i).length).toBeGreaterThan(0);
+    // Holder distribution table — share-of-supply.
+    expect(screen.queryAllByText(/Holder distribution/i).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/100\.0%/).length).toBeGreaterThan(0);
   });
 
   it("switches to the Holdings matrix lens and renders the pivot", async () => {

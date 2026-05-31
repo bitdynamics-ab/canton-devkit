@@ -6,6 +6,7 @@ import {
   fetchHoldingContracts,
   fetchHoldings,
   fetchInstruments,
+  fetchInstrumentSummary,
   fetchMatrix,
   mintToken,
   planTransfer,
@@ -13,6 +14,7 @@ import {
   type BalanceMatrix,
   type HoldingContract,
   type InstrumentRef,
+  type InstrumentSummary,
   type TokenHolding,
   type TokenRef,
 } from "../api";
@@ -70,6 +72,7 @@ export function TokensScreen() {
   const [contracts, setContracts] = useState<HoldingContract[]>([]);
   const [matrix, setMatrix] = useState<BalanceMatrix | null>(null);
   const [matrixErr, setMatrixErr] = useState<string | null>(null);
+  const [summary, setSummary] = useState<InstrumentSummary | null>(null);
 
   const [showCreate, setShowCreate] = useState(false);
   const [modal, setModal] = useState<
@@ -149,6 +152,27 @@ export function TokensScreen() {
         if (!cancelled) {
           setHoldingsErr(e instanceof ApiError ? e.message : "failed to load holdings");
         }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instance, activeSymbol, refreshTick]);
+
+  // Instrument-first KPI summary (BIT-219 lens 1): supply, holder +
+  // contract counts, holder distribution. One ACS scan; best-effort —
+  // a failure just hides the KPI strip, the holdings table still loads.
+  useEffect(() => {
+    if (!instance || !activeSymbol) {
+      setSummary(null);
+      return;
+    }
+    let cancelled = false;
+    fetchInstrumentSummary(instance, activeSymbol)
+      .then((s) => {
+        if (!cancelled) setSummary(s);
+      })
+      .catch(() => {
+        if (!cancelled) setSummary(null);
       });
     return () => {
       cancelled = true;
@@ -308,6 +332,9 @@ export function TokensScreen() {
                 <div style={{ color: W.dim, fontSize: 12, marginTop: 4, fontFamily: wMono }}>
                   admin {shortParty(active.admin)} · id {active.instrument_id}
                 </div>
+
+                {summary && <KpiRow s={summary} />}
+                {summary && summary.holders.length > 0 && <HolderDistribution s={summary} />}
 
                 <h4 style={{ color: W.text2, margin: "18px 0 8px" }}>
                   Holdings <span style={{ color: W.dim, fontWeight: 400, fontSize: 12 }}>· a balance is the sum of its Holding contracts — click a row to expand</span>
@@ -511,6 +538,99 @@ function TransferModal({
         </div>
       </form>
     </ModalShell>
+  );
+}
+
+// KpiRow — the instrument-first KPI strip (BIT-219 lens 1). Supply,
+// circulating (= supply on a UTXO ledger), holder count, and the number
+// of Holding contracts backing it. All derived from one ACS scan.
+function KpiRow({ s }: { s: InstrumentSummary }) {
+  const cards: Array<{ label: string; value: string; hint?: string }> = [
+    { label: "Total supply", value: s.total_supply },
+    { label: "In circulation", value: s.total_supply, hint: "sum of all holdings" },
+    { label: "Holders", value: String(s.holder_count) },
+    { label: "Holding contracts", value: String(s.contract_count), hint: "UTXOs" },
+  ];
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+        gap: 10,
+        margin: "16px 0 4px",
+      }}
+    >
+      {cards.map((c) => (
+        <div
+          key={c.label}
+          style={{
+            background: W.bg,
+            border: `1px solid ${W.border}`,
+            borderRadius: 8,
+            padding: "10px 12px",
+          }}
+        >
+          <div style={{ color: W.dim, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4 }}>
+            {c.label}
+          </div>
+          <div style={{ color: W.text, fontSize: 20, fontFamily: wMono, marginTop: 4 }}>{c.value}</div>
+          {c.hint && <div style={{ color: W.dim, fontSize: 10, marginTop: 2 }}>{c.hint}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// HolderDistribution — per-holder stake table (BIT-219 lens 1): balance,
+// share of supply (with an inline bar), and how many Holding contracts
+// back each holder. Sorted biggest-first by the backend.
+function HolderDistribution({ s }: { s: InstrumentSummary }) {
+  return (
+    <>
+      <h4 style={{ color: W.text2, margin: "16px 0 6px" }}>
+        Holder distribution{" "}
+        <span style={{ color: W.dim, fontWeight: 400, fontSize: 12 }}>· share of total supply</span>
+      </h4>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <thead>
+          <tr style={{ color: W.dim, textAlign: "left" }}>
+            <th style={th}>HOLDER</th>
+            <th style={th}>BALANCE</th>
+            <th style={th}>SHARE</th>
+            <th style={th}>UTXOS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {s.holders.map((h) => {
+            const pct = Number(h.pct_of_supply) || 0;
+            return (
+              <tr key={h.party}>
+                <td style={td}>{shortParty(h.party)}</td>
+                <td style={{ ...td, fontFamily: wMono }}>{h.balance}</td>
+                <td style={td}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ flex: 1, height: 6, background: W.surface2, borderRadius: 3, minWidth: 40 }}>
+                      <div
+                        style={{
+                          width: `${Math.min(100, pct)}%`,
+                          height: "100%",
+                          background: W.brand,
+                          borderRadius: 3,
+                        }}
+                      />
+                    </div>
+                    <span style={{ fontFamily: wMono, color: W.text2, fontSize: 12, minWidth: 44, textAlign: "right" }}>
+                      {h.pct_of_supply}%
+                    </span>
+                  </div>
+                </td>
+                <td style={{ ...td, fontFamily: wMono, color: W.text2 }}>{h.contract_count}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </>
   );
 }
 

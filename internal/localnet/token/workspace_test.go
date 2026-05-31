@@ -78,3 +78,52 @@ func cellAmount(cells []MatrixCell, party, inst string) string {
 	}
 	return ""
 }
+
+func TestSummarizeInstrument_KPIsAndDistribution(t *testing.T) {
+	// alice holds 17255 Amulet, bob holds 75.16 across 1 UTXO.
+	ws := &Workspace{Holdings: sampleHoldings()}
+	s := summarizeInstrument(ws, "Amulet")
+
+	if s.TotalSupply != "17330.16" {
+		t.Errorf("total supply: got %q, want 17330.16", s.TotalSupply)
+	}
+	if s.HolderCount != 2 {
+		t.Errorf("holder count: got %d, want 2", s.HolderCount)
+	}
+	if s.ContractCount != 2 {
+		t.Errorf("contract count: got %d, want 2", s.ContractCount)
+	}
+	// Holders sorted by balance desc — alice (17255) first.
+	if len(s.Holders) != 2 || s.Holders[0].Party != "alice" {
+		t.Fatalf("holders not sorted desc by balance: %+v", s.Holders)
+	}
+	if s.Holders[0].Balance != "17255.00" {
+		t.Errorf("alice balance: got %q, want 17255.00", s.Holders[0].Balance)
+	}
+	// alice ≈ 99.6% of supply.
+	if s.Holders[0].PctOfSupply != "99.6" {
+		t.Errorf("alice pct: got %q, want 99.6", s.Holders[0].PctOfSupply)
+	}
+}
+
+func TestSummarizeInstrument_MultiUTXOContractCount(t *testing.T) {
+	// bob holds MYT across 3 contracts; one holder, three contracts.
+	ws := &Workspace{Holdings: sampleHoldings()}
+	s := summarizeInstrument(ws, "MYT")
+	if s.HolderCount != 1 || s.ContractCount != 3 {
+		t.Errorf("MYT: holders=%d contracts=%d, want 1/3", s.HolderCount, s.ContractCount)
+	}
+	if s.Holders[0].PctOfSupply != "100.0" {
+		t.Errorf("sole holder pct: got %q, want 100.0", s.Holders[0].PctOfSupply)
+	}
+}
+
+func TestSummarizeInstrument_EmptyZeroSafe(t *testing.T) {
+	s := summarizeInstrument(&Workspace{}, "MYT")
+	if s.TotalSupply != "0" || s.HolderCount != 0 || s.ContractCount != 0 {
+		t.Errorf("empty workspace not zero-safe: %+v", s)
+	}
+	if len(s.Holders) != 0 {
+		t.Errorf("empty holders expected, got %+v", s.Holders)
+	}
+}

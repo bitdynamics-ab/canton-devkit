@@ -1163,6 +1163,41 @@ export const fetchMatrix = (instance: string, role = "app-user") =>
     `/api/tokens/matrix?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
   ).then((r) => r.matrix);
 
+// HolderRow / InstrumentSummary — the instrument-first KPI view
+// (BIT-219 lens 1). Supply + holder/contract counts + per-holder
+// distribution, derived from one ACS scan (workspace.go).
+export interface HolderRow {
+  party: string;
+  balance: string;
+  contract_count: number;
+  pct_of_supply: string;
+}
+
+export interface InstrumentSummary {
+  instrument_id: string;
+  admin: string;
+  total_supply: string;
+  holder_count: number;
+  contract_count: number;
+  holders: HolderRow[];
+}
+
+interface InstrumentSummaryResponse {
+  schema_version: number;
+  summary: InstrumentSummary;
+}
+
+export const fetchInstrumentSummary = (
+  instance: string,
+  symbol: string,
+  role = "app-user",
+) =>
+  apiFetch<InstrumentSummaryResponse>(
+    `/api/tokens/${encodeURIComponent(symbol)}/summary?instance=${encodeURIComponent(
+      instance,
+    )}&role=${encodeURIComponent(role)}`,
+  ).then((r) => r.summary);
+
 export const fetchHoldingContracts = (
   instance: string,
   symbol: string,

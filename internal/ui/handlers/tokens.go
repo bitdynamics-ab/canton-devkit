@@ -44,6 +44,7 @@ func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	mux.HandleFunc("GET /api/tokens", handleTokensList)
 	mux.HandleFunc("GET /api/tokens/matrix", handleTokenMatrix)
 	mux.HandleFunc("GET /api/tokens/{symbol}", handleTokenDetail)
+	mux.HandleFunc("GET /api/tokens/{symbol}/summary", handleTokenSummary)
 	mux.HandleFunc("GET /api/tokens/{symbol}/holdings", handleTokenHoldings)
 	// State-changing POSTs are wrapped with Idempotency-Key dedup so a
 	// client retry can't mint/transfer/burn twice (opt-in: only requests
@@ -136,6 +137,45 @@ func handleTokenDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, ref)
+}
+
+// handleTokenSummary returns the instrument-first KPI view (BIT-219
+// lens 1): total supply, holder + holding-contract counts, and the
+// per-holder distribution with share-of-supply. ACS-derived, same live
+// endpoint as the matrix.
+func handleTokenSummary(w http.ResponseWriter, r *http.Request) {
+	instance, err := instanceFromQuery(r)
+	if err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	role := roleFromQuery(r)
+	ep := liveLedgerEndpoint(instance, role)
+	if ep == "" {
+		writeErrorWithCode(w, http.StatusServiceUnavailable, "PARTICIPANT_PORT_NOT_RECORDED",
+			"no live ledger endpoint for instance "+instance+" — restart it so ports are captured")
+		return
+	}
+	// Resolve the symbol to its on-ledger instrument id so the scan's
+	// per-holding instrumentId filter lines up (the workspace keys on
+	// instrument_id, which for our native tokens == symbol).
+	sym := r.PathValue("symbol")
+	instrumentID := sym
+	if ref, rerr := token.ResolveBySymbol(instance, sym); rerr == nil && ref.InstrumentID != "" {
+		instrumentID = ref.InstrumentID
+	}
+	summary, err := token.RunInstrumentSummary(r.Context(), token.BalanceOptions{
+		Instance: instance, Role: role, Insecure: true, Endpoint: ep,
+		Instrument: instrumentID,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "instrument summary", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema_version": types.SchemaVersion,
+		"summary":        summary,
+	})
 }
 
 func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
