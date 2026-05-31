@@ -115,6 +115,13 @@ Optional `--profile observability` adds **Prometheus + Grafana** with a curated 
 > Docker prerequisites, compatibility matrix, troubleshooting, and a
 > zero-to-running LocalNet guide — lives in
 > [docs/getting-started.md](docs/getting-started.md).
+>
+> **Docs index:** [Getting started](docs/getting-started.md) ·
+> [Tokens (CIP-0112 / V2)](docs/tokens.md) ·
+> [FAQ](docs/faq.md) ·
+> [Troubleshooting](docs/troubleshooting.md) ·
+> [Versions](docs/versions.md) ·
+> [Limitations](docs/limitations.md)
 
 ### 1 · Install
 
