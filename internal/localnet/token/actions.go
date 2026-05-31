@@ -654,7 +654,10 @@ func emit(out io.Writer, verb string, payload map[string]any) {
 	if out == nil {
 		return
 	}
-	_, _ = fmt.Fprintf(out, "Planned %s: ", verb)
+	// "<verb>: {json}" reads naturally for both pre-submit ("transfer:")
+	// and result ("burn complete:") verbs — the older "Planned %s" prefix
+	// mislabelled completions as "Planned mint complete".
+	_, _ = fmt.Fprintf(out, "%s: ", verb)
 	enc := json.NewEncoder(out)
 	_ = enc.Encode(payload) // includes trailing newline
 }

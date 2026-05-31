@@ -16,14 +16,21 @@ func Build() *cobra.Command {
 		Short: "Create and manage Canton Token Standard V2 instruments on LocalNet",
 		Long: `Manage Token Standard V2 token instruments on a LocalNet instance.
 
-The subcommands wrap the upstream V2 flow ([HoldingV2], TransferInstructionV2,
-BurnMintV1) for the convenience of a local developer: create a fresh
-issuer-managed instrument, mint/transfer/burn holdings, query balances.
+The subcommands wrap the upstream V2 flow ([HoldingV2], TransferInstructionV2)
+for the convenience of a local developer: create a fresh issuer-managed
+instrument, mint/transfer/burn holdings, fund parties, and query balances —
+all by party alias, with no JWTs, ports, or contract ids in your face.
 
 V2 only — V1 / CIP-0056 is not supported by this CLI. Selecting an
 alpha-channel Splice version with the --profile tokens-v2 overlay is
 required for the on-ledger surfaces to function (see "localnet versions"
 + "localnet up --profile tokens-v2").
+
+Quick start (on a running V2 instance):
+  token create  --instance <i> --endpoint <p> --non-interactive --name … --symbol …
+  token mint    --instance <i> --endpoint <p> --instrument <sym> --to <party> --amount …
+  token balances --instance <i> --endpoint <p>          # everyone's holdings at a glance
+  token party new <alias> --instance <i> --endpoint <p> # name a party once, use it everywhere
 
 [HoldingV2]: https://github.com/canton-network/splice/blob/token-standard-v2-upcoming/token-standard/splice-api-token-holding-v2/daml/Splice/Api/Token/HoldingV2.daml`,
 	}

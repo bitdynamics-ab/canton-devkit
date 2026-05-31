@@ -657,7 +657,7 @@ function TransferModal({
                   <span style={{ color: W.text2 }}>→ {shortParty(to || from)} receive</span>
                   <span style={{ color: W.ok }}>+{amount}</span>
                 </div>
-                {plan.change !== "0.0000000000" && (
+                {Number(plan.change) > 0 && (
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span style={{ color: W.text2 }}>→ {shortParty(from)} change</span>
                     <span style={{ color: W.ok }}>+{plan.change}</span>
