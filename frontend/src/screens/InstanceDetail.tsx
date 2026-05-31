@@ -3,9 +3,11 @@ import {
   ApiError,
   type Instance,
   fetchInstance,
+  pauseInstance,
   resumeInstance,
   scrubInstance,
   stopInstance,
+  unpauseInstance,
 } from "../api";
 import { W, wMono } from "../tokens";
 import { BackupRestore } from "./BackupRestore";
@@ -69,6 +71,34 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "failed to stop";
       setStopping({ kind: "err", message: msg });
+      setRefetchTick((n) => n + 1);
+      onChanged?.();
+    }
+  }
+
+  async function onPause() {
+    setStopping({ kind: "running" });
+    try {
+      await pauseInstance(name);
+      setStopping({ kind: "idle" });
+      setRefetchTick((n) => n + 1);
+      onChanged?.();
+    } catch (e) {
+      setStopping({ kind: "err", message: e instanceof ApiError ? e.message : "failed to pause" });
+      setRefetchTick((n) => n + 1);
+      onChanged?.();
+    }
+  }
+
+  async function onResume() {
+    setStopping({ kind: "running" });
+    try {
+      await unpauseInstance(name);
+      setStopping({ kind: "idle" });
+      setRefetchTick((n) => n + 1);
+      onChanged?.();
+    } catch (e) {
+      setStopping({ kind: "err", message: e instanceof ApiError ? e.message : "failed to resume" });
       setRefetchTick((n) => n + 1);
       onChanged?.();
     }
@@ -182,6 +212,8 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
             busy={stopping.kind === "running"}
             onStart={onStart}
             onStop={onStop}
+            onPause={onPause}
+            onResume={onResume}
             onRemove={onRemove}
           />
         )}
@@ -281,24 +313,60 @@ function ActionButton({
   busy,
   onStart,
   onStop,
+  onPause,
+  onResume,
   onRemove,
 }: {
   status: string;
   busy: boolean;
   onStart: () => void;
   onStop: () => void;
+  onPause: () => void;
+  onResume: () => void;
   onRemove: () => void;
 }) {
   if (status === "running") {
     return (
-      <button
-        onClick={onStop}
-        disabled={busy}
-        title="Bring containers down via docker compose. Data volumes preserved."
-        style={btnStyle(W.err, busy)}
-      >
-        {busy ? "Stopping…" : "⏹ Stop"}
-      </button>
+      <div style={{ display: "flex", gap: 6 }}>
+        <button
+          onClick={onPause}
+          disabled={busy}
+          title="Freeze containers (docker compose pause) — hold state + ports, free CPU. Resume is instant."
+          style={btnStyle(W.warn, busy)}
+        >
+          {busy ? "…" : "⏸ Pause"}
+        </button>
+        <button
+          onClick={onStop}
+          disabled={busy}
+          title="Bring containers down via docker compose. Data volumes preserved."
+          style={btnStyle(W.err, busy)}
+        >
+          {busy ? "Stopping…" : "⏹ Stop"}
+        </button>
+      </div>
+    );
+  }
+  if (status === "paused") {
+    return (
+      <div style={{ display: "flex", gap: 6 }}>
+        <button
+          onClick={onResume}
+          disabled={busy}
+          title="Resume frozen containers (docker compose unpause) — no boot cost."
+          style={btnStyle(W.brand, busy)}
+        >
+          {busy ? "…" : "▶ Resume"}
+        </button>
+        <button
+          onClick={onStop}
+          disabled={busy}
+          title="Bring containers down via docker compose. Data volumes preserved."
+          style={btnStyle(W.err, busy)}
+        >
+          {busy ? "Stopping…" : "⏹ Stop"}
+        </button>
+      </div>
     );
   }
   if (status === "failed" || status === "partial") {

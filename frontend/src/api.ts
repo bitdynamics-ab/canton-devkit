@@ -825,6 +825,34 @@ export async function stopInstance(name: string, keepData = false): Promise<void
   }
 }
 
+// pauseInstance / resumeInstance invoke POST /api/instances/{name}/pause
+// | /resume — docker compose pause/unpause (BIT-175). Near-instant; 204
+// on success. Pause is valid only when running, resume only when paused.
+export async function pauseInstance(name: string): Promise<void> {
+  await postInstanceAction(name, "pause");
+}
+
+export async function unpauseInstance(name: string): Promise<void> {
+  await postInstanceAction(name, "resume");
+}
+
+async function postInstanceAction(name: string, action: string): Promise<void> {
+  const resp = await fetch(
+    `/api/instances/${encodeURIComponent(name)}/${action}`,
+    { method: "POST" },
+  );
+  if (!resp.ok) {
+    const text = await resp.text();
+    let body: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try {
+      body = JSON.parse(text);
+    } catch {
+      /* non-JSON; keep default */
+    }
+    throw new ApiError(resp.status, body);
+  }
+}
+
 // scrubInstance invokes DELETE /api/instances/{name} — removes the
 // registry entry entirely. Use for cleanup of zombie creating
 // entries (e.g. server restart killed the goroutine mid-up,
