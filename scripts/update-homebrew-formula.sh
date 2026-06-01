@@ -10,7 +10,7 @@
 #
 # What it does:
 #   1. Validates the tag exists on public GitHub Releases.
-#   2. Downloads the SHA256SUMS file from the release and extracts the
+#   2. Downloads the checksums.txt file from the release and extracts the
 #      checksums for the darwin_arm64 and linux_amd64 tarballs.
 #   3. Rewrites version + the two sha256 fields in the public builds repo's
 #      Formula/canton-devkit.rb.
@@ -38,21 +38,21 @@ if [[ ! -f "$formula" ]]; then
   exit 1
 fi
 
-# Pull SHA256SUMS from the release. `gh release view --json` doesn't
+# Pull checksums.txt from the release. `gh release view --json` doesn't
 # include asset contents, so download via the asset URL directly.
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
-echo "Fetching SHA256SUMS from $repo $tag..."
-gh release download "$tag" -R "$repo" -p SHA256SUMS -D "$tmpdir"
+echo "Fetching checksums.txt from $repo $tag..."
+gh release download "$tag" -R "$repo" -p checksums.txt -D "$tmpdir"
 
-sha_darwin=$(grep "_${tag}_darwin_arm64.tar.gz$" "$tmpdir/SHA256SUMS" | awk '{print $1}')
-sha_linux=$(grep "_${tag}_linux_amd64.tar.gz$"  "$tmpdir/SHA256SUMS" | awk '{print $1}')
+sha_darwin=$(grep "_${tag}_darwin_arm64.tar.gz$" "$tmpdir/checksums.txt" | awk '{print $1}')
+sha_linux=$(grep "_${tag}_linux_amd64.tar.gz$"  "$tmpdir/checksums.txt" | awk '{print $1}')
 
 if [[ -z "$sha_darwin" || -z "$sha_linux" ]]; then
-  echo "error: could not locate darwin/arm64 or linux/amd64 entry in SHA256SUMS" >&2
-  echo "SHA256SUMS contents:" >&2
-  cat "$tmpdir/SHA256SUMS" >&2
+  echo "error: could not locate darwin/arm64 or linux/amd64 entry in checksums.txt" >&2
+  echo "checksums.txt contents:" >&2
+  cat "$tmpdir/checksums.txt" >&2
   exit 1
 fi
 
