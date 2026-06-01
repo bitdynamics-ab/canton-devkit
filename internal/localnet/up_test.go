@@ -200,6 +200,46 @@ func TestRunUp_HappyPath_FakeDriven(t *testing.T) {
 	}
 }
 
+func TestRunUp_AlphaVersionWarns(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+
+	projectDir := t.TempDir()
+	envDir := filepath.Join(projectDir, "env")
+	if err := os.MkdirAll(envDir, 0o755); err != nil {
+		t.Fatalf("mkdir env: %v", err)
+	}
+	for name, body := range map[string]string{
+		"sv-auth-on.env":           "AUTH_SV_VALIDATOR_USER_NAME=sv-user\nAUTH_SV_AUDIENCE=sv-aud\n",
+		"app-provider-auth-on.env": "AUTH_APP_PROVIDER_VALIDATOR_USER_NAME=ap-user\nAUTH_APP_PROVIDER_AUDIENCE=ap-aud\n",
+		"app-user-auth-on.env":     "AUTH_APP_USER_VALIDATOR_USER_NAME=au-user\nAUTH_APP_USER_AUDIENCE=au-aud\n",
+	} {
+		if err := os.WriteFile(filepath.Join(envDir, name), []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	var out, errBuf bytes.Buffer
+	code := RunUp(context.Background(),
+		&TextProgress{OutW: &out, ErrW: &errBuf},
+		&UpOptions{
+			Name:          "alpha-warn",
+			Version:       "token-standard-v2",
+			SkipPreflight: true,
+			FetchFn: func(_ context.Context, _ splice.Version, _ string, _ io.Writer) (string, error) {
+				return projectDir, nil
+			},
+			NewRunner: func(string, []string, []string, []string, string, io.Writer) composeOps {
+				return &composeRunnerStub{}
+			},
+		})
+	if code != ExitSuccess {
+		t.Fatalf("RunUp = %d, want ExitSuccess\nstdout=%q\nstderr=%q", code, out.String(), errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), `selecting alpha-channel Splice "token-standard-v2"`) {
+		t.Errorf("stderr missing alpha warning\nfull:\n%s", errBuf.String())
+	}
+}
+
 // TestRunUp_UncuratedTagWithoutOptInRejected locks in the security
 // floor of the two-layer version model (PR #20 #2): without
 // --allow-uncurated, a tag that isn't in the curated catalogue must
