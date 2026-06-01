@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Update Formula/canton-devkit.rb to point at the tarballs of a published
-# release. Run after `gh release create vX.Y.Z` once the binaries job has
-# uploaded its artifacts.
+# release. Run after the release workflow has uploaded public artifacts to
+# bitdynamics-ab/canton-devkit-builds.
 #
 # Usage:
 #   scripts/update-homebrew-formula.sh vX.Y.Z
 #
 # What it does:
-#   1. Validates the tag exists on GitHub Releases.
+#   1. Validates the tag exists on public GitHub Releases.
 #   2. Downloads the SHA256SUMS file from the release and extracts the
 #      checksums for the darwin_arm64 and linux_amd64 tarballs.
 #   3. Rewrites version + the two sha256 fields in Formula/canton-devkit.rb.
@@ -25,7 +25,7 @@ fi
 
 tag="$1"
 version="${tag#v}"
-repo="bitdynamics-ab/canton-devkit"
+repo="bitdynamics-ab/canton-devkit-builds"
 formula="Formula/canton-devkit.rb"
 
 if [[ ! -f "$formula" ]]; then
