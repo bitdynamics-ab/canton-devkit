@@ -38,9 +38,8 @@ Counters are merged into a weekly aggregate with no per-invocation row.
 We learn *"this week saw N `up` invocations from arm64/darwin"* — and
 nothing else.
 
-This kills the GitHub-CLI-2.91 device-id behavioral-profile critique
-outright, and removes any legal/GDPR exposure because no personal
-data is ever collected.
+This removes any legal/GDPR exposure because no personal data is ever 
+collected.
 
 ### 3. Counter taxonomy (v1, ten slots)
 
