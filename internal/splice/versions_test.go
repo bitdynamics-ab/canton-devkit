@@ -34,6 +34,34 @@ func TestAlphaChannelEntryShape(t *testing.T) {
 	}
 }
 
+func TestTokenStandardV2CatalogueEntry(t *testing.T) {
+	v, err := Resolve("token-standard-v2")
+	if err != nil {
+		t.Fatalf("Resolve(token-standard-v2): %v", err)
+	}
+	if v.Commit != "de911e38af78ec79b6f0e6a9515e104b1e4c3d62" {
+		t.Errorf("Commit = %q", v.Commit)
+	}
+	if v.ContentSHA != "4fae533b28de046360524c0e4b9d56a5799865bfff6007b5372959bf150165c7" {
+		t.Errorf("ContentSHA = %q", v.ContentSHA)
+	}
+	if v.Size != 154042565 {
+		t.Errorf("Size = %d", v.Size)
+	}
+	if v.Major != "0.6" {
+		t.Errorf("Major = %q", v.Major)
+	}
+	if v.Channel != "alpha" {
+		t.Errorf("Channel = %q", v.Channel)
+	}
+	if !v.IsAlpha() {
+		t.Error("IsAlpha() = false, want true")
+	}
+	if v.ImageRepo != "ghcr.io/digital-asset/decentralized-canton-sync-dev/docker" {
+		t.Errorf("ImageRepo = %q", v.ImageRepo)
+	}
+}
+
 func TestResolveSupportedTag(t *testing.T) {
 	for tag := range SupportedVersions {
 		v, err := Resolve(tag)
