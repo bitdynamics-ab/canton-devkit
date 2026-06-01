@@ -26,3 +26,25 @@ func adapterFor(v splice.Version) (splice.Adapter, error) {
 			v.Major, v.Tag)
 	}
 }
+
+// CoreServicesFor resolves the BIT-222 core-services list (compose
+// service names whose absence collapses the reconciler's evalStatus
+// to `failed`) for a given persisted splice_version. Returns nil
+// when the version isn't resolvable — callers treat nil as "skip the
+// core-services check" to preserve back-compat with registry entries
+// whose splice_version has been renamed or removed.
+//
+// Exported here so handlers (which can't see adapterFor) have a
+// single-call entry point and keep the adapter-resolver invariants
+// in one place rather than scattered across packages.
+func CoreServicesFor(spliceVersion string) []string {
+	v, err := splice.Resolve(spliceVersion)
+	if err != nil {
+		return nil
+	}
+	a, err := adapterFor(v)
+	if err != nil {
+		return nil
+	}
+	return a.CoreServices()
+}
