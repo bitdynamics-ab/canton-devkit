@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
-# Update Formula/canton-devkit.rb to point at the tarballs of a published
-# release. Run after the release workflow has uploaded public artifacts to
-# bitdynamics-ab/canton-devkit-builds.
+# Update the public builds repo Homebrew formula to point at the tarballs of a
+# published release. Run after the release workflow has uploaded public
+# artifacts to bitdynamics-ab/canton-devkit-builds.
 #
 # Usage:
-#   scripts/update-homebrew-formula.sh vX.Y.Z
+#   scripts/update-homebrew-formula.sh vX.Y.Z [path/to/canton-devkit-builds]
+#
+# If the builds repo path is omitted, the script uses ../canton-devkit-builds.
 #
 # What it does:
 #   1. Validates the tag exists on public GitHub Releases.
 #   2. Downloads the SHA256SUMS file from the release and extracts the
 #      checksums for the darwin_arm64 and linux_amd64 tarballs.
-#   3. Rewrites version + the two sha256 fields in Formula/canton-devkit.rb.
+#   3. Rewrites version + the two sha256 fields in the public builds repo's
+#      Formula/canton-devkit.rb.
 #   4. Prints a diff and the proposed commit message.
 #
-# Does NOT commit or push — that's a deliberate maintainer step. Run
-# `git diff Formula/canton-devkit.rb` first, then commit.
+# Does NOT commit or push — that's a deliberate maintainer step. Review the
+# public builds repo diff first, then commit there.
 
 set -euo pipefail
 
@@ -26,10 +29,12 @@ fi
 tag="$1"
 version="${tag#v}"
 repo="bitdynamics-ab/canton-devkit-builds"
-formula="Formula/canton-devkit.rb"
+builds_repo_path="${2:-../canton-devkit-builds}"
+formula="$builds_repo_path/Formula/canton-devkit.rb"
 
 if [[ ! -f "$formula" ]]; then
-  echo "error: $formula not found (run from repo root)" >&2
+  echo "error: $formula not found" >&2
+  echo "usage: $0 <tag> [path/to/canton-devkit-builds]" >&2
   exit 1
 fi
 
@@ -71,8 +76,9 @@ mv "$tmpdir/formula.new" "$formula"
 
 echo
 echo "--- $formula updated; diff: ---"
-git --no-pager diff "$formula" || true
+git -C "$builds_repo_path" --no-pager diff -- Formula/canton-devkit.rb || true
 echo
 echo "Suggested commit:"
-echo "  git add $formula"
+echo "  cd $builds_repo_path"
+echo "  git add Formula/canton-devkit.rb"
 echo "  git commit -m 'chore: bump Homebrew formula to $tag'"
