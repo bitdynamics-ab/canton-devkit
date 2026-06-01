@@ -3,10 +3,17 @@ package handlers
 import (
 	"context"
 	"log"
+	"sort"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
+
+// captureCantonPorts is a test seam wrapping localnet.CaptureCantonPorts.
+// Tests override this var to feed deterministic port maps without
+// shelling out to docker. Production uses the real implementation.
+var captureCantonPorts = localnet.CaptureCantonPorts
 
 // BIT-177 — adopt/resync from docker.
 //
@@ -141,7 +148,25 @@ func ReconcileOne(ctx context.Context, name string) (old, neu registry.Status, c
 	}
 
 	newStatus := evalStatus(state.Status, probed)
-	if newStatus == state.Status {
+
+	// BIT-221: when canton is up (or going up), re-capture the 9
+	// participant ports the screens dial. If `canton` was recreated
+	// since the last bring-up (clean restart, OOM restart, etc.)
+	// docker reassigned its ephemeral host ports — but BIT-190's
+	// capture-on-WaitForHealthy never gets a second chance to update
+	// state.Ports. Without this the Explorer / DAR / contracts
+	// handlers happily 502 against a port that's been closed for
+	// minutes while the reconciler reports `running`.
+	//
+	// We refresh ports BEFORE the status-changed early return so the
+	// common case (cached=running, newStatus=running, only ports
+	// drifted) gets the fix too.
+	portsChanged := false
+	if newStatus == registry.StatusRunning && state.ComposeProject != "" {
+		portsChanged = refreshCantonPorts(ctx, state, name)
+	}
+
+	if newStatus == state.Status && !portsChanged {
 		return state.Status, state.Status, false
 	}
 
@@ -151,9 +176,43 @@ func ReconcileOne(ctx context.Context, name string) (old, neu registry.Status, c
 		log.Printf("reconciler: write %s status=%s: %v", name, newStatus, err)
 		return oldStatus, oldStatus, false
 	}
-	log.Printf("reconciler: %s status %s → %s (docker truth: %d containers)",
-		name, oldStatus, newStatus, len(probed))
-	return oldStatus, newStatus, true
+	if oldStatus != newStatus {
+		log.Printf("reconciler: %s status %s → %s (docker truth: %d containers)",
+			name, oldStatus, newStatus, len(probed))
+	}
+	return oldStatus, newStatus, oldStatus != newStatus || portsChanged
+}
+
+// refreshCantonPorts probes `docker compose port` for the 9 canonical
+// canton participant ports and updates state.Ports in place with any
+// diff. Returns true when at least one port changed.
+//
+// Probe failures are tolerated — `localnet.CaptureCantonPorts` is
+// best-effort (a port that fails to query is OMITTED from the result
+// rather than returned as 0). Missing keys leave the cached value
+// alone, matching that contract — better to render stale than to
+// blank out ports on a transient docker hiccup.
+func refreshCantonPorts(ctx context.Context, state *registry.State, name string) bool {
+	live := captureCantonPorts(ctx, state.ComposeProject)
+	if len(live) == 0 {
+		return false
+	}
+	if state.Ports == nil {
+		state.Ports = make(map[string]int, len(live))
+	}
+	changedKeys := make([]string, 0, 4)
+	for key, port := range live {
+		if state.Ports[key] != port {
+			changedKeys = append(changedKeys, key)
+			state.Ports[key] = port
+		}
+	}
+	if len(changedKeys) == 0 {
+		return false
+	}
+	sort.Strings(changedKeys)
+	log.Printf("reconciler: %s canton ports drifted: %v", name, changedKeys)
+	return true
 }
 
 // evalStatus maps a docker-compose-ps snapshot to the registry

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"testing"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
@@ -96,4 +97,134 @@ func TestEvalStatus(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRefreshCantonPorts pins the BIT-221 fix: when canton has been
+// recreated and ephemeral host ports drifted, the reconciler must
+// rewrite state.Ports with the live capture, regardless of whether
+// the high-level status changed.
+//
+// The motivating bug: v2-canton restarts (clean exit 0 → docker
+// recreates → new ports) while the reconciler still sees the same
+// "all-healthy" snapshot before AND after. Status doesn't flip;
+// without this fix Explorer / DAR / contracts 502 against the closed
+// old port for the entire 15s reconcile interval (or forever if the
+// container never goes unhealthy in between).
+func TestRefreshCantonPorts(t *testing.T) {
+	t.Run("stale canton ports overwritten with live capture", func(t *testing.T) {
+		state := &registry.State{
+			ComposeProject: "canton-v2",
+			Ports: map[string]int{
+				"participant_admin_app-user":      58953, // stale
+				"participant_ledger_app-user":     58955, // stale
+				"participant_json_app-user":       58956,
+				"app_user_ui":                     65320, // NOT a canton port — must not be touched
+				"participant_admin_app-provider":  58954,
+				"participant_ledger_app-provider": 58952,
+				"participant_json_app-provider":   58957,
+				"participant_admin_sv":            58950,
+				"participant_ledger_sv":           58949,
+				"participant_json_sv":             58951,
+			},
+		}
+
+		origCapture := captureCantonPorts
+		t.Cleanup(func() { captureCantonPorts = origCapture })
+		captureCantonPorts = func(_ context.Context, project string) map[string]int {
+			if project != "canton-v2" {
+				t.Errorf("captureCantonPorts got project %q, want canton-v2", project)
+			}
+			return map[string]int{
+				"participant_admin_app-user":      61252,
+				"participant_ledger_app-user":     61247,
+				"participant_json_app-user":       61246,
+				"participant_admin_app-provider":  61253,
+				"participant_ledger_app-provider": 61248,
+				"participant_json_app-provider":   61249,
+				"participant_admin_sv":            61251,
+				"participant_ledger_sv":           61244,
+				"participant_json_sv":             61245,
+			}
+		}
+
+		changed := refreshCantonPorts(context.Background(), state, "v2")
+		if !changed {
+			t.Fatal("refreshCantonPorts returned false on a drifted port set")
+		}
+		if state.Ports["participant_admin_app-user"] != 61252 {
+			t.Errorf("admin app-user = %d, want 61252", state.Ports["participant_admin_app-user"])
+		}
+		if state.Ports["participant_ledger_app-user"] != 61247 {
+			t.Errorf("ledger app-user = %d, want 61247", state.Ports["participant_ledger_app-user"])
+		}
+		if state.Ports["app_user_ui"] != 65320 {
+			t.Errorf("app_user_ui = %d, want 65320 (must not be touched)", state.Ports["app_user_ui"])
+		}
+	})
+
+	t.Run("no diff returns false", func(t *testing.T) {
+		state := &registry.State{
+			ComposeProject: "canton-v2",
+			Ports: map[string]int{
+				"participant_admin_app-user":  61252,
+				"participant_ledger_app-user": 61247,
+			},
+		}
+		origCapture := captureCantonPorts
+		t.Cleanup(func() { captureCantonPorts = origCapture })
+		captureCantonPorts = func(context.Context, string) map[string]int {
+			return map[string]int{
+				"participant_admin_app-user":  61252,
+				"participant_ledger_app-user": 61247,
+			}
+		}
+		if refreshCantonPorts(context.Background(), state, "v2") {
+			t.Error("refreshCantonPorts returned true when nothing diffed")
+		}
+	})
+
+	t.Run("probe failure (empty map) leaves cached ports alone", func(t *testing.T) {
+		state := &registry.State{
+			ComposeProject: "canton-v2",
+			Ports: map[string]int{
+				"participant_admin_app-user": 99999,
+			},
+		}
+		origCapture := captureCantonPorts
+		t.Cleanup(func() { captureCantonPorts = origCapture })
+		captureCantonPorts = func(context.Context, string) map[string]int { return nil }
+		if refreshCantonPorts(context.Background(), state, "v2") {
+			t.Error("refreshCantonPorts returned true on empty live capture")
+		}
+		if state.Ports["participant_admin_app-user"] != 99999 {
+			t.Errorf("port was clobbered to %d on probe failure", state.Ports["participant_admin_app-user"])
+		}
+	})
+
+	t.Run("partial probe keeps cached for missing keys", func(t *testing.T) {
+		state := &registry.State{
+			ComposeProject: "canton-v2",
+			Ports: map[string]int{
+				"participant_admin_app-user":  58953,
+				"participant_ledger_app-user": 58955,
+			},
+		}
+		origCapture := captureCantonPorts
+		t.Cleanup(func() { captureCantonPorts = origCapture })
+		captureCantonPorts = func(context.Context, string) map[string]int {
+			// Only admin probe succeeded — the contract from
+			// canton_ports.go is "missing key = I don't know,
+			// leave cached value alone."
+			return map[string]int{"participant_admin_app-user": 61252}
+		}
+		if !refreshCantonPorts(context.Background(), state, "v2") {
+			t.Fatal("admin drifted but refresh returned false")
+		}
+		if state.Ports["participant_admin_app-user"] != 61252 {
+			t.Errorf("admin = %d, want 61252", state.Ports["participant_admin_app-user"])
+		}
+		if state.Ports["participant_ledger_app-user"] != 58955 {
+			t.Errorf("ledger clobbered to %d; want cached 58955 to survive", state.Ports["participant_ledger_app-user"])
+		}
+	})
 }
