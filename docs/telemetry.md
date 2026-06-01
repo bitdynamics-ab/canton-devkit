@@ -1,85 +1,104 @@
 # Telemetry
 
-canton-devkit collects **anonymous, aggregate** usage data to guide
-development and report ecosystem adoption (Milestone 4). This page
-documents exactly what is collected, how to turn it off, and how to audit
-it. You can always see precisely what's queued with:
+canton-devkit records **anonymous, aggregate usage counters** — merged
+into a weekly total with **no per-invocation rows and no identifiers of
+any kind** — to help the team see what's used and what breaks. See the
+full design at [docs/proposals/telemetry.md](proposals/telemetry.md).
+
+Inspect exactly what's queued any time:
 
 ```bash
-canton-devkit localnet telemetry status
+canton-devkit telemetry preview
 ```
 
 ## On by default (opt-out)
 
-Telemetry is **enabled by default**. The first time a command runs, a
-one-time notice is printed explaining this and how to opt out. Disable it
-any time — your choice persists:
+Telemetry is **on by default**. The first time you run an operational
+command in an interactive terminal, a one-time notice explains this. Turn
+it off any time — your choice persists:
 
 ```bash
-canton-devkit localnet telemetry off      # disable (persists)
-canton-devkit localnet telemetry on       # re-enable
+canton-devkit telemetry off      # disable (persists)
+canton-devkit telemetry on       # re-enable
 
 # or, per-invocation / environment-wide, without writing config:
-export CANTON_DEVKIT_TELEMETRY=0           # also: false / off / no
-export DO_NOT_TRACK=1                       # the community standard
+export DPM_TELEMETRY=off          # also: on
+export DO_NOT_TRACK=1             # the community standard — always wins
 ```
 
-An env override always wins over the persisted setting.
+Precedence (highest first): `DO_NOT_TRACK` → `DPM_TELEMETRY` → config file
+→ default on.
 
-## What is collected
+## What is collected — counters only
 
-Each record is a single, aggregate event:
+A closed, compile-time-enforced allow-list of ten counters. Each is a
+`chart` with a small set of `buckets`; we keep weekly **counts** per
+bucket and nothing else:
 
-| Field | Example | Why |
-|---|---|---|
-| `event` | `command` | event type |
-| `command` | `localnet token mint` | **command path only** — never arguments or flag values |
-| `exit_code` | `0` | success/failure rates |
-| `duration_bucket` | `500ms-2s` | coarse timing (never a precise duration) |
-| `tool_version` | `1.2.3` | which release is in use |
-| `os` / `arch` | `darwin` / `arm64` | platform coverage |
-| `install_id` | random 128-bit hex | de-duplicate installs; **not** derived from any machine identifier |
-| `ts` | RFC3339 | when |
+| Counter | Buckets |
+|---|---|
+| `dpm/command` | the localnet verb (`up`, `down`, `dar`, `token`, …) |
+| `dpm/command_exit` | `<verb>/ok` or `<verb>/fail` |
+| `dpm/channel` | `stable` `nightly` `dev` |
+| `dpm/os` | `linux` `darwin` `windows` |
+| `dpm/arch` | `amd64` `arm64` |
+| `dpm/ci` | `true` `false` |
+| `dpm/llm_agent` | `claude` `copilot` `cursor` `gemini` `none` |
+| `dpm/docker_engine` | `docker` `colima` `orbstack` `podman` `other` |
+| `dpm/compose_version_bucket` | `v2.20-` `v2.20-v2.27` `v2.28+` |
+| `dpm/doctor_fail` | failing `doctor` check ids (only on `doctor` failure) |
+
+A week's file is literally:
+
+```json
+{
+  "schema_version": 1,
+  "week": "2026-W22",
+  "counters": {
+    "dpm/command": {"up": 5, "down": 3},
+    "dpm/os": {"darwin": 8}
+  }
+}
+```
+
+We learn *"this week saw 5 `up` invocations on darwin/arm64"* — and
+nothing else.
 
 ## What is **never** collected
 
-This is a hard boundary enforced by the data model — there is no field
-that can carry any of it:
+No machine id, install uuid, or hashed hardware id. No IP retention. And
+by construction — the model is counters, not events — no:
 
-- instance names, party ids, aliases
-- DAR names, contents, or package ids
-- ports, endpoints, credentials, JWTs
-- file paths, working directory, home directory
-- command arguments or flag values
-- environment variables, IP addresses, hostnames, usernames
+- instance / project / compose names, party ids, contract ids
+- DAR names/hashes, package/module names
+- JWT audiences/issuers/fingerprints, ports, endpoints, file paths
+- command arguments beyond the verb, error messages, stack traces
+- timestamps finer than the ISO week, environment variables, hostnames
 
-Only the **command path** is recorded (e.g. `localnet token mint`), so
-`token mint --to alice::1220… --amount 1000` records just
-`localnet token mint`.
+There is no per-invocation row to profile and no identifier to correlate.
 
 ## How it works
 
-- Events append to a local spool (`~/.canton-devkit/telemetry-spool.jsonl`,
-  capped at 500). Recording is a fast local write.
-- The spool is flushed to the collector in **batches** (every ~20 events,
-  or when the oldest queued event is over a day old) — never on every
-  command.
-- Flushes are **non-blocking-bounded**: a hard ~1.2s timeout, and any
-  failure (offline, slow, error response) leaves events queued and is
-  completely silent. Telemetry never slows or breaks a command.
-- With **no collector endpoint configured** (the default in a source
-  build), nothing ever leaves your machine — events only spool locally.
-  Release binaries may bake in an endpoint; `telemetry status` always
-  shows whether one is set and where.
+- Counters accumulate in memory during a run and merge into the current
+  week's local file (`<config dir>/canton-devkit/telemetry/<week>.json`)
+  on exit. Recording never blocks or fails a command.
+- A **completed** past week is uploaded once (a single POST), then its
+  file is deleted. On the first upload failure the week is marked deferred
+  and retried at the next window; after a second miss it is dropped.
+  Retrying an aggregate is privacy-safe; retrying individual events is
+  not, so we don't keep events.
+- With **no collector configured** (the default in a source build),
+  nothing ever leaves the machine. Release binaries may bake an endpoint;
+  `telemetry status` shows whether one is set.
 
 ## Audit it
 
 ```bash
-canton-devkit localnet telemetry status            # state + queued events
-canton-devkit localnet telemetry status --format json
+canton-devkit telemetry status              # on/off, the rule that decided it, channel, collector
+canton-devkit telemetry preview             # this week's counters (exactly what would be sent)
+canton-devkit telemetry preview --format json
+DPM_TELEMETRY_DEBUG=1 canton-devkit localnet status   # print the would-send JSON to stderr, send nothing
 ```
 
-The `status` output lists every queued event verbatim — exactly the bytes
-that would be sent — so you can verify the claims on this page yourself.
-
-See also: [FAQ](faq.md) · [getting-started](getting-started.md).
+See also: [proposals/telemetry.md](proposals/telemetry.md) (full design) ·
+[FAQ](faq.md) · [getting-started](getting-started.md).

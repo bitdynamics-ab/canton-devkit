@@ -1,144 +1,174 @@
 package telemetry
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 )
 
 func sandbox(t *testing.T) {
 	t.Helper()
-	t.Setenv("CANTON_DEVKIT_TELEMETRY_DIR", t.TempDir())
-	// Clear inherited disables so tests control state explicitly.
-	t.Setenv(envDisable, "")
+	t.Setenv(envDir, t.TempDir())
 	t.Setenv(envDoNotTrack, "")
+	t.Setenv(envToggle, "")
 	t.Setenv(envEndpoint, "")
+	t.Setenv(envDebug, "")
+	Install(noopSink{}) // reset global sink between tests
 }
 
 func TestEnabledByDefault_OptOut(t *testing.T) {
 	sandbox(t)
-	if !Enabled() {
-		t.Fatal("telemetry should be ON by default (opt-out)")
+	on, src := Enabled()
+	if !on || src != SourceDefault {
+		t.Fatalf("default should be ON via SourceDefault, got %v / %s", on, src)
 	}
 }
 
-func TestSetEnabled_Persists(t *testing.T) {
+func TestPrecedence(t *testing.T) {
 	sandbox(t)
+	// config off
 	if err := SetEnabled(false); err != nil {
 		t.Fatal(err)
 	}
-	if Enabled() {
-		t.Error("expected disabled after SetEnabled(false)")
+	if on, src := Enabled(); on || src != SourceConfig {
+		t.Errorf("config off: got %v/%s", on, src)
 	}
-	if err := SetEnabled(true); err != nil {
+	// env toggle on beats config off
+	t.Setenv(envToggle, "on")
+	if on, src := Enabled(); !on || src != SourceEnvToggle {
+		t.Errorf("env on should win over config: %v/%s", on, src)
+	}
+	// DO_NOT_TRACK beats everything
+	t.Setenv(envDoNotTrack, "1")
+	if on, src := Enabled(); on || src != SourceDoNotTrack {
+		t.Errorf("DO_NOT_TRACK should win: %v/%s", on, src)
+	}
+}
+
+func TestInc_WeeklyAggregate_NoIDsNoTimestamps(t *testing.T) {
+	sandbox(t)
+	Install(NewSink("dev"))
+	Inc("dpm/command", "up")
+	Inc("dpm/command", "up")
+	Inc("dpm/command", "down")
+	Inc("dpm/os", "darwin")
+	Inc("dpm/nonsense", "x") // not allow-listed → dropped
+	Persist()
+
+	agg, err := PreviewCurrentWeek()
+	if err != nil {
 		t.Fatal(err)
 	}
-	if !Enabled() {
-		t.Error("expected enabled after SetEnabled(true)")
+	if agg.Counters["dpm/command"]["up"] != 2 || agg.Counters["dpm/command"]["down"] != 1 {
+		t.Errorf("command counts wrong: %+v", agg.Counters["dpm/command"])
 	}
-}
-
-func TestEnvOverrides_ForceDisable(t *testing.T) {
-	sandbox(t)
-	t.Setenv(envDisable, "0")
-	if Enabled() {
-		t.Error("CANTON_DEVKIT_TELEMETRY=0 must disable")
+	if _, ok := agg.Counters["dpm/nonsense"]; ok {
+		t.Error("non-allow-listed counter leaked through")
 	}
-	t.Setenv(envDisable, "")
-	t.Setenv(envDoNotTrack, "1")
-	if Enabled() {
-		t.Error("DO_NOT_TRACK=1 must disable")
-	}
-}
-
-func TestRecordCommand_AppendsZeroPII(t *testing.T) {
-	sandbox(t)
-	RecordCommand("1.2.3", "localnet token mint", 0, 1500*time.Millisecond)
-	events, err := RecentEvents()
-	if err != nil || len(events) != 1 {
-		t.Fatalf("want 1 spooled event, got %d (%v)", len(events), err)
-	}
-	e := events[0]
-	if e.Command != "localnet token mint" || e.ExitCode != 0 || e.DurationBucket != "500ms-2s" {
-		t.Errorf("event fields wrong: %+v", e)
-	}
-	if e.InstallID == "" || e.ToolVersion != "1.2.3" {
-		t.Errorf("missing install id / version: %+v", e)
-	}
-	// Zero-PII guard: serialize and assert none of the forbidden tokens
-	// appear (the struct simply has no field for them).
-	b, _ := json.Marshal(e)
-	for _, bad := range []string{"--name", "::", "/Users/", "party", "jwt", "token=", "instance_name"} {
-		if strings.Contains(strings.ToLower(string(b)), strings.ToLower(bad)) {
-			t.Errorf("event leaked %q: %s", bad, b)
+	// Zero-PII / no-identifier guard: the serialized week file must not
+	// contain any id/timestamp-below-week/pii token.
+	b, _ := json.Marshal(agg)
+	low := strings.ToLower(string(b))
+	for _, bad := range []string{"install", "uuid", "machine", "\"ts\"", "timestamp", "::", "/users/", "party", "jwt"} {
+		if strings.Contains(low, bad) {
+			t.Errorf("week file leaked %q: %s", bad, b)
 		}
 	}
 }
 
-func TestRecordCommand_NoOpWhenDisabled(t *testing.T) {
+func TestInc_DroppedWhenDisabled(t *testing.T) {
 	sandbox(t)
 	_ = SetEnabled(false)
-	RecordCommand("1.0.0", "localnet up", 0, time.Second)
-	if events, _ := RecentEvents(); len(events) != 0 {
-		t.Errorf("disabled telemetry must not spool, got %d", len(events))
+	// App installs the real sink only when enabled; emulate that.
+	if IsEnabled() {
+		t.Fatal("should be disabled")
+	}
+	// With the no-op sink installed (sandbox default), Inc writes nothing.
+	Inc("dpm/command", "up")
+	Persist()
+	agg, _ := PreviewCurrentWeek()
+	if len(agg.Counters) != 0 {
+		t.Errorf("disabled telemetry must not record, got %+v", agg.Counters)
 	}
 }
 
-func TestFlush_PostsBatchAndClears(t *testing.T) {
+func TestUpload_PastWeekAndDrop(t *testing.T) {
 	sandbox(t)
 	var mu sync.Mutex
 	var got map[string]any
+	fail := true
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
+		if fail {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		_ = json.NewDecoder(r.Body).Decode(&got)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
 	t.Setenv(envEndpoint, srv.URL)
 
-	RecordCommand("1.0.0", "localnet up", 0, time.Second)
-	RecordCommand("1.0.0", "localnet down", 0, time.Second)
-	if err := Flush(context.Background()); err != nil {
-		t.Fatalf("flush: %v", err)
+	// Seed a PAST week file directly.
+	past := &WeeklyAggregate{SchemaVersion: SchemaVersion, Week: "2000-W01",
+		Counters: map[string]map[string]int{"dpm/command": {"up": 3}}}
+	if err := saveWeek(past); err != nil {
+		t.Fatal(err)
+	}
+
+	// First attempt fails → file kept, marked deferred.
+	tryWeeklyUpload()
+	if _, err := os.Stat(weekFilePath("2000-W01")); err != nil {
+		t.Fatal("file should survive first failure")
+	}
+	w1, _ := loadWeek("2000-W01")
+	if !w1.Deferred {
+		t.Error("should be marked deferred after first failure")
+	}
+	// Second attempt fails → dropped.
+	tryWeeklyUpload()
+	if _, err := os.Stat(weekFilePath("2000-W01")); !os.IsNotExist(err) {
+		t.Error("file should be dropped after second failure")
+	}
+
+	// Now a successful upload clears the file.
+	if err := saveWeek(past); err != nil {
+		t.Fatal(err)
 	}
 	mu.Lock()
-	evs, _ := got["events"].([]any)
+	fail = false
 	mu.Unlock()
-	if len(evs) != 2 {
-		t.Errorf("collector received %d events, want 2", len(evs))
+	tryWeeklyUpload()
+	mu.Lock()
+	evWeek, _ := got["week"].(string)
+	mu.Unlock()
+	if evWeek != "2000-W01" {
+		t.Errorf("collector got week %q, want 2000-W01", evWeek)
 	}
-	if left, _ := RecentEvents(); len(left) != 0 {
-		t.Errorf("spool should be cleared after a 2xx flush, %d left", len(left))
-	}
-}
-
-func TestFlush_NoEndpoint_RetainsSpool(t *testing.T) {
-	sandbox(t) // endpoint cleared
-	RecordCommand("1.0.0", "localnet up", 0, time.Second)
-	if err := Flush(context.Background()); err != nil {
-		t.Fatalf("flush with no endpoint should be a no-op, got %v", err)
-	}
-	if left, _ := RecentEvents(); len(left) != 1 {
-		t.Errorf("spool must be retained when no endpoint, got %d", len(left))
+	if _, err := os.Stat(weekFilePath("2000-W01")); !os.IsNotExist(err) {
+		t.Error("file should be removed after successful upload")
 	}
 }
 
-func TestFirstRunNotice_ShownOnce(t *testing.T) {
-	sandbox(t)
-	var b strings.Builder
-	MaybeFirstRunNotice(&b)
-	if !strings.Contains(b.String(), "anonymous") {
-		t.Error("first-run notice not printed")
+func TestComposeBucket(t *testing.T) {
+	cases := map[string]string{"2.19.1": "v2.20-", "v2.20.0": "v2.20-v2.27", "2.27.9": "v2.20-v2.27", "2.28.0": "v2.28+", "2.35.1": "v2.28+", "": "", "garbage": ""}
+	for in, want := range cases {
+		if got := ComposeBucket(in); got != want {
+			t.Errorf("ComposeBucket(%q)=%q want %q", in, got, want)
+		}
 	}
-	var b2 strings.Builder
-	MaybeFirstRunNotice(&b2)
-	if b2.Len() != 0 {
-		t.Error("notice should print only once")
+}
+
+func TestNormEngineAndSlug(t *testing.T) {
+	if NormEngine("rancher") != "other" || NormEngine("colima") != "colima" || NormEngine("") != "" {
+		t.Error("NormEngine clamp wrong")
+	}
+	if Slug("Docker Compose v2") != "docker-compose-v2" {
+		t.Errorf("Slug = %q", Slug("Docker Compose v2"))
 	}
 }

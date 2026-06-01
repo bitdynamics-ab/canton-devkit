@@ -68,6 +68,7 @@ jobs:
           set -euo pipefail
           mkdir -p dist component-bin
           tel_pkg="github.com/bitdynamics-ab/canton-devkit/internal/telemetry"
+          # Tag builds are the stable release channel (telemetry decision #15).
           # Iterate the target matrix as a real array so each element is
           # quoted (tidier than relying on unquoted word-splitting).
           read -ra targets <<< "${RELEASE_TARGETS}"
@@ -87,7 +88,7 @@ jobs:
             mkdir -p "${bindir}"
             GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build \
               -trimpath \
-              -ldflags "-s -w -X main.version=${VERSION} -X ${tel_pkg}.endpoint=${TELEMETRY_ENDPOINT}" \
+              -ldflags "-s -w -X main.version=${VERSION} -X main.channel=stable -X ${tel_pkg}.endpoint=${TELEMETRY_ENDPOINT}" \
               -o "${bindir}/${binary_name}" ./cmd/canton-devkit
 
             # Stage the standalone archive: binary + LICENSE + README for

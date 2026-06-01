@@ -18,6 +18,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
+	"github.com/bitdynamics-ab/canton-devkit/internal/telemetry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 )
 
@@ -237,6 +238,11 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			MinMemoryBytes:         splice.MinMemoryFor(version),
 			RecommendedMemoryBytes: splice.RecommendedMemoryFor(version),
 		})
+		// Anonymous telemetry (no-op unless enabled): the docker engine
+		// flavor + compose-version bucket discovered by preflight. No host,
+		// path, or version string is recorded — only the allow-listed bucket.
+		telemetry.Inc("dpm/docker_engine", telemetry.NormEngine(report.DockerEngine))
+		telemetry.Inc("dpm/compose_version_bucket", telemetry.ComposeBucket(report.ComposeVersion))
 		report.Write(prog.Out())
 		if !report.OK() {
 			// BIT-172: stamp the most-specific code we can infer

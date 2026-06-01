@@ -27,7 +27,6 @@ func Build() *cobra.Command {
 	localnet.AddCommand(buildRestart())
 	localnet.AddCommand(buildPause())
 	localnet.AddCommand(buildResume())
-	localnet.AddCommand(buildTelemetry())
 	localnet.AddCommand(buildClean())
 
 	// Inspection — real implementations landed on main via

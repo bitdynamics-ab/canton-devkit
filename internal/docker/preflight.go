@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -65,6 +66,10 @@ type Report struct {
 	Results        []CheckResult
 	DockerVersion  string
 	ComposeVersion string
+	// DockerEngine is the detected engine flavor (docker / colima /
+	// orbstack / podman / other / ""), used for anonymous telemetry. Best
+	// effort; empty when the daemon is down or undetectable.
+	DockerEngine string
 }
 
 // OK reports whether every check passed or was skipped.
@@ -152,12 +157,41 @@ func RunPreflight(ctx context.Context, opts Options) *Report {
 
 	if daemonResult.Status == StatusOK {
 		report.Results = append(report.Results, checkDockerMemory(ctx, opts.MinMemoryBytes, opts.RecommendedMemoryBytes))
+		report.DockerEngine = detectDockerEngine(ctx)
 	} else {
 		report.Results = append(report.Results, skip("Docker memory", "daemon unavailable"))
 	}
 
 	report.Results = append(report.Results, runHostChecks(opts)...)
 	return report
+}
+
+// detectDockerEngine identifies the engine flavor from the active docker
+// context's endpoint socket — colima / orbstack / podman have recognizable
+// socket paths; otherwise plain docker. Returns "" on any failure. Used
+// only for anonymous telemetry (no host/path is ever recorded — just the
+// flavor string).
+func detectDockerEngine(ctx context.Context) string {
+	ctx, cancel := context.WithTimeout(ctx, preflightCheckTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "docker", "context", "inspect",
+		"--format", "{{.Endpoints.docker.Host}}").CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(strings.TrimSpace(string(out)))
+	switch {
+	case strings.Contains(host, "colima"):
+		return "colima"
+	case strings.Contains(host, "orbstack"):
+		return "orbstack"
+	case strings.Contains(host, "podman"):
+		return "podman"
+	case strings.Contains(host, "docker.sock") || strings.HasPrefix(host, "tcp:") || strings.HasPrefix(host, "npipe:"):
+		return "docker"
+	default:
+		return "other"
+	}
 }
 
 func runHostChecks(opts Options) []CheckResult {
