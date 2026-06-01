@@ -1,10 +1,14 @@
 # Homebrew install
 
 `canton-devkit` ships a Homebrew formula for macOS (Apple Silicon) and
-Linux (x86_64). The formula is published from the public
+Linux (x86_64). The formula and downloadable build artifacts live in the public
 [`bitdynamics-ab/canton-devkit-builds`](https://github.com/bitdynamics-ab/canton-devkit-builds)
 repository so users can download release artifacts without access to the
 private source repository.
+
+This private source repository does not keep a `Formula/` directory. Homebrew
+distribution files are maintained in `canton-devkit-builds`; this repository only
+keeps the release helper script and docs that describe the process.
 
 ## Install (direct, no tap)
 
@@ -47,19 +51,20 @@ On every release tag (`v*`):
 
    The script downloads `SHA256SUMS` from the public builds release,
    extracts the `darwin_arm64` and `linux_amd64` digests, and rewrites
-   the `version` + two `sha256` fields in `Formula/canton-devkit.rb`.
+   the `version` + two `sha256` fields in the checked-out public builds
+   repo's `Formula/canton-devkit.rb`.
 
-3. The diff is committed (`chore: bump Homebrew formula to v0.1.0`),
-   merged, and mirrored to `bitdynamics-ab/canton-devkit-builds`.
+3. The diff is committed in `bitdynamics-ab/canton-devkit-builds` with a
+   message such as `chore: bump Homebrew formula to v0.1.0`.
 
-The script does NOT commit or push automatically — `git diff Formula/`
-first, then commit. This keeps the human in the loop in case the
+The script does NOT commit or push automatically. Review the diff in the public
+builds repo first, then commit. This keeps the human in the loop in case the
 release tarballs themselves are wrong.
 
 ## Smoke test
 
 ```sh
-brew install --formula Formula/canton-devkit.rb   # from a clone
+brew install --formula ../canton-devkit-builds/Formula/canton-devkit.rb
 brew test  canton-devkit                          # invokes `localnet --help`
 canton-devkit localnet --help
 ```
