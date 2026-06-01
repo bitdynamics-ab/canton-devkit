@@ -78,7 +78,7 @@ jobs:
           # Windows standalone zip (no tarball needed for Homebrew)
           cp "dist/canton-devkit_windows_amd64.exe" dist/tarballs/
           cd dist/tarballs
-          sha256sum * > SHA256SUMS
+          sha256sum * > checksums.txt
 
       - name: Upload main branch artifacts
         if: github.ref == 'refs/heads/main'
@@ -105,7 +105,7 @@ jobs:
             --repo bitdynamics-ab/canton-devkit-builds \
             --title "${VERSION}" \
             --notes "canton-devkit release ${VERSION}" \
-            dist/tarballs/*.tar.gz dist/tarballs/SHA256SUMS
+            dist/tarballs/*.tar.gz dist/tarballs/checksums.txt
 
       - name: Update Homebrew formula in public builds repo
         if: startsWith(github.ref, 'refs/tags/')
@@ -113,8 +113,8 @@ jobs:
           GH_TOKEN: ${{ secrets.BUILDS_REPO_TOKEN }}
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          sha_darwin=$(grep "_${VERSION}_darwin_arm64.tar.gz$" dist/tarballs/SHA256SUMS | awk '{print $1}')
-          sha_linux=$(grep "_${VERSION}_linux_amd64.tar.gz$" dist/tarballs/SHA256SUMS | awk '{print $1}')
+          sha_darwin=$(grep "_${VERSION}_darwin_arm64.tar.gz$" dist/tarballs/checksums.txt | awk '{print $1}')
+          sha_linux=$(grep "_${VERSION}_linux_amd64.tar.gz$" dist/tarballs/checksums.txt | awk '{print $1}')
           version_num="${VERSION#v}"
 
           # Fetch current formula from the public builds repo

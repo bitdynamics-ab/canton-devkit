@@ -41,7 +41,7 @@ Until then, use the direct formula URL from `canton-devkit-builds`.
 On every release tag (`v*`):
 
 1. `.github/workflows/release.yml` builds and publishes the per-platform
-   tarballs and a `SHA256SUMS` manifest to a public GitHub Release in
+   tarballs and a `checksums.txt` manifest to a public GitHub Release in
    `bitdynamics-ab/canton-devkit-builds`.
 2. A maintainer runs:
 
@@ -49,7 +49,7 @@ On every release tag (`v*`):
    scripts/update-homebrew-formula.sh v0.1.0
    ```
 
-   The script downloads `SHA256SUMS` from the public builds release,
+   The script downloads `checksums.txt` from the public builds release,
    extracts the `darwin_arm64` and `linux_amd64` digests, and rewrites
    the `version` + two `sha256` fields in the checked-out public builds
    repo's `Formula/canton-devkit.rb`.
