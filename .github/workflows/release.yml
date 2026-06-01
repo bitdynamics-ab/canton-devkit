@@ -59,20 +59,90 @@ jobs:
               -o "$output" ./cmd/canton-devkit
           done
 
+      - name: Package tarballs and checksums
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          mkdir -p dist/tarballs
+          for target in linux/amd64 darwin/arm64; do
+            os="${target%/*}"
+            arch="${target#*/}"
+            binary="dist/canton-devkit_${os}_${arch}"
+            tarball="dist/tarballs/canton-devkit_${VERSION}_${os}_${arch}.tar.gz"
+            staging="$(mktemp -d)"
+            cp "$binary" "$staging/canton-devkit"
+            cp LICENSE README.md "$staging/"
+            tar -czf "$tarball" -C "$staging" canton-devkit LICENSE README.md
+            rm -rf "$staging"
+          done
+          # Windows standalone zip (no tarball needed for Homebrew)
+          cp "dist/canton-devkit_windows_amd64.exe" dist/tarballs/
+          cd dist/tarballs
+          sha256sum * > SHA256SUMS
+
       - name: Upload main branch artifacts
         if: github.ref == 'refs/heads/main'
         # actions/upload-artifact@v4
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: canton-devkit-${{ steps.meta.outputs.version }}
-          path: dist/*
+          path: dist/tarballs/*
 
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/')
         # softprops/action-gh-release@v3
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
         with:
-          files: dist/*
+          files: dist/tarballs/*
+
+      - name: Publish to public builds repo
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.BUILDS_REPO_TOKEN }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          gh release create "${VERSION}" \
+            --repo bitdynamics-ab/canton-devkit-builds \
+            --title "${VERSION}" \
+            --notes "canton-devkit release ${VERSION}" \
+            dist/tarballs/*.tar.gz dist/tarballs/SHA256SUMS
+
+      - name: Update Homebrew formula in public builds repo
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.BUILDS_REPO_TOKEN }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          sha_darwin=$(grep "_${VERSION}_darwin_arm64.tar.gz$" dist/tarballs/SHA256SUMS | awk '{print $1}')
+          sha_linux=$(grep "_${VERSION}_linux_amd64.tar.gz$" dist/tarballs/SHA256SUMS | awk '{print $1}')
+          version_num="${VERSION#v}"
+
+          # Fetch current formula from the public builds repo
+          gh api repos/bitdynamics-ab/canton-devkit-builds/contents/Formula/canton-devkit.rb \
+            --jq '.content' | base64 -d > /tmp/canton-devkit.rb
+
+          # Rewrite version and sha256 fields
+          awk -v ver="$version_num" -v sd="$sha_darwin" -v sl="$sha_linux" '
+            BEGIN { seen_sha = 0 }
+            /^  version / { sub(/"[^"]*"/, "\"" ver "\""); print; next }
+            /^      sha256 / {
+              seen_sha++
+              if (seen_sha == 1)      sub(/"[^"]*"/, "\"" sd "\"")
+              else if (seen_sha == 2) sub(/"[^"]*"/, "\"" sl "\"")
+              print; next
+            }
+            { print }
+          ' /tmp/canton-devkit.rb > /tmp/canton-devkit-updated.rb
+
+          # Commit updated formula via the GitHub API
+          file_sha=$(gh api repos/bitdynamics-ab/canton-devkit-builds/contents/Formula/canton-devkit.rb --jq '.sha')
+          updated_content=$(base64 -w0 < /tmp/canton-devkit-updated.rb)
+
+          gh api --method PUT repos/bitdynamics-ab/canton-devkit-builds/contents/Formula/canton-devkit.rb \
+            -f message="chore: bump Homebrew formula to ${VERSION}" \
+            -f content="$updated_content" \
+            -f sha="$file_sha" \
+            -f branch="main"
 
   docker:
     name: Build and publish Docker image
