@@ -102,10 +102,10 @@ jobs:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
           gh release create "${VERSION}" \
-            --repo bitdynamics-ab/canton-devkit-builds \
+            --repo bitdynamics-ab/homebrew-canton-devkit \
             --title "${VERSION}" \
             --notes "canton-devkit release ${VERSION}" \
-            dist/tarballs/*.tar.gz dist/tarballs/checksums.txt
+            dist/tarballs/*
 
       - name: Update Homebrew formula in public builds repo
         if: startsWith(github.ref, 'refs/tags/')
@@ -118,7 +118,7 @@ jobs:
           version_num="${VERSION#v}"
 
           # Fetch current formula from the public builds repo
-          gh api repos/bitdynamics-ab/canton-devkit-builds/contents/Formula/canton-devkit.rb \
+          gh api repos/bitdynamics-ab/homebrew-canton-devkit/contents/Formula/canton-devkit.rb \
             --jq '.content' | base64 -d > /tmp/canton-devkit.rb
 
           # Rewrite version and sha256 fields
@@ -135,10 +135,10 @@ jobs:
           ' /tmp/canton-devkit.rb > /tmp/canton-devkit-updated.rb
 
           # Commit updated formula via the GitHub API
-          file_sha=$(gh api repos/bitdynamics-ab/canton-devkit-builds/contents/Formula/canton-devkit.rb --jq '.sha')
+          file_sha=$(gh api repos/bitdynamics-ab/homebrew-canton-devkit/contents/Formula/canton-devkit.rb --jq '.sha')
           updated_content=$(base64 -w0 < /tmp/canton-devkit-updated.rb)
 
-          gh api --method PUT repos/bitdynamics-ab/canton-devkit-builds/contents/Formula/canton-devkit.rb \
+          gh api --method PUT repos/bitdynamics-ab/homebrew-canton-devkit/contents/Formula/canton-devkit.rb \
             -f message="chore: bump Homebrew formula to ${VERSION}" \
             -f content="$updated_content" \
             -f sha="$file_sha" \
