@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Update the public builds repo Homebrew formula to point at the tarballs of a
 # published release. Run after the release workflow has uploaded public
-# artifacts to bitdynamics-ab/canton-devkit-builds.
+# artifacts to bitdynamics-ab/homebrew-canton-devkit.
 #
 # Usage:
-#   scripts/update-homebrew-formula.sh vX.Y.Z [path/to/canton-devkit-builds]
+#   scripts/update-homebrew-formula.sh vX.Y.Z [path/to/homebrew-canton-devkit]
 #
-# If the builds repo path is omitted, the script uses ../canton-devkit-builds.
+# If the builds repo path is omitted, the script uses ../homebrew-canton-devkit.
 #
 # What it does:
 #   1. Validates the tag exists on public GitHub Releases.
@@ -28,13 +28,13 @@ fi
 
 tag="$1"
 version="${tag#v}"
-repo="bitdynamics-ab/canton-devkit-builds"
-builds_repo_path="${2:-../canton-devkit-builds}"
+repo="bitdynamics-ab/homebrew-canton-devkit"
+builds_repo_path="${2:-../homebrew-canton-devkit}"
 formula="$builds_repo_path/Formula/canton-devkit.rb"
 
 if [[ ! -f "$formula" ]]; then
   echo "error: $formula not found" >&2
-  echo "usage: $0 <tag> [path/to/canton-devkit-builds]" >&2
+  echo "usage: $0 <tag> [path/to/homebrew-canton-devkit]" >&2
   exit 1
 fi
 

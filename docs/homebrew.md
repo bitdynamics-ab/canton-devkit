@@ -2,12 +2,12 @@
 
 `canton-devkit` ships a Homebrew formula for macOS (Apple Silicon) and
 Linux (x86_64). The formula and downloadable build artifacts live in the public
-[`bitdynamics-ab/canton-devkit-builds`](https://github.com/bitdynamics-ab/canton-devkit-builds)
+[`bitdynamics-ab/homebrew-canton-devkit`](https://github.com/bitdynamics-ab/homebrew-canton-devkit)
 repository so users can download release artifacts without access to the
 private source repository.
 
 This private source repository does not keep a `Formula/` directory. Homebrew
-distribution files are maintained in `canton-devkit-builds`; this repository only
+distribution files are maintained in `homebrew-canton-devkit`; this repository only
 keeps the release helper script and docs that describe the process.
 
 ## Install (direct, no tap)
@@ -17,7 +17,7 @@ checksums:
 
 ```sh
 brew install --formula \
-  https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit-builds/main/Formula/canton-devkit.rb
+  https://raw.githubusercontent.com/bitdynamics-ab/homebrew-canton-devkit/main/Formula/canton-devkit.rb
 ```
 
 > Note: the formula's stable `url` + `sha256` start as placeholders
@@ -25,16 +25,12 @@ brew install --formula \
 > and `scripts/update-homebrew-formula.sh` rewrites them. There is no
 > public `--HEAD` install path because the source repository is private.
 
-## Install (via tap, future)
-
-Once a dedicated public tap is published, the canonical flow becomes:
+## Install (via tap)
 
 ```sh
 brew tap bitdynamics-ab/canton-devkit
 brew install canton-devkit
 ```
-
-Until then, use the direct formula URL from `canton-devkit-builds`.
 
 ## How the formula stays in sync
 
@@ -42,7 +38,7 @@ On every release tag (`v*`):
 
 1. `.github/workflows/release.yml` builds and publishes the per-platform
    tarballs and a `checksums.txt` manifest to a public GitHub Release in
-   `bitdynamics-ab/canton-devkit-builds`.
+   `bitdynamics-ab/homebrew-canton-devkit`.
 2. A maintainer runs:
 
    ```sh
@@ -54,7 +50,7 @@ On every release tag (`v*`):
    the `version` + two `sha256` fields in the checked-out public builds
    repo's `Formula/canton-devkit.rb`.
 
-3. The diff is committed in `bitdynamics-ab/canton-devkit-builds` with a
+3. The diff is committed in `bitdynamics-ab/homebrew-canton-devkit` with a
    message such as `chore: bump Homebrew formula to v0.1.0`.
 
 The script does NOT commit or push automatically. Review the diff in the public
@@ -64,7 +60,7 @@ release tarballs themselves are wrong.
 ## Smoke test
 
 ```sh
-brew install --formula ../canton-devkit-builds/Formula/canton-devkit.rb
+brew install --formula ../homebrew-canton-devkit/Formula/canton-devkit.rb
 brew test  canton-devkit                          # invokes `localnet --help`
 canton-devkit localnet --help
 ```
@@ -76,7 +72,7 @@ tree is reachable.
 ## What's not supported (yet)
 
 - **Windows** — Homebrew doesn't target Windows. Use the standalone
-  artifact from the [public builds release page](https://github.com/bitdynamics-ab/canton-devkit-builds/releases).
+  artifact from the [public builds release page](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases).
 - **Linux ARM** — not in the release matrix. Could be added in BIT-19's
   follow-up if there's demand.
 - **macOS Intel** — same; the project's compatibility matrix is
