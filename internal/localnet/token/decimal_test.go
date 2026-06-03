@@ -58,19 +58,5 @@ func TestValidateAmount(t *testing.T) {
 	}
 }
 
-// TestValidatePartyID accepts bare hints and qualified ids, rejects
-// whitespace/garbage that the old non-empty-only check let through.
-func TestValidatePartyID(t *testing.T) {
-	good := []string{"alice", "alice::1220abcd", "app_provider", "sv-1", "Bob#2"}
-	for _, s := range good {
-		if err := validatePartyID("--to", s); err != nil {
-			t.Errorf("validatePartyID(%q) unexpected error: %v", s, err)
-		}
-	}
-	bad := []string{"", " ", "a b", "alice\n", "💀", "::nohint"}
-	for _, s := range bad {
-		if err := validatePartyID("--to", s); err == nil {
-			t.Errorf("validatePartyID(%q) = nil, want error", s)
-		}
-	}
-}
+// (TestValidatePartyID lives in validate_test.go, added by #82 which
+// owns validatePartyID; removed the duplicate here on merge to main.)

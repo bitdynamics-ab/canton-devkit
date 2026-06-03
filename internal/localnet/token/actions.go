@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"math/big"
-	"regexp"
 	"strings"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
@@ -454,22 +453,10 @@ func isZeroDecimal(s string) bool {
 	return true
 }
 
-// partyIDPattern is a light syntactic guard for a party id / hint:
-// starts alphanumeric, then the party-id character set. It deliberately
-// accepts BOTH a bare hint ("alice") and a fully-qualified id
-// ("alice::1220ab…") — the ledger resolves which is which — but rejects
-// whitespace, empties, and obvious garbage that requireFields' non-empty
-// check let through.
-var partyIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:_#./-]*$`)
-
-func validatePartyID(field, v string) error {
-	if !partyIDPattern.MatchString(v) {
-		return fmt.Errorf(
-			"%s %q is not a valid party id (expected alphanumeric, optionally `hint::fingerprint`)",
-			field, v)
-	}
-	return nil
-}
+// validatePartyID + partyIDPattern live in token.go (added by the
+// create-wizard PR #82, which merged to main first). The mint/transfer/
+// burn actions in this file reuse it; the duplicate copy that used to
+// live here was removed on merge to avoid a redeclaration.
 
 // emit writes a human-readable "going to run X with Y" line on the
 // caller's writer before the action returns ErrNeedsV2LocalNet, so
