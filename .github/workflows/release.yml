@@ -13,12 +13,24 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository }}
+  # GHCR namespace for both standalone-binary releases and the
+  # DPM-component OCI artifact.
+  GHCR_NAMESPACE: ghcr.io/${{ github.repository }}
+  # DPM CLI version pinned for reproducible publishes. Bump deliberately
+  # — see https://github.com/digital-asset/dpm/releases. The companion
+  # DPM_LINUX_SHA256 below pins the linux-amd64 tarball used to install
+  # the CLI in CI; recompute via:
+  #   curl -sL <release-tarball-url> | sha256sum
+  DPM_VERSION: 1.0.16
+  DPM_LINUX_SHA256: 387421d4b3d0e799f05cde1f5c2adc704acd2824796d436861602eb2be759874
+  # Build matrix (single source of truth — kept in sync between the
+  # standalone-binary and DPM-component jobs).
+  RELEASE_TARGETS: linux/amd64 darwin/arm64 windows/amd64
 
 jobs:
-  release:
-    name: Build release artifacts
-    runs-on: [self-hosted, Linux]
+  binaries:
+    name: Build standalone binaries
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
@@ -30,7 +42,9 @@ jobs:
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
           go-version-file: go.mod
-          cache: false
+          # Module + build cache on (setup-go default). This is the only
+          # Go-compiling job now — the dpm-component job consumes the
+          # binaries this job uploads, so the toolchain runs exactly once.
 
       - name: Set release metadata
         id: meta
@@ -43,42 +57,68 @@ jobs:
           fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
-      - name: Build release binaries
+      - name: Build release binaries + tarballs + checksums
         env:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          mkdir -p dist
-          targets="linux/amd64 darwin/arm64 windows/amd64"
-          for target in $targets; do
+          set -euo pipefail
+          mkdir -p dist component-bin
+          # Iterate the target matrix as a real array so each element is
+          # quoted (tidier than relying on unquoted word-splitting).
+          read -ra targets <<< "${RELEASE_TARGETS}"
+          for target in "${targets[@]}"; do
             os="${target%/*}"
             arch="${target#*/}"
-            output="dist/canton-devkit_${os}_${arch}"
-            if [ "$os" = "windows" ]; then output="${output}.exe"; fi
+
+            binary_name="canton-devkit"
+            [ "$os" = "windows" ] && binary_name="canton-devkit.exe"
+
+            # Build ONCE into component-bin/<os>_<arch>/. The dpm-component
+            # job downloads this exact binary, so GitHub Releases and the
+            # GHCR OCI artifact ship byte-identical bits (no rebuild skew).
+            # -trimpath strips the runner's local paths from the binary;
+            # -s -w shrink it ~30%.
+            bindir="component-bin/${os}_${arch}"
+            mkdir -p "${bindir}"
             GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build \
+              -trimpath \
               -ldflags "-s -w -X main.version=${VERSION}" \
-              -o "$output" ./cmd/canton-devkit
+              -o "${bindir}/${binary_name}" ./cmd/canton-devkit
+
+            # Stage the standalone archive: binary + LICENSE + README for
+            # end-user discoverability.
+            stage="dist/stage_${os}_${arch}"
+            mkdir -p "${stage}"
+            cp "${bindir}/${binary_name}" "${stage}/${binary_name}"
+            cp LICENSE "${stage}/LICENSE"
+            cp README.md "${stage}/README.md"
+
+            archive_base="canton-devkit_${VERSION}_${os}_${arch}"
+            if [ "$os" = "windows" ]; then
+              (cd "${stage}" && zip -q -r "../${archive_base}.zip" .)
+            else
+              tar -C "${stage}" -czf "dist/${archive_base}.tar.gz" .
+            fi
+            rm -rf "${stage}"
           done
 
-      - name: Package tarballs and checksums
-        env:
-          VERSION: ${{ steps.meta.outputs.version }}
-        run: |
-          mkdir -p dist/tarballs
-          for target in linux/amd64 darwin/arm64; do
-            os="${target%/*}"
-            arch="${target#*/}"
-            binary="dist/canton-devkit_${os}_${arch}"
-            tarball="dist/tarballs/canton-devkit_${VERSION}_${os}_${arch}.tar.gz"
-            staging="$(mktemp -d)"
-            cp "$binary" "$staging/canton-devkit"
-            cp LICENSE README.md "$staging/"
-            tar -czf "$tarball" -C "$staging" canton-devkit LICENSE README.md
-            rm -rf "$staging"
-          done
-          # Windows standalone zip (no tarball needed for Homebrew)
-          cp "dist/canton-devkit_windows_amd64.exe" dist/tarballs/
-          cd dist/tarballs
-          sha256sum * > checksums.txt
+          # Single SHA256SUMS file covers every published archive (dist/
+          # now holds only the tarballs/zips). Format is GNU sha256sum
+          # compatible so users can verify via:
+          #   sha256sum --check SHA256SUMS
+          (cd dist && sha256sum * > SHA256SUMS)
+          cat dist/SHA256SUMS
+
+      - name: Upload raw binaries for the DPM-component job
+        # Unconditional: the dpm-component job needs these on every run
+        # (it dry-runs on main and publishes on tags). upload-artifact
+        # does NOT preserve the executable bit — the consumer re-chmods.
+        # actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: component-binaries
+          path: component-bin/**
+          retention-days: 1
 
       - name: Upload main branch artifacts
         if: github.ref == 'refs/heads/main'
@@ -86,14 +126,14 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: canton-devkit-${{ steps.meta.outputs.version }}
-          path: dist/tarballs/*
+          path: dist/*
 
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/')
         # softprops/action-gh-release@v3
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
         with:
-          files: dist/tarballs/*
+          files: dist/*
 
       - name: Publish to public builds repo
         if: startsWith(github.ref, 'refs/tags/')
@@ -105,7 +145,7 @@ jobs:
             --repo bitdynamics-ab/homebrew-canton-devkit \
             --title "${VERSION}" \
             --notes "canton-devkit release ${VERSION}" \
-            dist/tarballs/*
+            dist/*
 
       - name: Update Homebrew formula in public builds repo
         if: startsWith(github.ref, 'refs/tags/')
@@ -113,8 +153,12 @@ jobs:
           GH_TOKEN: ${{ secrets.BUILDS_REPO_TOKEN }}
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          sha_darwin=$(grep "_${VERSION}_darwin_arm64.tar.gz$" dist/tarballs/checksums.txt | awk '{print $1}')
-          sha_linux=$(grep "_${VERSION}_linux_amd64.tar.gz$" dist/tarballs/checksums.txt | awk '{print $1}')
+          # SHA256SUMS lives at dist/SHA256SUMS now (PR #27 / BIT-19
+          # consolidated tarballs into dist/ directly and renamed the
+          # checksum file to GNU sha256sum format). Filenames stay the
+          # same so the regex anchors still match.
+          sha_darwin=$(grep "_${VERSION}_darwin_arm64.tar.gz$" dist/SHA256SUMS | awk '{print $1}')
+          sha_linux=$(grep "_${VERSION}_linux_amd64.tar.gz$" dist/SHA256SUMS | awk '{print $1}')
           version_num="${VERSION#v}"
 
           # Fetch current formula from the public builds repo
@@ -144,23 +188,90 @@ jobs:
             -f sha="$file_sha" \
             -f branch="main"
 
-  docker:
-    name: Build and publish Docker image
-    # Disabled: canton-devkit invokes docker and docker compose directly for its features,
-    # so running it inside a container is not suitable.
-    if: false
-    runs-on: [self-hosted, Linux]
+  dpm-component:
+    name: Publish DPM component to GHCR
+    # Consumes the binaries built by `binaries` (no second Go build) so
+    # the OCI artifact and the GitHub Release ship identical bits and CI
+    # compiles Go exactly once.
+    needs: binaries
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
         # actions/checkout@v5
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
-      - name: Set up Docker Buildx
-        # docker/setup-buildx-action@v4
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
+      - name: Download prebuilt binaries
+        # actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: component-binaries
+          path: component-bin
+
+      - name: Set release metadata
+        id: meta
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            # DPM expects a semver-shaped version string for the OCI
+            # tag — strip the `v` prefix.
+            version="${GITHUB_REF_NAME#v}"
+            push="true"
+          else
+            version="0.0.0-${short_sha}"
+            push="false"
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "push=${push}" >> "${GITHUB_OUTPUT}"
+
+      - name: Install DPM CLI (sha256-verified)
+        run: |
+          set -euo pipefail
+          tar="/tmp/dpm-${DPM_VERSION}-linux-amd64.tar.gz"
+          curl -sSfL \
+            "https://github.com/digital-asset/dpm/releases/download/${DPM_VERSION}/dpm-${DPM_VERSION}-linux-amd64.tar.gz" \
+            -o "$tar"
+          echo "${DPM_LINUX_SHA256}  ${tar}" | sha256sum --check --strict -
+          tar -xzf "$tar" -C /usr/local/bin dpm
+          dpm --version
+
+      - name: Lay out per-platform component dirs
+        run: |
+          set -euo pipefail
+          # Mirror the layout dpm publish component expects:
+          #   <dir>/component.yaml
+          #   <dir>/LICENSE
+          #   <dir>/bin/canton-devkit[.exe]
+          #
+          # DPM does NOT auto-append `.exe` on Windows — it stat()s the
+          # exact path in component.yaml. We therefore template the
+          # manifest per platform: Unix uses bin/canton-devkit; Windows
+          # gets bin/canton-devkit.exe. (Empirically verified against
+          # DPM 1.0.16.)
+          read -ra targets <<< "${RELEASE_TARGETS}"
+          for target in "${targets[@]}"; do
+            os="${target%/*}"
+            arch="${target#*/}"
+            dir="dist/component_${os}_${arch}"
+            mkdir -p "${dir}/bin"
+            cp LICENSE "${dir}/LICENSE"
+
+            binary_name="canton-devkit"
+            [ "$os" = "windows" ] && binary_name="canton-devkit.exe"
+
+            # Copy the prebuilt binary and restore the executable bit
+            # (upload/download-artifact drops file permissions).
+            cp "component-bin/${os}_${arch}/${binary_name}" "${dir}/bin/${binary_name}"
+            chmod +x "${dir}/bin/${binary_name}"
+
+            # Substitute the binary path token in the manifest template.
+            sed "s|@@BINARY_PATH@@|bin/${binary_name}|" \
+              packaging/component.yaml.tmpl > "${dir}/component.yaml"
+          done
+          ls -R dist
 
       - name: Log in to GHCR
+        if: steps.meta.outputs.push == 'true'
         # docker/login-action@v4
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
@@ -168,34 +279,41 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set image metadata
-        id: meta
+      - name: Validate component manifest (dry-run)
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          short_sha="${GITHUB_SHA::7}"
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            version="${GITHUB_REF_NAME}"
-          else
-            version="main-${short_sha}"
-          fi
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          {
-            echo "tags<<EOF"
-            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-              echo "${IMAGE_NAME}:${version}"
-              echo "${IMAGE_NAME}:latest"
-            else
-              echo "${IMAGE_NAME}:main"
-              echo "${IMAGE_NAME}:sha-${short_sha}"
-            fi
-            echo "EOF"
-          } >> "${GITHUB_OUTPUT}"
+          set -euo pipefail
+          dpm publish component \
+            "oci://${GHCR_NAMESPACE}:${VERSION}" \
+            --dry-run \
+            --platform linux/amd64=dist/component_linux_amd64 \
+            --platform darwin/arm64=dist/component_darwin_arm64 \
+            --platform windows/amd64=dist/component_windows_amd64
 
-      - name: Build and push image
-        # docker/build-push-action@v7
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
-        with:
-          context: .
-          push: true
-          build-args: |
-            VERSION=${{ steps.meta.outputs.version }}
-          tags: ${{ steps.meta.outputs.tags }}
+      - name: Publish DPM component (tag pushes only)
+        if: steps.meta.outputs.push == 'true'
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Only move the `latest` tag for FINAL releases. A pre-release
+          # (v1.2.0-rc1) or a hotfix tagged against an older line must not
+          # clobber `latest`. Semver pre-releases carry a `-` in the
+          # build metadata; gate on its absence.
+          extra_tags=()
+          case "${VERSION}" in
+            *-*) echo "pre-release ${VERSION} — leaving 'latest' untouched" ;;
+            *)   extra_tags+=(--extra-tags latest) ;;
+          esac
+          # ${arr[@]+"${arr[@]}"} expands to nothing when the array is
+          # empty WITHOUT tripping `set -u` (portable across bash 3.2+),
+          # so a pre-release publishes with no extra args rather than a
+          # stray empty argument.
+          dpm publish component \
+            "oci://${GHCR_NAMESPACE}:${VERSION}" \
+            --include-git-info \
+            ${extra_tags[@]+"${extra_tags[@]}"} \
+            --platform linux/amd64=dist/component_linux_amd64 \
+            --platform darwin/arm64=dist/component_darwin_arm64 \
+            --platform windows/amd64=dist/component_windows_amd64
