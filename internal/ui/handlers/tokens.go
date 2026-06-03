@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"regexp"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
@@ -41,11 +42,15 @@ func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	mux.HandleFunc("GET /api/tokens", handleTokensList)
 	mux.HandleFunc("GET /api/tokens/{symbol}", handleTokenDetail)
 	mux.HandleFunc("GET /api/tokens/{symbol}/holdings", handleTokenHoldings)
-	mux.HandleFunc("POST /api/tokens", handleTokensCreate)
-	mux.HandleFunc("POST /api/tokens/{symbol}/mint", handleTokenMint)
-	mux.HandleFunc("POST /api/tokens/{symbol}/transfer", handleTokenTransfer)
-	mux.HandleFunc("POST /api/tokens/transfers/{id}/accept", handleTokenAccept)
-	mux.HandleFunc("POST /api/tokens/{symbol}/burn", handleTokenBurn)
+	// State-changing POSTs are wrapped with Idempotency-Key dedup so a
+	// client retry can't mint/transfer/burn twice (opt-in: only requests
+	// carrying the header are deduplicated).
+	idem := newIdemStore()
+	mux.HandleFunc("POST /api/tokens", idem.wrap(handleTokensCreate))
+	mux.HandleFunc("POST /api/tokens/{symbol}/mint", idem.wrap(handleTokenMint))
+	mux.HandleFunc("POST /api/tokens/{symbol}/transfer", idem.wrap(handleTokenTransfer))
+	mux.HandleFunc("POST /api/tokens/transfers/{id}/accept", idem.wrap(handleTokenAccept))
+	mux.HandleFunc("POST /api/tokens/{symbol}/burn", idem.wrap(handleTokenBurn))
 }
 
 // --- read paths ------------------------------------------------------
@@ -257,6 +262,21 @@ func decodeJSON(r io.ReadCloser, into any) error {
 //   - token.ErrNeedsV2LocalNet   → 412 Precondition Failed
 //   - token.ErrSymbolInUse       → 409 Conflict
 //   - other                      → 400 / 500 with the message
+//
+// partyIDFingerprint matches the fingerprint half of a fully-qualified
+// Daml party id (`<hint>::<fingerprint>`). The hint is human-readable;
+// the fingerprint is the unique, enumeration-sensitive identifier.
+var partyIDFingerprint = regexp.MustCompile(`([A-Za-z0-9._-]+::)[A-Za-z0-9]{8,}`)
+
+// sanitize400 masks party-id fingerprints in a user-facing 400 message.
+// Locally-constructed 400s are safe, but a gRPC InvalidArgument message
+// is built upstream and could embed a fully-qualified party id; keep the
+// readable hint, drop the fingerprint so an error body can't be used to
+// enumerate party ids.
+func sanitize400(msg string) string {
+	return partyIDFingerprint.ReplaceAllString(msg, "$1…")
+}
+
 func mapTokenError(w http.ResponseWriter, err error, op string) {
 	switch {
 	case err == nil:
@@ -279,7 +299,10 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 			case codes.PermissionDenied, codes.Unauthenticated:
 				writeErrorWithCode(w, http.StatusForbidden, "PERMISSION_DENIED", s.Message())
 			case codes.InvalidArgument:
-				writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, s.Message())
+				// s.Message() comes from upstream and may embed a
+				// fully-qualified party id; mask the fingerprint before it
+				// reaches the client.
+				writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, sanitize400(s.Message()))
 			case codes.Unavailable, codes.DeadlineExceeded:
 				// Upstream participant unreachable / slow — redact the
 				// detail (5xx contract) and log the cause.
