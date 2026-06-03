@@ -80,7 +80,7 @@ Status flags per row:
 | `supported` | Catalogued; upstream pin matches. Safe to use. |
 | `drifted` | Catalogued; upstream tag has been force-moved to a different commit. **Security signal** — re-review the catalogue entry before trusting. |
 | `available` | Upstream has the tag; not yet in our catalogue. A maintainer can add it via the helper below. |
-| `catalogued-only` | We catalogue it; upstream no longer has it (tag was deleted). Investigate before removing. |
+| `catalogued-only` | We catalogue it, but the online tag listing does not contain the same label. For stable entries this usually means the upstream tag was deleted and should be investigated before removal; branch-backed alpha entries such as `token-standard-v2` can also appear this way until branch/ref-aware status is added. |
 
 ## Adding a new version (maintainer flow)
 

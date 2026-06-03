@@ -87,14 +87,28 @@ func TestCrossReferenceUpstream(t *testing.T) {
 
 	if s := byTag["0.6.4"]; s.Status != StatusSupported {
 		t.Errorf("0.6.4 should be supported, got %v", s.Status)
+	} else if s.Channel != "" || s.ImageRepo != "" {
+		t.Errorf("0.6.4 metadata = Channel %q ImageRepo %q, want stable defaults", s.Channel, s.ImageRepo)
 	}
 	if s := byTag["0.6.3"]; s.Status != StatusDrifted {
 		t.Errorf("0.6.3 should be drifted (upstream moved), got %v", s.Status)
+	} else if s.Channel != "" || s.ImageRepo != "" {
+		t.Errorf("0.6.3 metadata = Channel %q ImageRepo %q, want stable defaults", s.Channel, s.ImageRepo)
 	}
 	if s := byTag["0.7.0-new"]; s.Status != StatusAvailable {
 		t.Errorf("0.7.0-new should be available, got %v", s.Status)
 	}
 	if s := byTag["0.5.18"]; s.Status != StatusCataloguedOnly {
 		t.Errorf("0.5.18 should be catalogued-only (missing upstream), got %v", s.Status)
+	}
+	if s := byTag["token-standard-v2"]; s.Status != StatusCataloguedOnly {
+		t.Errorf("token-standard-v2 should be catalogued-only in tag-only upstream listing, got %v", s.Status)
+	} else {
+		if s.Channel != "alpha" {
+			t.Errorf("token-standard-v2 Channel = %q, want alpha", s.Channel)
+		}
+		if s.ImageRepo != "ghcr.io/digital-asset/decentralized-canton-sync-dev/docker" {
+			t.Errorf("token-standard-v2 ImageRepo = %q", s.ImageRepo)
+		}
 	}
 }
