@@ -21,3 +21,4 @@ dist/
 # See internal/ui/assets.go.
 internal/ui/dist/*
 !internal/ui/dist/index.html
+.worktrees/

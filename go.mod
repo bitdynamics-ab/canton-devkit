@@ -9,6 +9,7 @@ require (
 	github.com/mattn/go-isatty v0.0.22
 	github.com/muesli/termenv v0.16.0
 	github.com/spf13/cobra v1.10.2
+	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/sys v0.42.0
 	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.11
