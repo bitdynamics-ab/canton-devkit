@@ -61,6 +61,10 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
   // overlay pulls extra container images and adds memory pressure
   // — opt-in is friendlier for the "just spin one up" path.
   const [observability, setObservability] = useState(false);
+  // tokensV2: when on, bring-up adds the Token Standard V2 alpha-protocol
+  // Canton overlay (`--profile tokens-v2`). Needs a V2-capable Splice
+  // version; default OFF.
+  const [tokensV2, setTokensV2] = useState(false);
   const [versions, setVersions] = useState<SpliceVersionEntry[]>([]);
   const [stage, setStage] = useState<Stage>({ kind: "form" });
   // Per-version system-requirements check. "idle" = no version
@@ -89,6 +93,7 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
       setVersion("");
       setAllowUncurated(false);
       setObservability(false);
+      setTokensV2(false);
       setStage({ kind: "form" });
       requestAnimationFrame(() => inputRef.current?.focus());
       // Refresh the version catalogue on open. Cached on the
@@ -215,7 +220,13 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
         name,
         ...(version ? { version } : {}),
         ...(allowUncurated ? { allow_uncurated: true } : {}),
-        ...(observability ? { profiles: ["observability"] } : {}),
+        ...(() => {
+          const profiles = [
+            ...(observability ? ["observability"] : []),
+            ...(tokensV2 ? ["tokens-v2"] : []),
+          ];
+          return profiles.length ? { profiles } : {};
+        })(),
       });
       setStage({ kind: "progress", accepted });
     } catch (e) {
@@ -279,6 +290,8 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
               setAllowUncurated={setAllowUncurated}
               observability={observability}
               setObservability={setObservability}
+              tokensV2={tokensV2}
+              setTokensV2={setTokensV2}
               preflight={preflight}
               onSubmit={submit}
             />
@@ -450,6 +463,8 @@ interface FormBodyProps {
   setAllowUncurated: (b: boolean) => void;
   observability: boolean;
   setObservability: (b: boolean) => void;
+  tokensV2: boolean;
+  setTokensV2: (b: boolean) => void;
   preflight: PreflightState;
   onSubmit: (e: React.FormEvent) => void;
 }
@@ -466,6 +481,8 @@ function FormBody({
   setAllowUncurated,
   observability,
   setObservability,
+  tokensV2,
+  setTokensV2,
   preflight,
   onSubmit,
 }: FormBodyProps) {
@@ -548,6 +565,56 @@ function FormBody({
         </div>
       </label>
 
+      {/* Token Standard V2 alpha overlay — opt-in. Mirrors the CLI's
+          --profile tokens-v2; needs a V2-capable Splice version. */}
+      <label
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 10,
+          padding: "10px 12px",
+          background: W.surface2,
+          borderRadius: 8,
+          border: `1px solid ${tokensV2 ? W.brand : W.border}`,
+          cursor: "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={tokensV2}
+          onChange={(e) => setTokensV2(e.target.checked)}
+          style={{ marginTop: 2 }}
+        />
+        <div style={{ flex: 1, fontSize: 12.5, color: W.text2 }}>
+          <strong style={{ color: W.text }}>Token Standard V2 (alpha)</strong>
+          <span
+            style={{
+              marginLeft: 8,
+              fontSize: 10.5,
+              padding: "1px 6px",
+              borderRadius: 3,
+              background: `${W.brand}1A`,
+              color: W.brand,
+              fontFamily: wMono,
+            }}
+          >
+            protocol 35
+          </span>
+          <div style={{ color: W.dim, fontSize: 11.5, marginTop: 3, lineHeight: 1.5 }}>
+            Injects the alpha-protocol Canton config for CIP-0112 token
+            flows. Requires a V2-capable Splice version (e.g.{" "}
+            <code style={{ fontFamily: wMono }}>token-standard-v2</code>). The
+            instance will settle at status <strong>partial</strong> — the V2
+            splice healthcheck never reports healthy, but token flows work.
+            Equivalent to{" "}
+            <code style={{ fontFamily: wMono, marginLeft: 4 }}>
+              --profile tokens-v2
+            </code>{" "}
+            on the CLI.
+          </div>
+        </div>
+      </label>
+
       <details style={{ marginTop: 4 }}>
         <summary
           style={{
@@ -603,6 +670,7 @@ function FormBody({
           dpm localnet up --name {name || "<name>"} --version{" "}
           {version || "latest"}
           {observability ? " --profile observability" : ""}
+          {tokensV2 ? " --profile tokens-v2" : ""}
         </span>
       </div>
     </form>

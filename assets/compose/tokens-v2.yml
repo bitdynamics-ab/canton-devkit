@@ -1,5 +1,12 @@
 # BIT-211 — Token Standard V2 alpha profile overlay (Canton config).
 #
+# KNOWN PARTIAL OUTCOME: under the V2 alpha protocol the `splice` service's
+# healthcheck never reports `healthy`, so an instance brought up with this
+# profile settles at status `partial` even though the ledger is up and
+# token flows work. This is an upstream alpha-image limitation, not a
+# bring-up failure — treat `partial` as "running, V2 alpha" for tokens-v2
+# instances. Re-evaluate when V2 merges into mainline Splice.
+#
 # Apply via `dpm localnet up --profile tokens-v2 --version token-standard-v2`
 # (or `--allow-uncurated` against a custom V2 snapshot). The overlay file
 # itself is only appended to the compose chain when --profile tokens-v2 is
