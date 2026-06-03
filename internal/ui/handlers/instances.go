@@ -365,7 +365,11 @@ func writeError(w http.ResponseWriter, status int, summary string, cause error) 
 
 // writeErrorWithCode is the variant used when the handler wants
 // to pin a specific stable code rather than the status-derived
-// default.
+// default. Currently called from sibling handlers (snapshots,
+// metrics, …) that may not exist on every branch — keep as
+// exported-to-package even when no caller is in this file.
+//
+//nolint:unused // intentional package-public; consumed by sibling handlers
 func writeErrorWithCode(w http.ResponseWriter, status int, code, summary string, remediation ...string) {
 	writeJSON(w, status, errorBody{
 		Code:        code,
@@ -411,6 +415,7 @@ type upRequest struct {
 // known profile constants.
 var allowedProfiles = map[string]bool{
 	localnet.ObservabilityProfileName: true,
+	localnet.TokensV2ProfileName:      true,
 }
 
 // upAcceptedResponse is the 202 body the POST returns. The frontend
@@ -1787,7 +1792,33 @@ func enableObservability(ctx context.Context, state *registry.State) (string, in
 		state.ComposeFiles = append(state.ComposeFiles, overlay)
 	}
 
+	// Reconstruct the FULL compose env the same way RunUp does. The
+	// Splice base compose requires PARTY_HINT / LOCALNET_DIR /
+	// IMAGE_TAG / COMPOSE_PROFILES / ... — all supplied by the
+	// adapter's OverlayEnv + the --env-file flags. Without them
+	// docker compose aborts during interpolation ("required variable
+	// PARTY_HINT is missing a value") before prometheus/grafana can
+	// start. Reuse the instance's already-published UI host ports;
+	// let docker auto-assign the observability ports (PROMETHEUS/
+	// GRAFANA_HOST_PORT=0) — prometheus_ui is discovered below.
+	uiOverrides := map[string]int{
+		"APP_USER_UI_PORT":     state.Ports["app_user_ui"],
+		"APP_PROVIDER_UI_PORT": state.Ports["app_provider_ui"],
+		"SV_UI_PORT":           state.Ports["sv_ui"],
+		"SWAGGER_UI_PORT":      state.Ports["swagger_ui"],
+		"DB_PORT":              state.Ports["postgres"],
+		"PROMETHEUS_HOST_PORT": 0,
+		"GRAFANA_HOST_PORT":    0,
+	}
+	cenv, err := localnet.ComposeEnvForInstance(state, uiOverrides)
+	if err != nil {
+		return "", 0, fmt.Errorf("rebuild compose env: %w", err)
+	}
+
 	args := []string{"compose", "-p", state.ComposeProject}
+	for _, f := range cenv.EnvFiles {
+		args = append(args, "--env-file", f)
+	}
 	for _, f := range state.ComposeFiles {
 		args = append(args, "-f", f)
 	}
@@ -1796,10 +1827,9 @@ func enableObservability(ctx context.Context, state *registry.State) (string, in
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Dir = state.ProjectDir
-	// Pass through PROMETHEUS_HOST_PORT=0 so docker auto-assigns a
-	// free host port. RunUp does the same for the initial up.
-	cmd.Env = append(cmd.Env, "PROMETHEUS_HOST_PORT=0",
-		"COMPOSE_PROJECT_NAME="+state.ComposeProject)
+	// Full env (os.Environ() + adapter OverlayEnv). The env-file
+	// paths above are relative to ProjectDir, which is cmd.Dir.
+	cmd.Env = cenv.Env
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(out), 0, fmt.Errorf("docker compose up: %w", err)
