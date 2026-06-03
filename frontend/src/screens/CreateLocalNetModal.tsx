@@ -1081,6 +1081,164 @@ const selectStyle: React.CSSProperties = {
   appearance: "auto",
 };
 
+// PreflightPanel renders the system-requirements check inline in
+// the form. Five visual modes:
+//
+//   idle     — no render
+//   loading  — pill saying "checking docker memory + disk…"
+//   err      — neutral note; doesn't block ("server probe failed,
+//              the server-side gate will still run on submit")
+//   ok+pass  — tiny green confirmation pill
+//   ok+warn  — amber box with warning checks (proceeding allowed)
+//   blocked  — red box: every fail check + its remediation;
+//              warns rendered as amber subnotes. Create disabled.
+//
+// The component never reads the version directly — it just
+// renders whatever the parent's effect produced. Clean separation.
+function PreflightPanel({ state }: { state: PreflightState }) {
+  if (state.kind === "idle") return null;
+  if (state.kind === "loading") {
+    return (
+      <div
+        style={{
+          padding: "8px 12px",
+          background: W.surface2,
+          color: W.dim,
+          border: `1px solid ${W.border}`,
+          borderRadius: 7,
+          fontSize: 11.5,
+          fontFamily: wMono,
+        }}
+      >
+        ⠋ checking system requirements (docker memory · disk · daemon)…
+      </div>
+    );
+  }
+  if (state.kind === "err") {
+    return (
+      <div
+        style={{
+          padding: "8px 12px",
+          background: W.surface2,
+          color: W.dim,
+          border: `1px solid ${W.border}`,
+          borderRadius: 7,
+          fontSize: 11.5,
+        }}
+      >
+        Pre-flight probe couldn't reach the server ({state.message}). The
+        server-side gate still runs on submit.
+      </div>
+    );
+  }
+  const allChecks: { section: string; check: PreflightCheck }[] = [];
+  for (const sec of state.report.sections) {
+    for (const c of sec.checks) {
+      allChecks.push({ section: sec.title, check: c });
+    }
+  }
+  const fails = allChecks.filter((c) => c.check.result === "fail");
+  const warns = allChecks.filter((c) => c.check.result === "warn");
+  const blocked = state.kind === "blocked";
+  const accent = blocked ? W.err : warns.length > 0 ? W.warn : W.ok;
+  const heading = blocked
+    ? "✗ Host doesn't meet this version's requirements"
+    : warns.length > 0
+    ? "⚠ Host meets minimums — but raise resources for headroom"
+    : "✓ Host is ready for this version";
+  if (!blocked && warns.length === 0) {
+    // Compact success pill — don't clutter the form.
+    return (
+      <div
+        style={{
+          padding: "6px 10px",
+          background: `${W.ok}14`,
+          color: W.ok,
+          border: `1px solid ${W.ok}44`,
+          borderRadius: 7,
+          fontSize: 11.5,
+          fontFamily: wMono,
+        }}
+      >
+        {heading} · {state.report.summary}
+      </div>
+    );
+  }
+  return (
+    <div
+      role={blocked ? "alert" : undefined}
+      style={{
+        padding: "10px 12px",
+        background: `${accent}10`,
+        border: `1px solid ${accent}`,
+        borderRadius: 8,
+        fontSize: 12,
+      }}
+    >
+      <div style={{ color: accent, fontWeight: 600, marginBottom: 6 }}>
+        {heading}
+      </div>
+      {state.report.summary && (
+        <div style={{ color: W.text2, marginBottom: 8, fontSize: 11.5 }}>
+          {state.report.summary}
+        </div>
+      )}
+      {[...fails, ...warns].map(({ section, check }, i) => (
+        <div
+          key={`${section}-${check.label}-${i}`}
+          style={{
+            marginTop: 6,
+            padding: "6px 8px",
+            background: W.bg,
+            border: `1px solid ${W.border}`,
+            borderRadius: 6,
+          }}
+        >
+          <div style={{ fontFamily: wMono, fontSize: 11.5 }}>
+            <span
+              style={{
+                color: check.result === "fail" ? W.err : W.warn,
+                fontWeight: 700,
+                marginRight: 6,
+              }}
+            >
+              {check.result === "fail" ? "✗" : "⚠"} {check.label}
+            </span>
+            <span style={{ color: W.dim }}>· {section}</span>
+          </div>
+          {check.detail && (
+            <div
+              style={{
+                color: W.text2,
+                fontSize: 11,
+                marginTop: 3,
+                fontFamily: wMono,
+              }}
+            >
+              {check.detail}
+            </div>
+          )}
+          {check.remediation && check.remediation.length > 0 && (
+            <ul
+              style={{
+                margin: "4px 0 0 0",
+                paddingLeft: 18,
+                color: W.text2,
+                fontSize: 11,
+                lineHeight: 1.5,
+              }}
+            >
+              {check.remediation.map((r: string, j: number) => (
+                <li key={j}>{r}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Field({
   label,
   hint,
