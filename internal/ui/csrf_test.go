@@ -390,6 +390,38 @@ func TestCSRF_SkillsInstallProtectedEndToEnd(t *testing.T) {
 	}
 }
 
+// TestCSRF_TokensActionsProtectedEndToEnd pins that the state-changing
+// /api/tokens POSTs (create / mint / transfer / accept / burn) inherit
+// the global Origin gate — they have no per-route CSRF guard of their
+// own and rely entirely on withOriginCheck wrapping the mux in
+// NewRouter. A cross-origin POST to each must be rejected with 403
+// BEFORE the handler (and any ledger mutation) runs.
+func TestCSRF_TokensActionsProtectedEndToEnd(t *testing.T) {
+	srv, addr := startTestServer(t)
+	defer func() { _ = srv.Shutdown(context.Background()) }()
+
+	routes := []string{
+		"/api/tokens",
+		"/api/tokens/RTK/mint",
+		"/api/tokens/RTK/transfer",
+		"/api/tokens/transfers/abc123/accept",
+		"/api/tokens/RTK/burn",
+	}
+	for _, route := range routes {
+		req, _ := http.NewRequest("POST", "http://"+addr+route, nil)
+		req.Header.Set("Origin", "https://evil.example.com")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST %s: %v", route, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("cross-origin POST %s status = %d, want 403 — withOriginCheck not reaching the route",
+				route, resp.StatusCode)
+		}
+	}
+}
+
 func TestRouter_SkillsInstallRouteMountedEndToEnd(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

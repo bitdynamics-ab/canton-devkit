@@ -266,6 +266,12 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 		writeErrorWithCode(w, http.StatusConflict,
 			"SYMBOL_IN_USE", err.Error())
 	default:
-		writeError(w, http.StatusBadRequest, op, err)
+		// Orchestration-layer errors here are user-actionable (bad
+		// amount, unknown party, malformed instrument id). Surface the
+		// cause so the caller can fix the request — `writeError` would
+		// redact it to just the op name, which is correct for 5xx but
+		// unhelpful for a 400. Consistent with the explicit 400s in the
+		// per-handler decode paths.
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 	}
 }
