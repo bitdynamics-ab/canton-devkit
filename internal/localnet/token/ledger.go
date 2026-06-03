@@ -2,7 +2,9 @@ package token
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -78,11 +80,40 @@ func dialLedger(ctx context.Context, conn LedgerConn) (*ledger.Client, func(), e
 	return client, func() { _ = client.Close() }, nil
 }
 
+// jwtPattern matches a compact JWS (three base64url segments, header
+// starting with the conventional `eyJ`). Used by resolveLedgerToken to
+// scrub any bearer token that might otherwise ride out in an error
+// string toward the user's terminal or logs.
+var jwtPattern = regexp.MustCompile(`eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`)
+
+// redactJWTs replaces any JWT-shaped substring with a fixed marker.
+// Defence-in-depth: errors on the token-resolution path wrap file/role
+// context today (not the token itself — SignToken returns the token only
+// on success), but a future change to splice.SignToken or
+// LoadCredentialInputs could embed credential material in an error. This
+// guard ensures a bearer token can never reach the user via an error.
+func redactJWTs(err error) error {
+	if err == nil {
+		return nil
+	}
+	masked := jwtPattern.ReplaceAllString(err.Error(), "[redacted-jwt]")
+	if masked == err.Error() {
+		return err // nothing matched — preserve the original error (and its wrapping)
+	}
+	return errors.New(masked)
+}
+
 // resolveLedgerToken implements the four-step token resolution order
 // documented on dialLedger. Returns "" when no token is needed
 // (participant runs without auth) — the caller treats empty as "no
-// auth header" rather than an error.
+// auth header" rather than an error. Any returned error is passed
+// through redactJWTs so a bearer token can never leak via the error path.
 func resolveLedgerToken(conn LedgerConn) (string, error) {
+	tok, err := resolveLedgerTokenRaw(conn)
+	return tok, redactJWTs(err)
+}
+
+func resolveLedgerTokenRaw(conn LedgerConn) (string, error) {
 	if conn.Token != "" {
 		return conn.Token, nil
 	}
