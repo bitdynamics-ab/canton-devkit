@@ -169,6 +169,41 @@ func TestGetAcceptChoiceContext_EmptyIDRejected(t *testing.T) {
 	}
 }
 
+// TestGetAcceptChoiceContext_EscapesReservedChars pins C3: an
+// instruction id containing URL-reserved chars ('#', '?', ' ') is
+// url.PathEscape'd so the registry sees the literal id, not a
+// fragment / query string. Without the escape, '#' truncates the
+// path on the way out the door.
+func TestGetAcceptChoiceContext_EscapesReservedChars(t *testing.T) {
+	var capturedPath, capturedRaw string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPath = r.URL.Path
+		capturedRaw = r.URL.RawPath
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choiceContextData":{},"disclosedContracts":[]}`))
+	}))
+	defer srv.Close()
+
+	c, err := Dial(DialOptions{BaseURL: srv.URL, Token: StaticToken("x")})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	weirdID := "00txn id with#hash?and space"
+	if _, err := c.GetAcceptChoiceContext(
+		context.Background(),
+		weirdID,
+		ChoiceContextRequest{Meta: map[string]string{}},
+	); err != nil {
+		t.Fatalf("GetAcceptChoiceContext: %v", err)
+	}
+	// The decoded path (r.URL.Path) reflects the original id. The raw
+	// path (when present) carries the escaped form. The decisive
+	// check: the path must NOT be truncated at the '#' or '?'.
+	if !strings.Contains(capturedPath, "00txn id with#hash?and space") {
+		t.Errorf("path lost reserved chars: path=%q raw=%q", capturedPath, capturedRaw)
+	}
+}
+
 // TestGetTransferFactory_PropagatesAPIError asserts that a 4xx from the
 // registry (e.g. fee schedule violation) round-trips via APIError so
 // the caller can surface the actual reason to the user.

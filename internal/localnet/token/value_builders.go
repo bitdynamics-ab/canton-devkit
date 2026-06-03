@@ -3,6 +3,7 @@ package token
 import (
 	"encoding/base64"
 	"fmt"
+	"math/big"
 	"sort"
 	"strings"
 	"time"
@@ -276,7 +277,14 @@ func jsonToAnyValue(v any) (*lapiv2.Value, error) {
 				Sum: &lapiv2.Value_Int64{Int64: int64(x)},
 			}), nil
 		}
-		return variantValue("AV_Decimal", numericValue(fmt.Sprintf("%g", x))), nil
+		// %g loses precision past ~15 significant digits and may emit
+		// scientific notation, neither of which the registry accepts.
+		// Round-trip the float64 through big.Rat so we emit an exact
+		// decimal string. Daml Decimal allows up to 38 fractional
+		// digits in V2; FloatString(18) covers V2's test-token cap
+		// while keeping the wire form deterministic.
+		return variantValue("AV_Decimal",
+			numericValue(new(big.Rat).SetFloat64(x).FloatString(18))), nil
 	case bool:
 		return variantValue("AV_Bool", &lapiv2.Value{Sum: &lapiv2.Value_Bool{Bool: x}}), nil
 	case nil:

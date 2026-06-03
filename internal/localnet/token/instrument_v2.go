@@ -253,6 +253,11 @@ func createTokenRules(ctx context.Context, client *ledger.Client, admin string) 
 // (the instrument identity is the (admin, id) pair carried per holding,
 // not per-TokenRules).
 func findTokenRules(ctx context.Context, client *ledger.Client, admin string) (string, error) {
+	// Cancel the stream pump on every return path so an early break
+	// (first match found) doesn't leak the goroutine for the lifetime
+	// of the parent request context.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	end, err := client.LedgerEnd(ctx)
 	if err != nil {
 		return "", fmt.Errorf("ledger end: %w", err)
@@ -299,6 +304,10 @@ func findTokenRules(ctx context.Context, client *ledger.Client, admin string) (s
 // submission must disclose it (with its createdEventBlob) for the
 // receiver's transaction to reference it via the choice context.
 func findTokenRulesDisclosed(ctx context.Context, client *ledger.Client, admin string) (string, *lapiv2.DisclosedContract, error) {
+	// Cancel the stream pump on every return path; first-match returns
+	// otherwise leak the upstream goroutine.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	end, err := client.LedgerEnd(ctx)
 	if err != nil {
 		return "", nil, fmt.Errorf("ledger end: %w", err)

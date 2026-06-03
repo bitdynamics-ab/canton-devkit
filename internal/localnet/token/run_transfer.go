@@ -226,6 +226,10 @@ func contractIDsOf(h []holdingRef) []string {
 // `instrumentID`. Empty instrumentID returns all holdings (caller
 // filters).
 func listSenderHoldings(ctx context.Context, client *ledger.Client, sender, instrumentID string) ([]holdingRef, error) {
+	// Wrap with cancel so a stream-iter error or an upstream timeout
+	// tears down the stream pump goroutine instead of leaking it.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	end, err := client.LedgerEnd(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("ledger end: %w", err)
@@ -276,29 +280,63 @@ func listSenderHoldings(ctx context.Context, client *ledger.Client, sender, inst
 // `amount`. Greedy small-first keeps individually-large holdings free
 // for bigger future transfers — a common heuristic for token wallets.
 // Returns the picked holdings + sum, or an error if total < amount.
+//
+// Arithmetic uses math/big.Rat (not big.Float) so 18-decimal-place
+// Daml Decimal values round-trip exactly: big.Float uses binary
+// mantissa and silently loses precision past ~15 decimal digits,
+// which corrupts cash amounts. Rat parses decimal strings exactly
+// via SetString and formats back via FloatString(decimals).
 func selectInputHoldings(holdings []holdingRef, amount string) ([]holdingRef, string, error) {
-	target, ok := new(big.Float).SetString(amount)
+	target, ok := new(big.Rat).SetString(amount)
 	if !ok {
 		return nil, "", fmt.Errorf("amount %q is not a valid decimal", amount)
 	}
 	indexed := make([]holdingRef, len(holdings))
 	copy(indexed, holdings)
 	sort.Slice(indexed, func(i, j int) bool {
-		a, _ := new(big.Float).SetString(indexed[i].Amount)
-		b, _ := new(big.Float).SetString(indexed[j].Amount)
+		a, _ := new(big.Rat).SetString(indexed[i].Amount)
+		b, _ := new(big.Rat).SetString(indexed[j].Amount)
 		return a.Cmp(b) < 0
 	})
-	sum := new(big.Float).SetFloat64(0)
+	sum := new(big.Rat)
 	var picked []holdingRef
 	for _, h := range indexed {
-		a, _ := new(big.Float).SetString(h.Amount)
+		a, ok := new(big.Rat).SetString(h.Amount)
+		if !ok {
+			return nil, "", fmt.Errorf("holding amount %q is not a valid decimal", h.Amount)
+		}
 		sum.Add(sum, a)
 		picked = append(picked, h)
 		if sum.Cmp(target) >= 0 {
-			return picked, sum.Text('f', 10), nil
+			return picked, formatDecimalRat(sum, amount), nil
 		}
 	}
-	return nil, "", fmt.Errorf("sender has %s total but transfer needs %s", sum.Text('f', 10), amount)
+	return nil, "", fmt.Errorf("sender has %s total but transfer needs %s",
+		formatDecimalRat(sum, amount), amount)
+}
+
+// formatDecimalRat renders r as a decimal string with enough
+// fractional digits to round-trip the input — derived from the
+// reference string `like` (typically the user-supplied amount).
+// Daml Decimal allows up to 38 fractional digits in V2; we cap at
+// the larger of (input scale, 10) to keep output stable.
+func formatDecimalRat(r *big.Rat, like string) string {
+	scale := decimalScale(like)
+	if scale < 10 {
+		scale = 10
+	}
+	return r.FloatString(scale)
+}
+
+// decimalScale returns the number of digits after the decimal point
+// in s, or 0 if s has no '.' character.
+func decimalScale(s string) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == '.' {
+			return len(s) - i - 1
+		}
+	}
+	return 0
 }
 
 // inferAdminFromHoldings reads the admin off a holding view. All

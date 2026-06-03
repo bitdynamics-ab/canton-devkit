@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -213,7 +214,10 @@ func (c *Client) GetAcceptChoiceContext(ctx context.Context, instructionID strin
 		return nil, fmt.Errorf("GetAcceptChoiceContext: instructionID is required")
 	}
 	var out ChoiceContextResponse
-	path := fmt.Sprintf(choiceContextAcceptPathFmt, instructionID)
+	// url.PathEscape protects against an instruction id containing
+	// reserved URL chars ('#', '?', ' ') from being mis-parsed by the
+	// registry as a separate path segment / query string.
+	path := fmt.Sprintf(choiceContextAcceptPathFmt, url.PathEscape(instructionID))
 	if err := c.doJSON(ctx, "POST", path, req, &out); err != nil {
 		return nil, fmt.Errorf("GetAcceptChoiceContext: %w", err)
 	}
@@ -235,7 +239,7 @@ func (c *Client) GetRejectChoiceContext(ctx context.Context, instructionID strin
 		return nil, fmt.Errorf("GetRejectChoiceContext: instructionID is required")
 	}
 	var out ChoiceContextResponse
-	path := fmt.Sprintf(choiceContextRejectPathFmt, instructionID)
+	path := fmt.Sprintf(choiceContextRejectPathFmt, url.PathEscape(instructionID))
 	if err := c.doJSON(ctx, "POST", path, req, &out); err != nil {
 		return nil, fmt.Errorf("GetRejectChoiceContext: %w", err)
 	}
@@ -250,7 +254,7 @@ func (c *Client) GetWithdrawChoiceContext(ctx context.Context, instructionID str
 		return nil, fmt.Errorf("GetWithdrawChoiceContext: instructionID is required")
 	}
 	var out ChoiceContextResponse
-	path := fmt.Sprintf(choiceContextWithdrawPathFmt, instructionID)
+	path := fmt.Sprintf(choiceContextWithdrawPathFmt, url.PathEscape(instructionID))
 	if err := c.doJSON(ctx, "POST", path, req, &out); err != nil {
 		return nil, fmt.Errorf("GetWithdrawChoiceContext: %w", err)
 	}
