@@ -45,6 +45,7 @@ func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
 	handlers.MountContracts(mux)    // BIT-186 — Explorer (ACS snapshot)
 	handlers.MountTransactions(mux) // BIT-186 — Explorer (Transactions/Timeline)
 	handlers.MountSkills(mux)       // BIT-189 — Agent Skills (browse + install)
+	handlers.MountTokens(mux, hub)  // BIT-213 — Tokens (V2 instruments + actions)
 	// /events (SSE) — added by BIT-130. Handler does its own
 	// Origin check (sse.go) since EventSource sends GET and the
 	// global CSRF middleware is GET-exempt.
