@@ -49,11 +49,22 @@ type InstrumentRef struct {
 	OnLedger bool   `json:"on_ledger"`          // discovered from the ACS
 }
 
+// maxWorkspaceScan caps how many ACS contracts scanWorkspace will
+// consume before declaring the result truncated. A real instance
+// rarely holds more than a few thousand HoldingV2 contracts; the
+// cap is a belt-and-braces guard against a runaway ledger pumping
+// us into OOM via the unbounded gRPC stream.
+const maxWorkspaceScan = 10_000
+
 // Workspace is the full scanned state.
 type Workspace struct {
 	Parties     []string          `json:"parties"`
 	Instruments []InstrumentRef   `json:"instruments"`
 	Holdings    []HoldingContract `json:"holdings"` // every UTXO across all parties
+	// Truncated is set when the ACS scan hit maxWorkspaceScan and
+	// stopped early; the UI can render "showing N of many" rather
+	// than silently misreporting the workspace.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 // scanWorkspace dials the participant and scans HoldingV2 across every
@@ -61,6 +72,11 @@ type Workspace struct {
 // each Holding contract. Roles' JWTs carry CanReadAs the local parties,
 // so a per-party filter returns them all without a super-reader claim.
 func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error) {
+	// Cancel the upstream stream pump on every return path so an
+	// early break (cap, decode error) doesn't leak the goroutine for
+	// the lifetime of the parent request context.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	conn := LedgerConn{
 		Endpoint: opts.Endpoint,
 		Token:    opts.Token,
@@ -101,9 +117,16 @@ func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error)
 	}
 
 	var holdings []HoldingContract
+	var scanned int
+	var truncated bool
 	for item := range stream {
 		if item.Err != nil {
 			return nil, fmt.Errorf("ACS stream: %w", item.Err)
+		}
+		scanned++
+		if scanned > maxWorkspaceScan {
+			truncated = true
+			break
 		}
 		entry, ok := item.Value.ContractEntry.(*lapiv2.GetActiveContractsResponse_ActiveContract)
 		if !ok {
@@ -133,6 +156,7 @@ func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error)
 		Parties:     sortedUnique(partiesOf(holdings, parties)),
 		Holdings:    holdings,
 		Instruments: instrumentsFromHoldings(holdings, opts.Instance),
+		Truncated:   truncated,
 	}
 	return ws, nil
 }
@@ -199,6 +223,10 @@ type BalanceMatrix struct {
 	Instruments []InstrumentRef `json:"instruments"`
 	Cells       []MatrixCell    `json:"cells"`  // sparse: only non-zero
 	Totals      []MatrixCell    `json:"totals"` // per instrument (party="")
+	// Truncated propagates from the underlying Workspace so the UI
+	// can surface "matrix shows N of many" rather than misleading
+	// per-instrument totals.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 // buildMatrix sums holdings per (party, instrumentId).
@@ -237,6 +265,7 @@ func buildMatrix(ws *Workspace) *BalanceMatrix {
 		Instruments: ws.Instruments,
 		Cells:       cells,
 		Totals:      tot,
+		Truncated:   ws.Truncated,
 	}
 }
 

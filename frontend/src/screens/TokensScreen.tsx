@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   acceptTransfer,
@@ -87,6 +87,12 @@ export function TokensScreen() {
   const [holdingsErr, setHoldingsErr] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null); // party whose UTXOs are shown
   const [contracts, setContracts] = useState<HoldingContract[]>([]);
+  // expandSeqRef is the monotonic counter behind toggleExpand's
+  // latest-click guard: if the user clicks a new party while a fetch
+  // is still in flight, the stale resolution bails before clobbering
+  // the newer state. Same pattern as the `cancelled` flags in the
+  // useEffect fetches above.
+  const expandSeqRef = useRef(0);
   const [matrix, setMatrix] = useState<BalanceMatrix | null>(null);
   const [matrixErr, setMatrixErr] = useState<string | null>(null);
   const [summary, setSummary] = useState<InstrumentSummary | null>(null);
@@ -255,6 +261,11 @@ export function TokensScreen() {
   );
 
   // Expand a party's balance into its individual Holding contracts (UTXOs).
+  // The latest-click guard mirrors the `cancelled` pattern used by the
+  // useEffect fetches above: if the user clicks a different party while
+  // a fetch is still in flight, the stale resolution must not overwrite
+  // the newer state. expandSeq increments on every click; the in-flight
+  // closure captures its own seq and bails when it no longer matches.
   function toggleExpand(party: string) {
     if (expanded === party) {
       setExpanded(null);
@@ -262,11 +273,17 @@ export function TokensScreen() {
       return;
     }
     if (!instance || !activeSymbol) return;
+    const seq = expandSeqRef.current + 1;
+    expandSeqRef.current = seq;
     setExpanded(party);
     setContracts([]);
     fetchHoldingContracts(instance, activeSymbol, party)
-      .then((cs) => setContracts(cs))
-      .catch(() => setContracts([]));
+      .then((cs) => {
+        if (expandSeqRef.current === seq) setContracts(cs);
+      })
+      .catch(() => {
+        if (expandSeqRef.current === seq) setContracts([]);
+      });
   }
 
   function bump() {

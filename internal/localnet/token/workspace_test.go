@@ -127,3 +127,23 @@ func TestSummarizeInstrument_EmptyZeroSafe(t *testing.T) {
 		t.Errorf("empty holders expected, got %+v", s.Holders)
 	}
 }
+
+// TestBuildMatrix_PropagatesTruncated pins D1: when scanWorkspace
+// hits maxWorkspaceScan and returns truncated=true, buildMatrix
+// must carry the flag through so the UI can render
+// "matrix shows N of many" instead of misleading per-instrument
+// totals. The unbounded ACS read this guards against could otherwise
+// silently pump us into OOM.
+func TestBuildMatrix_PropagatesTruncated(t *testing.T) {
+	ws := &Workspace{Truncated: true}
+	m := buildMatrix(ws)
+	if !m.Truncated {
+		t.Errorf("BalanceMatrix.Truncated = false; want true (propagated from workspace)")
+	}
+
+	ws2 := &Workspace{}
+	m2 := buildMatrix(ws2)
+	if m2.Truncated {
+		t.Errorf("BalanceMatrix.Truncated = true for untruncated workspace; want false")
+	}
+}
