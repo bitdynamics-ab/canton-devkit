@@ -124,6 +124,7 @@ func Dial(opts DialOptions) (*Client, error) {
 //   - APIError on non-2xx (with status code + response body for the
 //     caller to surface).
 //   - wrapped non-API error on network / decode failure.
+//
 // maxResponseBytes caps the success-path JSON body we'll read from the
 // registry. Generous (4 MiB) versus the few-KB choice contexts we
 // actually expect, but a hard ceiling against an unbounded/hostile body.
