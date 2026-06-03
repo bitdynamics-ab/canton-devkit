@@ -43,12 +43,9 @@ func MaterializeTokensV2Overlay(dataDir string) (string, error) {
 	}
 
 	const embedPath = "compose/tokens-v2.yml"
-	// assets.Observability is misnamed: it's the shared `//go:embed
-	// all:compose all:grafana` filesystem, not an observability-only FS.
-	// The tokens-v2 overlay lives under compose/ in that same tree.
-	// (A rename to assets.FS is the cleaner fix but touches every
-	// consumer; tracked separately.)
-	data, err := fs.ReadFile(assets.Observability, embedPath)
+	// assets.FS is the shared compose+grafana embed; the tokens-v2
+	// overlay lives under compose/ in that tree.
+	data, err := fs.ReadFile(assets.FS, embedPath)
 	if err != nil {
 		return "", fmt.Errorf("read embedded %s: %w", embedPath, err)
 	}
