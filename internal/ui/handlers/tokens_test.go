@@ -11,6 +11,8 @@ import (
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // tokensSrv mounts MountTokens on a fresh mux and returns an
@@ -147,26 +149,47 @@ func TestTokens_MissingInstanceIs400(t *testing.T) {
 	}
 }
 
-// TestMapTokenError_DefaultSanitizesCause pins A1: unknown errors
-// route through the 500 path so the raw cause string (party-ids,
-// contract-ids, dial URLs) NEVER reaches the client body. Known
-// sentinels still surface their dedicated codes.
-func TestMapTokenError_DefaultSanitizesCause(t *testing.T) {
-	cause := errors.New("dial localhost:13902: party alice::abc123def contract 00abcd: rpc error")
+// TestMapTokenError_DefaultIs400WithCause pins main's policy: a
+// non-gRPC orchestration error is user-actionable (bad amount,
+// unknown party, malformed instrument id), so it surfaces as 400
+// with the cause string — `writeError`'s 5xx-only redaction would
+// hide context the user needs. gRPC paths (Unavailable, Internal,
+// InvalidArgument) are exercised in their dedicated mint tests
+// where sanitize400 masks party-id fingerprints on the 400 branch.
+func TestMapTokenError_DefaultIs400WithCause(t *testing.T) {
+	cause := errors.New("amount must be a non-negative decimal")
 	rec := httptest.NewRecorder()
-	mapTokenError(rec, cause, "balance")
+	mapTokenError(rec, cause, "mint")
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want 500", rec.Code)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), ErrCodeInvalidRequest) {
+		t.Errorf("body should carry INVALID_REQUEST code; got %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "non-negative decimal") {
+		t.Errorf("body should carry the cause string; got %s", rec.Body.String())
+	}
+}
+
+// TestMapTokenError_InvalidArgumentSanitizesPartyID pins main's
+// sanitize400: a gRPC InvalidArgument whose message embeds a fully-
+// qualified party id has the fingerprint masked before reaching the
+// client. The readable hint stays so the error remains actionable.
+func TestMapTokenError_InvalidArgumentSanitizesPartyID(t *testing.T) {
+	st := status.New(codes.InvalidArgument, "party alice::abc123def456 not authorized")
+	rec := httptest.NewRecorder()
+	mapTokenError(rec, st.Err(), "mint")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, leak := range []string{"alice::abc123def", "00abcd", "localhost:13902", "rpc error"} {
-		if strings.Contains(body, leak) {
-			t.Errorf("body leaks %q: %s", leak, body)
-		}
+	if strings.Contains(body, "abc123def456") {
+		t.Errorf("body leaks party-id fingerprint: %s", body)
 	}
-	if !strings.Contains(body, ErrCodeInternal) {
-		t.Errorf("body should carry internal code; got %s", body)
+	if !strings.Contains(body, "alice::") {
+		t.Errorf("body should keep readable hint: %s", body)
 	}
 }
 
