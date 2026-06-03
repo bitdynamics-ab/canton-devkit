@@ -17,6 +17,11 @@
 # only `exec-args` + user args reach it. `exec-args: ["localnet"]` is
 # therefore required so the binary dispatches into its `localnet`
 # subtree regardless of how DPM invoked the component.
+#
+# digitalasset.com/v1 is the GA component schema (NOT a v1beta1
+# pre-release): `dpm publish component --dry-run` on DPM 1.0.16 validates
+# this manifest under it. Bump only when DPM documents a newer GA
+# component apiVersion.
 apiVersion: digitalasset.com/v1
 kind: Component
 spec:

@@ -30,6 +30,12 @@ tar -xzf canton-devkit_v0.1.0_linux_amd64.tar.gz
 ./canton-devkit localnet --help
 ```
 
+> **Version-string asymmetry:** the standalone archive filenames keep the
+> `v` prefix (`canton-devkit_v0.1.0_…`), matching the git tag, while the
+> DPM/OCI tag strips it (`…:0.1.0`) because DPM requires a bare-semver
+> tag. Same release, two conventions — chosen to match each ecosystem's
+> norm.
+
 ## DPM component
 
 The DPM component is published to GitHub Container Registry on every
@@ -102,3 +108,19 @@ dpm publish component oci://localhost:5000/canton-devkit:0.0.1-dryrun \
 `✅ Component manifest is valid` confirms the manifest schema. CI runs
 the same `--dry-run` on every push and the real publish only on `v*`
 tags.
+
+## Supply-chain integrity
+
+Today's integrity story is **SHA-256 checksums** (`SHA256SUMS`, verifiable
+with `sha256sum --check`) plus the immutability of the GHCR OCI digest.
+The CI pipeline also pins every GitHub Action and the DPM CLI tarball by
+SHA.
+
+**Known gap (follow-up):** the release artifacts are **not yet
+cryptographically signed**. There are no [cosign](https://github.com/sigstore/cosign)/Sigstore
+signatures on `SHA256SUMS` or on the OCI artifact, so consumers can
+verify *integrity* (the bytes match the checksum) but not *provenance*
+(the bytes were produced by our pipeline). Adding keyless cosign signing
++ a published verification step is tracked as a post-v1 hardening item —
+not blocking the initial release, but required before the artifacts are
+promoted as a trusted distribution channel.

@@ -26,10 +26,6 @@ env:
   # Build matrix (single source of truth — kept in sync between the
   # standalone-binary and DPM-component jobs).
   RELEASE_TARGETS: linux/amd64 darwin/arm64 windows/amd64
-  # Common Go build flags. -trimpath strips local paths from the binary
-  # (otherwise the CI runner's /home/runner/... shows up in stack
-  # traces); -s -w shrink the binary by ~30%.
-  GO_BUILD_FLAGS: -trimpath -ldflags
 
 jobs:
   binaries:
@@ -46,7 +42,9 @@ jobs:
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
           go-version-file: go.mod
-          cache: false
+          # Module + build cache on (setup-go default). This is the only
+          # Go-compiling job now — the dpm-component job consumes the
+          # binaries this job uploads, so the toolchain runs exactly once.
 
       - name: Set release metadata
         id: meta
@@ -64,21 +62,34 @@ jobs:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
           set -euo pipefail
-          mkdir -p dist
-          for target in $RELEASE_TARGETS; do
+          mkdir -p dist component-bin
+          # Iterate the target matrix as a real array so each element is
+          # quoted (tidier than relying on unquoted word-splitting).
+          read -ra targets <<< "${RELEASE_TARGETS}"
+          for target in "${targets[@]}"; do
             os="${target%/*}"
             arch="${target#*/}"
-            stage="dist/stage_${os}_${arch}"
-            mkdir -p "${stage}"
 
             binary_name="canton-devkit"
             [ "$os" = "windows" ] && binary_name="canton-devkit.exe"
+
+            # Build ONCE into component-bin/<os>_<arch>/. The dpm-component
+            # job downloads this exact binary, so GitHub Releases and the
+            # GHCR OCI artifact ship byte-identical bits (no rebuild skew).
+            # -trimpath strips the runner's local paths from the binary;
+            # -s -w shrink it ~30%.
+            bindir="component-bin/${os}_${arch}"
+            mkdir -p "${bindir}"
             GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build \
               -trimpath \
               -ldflags "-s -w -X main.version=${VERSION}" \
-              -o "${stage}/${binary_name}" ./cmd/canton-devkit
+              -o "${bindir}/${binary_name}" ./cmd/canton-devkit
 
-            # Bundle LICENSE + README for end-user discoverability.
+            # Stage the standalone archive: binary + LICENSE + README for
+            # end-user discoverability.
+            stage="dist/stage_${os}_${arch}"
+            mkdir -p "${stage}"
+            cp "${bindir}/${binary_name}" "${stage}/${binary_name}"
             cp LICENSE "${stage}/LICENSE"
             cp README.md "${stage}/README.md"
 
@@ -91,11 +102,23 @@ jobs:
             rm -rf "${stage}"
           done
 
-          # Single SHA256SUMS file covers every published artifact. Format
-          # is GNU sha256sum compatible so users can verify via:
+          # Single SHA256SUMS file covers every published archive (dist/
+          # now holds only the tarballs/zips). Format is GNU sha256sum
+          # compatible so users can verify via:
           #   sha256sum --check SHA256SUMS
           (cd dist && sha256sum * > SHA256SUMS)
           cat dist/SHA256SUMS
+
+      - name: Upload raw binaries for the DPM-component job
+        # Unconditional: the dpm-component job needs these on every run
+        # (it dry-runs on main and publishes on tags). upload-artifact
+        # does NOT preserve the executable bit — the consumer re-chmods.
+        # actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: component-binaries
+          path: component-bin/**
+          retention-days: 1
 
       - name: Upload main branch artifacts
         if: github.ref == 'refs/heads/main'
@@ -114,9 +137,10 @@ jobs:
 
   dpm-component:
     name: Publish DPM component to GHCR
-    # Runs in parallel with `binaries`: the two jobs rebuild Go binaries
-    # independently. Adding `needs: binaries` would serialise for no
-    # gain since neither job consumes the other's outputs.
+    # Consumes the binaries built by `binaries` (no second Go build) so
+    # the OCI artifact and the GitHub Release ship identical bits and CI
+    # compiles Go exactly once.
+    needs: binaries
     runs-on: ubuntu-latest
 
     steps:
@@ -124,12 +148,12 @@ jobs:
         # actions/checkout@v5
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
-      - name: Set up Go
-        # actions/setup-go@v6
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+      - name: Download prebuilt binaries
+        # actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          go-version-file: go.mod
-          cache: false
+          name: component-binaries
+          path: component-bin
 
       - name: Set release metadata
         id: meta
@@ -159,8 +183,6 @@ jobs:
           dpm --version
 
       - name: Lay out per-platform component dirs
-        env:
-          VERSION: ${{ steps.meta.outputs.version }}
         run: |
           set -euo pipefail
           # Mirror the layout dpm publish component expects:
@@ -173,7 +195,8 @@ jobs:
           # manifest per platform: Unix uses bin/canton-devkit; Windows
           # gets bin/canton-devkit.exe. (Empirically verified against
           # DPM 1.0.16.)
-          for target in $RELEASE_TARGETS; do
+          read -ra targets <<< "${RELEASE_TARGETS}"
+          for target in "${targets[@]}"; do
             os="${target%/*}"
             arch="${target#*/}"
             dir="dist/component_${os}_${arch}"
@@ -182,14 +205,15 @@ jobs:
 
             binary_name="canton-devkit"
             [ "$os" = "windows" ] && binary_name="canton-devkit.exe"
+
+            # Copy the prebuilt binary and restore the executable bit
+            # (upload/download-artifact drops file permissions).
+            cp "component-bin/${os}_${arch}/${binary_name}" "${dir}/bin/${binary_name}"
+            chmod +x "${dir}/bin/${binary_name}"
+
             # Substitute the binary path token in the manifest template.
             sed "s|@@BINARY_PATH@@|bin/${binary_name}|" \
               packaging/component.yaml.tmpl > "${dir}/component.yaml"
-
-            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build \
-              -trimpath \
-              -ldflags "-s -w -X main.version=${VERSION}" \
-              -o "${dir}/bin/${binary_name}" ./cmd/canton-devkit
           done
           ls -R dist
 
@@ -220,10 +244,23 @@ jobs:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
           set -euo pipefail
+          # Only move the `latest` tag for FINAL releases. A pre-release
+          # (v1.2.0-rc1) or a hotfix tagged against an older line must not
+          # clobber `latest`. Semver pre-releases carry a `-` in the
+          # build metadata; gate on its absence.
+          extra_tags=()
+          case "${VERSION}" in
+            *-*) echo "pre-release ${VERSION} — leaving 'latest' untouched" ;;
+            *)   extra_tags+=(--extra-tags latest) ;;
+          esac
+          # ${arr[@]+"${arr[@]}"} expands to nothing when the array is
+          # empty WITHOUT tripping `set -u` (portable across bash 3.2+),
+          # so a pre-release publishes with no extra args rather than a
+          # stray empty argument.
           dpm publish component \
             "oci://${GHCR_NAMESPACE}:${VERSION}" \
             --include-git-info \
-            --extra-tags latest \
+            ${extra_tags[@]+"${extra_tags[@]}"} \
             --platform linux/amd64=dist/component_linux_amd64 \
             --platform darwin/arm64=dist/component_darwin_arm64 \
             --platform windows/amd64=dist/component_windows_amd64
