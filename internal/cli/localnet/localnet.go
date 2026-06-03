@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/cli/localnet/dar"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cli/localnet/token"
 	"github.com/spf13/cobra"
 )
 
@@ -66,6 +67,11 @@ func Build() *cobra.Command {
 	// remove/build-upload/watch/connect) — adopted from the
 	// `srikanth/bit-track-b-dar-admin` branch.
 	localnet.AddCommand(dar.Build())
+
+	// BIT-138/139: Token Standard V2 commands (create wizard +
+	// mint/transfer/burn/balance). Mirrors dar.Build()'s pattern —
+	// the token subpackage owns its own command tree.
+	localnet.AddCommand(token.Build())
 
 	return localnet
 }
