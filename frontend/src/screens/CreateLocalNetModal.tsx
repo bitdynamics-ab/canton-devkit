@@ -52,6 +52,8 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
   const [version, setVersion] = useState("");
   const [allowUncurated, setAllowUncurated] = useState(false);
   const [versions, setVersions] = useState<SpliceVersionEntry[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [versionsError, setVersionsError] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage>({ kind: "form" });
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -70,6 +72,8 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
       requestAnimationFrame(() => inputRef.current?.focus());
       // Refresh the version catalogue on open. Cached on the
       // server (versions.json is embedded), so this is fast.
+      setVersionsLoading(true);
+      setVersionsError(null);
       fetchSpliceVersions()
         .then((r) => {
           setVersions(r.versions);
@@ -80,11 +84,15 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
             if (latest) setVersion(latest.tag);
           }
         })
-        .catch(() => {
-          // Non-fatal — the picker shows an "unavailable" hint
-          // and the user can still type a version.
+        .catch((e) => {
+          // Distinguish failure from "still loading": a collapsed empty
+          // state left the picker showing "Loading…" forever on a 5xx.
           setVersions([]);
-        });
+          setVersionsError(
+            e instanceof ApiError ? e.message : "Couldn't load the version catalogue",
+          );
+        })
+        .finally(() => setVersionsLoading(false));
     }
     // versions captured intentionally — only re-run on open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -199,6 +207,8 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
               version={version}
               setVersion={setVersion}
               versions={versions}
+              versionsLoading={versionsLoading}
+              versionsError={versionsError}
               allowUncurated={allowUncurated}
               setAllowUncurated={setAllowUncurated}
               onSubmit={submit}
@@ -360,6 +370,8 @@ interface FormBodyProps {
   version: string;
   setVersion: (s: string) => void;
   versions: SpliceVersionEntry[];
+  versionsLoading: boolean;
+  versionsError: string | null;
   allowUncurated: boolean;
   setAllowUncurated: (b: boolean) => void;
   onSubmit: (e: React.FormEvent) => void;
@@ -373,6 +385,8 @@ function FormBody({
   version,
   setVersion,
   versions,
+  versionsLoading,
+  versionsError,
   allowUncurated,
   setAllowUncurated,
   onSubmit,
@@ -404,6 +418,8 @@ function FormBody({
           versions={versions}
           selected={version}
           onSelect={setVersion}
+          loading={versionsLoading}
+          error={versionsError}
         />
       </Field>
 
@@ -769,15 +785,30 @@ export function VersionPicker({
   versions,
   selected,
   onSelect,
+  loading = false,
+  error = null,
 }: {
   versions: SpliceVersionEntry[];
   selected: string;
   onSelect: (tag: string) => void;
+  loading?: boolean;
+  error?: string | null;
 }) {
   if (versions.length === 0) {
+    // Three distinct empty states — previously all collapsed into
+    // "Loading…", so a failed fetch (5xx) span forever.
+    let placeholder = "No curated versions available";
+    if (loading) placeholder = "Loading curated versions…";
+    else if (error) placeholder = `⚠ Couldn't load versions — ${error}`;
     return (
-      <select disabled value="" style={selectStyle} aria-label="Splice version">
-        <option value="">Loading curated versions…</option>
+      <select
+        disabled
+        value=""
+        style={selectStyle}
+        aria-label="Splice version"
+        aria-busy={loading || undefined}
+      >
+        <option value="">{placeholder}</option>
       </select>
     );
   }
@@ -785,7 +816,7 @@ export function VersionPicker({
   const sorted = [...versions].sort((a, b) => {
     if (a.status === "latest" && b.status !== "latest") return -1;
     if (b.status === "latest" && a.status !== "latest") return 1;
-    return b.tag.localeCompare(a.tag, undefined, { numeric: true });
+    return compareSpliceTags(b.tag, a.tag);
   });
 
   return (
@@ -804,6 +835,64 @@ export function VersionPicker({
       ))}
     </select>
   );
+}
+
+// compareSpliceTags orders two Splice version tags like a localeCompare
+// (negative ⇒ a is older/lower than b), but semver-aware so a final
+// release outranks its own pre-release.
+//
+// localeCompare(…, {numeric:true}) gets this wrong: "0.6.4" is a prefix
+// of "0.6.4-rc.1", so a string collation sorts the rc AFTER the release
+// — inverting precedence (semver says 0.6.4 > 0.6.4-rc.1). Non-semver
+// tags ("token-standard-v2", "next-cilr") have no precedence to reason
+// about, so they fall back to numeric localeCompare. Exported for the
+// regression test.
+export function compareSpliceTags(a: string, b: string): number {
+  const pa = parseSemverTag(a);
+  const pb = parseSemverTag(b);
+  if (!pa || !pb) {
+    return a.localeCompare(b, undefined, { numeric: true });
+  }
+  for (let i = 0; i < 3; i++) {
+    if (pa.core[i] !== pb.core[i]) return pa.core[i] - pb.core[i];
+  }
+  // Same x.y.z: a release (no pre-release) is newer than any pre-release.
+  if (pa.pre === null && pb.pre === null) return 0;
+  if (pa.pre === null) return 1;
+  if (pb.pre === null) return -1;
+  return comparePrerelease(pa.pre, pb.pre);
+}
+
+function parseSemverTag(tag: string): { core: [number, number, number]; pre: string | null } | null {
+  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-(.+))?$/.exec(tag);
+  if (!m) return null;
+  return { core: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4] ?? null };
+}
+
+// comparePrerelease applies the semver pre-release precedence rules:
+// dot-separated identifiers compared left-to-right; numeric identifiers
+// numerically and ranked below alphanumerics; a shorter run loses to a
+// longer one when otherwise equal.
+function comparePrerelease(a: string, b: string): number {
+  const as = a.split(".");
+  const bs = b.split(".");
+  const n = Math.max(as.length, bs.length);
+  for (let i = 0; i < n; i++) {
+    if (as[i] === undefined) return -1;
+    if (bs[i] === undefined) return 1;
+    const aNum = /^\d+$/.test(as[i]);
+    const bNum = /^\d+$/.test(bs[i]);
+    if (aNum && bNum) {
+      const d = Number(as[i]) - Number(bs[i]);
+      if (d !== 0) return d;
+    } else if (aNum !== bNum) {
+      return aNum ? -1 : 1; // numeric identifiers have lower precedence
+    } else {
+      const c = as[i].localeCompare(bs[i]);
+      if (c !== 0) return c;
+    }
+  }
+  return 0;
 }
 
 // selectStyle is inlined rather than spread from `inputStyle` because
