@@ -161,8 +161,19 @@ func ReconcileOne(ctx context.Context, name string) (old, neu registry.Status, c
 	// We refresh ports BEFORE the status-changed early return so the
 	// common case (cached=running, newStatus=running, only ports
 	// drifted) gets the fix too.
+	//
+	// Gate also includes `partial` — the V2 Token Standard image set
+	// has a perpetually-`starting` splice healthcheck that pegs the
+	// reconciler at `partial` forever (see assets/compose/tokens-v2.yml).
+	// Those are the instances where canton most often restarts AND
+	// the screens most need a working port set; gating on `running`
+	// alone would never fire for them.
+	// `refreshCantonPorts` itself is best-effort — missing probes
+	// leave cached values intact — so calling it during `partial`
+	// is safe (probe failure ⇒ no diff ⇒ no write).
 	portsChanged := false
-	if newStatus == registry.StatusRunning && state.ComposeProject != "" {
+	if state.ComposeProject != "" &&
+		(newStatus == registry.StatusRunning || newStatus == registry.StatusPartial) {
 		portsChanged = refreshCantonPorts(ctx, state, name)
 	}
 
