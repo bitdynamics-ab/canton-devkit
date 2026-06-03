@@ -28,5 +28,20 @@ required for the on-ledger surfaces to function (see "localnet versions"
 [HoldingV2]: https://github.com/canton-network/splice/blob/token-standard-v2-upcoming/token-standard/splice-api-token-holding-v2/daml/Splice/Api/Token/HoldingV2.daml`,
 	}
 	cmd.AddCommand(buildCreate())
+	cmd.AddCommand(buildMint())
+	cmd.AddCommand(buildTransfer())
+	cmd.AddCommand(buildBurn())
+	cmd.AddCommand(buildBalance())
 	return cmd
 }
+
+// errSilent is returned by mint/transfer/burn when the orchestration
+// surfaced ErrNeedsV2LocalNet — cobra exits non-zero, but the user
+// already saw the friendly remediation on stderr so we suppress the
+// usual usage-and-stack dump. Implements `error` with an empty string
+// so cobra's default error renderer is a no-op.
+var errSilent silentError
+
+type silentError struct{}
+
+func (silentError) Error() string { return "" }
