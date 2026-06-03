@@ -310,6 +310,39 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		composeFiles = append(composeFiles, overlay)
 	}
 
+	// BIT-211: tokens-v2 profile materializes the alpha-protocol
+	// Canton config overlay. Required when running the Token Standard
+	// V2 snapshot (alpha catalogue entry); a stable Splice version
+	// with this profile on is harmless — it just injects an env that
+	// the stable Canton ignores.
+	hasTokensV2Profile := false
+	for _, p := range opts.Profiles {
+		if p == TokensV2ProfileName {
+			hasTokensV2Profile = true
+			break
+		}
+	}
+	if hasTokensV2Profile {
+		overlay, err := MaterializeTokensV2Overlay(dataDir)
+		if err != nil {
+			prog.FailStep(StepPersistState,
+				"Failed to extract tokens-v2 overlay", err)
+			return ExitRuntimeFailure
+		}
+		composeFiles = append(composeFiles, overlay)
+	} else if version.IsAlpha() {
+		// Alpha version selected without the matching profile — Canton
+		// won't carry the protocol-35 flags V2 requires and the bring-up
+		// is highly likely to fail. WARN loudly rather than refuse, so
+		// users who pin alpha for non-V2 reasons (e.g. previewing other
+		// changes on the snapshot) aren't blocked.
+		prog.Warn(fmt.Sprintf(
+			"alpha Splice %q selected without --profile %s — Canton "+
+				"will not enable initial-protocol-version=35; V2 features "+
+				"WILL fail. Re-run with --profile %s to inject the alpha-protocol config.",
+			version.Tag, TokensV2ProfileName, TokensV2ProfileName))
+	}
+
 	// PR #20 #5/#7: read any pre-existing state so we can reuse the
 	// previously assigned UI host ports — stable URLs across an
 	// up/down/up cycle is the whole point of persisting them. If no
@@ -406,7 +439,15 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			Env:          env,
 			WorkDir:      projectDir,
 			LogWriter:    prog.Out(),
-			Profiles:     opts.Profiles,
+			// docker compose v5 treats CLI --profile as REPLACING (not
+			// augmenting) COMPOSE_PROFILES from the env, so an
+			// `up --profile tokens-v2` invocation activates only
+			// tokens-v2 and every base service (sv / app-provider /
+			// app-user / swagger-ui) is filtered out → "no service
+			// selected". Merge the adapter's base profiles with the
+			// user's opt-ins on the CLI so the union is what docker
+			// compose sees.
+			Profiles: append(adapter.Profiles(), opts.Profiles...),
 		}
 	}
 

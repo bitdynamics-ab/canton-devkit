@@ -1,0 +1,50 @@
+# BIT-211 — Token Standard V2 alpha profile overlay (Canton config).
+#
+# KNOWN PARTIAL OUTCOME: under the V2 alpha protocol the `splice` service's
+# healthcheck never reports `healthy`, so an instance brought up with this
+# profile settles at status `partial` even though the ledger is up and
+# token flows work. This is an upstream alpha-image limitation, not a
+# bring-up failure — treat `partial` as "running, V2 alpha" for tokens-v2
+# instances. Re-evaluate when V2 merges into mainline Splice.
+#
+# Apply via `dpm localnet up --profile tokens-v2 --version token-standard-v2`
+# (or `--allow-uncurated` against a custom V2 snapshot). The overlay file
+# itself is only appended to the compose chain when --profile tokens-v2 is
+# on, so there is no `profiles:` key here — the file's mere presence in
+# the chain is the gate.
+#
+# What this does:
+#   Splice's `canton` container reads a free-form Canton config blob from
+#   the `ADDITIONAL_CONFIG_TOKEN_STANDARD_V2_DEVNET` environment variable
+#   and concatenates it onto the static `monitoring.conf` / `parameters.conf`
+#   before booting. We inject the four flags V2 needs:
+#
+#     canton.parameters.alpha-version-support=true
+#     canton.parameters.non-standard-config=true
+#     canton.participants.participant.parameters.alpha-version-support=true
+#     canton.participants.participant.parameters.initial-protocol-version=35
+#
+#   See:
+#   https://github.com/canton-network/splice/blob/token-standard-v2-upcoming/token-standard/TOKEN_STANDARD_V2_DEVNET.md
+#
+# Why no service-level `profiles:`:
+#   The base Splice compose declares `canton` with no profiles, so the
+#   container always starts. Adding `profiles: ["tokens-v2"]` here would
+#   merge into the base list and gate canton itself behind the profile —
+#   breaking every non-V2 bring-up. The DevKit overlay materialiser only
+#   appends this file when the user passes --profile tokens-v2, so the
+#   gate is enforced at the compose-files layer, not by docker's
+#   profile activation.
+
+services:
+  canton:
+    environment:
+      ADDITIONAL_CONFIG_TOKEN_STANDARD_V2_DEVNET: |
+        canton.parameters.alpha-version-support=true
+        canton.parameters.non-standard-config=true
+        canton.participants.app-user.parameters.alpha-version-support=true
+        canton.participants.app-user.parameters.initial-protocol-version=35
+        canton.participants.app-provider.parameters.alpha-version-support=true
+        canton.participants.app-provider.parameters.initial-protocol-version=35
+        canton.participants.sv.parameters.alpha-version-support=true
+        canton.participants.sv.parameters.initial-protocol-version=35

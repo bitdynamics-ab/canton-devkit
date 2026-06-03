@@ -95,24 +95,68 @@ func TestOverlayEnv_FullValueSurface(t *testing.T) {
 // TestOverlayEnv_ImageRepoOverride pins the BIT-210 contract: when a
 // catalogue entry sets ImageRepo (e.g. the Token Standard V2 alpha
 // snapshot), the adapter emits IMAGE_REPO so `docker compose pull`
-// hits the alpha `-dev` registry instead of the stable one. Empty
-// ImageRepo (covered above) leaves the compose default in place.
+// hits the alpha `-dev` registry instead of the stable one.
+//
+// The adapter ALSO normalises a missing trailing slash to a present
+// one, because Splice's compose concatenates `${IMAGE_REPO}<image-name>`
+// without an intermediate separator — a no-slash override produces
+// invalid paths like `dockersv-web-ui` and `docker compose pull`
+// errors with `denied`. Empty ImageRepo (covered above) leaves the
+// compose default in place.
 func TestOverlayEnv_ImageRepoOverride(t *testing.T) {
 	a := New()
-	const altRepo = "ghcr.io/digital-asset/decentralized-canton-sync-dev/docker"
+	// Override without a trailing slash — the adapter MUST add it.
+	const altRepoNoSlash = "ghcr.io/digital-asset/decentralized-canton-sync-dev/docker"
+	const want = altRepoNoSlash + "/"
 	p := splice.InstanceParams{
 		Name: "v2",
 		Version: splice.Version{
 			Tag:       "token-standard-v2",
 			Major:     "0.6",
 			Channel:   "alpha",
-			ImageRepo: altRepo,
+			ImageRepo: altRepoNoSlash,
 		},
 		ProjectDir: "/cache/v2",
 	}
 	env := a.OverlayEnv(p)
-	if got := env["IMAGE_REPO"]; got != altRepo {
-		t.Errorf("IMAGE_REPO = %q, want %q", got, altRepo)
+	if got := env["IMAGE_REPO"]; got != want {
+		t.Errorf("IMAGE_REPO = %q, want %q (adapter must normalise the trailing slash)", got, want)
+	}
+
+	// And an already-slashed override stays unchanged — no double slash.
+	p.Version.ImageRepo = want
+	env = a.OverlayEnv(p)
+	if got := env["IMAGE_REPO"]; got != want {
+		t.Errorf("already-slashed override: IMAGE_REPO = %q, want %q (no double slash)", got, want)
+	}
+}
+
+// TestOverlayEnv_ImageTagOverride pins the BIT-210 follow-up: when a
+// catalogue entry sets Version.ImageTag (e.g. the V2 alpha snapshot,
+// whose ghcr tag is `0.6.5-snapshot...` while its catalogue Tag is the
+// friendly `token-standard-v2`), the adapter emits IMAGE_TAG using
+// the override. Empty falls back to Tag for stable entries.
+func TestOverlayEnv_ImageTagOverride(t *testing.T) {
+	a := New()
+	const snapshot = "0.6.5-snapshot.20260526.2931.0.ve28a6722"
+	p := splice.InstanceParams{
+		Name:       "v2",
+		ProjectDir: "/cache/v2",
+		Version: splice.Version{
+			Tag:      "token-standard-v2",
+			Major:    "0.6",
+			ImageTag: snapshot,
+		},
+	}
+	if got := a.OverlayEnv(p)["IMAGE_TAG"]; got != snapshot {
+		t.Errorf("IMAGE_TAG = %q, want override %q", got, snapshot)
+	}
+
+	// Empty ImageTag → Tag is the source of truth (stable releases
+	// where the catalogue Tag === the upstream ghcr tag).
+	p.Version.ImageTag = ""
+	if got := a.OverlayEnv(p)["IMAGE_TAG"]; got != "token-standard-v2" {
+		t.Errorf("IMAGE_TAG fallback = %q, want %q (catalogue Tag)", got, "token-standard-v2")
 	}
 }
 

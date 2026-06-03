@@ -415,6 +415,7 @@ type upRequest struct {
 // known profile constants.
 var allowedProfiles = map[string]bool{
 	localnet.ObservabilityProfileName: true,
+	localnet.TokensV2ProfileName:      true,
 }
 
 // upAcceptedResponse is the 202 body the POST returns. The frontend

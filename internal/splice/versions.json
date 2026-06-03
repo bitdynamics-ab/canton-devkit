@@ -39,7 +39,8 @@
       "min_memory_bytes": 8589934592,
       "recommended_memory_bytes": 12884901888,
       "channel": "alpha",
-      "image_repo": "ghcr.io/digital-asset/decentralized-canton-sync-dev/docker"
+      "image_repo": "ghcr.io/digital-asset/decentralized-canton-sync-dev/docker",
+      "image_tag": "0.6.5-snapshot.20260526.2931.0.ve28a6722"
     }
   ]
 }
