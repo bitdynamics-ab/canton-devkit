@@ -62,9 +62,11 @@ func Open(path string) (*Info, error) {
 	// Compute the file-level SHA256 in one pass while also reading
 	// the zip via a second read. Cheaper than streaming once and
 	// hashing twice; for DARs in the 100KB–10MB range this is fine.
-	raw, err := os.ReadFile(path)
+	// ReadDARFile bounds the read at MaxDARBytes so a hostile or
+	// corrupted file can't OOM the process (BIT-127 review fix).
+	raw, err := ReadDARFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
+		return nil, err
 	}
 	fileSum := sha256.Sum256(raw)
 

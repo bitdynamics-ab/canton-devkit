@@ -1,0 +1,61 @@
+# BIT-134 — Prometheus scrape config for the observability profile.
+#
+# Both the Canton and Splice container images ship a
+# `/app/monitoring.conf` file that the canton entrypoint conditionally
+# appends as an extra `--config` arg (`[ -s /app/monitoring.conf ]`).
+# That file enables the built-in Prometheus reporter on port 10013
+# (0.0.0.0:10013/metrics) with JVM metrics, all qualifiers
+# (errors/latency/saturation/traffic/debug), and 40k cardinality.
+#
+# We discovered this by inspecting the upstream image — prior
+# versions of this comment assumed metrics were OFF in stock Splice;
+# they're not. The reporter is ON by default in both images and
+# active for the canton and splice JVM services without any extra
+# configuration overlay on our side.
+#
+# Both `canton` and `splice` containers join the project's default
+# docker network when the observability overlay is applied, so the
+# service-name DNS resolves to the container IP and 10013 is
+# reachable from the prometheus container without exposing the
+# port to the host.
+#
+# Multi-instance: external_labels.instance is templated off
+# COMPOSE_PROJECT_NAME so when two LocalNets each run their own
+# Prometheus + Grafana, dashboards can group by instance.
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+  external_labels:
+    instance: "${COMPOSE_PROJECT_NAME:-canton}"
+
+scrape_configs:
+  # Prometheus self-scrape — proves the stack is up. Always
+  # produces data so a user opening Grafana can see SOMETHING
+  # even if canton/splice are still starting.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          component: prometheus
+
+  # Canton (participants + synchronizer). Metrics surface daml.*
+  # (ledger api), canton.* (sync + participant), and jvm_* (heap,
+  # GC). Reporter is enabled by the image's own monitoring.conf —
+  # no overlay needed.
+  - job_name: canton
+    static_configs:
+      - targets: ["canton:10013"]
+        labels:
+          component: canton
+
+  # Splice JVM (super-validator + validator + Scan + ANS).
+  # Same monitoring.conf shape; emits business-level metrics
+  # (round counts, traffic, super-validator activity) alongside
+  # standard JVM + Daml ledger client metrics.
+  - job_name: splice
+    static_configs:
+      - targets: ["splice:10013"]
+        labels:
+          component: splice

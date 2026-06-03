@@ -1,0 +1,128 @@
+{
+  "title": "Canton LocalNet — DApp Developer Overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "uid": "canton-localnet-v1",
+  "tags": ["canton", "splice", "localnet"],
+  "timezone": "browser",
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "label_values(up, instance)",
+        "refresh": 1,
+        "current": { "selected": false, "text": "All", "value": "$__all" },
+        "includeAll": true,
+        "multi": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Ledger TPS (5m avg)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(canton_participant_transactions_total{instance=~\"$instance\"}[5m]))",
+          "legendFormat": "tx/s"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Active Participants",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        { "expr": "count(up{component=\"canton\", instance=~\"$instance\"} == 1)" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Mediator Approval Latency (p95)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(canton_mediator_approval_duration_bucket{instance=~\"$instance\"}[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Postgres Conn Count",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        { "expr": "sum(pg_stat_activity_count{instance=~\"$instance\"})" }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Transactions per Second",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "expr": "rate(canton_participant_transactions_total{instance=~\"$instance\"}[1m])",
+          "legendFormat": "{{participant}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "JVM Heap Used (per node)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        {
+          "expr": "jvm_memory_used_bytes{area=\"heap\", instance=~\"$instance\"}",
+          "legendFormat": "{{component}}"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Sequencer Message Rate",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "expr": "rate(canton_sequencer_messages_total{instance=~\"$instance\"}[1m])",
+          "legendFormat": "{{sequencer}}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Transaction Processing Latency",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(canton_participant_transaction_duration_bucket{instance=~\"$instance\"}[5m])) by (le, participant))",
+          "legendFormat": "p50 {{participant}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(canton_participant_transaction_duration_bucket{instance=~\"$instance\"}[5m])) by (le, participant))",
+          "legendFormat": "p95 {{participant}}"
+        }
+      ]
+    }
+  ]
+}

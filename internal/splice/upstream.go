@@ -145,6 +145,13 @@ type VersionStatus struct {
 	CataloguedCommit string // empty if not catalogued
 	UpstreamCommit   string // empty if not upstream
 	Major            string // catalogue's adapter major, empty if not catalogued
+	// Channel mirrors the catalogue's Version.Channel ("" / "alpha")
+	// so the CLI/UI can flag opt-in pre-releases (e.g. Token Standard
+	// V2 snapshot) without re-reading the embedded catalogue.
+	Channel string
+	// ImageRepo mirrors Version.ImageRepo. Empty means the catalogue
+	// entry inherits the stable repo from Splice's compose env.
+	ImageRepo string
 }
 
 // CrossReferenceUpstream computes the catalogue-vs-upstream diff. Used
@@ -165,11 +172,11 @@ func CrossReferenceUpstream(ctx context.Context) ([]VersionStatus, error) {
 		ucommit, ok := byTag[tag]
 		switch {
 		case !ok:
-			out = append(out, VersionStatus{Tag: tag, Status: StatusCataloguedOnly, CataloguedCommit: v.Commit, Major: v.Major})
+			out = append(out, VersionStatus{Tag: tag, Status: StatusCataloguedOnly, CataloguedCommit: v.Commit, Major: v.Major, Channel: v.Channel, ImageRepo: v.ImageRepo})
 		case ucommit != v.Commit:
-			out = append(out, VersionStatus{Tag: tag, Status: StatusDrifted, CataloguedCommit: v.Commit, UpstreamCommit: ucommit, Major: v.Major})
+			out = append(out, VersionStatus{Tag: tag, Status: StatusDrifted, CataloguedCommit: v.Commit, UpstreamCommit: ucommit, Major: v.Major, Channel: v.Channel, ImageRepo: v.ImageRepo})
 		default:
-			out = append(out, VersionStatus{Tag: tag, Status: StatusSupported, CataloguedCommit: v.Commit, UpstreamCommit: ucommit, Major: v.Major})
+			out = append(out, VersionStatus{Tag: tag, Status: StatusSupported, CataloguedCommit: v.Commit, UpstreamCommit: ucommit, Major: v.Major, Channel: v.Channel, ImageRepo: v.ImageRepo})
 		}
 	}
 	for _, u := range upstream {

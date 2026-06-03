@@ -18,6 +18,10 @@ type LogsOptions struct {
 	Follow   bool
 	Tail     string // "100" or "all"; passed through to docker compose
 	Since    string // duration string, optional
+
+	// RunFn is a test seam for the docker invocation. Production callers
+	// leave it nil so RunLogs uses exec.CommandContext.
+	RunFn func(ctx context.Context, args []string, dir string, env []string, out io.Writer, errw io.Writer) error
 }
 
 // RunLogs proxies to `docker compose logs`. SIGINT is forwarded to the
@@ -29,7 +33,7 @@ func RunLogs(ctx context.Context, out io.Writer, errw io.Writer, opts *LogsOptio
 	state, err := registry.Read(opts.Name)
 	if err == registry.ErrNotFound {
 		_, _ = fmt.Fprintf(errw, "No instance named %q is registered.\n", opts.Name)
-		return 3
+		return ExitUserError
 	}
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "Failed to read state: %s\n", err)
@@ -60,15 +64,11 @@ func RunLogs(ctx context.Context, out io.Writer, errw io.Writer, opts *LogsOptio
 	}
 	args = append(args, opts.Services...)
 
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	cmd.Stdout = out
-	cmd.Stderr = errw
-	cmd.Dir = state.ProjectDir
-	if env != nil {
-		cmd.Env = env
+	run := opts.RunFn
+	if run == nil {
+		run = runDockerLogs
 	}
-
-	if err := cmd.Run(); err != nil {
+	if err := run(ctx, args, state.ProjectDir, env, out, errw); err != nil {
 		if ctx.Err() != nil {
 			return ExitSuccess // graceful Ctrl-C
 		}
@@ -76,4 +76,15 @@ func RunLogs(ctx context.Context, out io.Writer, errw io.Writer, opts *LogsOptio
 		return ExitRuntimeFailure
 	}
 	return ExitSuccess
+}
+
+func runDockerLogs(ctx context.Context, args []string, dir string, env []string, out io.Writer, errw io.Writer) error {
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd.Stdout = out
+	cmd.Stderr = errw
+	cmd.Dir = dir
+	if env != nil {
+		cmd.Env = env
+	}
+	return cmd.Run()
 }

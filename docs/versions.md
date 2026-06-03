@@ -51,11 +51,19 @@ canonical name in code and docs.
 
 | Field | Source of truth | Why it's pinned |
 |---|---|---|
-| `tag` | Upstream git tag | User-facing identifier; what `--version` accepts. |
-| `commit` | `git ls-remote --tags` at catalogue time | Immutable, content-addressable. We fetch via `archive/<commit>.tar.gz` so a force-pushed tag can't quietly change what `localnet up` installs. |
+| `tag` | Upstream git tag (or branch label for pre-releases) | User-facing identifier; what `--version` accepts. |
+| `commit` | `git ls-remote --tags` at catalogue time (or branch HEAD for pre-releases) | Immutable, content-addressable. We fetch via `archive/<commit>.tar.gz` so a force-pushed tag can't quietly change what `localnet up` installs. |
 | `content_sha` | `scripts/compute-tree-sha.sh` | SHA-256 over the extracted `cluster/compose/localnet/` subtree (sorted by path). Stable across upstream gzip-envelope rewrites; this is the authoritative integrity check at fetch time. |
 | `size` | byte count of the source-tarball | Informational; used to print a hint before download and to size the in-flight body cap. |
-| `major` | first two segments of `tag` | Routes to the per-major adapter in `internal/splice/v0X/`. |
+| `major` | first two segments of `tag` (or set manually for branch tags) | Routes to the per-major adapter in `internal/splice/v0X/`. |
+| `channel` *(optional)* | catalogue maintainer | `""` / `"stable"` → production-ready; `"alpha"` → opt-in pre-release (Token Standard V2 snapshot etc.). `up` prints a one-line warning when an alpha entry is selected. |
+| `image_repo` *(optional)* | catalogue maintainer | Overrides the default Docker image repository. Defaults to `ghcr.io/digital-asset/decentralized-canton-sync/docker`. Set to `ghcr.io/digital-asset/decentralized-canton-sync-dev/docker` for the V2 alpha track. The v06 adapter forwards this as the `IMAGE_REPO` compose env. |
+
+### The alpha channel
+
+DevKit's first alpha entry is the **Token Standard V2** snapshot pointed at by [`token-standard-v2-upcoming`](https://github.com/canton-network/splice/tree/token-standard-v2-upcoming). V2 publishes images to a separate `-dev` ghcr registry (hence the `image_repo` override) and runs only on Canton's *alpha* protocol version (initial protocol 35, alpha-version-support flags). The Canton config side of that requirement is delivered by a separate `--profile tokens-v2` overlay (BIT-211); selecting the alpha catalogue entry without the profile is supported but will not bring up a healthy stack.
+
+**Stability caveat:** the upstream V2 DevNet [is reset and upgraded on a weekly cadence](https://github.com/canton-network/splice/blob/token-standard-v2-upcoming/token-standard/TOKEN_STANDARD_V2_DEVNET.md), so the V2 entry's `commit` will rotate more often than a stable release. Refresh via `scripts/add-splice-version.sh` (modify the script to pass `--ref token-standard-v2-upcoming` for branch-tracking).
 
 ## Discovering versions
 
@@ -72,7 +80,7 @@ Status flags per row:
 | `supported` | Catalogued; upstream pin matches. Safe to use. |
 | `drifted` | Catalogued; upstream tag has been force-moved to a different commit. **Security signal** — re-review the catalogue entry before trusting. |
 | `available` | Upstream has the tag; not yet in our catalogue. A maintainer can add it via the helper below. |
-| `catalogued-only` | We catalogue it; upstream no longer has it (tag was deleted). Investigate before removing. |
+| `catalogued-only` | We catalogue it, but the online tag listing does not contain the same label. For stable entries this usually means the upstream tag was deleted and should be investigated before removal; branch-backed alpha entries such as `token-standard-v2` can also appear this way until branch/ref-aware status is added. |
 
 ## Adding a new version (maintainer flow)
 
@@ -96,15 +104,27 @@ A reviewer then:
   merging.
 - Commits + pushes.
 
-## Automatic refresh
+## Two-layer resolution (PR #20 #2)
 
-`.github/workflows/refresh-versions.yml` runs every Monday at 06:00 UTC:
-- Enumerates upstream tags via the GitHub API.
-- Filters to N.N.N semver (skips pre-release artifacts like `next-cilr`).
-- Runs the maintainer script for any tag not in the catalogue.
-- Opens a PR with the diff. A human reviewer merges or closes.
+DevKit now exposes the catalogue as the *default* tier of a two-layer
+version model — the curated path stays audited, and an explicit
+opt-in unlocks arbitrary upstream tags for prerelease testing.
 
-Manual trigger: GitHub Actions → "Refresh Splice versions" → Run workflow.
+| Layer | Trigger | Source | ContentSHA | Notes |
+|-------|---------|--------|------------|-------|
+| 1 — Curated | `--version <tag>` for any tag in `versions.json` (or `--version latest`) | Embedded catalogue | Pinned at catalogue time, verified post-extract | Default. Audited. Offline. |
+| 2 — Upstream | `--version <tag> --allow-uncurated` for any tag not in the catalogue | `api.github.com/repos/canton-network/splice/git/refs/tags/<tag>` | Computed on first extract, recorded for future runs | Requires explicit opt-in. Network on first call. Cached at `~/.canton-devkit/cache/resolved-versions.json`. |
+
+Layer 2 trades audit for flexibility: it lets a user spin up a
+`0.7.0-alpha.4` LocalNet without waiting for a catalogue PR, but
+DevKit can't promise the bits were tested against this release.
+Orchestrators print a one-line "Using uncurated Splice tag" warning
+on the layer-2 path so the user is never surprised.
+
+Because layer 2 exists, the previous weekly cron that auto-bumped
+the catalogue was removed in this change — it added latency without
+solving the prerelease use case, and the catalogue is now strictly
+the curated-by-humans surface.
 
 ## Why not just point at the latest tag?
 

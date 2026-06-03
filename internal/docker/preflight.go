@@ -10,6 +10,24 @@ import (
 
 const preflightCheckTimeout = 10 * time.Second
 
+// DefaultMinDiskBytes / DefaultMinMemoryBytes are the shared
+// resource thresholds used by BOTH `localnet up` preflight and
+// `localnet doctor`. They MUST be equal across the two surfaces —
+// the `doctor && up` shell-gating contract (PR #39 review:
+// "doctor must not fail on a host where `up` would pass") relies
+// on it. A regression where one site drifted was caught in the
+// PR #39 follow-up review; TestThresholdParity_DoctorMatchesUp
+// pins the equality.
+//
+// Values chosen to match the current `up` defaults (the
+// historical authority — `up` shipped these before `doctor`
+// existed). If the proposal requires a bump, edit ONCE here and
+// the gate stays consistent.
+const (
+	DefaultMinDiskBytes   uint64 = 10 * 1024 * 1024 * 1024 // 10 GiB
+	DefaultMinMemoryBytes uint64 = 4 * 1024 * 1024 * 1024  // 4 GiB
+)
+
 // Status describes the outcome of a single preflight check.
 type Status int
 
@@ -98,6 +116,12 @@ type Options struct {
 	MinDiskBytes uint64
 	// MinMemoryBytes is the minimum Docker daemon memory required. 0 disables.
 	MinMemoryBytes uint64
+	// RecommendedMemoryBytes is the threshold below which the memory
+	// check emits a WARN even when the minimum passes. 0 disables.
+	// Used by the per-version preflight gate so a host that *barely*
+	// meets the floor still gets a heads-up that it'll run hot. Must
+	// be >= MinMemoryBytes — otherwise it's silently ignored.
+	RecommendedMemoryBytes uint64
 }
 
 // RunPreflight runs all preflight checks and returns a Report. It never
@@ -127,7 +151,7 @@ func RunPreflight(ctx context.Context, opts Options) *Report {
 	report.ComposeVersion = composeVersion
 
 	if daemonResult.Status == StatusOK {
-		report.Results = append(report.Results, checkDockerMemory(ctx, opts.MinMemoryBytes))
+		report.Results = append(report.Results, checkDockerMemory(ctx, opts.MinMemoryBytes, opts.RecommendedMemoryBytes))
 	} else {
 		report.Results = append(report.Results, skip("Docker memory", "daemon unavailable"))
 	}
