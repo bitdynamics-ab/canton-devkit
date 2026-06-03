@@ -10,6 +10,8 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // tokensBodyMax caps any /api/tokens request body. Token bodies are
@@ -266,12 +268,34 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 		writeErrorWithCode(w, http.StatusConflict,
 			"SYMBOL_IN_USE", err.Error())
 	default:
-		// Orchestration-layer errors here are user-actionable (bad
-		// amount, unknown party, malformed instrument id). Surface the
-		// cause so the caller can fix the request — `writeError` would
-		// redact it to just the op name, which is correct for 5xx but
-		// unhelpful for a 400. Consistent with the explicit 400s in the
-		// per-handler decode paths.
+		// Once the actions submit for real, failures arrive as gRPC
+		// status errors — map their codes to the matching HTTP status
+		// instead of flattening everything to 400. (Today the actions
+		// stub at ErrNeedsV2LocalNet → 412, so this is forward-looking.)
+		if s, ok := status.FromError(err); ok && s.Code() != codes.OK {
+			switch s.Code() {
+			case codes.NotFound:
+				writeErrorWithCode(w, http.StatusNotFound, "NOT_FOUND", s.Message())
+			case codes.PermissionDenied, codes.Unauthenticated:
+				writeErrorWithCode(w, http.StatusForbidden, "PERMISSION_DENIED", s.Message())
+			case codes.InvalidArgument:
+				writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, s.Message())
+			case codes.Unavailable, codes.DeadlineExceeded:
+				// Upstream participant unreachable / slow — redact the
+				// detail (5xx contract) and log the cause.
+				writeError(w, http.StatusServiceUnavailable, op, err)
+			default:
+				// Internal / Unknown / etc. — a genuine server-side
+				// failure, not a bad request. Redact like any 5xx.
+				writeError(w, http.StatusBadGateway, op, err)
+			}
+			return
+		}
+		// Non-gRPC orchestration error: user-actionable (bad amount,
+		// unknown party, malformed instrument id). Surface the cause —
+		// `writeError` would redact it to just the op name, which is
+		// correct for 5xx but unhelpful for a 400. Consistent with the
+		// explicit 400s in the per-handler decode paths.
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 	}
 }
