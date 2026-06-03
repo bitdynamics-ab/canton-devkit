@@ -6,9 +6,10 @@
 > precedence + `DPM_TELEMETRY` + `DPM_TELEMETRY_DEBUG`, `App.Run` wiring,
 > the root `telemetry` command, and the golden tests. No production
 > collector is deployed yet — with no endpoint baked in, counters stay
-> local. **One deliberate change from the original draft:** consent is
-> **opt-out** (on by default), not opt-in, per project decision; every
-> other guardrail below is unchanged.
+> local. **Consent model: opt-out** — telemetry is **on by default** and
+> users disable it anytime (`telemetry off` / `DPM_TELEMETRY=off` /
+> `DO_NOT_TRACK=1`). This is the canonical design; every other guardrail
+> below stands.
 
 ## Goal
 
@@ -25,11 +26,13 @@ enabling a behavioral profile.
 
 ## Decisions
 
-1. **Opt-out, default on.** (Changed from the draft's opt-in.) One-time
-   TTY-gated notice on the first operational command; `telemetry off` /
-   `DPM_TELEMETRY=off` / `DO_NOT_TRACK=1` disable it. Notice wording is
-   `"Anonymous telemetry is ON by default. Turn it off? [y/N]"` so the
-   user is asked to *opt out*, matching the default.
+1. **Opt-out — telemetry is ON by default; users opt out anytime.**
+   This is the project's ratified consent model (an earlier opt-in draft
+   was dropped). On the first operational command a one-time TTY-gated
+   notice states it plainly: *"Telemetry is ON by default. Turn it off
+   anytime: `canton-devkit telemetry off` (or `DPM_TELEMETRY=off` /
+   `DO_NOT_TRACK=1`)."* All three switches disable it, and the choice
+   persists. Non-interactive runs never prompt and never block.
 2. **No identifier at all.** No machine id, install uuid, hashed hardware
    id, or IP retention. Counters merge into a weekly aggregate with no
    per-invocation row.
