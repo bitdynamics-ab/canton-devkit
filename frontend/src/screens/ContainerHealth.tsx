@@ -238,7 +238,13 @@ function ContainersTable({
       </div>
       {sorted.map((c) => {
         const { color, glyph } = signalFor(c);
-        const onLogs = () => onPickLogs(c.name);
+        const onLogs = (e: React.MouseEvent) => {
+          // Stop propagation so the click that opens the modal can't
+          // also be interpreted as a backdrop click on the modal's
+          // overlay (which would close it immediately).
+          e.stopPropagation();
+          onPickLogs(c.name);
+        };
         const onRestartClick = (e: React.MouseEvent) => {
           e.stopPropagation();
           onRestart(c.name);

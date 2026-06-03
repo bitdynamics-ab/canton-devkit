@@ -50,7 +50,7 @@ func TestServer_AllowsNonLoopbackWhenExplicitlyOptedIn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AllowNonLoopback=true should bypass the gate, got %v", err)
 	}
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 	if addr == "" {
 		t.Error("Listen returned empty addr")
 	}
@@ -67,7 +67,7 @@ func TestCSRF_RejectsCrossOriginPost(t *testing.T) {
 	srv := New(Config{Port: 0, Router: NewRouter(assets, nil)})
 	addr, _ := srv.Listen()
 	go srv.Serve() //nolint:errcheck
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	req, _ := http.NewRequest("POST", "http://"+addr+"/api/anything", nil)
 	req.Header.Set("Origin", "https://evil.example.com")
@@ -75,7 +75,7 @@ func TestCSRF_RejectsCrossOriginPost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("cross-origin POST status = %d, want 403", resp.StatusCode)
 	}
@@ -90,7 +90,7 @@ func TestCSRF_AcceptsSameOriginPost(t *testing.T) {
 	srv := New(Config{Port: 0, Router: NewRouter(assets, nil)})
 	addr, _ := srv.Listen()
 	go srv.Serve() //nolint:errcheck
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	req, _ := http.NewRequest("POST", "http://"+addr+"/api/typo", nil)
 	req.Header.Set("Origin", "http://"+addr)
@@ -98,7 +98,7 @@ func TestCSRF_AcceptsSameOriginPost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusForbidden {
 		t.Errorf("same-origin POST was rejected (403) — CSRF gate too strict")
 	}
@@ -112,7 +112,7 @@ func TestCSRF_RejectsMissingOriginPost(t *testing.T) {
 	srv := New(Config{Port: 0, Router: NewRouter(assets, nil)})
 	addr, _ := srv.Listen()
 	go srv.Serve() //nolint:errcheck
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	req, _ := http.NewRequest("POST", "http://"+addr+"/api/anything", nil)
 	// No Origin, no Referer.
@@ -120,7 +120,7 @@ func TestCSRF_RejectsMissingOriginPost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("no-Origin POST status = %d, want 403", resp.StatusCode)
 	}
@@ -132,13 +132,13 @@ func TestCSRF_RejectsMissingOriginPost(t *testing.T) {
 // would 403.
 func TestCSRF_GETIsExempt(t *testing.T) {
 	srv, addr := startTestServer(t)
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	resp, err := http.Get("http://" + addr + "/api/version")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("GET with no Origin was rejected: status %d", resp.StatusCode)
 	}
@@ -153,14 +153,14 @@ func TestCSRF_GETIsExempt(t *testing.T) {
 // frontend can branch on, not "the API returned HTML, weird".
 func TestSPA_DoesNotMaskAPITypos(t *testing.T) {
 	srv, addr := startTestServer(t)
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	// Misspelled API path — looks like /api/version typo.
 	resp, err := http.Get("http://" + addr + "/api/typoVersion")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("/api/typo status = %d, want 404 (must NOT serve SPA index)", resp.StatusCode)
 	}
@@ -173,7 +173,7 @@ func TestSPA_DoesNotMaskAPITypos(t *testing.T) {
 	}
 	// Similarly for /events/typo.
 	resp2, _ := http.Get("http://" + addr + "/events/whatever")
-	defer resp2.Body.Close()
+	defer func() { _ = resp2.Body.Close() }()
 	if resp2.StatusCode != http.StatusNotFound {
 		t.Errorf("/events/typo status = %d, want 404", resp2.StatusCode)
 	}
@@ -184,13 +184,13 @@ func TestSPA_DoesNotMaskAPITypos(t *testing.T) {
 // SPA fallback. Required so React Router deep links work.
 func TestSPA_StillServesGenuineRoute(t *testing.T) {
 	srv, addr := startTestServer(t)
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	resp, err := http.Get("http://" + addr + "/dashboard/explorer/abc123")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("genuine SPA route status = %d, want 200", resp.StatusCode)
 	}
@@ -310,13 +310,13 @@ func TestRouter_AccessLogEmittedPerRequest(t *testing.T) {
 	t.Cleanup(func() { log.SetOutput(prev) })
 
 	srv, addr := startTestServer(t)
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	resp, err := http.Get("http://" + addr + "/api/version")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	body := logBuf.String()
 	for _, want := range []string{
@@ -348,7 +348,7 @@ func TestRouter_AccessLogEmittedPerRequest(t *testing.T) {
 // proving the middleware chain reaches that handler.
 func TestCSRF_JWTEndpointProtectedEndToEnd(t *testing.T) {
 	srv, addr := startTestServer(t)
-	defer srv.Shutdown(context.Background())
+	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	// We don't care whether the underlying handler would have
 	// succeeded — we only care that the CSRF gate fires BEFORE
@@ -360,7 +360,7 @@ func TestCSRF_JWTEndpointProtectedEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("cross-origin POST /api/instances/demo/jwt status = %d, want 403 — withOriginCheck not reaching credential route",
 			resp.StatusCode)

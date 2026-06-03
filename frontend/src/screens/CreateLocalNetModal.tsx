@@ -1,15 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ApiError,
+  PreflightFailedError,
   STEP_LABELS,
   STEP_ORDER,
   cancelInstanceUp,
   createInstance,
+  fetchPreflight,
   fetchSpliceVersions,
   type CreateInstanceAcceptedResponse,
+  type PreflightCheck,
+  type PreflightReport,
   type SpliceVersionEntry,
 } from "../api";
 import { W, wMono, wSans } from "../tokens";
+import { remediationForCode } from "./remediation";
 import {
   type ProgressState,
   type StepState,
@@ -51,10 +56,27 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
   const [name, setName] = useState("");
   const [version, setVersion] = useState("");
   const [allowUncurated, setAllowUncurated] = useState(false);
+  // observability: when on, bring-up adds the Prometheus + Grafana
+  // overlay (`--profile observability`). Default OFF because the
+  // overlay pulls extra container images and adds memory pressure
+  // — opt-in is friendlier for the "just spin one up" path.
+  const [observability, setObservability] = useState(false);
   const [versions, setVersions] = useState<SpliceVersionEntry[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [versionsError, setVersionsError] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage>({ kind: "form" });
+  // Per-version system-requirements check. "idle" = no version
+  // picked yet; "loading" = probe in flight; "ok" = host meets
+  // floor; "blocked" = at least one FAIL — Create button disabled.
+  // Warnings (WARN-only report) still allow submit; the user sees
+  // them inline as a heads-up.
+  const [preflight, setPreflight] = useState<
+    | { kind: "idle" }
+    | { kind: "loading" }
+    | { kind: "ok"; report: PreflightReport }
+    | { kind: "blocked"; report: PreflightReport }
+    | { kind: "err"; message: string }
+  >({ kind: "idle" });
   const inputRef = useRef<HTMLInputElement>(null);
 
   const progress = useCreateProgress(
@@ -68,6 +90,7 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
       setName("");
       setVersion("");
       setAllowUncurated(false);
+      setObservability(false);
       setStage({ kind: "form" });
       requestAnimationFrame(() => inputRef.current?.focus());
       // Refresh the version catalogue on open. Cached on the
@@ -143,10 +166,53 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
     if (!open) firedRef.current = null;
   }, [open]);
 
+  // Probe system requirements whenever the picked version changes
+  // (while still on the form stage). Skipped for the uncurated-tag
+  // bypass since the server doesn't enforce a per-version floor
+  // for tags not in the catalogue. Race-safe via a cancelled flag —
+  // a fast-clicker who flips between versions only sees the latest
+  // result, not whichever subprocess probe finishes last.
+  useEffect(() => {
+    if (!open || stage.kind !== "form") return;
+    if (!version || allowUncurated) {
+      setPreflight({ kind: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setPreflight({ kind: "loading" });
+    fetchPreflight(version)
+      .then((report) => {
+        if (cancelled) return;
+        setPreflight(
+          report.ok
+            ? { kind: "ok", report }
+            : { kind: "blocked", report },
+        );
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setPreflight({
+          kind: "err",
+          message:
+            e instanceof ApiError
+              ? e.message
+              : "could not check system requirements",
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, stage.kind, version, allowUncurated]);
+
   if (!open) return null;
 
   const nameValid = NAME_RE.test(name);
-  const canSubmit = nameValid && stage.kind === "form";
+  // Gating: name validity AND preflight not blocked. "loading" or
+  // "err" still allows submit — preflight is advisory in those
+  // states; the server's own gate is the source of truth.
+  const preflightBlocks = preflight.kind === "blocked";
+  const canSubmit =
+    nameValid && stage.kind === "form" && !preflightBlocks;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -157,9 +223,19 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
         name,
         ...(version ? { version } : {}),
         ...(allowUncurated ? { allow_uncurated: true } : {}),
+        ...(observability ? { profiles: ["observability"] } : {}),
       });
       setStage({ kind: "progress", accepted });
     } catch (e) {
+      if (e instanceof PreflightFailedError) {
+        // Server-side gate caught what the inline probe missed
+        // (race with the user, or first time the version was
+        // chosen). Drop back to form stage with the report
+        // populated so the inline panel renders the findings.
+        setPreflight({ kind: "blocked", report: e.report });
+        setStage({ kind: "form" });
+        return;
+      }
       const apiErr = e instanceof ApiError ? e : null;
       setStage({
         kind: "error",
@@ -211,6 +287,9 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
               versionsError={versionsError}
               allowUncurated={allowUncurated}
               setAllowUncurated={setAllowUncurated}
+              observability={observability}
+              setObservability={setObservability}
+              preflight={preflight}
               onSubmit={submit}
             />
           )}
@@ -362,6 +441,13 @@ function ModalFooter({
 
 // ── stage bodies ──────────────────────────────────────────────────
 
+type PreflightState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "ok"; report: PreflightReport }
+  | { kind: "blocked"; report: PreflightReport }
+  | { kind: "err"; message: string };
+
 interface FormBodyProps {
   inputRef: React.RefObject<HTMLInputElement>;
   name: string;
@@ -374,6 +460,9 @@ interface FormBodyProps {
   versionsError: string | null;
   allowUncurated: boolean;
   setAllowUncurated: (b: boolean) => void;
+  observability: boolean;
+  setObservability: (b: boolean) => void;
+  preflight: PreflightState;
   onSubmit: (e: React.FormEvent) => void;
 }
 
@@ -389,6 +478,9 @@ function FormBody({
   versionsError,
   allowUncurated,
   setAllowUncurated,
+  observability,
+  setObservability,
+  preflight,
   onSubmit,
 }: FormBodyProps) {
   return (
@@ -422,6 +514,55 @@ function FormBody({
           error={versionsError}
         />
       </Field>
+
+      <PreflightPanel state={preflight} />
+
+      {/* Observability profile — opt-in. Prometheus + Grafana
+          overlay; off by default to keep the cold-start small. */}
+      <label
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 10,
+          padding: "10px 12px",
+          background: W.surface2,
+          borderRadius: 8,
+          border: `1px solid ${observability ? W.brand : W.border}`,
+          cursor: "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={observability}
+          onChange={(e) => setObservability(e.target.checked)}
+          style={{ marginTop: 2 }}
+        />
+        <div style={{ flex: 1, fontSize: 12.5, color: W.text2 }}>
+          <strong style={{ color: W.text }}>Enable observability</strong>
+          <span
+            style={{
+              marginLeft: 8,
+              fontSize: 10.5,
+              padding: "1px 6px",
+              borderRadius: 3,
+              background: `${W.brand}1A`,
+              color: W.brand,
+              fontFamily: wMono,
+            }}
+          >
+            +Prometheus +Grafana
+          </span>
+          <div style={{ color: W.dim, fontSize: 11.5, marginTop: 3, lineHeight: 1.5 }}>
+            Adds the metrics overlay so the Metrics screen renders live
+            charts (throughput, latency, ACS, errors). Extra ~400 MB of
+            container images; ~300 MB extra RAM at idle. Equivalent to
+            <code style={{ fontFamily: wMono, marginLeft: 4 }}>
+              --profile observability
+            </code>{" "}
+            on the CLI.
+          </div>
+        </div>
+      </label>
 
       <details style={{ marginTop: 4 }}>
         <summary
@@ -477,6 +618,7 @@ function FormBody({
         <span style={{ color: W.brand }}>
           dpm localnet up --name {name || "<name>"} --version{" "}
           {version || "latest"}
+          {observability ? " --profile observability" : ""}
         </span>
       </div>
     </form>
@@ -657,6 +799,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
     );
   }
   if (banner.kind === "failed") {
+    const remediation = remediationForCode(banner.errorCode);
     return (
       <div
         style={{
@@ -672,6 +815,26 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
         {banner.cause && (
           <div style={{ color: W.text2, marginTop: 4, fontFamily: wMono, fontSize: 11 }}>
             {banner.cause}
+          </div>
+        )}
+        {remediation && (
+          <div
+            style={{
+              marginTop: 8,
+              padding: "8px 10px",
+              background: W.surface2,
+              borderRadius: 6,
+              color: W.text2,
+              fontSize: 11.5,
+              borderLeft: `3px solid ${W.warn}`,
+            }}
+          >
+            <strong style={{ color: W.warn }}>{remediation.title}</strong>
+            <ul style={{ margin: "4px 0 0", paddingLeft: 18, lineHeight: 1.55 }}>
+              {remediation.steps.map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+            </ul>
           </div>
         )}
       </div>

@@ -63,7 +63,7 @@ describe("ErrorBoundary", () => {
     // React itself logs the error too; we just check OUR explicit
     // console.error fired at least once with the right prefix.
     const matched = consoleError.mock.calls.some(
-      (c) =>
+      (c: unknown[]) =>
         typeof c[0] === "string" &&
         c[0].includes("ErrorBoundary caught a render error"),
     );

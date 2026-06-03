@@ -3,6 +3,8 @@ package localnet
 import (
 	"fmt"
 	"io"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 )
 
 // Progress is the structured-event substrate the Web UI (BIT-163,
@@ -121,17 +123,53 @@ type Progress interface {
 }
 
 // TextProgress is the CLI-facing implementation. Every method
-// produces a line (or block) of text on the appropriate stream;
-// the goal is byte-identical output to the existing RunUp behaviour
-// so the BIT-163b refactor doesn't change a single golden CLI test.
+// produces a line (or block) of text on the appropriate stream.
 //
-// The string forms below are intentionally plain — the existing
-// up.go doesn't ANSI-color them, doesn't use the term primitives,
-// doesn't render boxes. We match that. BIT-122 (re-skinning up
-// against the lipgloss mockups) is a separate ticket.
+// BIT-122 re-skin: when stdout is a TTY, we render section
+// headers + final success box via the term primitives that match
+// ScreenUp in docs/design/mockups/screens-lifecycle.jsx. When
+// stdout is NOT a TTY (pipes, CI, bytes.Buffer test injection),
+// we keep the historical plain-text output so:
+//   - existing golden tests still pass byte-for-byte,
+//   - piping (`dpm localnet up | tee log.txt`) doesn't leak
+//     ANSI escapes into the log file,
+//   - CI logs stay greppable.
+//
+// The TTY check happens once at construction (via NewTextProgress)
+// so callers that handcraft a TextProgress{OutW: …, ErrW: …}
+// without setting tty get the plain path — matches the prior
+// behavior. Use NewTextProgress for the rich path.
 type TextProgress struct {
 	OutW io.Writer
 	ErrW io.Writer
+	// tty controls whether StartStep / Done emit the boxed,
+	// glyph-prefixed rendering from BIT-121's term primitives.
+	// False (default) keeps the historical plain output so the
+	// suite of golden tests built against the unstyled bytes
+	// keeps passing.
+	tty bool
+}
+
+// NewTextProgress constructs a TextProgress and auto-detects
+// whether out is a TTY. CLI entrypoints (`dpm localnet up`)
+// should use this constructor so an interactive run gets the
+// styled output. Tests + non-TTY callers can keep using the
+// literal `&TextProgress{OutW: buf, ErrW: buf}` form — the
+// plain path stays the default.
+func NewTextProgress(out, errw io.Writer) *TextProgress {
+	return &TextProgress{
+		OutW: out,
+		ErrW: errw,
+		tty:  isTTY(out),
+	}
+}
+
+// isTTY indirects through the term package so this file doesn't
+// have to import isatty directly. Returns false when out isn't an
+// *os.File (e.g. bytes.Buffer in tests) — that's the desired
+// "fall back to plain" path.
+func isTTY(out io.Writer) bool {
+	return term.IsTerminal(out)
 }
 
 // stepLabel maps the typed Step to the human-readable phrase the
@@ -191,11 +229,28 @@ func (t *TextProgress) StartStep(step Step, detail string) {
 		return
 	}
 	label := labelFor(step)
-	if detail == "" {
-		fmt.Fprintf(t.OutW, "%s...\n", label)
+	if !t.tty {
+		// Plain path — historical byte-stable output for non-TTY
+		// callers (tests, pipes, CI).
+		if detail == "" {
+			_, _ = fmt.Fprintf(t.OutW, "%s...\n", label)
+			return
+		}
+		_, _ = fmt.Fprintf(t.OutW, "%s (%s)...\n", label, detail)
 		return
 	}
-	fmt.Fprintf(t.OutW, "%s (%s)...\n", label, detail)
+	// BIT-122 styled path — mockup-aligned section header. Maps
+	// to the `┌─ preflight ────…` / `┌─ services ─────…` block
+	// headers in ScreenUp; we surface the same per-step label
+	// the plain path uses for the section title so a user
+	// flipping between modes sees the same vocabulary.
+	right := ""
+	if detail != "" {
+		right = detail
+	}
+	body := term.Dimc("(running…)")
+	_, _ = fmt.Fprintln(t.OutW)
+	_, _ = fmt.Fprintln(t.OutW, term.Section(label, right, body, 0))
 }
 
 // UpdateStep is a no-op in the CLI: the existing up.go doesn't
@@ -217,16 +272,16 @@ func (t *TextProgress) FinishStep(_ Step, _ string) {}
 // scattered through up.go today.
 func (t *TextProgress) FailStep(_ Step, summary string, cause error) {
 	if cause == nil {
-		fmt.Fprintln(t.ErrW, summary)
+		_, _ = fmt.Fprintln(t.ErrW, summary)
 		return
 	}
-	fmt.Fprintf(t.ErrW, "%s: %s\n", summary, cause)
+	_, _ = fmt.Fprintf(t.ErrW, "%s: %s\n", summary, cause)
 }
 
 // Warn writes a "warning: ..." line to stderr. Mirrors the existing
 // dev-secret warning + JWT capture warnings in up.go.
 func (t *TextProgress) Warn(message string) {
-	fmt.Fprintf(t.ErrW, "warning: %s\n", message)
+	_, _ = fmt.Fprintf(t.ErrW, "warning: %s\n", message)
 }
 
 // Done is the success marker. Today's up.go ends with:
@@ -235,11 +290,25 @@ func (t *TextProgress) Warn(message string) {
 //
 // followed by the endpoint listing. detail carries the full ready-
 // line; endpoint listing goes through Out() as a verbatim block.
+//
+// BIT-122 styled path on a TTY: render the ready-line inside a
+// brand-accented Box matching the `✦ LocalNet "<name>" is ready.`
+// block in ScreenUp.
 func (t *TextProgress) Done(detail string) {
 	if detail == "" {
 		return
 	}
-	fmt.Fprintf(t.OutW, "\n%s\n\n", detail)
+	if !t.tty {
+		_, _ = fmt.Fprintf(t.OutW, "\n%s\n\n", detail)
+		return
+	}
+	body := term.Brandc("✦ ") + term.Textc(detail) + "\n" +
+		term.Dimc("Run ") + term.Textc("dpm localnet env") +
+		term.Dimc(" to export config, or ") + term.Textc("dpm localnet ui") +
+		term.Dimc(" to open the dashboard.")
+	_, _ = fmt.Fprintln(t.OutW)
+	_, _ = fmt.Fprintln(t.OutW, term.Box(term.BoxBrand, body))
+	_, _ = fmt.Fprintln(t.OutW)
 }
 
 // Out returns the underlying stdout writer — for already-formatted
@@ -267,11 +336,11 @@ func labelFor(step Step) string {
 // io.Discard so any verbatim block writes don't crash.
 type NopProgress struct{}
 
-func (NopProgress) StartStep(Step, string)            {}
-func (NopProgress) UpdateStep(Step, string, int)      {}
-func (NopProgress) FinishStep(Step, string)           {}
-func (NopProgress) FailStep(Step, string, error)      {}
-func (NopProgress) Warn(string)                       {}
-func (NopProgress) Done(string)                       {}
-func (NopProgress) Out() io.Writer                    { return io.Discard }
-func (NopProgress) Err() io.Writer                    { return io.Discard }
+func (NopProgress) StartStep(Step, string)       {}
+func (NopProgress) UpdateStep(Step, string, int) {}
+func (NopProgress) FinishStep(Step, string)      {}
+func (NopProgress) FailStep(Step, string, error) {}
+func (NopProgress) Warn(string)                  {}
+func (NopProgress) Done(string)                  {}
+func (NopProgress) Out() io.Writer               { return io.Discard }
+func (NopProgress) Err() io.Writer               { return io.Discard }

@@ -27,6 +27,8 @@ func (a *App) buildRoot() *cobra.Command {
 	root.SetErr(a.err)
 
 	root.AddCommand(a.buildVersionCmd())
-	root.AddCommand(localnet.Build())
+	ln := localnet.Build()
+	applyHelp(ln) // BIT-148: ScreenHelp template for `localnet --help`
+	root.AddCommand(ln)
 	return root
 }

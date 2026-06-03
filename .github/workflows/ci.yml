@@ -50,21 +50,34 @@ jobs:
 
   mockup-syntax:
     # PR #31 #10 review pin: docs/design/mockups/*.jsx are
-    # acceptance specs. CI doesn't render them, but `node --check`
-    # parses each file so a hand-edit that breaks the design-
-    # canvas viewer fails here rather than in a reviewer's
-    # browser.
+    # acceptance specs. CI doesn't render them, but esbuild parses
+    # each file so a hand-edit that breaks the design-canvas viewer
+    # fails here rather than in a reviewer's browser.
+    #
+    # Originally used `node --check`, but plain Node can't parse JSX
+    # (the May 25 mockup refresh introduced real JSX expressions that
+    # tripped the syntax check). esbuild's `--loader=jsx` is the
+    # cheapest JSX-aware parser; no node_modules install needed.
     name: Mockup JSX syntax
     runs-on: [self-hosted, Linux]
     steps:
       - name: Check out repository
         # actions/checkout@v5
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-      - name: Node --check every mockup .jsx
+      - name: Set up Node
+        # actions/setup-node@v4
+        # Self-hosted runner has no Node by default; previous
+        # `node --check` step also failed silently here. Pin to the
+        # frontend's .nvmrc so all JS-touching jobs share one Node.
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version-file: frontend/.nvmrc
+      - name: esbuild --loader=jsx on every mockup .jsx
         run: |
           set -euo pipefail
           for f in docs/design/mockups/*.jsx; do
-            node --check "$f" || { echo "::error file=$f::JSX syntax error"; exit 1; }
+            npx --yes esbuild --loader:.jsx=jsx --log-level=warning "$f" > /dev/null \
+              || { echo "::error file=$f::JSX syntax error"; exit 1; }
           done
 
   lint:

@@ -1,0 +1,211 @@
+// Screen-level smoke tests (yellow Y16).
+//
+// Each screen is mounted with a stubbed `fetch` and the
+// InstanceSelectionProvider primed via an /api/instances seed. The
+// asserts are deliberately narrow — "did the screen render without
+// throwing and surface the expected heading/empty-state" — because
+// the heavy lifting (chart shapes, filter logic) lives in
+// component-level tests already. The smoke tests exist as a tripwire
+// against the kind of regression that yellow B1 was: a stale
+// reference that compiles fine but throws at runtime when its code
+// path is hit (TimelineView's `hovered` → `focused` rename). A render
+// smoke test of TimelineView would have caught that on the first
+// run.
+//
+// We do NOT test the screens' interactive behaviour here — they
+// already get a lot of coverage via the component tests
+// (charts.test.tsx, BackupRestore.test.tsx, etc.). This is the
+// "won't blow up on first paint" guard.
+
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import type { ReactNode } from "react";
+import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
+
+// InstanceSelectionProvider uses useSearchParams, which only works
+// inside a <Router>; the existing tests (Dashboard.test.tsx) wrap
+// the same way.
+function Providers({ children }: { children: ReactNode }) {
+  return (
+    <MemoryRouter initialEntries={["/?instance=demo"]}>
+      <InstanceSelectionProvider>{children}</InstanceSelectionProvider>
+    </MemoryRouter>
+  );
+}
+import { DARScreen } from "./DARScreen";
+import { MetricsScreen } from "./MetricsScreen";
+import { ExplorerScreen } from "./ExplorerScreen";
+import { WalletScreen } from "./WalletScreen";
+
+interface InstanceShape {
+  name: string;
+  status?: string;
+  endpoints?: Array<{ label: string; url: string; port: number; scheme: string }>;
+}
+
+// stubFetch wires the minimum set of endpoints each screen probes.
+// Anything not enumerated returns 404 so an accidental new call
+// surfaces in failures instead of being silently mocked away.
+function stubFetch(instance: InstanceShape) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((rawUrl: string) => {
+      const url = typeof rawUrl === "string" ? rawUrl : (rawUrl as URL).toString();
+      // List: feeds InstanceSelectionProvider so `selected` resolves.
+      if (url === "/api/instances" || url.startsWith("/api/instances?")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              schema_version: 1,
+              instances: [
+                {
+                  name: instance.name,
+                  splice_version: "0.6.4",
+                  status: instance.status ?? "running",
+                  created_at: "2026-05-25T10:00:00Z",
+                  updated_at: "2026-05-25T10:00:00Z",
+                },
+              ],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      // Detail — for WalletScreen + others that read endpoints.
+      if (url.match(/^\/api\/instances\/[^/?]+(?:\?|$)/)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              schema_version: 1,
+              name: instance.name,
+              splice_version: "0.6.4",
+              status: instance.status ?? "running",
+              created_at: "2026-05-25T10:00:00Z",
+              compose_project: `canton-${instance.name}`,
+              docker_network: instance.name,
+              container_prefix: `${instance.name}-`,
+              project_dir: "/tmp/p",
+              data_dir: "/tmp/d",
+              endpoints: instance.endpoints ?? [],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      // Empty lists for screen-specific endpoints — enough for the
+      // initial-render code path.
+      if (url.includes("/contracts") || url.includes("/transactions")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ schema_version: 1, contracts: [], transactions: [], count: 0 }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      if (url.includes("/dar")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ schema_version: 1, dars: [] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+      if (url.includes("/metrics/summary")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ schema_version: 1, metrics: {} }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+      if (url.includes("/metrics/range")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ status: "success", data: { result: [] } }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+      return Promise.resolve(new Response("not found", { status: 404 }));
+    }),
+  );
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("DARScreen smoke", () => {
+  it("renders the DAR Manager heading without throwing", async () => {
+    stubFetch({ name: "demo" });
+    render(
+      <Providers>
+        <DARScreen />
+      </Providers>,
+    );
+    // Tolerant — the screen mentions "DAR" in several places; we
+    // just want SOMETHING matching to confirm the body rendered.
+    await waitFor(() => {
+      expect(screen.getAllByText(/DAR/i).length).toBeGreaterThan(0);
+    });
+  });
+});
+
+describe("MetricsScreen smoke", () => {
+  it("renders without throwing when observability is off (empty body)", async () => {
+    stubFetch({ name: "demo" });
+    render(
+      <Providers>
+        <MetricsScreen />
+      </Providers>,
+    );
+    // MetricCard titles are always present once the screen mounts;
+    // they don't require observability to be on.
+    await waitFor(() => {
+      expect(screen.getAllByText(/throughput/i).length).toBeGreaterThan(0);
+    });
+  });
+});
+
+describe("ExplorerScreen smoke", () => {
+  it("renders without throwing on empty ACS + transactions", async () => {
+    stubFetch({ name: "demo" });
+    render(
+      <Providers>
+        <ExplorerScreen />
+      </Providers>,
+    );
+    // The view-toggle (Contracts/Transactions/Timeline) is the
+    // most stable anchor — present on every render regardless of
+    // ACS-empty-vs-populated.
+    await waitFor(() => {
+      expect(screen.getAllByText(/Contracts|Transactions|Timeline/i).length).toBeGreaterThan(0);
+    });
+  });
+});
+
+describe("WalletScreen smoke", () => {
+  it("renders an iframe + login hint when endpoints are present", async () => {
+    stubFetch({
+      name: "demo",
+      endpoints: [
+        {
+          label: "Wallet · app-user",
+          url: "http://wallet.localhost:60470",
+          port: 60470,
+          scheme: "http",
+        },
+      ],
+    });
+    render(
+      <Providers>
+        <WalletScreen />
+      </Providers>,
+    );
+    // The login hint is the most distinctive WalletScreen artefact.
+    await waitFor(() => {
+      expect(screen.getByText(/Login:/i)).toBeTruthy();
+    });
+  });
+});

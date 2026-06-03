@@ -57,7 +57,7 @@ func TestList_EmptyRegistryReturnsEmptyArray(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
@@ -93,9 +93,9 @@ func TestList_RegisteredInstancesAppearSorted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var got types.ListResponse
-	json.NewDecoder(resp.Body).Decode(&got)
+	_ = json.NewDecoder(resp.Body).Decode(&got)
 
 	if len(got.Instances) != 2 {
 		t.Fatalf("len = %d, want 2", len(got.Instances))
@@ -112,9 +112,7 @@ func TestList_RegisteredInstancesAppearSorted(t *testing.T) {
 
 // TestDetail_ReturnsInstance is the happy path for /api/instances/{name}.
 // We seed an instance, GET its detail endpoint, and assert the
-// shape carries the registry fields without going through any
-// docker call (Services stays nil because no live probe is wired
-// in this PR — that lands when BIT-144 status.go merges).
+// shape carries the registry fields via the shared status projection.
 func TestDetail_ReturnsInstance(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo", "0.6.4",
@@ -125,12 +123,12 @@ func TestDetail_ReturnsInstance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var got types.Instance
-	json.NewDecoder(resp.Body).Decode(&got)
+	_ = json.NewDecoder(resp.Body).Decode(&got)
 	if got.Name != "demo" {
 		t.Errorf("Name = %q, want demo", got.Name)
 	}
@@ -142,6 +140,9 @@ func TestDetail_ReturnsInstance(t *testing.T) {
 	}
 	if got.SchemaVersion != types.SchemaVersion {
 		t.Errorf("SchemaVersion = %d, want %d", got.SchemaVersion, types.SchemaVersion)
+	}
+	if len(got.Endpoints) == 0 || got.Endpoints[0].URL != "http://localhost:4441" {
+		t.Errorf("Endpoints = %+v, want wallet URL", got.Endpoints)
 	}
 }
 
@@ -157,13 +158,13 @@ func TestDetail_UnknownNameReturns404(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 	// Error body shape pin — frontend toasts read `error` field.
 	var body errorBody
-	json.NewDecoder(resp.Body).Decode(&body)
+	_ = json.NewDecoder(resp.Body).Decode(&body)
 	if body.Error == "" {
 		t.Error("error body missing `error` field — frontend can't render toast")
 	}
@@ -184,7 +185,7 @@ func TestDetail_InvalidNameReturns400(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d for malformed name, want 400", resp.StatusCode)
 	}
@@ -215,12 +216,12 @@ func TestList_PartialStateFileSurfacesWarning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("status = %d, want 200 (best-effort)", resp.StatusCode)
 	}
 	var got types.ListResponse
-	json.NewDecoder(resp.Body).Decode(&got)
+	_ = json.NewDecoder(resp.Body).Decode(&got)
 	if got.Warning == "" {
 		t.Error("Warning empty after corrupt state.json — frontend can't surface degraded state")
 	}

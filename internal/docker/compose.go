@@ -40,6 +40,13 @@ type ComposeRunner struct {
 	Env       []string
 	WorkDir   string
 	LogWriter io.Writer
+	// Profiles, when non-empty, becomes one or more `--profile P`
+	// args on every compose invocation. Compose services scoped
+	// under a profile via `profiles: [P]` are skipped unless that
+	// profile is enabled — used by BIT-134's `observability`
+	// overlay to opt users into the Prometheus + Grafana stack
+	// without forcing the extra ~600 MiB on the default path.
+	Profiles []string
 
 	// commandFn is the seam tests use to inject a fake docker. Production
 	// callers leave it nil; tests set it to capture (and optionally script
@@ -77,6 +84,12 @@ func (c *ComposeRunner) composeBase() []string {
 	}
 	for _, ef := range c.EnvFiles {
 		args = append(args, "--env-file", ef)
+	}
+	for _, p := range c.Profiles {
+		// `--profile <name>` is a per-invocation toggle; we emit
+		// it as a leading arg so subsequent `up` / `ps` / `down`
+		// all see the same enabled profile set.
+		args = append(args, "--profile", p)
 	}
 	return args
 }
@@ -314,6 +327,16 @@ func (c *ComposeRunner) Endpoints(ctx context.Context) map[string]string {
 	return endpoints
 }
 
+// Ps returns a tab-separated docker compose ps snapshot for status rendering.
+func (c *ComposeRunner) Ps(ctx context.Context) ([]byte, error) {
+	args := append(c.composeBase(), "ps", "--all", "--format", "{{.Name}}\t{{.State}}\t{{.Health}}\t{{.Image}}\t{{.Publishers}}")
+	out, err := c.command(ctx, args...).Output()
+	if err != nil {
+		return nil, fmt.Errorf("docker compose ps: %w", err)
+	}
+	return out, nil
+}
+
 // DiscoverPort returns the host port that the given compose service has
 // mapped to its container port. Used when running with TEST_PORT=1 (i.e.
 // ephemeral allocation) so we can populate state.Ports with the actual
@@ -345,7 +368,46 @@ func (c *ComposeRunner) DiscoverPort(ctx context.Context, service string, contai
 	return port, nil
 }
 
-func (c *ComposeRunner) Down(ctx context.Context) error {
-	args := append(c.composeBase(), "down", "--volumes", "--remove-orphans")
+// Stop runs `docker compose down`. When removeVolumes is true the call
+// is destructive — it strips named volumes and orphan containers,
+// equivalent to the previous Down() semantics and what `localnet
+// clean` will use. When false it preserves volumes so a follow-up
+// `localnet up` against the same --name can resume from existing
+// state; this is what `localnet down` (BIT-124) wants.
+//
+// --remove-orphans is always set because forgetting it leaves
+// dangling containers when a later compose project rename happens
+// (e.g. across an instance rename), and the user has no way to find
+// or clean them without inspecting docker directly.
+func (c *ComposeRunner) Stop(ctx context.Context, removeVolumes bool) error {
+	args := append(c.composeBase(), "down", "--remove-orphans")
+	if removeVolumes {
+		args = append(args, "--volumes")
+	}
 	return c.command(ctx, args...).Run()
+}
+
+// Down is the destructive variant — kept as a thin wrapper over
+// Stop(true) so existing callers and tests keep working. New code
+// should call Stop directly with the explicit removeVolumes choice.
+func (c *ComposeRunner) Down(ctx context.Context) error {
+	return c.Stop(ctx, true)
+}
+
+// Restart runs `docker compose restart [services...]`. With no
+// services it restarts the whole project. Unlike down+up it keeps
+// containers, networks, and volumes — only the processes bounce —
+// so it's the right primitive for `localnet restart`. Containers
+// keep their identities but Docker MAY re-assign published host
+// ports on restart, so callers should re-capture ports afterward.
+func (c *ComposeRunner) Restart(ctx context.Context, services ...string) error {
+	args := append(c.composeBase(), "restart")
+	args = append(args, services...)
+	cmd := c.command(ctx, args...)
+	cmd.Stdout = c.LogWriter
+	cmd.Stderr = c.LogWriter
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("docker compose restart failed: %w", err)
+	}
+	return nil
 }

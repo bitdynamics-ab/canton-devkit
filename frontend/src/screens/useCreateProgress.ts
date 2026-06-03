@@ -37,7 +37,7 @@ export interface StepState {
 export type BannerState =
   | { kind: "running" }
   | { kind: "done"; detail?: string }
-  | { kind: "failed"; step?: StepName; summary?: string; cause?: string }
+  | { kind: "failed"; step?: StepName; summary?: string; cause?: string; errorCode?: import("../api").ErrorCode }
   | { kind: "cancelled"; reason?: string };
 
 export interface ProgressState {
@@ -134,6 +134,7 @@ export function reducer(state: ProgressState, ev: CreateProgressEvent): Progress
                 step: ev.step,
                 summary: ev.summary,
                 cause: ev.cause,
+                errorCode: ev.error_code,
               },
       };
     case "warn":

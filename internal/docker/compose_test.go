@@ -133,6 +133,7 @@ func TestEveryMethodPropagatesWorkDirAndEnv(t *testing.T) {
 	}{
 		{"Up", func(c *ComposeRunner) { _ = c.Up(context.Background()) }},
 		{"Down", func(c *ComposeRunner) { _ = c.Down(context.Background()) }},
+		{"Restart", func(c *ComposeRunner) { _ = c.Restart(context.Background()) }},
 	}
 	// healthSnapshot / Endpoints / DiscoverPort require .Output(), which
 	// invokes the underlying command. Those are covered by the
@@ -173,6 +174,46 @@ func TestDownArgvShape(t *testing.T) {
 		"-p", "canton-test",
 		"down", "--volumes", "--remove-orphans",
 	}, "Down")
+}
+
+func TestRestartArgvShape(t *testing.T) {
+	rec := &recorder{}
+	c := runnerForWiring(t, rec)
+	_ = c.Restart(context.Background())
+
+	if len(rec.calls) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(rec.calls))
+	}
+	assertArgvContains(t, argvOf(rec.calls[0]), []string{
+		"docker", "compose",
+		"-p", "canton-test",
+		"-f", "compose.yaml",
+		"-f", "overlay.yaml",
+		"--env-file", "compose.env",
+		"--env-file", "env/common.env",
+		"restart",
+	}, "Restart")
+}
+
+func TestRestartArgvWithServices(t *testing.T) {
+	rec := &recorder{}
+	c := runnerForWiring(t, rec)
+	_ = c.Restart(context.Background(), "canton", "splice")
+
+	if len(rec.calls) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(rec.calls))
+	}
+	argv := argvOf(rec.calls[0])
+	assertArgvContains(t, argv, []string{"restart", "canton", "splice"}, "Restart(services)")
+
+	// Service args must follow "restart" in order.
+	ri := indexOf(argv, "restart")
+	if ri < 0 || ri+2 >= len(argv) {
+		t.Fatalf("restart not found or not enough trailing args: %v", argv)
+	}
+	if argv[ri+1] != "canton" || argv[ri+2] != "splice" {
+		t.Errorf("service args out of order: got %v after 'restart'", argv[ri+1:])
+	}
 }
 
 // --- behaviour: classifyHealth parser ------------------------------------
@@ -431,6 +472,45 @@ func TestEndpointsParsesNamePublishersPairs(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Endpoints mismatch:\n  got:  %v\n  want: %v", sortKeys(got), sortKeys(want))
+	}
+}
+
+func TestPsUsesComposeRunnerCommandSeam(t *testing.T) {
+	skipIfNoShell(t)
+	wantOut := "demo-canton\trunning\thealthy\tsplice/canton:0.6.4\t4400->4400/tcp\n"
+	rec := &scriptedRecorder{
+		script: func(args []string) (string, int) {
+			return wantOut, 0
+		},
+	}
+	c := &ComposeRunner{
+		ProjectName: "canton-demo",
+		WorkDir:     t.TempDir(),
+		Env:         []string{"DOCKER_HOST=unix:///tmp/docker.sock"},
+		commandFn:   rec.factory,
+	}
+	out, err := c.Ps(context.Background())
+	if err != nil {
+		t.Fatalf("Ps: %v", err)
+	}
+	if string(out) != wantOut {
+		t.Errorf("Ps output = %q, want %q", string(out), wantOut)
+	}
+	if len(rec.argvs) != 1 {
+		t.Fatalf("expected 1 docker call, got %d", len(rec.argvs))
+	}
+	wantArgv := []string{
+		"docker", "compose", "-p", "canton-demo", "ps", "--all",
+		"--format", "{{.Name}}\t{{.State}}\t{{.Health}}\t{{.Image}}\t{{.Publishers}}",
+	}
+	if !reflect.DeepEqual(rec.argvs[0], wantArgv) {
+		t.Errorf("argv mismatch:\n  got:  %v\n  want: %v", rec.argvs[0], wantArgv)
+	}
+	if rec.calls[0].Dir != c.WorkDir {
+		t.Errorf("cmd.Dir = %q, want %q", rec.calls[0].Dir, c.WorkDir)
+	}
+	if !reflect.DeepEqual(rec.calls[0].Env, []string{"DOCKER_HOST=unix:///tmp/docker.sock"}) {
+		t.Errorf("cmd.Env = %v", rec.calls[0].Env)
 	}
 }
 

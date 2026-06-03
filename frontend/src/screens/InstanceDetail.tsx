@@ -3,10 +3,12 @@ import {
   ApiError,
   type Instance,
   fetchInstance,
+  resumeInstance,
   scrubInstance,
   stopInstance,
 } from "../api";
 import { W, wMono } from "../tokens";
+import { BackupRestore } from "./BackupRestore";
 
 // InstanceDetail — the per-instance detail card the dashboard
 // pops above the Developer setup card when a row is selected.
@@ -69,6 +71,23 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
       setStopping({ kind: "err", message: msg });
       setRefetchTick((n) => n + 1);
       onChanged?.();
+    }
+  }
+
+  async function onStart() {
+    setStopping({ kind: "running" });
+    try {
+      await resumeInstance(name);
+      // 202 — bring-up is in progress. The dashboard's 15s
+      // poll will pick up the running status when the
+      // reconciler sees it. Refresh both surfaces eagerly so
+      // the user sees "creating" within the next tick.
+      setStopping({ kind: "idle" });
+      setRefetchTick((n) => n + 1);
+      onChanged?.();
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "failed to start";
+      setStopping({ kind: "err", message: msg });
     }
   }
 
@@ -161,6 +180,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
           <ActionButton
             status={statusHint ?? (state.kind === "ok" ? state.instance.status : "")}
             busy={stopping.kind === "running"}
+            onStart={onStart}
             onStop={onStop}
             onRemove={onRemove}
           />
@@ -191,6 +211,11 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
         <div style={{ color: W.err, fontSize: 13 }}>{state.error}</div>
       )}
       {state.kind === "ok" && <DetailGrid instance={state.instance} />}
+      {/* BIT-184: Backup & restore lives inside the detail card so
+          the instance-name context is implicit. Renders even on
+          loading/error so the user can still take a snapshot of a
+          mostly-broken instance for support tickets. */}
+      <BackupRestore instanceName={name} />
     </section>
   );
 }
@@ -254,11 +279,13 @@ function DetailGrid({ instance }: { instance: Instance }) {
 function ActionButton({
   status,
   busy,
+  onStart,
   onStop,
   onRemove,
 }: {
   status: string;
   busy: boolean;
+  onStart: () => void;
   onStop: () => void;
   onRemove: () => void;
 }) {
@@ -299,15 +326,30 @@ function ActionButton({
     );
   }
   if (status === "stopped") {
+    // Start sits next to Remove so a user who came back to a
+    // stopped instance can resume it without bouncing to the
+    // terminal. The Start path is the dedicated POST /up
+    // endpoint — reuses the recorded version + ports, won't
+    // silently upgrade.
     return (
-      <button
-        onClick={onRemove}
-        disabled={busy}
-        title="Remove the registry entry + state.json. Docker volumes (if any) untouched."
-        style={btnStyle(W.dim, busy)}
-      >
-        {busy ? "Removing…" : "✕ Remove entry"}
-      </button>
+      <div style={{ display: "flex", gap: 6 }}>
+        <button
+          onClick={onStart}
+          disabled={busy}
+          title="Bring containers back up with the recorded Splice version and ports."
+          style={btnStyle(W.brand, busy)}
+        >
+          {busy ? "Starting…" : "▶ Start"}
+        </button>
+        <button
+          onClick={onRemove}
+          disabled={busy}
+          title="Remove the registry entry + state.json. Docker volumes (if any) untouched."
+          style={btnStyle(W.dim, busy)}
+        >
+          {busy ? "Removing…" : "✕ Remove entry"}
+        </button>
+      </div>
     );
   }
   return null;

@@ -9,6 +9,7 @@ import (
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui"
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui/handlers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 	"github.com/spf13/cobra"
@@ -115,6 +116,15 @@ identifiers and is not designed for LAN-wide exposure.`,
 			ctx, stop := signal.NotifyContext(cmd.Context(),
 				syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
+
+			// BIT-177 — start the docker→registry reconciler. Runs
+			// until ctx is cancelled (same shutdown signal as the
+			// HTTP server). Keeps registry status eventually-
+			// consistent with `docker compose ps` so the dashboard
+			// status pill catches up after fixes the orchestrator
+			// didn't witness (memory bump, manual container
+			// restart, terminal-side `docker compose down`).
+			handlers.StartReconciler(ctx)
 
 			errCh := make(chan error, 1)
 			go func() { errCh <- srv.Serve() }()

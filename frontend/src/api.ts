@@ -89,6 +89,13 @@ export interface ListResponse {
 // Instance mirrors internal/api/types.Instance (subset; full shape
 // has Services/Endpoints/Parties/Credentials once the live probe
 // lands — added per-screen as those land).
+export interface Endpoint {
+  label: string;
+  url: string;
+  port?: number;
+  scheme?: string;
+}
+
 export interface Instance {
   schema_version: number;
   name: string;
@@ -102,6 +109,8 @@ export interface Instance {
   project_dir: string;
   data_dir: string;
   live_probe_failed?: boolean;
+  /** Per-role wallet UI endpoints; populated by detail handler post-BIT-192. */
+  endpoints?: Endpoint[];
 }
 
 // fetchVersion is the bootstrap handshake. Returns the server's
@@ -311,10 +320,13 @@ export const fetchSpliceVersions = () =>
 
 // CreateInstanceRequest mirrors handlers/instances.go upRequest.
 // version="" defers to the server's "latest" alias.
+// profiles maps to `dpm localnet up --profile ...` — currently the
+// only allowed entry is "observability" (Prometheus + Grafana).
 export interface CreateInstanceRequest {
   name: string;
   version?: string;
   allow_uncurated?: boolean;
+  profiles?: string[];
 }
 
 // CreateInstanceAcceptedResponse is what POST /api/instances
@@ -329,12 +341,96 @@ export interface CreateInstanceAcceptedResponse {
 // createInstance kicks off the bring-up. The HTTP request returns
 // 202 immediately; progress arrives over the SSE stream at the
 // returned events_url. Errors here are client-side
-// (400 validation / 409 duplicate / 413 oversized / 503 disabled).
-export const createInstance = (req: CreateInstanceRequest) =>
-  apiFetch<CreateInstanceAcceptedResponse>("/api/instances", {
+// (400 validation / 409 duplicate / 413 oversized / 422 preflight
+// failure / 503 disabled). 422 carries a PreflightReport body, not
+// the usual ApiError envelope — handled by createInstance via the
+// X-Preflight-Failed response header so the modal can surface the
+// findings inline instead of generic error text.
+export async function createInstance(req: CreateInstanceRequest): Promise<CreateInstanceAcceptedResponse> {
+  const resp = await fetch("/api/instances", {
     method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(req),
   });
+  if (resp.status === 422 && resp.headers.get("X-Preflight-Failed")) {
+    const report = (await resp.json()) as PreflightReport;
+    throw new PreflightFailedError(report);
+  }
+  const text = await resp.text();
+  if (!resp.ok) {
+    let body: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try { body = JSON.parse(text); } catch { /* non-JSON */ }
+    throw new ApiError(resp.status, body);
+  }
+  return JSON.parse(text) as CreateInstanceAcceptedResponse;
+}
+
+// PreflightReport mirrors internal/api/types.PreflightReport.
+// Returned by GET /api/preflight?version=<tag> and as the body of
+// a 422 from POST /api/instances when the host can't satisfy the
+// chosen version's resource floor.
+export interface PreflightReport {
+  schema_version: number;
+  ok: boolean;
+  sections: PreflightSection[];
+  summary?: string;
+  // BIT-172 — stable machine-readable code populated when ok=false.
+  // Values: PORTS_IN_USE | DOCKER_DOWN | DOCKER_NOT_INSTALLED |
+  // COMPOSE_V1_OR_MISSING | DOCKER_MEMORY_LOW | DISK_LOW |
+  // PREFLIGHT_FAILED. Frontend switches on this for targeted
+  // remediation panels.
+  error_code?: ErrorCode;
+}
+
+// ErrorCode — wire-stable strings from internal/localnet/coded_error.go.
+// New values are non-breaking; renaming/repurposing is breaking.
+// Keep this union in sync with the Go constants.
+export type ErrorCode =
+  | "PORTS_IN_USE"
+  | "DOCKER_DOWN"
+  | "DOCKER_NOT_INSTALLED"
+  | "COMPOSE_V1_OR_MISSING"
+  | "DOCKER_MEMORY_LOW"
+  | "DISK_LOW"
+  | "PREFLIGHT_FAILED"
+  | "CANTON_OOM"
+  | "CONTAINER_UNHEALTHY";
+
+export interface PreflightSection {
+  title: string;
+  checks: PreflightCheck[];
+}
+
+export interface PreflightCheck {
+  label: string;
+  result: "pass" | "warn" | "fail" | "skip";
+  detail?: string;
+  remediation?: string[];
+}
+
+// PreflightFailedError is thrown by createInstance when the server
+// rejects with a 422 preflight failure. The caller (typically the
+// create modal) catches this and renders the report inline rather
+// than the generic error envelope.
+export class PreflightFailedError extends Error {
+  report: PreflightReport;
+  constructor(report: PreflightReport) {
+    super(report.summary || "system requirements not met");
+    this.report = report;
+  }
+}
+
+// fetchPreflight runs the system-requirements gate for a version
+// without queuing a bring-up. The create modal calls this on
+// version-change so the Create button can be disabled (and the
+// findings shown) BEFORE the user clicks — no need to round-trip
+// through POST /api/instances just to discover an under-provisioned
+// host. Always returns a PreflightReport (200) — `ok=false` is the
+// signal to block, not a thrown error.
+export const fetchPreflight = (version: string) =>
+  apiFetch<PreflightReport>(
+    `/api/preflight?version=${encodeURIComponent(version)}`,
+  );
 
 // stopInstance invokes POST /api/instances/{name}/down — runs
 // `docker compose down` against the named instance and removes
@@ -345,6 +441,369 @@ export const createInstance = (req: CreateInstanceRequest) =>
 // On failure, the server's error envelope includes a one-line
 // summary the modal shows to the user; the full output goes to
 // the server log.
+// BIT-184 — snapshot / restore.
+//
+// downloadSnapshot triggers POST /api/instances/:name/snapshot and
+// hands the gzipped tar to the browser via an <a download> click. We
+// don't use fetch() + Blob here for one reason: a snapshot can be
+// 100s of MB, and putting the whole body into JS memory just to hand
+// it back to the browser is wasteful. The form-submit trick keeps the
+// response entirely in the browser's download pipeline.
+//
+// Returns a Promise that resolves when the request is dispatched
+// (not when the download completes — the browser owns that). Errors
+// from the server arrive as a JSON body the browser displays as a
+// download; we accept that UX limitation rather than buffer the tar
+// just to surface a structured error toast.
+export async function downloadSnapshot(name: string): Promise<void> {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = `/api/instances/${encodeURIComponent(name)}/snapshot`;
+  // Hidden iframe target avoids navigating away from the SPA on
+  // success. Browsers attach the download attribute on the response
+  // headers (Content-Disposition), so the iframe never actually
+  // renders anything — the file goes straight to the downloads bar.
+  form.target = "_dpm_dl";
+  let frame = document.querySelector(
+    'iframe[name="_dpm_dl"]',
+  ) as HTMLIFrameElement | null;
+  if (!frame) {
+    frame = document.createElement("iframe");
+    frame.name = "_dpm_dl";
+    frame.style.display = "none";
+    document.body.appendChild(frame);
+  }
+  document.body.appendChild(form);
+  form.submit();
+  document.body.removeChild(form);
+}
+
+export interface RestoreResponse {
+  name: string;
+  restored: boolean;
+}
+
+// restoreSnapshot uploads a snapshot tar to POST /api/instances/restore
+// via multipart/form-data. We use XMLHttpRequest (not fetch) for
+// upload progress events — fetch has no equivalent in Safari ≤17 and
+// the snapshot UX needs a progress bar for 100-MB-class uploads.
+//
+// onProgress receives a fraction in [0, 1]; callers render whatever
+// they like (bar, %, spinner with %). Resolves with the parsed
+// response body on 2xx; rejects with ApiError otherwise.
+export function restoreSnapshot(
+  file: File,
+  name: string,
+  opts: { force?: boolean; onProgress?: (frac: number) => void } = {},
+): Promise<RestoreResponse> {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    fd.append("name", name);
+    fd.append("file", file);
+    if (opts.force) fd.append("force", "true");
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/instances/restore");
+    if (opts.onProgress) {
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable && opts.onProgress) {
+          opts.onProgress(e.loaded / e.total);
+        }
+      });
+    }
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as RestoreResponse);
+        } catch (e) {
+          reject(
+            new ApiError(xhr.status, {
+              code: "UNKNOWN",
+              error: "response was not JSON",
+            }),
+          );
+        }
+        return;
+      }
+      let body: ApiErrorBody = { code: "UNKNOWN", error: xhr.statusText };
+      try {
+        body = JSON.parse(xhr.responseText);
+      } catch {
+        /* non-JSON; keep default */
+      }
+      reject(new ApiError(xhr.status, body));
+    });
+    xhr.addEventListener("error", () => {
+      reject(new ApiError(0, { code: "NETWORK", error: "network error" }));
+    });
+    xhr.send(fd);
+  });
+}
+
+export interface ResumeAcceptedResponse {
+  schema_version: number;
+  instance: string;
+  events_url: string;
+}
+
+// resumeInstance invokes POST /api/instances/{name}/up — the
+// "restart a stopped instance" verb. Backend kicks off the same
+// goroutine + SSE shape as the create-instance flow, so the
+// frontend can hand `response.events_url` straight to the
+// existing progress modal without a separate code path.
+//
+// The recorded Splice version + ports are reused, so a resume
+// won't silently upgrade or shuffle ports. Errors mirror the
+// create flow: 404 if unregistered, 409 if running or already
+// being brought up.
+export async function resumeInstance(name: string): Promise<ResumeAcceptedResponse> {
+  const resp = await fetch(
+    `/api/instances/${encodeURIComponent(name)}/up`,
+    { method: "POST" },
+  );
+  if (!resp.ok) {
+    const text = await resp.text();
+    let body: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try {
+      body = JSON.parse(text);
+    } catch {
+      /* non-JSON; keep default */
+    }
+    throw new ApiError(resp.status, body);
+  }
+  return (await resp.json()) as ResumeAcceptedResponse;
+}
+
+// BIT-188 — Metrics summary.
+//
+// The four curated headline numbers the CLI's
+// `dpm localnet metrics --format json` also returns. Naming
+// mirrors the `metricsq.Headline` Go constants so a frontend
+// rename can't drift from the backend.
+export interface MetricsSummary {
+  schema_version: number;
+  instance: string;
+  metrics: {
+    ledger_tps_5m?: number;
+    mediator_p95_seconds?: number;
+    jvm_heap_used_bytes?: number;
+    postgres_conn_count?: number;
+  };
+}
+
+// fetchMetricsSummary returns the headline panel data. The
+// caller MUST handle ApiError with body.code === "OBSERVABILITY_PROFILE_OFF"
+// to render the "raise observability" empty state — that's not
+// a hard failure, just a missing profile.
+// BIT-187 — DAR Manager.
+//
+// The Web UI lists DARs uploaded to a participant. Role defaults
+// to app-user (the common dev target). The backend reads the
+// per-role admin port from state.json (BIT-190) so the browser
+// doesn't need to know about gRPC.
+export type Role = "app-user" | "app-provider" | "sv";
+
+export interface DARRow {
+  main: string; // package id
+  name: string;
+  version: string;
+  description?: string;
+}
+
+export interface DARListResponse {
+  schema_version: number;
+  instance: string;
+  role: Role;
+  dars: DARRow[];
+}
+
+export const fetchDARList = (name: string, role: Role = "app-user") =>
+  apiFetch<DARListResponse>(
+    `/api/instances/${encodeURIComponent(name)}/dar?role=${role}`,
+  );
+
+export interface DARUploadRoleResult {
+  role: Role;
+  ok: boolean;
+  dar_ids?: string[];
+  count: number;
+  error?: string;
+}
+
+export interface DARUploadResponse {
+  schema_version: number;
+  instance: string;
+  results: DARUploadRoleResult[];
+  total_uploaded: number;
+}
+
+// uploadDARs posts a multipart body with one or more .dar files
+// to /api/instances/:name/dar. Uses XMLHttpRequest for upload
+// progress (the same pattern as BIT-184's BackupRestore).
+//
+// `roles` is the set of target participants — the backend dials
+// each in parallel and returns a per-role success/error envelope.
+// At least one role is required.
+export function uploadDARs(
+  name: string,
+  files: File[],
+  roles: Role[],
+  onProgress?: (frac: number) => void,
+): Promise<DARUploadResponse> {
+  if (roles.length === 0) {
+    return Promise.reject(
+      new ApiError(400, {
+        code: "INVALID_REQUEST",
+        error: "select at least one target participant",
+      }),
+    );
+  }
+  return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    for (const r of roles) fd.append("roles", r);
+    for (const f of files) fd.append("file", f);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api/instances/${encodeURIComponent(name)}/dar`);
+    if (onProgress) {
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) onProgress(e.loaded / e.total);
+      });
+    }
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as DARUploadResponse);
+        } catch (e) {
+          reject(
+            new ApiError(xhr.status, {
+              code: "UNKNOWN",
+              error: "response was not JSON",
+            }),
+          );
+        }
+        return;
+      }
+      let body: ApiErrorBody = { code: "UNKNOWN", error: xhr.statusText };
+      try {
+        body = JSON.parse(xhr.responseText);
+      } catch {
+        /* keep default */
+      }
+      reject(new ApiError(xhr.status, body));
+    });
+    xhr.addEventListener("error", () =>
+      reject(new ApiError(0, { code: "NETWORK", error: "network error" })),
+    );
+    xhr.send(fd);
+  });
+}
+
+// BIT-186 — Explorer ACS snapshot.
+export interface ContractRow {
+  contract_id: string;
+  template_id: string;
+  payload?: Record<string, unknown>;
+  signatories: string[];
+  observers: string[];
+  created_at?: string;
+  package_name?: string;
+}
+
+export interface ContractsListResponse {
+  schema_version: number;
+  instance: string;
+  role: Role;
+  ledger_end: number;
+  contracts: ContractRow[];
+}
+
+export const fetchContracts = (
+  name: string,
+  role: Role = "app-user",
+  limit = 100,
+) =>
+  apiFetch<ContractsListResponse>(
+    `/api/instances/${encodeURIComponent(name)}/contracts?role=${role}&limit=${limit}`,
+  );
+
+// BIT-186 follow-up — Transactions + Timeline.
+//
+// Each row in `transactions` represents one Canton update:
+// transaction / reassignment / topology event. The frontend
+// branches on `kind` to render either the table row or the
+// timeline-strip glyph.
+export interface TransactionEvent {
+  kind: "create" | "archive" | "exercise";
+  contract_id: string;
+  template?: string;
+  witnesses?: string[];
+}
+
+export interface TransactionRow {
+  kind: "transaction" | "reassignment" | "topology" | "checkpoint";
+  offset: number;
+  update_id?: string;
+  workflow_id?: string;
+  command_id?: string;
+  record_time?: string;
+  synchronizer?: string;
+  event_count?: number;
+  events?: TransactionEvent[];
+}
+
+export interface TransactionsListResponse {
+  schema_version: number;
+  instance: string;
+  role: Role;
+  ledger_end: number;
+  transactions: TransactionRow[];
+  count: number;
+}
+
+export const fetchTransactions = (
+  name: string,
+  role: Role = "app-user",
+  limit = 100,
+) =>
+  apiFetch<TransactionsListResponse>(
+    `/api/instances/${encodeURIComponent(name)}/transactions?role=${role}&limit=${limit}`,
+  );
+
+export const fetchMetricsSummary = (name: string, signal?: AbortSignal) =>
+  apiFetch<MetricsSummary>(
+    `/api/instances/${encodeURIComponent(name)}/metrics/summary`,
+    { signal },
+  );
+
+// Prometheus range-query response (subset). The backend's
+// /metrics/range endpoint passes Prometheus's response through
+// verbatim, so the frontend decodes the same shape Prometheus
+// publishes.
+export interface PrometheusRangeResponse {
+  status: string;
+  data?: {
+    resultType?: string;
+    result?: Array<{
+      metric?: Record<string, string>;
+      values?: Array<[number, string]>;
+    }>;
+  };
+}
+
+export const fetchMetricsRange = (
+  name: string,
+  query: string,
+  window = "1h",
+  step?: string,
+  signal?: AbortSignal,
+) => {
+  const params = new URLSearchParams({ query, window });
+  if (step) params.set("step", step);
+  return apiFetch<PrometheusRangeResponse>(
+    `/api/instances/${encodeURIComponent(name)}/metrics/range?${params.toString()}`,
+    { signal },
+  );
+};
+
 export async function stopInstance(name: string, keepData = false): Promise<void> {
   const resp = await fetch(
     `/api/instances/${encodeURIComponent(name)}/down`,
@@ -481,6 +940,12 @@ interface StepFailedEvent {
   step: StepName;
   summary?: string;
   cause?: string;
+  // BIT-172 — stable machine-readable code, populated when the
+  // server recognized the failure mode (PORTS_IN_USE,
+  // DOCKER_DOWN, DOCKER_MEMORY_LOW, etc.). useCreateProgress
+  // surfaces this in the banner so the modal can render targeted
+  // remediation panels instead of generic "failed" copy.
+  error_code?: ErrorCode;
 }
 interface WarnEvent {
   kind: "warn";
@@ -508,3 +973,42 @@ interface ApiErrorBody {
   detail?: string;
   remediation?: string[];
 }
+
+// ── Agent Skills (BIT-189) ─────────────────────────────────────────
+// Mirrors internal/skills.Skill + the /api/skills handler. The same
+// embedded docs back the CLI `localnet skills` command.
+export interface Skill {
+  filename: string;
+  name: string;
+  description: string;
+  body: string;
+}
+
+export interface SkillsListResponse {
+  schema_version: number;
+  skills: Skill[];
+}
+
+export interface SkillsInstallResponse {
+  schema_version: number;
+  target: string;
+  dir: string;
+  installed: string[];
+  count: number;
+  // Files left untouched because an existing copy differs from the
+  // bundled doc (server is clobber-safe by default). Re-install with
+  // force=true to overwrite them. Mirrors skills.InstallResult.Skipped.
+  skipped: string[];
+}
+
+export const fetchSkills = () => apiFetch<SkillsListResponse>("/api/skills");
+
+// force overwrites locally-modified SKILL.md files that the server
+// would otherwise preserve. Defaults to false to match the safe-by-
+// default CLI (`skills install` without --force).
+export const installSkills = (target: "claude" | "codex", force = false) =>
+  apiFetch<SkillsInstallResponse>("/api/skills/install", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target, force }),
+  });

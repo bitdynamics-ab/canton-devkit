@@ -61,6 +61,14 @@ var UIPortEnvVarToStateKey = map[string]string{
 	"SV_UI_PORT":           "sv_ui",
 	"SWAGGER_UI_PORT":      "swagger_ui",
 	"DB_PORT":              "postgres",
+	// BIT-134 review v4: observability profile ports allocated
+	// alongside the rest so a re-up with --profile observability
+	// reuses the same Grafana / Prometheus URLs the user
+	// bookmarked. The compose overlay binds `${PROMETHEUS_HOST_PORT}
+	// :9090` / `${GRAFANA_HOST_PORT}:3000` so the chosen ephemeral
+	// host port is fed in via env (same as the existing UI vars).
+	"PROMETHEUS_HOST_PORT": "prometheus_ui",
+	"GRAFANA_HOST_PORT":    "grafana_ui",
 }
 
 // ErrPortBusy is returned by ReuseOrAllocateUIPorts when a previously
@@ -151,6 +159,13 @@ func allocateOneEphemeral() (int, error) {
 // UIPortEnvVars enumerates the env-var names the Splice LocalNet compose
 // substitutes for host ports of non-canton services. Names are stable
 // across 0.5.x and 0.6.x (confirmed via the adapter design research).
+//
+// BIT-134 review v4 — the observability profile's PROMETHEUS_HOST_PORT
+// and GRAFANA_HOST_PORT come via ObservabilityPortEnvVars (separate
+// helper) so they're conditionally appended only when the profile is
+// enabled. Keeping them out of the always-on list avoids a re-up
+// without `--profile observability` allocating two ephemeral ports
+// for services that won't start.
 func UIPortEnvVars() []string {
 	return []string{
 		"APP_USER_UI_PORT",
@@ -158,5 +173,18 @@ func UIPortEnvVars() []string {
 		"SV_UI_PORT",
 		"SWAGGER_UI_PORT",
 		"DB_PORT",
+	}
+}
+
+// ObservabilityPortEnvVars enumerates the env-var names the BIT-134
+// observability overlay (assets/compose/observability.yaml)
+// substitutes for the Prometheus + Grafana host ports. Allocated
+// only when `--profile observability` is enabled; the same
+// allocator + stable-reuse contract applies as the regular UI
+// ports (so a re-up gives back the same bookmarked Grafana URL).
+func ObservabilityPortEnvVars() []string {
+	return []string{
+		"PROMETHEUS_HOST_PORT",
+		"GRAFANA_HOST_PORT",
 	}
 }

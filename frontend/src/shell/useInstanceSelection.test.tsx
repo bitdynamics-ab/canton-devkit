@@ -123,6 +123,55 @@ describe("useInstanceSelection auto-pick", () => {
     expect(result.current.selected).toBe("hubble");
   });
 
+  it("re-polls every 15s so externally-killed containers update the dashboard", async () => {
+    // Repro for the user-reported bug: stop containers via Docker
+    // Desktop → registry status flips (backend reconciler) but the
+    // Dashboard was rendering the mount-time snapshot forever.
+    // After the fix, the hook polls /api/instances on a 15s timer
+    // and the next snapshot replaces the stale view.
+    vi.useFakeTimers();
+    let callCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => {
+        callCount++;
+        const status = callCount === 1 ? "running" : "stopped";
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              schema_version: 1,
+              instances: [
+                {
+                  name: "demo",
+                  status,
+                  splice_version: "0.6.4",
+                  ports: "",
+                  started_ago: "",
+                },
+              ],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }),
+    );
+    const { result } = renderHook(() => useInstanceSelection(), {
+      wrapper: wrap(["/"]),
+    });
+    // First fetch: status=running
+    await vi.waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.instances[0]?.status).toBe("running");
+    // Advance one tick → second fetch fires with status=stopped
+    await act(async () => {
+      vi.advanceTimersByTime(15_000);
+    });
+    await vi.waitFor(() =>
+      expect(result.current.instances[0]?.status).toBe("stopped"),
+    );
+    expect(callCount).toBeGreaterThanOrEqual(2);
+    vi.useRealTimers();
+  });
+
   it("throws if used outside the Provider — guards against silent bugs", () => {
     // Suppress React's error-boundary log; we expect the throw.
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});

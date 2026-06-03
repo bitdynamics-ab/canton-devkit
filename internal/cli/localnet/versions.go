@@ -83,6 +83,8 @@ func renderCatalogueOnly(out cobraWriter, format string) error {
 			Status:           splice.StatusSupported, // best we know without network
 			CataloguedCommit: v.Commit,
 			Major:            v.Major,
+			Channel:          v.Channel,
+			ImageRepo:        v.ImageRepo,
 		})
 	}
 	return renderVersions(out, rows, format)
@@ -94,9 +96,13 @@ func renderVersions(out cobraWriter, rows []splice.VersionStatus, format string)
 		enc.SetIndent("", "  ")
 		return enc.Encode(rows)
 	}
-	// Text format: aligned table.
-	_, _ = fmt.Fprintf(out, "%-16s  %-15s  %-10s  %-40s  %s\n",
-		"TAG", "STATUS", "MAJOR", "COMMIT", "NOTE")
+	// Text format: aligned table. CHANNEL defaults to "stable" for
+	// rendering (empty catalogue Channel) so the column always carries
+	// a meaningful word — the JSON form keeps the raw "" so callers
+	// can distinguish the historical default from an explicit
+	// "stable".
+	_, _ = fmt.Fprintf(out, "%-20s  %-15s  %-7s  %-10s  %-40s  %s\n",
+		"TAG", "STATUS", "CHANNEL", "MAJOR", "COMMIT", "NOTE")
 	for _, r := range rows {
 		commit := r.CataloguedCommit
 		note := ""
@@ -107,8 +113,21 @@ func renderVersions(out cobraWriter, rows []splice.VersionStatus, format string)
 			commit = r.UpstreamCommit
 			note = "run scripts/add-splice-version.sh " + r.Tag
 		}
-		_, _ = fmt.Fprintf(out, "%-16s  %-15s  %-10s  %-40s  %s\n",
-			r.Tag, r.Status.String(), r.Major, short(commit), note)
+		// For alpha entries the image_repo override is material to the
+		// user (pulls from a different ghcr registry) so surface it in
+		// the NOTE column when set, after any status-derived note.
+		if r.ImageRepo != "" {
+			if note != "" {
+				note += "; "
+			}
+			note += "image_repo=" + r.ImageRepo
+		}
+		channel := r.Channel
+		if channel == "" {
+			channel = "stable"
+		}
+		_, _ = fmt.Fprintf(out, "%-20s  %-15s  %-7s  %-10s  %-40s  %s\n",
+			r.Tag, r.Status.String(), channel, r.Major, short(commit), note)
 	}
 	return nil
 }
@@ -126,10 +145,20 @@ type cobraWriter interface {
 	Write(p []byte) (n int, err error)
 }
 
-// localnet_validateFormat keeps this command's format check independent
-// of the localnet package's identical helper — PR-A lands this before
-// PR-B exposes ValidateFormat publicly. Cheap defensive copy.
+// localnet_validateFormat is the legacy lowercase name kept for
+// callers in this package that landed before PR-B promoted
+// ValidateFormat to its exported form (BIT-127 adoption).
+// Delegates to the public ValidateFormat — single source of truth.
 func localnet_validateFormat(got string, allowed ...string) error {
+	return ValidateFormat(got, allowed...)
+}
+
+// ValidateFormat checks that got is one of allowed. Exported so
+// the BIT-127 dar subcommands (internal/cli/localnet/dar) can
+// share the same validation as the in-package versions/container/
+// refresh subcommands — keeps the error wording identical across
+// every CLI surface that takes a --format flag.
+func ValidateFormat(got string, allowed ...string) error {
 	for _, a := range allowed {
 		if got == a {
 			return nil

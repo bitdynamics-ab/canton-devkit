@@ -219,6 +219,35 @@ func NewState(name, spliceVersion string) *State {
 	}
 }
 
+// LookupByComposeProject walks the index and returns the State for
+// the instance whose ComposeProject matches. Returns ErrNotFound
+// when no match is found.
+//
+// Added for handlers/metrics.go (yellow Y6): the previous reverse
+// lookup did strings.TrimPrefix(project, "canton-"), which broke if
+// the naming convention ever changed or an instance was renamed.
+// This walks the authoritative ground truth instead.
+//
+// Cost: O(N) reads where N = number of instances. With at most a
+// handful of instances per dev box this is trivial; metrics handler
+// caches the result with a 5s TTL on top.
+func LookupByComposeProject(project string) (*State, error) {
+	idx, err := ReadIndex()
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range idx.Entries {
+		s, err := Read(e.Name)
+		if err != nil {
+			continue // skip unreadable entries; don't fail the lookup
+		}
+		if s.ComposeProject == project {
+			return s, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
 // Read loads the state file for the named instance.
 func Read(name string) (*State, error) {
 	if err := ValidateName(name); err != nil {

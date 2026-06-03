@@ -16,23 +16,14 @@
 // JWT signer. That's the cheapest meaningful slice to land and review;
 // it also gives the M2 frontend something to consume on day one.
 //
-// # Why we read the registry directly here
+// # Why detail delegates to localnet.CollectStatus
 //
-// `internal/cli/localnet/status.go` exposes a `CollectStatus` function
-// intended as the single source of truth for both the CLI's status
-// command and the future Web UI handler. As of this PR's branch base
-// (post-mockup-refresh on m1-foundation), that function lives on the
-// not-yet-merged srikanth/bit-144 branch — depending on it would
-// couple this PR to a different review cycle.
-//
-// Instead, the handler reads registry directly with the same shape.
-// When BIT-144 merges, this file should be refactored to delegate to
-// localnet.CollectStatus (which also handles the docker `compose ps`
-// soft-fail and the JWT redaction). Tracked by TODO(BIT-144-merge).
+// The CLI status command and Web UI detail endpoint share
+// localnet.CollectStatus so JSON shape, Docker soft-fail handling,
+// endpoint projection, and JWT redaction do not drift.
 package handlers
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -49,7 +40,9 @@ import (
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
+	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/progress"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 )
@@ -106,6 +99,8 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("DELETE /api/instances/{name}/up", handleCancelUp(hub))
 		mux.HandleFunc("DELETE /api/instances/{name}", handleScrubInstance(hub))
 		mux.HandleFunc("POST /api/instances/{name}/down", handleDownInstance())
+		mux.HandleFunc("POST /api/instances/{name}/up", handleResumeInstance(hub))
+		mux.HandleFunc("POST /api/instances/{name}/observability", handleObservabilityToggle())
 	} else {
 		// Stub so a misconfigured deployment fails loudly
 		// rather than 404 (which the frontend would mistake
@@ -121,6 +116,7 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("DELETE /api/instances/{name}/up", stub)
 		mux.HandleFunc("DELETE /api/instances/{name}", stub)
 		mux.HandleFunc("POST /api/instances/{name}/down", stub)
+		mux.HandleFunc("POST /api/instances/{name}/up", stub)
 	}
 	// Container probe + log tail + restart are hub-independent
 	// (pure docker calls) — mount them for every deployment.
@@ -185,7 +181,7 @@ func handleDetail(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid instance name", err)
 		return
 	}
-	s, err := registry.Read(name)
+	inst, err := localnet.CollectStatus(r.Context(), name, true, false)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "instance not registered", err)
@@ -194,23 +190,6 @@ func handleDetail(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read state", err)
 		return
 	}
-	inst := types.Instance{
-		SchemaVersion:   types.SchemaVersion,
-		Name:            s.Name,
-		SpliceVersion:   s.SpliceVersion,
-		Status:          string(s.Status),
-		CreatedAt:       s.CreatedAt,
-		ComposeProject:  s.ComposeProject,
-		DockerNetwork:   s.DockerNetwork,
-		ContainerPrefix: s.ContainerPrefix,
-		ProjectDir:      s.ProjectDir,
-		DataDir:         s.DataDir,
-	}
-	// TODO(BIT-144-merge): once status.go's CollectStatus lands,
-	// delegate to it for the Endpoints/Credentials/Services
-	// projection (also handles JWT redaction). For now, we surface
-	// the cheap fields only — the frontend's dashboard tile renders
-	// fine without Services until the live probe lands.
 	writeJSON(w, http.StatusOK, inst)
 }
 
@@ -386,7 +365,11 @@ func writeError(w http.ResponseWriter, status int, summary string, cause error) 
 
 // writeErrorWithCode is the variant used when the handler wants
 // to pin a specific stable code rather than the status-derived
-// default.
+// default. Currently called from sibling handlers (snapshots,
+// metrics, …) that may not exist on every branch — keep as
+// exported-to-package even when no caller is in this file.
+//
+//nolint:unused // intentional package-public; consumed by sibling handlers
 func writeErrorWithCode(w http.ResponseWriter, status int, code, summary string, remediation ...string) {
 	writeJSON(w, status, errorBody{
 		Code:        code,
@@ -420,9 +403,18 @@ func codeForStatus(status int) string {
 // `dpm localnet up` flags exactly so CLI and Web UI surface the
 // same controls.
 type upRequest struct {
-	Name           string `json:"name"`
-	Version        string `json:"version,omitempty"`         // empty → "latest" server-side
-	AllowUncurated bool   `json:"allow_uncurated,omitempty"` // resolve unknown tags upstream
+	Name           string   `json:"name"`
+	Version        string   `json:"version,omitempty"`         // empty → "latest" server-side
+	AllowUncurated bool     `json:"allow_uncurated,omitempty"` // resolve unknown tags upstream
+	Profiles       []string `json:"profiles,omitempty"`        // docker-compose profiles; e.g. ["observability"]
+}
+
+// allowedProfiles caps what the HTTP surface will accept. Mirrors
+// the CLI's documented set so a stray "production" or arbitrary
+// string can't ride through. Keep in sync with internal/localnet's
+// known profile constants.
+var allowedProfiles = map[string]bool{
+	localnet.ObservabilityProfileName: true,
 }
 
 // upAcceptedResponse is the 202 body the POST returns. The frontend
@@ -440,19 +432,19 @@ type upAcceptedResponse struct {
 // Validation order (cheapest first; each rejection fails the
 // request before any work):
 //
-//	1. body decode + size cap
-//	2. RFC 1123 DNS-label name validation
-//	3. duplicate-name check (registry has an entry OR jobs
-//	   registry has an in-flight goroutine)
+//  1. body decode + size cap
+//  2. RFC 1123 DNS-label name validation
+//  3. duplicate-name check (registry has an entry OR jobs
+//     registry has an in-flight goroutine)
 //
 // Then:
 //
-//	4. hub.EnableBuffering(topic, 128)
-//	5. context.WithCancel — cancel stored in jobs registry for
-//	   the future DELETE handler (BIT-163e); context.WithTimeout
-//	   wraps that with the 10-minute job ceiling
-//	6. spawn goroutine → RunUp(ctx, SSEProgress, opts)
-//	7. return 202 with {instance, events_url}
+//  4. hub.EnableBuffering(topic, 128)
+//  5. context.WithCancel — cancel stored in jobs registry for
+//     the future DELETE handler (BIT-163e); context.WithTimeout
+//     wraps that with the 10-minute job ceiling
+//  6. spawn goroutine → RunUp(ctx, SSEProgress, opts)
+//  7. return 202 with {instance, events_url}
 //
 // The goroutine's deferred cleanup:
 //
@@ -520,6 +512,28 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 			return
 		}
 
+		// Resolve the version up front so the preflight gate uses
+		// the same Splice catalogue entry RunUp will. If the user
+		// asked for an uncurated tag with AllowUncurated, skip
+		// the version-specific memory floor — there's no curated
+		// requirement to enforce — and rely on RunUp's own
+		// in-stream preflight for the global defaults.
+		if v, err := splice.Resolve(req.Version); err == nil {
+			report := runPreflightForVersion(r.Context(), v)
+			if !report.OK {
+				w.Header().Set("X-Preflight-Failed", "1")
+				writeJSON(w, http.StatusUnprocessableEntity, report)
+				return
+			}
+		} else if !req.AllowUncurated {
+			// Same shape RunUp would produce for the same input.
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"unknown splice version: "+req.Version,
+				"call GET /api/splice/versions for the curated list, or set allow_uncurated to bypass")
+			return
+		}
+
 		topic := progress.TopicFor(req.Name)
 		hub.EnableBuffering(topic, progressBufferCap)
 
@@ -542,10 +556,28 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 			return
 		}
 
+		// Validate any caller-supplied profiles against the
+		// allowlist. Unknown profiles are an explicit 400 rather
+		// than a silent drop — a typo'd "observabilty" should NOT
+		// quietly produce an instance without Prometheus.
+		for _, p := range req.Profiles {
+			if !allowedProfiles[p] {
+				cancelJob()
+				hub.ClearBuffer(topic)
+				jobs.Unregister(req.Name)
+				writeErrorWithCode(w, http.StatusBadRequest,
+					ErrCodeInvalidRequest,
+					"unknown profile: "+p,
+					"supported profiles: observability")
+				return
+			}
+		}
+
 		opts := &localnet.UpOptions{
 			Name:           req.Name,
 			Version:        req.Version,
 			AllowUncurated: req.AllowUncurated,
+			Profiles:       req.Profiles,
 		}
 
 		go func() {
@@ -577,6 +609,104 @@ const downTimeout = 3 * time.Minute
 // future --keep-data flag once the frontend has a UI for it).
 type downRequest struct {
 	KeepData bool `json:"keep_data,omitempty"`
+}
+
+// handleResumeInstance: POST /api/instances/{name}/up.
+//
+// Brings a previously-stopped instance back up, reusing its
+// recorded Splice version and ports. Symmetric counterpart to
+// `POST /api/instances/{name}/down`. The general create flow
+// (`POST /api/instances`) refuses when the name already exists,
+// so the UI needs this dedicated verb to surface a "Start"
+// button on the stopped row.
+//
+// Path-existence semantics:
+//
+//   - 404 — name not in the registry (user typoed)
+//   - 409 INSTANCE_RUNNING — already running; use /down first
+//   - 409 INSTANCE_CREATING — a bring-up is in flight; subscribe
+//     to the existing events stream instead
+//   - 202 — kicked off; events stream at /api/instances/{name}/events
+//
+// Uses the same goroutine / SSE shape as handleCreate so the
+// frontend reuses its create-progress modal verbatim.
+func handleResumeInstance(hub *stream.Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if err := localnet.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+		// Yellow Y8 — invert read-then-acquire order. The original
+		// code read state, decided to proceed, then registered the
+		// job. Between those two points a concurrent /up could
+		// register first, get the lock, and flip the instance to
+		// running — leaving us racing to start a duplicate. Now:
+		// reserve the job slot FIRST, then read state, recheck
+		// status. If anything changed after we won the slot we
+		// release and surface the right 409.
+		jobCtx, cancelJob := context.WithTimeout(context.Background(), upJobTimeout)
+		if !jobs.Register(name, cancelJob) {
+			cancelJob()
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_CREATING",
+				"instance "+name+" is already being brought up",
+				"open /api/instances/"+name+"/events to watch the existing run")
+			return
+		}
+
+		prior, err := registry.Read(name)
+		if err != nil {
+			jobs.Unregister(name)
+			cancelJob()
+			if errors.Is(err, registry.ErrNotFound) {
+				writeErrorWithCode(w, http.StatusNotFound,
+					ErrCodeNotFound,
+					"instance "+name+" not registered",
+					"create it first via POST /api/instances")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "read state", err)
+			return
+		}
+		if prior.Status == registry.StatusRunning {
+			jobs.Unregister(name)
+			cancelJob()
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_RUNNING",
+				"instance "+name+" is already running",
+				"to restart, stop it first via POST /api/instances/"+name+"/down")
+			return
+		}
+
+		topic := progress.TopicFor(name)
+		hub.EnableBuffering(topic, progressBufferCap)
+
+		// Reuse the recorded Splice version so a resume doesn't
+		// silently upgrade. The user explicitly upgrades by going
+		// through the create flow with a new --version.
+		opts := &localnet.UpOptions{
+			Name:    name,
+			Version: prior.SpliceVersion,
+		}
+
+		go func() {
+			defer cancelJob()
+			defer hub.ClearBuffer(topic)
+			defer jobs.Unregister(name)
+			prog := progress.New(hub, name)
+			exitCode := localnet.RunUp(jobCtx, prog, opts)
+			log.Printf("resume instance %q: exit_code=%d", name, exitCode)
+		}()
+
+		writeJSON(w, http.StatusAccepted, upAcceptedResponse{
+			SchemaVersion: types.SchemaVersion,
+			Instance:      name,
+			EventsURL:     "/api/instances/" + name + "/events",
+		})
+	}
 }
 
 // handleDownInstance: POST /api/instances/{name}/down.
@@ -646,9 +776,10 @@ func handleDownInstance() http.HandlerFunc {
 		// RunDown writes friendly errors to errw; surface those
 		// directly so the frontend can render them.
 		status := http.StatusInternalServerError
-		if exit == localnet.ExitUserError {
+		switch exit {
+		case localnet.ExitUserError:
 			status = http.StatusBadRequest
-		} else if exit == localnet.ExitTimeout {
+		case localnet.ExitTimeout:
 			status = http.StatusRequestTimeout
 		}
 		cause := errBuf.String()
@@ -656,9 +787,19 @@ func handleDownInstance() http.HandlerFunc {
 			cause = "down failed with exit code " + uintToString(uint64(exit))
 		}
 		log.Printf("down instance %q: exit=%d err=%s", name, exit, cause)
+		// BIT-176: RunDown writes multiple lines to errw — `Warning:`
+		// notices about non-fatal side issues (e.g. "could not
+		// reconstruct compose context") followed by the actual
+		// fatal cause. The plain `firstLine` helper grabbed the
+		// first line which was often the Warning, making the
+		// surfaced "Stop failed: …" misleading. firstNonWarningLine
+		// skips lines starting with "Warning:" / "warning:" so the
+		// summary always reflects the actual failure. The full
+		// output is still in the server log for diagnostic
+		// triangulation.
 		writeErrorWithCode(w, status,
 			"DOWN_FAILED",
-			"failed to stop "+name+": "+firstLine(cause),
+			"failed to stop "+name+": "+firstNonWarningLine(cause),
 			"the docker compose down output is in the server log; "+
 				"try `dpm localnet down --name "+name+"` from a terminal for full output")
 	}
@@ -691,16 +832,85 @@ func firstLine(s string) string {
 	return s
 }
 
+// firstNonWarningLine returns the first line of s that does not
+// look like a `Warning:` / `WARN:` notice. RunDown emits warning
+// lines for non-fatal side issues (orphan-registry cleanup, state
+// persistence, compose-context reconstruction) before the actual
+// fatal cause, so a naive firstLine would surface a Warning as
+// the failure summary — see BIT-176.
+//
+// Match is on a small fixed set of case variants (Warning, warning,
+// WARNING, WARN, warn, Warn) rather than truly case-insensitive
+// — sufficient for the patterns RunDown actually emits and avoids
+// a unicode.ToLower allocation per line on a hot path. New variants
+// slot into looksLikeWarningLine without changing this function.
+//
+// CRLF safe: a trailing \r left by docker-compose on Windows stderr
+// is trimmed per-line before the prefix check.
+//
+// If every line is a warning OR the string is empty, returns the
+// raw first line so the caller still has *something* to show.
+func firstNonWarningLine(s string) string {
+	start := 0
+	for i := 0; i <= len(s); i++ {
+		if i == len(s) || s[i] == '\n' {
+			line := s[start:i]
+			// Trim a trailing \r so CRLF line endings (Windows
+			// docker-compose stderr) don't defeat the prefix
+			// match below.
+			if len(line) > 0 && line[len(line)-1] == '\r' {
+				line = line[:len(line)-1]
+			}
+			if !looksLikeWarningLine(line) && line != "" {
+				return line
+			}
+			start = i + 1
+		}
+	}
+	// Fallthrough: every line was a warning. Surface the first
+	// raw line — the user still gets a hint, just not the ideal
+	// one.
+	return firstLine(s)
+}
+
+// looksLikeWarningLine matches lines that should be skipped when
+// looking for the surfaced failure cause. Recognizes the case
+// variants RunDown actually emits (in internal/localnet/down.go):
+//
+//	Warning:    docker-compose / docker stderr convention
+//	warning:    lowercase fmt.Errorf wrappers
+//	WARNING:    occasional ALL-CAPS from system logs
+//	WARN:       short form some upstream tools use
+//	warn:       lowercase short form
+//	Warn:       title-case short form
+//
+// Defensive whitespace trim for indented continuation lines.
+func looksLikeWarningLine(line string) bool {
+	// Trim leading whitespace defensively — docker-compose's
+	// formatted output sometimes indents continuation lines.
+	for len(line) > 0 && (line[0] == ' ' || line[0] == '\t') {
+		line = line[1:]
+	}
+	switch {
+	case len(line) >= 8 && (line[:8] == "Warning:" || line[:8] == "warning:" || line[:8] == "WARNING:"):
+		return true
+	case len(line) >= 5 && (line[:5] == "WARN:" || line[:5] == "warn:" || line[:5] == "Warn:"):
+		return true
+	}
+	return false
+}
+
 // ContainerHealth is one row in the per-instance container
 // table the UI's ContainerHealth panel renders. Mirrors what
 // `docker compose ps --all --format json` emits, narrowed to the
 // fields the UI actually needs.
 //
 // State + Health are the high-leverage diagnostic pair:
-//   State    = docker container state — running, restarting,
-//              exited, dead, created, paused
-//   Health   = docker healthcheck verdict — healthy, unhealthy,
-//              starting, "" (no healthcheck defined)
+//
+//	State    = docker container state — running, restarting,
+//	           exited, dead, created, paused
+//	Health   = docker healthcheck verdict — healthy, unhealthy,
+//	           starting, "" (no healthcheck defined)
 //
 // The user's frustration we're addressing: registry's hard-coded
 // `running|stopped|failed|...` enum hides truth like "canton is
@@ -721,11 +931,11 @@ type ContainersResponse struct {
 	Instance      string            `json:"instance"`
 	Containers    []ContainerHealth `json:"containers"`
 	// Counters the frontend uses for a one-glance summary pill.
-	HealthyCount  int `json:"healthy_count"`
-	StartingCount int `json:"starting_count"`
-	UnhealthyCount int `json:"unhealthy_count"`
+	HealthyCount    int `json:"healthy_count"`
+	StartingCount   int `json:"starting_count"`
+	UnhealthyCount  int `json:"unhealthy_count"`
 	RestartingCount int `json:"restarting_count"`
-	ExitedCount   int `json:"exited_count"`
+	ExitedCount     int `json:"exited_count"`
 }
 
 // handleInstanceContainers: GET /api/instances/{name}/containers.
@@ -768,7 +978,7 @@ func handleInstanceContainers() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 
-		containers, runErr := composePs(ctx, state.ComposeProject)
+		health, runErr := containersList(ctx, state.ComposeProject)
 		if runErr != nil {
 			// Docker call failed (daemon down? project label
 			// doesn't exist?). Surface the failure as a 503
@@ -784,9 +994,9 @@ func handleInstanceContainers() http.HandlerFunc {
 		resp := ContainersResponse{
 			SchemaVersion: types.SchemaVersion,
 			Instance:      name,
-			Containers:    containers,
+			Containers:    health,
 		}
-		for _, c := range containers {
+		for _, c := range health {
 			switch c.Health {
 			case "healthy":
 				resp.HealthyCount++
@@ -806,69 +1016,29 @@ func handleInstanceContainers() http.HandlerFunc {
 	}
 }
 
-// composePs runs `docker compose -p <project> ps --all --format
-// json` and parses each NDJSON line into a ContainerHealth.
-// Returns an empty slice (no error) when docker reports no
-// containers for the project — the project may have been torn
-// down out-of-band, or never created.
-//
-// Error path is reserved for docker-side failures (daemon down,
-// compose binary missing) — the handler surfaces those as 503.
-func composePs(ctx context.Context, project string) ([]ContainerHealth, error) {
-	cmd := exec.CommandContext(ctx,
-		"docker", "compose", "-p", project,
-		"ps", "--all", "--format", "json")
-	out, err := cmd.Output()
+// containersList wraps the shared containers.List (called from
+// both the CLI's `dpm localnet container list` and this handler)
+// and re-shapes Info → ContainerHealth so the API responses keep
+// their stable JSON tags. The docker-side logic lives once in
+// internal/localnet/containers — see AGENTS.md "CLI ↔ Web UI
+// parity" rule.
+func containersList(ctx context.Context, project string) ([]ContainerHealth, error) {
+	infos, err := containers.List(ctx, project)
 	if err != nil {
-		// Empty output + non-zero exit usually means "no such
-		// project" which we treat as empty-list success. Other
-		// errors (daemon down) propagate.
-		if exitErr, ok := err.(*exec.ExitError); ok && len(out) == 0 {
-			stderrText := string(exitErr.Stderr)
-			if strings.Contains(stderrText, "no such") ||
-				strings.Contains(stderrText, "not exist") {
-				return nil, nil
-			}
-		}
-		return nil, fmt.Errorf("docker compose ps: %w", err)
+		return nil, err
 	}
-	if len(bytes.TrimSpace(out)) == 0 {
-		return nil, nil
+	out := make([]ContainerHealth, 0, len(infos))
+	for _, c := range infos {
+		out = append(out, ContainerHealth{
+			Name:    c.Name,
+			Service: c.Service,
+			State:   c.State,
+			Health:  c.Health,
+			Status:  c.Status,
+			Image:   c.Image,
+		})
 	}
-
-	// docker compose ps --format json emits a single JSON ARRAY
-	// in newer versions (>= v2.21) or NDJSON in older. Handle
-	// both: if the first non-whitespace byte is '[', parse as
-	// array; otherwise parse line-by-line.
-	trimmed := bytes.TrimLeft(out, " \t\r\n")
-	containers := []ContainerHealth{}
-	if len(trimmed) > 0 && trimmed[0] == '[' {
-		var arr []dockerComposePsEntry
-		if err := json.Unmarshal(trimmed, &arr); err != nil {
-			return nil, fmt.Errorf("parse compose ps JSON array: %w", err)
-		}
-		for _, e := range arr {
-			containers = append(containers, e.toHealth())
-		}
-		return containers, nil
-	}
-	// NDJSON fallback.
-	scanner := bufio.NewScanner(bytes.NewReader(trimmed))
-	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			continue
-		}
-		var e dockerComposePsEntry
-		if err := json.Unmarshal(line, &e); err != nil {
-			// Best-effort: skip a malformed line rather than
-			// fail the whole call.
-			continue
-		}
-		containers = append(containers, e.toHealth())
-	}
-	return containers, nil
+	return out, nil
 }
 
 // handleContainerLogs: GET /api/instances/{name}/containers/{container}/logs.
@@ -929,25 +1099,18 @@ func handleContainerLogs() http.HandlerFunc {
 		// docker compose ps) and the defence-in-depth is worth
 		// the extra round trip.
 		probeCtx, cancelProbe := context.WithTimeout(r.Context(), 5*time.Second)
-		containers, probeErr := composePs(probeCtx, state.ComposeProject)
+		belongsErr := containers.BelongsToProject(probeCtx, state.ComposeProject, container)
 		cancelProbe()
-		if probeErr != nil {
+		if belongsErr != nil {
+			if errors.Is(belongsErr, containers.ErrContainerNotInProject) {
+				writeErrorWithCode(w, http.StatusNotFound,
+					ErrCodeNotFound,
+					"container "+container+" not in compose project "+state.ComposeProject)
+				return
+			}
 			writeErrorWithCode(w, http.StatusServiceUnavailable,
 				"DOCKER_PROBE_FAILED",
-				"could not query docker", probeErr.Error())
-			return
-		}
-		found := false
-		for _, c := range containers {
-			if c.Name == container {
-				found = true
-				break
-			}
-		}
-		if !found {
-			writeErrorWithCode(w, http.StatusNotFound,
-				ErrCodeNotFound,
-				"container "+container+" not in compose project "+state.ComposeProject)
+				"could not query docker", belongsErr.Error())
 			return
 		}
 
@@ -970,38 +1133,24 @@ func handleContainerLogs() http.HandlerFunc {
 			return
 		}
 
-		args := []string{"logs", "--tail", strconv.Itoa(tail)}
-		if since != "" {
-			args = append(args, "--since", since)
-		}
-		args = append(args, container)
-
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "docker", args...)
-		// Docker logs are written to stderr for the bootstrap +
-		// stdout for application output; merge for the user.
-		var combined bytes.Buffer
-		cmd.Stdout = &combined
-		cmd.Stderr = &combined
-		if err := cmd.Run(); err != nil {
-			// If we got SOME output, surface it anyway — log
-			// tails often partial-fail when the container
-			// rotates mid-fetch.
-			if combined.Len() == 0 {
-				writeErrorWithCode(w, http.StatusServiceUnavailable,
-					"DOCKER_LOGS_FAILED",
-					"could not tail container logs", err.Error())
-				return
-			}
+		body, err := containers.Logs(ctx, container, containers.LogsOptions{
+			Tail:  tail,
+			Since: since,
+		})
+		if err != nil && body == "" {
+			writeErrorWithCode(w, http.StatusServiceUnavailable,
+				"DOCKER_LOGS_FAILED",
+				"could not tail container logs", err.Error())
+			return
 		}
-
 		// Plain-text response so the frontend can render in a
 		// <pre> without a JSON decode + escape round-trip.
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(combined.Bytes())
+		_, _ = w.Write([]byte(body))
 	}
 }
 
@@ -1054,42 +1203,28 @@ func handleContainerRestart() http.HandlerFunc {
 		// could restart arbitrary containers on the host by
 		// passing a foreign container name.
 		probeCtx, cancelProbe := context.WithTimeout(r.Context(), 5*time.Second)
-		containers, probeErr := composePs(probeCtx, state.ComposeProject)
+		belongsErr := containers.BelongsToProject(probeCtx, state.ComposeProject, container)
 		cancelProbe()
-		if probeErr != nil {
+		if belongsErr != nil {
+			if errors.Is(belongsErr, containers.ErrContainerNotInProject) {
+				writeErrorWithCode(w, http.StatusNotFound,
+					ErrCodeNotFound,
+					"container "+container+" not in compose project "+state.ComposeProject)
+				return
+			}
 			writeErrorWithCode(w, http.StatusServiceUnavailable,
 				"DOCKER_PROBE_FAILED",
-				"could not query docker", probeErr.Error())
-			return
-		}
-		found := false
-		for _, c := range containers {
-			if c.Name == container {
-				found = true
-				break
-			}
-		}
-		if !found {
-			writeErrorWithCode(w, http.StatusNotFound,
-				ErrCodeNotFound,
-				"container "+container+" not in compose project "+state.ComposeProject)
+				"could not query docker", belongsErr.Error())
 			return
 		}
 
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "docker", "restart", container)
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		if err := cmd.Run(); err != nil {
-			cause := strings.TrimSpace(stderr.String())
-			if cause == "" {
-				cause = err.Error()
-			}
-			log.Printf("restart container %q: %s", container, cause)
+		if err := containers.Restart(ctx, container); err != nil {
+			log.Printf("restart container %q: %v", container, err)
 			writeErrorWithCode(w, http.StatusInternalServerError,
 				"CONTAINER_RESTART_FAILED",
-				"failed to restart "+container+": "+firstLine(cause))
+				"failed to restart "+container+": "+firstLine(err.Error()))
 			return
 		}
 		log.Printf("restart container %q: ok", container)
@@ -1154,29 +1289,12 @@ func parseClampedInt(s string, lo, hi int) (int, error) {
 	return n, nil
 }
 
-// dockerComposePsEntry mirrors the JSON fields `docker compose ps
-// --format json` emits. Only the fields we render are mapped;
-// unknown extras (e.g. ExitCode, RunningFor) are ignored so a
-// docker version bump that adds new fields doesn't break us.
-type dockerComposePsEntry struct {
-	Name    string `json:"Name"`
-	Service string `json:"Service"`
-	State   string `json:"State"`
-	Health  string `json:"Health"`
-	Status  string `json:"Status"`
-	Image   string `json:"Image"`
-}
-
-func (e dockerComposePsEntry) toHealth() ContainerHealth {
-	return ContainerHealth{
-		Name:    e.Name,
-		Service: e.Service,
-		State:   e.State,
-		Health:  e.Health,
-		Status:  e.Status,
-		Image:   e.Image,
-	}
-}
+// dockerComposePsEntry was the in-package JSON decoder for the
+// `docker compose ps --format json` output. Moved to
+// internal/localnet/containers/containers.go so the CLI and HTTP
+// handlers share one parser — see AGENTS.md "CLI ↔ Web UI parity"
+// rule. The wrapper containersList re-shapes the shared Info into
+// the API-stable ContainerHealth shape.
 
 // handleScrubInstance: DELETE /api/instances/{name}.
 //
@@ -1226,9 +1344,53 @@ func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
 			return
 		}
 
+		// Yellow Y9 — acquire the per-instance flock so the read +
+		// status check + index/state delete is a true CAS. Without
+		// this a concurrent POST /api/instances or POST /up that
+		// races the goroutine-Active probe above could re-register
+		// the same name between our Read and Delete. The lock
+		// excludes both create and resume paths (they take the
+		// same lock around their work).
+		release, lerr := registry.Lock(name)
+		if lerr != nil {
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_BUSY",
+				"instance "+name+" is busy — another operation holds the lock",
+				"wait for the in-flight operation to finish, then retry")
+			return
+		}
+		defer release()
+
 		state, err := registry.Read(name)
 		if err != nil {
 			if errors.Is(err, registry.ErrNotFound) {
+				// Two flavours of "not found":
+				//   1. The name is unknown entirely — neither
+				//      a state.json nor an index entry exists.
+				//      Return 404; nothing to clean.
+				//   2. ORPHAN: state.json is missing but the
+				//      index.json still references the name —
+				//      a previous interrupted teardown or a
+				//      manual filesystem wipe. The Web UI shows
+				//      this in `localnet list` and the user
+				//      clicks Remove with no way to repair it.
+				//      Treat Delete as idempotent here: scrub
+				//      the index entry so list reflects truth.
+				if idx, ierr := registry.ReadIndex(); ierr == nil {
+					for _, e := range idx.Entries {
+						if e.Name == name {
+							hub.ClearBuffer(progress.TopicFor(name))
+							if derr := registry.Delete(name); derr != nil {
+								writeError(w, http.StatusInternalServerError,
+									"scrub orphan index entry", derr)
+								return
+							}
+							log.Printf("scrub orphan index entry %q via DELETE (state.json was missing)", name)
+							w.WriteHeader(http.StatusNoContent)
+							return
+						}
+					}
+				}
 				writeErrorWithCode(w, http.StatusNotFound,
 					ErrCodeNotFound,
 					"instance "+name+" not registered")
@@ -1465,4 +1627,257 @@ func handleCancelUp(hub *stream.Hub) http.HandlerFunc {
 		log.Printf("cancel instance %q via DELETE", name)
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// observabilityToggleTimeout caps how long the toggle handler will
+// wait on docker compose. Prometheus + Grafana cold-start in <10s
+// typically; 90s leaves room for the first image pull (~250 MB)
+// on a fresh machine.
+const observabilityToggleTimeout = 90 * time.Second
+
+// observabilityToggleRequest is the body for
+// POST /api/instances/{name}/observability.
+type observabilityToggleRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
+// handleObservabilityToggle: POST /api/instances/{name}/observability.
+//
+// Toggles the Prometheus + Grafana sidecars on a RUNNING instance
+// without disturbing canton/splice. The endpoint exists so users
+// who created an instance without `--profile observability` (or
+// without the checkbox in the Create modal) can flip metrics on
+// after the fact instead of having to down + up.
+//
+// Body: {"enabled": true|false}
+//
+//	enabled=true  → MaterializeObservabilityOverlay into dataDir,
+//	                append the overlay to state.ComposeFiles if
+//	                absent, run `docker compose ... --profile
+//	                observability up -d prometheus grafana`,
+//	                discover the new host port, persist into
+//	                state.Ports["prometheus_ui"].
+//	enabled=false → `docker compose ... stop prometheus grafana`
+//	                then `... rm -f prometheus grafana`. Clear the
+//	                port from state.json. Canton + splice are
+//	                untouched.
+//
+// Failure modes:
+//
+//	404 INSTANCE_NOT_FOUND       — name unknown
+//	409 INSTANCE_NOT_RUNNING     — toggle requires a live stack
+//	409 INSTANCE_BUSY            — another op holds the lock
+//	502 OBSERVABILITY_TOGGLE_FAIL — docker compose returned non-zero
+func handleObservabilityToggle() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if err := localnet.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+		var req observabilityToggleRequest
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid request body",
+				`expected {"enabled": true|false}`)
+			return
+		}
+
+		// Per-instance lock so we can't race a concurrent down/up
+		// or another toggle. The lock is the same one
+		// `localnet up` / snapshot / restore hold — uniform CAS.
+		release, lerr := registry.Lock(name)
+		if lerr != nil {
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_BUSY",
+				"instance "+name+" is busy — another op holds the lock",
+				"retry once the in-flight operation finishes")
+			return
+		}
+		defer release()
+
+		state, err := registry.Read(name)
+		if err != nil {
+			if errors.Is(err, registry.ErrNotFound) {
+				writeErrorWithCode(w, http.StatusNotFound,
+					ErrCodeNotFound,
+					"instance "+name+" not registered")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "read state", err)
+			return
+		}
+		if state.Status != registry.StatusRunning {
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_NOT_RUNNING",
+				"instance "+name+" is not running (status="+string(state.Status)+")",
+				"bring it up first via POST /api/instances/"+name+"/up")
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), observabilityToggleTimeout)
+		defer cancel()
+
+		if req.Enabled {
+			out, port, err := enableObservability(ctx, state)
+			if err != nil {
+				log.Printf("observability enable %q failed: %s\noutput:\n%s", name, err, out)
+				writeErrorWithCode(w, http.StatusBadGateway,
+					"OBSERVABILITY_TOGGLE_FAIL",
+					"failed to enable observability: "+truncateForUser(err.Error()),
+					"check `docker compose -p "+state.ComposeProject+" ps` and `docker logs "+state.ComposeProject+"-prometheus`")
+				return
+			}
+			state.Ports["prometheus_ui"] = port
+			if err := registry.Write(state); err != nil {
+				writeError(w, http.StatusInternalServerError, "persist port", err)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"schema_version": types.SchemaVersion,
+				"instance":       name,
+				"enabled":        true,
+				"prometheus_ui":  port,
+			})
+			return
+		}
+
+		// Disable path.
+		out, err := disableObservability(ctx, state)
+		if err != nil {
+			log.Printf("observability disable %q failed: %s\noutput:\n%s", name, err, out)
+			writeErrorWithCode(w, http.StatusBadGateway,
+				"OBSERVABILITY_TOGGLE_FAIL",
+				"failed to disable observability: "+truncateForUser(err.Error()))
+			return
+		}
+		delete(state.Ports, "prometheus_ui")
+		if err := registry.Write(state); err != nil {
+			writeError(w, http.StatusInternalServerError, "persist port removal", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"schema_version": types.SchemaVersion,
+			"instance":       name,
+			"enabled":        false,
+		})
+	}
+}
+
+// enableObservability runs the docker-compose subcommands that
+// materialize the overlay and bring up prometheus + grafana for
+// a running instance. Returns the captured combined output (for
+// the 502 path) and the discovered host port for prometheus_ui.
+func enableObservability(ctx context.Context, state *registry.State) (string, int, error) {
+	overlay, err := localnet.MaterializeObservabilityOverlay(state.DataDir, state.ProjectDir)
+	if err != nil {
+		return "", 0, fmt.Errorf("materialize overlay: %w", err)
+	}
+	// Ensure the overlay is reflected in state.ComposeFiles so a
+	// later resume (POST /up) sees the overlay too.
+	hasOverlay := false
+	for _, f := range state.ComposeFiles {
+		if f == overlay {
+			hasOverlay = true
+			break
+		}
+	}
+	if !hasOverlay {
+		state.ComposeFiles = append(state.ComposeFiles, overlay)
+	}
+
+	args := []string{"compose", "-p", state.ComposeProject}
+	for _, f := range state.ComposeFiles {
+		args = append(args, "-f", f)
+	}
+	args = append(args, "--profile", localnet.ObservabilityProfileName,
+		"up", "-d", "prometheus", "grafana")
+
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd.Dir = state.ProjectDir
+	// Pass through PROMETHEUS_HOST_PORT=0 so docker auto-assigns a
+	// free host port. RunUp does the same for the initial up.
+	cmd.Env = append(cmd.Env, "PROMETHEUS_HOST_PORT=0",
+		"COMPOSE_PROJECT_NAME="+state.ComposeProject)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(out), 0, fmt.Errorf("docker compose up: %w", err)
+	}
+
+	// Discover the freshly-assigned host port for prometheus's
+	// container-internal 9090.
+	portCmd := exec.CommandContext(ctx, "docker", "compose",
+		"-p", state.ComposeProject, "port", "prometheus", "9090")
+	portCmd.Dir = state.ProjectDir
+	rawPort, perr := portCmd.CombinedOutput()
+	if perr != nil {
+		return string(out) + "\n" + string(rawPort), 0, fmt.Errorf("discover prometheus host port: %w", perr)
+	}
+	port := parseHostPort(string(rawPort))
+	if port == 0 {
+		return string(out) + "\n" + string(rawPort), 0,
+			fmt.Errorf("could not parse prometheus host port from %q", string(rawPort))
+	}
+	return string(out), port, nil
+}
+
+// disableObservability stops + removes the prometheus and grafana
+// containers without touching anything else. We deliberately do
+// NOT mutate state.ComposeFiles — keeping the overlay in the list
+// makes a future re-enable a no-op materialize + spin-up.
+func disableObservability(ctx context.Context, state *registry.State) (string, error) {
+	stopCmd := exec.CommandContext(ctx, "docker", "compose",
+		"-p", state.ComposeProject, "stop", "prometheus", "grafana")
+	stopCmd.Dir = state.ProjectDir
+	if out, err := stopCmd.CombinedOutput(); err != nil {
+		return string(out), fmt.Errorf("docker compose stop: %w", err)
+	}
+	rmCmd := exec.CommandContext(ctx, "docker", "compose",
+		"-p", state.ComposeProject, "rm", "-f", "prometheus", "grafana")
+	rmCmd.Dir = state.ProjectDir
+	if out, err := rmCmd.CombinedOutput(); err != nil {
+		return string(out), fmt.Errorf("docker compose rm: %w", err)
+	}
+	return "", nil
+}
+
+// parseHostPort pulls the port number out of `docker compose port`
+// output. Output shape examples:
+//
+//	0.0.0.0:60471
+//	127.0.0.1:60471
+//	[::]:60471
+//
+// Returns 0 if no port found (caller surfaces as a 502).
+func parseHostPort(s string) int {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0
+	}
+	idx := strings.LastIndex(s, ":")
+	if idx < 0 || idx == len(s)-1 {
+		return 0
+	}
+	p, err := strconv.Atoi(strings.TrimSpace(s[idx+1:]))
+	if err != nil {
+		return 0
+	}
+	return p
+}
+
+// truncateForUser keeps error messages from leaking the full docker
+// compose stderr (sometimes 10+ KB) into the user-facing response.
+// 400 chars is enough for the typical "no such service" / "address
+// already in use" lines without dumping the entire trace.
+func truncateForUser(s string) string {
+	const max = 400
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
 }
