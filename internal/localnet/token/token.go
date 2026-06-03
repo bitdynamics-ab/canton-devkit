@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"time"
 
@@ -205,6 +206,27 @@ func validateCreate(opts CreateOptions) error {
 	}
 	if opts.Issuer == "" {
 		return errors.New("issuer party is required")
+	}
+	if err := validatePartyID("issuer", opts.Issuer); err != nil {
+		return err
+	}
+	return nil
+}
+
+// partyIDPattern is a light syntactic guard for a party id / hint: starts
+// alphanumeric, then the party-id character set. Accepts BOTH a bare hint
+// ("alice") and a fully-qualified id ("alice::1220ab…") — the ledger
+// resolves which is which — but rejects whitespace, empties, and garbage
+// that a bare non-empty check let through.
+var partyIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:_#./-]*$`)
+
+// validatePartyID is the shared party-id guard reused by the create
+// issuer and (post-merge) the mint/transfer/burn party flags.
+func validatePartyID(field, v string) error {
+	if !partyIDPattern.MatchString(v) {
+		return fmt.Errorf(
+			"%s %q is not a valid party id (expected alphanumeric, optionally `hint::fingerprint`)",
+			field, v)
 	}
 	return nil
 }
