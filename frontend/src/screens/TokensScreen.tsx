@@ -40,6 +40,7 @@ export function TokensScreen() {
 
   const [list, setList] = useState<TokenRef[]>([]);
   const [listErr, setListErr] = useState<string | null>(null);
+  const [listLoading, setListLoading] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
 
@@ -64,6 +65,7 @@ export function TokensScreen() {
       return;
     }
     let cancelled = false;
+    setListLoading(true);
     fetchTokens(instance)
       .then((r) => {
         if (cancelled) return;
@@ -76,6 +78,9 @@ export function TokensScreen() {
       .catch((e: unknown) => {
         if (cancelled) return;
         setListErr(e instanceof ApiError ? e.message : "failed to load tokens");
+      })
+      .finally(() => {
+        if (!cancelled) setListLoading(false);
       });
     return () => {
       cancelled = true;
@@ -154,10 +159,14 @@ export function TokensScreen() {
       )}
 
       {list.length === 0 ? (
-        <div style={{ color: W.dim, fontSize: 13 }}>
-          No instruments recorded yet on <code>{instance}</code>. Click <b>Create token</b> above
-          (or run <code>dpm localnet token create --instance {instance}</code>).
-        </div>
+        listLoading ? (
+          <div style={{ color: W.dim, fontSize: 13 }}>Loading instruments…</div>
+        ) : (
+          <div style={{ color: W.dim, fontSize: 13 }}>
+            No instruments recorded yet on <code>{instance}</code>. Click <b>Create token</b> above
+            (or run <code>dpm localnet token create --instance {instance}</code>).
+          </div>
+        )
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 14 }}>
           {/* Left rail: instrument list */}
