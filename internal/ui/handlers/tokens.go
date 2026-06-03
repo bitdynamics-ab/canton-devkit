@@ -116,9 +116,19 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 			opts.Endpoint = "localhost:" + strconv.Itoa(port)
 		}
 	}
-	rows, err := token.RunBalance(r.Context(), nil, opts)
+	rows, truncated, err := token.RunBalance(r.Context(), nil, opts)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "balance", err)
+		mapTokenError(w, err, "balance")
+		return
+	}
+	if truncated {
+		// Surface the truncation so the UI can render a "showing N of
+		// many" hint instead of silently misreporting the wallet.
+		writeJSON(w, http.StatusOK, map[string]any{
+			"schema_version": types.SchemaVersion,
+			"holdings":       rows,
+			"truncated":      true,
+		})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{

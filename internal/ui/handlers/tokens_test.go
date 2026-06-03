@@ -3,11 +3,13 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
@@ -142,5 +144,42 @@ func TestTokens_MissingInstanceIs400(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+// TestMapTokenError_DefaultSanitizesCause pins A1: unknown errors
+// route through the 500 path so the raw cause string (party-ids,
+// contract-ids, dial URLs) NEVER reaches the client body. Known
+// sentinels still surface their dedicated codes.
+func TestMapTokenError_DefaultSanitizesCause(t *testing.T) {
+	cause := errors.New("dial localhost:13902: party alice::abc123def contract 00abcd: rpc error")
+	rec := httptest.NewRecorder()
+	mapTokenError(rec, cause, "balance")
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, leak := range []string{"alice::abc123def", "00abcd", "localhost:13902", "rpc error"} {
+		if strings.Contains(body, leak) {
+			t.Errorf("body leaks %q: %s", leak, body)
+		}
+	}
+	if !strings.Contains(body, ErrCodeInternal) {
+		t.Errorf("body should carry internal code; got %s", body)
+	}
+}
+
+// TestMapTokenError_NeedsV2Maps412 pins that the V2-needed sentinel
+// still produces the dedicated remediation code even after A1's
+// default-branch tightening.
+func TestMapTokenError_NeedsV2Maps412(t *testing.T) {
+	rec := httptest.NewRecorder()
+	mapTokenError(rec, token.ErrNeedsV2LocalNet, "balance")
+	if rec.Code != http.StatusPreconditionFailed {
+		t.Errorf("status = %d, want 412", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "NEEDS_V2_LOCALNET") {
+		t.Errorf("body should carry NEEDS_V2_LOCALNET code; got %s", rec.Body.String())
 	}
 }
