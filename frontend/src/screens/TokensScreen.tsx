@@ -14,6 +14,12 @@ import {
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { W, wMono } from "../tokens";
 
+// SYMBOL_RE mirrors the create wizard's intent: a short ticker-style
+// symbol. Kept permissive (letters/digits/. _ -) so it never rejects a
+// server-valid symbol, while catching whitespace/empty/over-long input
+// client-side before the round-trip.
+const SYMBOL_RE = /^[A-Za-z0-9._-]{1,16}$/;
+
 // TokensScreen — BIT-140.
 //
 // V2 Token Standard surface: lists every instrument recorded on the
@@ -39,6 +45,7 @@ export function TokensScreen() {
 
   const [holdings, setHoldings] = useState<TokenHolding[]>([]);
   const [holdingsErr, setHoldingsErr] = useState<string | null>(null);
+  const [holdingsLoading, setHoldingsLoading] = useState(false);
 
   const [showCreate, setShowCreate] = useState(false);
   const [modal, setModal] = useState<
@@ -83,6 +90,7 @@ export function TokensScreen() {
       return;
     }
     let cancelled = false;
+    setHoldingsLoading(true);
     fetchHoldings(instance, activeSymbol)
       .then((r) => {
         if (!cancelled) {
@@ -94,6 +102,9 @@ export function TokensScreen() {
         if (!cancelled) {
           setHoldingsErr(e instanceof ApiError ? e.message : "failed to load holdings");
         }
+      })
+      .finally(() => {
+        if (!cancelled) setHoldingsLoading(false);
       });
     return () => {
       cancelled = true;
@@ -107,18 +118,6 @@ export function TokensScreen() {
 
   function bump() {
     setRefreshTick((n) => n + 1);
-  }
-
-  function renderActionError(e: unknown, fallback: string): { tone: "warn" | "err"; text: string } {
-    if (e instanceof ApiError && e.code === "NEEDS_V2_LOCALNET") {
-      return {
-        tone: "warn",
-        text:
-          "V2 ledger action not yet wired on this instance. Bring up a V2 LocalNet first " +
-          "(localnet up --version token-standard-v2 --profile tokens-v2) and re-run.",
-      };
-    }
-    return { tone: "err", text: e instanceof ApiError ? e.message : fallback };
   }
 
   if (!instance) {
@@ -227,7 +226,11 @@ export function TokensScreen() {
                       </tr>
                     ))}
                     {holdings.length === 0 && (
-                      <tr><td colSpan={2} style={{ ...td, color: W.dim }}>No holdings yet.</td></tr>
+                      <tr>
+                        <td colSpan={2} style={{ ...td, color: W.dim }}>
+                          {holdingsLoading ? "Loading holdings…" : "No holdings yet."}
+                        </td>
+                      </tr>
                     )}
                   </tbody>
                 </table>
@@ -256,7 +259,6 @@ export function TokensScreen() {
           onClose={() => setModal(null)}
           submit={(v) => mintToken(instance, modal.symbol, v.to, v.amount)}
           onDone={() => { setModal(null); bump(); }}
-          onError={(e) => setTopNotice(renderActionError(e, "mint failed"))}
         />
       )}
       {modal?.kind === "transfer" && active && (
@@ -271,7 +273,6 @@ export function TokensScreen() {
           onClose={() => setModal(null)}
           submit={(v) => transferToken(instance, modal.symbol, v.from, v.to, v.amount, v.reason || undefined)}
           onDone={() => { setModal(null); bump(); }}
-          onError={(e) => setTopNotice(renderActionError(e, "transfer failed"))}
         />
       )}
       {modal?.kind === "burn" && active && (
@@ -281,7 +282,6 @@ export function TokensScreen() {
           onClose={() => setModal(null)}
           submit={(v) => burnToken(instance, modal.symbol, v.from, v.amount)}
           onDone={() => { setModal(null); bump(); }}
-          onError={(e) => setTopNotice(renderActionError(e, "burn failed"))}
         />
       )}
       {modal?.kind === "accept" && (
@@ -291,7 +291,6 @@ export function TokensScreen() {
           onClose={() => setModal(null)}
           submit={(v) => acceptTransfer(instance, v.id)}
           onDone={() => { setModal(null); bump(); }}
-          onError={(e) => setTopNotice(renderActionError(e, "accept failed"))}
         />
       )}
     </section>
@@ -325,8 +324,15 @@ function CreateTokenModal({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // Client-side symbol guard so an obviously-bad symbol (spaces, empty,
+  // over-long) is caught before the round-trip. Tickers are short
+  // alphanumerics; allow . _ - for namespacing.
+  const symbolValid = symbol === "" || SYMBOL_RE.test(symbol);
+  const canSubmit = !busy && symbol !== "" && symbolValid;
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!canSubmit) return;
     setBusy(true);
     try {
       const ref = await createToken(instance, {
@@ -343,7 +349,21 @@ function CreateTokenModal({
     <ModalShell title="Create V2 instrument" onClose={onClose}>
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 8 }}>
         <Field label="Name"><input value={name} onChange={(e) => setName(e.target.value)} style={input} required /></Field>
-        <Field label="Symbol"><input value={symbol} onChange={(e) => setSymbol(e.target.value)} style={input} required /></Field>
+        <Field label="Symbol">
+          <input
+            value={symbol}
+            onChange={(e) => setSymbol(e.target.value)}
+            style={input}
+            required
+            aria-label="Symbol"
+            aria-invalid={!symbolValid}
+          />
+          {!symbolValid && (
+            <div role="alert" style={{ color: W.err, fontSize: 11, marginTop: 2 }}>
+              1–16 chars: letters, digits, and . _ - only
+            </div>
+          )}
+        </Field>
         <Field label="Decimals">
           <input type="number" min={0} max={18} value={decimals} onChange={(e) => setDecimals(Number(e.target.value))} style={input} />
         </Field>
@@ -352,7 +372,7 @@ function CreateTokenModal({
         {err && <div role="alert" style={{ color: W.err, fontSize: 12 }}>{err}</div>}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
           <button type="button" onClick={onClose} style={btnStyle(W.dim, false)}>Cancel</button>
-          <button type="submit" disabled={busy} style={btnStyle(W.brand, busy, true)}>{busy ? "Creating…" : "Create"}</button>
+          <button type="submit" disabled={!canSubmit} style={btnStyle(W.brand, busy, true)}>{busy ? "Creating…" : "Create"}</button>
         </div>
       </form>
     </ModalShell>
@@ -365,14 +385,12 @@ function ActionModal({
   onClose,
   submit,
   onDone,
-  onError,
 }: {
   title: string;
   fields: { label: string; key: string; optional?: boolean }[];
   onClose: () => void;
   submit: (values: Record<string, string>) => Promise<void>;
   onDone: () => void;
-  onError: (e: unknown) => void;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -384,8 +402,11 @@ function ActionModal({
       await submit(values);
       onDone();
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "failed");
-      onError(e);
+      // Single error surface: show it inline in the modal (the user is
+      // looking here and can retry) — the modal stays open. Previously
+      // this ALSO bubbled to a top-of-screen notice, double-rendering
+      // the same message.
+      setErr(actionErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -411,6 +432,19 @@ function ActionModal({
       </form>
     </ModalShell>
   );
+}
+
+// actionErrorMessage turns an action failure into the text shown inline
+// in the modal — keeping the V2-not-wired remediation that used to live
+// in the (now removed) top-notice renderer.
+function actionErrorMessage(e: unknown): string {
+  if (e instanceof ApiError && e.code === "NEEDS_V2_LOCALNET") {
+    return (
+      "V2 ledger action not yet wired on this instance. Bring up a V2 LocalNet first " +
+      "(localnet up --version token-standard-v2 --profile tokens-v2) and re-run."
+    );
+  }
+  return e instanceof ApiError ? e.message : "failed";
 }
 
 function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
