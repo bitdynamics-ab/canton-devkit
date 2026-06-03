@@ -1012,3 +1012,137 @@ export const installSkills = (target: "claude" | "codex", force = false) =>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ target, force }),
   });
+
+// -------------------------------------------------------------------
+// BIT-140 Tokens — Web UI client for /api/tokens.
+//
+// Mirrors registry.TokenRef + the request shapes the backend handlers
+// expect. Every action is instance-scoped (`?instance=`); error mapping
+// matches handlers.mapTokenError so the UI can switch on the code.
+// -------------------------------------------------------------------
+
+export interface TokenRef {
+  name: string;
+  symbol: string;
+  decimals: number;
+  initial_supply: string;
+  issuer_party: string;
+  instrument_id: string;
+  created_at: string;
+  status: string;
+}
+
+export interface TokenHolding {
+  instrument_symbol?: string;
+  instrument_id: string;
+  party: string;
+  amount: string;
+}
+
+export interface TokensListResponse {
+  schema_version: number;
+  tokens: TokenRef[];
+}
+
+export interface TokenHoldingsResponse {
+  schema_version: number;
+  holdings: TokenHolding[];
+}
+
+export const fetchTokens = (instance: string) =>
+  apiFetch<TokensListResponse>(
+    `/api/tokens?instance=${encodeURIComponent(instance)}`,
+  );
+
+export const fetchHoldings = (
+  instance: string,
+  symbol: string,
+  party?: string,
+) => {
+  const params = new URLSearchParams({ instance });
+  if (party) params.set("party", party);
+  return apiFetch<TokenHoldingsResponse>(
+    `/api/tokens/${encodeURIComponent(symbol)}/holdings?${params}`,
+  );
+};
+
+export interface TokenCreateInput {
+  name: string;
+  symbol: string;
+  decimals: number;
+  initial_supply: string;
+  issuer: string;
+}
+
+export const createToken = (instance: string, body: TokenCreateInput) =>
+  apiFetch<TokenRef>(
+    `/api/tokens?instance=${encodeURIComponent(instance)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+
+export const mintToken = (
+  instance: string,
+  symbol: string,
+  to: string,
+  amount: string,
+): Promise<void> =>
+  apiFetchVoid(
+    `/api/tokens/${encodeURIComponent(symbol)}/mint?instance=${encodeURIComponent(instance)}`,
+    { to, amount },
+  );
+
+export const transferToken = (
+  instance: string,
+  symbol: string,
+  from: string,
+  to: string,
+  amount: string,
+  reason?: string,
+): Promise<void> =>
+  apiFetchVoid(
+    `/api/tokens/${encodeURIComponent(symbol)}/transfer?instance=${encodeURIComponent(instance)}`,
+    { from, to, amount, reason: reason ?? "" },
+  );
+
+export const burnToken = (
+  instance: string,
+  symbol: string,
+  from: string,
+  amount: string,
+): Promise<void> =>
+  apiFetchVoid(
+    `/api/tokens/${encodeURIComponent(symbol)}/burn?instance=${encodeURIComponent(instance)}`,
+    { from, amount },
+  );
+
+export const acceptTransfer = (
+  instance: string,
+  transferInstructionID: string,
+): Promise<void> =>
+  apiFetchVoid(
+    `/api/tokens/transfers/${encodeURIComponent(transferInstructionID)}/accept?instance=${encodeURIComponent(instance)}`,
+    {},
+  );
+
+// apiFetchVoid is a thin POST wrapper for 204-returning handlers. The
+// mint/transfer/burn/accept endpoints return 204 on success and an
+// ApiError on failure — no body to decode either way.
+async function apiFetchVoid(path: string, body: unknown): Promise<void> {
+  const resp = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (resp.ok) return;
+  let parsed: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+  try {
+    parsed = await resp.json();
+  } catch {
+    /* keep default */
+  }
+  throw new ApiError(resp.status, parsed);
+}
