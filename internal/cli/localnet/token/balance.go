@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 	"github.com/spf13/cobra"
@@ -41,7 +42,13 @@ single instrument (by symbol or raw id).`,
 			if format == "json" {
 				enc := json.NewEncoder(out)
 				enc.SetIndent("", "  ")
-				return enc.Encode(rows)
+				// Wire-stable envelope ({schema_version, rows}) for parity
+				// with the HTTP /api/tokens responses — a bare array has no
+				// slot to version the shape.
+				return enc.Encode(map[string]any{
+					"schema_version": types.SchemaVersion,
+					"rows":           rows,
+				})
 			}
 			// Text: simple aligned table via term.
 			cols := []term.Column{

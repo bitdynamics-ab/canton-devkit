@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"regexp"
 	"strings"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
@@ -99,6 +100,12 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	if err := requireFields("mint", opts.Instance, opts.Instrument, opts.To, opts.Amount); err != nil {
 		return err
 	}
+	if err := validatePartyID("--to", opts.To); err != nil {
+		return err
+	}
+	if err := validateAmount("mint", opts.Amount); err != nil {
+		return err
+	}
 	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
 	if err != nil {
 		return err
@@ -111,6 +118,15 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 
 func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error {
 	if err := requireFields("transfer", opts.Instance, opts.Instrument, opts.From, opts.To, opts.Amount); err != nil {
+		return err
+	}
+	if err := validatePartyID("--from", opts.From); err != nil {
+		return err
+	}
+	if err := validatePartyID("--to", opts.To); err != nil {
+		return err
+	}
+	if err := validateAmount("transfer", opts.Amount); err != nil {
 		return err
 	}
 	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
@@ -136,6 +152,12 @@ func RunAccept(ctx context.Context, out io.Writer, opts AcceptOptions) error {
 
 func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 	if err := requireFields("burn", opts.Instance, opts.Instrument, opts.From, opts.Amount); err != nil {
+		return err
+	}
+	if err := validatePartyID("--from", opts.From); err != nil {
+		return err
+	}
+	if err := validateAmount("burn", opts.Amount); err != nil {
 		return err
 	}
 	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
@@ -400,6 +422,51 @@ func requireFields(verb string, fields ...string) error {
 		if v == "" {
 			return fmt.Errorf("%s: field at position %d is required", verb, i)
 		}
+	}
+	return nil
+}
+
+// validateAmount rejects an --amount that isn't a positive Daml decimal
+// BEFORE the action stubs out. Without it, "abc" or "1.2e5" fell through
+// to ErrNeedsV2LocalNet, mislabelling a plain input error as "this needs
+// a V2 LocalNet". looksLikeDecimal pins the same digits-and-one-dot
+// grammar the create wizard enforces.
+func validateAmount(verb, amount string) error {
+	if !looksLikeDecimal(amount) {
+		return fmt.Errorf(
+			"%s: --amount %q is not a valid decimal (digits and at most one '.', no sign or exponent)",
+			verb, amount)
+	}
+	if isZeroDecimal(amount) {
+		return fmt.Errorf("%s: --amount must be greater than zero", verb)
+	}
+	return nil
+}
+
+// isZeroDecimal reports whether a looksLikeDecimal-valid string is zero
+// (only 0s and an optional dot). Cheap and allocation-free.
+func isZeroDecimal(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= '1' && s[i] <= '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// partyIDPattern is a light syntactic guard for a party id / hint:
+// starts alphanumeric, then the party-id character set. It deliberately
+// accepts BOTH a bare hint ("alice") and a fully-qualified id
+// ("alice::1220ab…") — the ledger resolves which is which — but rejects
+// whitespace, empties, and obvious garbage that requireFields' non-empty
+// check let through.
+var partyIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:_#./-]*$`)
+
+func validatePartyID(field, v string) error {
+	if !partyIDPattern.MatchString(v) {
+		return fmt.Errorf(
+			"%s %q is not a valid party id (expected alphanumeric, optionally `hint::fingerprint`)",
+			field, v)
 	}
 	return nil
 }
