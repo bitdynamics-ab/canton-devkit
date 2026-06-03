@@ -61,7 +61,13 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
   // overlay pulls extra container images and adds memory pressure
   // — opt-in is friendlier for the "just spin one up" path.
   const [observability, setObservability] = useState(false);
+  // tokensV2: when on, bring-up adds the Token Standard V2 alpha-protocol
+  // Canton overlay (`--profile tokens-v2`). Needs a V2-capable Splice
+  // version; default OFF.
+  const [tokensV2, setTokensV2] = useState(false);
   const [versions, setVersions] = useState<SpliceVersionEntry[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [versionsError, setVersionsError] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage>({ kind: "form" });
   // Per-version system-requirements check. "idle" = no version
   // picked yet; "loading" = probe in flight; "ok" = host meets
@@ -89,10 +95,13 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
       setVersion("");
       setAllowUncurated(false);
       setObservability(false);
+      setTokensV2(false);
       setStage({ kind: "form" });
       requestAnimationFrame(() => inputRef.current?.focus());
       // Refresh the version catalogue on open. Cached on the
       // server (versions.json is embedded), so this is fast.
+      setVersionsLoading(true);
+      setVersionsError(null);
       fetchSpliceVersions()
         .then((r) => {
           setVersions(r.versions);
@@ -103,11 +112,15 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
             if (latest) setVersion(latest.tag);
           }
         })
-        .catch(() => {
-          // Non-fatal — the picker shows an "unavailable" hint
-          // and the user can still type a version.
+        .catch((e) => {
+          // Distinguish failure from "still loading": a collapsed empty
+          // state left the picker showing "Loading…" forever on a 5xx.
           setVersions([]);
-        });
+          setVersionsError(
+            e instanceof ApiError ? e.message : "Couldn't load the version catalogue",
+          );
+        })
+        .finally(() => setVersionsLoading(false));
     }
     // versions captured intentionally — only re-run on open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -215,7 +228,13 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
         name,
         ...(version ? { version } : {}),
         ...(allowUncurated ? { allow_uncurated: true } : {}),
-        ...(observability ? { profiles: ["observability"] } : {}),
+        ...(() => {
+          const profiles = [
+            ...(observability ? ["observability"] : []),
+            ...(tokensV2 ? ["tokens-v2"] : []),
+          ];
+          return profiles.length ? { profiles } : {};
+        })(),
       });
       setStage({ kind: "progress", accepted });
     } catch (e) {
@@ -275,10 +294,14 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
               version={version}
               setVersion={setVersion}
               versions={versions}
+              versionsLoading={versionsLoading}
+              versionsError={versionsError}
               allowUncurated={allowUncurated}
               setAllowUncurated={setAllowUncurated}
               observability={observability}
               setObservability={setObservability}
+              tokensV2={tokensV2}
+              setTokensV2={setTokensV2}
               preflight={preflight}
               onSubmit={submit}
             />
@@ -446,10 +469,14 @@ interface FormBodyProps {
   version: string;
   setVersion: (s: string) => void;
   versions: SpliceVersionEntry[];
+  versionsLoading: boolean;
+  versionsError: string | null;
   allowUncurated: boolean;
   setAllowUncurated: (b: boolean) => void;
   observability: boolean;
   setObservability: (b: boolean) => void;
+  tokensV2: boolean;
+  setTokensV2: (b: boolean) => void;
   preflight: PreflightState;
   onSubmit: (e: React.FormEvent) => void;
 }
@@ -462,10 +489,14 @@ function FormBody({
   version,
   setVersion,
   versions,
+  versionsLoading,
+  versionsError,
   allowUncurated,
   setAllowUncurated,
   observability,
   setObservability,
+  tokensV2,
+  setTokensV2,
   preflight,
   onSubmit,
 }: FormBodyProps) {
@@ -496,6 +527,8 @@ function FormBody({
           versions={versions}
           selected={version}
           onSelect={setVersion}
+          loading={versionsLoading}
+          error={versionsError}
         />
       </Field>
 
@@ -542,6 +575,56 @@ function FormBody({
             container images; ~300 MB extra RAM at idle. Equivalent to
             <code style={{ fontFamily: wMono, marginLeft: 4 }}>
               --profile observability
+            </code>{" "}
+            on the CLI.
+          </div>
+        </div>
+      </label>
+
+      {/* Token Standard V2 alpha overlay — opt-in. Mirrors the CLI's
+          --profile tokens-v2; needs a V2-capable Splice version. */}
+      <label
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 10,
+          padding: "10px 12px",
+          background: W.surface2,
+          borderRadius: 8,
+          border: `1px solid ${tokensV2 ? W.brand : W.border}`,
+          cursor: "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={tokensV2}
+          onChange={(e) => setTokensV2(e.target.checked)}
+          style={{ marginTop: 2 }}
+        />
+        <div style={{ flex: 1, fontSize: 12.5, color: W.text2 }}>
+          <strong style={{ color: W.text }}>Token Standard V2 (alpha)</strong>
+          <span
+            style={{
+              marginLeft: 8,
+              fontSize: 10.5,
+              padding: "1px 6px",
+              borderRadius: 3,
+              background: `${W.brand}1A`,
+              color: W.brand,
+              fontFamily: wMono,
+            }}
+          >
+            protocol 35
+          </span>
+          <div style={{ color: W.dim, fontSize: 11.5, marginTop: 3, lineHeight: 1.5 }}>
+            Injects the alpha-protocol Canton config for CIP-0112 token
+            flows. Requires a V2-capable Splice version (e.g.{" "}
+            <code style={{ fontFamily: wMono }}>token-standard-v2</code>). The
+            instance will settle at status <strong>partial</strong> — the V2
+            splice healthcheck never reports healthy, but token flows work.
+            Equivalent to{" "}
+            <code style={{ fontFamily: wMono, marginLeft: 4 }}>
+              --profile tokens-v2
             </code>{" "}
             on the CLI.
           </div>
@@ -603,6 +686,7 @@ function FormBody({
           dpm localnet up --name {name || "<name>"} --version{" "}
           {version || "latest"}
           {observability ? " --profile observability" : ""}
+          {tokensV2 ? " --profile tokens-v2" : ""}
         </span>
       </div>
     </form>
@@ -913,35 +997,49 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
 }
 
 // VersionPicker renders the curated Splice catalogue as a native HTML
-// <select> dropdown. The previous implementation fell back to a free-text
-// <input> when versions.length === 0 (typically a transient API-load
-// state). We deliberately don't fall back to a text field anymore: users
-// reported that the empty-state textbox felt like the picker had been
-// replaced, and typing an arbitrary tag silently routes to the
-// upstream-resolution path that the curated dropdown is meant to
-// prevent. The loading state is now a disabled select with a single
-// "Loading…" option so the field shape stays consistent.
+// <select> dropdown. The previous implementation rendered a custom
+// scrollable button-list when versions were present and fell back to a
+// free-text <input> when the API returned empty (loading / network
+// error). Users reported the empty-state textbox felt like a regression
+// from the prior dropdown UX, and typing an arbitrary tag silently
+// routed to the upstream-resolution path that the curated dropdown is
+// meant to prevent. This rewrite uses a real <select> in both states:
+// disabled placeholder when loading, populated when versions arrive.
 //
-// Sort order: "latest" first, then descending semver (so the newest
-// catalogued releases sit near the top of the dropdown).
+// Sort order: "latest" first, then descending semver — so the newest
+// catalogued releases sit near the top of the dropdown.
 //
 // Exported so the regression test (VersionPicker.test.tsx) can render
-// it in isolation. The "dropdown not textbox" invariant is exactly the
-// kind of UI contract a future contributor could break by accident
-// when adding a "type a custom version" affordance — the test pins it.
+// the component in isolation and pin the "always a <select>, never a
+// textbox" invariant.
 export function VersionPicker({
   versions,
   selected,
   onSelect,
+  loading = false,
+  error = null,
 }: {
   versions: SpliceVersionEntry[];
   selected: string;
   onSelect: (tag: string) => void;
+  loading?: boolean;
+  error?: string | null;
 }) {
   if (versions.length === 0) {
+    // Three distinct empty states — previously all collapsed into
+    // "Loading…", so a failed fetch (5xx) span forever.
+    let placeholder = "No curated versions available";
+    if (loading) placeholder = "Loading curated versions…";
+    else if (error) placeholder = `⚠ Couldn't load versions — ${error}`;
     return (
-      <select disabled value="" style={selectStyle} aria-label="Splice version">
-        <option value="">Loading curated versions…</option>
+      <select
+        disabled
+        value=""
+        style={selectStyle}
+        aria-label="Splice version"
+        aria-busy={loading || undefined}
+      >
+        <option value="">{placeholder}</option>
       </select>
     );
   }
@@ -949,7 +1047,7 @@ export function VersionPicker({
   const sorted = [...versions].sort((a, b) => {
     if (a.status === "latest" && b.status !== "latest") return -1;
     if (b.status === "latest" && a.status !== "latest") return 1;
-    return b.tag.localeCompare(a.tag, undefined, { numeric: true });
+    return compareSpliceTags(b.tag, a.tag);
   });
 
   return (
@@ -970,6 +1068,64 @@ export function VersionPicker({
   );
 }
 
+// compareSpliceTags orders two Splice version tags like a localeCompare
+// (negative ⇒ a is older/lower than b), but semver-aware so a final
+// release outranks its own pre-release.
+//
+// localeCompare(…, {numeric:true}) gets this wrong: "0.6.4" is a prefix
+// of "0.6.4-rc.1", so a string collation sorts the rc AFTER the release
+// — inverting precedence (semver says 0.6.4 > 0.6.4-rc.1). Non-semver
+// tags ("token-standard-v2", "next-cilr") have no precedence to reason
+// about, so they fall back to numeric localeCompare. Exported for the
+// regression test.
+export function compareSpliceTags(a: string, b: string): number {
+  const pa = parseSemverTag(a);
+  const pb = parseSemverTag(b);
+  if (!pa || !pb) {
+    return a.localeCompare(b, undefined, { numeric: true });
+  }
+  for (let i = 0; i < 3; i++) {
+    if (pa.core[i] !== pb.core[i]) return pa.core[i] - pb.core[i];
+  }
+  // Same x.y.z: a release (no pre-release) is newer than any pre-release.
+  if (pa.pre === null && pb.pre === null) return 0;
+  if (pa.pre === null) return 1;
+  if (pb.pre === null) return -1;
+  return comparePrerelease(pa.pre, pb.pre);
+}
+
+function parseSemverTag(tag: string): { core: [number, number, number]; pre: string | null } | null {
+  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-(.+))?$/.exec(tag);
+  if (!m) return null;
+  return { core: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4] ?? null };
+}
+
+// comparePrerelease applies the semver pre-release precedence rules:
+// dot-separated identifiers compared left-to-right; numeric identifiers
+// numerically and ranked below alphanumerics; a shorter run loses to a
+// longer one when otherwise equal.
+function comparePrerelease(a: string, b: string): number {
+  const as = a.split(".");
+  const bs = b.split(".");
+  const n = Math.max(as.length, bs.length);
+  for (let i = 0; i < n; i++) {
+    if (as[i] === undefined) return -1;
+    if (bs[i] === undefined) return 1;
+    const aNum = /^\d+$/.test(as[i]);
+    const bNum = /^\d+$/.test(bs[i]);
+    if (aNum && bNum) {
+      const d = Number(as[i]) - Number(bs[i]);
+      if (d !== 0) return d;
+    } else if (aNum !== bNum) {
+      return aNum ? -1 : 1; // numeric identifiers have lower precedence
+    } else {
+      const c = as[i].localeCompare(bs[i]);
+      if (c !== 0) return c;
+    }
+  }
+  return 0;
+}
+
 // selectStyle is inlined rather than spread from `inputStyle` because
 // `inputStyle` is declared further down in this file — relying on
 // hoisting here triggers a TDZ "used before declaration" error under
@@ -978,8 +1134,7 @@ export function VersionPicker({
 // `appearance: "auto"` so the native OS dropdown caret stays visible.
 // Without the explicit appearance, some browsers drop the caret when
 // a custom borderRadius/background is applied — making the field look
-// like a disabled text input, which is exactly the regression users
-// reported and this commit fixes.
+// like a disabled text input, which is the regression this commit fixes.
 const selectStyle: React.CSSProperties = {
   width: "100%",
   background: W.bg,
@@ -994,20 +1149,17 @@ const selectStyle: React.CSSProperties = {
   appearance: "auto",
 };
 
-// remediationForCode is extracted to ./remediation.ts so it can
-// be unit-tested without React Testing Library setup — see
-// remediation.test.ts. BIT-172 review v3.
-
 // PreflightPanel renders the system-requirements check inline in
-// the form. Three visual modes:
+// the form. Five visual modes:
 //
+//   idle     — no render
 //   loading  — pill saying "checking docker memory + disk…"
-//   blocked  — red box: every fail check + its remediation;
-//              warns rendered as amber subnotes. Create disabled.
-//   ok+warn  — amber box with warning checks (proceeding allowed)
-//   ok+pass  — tiny green confirmation pill
 //   err      — neutral note; doesn't block ("server probe failed,
 //              the server-side gate will still run on submit")
+//   ok+pass  — tiny green confirmation pill
+//   ok+warn  — amber box with warning checks (proceeding allowed)
+//   blocked  — red box: every fail check + its remediation;
+//              warns rendered as amber subnotes. Create disabled.
 //
 // The component never reads the version directly — it just
 // renders whatever the parent's effect produced. Clean separation.

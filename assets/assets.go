@@ -23,17 +23,20 @@ package assets
 
 import "embed"
 
-// Observability embeds the compose overlay + Grafana provisioning that
-// `canton-devkit localnet up --profile observability` materializes
-// into the instance's data directory at boot time.
+// FS embeds the compose overlays + Grafana provisioning that the
+// `localnet up --profile <x>` overlays materialize into an instance's
+// data directory at boot. It is NOT observability-specific — it was
+// once named Observability, which misled the tokens-v2 overlay author —
+// every profile's compose fragment lives under compose/ in this tree.
 //
 // Tree shape (post-walk):
 //
 //	compose/observability.yaml
 //	compose/prometheus.yml
+//	compose/tokens-v2.yml
 //	grafana/dashboards/canton-localnet.json
 //	grafana/provisioning/dashboards/canton.yaml
 //	grafana/provisioning/datasources/prometheus.yaml
 //
 //go:embed all:compose all:grafana
-var Observability embed.FS
+var FS embed.FS

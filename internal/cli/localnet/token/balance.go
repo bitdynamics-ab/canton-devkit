@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 	"github.com/spf13/cobra"
@@ -15,15 +16,22 @@ func buildBalance() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "balance",
 		Short: "List V2 token balances on the selected LocalNet",
-		Long: `Print balances of recorded V2 instruments. With --party, filter to a
-single party; with --instrument, filter to a single instrument (by
-symbol or raw id). Output text or json.
+		Long: `Print balances of V2 token instruments. Two paths:
 
-Today balances are derived from the per-instance Tokens registry the
-` + "`token create`" + ` wizard populates (the issuer party holds the
-full InitialSupply; others show zero). The full ACS-derived balance
-— a live count of Holding-interface contracts per (party, instrument)
-on the participant — lands once the live V2 wiring is in.`,
+  • --endpoint host:port (+ optional --token, --insecure): live ACS
+    query against the participant. Filters by the V2 Holding
+    interface (#splice-api-token-holding-v2:Splice.Api.Token.HoldingV2:
+    Holding), parses each HoldingViewV2 record, and sums amounts per
+    (party, instrument). The right path for any V2 LocalNet.
+
+  • no --endpoint: fall back to the registry-derived pseudo-balance
+    populated by the ` + "`token create`" + ` wizard (issuer holds the
+    full InitialSupply; everyone else shows 0). Useful for the
+    "show me what I've registered locally" case before the participant
+    is dialed.
+
+With --party, filter to a single party; with --instrument, filter to a
+single instrument (by symbol or raw id).`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			rows, err := token.RunBalance(cmd.Context(), nil, opts)
@@ -34,7 +42,13 @@ on the participant — lands once the live V2 wiring is in.`,
 			if format == "json" {
 				enc := json.NewEncoder(out)
 				enc.SetIndent("", "  ")
-				return enc.Encode(rows)
+				// Wire-stable envelope ({schema_version, rows}) for parity
+				// with the HTTP /api/tokens responses — a bare array has no
+				// slot to version the shape.
+				return enc.Encode(map[string]any{
+					"schema_version": types.SchemaVersion,
+					"rows":           rows,
+				})
 			}
 			// Text: simple aligned table via term.
 			cols := []term.Column{
@@ -57,6 +71,10 @@ on the participant — lands once the live V2 wiring is in.`,
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")
 	cmd.Flags().StringVar(&opts.Party, "party", "", "Filter to a single party.")
 	cmd.Flags().StringVar(&opts.Instrument, "instrument", "", "Filter to a single instrument (symbol or raw id).")
+	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). When set, query live ACS; otherwise use the registry pseudo-balance.")
+	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT for the participant. Empty (the common case) auto-issues a per-role token via `localnet creds` machinery.")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT the live ACS query authenticates as (sv / app-provider / app-user).")
+	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json.")
 	_ = cmd.MarkFlagRequired("instance")
 	return cmd

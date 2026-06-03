@@ -49,7 +49,7 @@ func MaterializeObservabilityOverlay(dataDir, projectDir string) (string, error)
 	// solution (per-instance overrides directory) is tracked in
 	// follow-up; this stops the silent stomp without that bigger
 	// change.
-	if err := fs.WalkDir(assets.Observability, ".", func(path string, d fs.DirEntry, err error) error {
+	if err := fs.WalkDir(assets.FS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -60,7 +60,7 @@ func MaterializeObservabilityOverlay(dataDir, projectDir string) (string, error)
 		if d.IsDir() {
 			return os.MkdirAll(dest, 0o755)
 		}
-		data, err := fs.ReadFile(assets.Observability, path)
+		data, err := fs.ReadFile(assets.FS, path)
 		if err != nil {
 			return fmt.Errorf("read embedded %s: %w", path, err)
 		}
@@ -88,7 +88,7 @@ func MaterializeObservabilityOverlay(dataDir, projectDir string) (string, error)
 	// path on first try and every subsequent up fails with "mount
 	// directory onto file".
 	if projectDir != "" {
-		promSrc, err := fs.ReadFile(assets.Observability, "compose/prometheus.yml")
+		promSrc, err := fs.ReadFile(assets.FS, "compose/prometheus.yml")
 		if err != nil {
 			return "", fmt.Errorf("read embedded prometheus.yml: %w", err)
 		}

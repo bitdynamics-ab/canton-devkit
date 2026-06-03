@@ -6,8 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
+	"strings"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
+	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
 
 // ErrNeedsV2LocalNet signals that the requested action needs the V2
@@ -53,6 +57,22 @@ type BalanceOptions struct {
 	Instance   string
 	Party      string // optional; empty = every party visible on the participant
 	Instrument string // optional; empty = every instrument
+
+	// Endpoint, Token, Role, Insecure are the live-ACS path. When
+	// Endpoint is set, RunBalance ACS-queries the participant for
+	// every HoldingInterfaceV2 contract and sums the views per
+	// (party, instrument). Empty Endpoint falls back to the
+	// registry-derived pseudo-balances.
+	//
+	// Token is optional: empty triggers per-role JWT auto-issuance
+	// via registry.State.Credentials → splice.SignToken (see
+	// dialLedger's token resolution chain). Role defaults to
+	// "app-user" — pass "sv" or "app-provider" to dial a different
+	// participant.
+	Endpoint string
+	Token    string
+	Role     string
+	Insecure bool
 }
 
 // BalanceRow is one row of the balance response — instrument + party
@@ -79,6 +99,12 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	if err := requireFields("mint", opts.Instance, opts.Instrument, opts.To, opts.Amount); err != nil {
 		return err
 	}
+	if err := validatePartyID("--to", opts.To); err != nil {
+		return err
+	}
+	if err := validateAmount("mint", opts.Amount); err != nil {
+		return err
+	}
 	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
 	if err != nil {
 		return err
@@ -91,6 +117,15 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 
 func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error {
 	if err := requireFields("transfer", opts.Instance, opts.Instrument, opts.From, opts.To, opts.Amount); err != nil {
+		return err
+	}
+	if err := validatePartyID("--from", opts.From); err != nil {
+		return err
+	}
+	if err := validatePartyID("--to", opts.To); err != nil {
+		return err
+	}
+	if err := validateAmount("transfer", opts.Amount); err != nil {
 		return err
 	}
 	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
@@ -118,6 +153,12 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 	if err := requireFields("burn", opts.Instance, opts.Instrument, opts.From, opts.Amount); err != nil {
 		return err
 	}
+	if err := validatePartyID("--from", opts.From); err != nil {
+		return err
+	}
+	if err := validateAmount("burn", opts.Amount); err != nil {
+		return err
+	}
 	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
 	if err != nil {
 		return err
@@ -132,13 +173,28 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 // returns the recorded TokenRefs from registry.State.Tokens as
 // pseudo-balances (Amount = InitialSupply when --party matches the
 // issuer; otherwise zero). Callers that want the live ACS-derived
-// balance need a running V2 LocalNet + the future ledger ACS query
-// — that's the BIT-139 follow-up. Returning *something* here makes
-// the Web UI's holdings table render right away on whatever instance
-// the user is browsing, and gives a deterministic surface for tests.
+// balance need a running V2 LocalNet + the future ledger ACS query —
+// that's the BIT-139 follow-up.
+//
+// When that follow-up lands, the ACS query uses HoldingInterfaceV2
+// (see v2_surface.go for the qualified interface id and why V2 rather
+// than V1) and sums the HoldingViewV2.amount for every contract whose
+// view.account.owner matches --party. The synthetic issuer-only case
+// goes away.
+//
+// Returning *something* here makes the Web UI's holdings table render
+// right away on whatever instance the user is browsing, and gives a
+// deterministic surface for tests.
 func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]BalanceRow, error) {
 	if opts.Instance == "" {
 		return nil, errors.New("instance is required")
+	}
+	// Live-ACS path takes precedence when the caller has dialed a
+	// participant. Symbol/admin pairs are joined back to the local
+	// state.Tokens registry so the rendered rows can still carry
+	// the friendly symbol when one exists.
+	if opts.Endpoint != "" {
+		return runBalanceLive(ctx, opts)
 	}
 	state, err := registry.Read(opts.Instance)
 	if err != nil {
@@ -165,6 +221,169 @@ func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]Bala
 		})
 	}
 	return rows, nil
+}
+
+// runBalanceLive is the V2-native ACS path: stream every contract
+// that implements HoldingInterfaceV2 from the participant at
+// Endpoint, parse the V2 Holding view, and sum amounts per (party,
+// instrument).
+//
+// Symbols come from the local registry — when a streamed instrument
+// matches a recorded TokenRef.InstrumentID we surface its symbol;
+// otherwise the row just carries the raw `(admin, id)` pair so an
+// unknown-instrument holding still renders.
+//
+// Numeric amounts are summed as decimal strings via summary
+// concatenation? No — we add them. The participant emits each holding
+// as a Daml Decimal (textual, up to 10 fractional digits in V1, 38 in
+// V2). Adding them in Go without losing precision means using a big-
+// decimal-style approach: split on '.', align scale, add as big.Ints.
+// The helper addDecimal does that.
+func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, error) {
+	state, err := registry.Read(opts.Instance)
+	if err != nil {
+		return nil, fmt.Errorf("read instance state: %w", err)
+	}
+	// Resolve the optional --instrument filter once into the form we
+	// match against streamed views. The user can pass a symbol or a
+	// raw InstrumentID; both turn into the same (admin, id) pair we
+	// compare HoldingViewV2 against.
+	var wantAdmin, wantID string
+	if opts.Instrument != "" {
+		if ref, ok := state.Tokens[opts.Instrument]; ok {
+			wantAdmin, wantID = ref.IssuerParty, ref.InstrumentID
+		} else {
+			wantID = opts.Instrument
+		}
+	}
+
+	conn := LedgerConn{
+		Endpoint: opts.Endpoint,
+		Token:    opts.Token,
+		Insecure: opts.Insecure,
+		Instance: opts.Instance,
+		Role:     opts.Role,
+	}
+	client, cleanup, err := dialLedger(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+
+	end, err := client.LedgerEnd(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("ledger end: %w", err)
+	}
+
+	var parties []string
+	if opts.Party != "" {
+		parties = []string{opts.Party}
+	}
+	req := ledger.ActiveContractsRequest{
+		ActiveAtOffset: end.Offset,
+		EventFormat:    holdingInterfaceFilterV2(parties),
+	}
+	stream, err := client.ActiveContracts(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("ACS query: %w", err)
+	}
+
+	type bucketKey struct{ admin, id, party string }
+	bucket := map[bucketKey]string{}
+
+	for item := range stream {
+		if item.Err != nil {
+			return nil, fmt.Errorf("ACS stream: %w", item.Err)
+		}
+		// ContractEntry is a oneof — only the ActiveContract branch
+		// carries the CreatedEvent we need. IncompleteAssigned /
+		// IncompleteUnassigned events are mid-reassignment and don't
+		// affect the V2 wallet balance.
+		entry, ok := item.Value.ContractEntry.(*lapiv2.GetActiveContractsResponse_ActiveContract)
+		if !ok || entry.ActiveContract == nil {
+			continue
+		}
+		// CreatedEvent carries the parsed interface views.
+		for _, iv := range entry.ActiveContract.GetCreatedEvent().GetInterfaceViews() {
+			hv, ok := extractHoldingViewV2(iv)
+			if !ok || hv.Owner == "" {
+				continue
+			}
+			if wantID != "" && hv.InstrumentID != wantID {
+				continue
+			}
+			if wantAdmin != "" && hv.Admin != wantAdmin {
+				continue
+			}
+			k := bucketKey{admin: hv.Admin, id: hv.InstrumentID, party: hv.Owner}
+			sum, err := addDecimal(bucket[k], hv.Amount)
+			if err != nil {
+				return nil, fmt.Errorf("sum holding amounts: %w", err)
+			}
+			bucket[k] = sum
+		}
+	}
+
+	// Join back to local symbol table for friendly rendering.
+	symByID := make(map[string]string, len(state.Tokens))
+	for _, t := range state.Tokens {
+		symByID[t.IssuerParty+"\x00"+t.InstrumentID] = t.Symbol
+	}
+	rows := make([]BalanceRow, 0, len(bucket))
+	for k, amount := range bucket {
+		rows = append(rows, BalanceRow{
+			InstrumentSymbol: symByID[k.admin+"\x00"+k.id],
+			InstrumentID:     k.id,
+			Party:            k.party,
+			Amount:           amount,
+		})
+	}
+	return rows, nil
+}
+
+// addDecimal returns a + b for two Daml Decimal strings (e.g. "1.5",
+// "1000000"). Empty a is treated as "0". Aligns fractional widths so
+// "1.0" + "1" → "2.0" without losing scale. Uses big.Int over an
+// aligned representation so we don't depend on a big-decimal library.
+func addDecimal(a, b string) (string, error) {
+	if a == "" {
+		a = "0"
+	}
+	if b == "" {
+		b = "0"
+	}
+	intA, fracA := splitDecimal(a)
+	intB, fracB := splitDecimal(b)
+	// Pad fractional parts to the same length.
+	if len(fracA) < len(fracB) {
+		fracA = fracA + strings.Repeat("0", len(fracB)-len(fracA))
+	} else if len(fracB) < len(fracA) {
+		fracB = fracB + strings.Repeat("0", len(fracA)-len(fracB))
+	}
+	scale := len(fracA)
+	aBig := new(big.Int)
+	if _, ok := aBig.SetString(intA+fracA, 10); !ok {
+		return "", fmt.Errorf("invalid decimal %q", a)
+	}
+	bBig := new(big.Int)
+	if _, ok := bBig.SetString(intB+fracB, 10); !ok {
+		return "", fmt.Errorf("invalid decimal %q", b)
+	}
+	sum := new(big.Int).Add(aBig, bBig).String()
+	if scale == 0 {
+		return sum, nil
+	}
+	if len(sum) <= scale {
+		sum = strings.Repeat("0", scale+1-len(sum)) + sum
+	}
+	return sum[:len(sum)-scale] + "." + sum[len(sum)-scale:], nil
+}
+
+func splitDecimal(s string) (intPart, fracPart string) {
+	if i := strings.IndexByte(s, '.'); i >= 0 {
+		return s[:i], s[i+1:]
+	}
+	return s, ""
 }
 
 // resolveInstrument turns the user's --instrument string into a full
@@ -205,6 +424,39 @@ func requireFields(verb string, fields ...string) error {
 	}
 	return nil
 }
+
+// validateAmount rejects an --amount that isn't a positive Daml decimal
+// BEFORE the action stubs out. Without it, "abc" or "1.2e5" fell through
+// to ErrNeedsV2LocalNet, mislabelling a plain input error as "this needs
+// a V2 LocalNet". looksLikeDecimal pins the same digits-and-one-dot
+// grammar the create wizard enforces.
+func validateAmount(verb, amount string) error {
+	if !looksLikeDecimal(amount) {
+		return fmt.Errorf(
+			"%s: --amount %q is not a valid decimal (digits and at most one '.', no sign or exponent)",
+			verb, amount)
+	}
+	if isZeroDecimal(amount) {
+		return fmt.Errorf("%s: --amount must be greater than zero", verb)
+	}
+	return nil
+}
+
+// isZeroDecimal reports whether a looksLikeDecimal-valid string is zero
+// (only 0s and an optional dot). Cheap and allocation-free.
+func isZeroDecimal(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= '1' && s[i] <= '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// validatePartyID + partyIDPattern live in token.go (added by the
+// create-wizard PR #82, which merged to main first). The mint/transfer/
+// burn actions in this file reuse it; the duplicate copy that used to
+// live here was removed on merge to avoid a redeclaration.
 
 // emit writes a human-readable "going to run X with Y" line on the
 // caller's writer before the action returns ErrNeedsV2LocalNet, so

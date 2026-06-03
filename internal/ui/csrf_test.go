@@ -175,7 +175,7 @@ func TestSPA_DoesNotMaskAPITypos(t *testing.T) {
 	}
 	// Similarly for /events/typo.
 	resp2, _ := http.Get("http://" + addr + "/events/whatever")
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp2.Body.Close() }()
 	if resp2.StatusCode != http.StatusNotFound {
 		t.Errorf("/events/typo status = %d, want 404", resp2.StatusCode)
 	}
