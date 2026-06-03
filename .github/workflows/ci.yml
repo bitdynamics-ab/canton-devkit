@@ -7,6 +7,9 @@ on:
       - "go.mod"
       - "go.sum"
       - ".github/workflows/ci.yml"
+      - "docs/design/mockups/**.jsx"
+      - "frontend/**"
+      - "Makefile"
   push:
     branches:
       - main
@@ -15,19 +18,17 @@ on:
       - "go.mod"
       - "go.sum"
       - ".github/workflows/ci.yml"
+      - "docs/design/mockups/**.jsx"
+      - "frontend/**"
+      - "Makefile"
 
 permissions:
   contents: read
 
 jobs:
   test:
-    name: Build and test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+    name: Build and test
+    runs-on: [self-hosted, Linux]
 
     steps:
       - name: Check out repository
@@ -47,9 +48,41 @@ jobs:
       - name: Test
         run: go test ./...
 
+  mockup-syntax:
+    # PR #31 #10 review pin: docs/design/mockups/*.jsx are
+    # acceptance specs. CI doesn't render them, but esbuild parses
+    # each file so a hand-edit that breaks the design-canvas viewer
+    # fails here rather than in a reviewer's browser.
+    #
+    # Originally used `node --check`, but plain Node can't parse JSX
+    # (the May 25 mockup refresh introduced real JSX expressions that
+    # tripped the syntax check). esbuild's `--loader=jsx` is the
+    # cheapest JSX-aware parser; no node_modules install needed.
+    name: Mockup JSX syntax
+    runs-on: [self-hosted, Linux]
+    steps:
+      - name: Check out repository
+        # actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Set up Node
+        # actions/setup-node@v4
+        # Self-hosted runner has no Node by default; previous
+        # `node --check` step also failed silently here. Pin to the
+        # frontend's .nvmrc so all JS-touching jobs share one Node.
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version-file: frontend/.nvmrc
+      - name: esbuild --loader=jsx on every mockup .jsx
+        run: |
+          set -euo pipefail
+          for f in docs/design/mockups/*.jsx; do
+            npx --yes esbuild --loader:.jsx=jsx --log-level=warning "$f" > /dev/null \
+              || { echo "::error file=$f::JSX syntax error"; exit 1; }
+          done
+
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
 
     steps:
       - name: Check out repository
@@ -68,3 +101,35 @@ jobs:
         uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20
         with:
           version: v2.12.2
+
+  frontend:
+    # Frontend lint + typecheck + Vitest suite. Gated on
+    # frontend/** + Makefile path filters above, so a Go-only
+    # change doesn't pay the npm-install cost.
+    #
+    # Deliberately does NOT run `npm run build` — the production
+    # bundle goes through `make frontend` at release time
+    # (release.yml), which also runs `go build` and proves
+    # //go:embed picks it up. This job is the per-PR fast loop:
+    # tsc + vitest, ~30s on a warm runner.
+    name: Frontend test
+    runs-on: [self-hosted, Linux]
+
+    steps:
+      - name: Check out repository
+        # actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Set up Node
+        # actions/setup-node@v4
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Typecheck
+        run: cd frontend && npm ci --silent && npm run typecheck
+
+      - name: Test
+        run: cd frontend && npm test

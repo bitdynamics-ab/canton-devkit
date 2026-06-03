@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Canton DevKit — CLI & Web UI · print</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: dark; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; background: #07090D; color: #E6E9EE; font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+
+  .page {
+    width: 100vw; height: 100vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #07090D;
+    page-break-after: always; break-after: page;
+    position: relative;
+    box-sizing: border-box;
+    padding: 28px 40px;
+    overflow: hidden;
+  }
+  .page:last-child { page-break-after: auto; break-after: auto; }
+
+  .page-header {
+    position: absolute; top: 16px; left: 28px; right: 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    color: #6B7380; font-size: 11px; font-family: 'JetBrains Mono', ui-monospace, monospace;
+    letter-spacing: 0.4px;
+  }
+  .page-header .brand { color: #5BD7C5; font-weight: 600; }
+  .page-header .section { color: #B5BCC7; }
+
+  .page-footer {
+    position: absolute; bottom: 14px; left: 28px; right: 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    color: #3B434F; font-size: 10px; font-family: 'JetBrains Mono', ui-monospace, monospace;
+    letter-spacing: 0.4px;
+  }
+
+  .artboard-wrap {
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 100%;
+  }
+  .artboard {
+    transform-origin: center center;
+    box-shadow: 0 30px 60px -28px rgba(0,0,0,.7);
+    border-radius: 12px; overflow: hidden;
+  }
+
+  /* Cover page */
+  .cover {
+    background: radial-gradient(ellipse at top right, rgba(91,215,197,0.12), transparent 60%), #07090D;
+    align-items: flex-start; justify-content: flex-end;
+    padding: 64px 80px;
+  }
+  .cover h1 { font-size: 76px; font-weight: 600; letter-spacing: -2px; margin: 0 0 14px; color: #E6E9EE; }
+  .cover h1 .accent { color: #5BD7C5; }
+  .cover .lede { font-size: 22px; color: #B5BCC7; max-width: 740px; line-height: 1.5; margin: 0 0 28px; }
+  .cover .meta { display: flex; gap: 18px; color: #7C8593; font-family: 'JetBrains Mono', monospace; font-size: 13px; letter-spacing: 0.4px; }
+  .cover .meta b { color: #5BD7C5; font-weight: 600; }
+  .cover .logo {
+    position: absolute; top: 56px; left: 80px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .cover .logo svg { width: 36px; height: 36px; }
+  .cover .logo .name { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+  .cover .logo .sub { color: #6B7380; font-size: 12px; font-family: 'JetBrains Mono', monospace; margin-top: -2px; }
+
+  /* Section divider */
+  .divider { align-items: flex-start; justify-content: center; padding-left: 80px; padding-right: 80px; }
+  .divider .num { color: #5BD7C5; font-family: 'JetBrains Mono', monospace; font-size: 14px; letter-spacing: 2px; margin-bottom: 18px; }
+  .divider h2 { font-size: 64px; font-weight: 600; letter-spacing: -1.5px; margin: 0 0 14px; color: #E6E9EE; max-width: 1000px; }
+  .divider .desc { font-size: 18px; color: #7C8593; max-width: 760px; line-height: 1.55; }
+
+  @page { size: 1600px 1000px; margin: 0; }
+
+  @media print {
+    html, body { background: #07090D; }
+    .page { page-break-after: always; }
+  }
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="terminal.jsx"></script>
+<script type="text/babel" src="webui-shell.jsx"></script>
+<script type="text/babel" src="screens-lifecycle.jsx"></script>
+<script type="text/babel" src="screens-dar.jsx"></script>
+<script type="text/babel" src="screens-contracts.jsx"></script>
+<script type="text/babel" src="screens-tokens-help.jsx"></script>
+<script type="text/babel" src="webui-dashboard.jsx"></script>
+<script type="text/babel" src="webui-dar.jsx"></script>
+<script type="text/babel" src="webui-explorer.jsx"></script>
+<script type="text/babel" src="webui-metrics-agent.jsx"></script>
+<script type="text/babel" src="webui-extras.jsx"></script>
+<script type="text/babel" src="browser-window.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+// Page = 1600x1000.  Available content area ~ 1540 x 920.
+// Each artboard is fit-scaled to that area.
+const PAGE_W = 1600, PAGE_H = 1000;
+const CONTENT_W = 1500, CONTENT_H = 880;
+
+function Artboard({ w, h, children }) {
+  // Fit-contain the artboard inside content area.
+  const scale = Math.min(CONTENT_W / w, CONTENT_H / h, 1);
+  return (
+    <div className="artboard-wrap">
+      <div className="artboard" style={{
+        width: w, height: h,
+        transform: `scale(${scale})`,
+        transformOrigin: 'center center',
+        flex: '0 0 auto',
+      }}>{children}</div>
+    </div>
+  );
+}
+
+function WebFrame({ children, label, url }) {
+  return (
+    <ChromeWindow width={1440} height={900} url={url}
+      tabs={[{ title: label, active: true }]} activeIndex={0}>
+      <div style={{ width: 1440, height: 836, background:'#0B0E13' }}>{children}</div>
+    </ChromeWindow>
+  );
+}
+
+function Page({ section, page, total, children }) {
+  return (
+    <div className="page">
+      <div className="page-header">
+        <span><span className="brand">▣ BitDynamics</span> <span style={{color:'#3B434F'}}>/</span> <span className="section">{section}</span></span>
+        <span>canton-devkit v0.7.2</span>
+      </div>
+      {children}
+      <div className="page-footer">
+        <span>splice 0.4.12 · CIP-0112</span>
+        <span>{page.toString().padStart(2,'0')} / {total.toString().padStart(2,'0')}</span>
+      </div>
+    </div>
+  );
+}
+
+const PAGES = [
+  // (section, label, render, w, h)
+  // Web UI
+  ['Web UI',       'Overview · LocalNet Dashboard',     () => <WebFrame label="Overview · hubble" url="devkit.local/hubble/overview"><DashboardScreen/></WebFrame>, 1440, 900],
+  ['Web UI',       'Explorer · ACS + Transactions',     () => <WebFrame label="Explorer · hubble" url="devkit.local/hubble/explorer"><ExplorerScreen/></WebFrame>, 1440, 900],
+  ['Web UI',       'DAR Manager · upload, vet, diff',   () => <WebFrame label="DAR Manager · hubble" url="devkit.local/hubble/dar"><DarManagerScreen/></WebFrame>, 1440, 900],
+  ['Web UI',       'Tokens · CIP-0112 faucet + cards',  () => <WebFrame label="Tokens · hubble" url="devkit.local/hubble/tokens"><TokensScreen/></WebFrame>, 1440, 900],
+  ['Web UI',       'Metrics · Canton Grafana preset',   () => <WebFrame label="Metrics · hubble" url="devkit.local/hubble/metrics"><MetricsScreen/></WebFrame>, 1440, 900],
+  ['Web UI',       'Agent Skill · Claude / Codex',      () => <WebFrame label="Agent Skill" url="devkit.local/hubble/agent"><AgentScreen/></WebFrame>, 1440, 900],
+  ['Web UI',       'Command palette · ⌘K overlay',      () => <WebFrame label="⌘K palette" url="devkit.local/hubble/overview"><CommandPaletteScreen/></WebFrame>, 1440, 900],
+  ['Web UI',       'Multi-instance switcher',           () => <WebFrame label="Switch LocalNet" url="devkit.local/instances"><InstanceSwitcherScreen/></WebFrame>, 1440, 900],
+  // CLI · lifecycle
+  ['CLI · Lifecycle', 'Help · root',                    () => <ScreenHelp/>,   760, 620],
+  ['CLI · Lifecycle', 'up · preflight + ready',          () => <ScreenUp/>,     780, 620],
+  ['CLI · Lifecycle', 'status · dashboard',              () => <ScreenStatus/>, 780, 620],
+  ['CLI · Lifecycle', 'doctor · host check',             () => <ScreenDoctor/>, 780, 540],
+  ['CLI · Lifecycle', 'logs · live tail',                () => <ScreenLogs/>,   840, 460],
+  ['CLI · Lifecycle', 'env · .env export',               () => <ScreenEnv/>,    780, 380],
+  ['CLI · Lifecycle', 'list · instances',                () => <ScreenList/>,   840, 300],
+  ['CLI · Lifecycle', 'down · graceful stop',            () => <ScreenDown/>,   780, 300],
+  ['CLI · Lifecycle', 'error · helpful failure',         () => <ScreenError/>,  780, 400],
+  // CLI · DAR
+  ['CLI · DAR Management', 'dar upload',                 () => <ScreenDarUpload/>, 840, 440],
+  ['CLI · DAR Management', 'dar list',                   () => <ScreenDarList/>,   920, 460],
+  ['CLI · DAR Management', 'dar info',                   () => <ScreenDarInfo/>,   840, 560],
+  ['CLI · DAR Management', 'dar diff · SCU-aware',       () => <ScreenDarDiff/>,   840, 540],
+  ['CLI · DAR Management', 'dar watch · hot redeploy',   () => <ScreenDarWatch/>,  840, 400],
+  // CLI · Contracts/Tx
+  ['CLI · Contracts & Tx', 'contracts watch · live',     () => <ScreenContractsWatch/>, 1000, 500],
+  ['CLI · Contracts & Tx', 'tx ls · multi-filter',       () => <ScreenTxList/>,         1000, 500],
+  ['CLI · Contracts & Tx', 'tx replay · projection',     () => <ScreenTxReplay/>,        920, 580],
+  // CLI · Obs
+  ['CLI · Observability', 'metrics · summary',           () => <ScreenMetrics/>, 840, 500],
+  // CLI · Token
+  ['CLI · Tokens', 'token create · CIP-0112 wizard',     () => <ScreenTokenCreate/>, 780, 620],
+  ['CLI · Tokens', 'mint · transfer · balance',          () => <ScreenTokenActions/>, 840, 500],
+];
+
+function App() {
+  const total = PAGES.length;
+  return (
+    <>
+      {/* Cover */}
+      <div className="page cover">
+        <div className="logo">
+          <svg viewBox="0 0 64 64" fill="none" style={{width:42, height:42}}>
+            <rect x="10" y="10" width="44" height="44" fill="none" stroke="#5C6573" strokeWidth="3" />
+            <rect x="22" y="22" width="20" height="20" fill="#CCFB6A" />
+            <line x1="32" y1="0"  x2="32" y2="8"  stroke="#CCFB6A"  strokeWidth="4" />
+            <line x1="32" y1="56" x2="32" y2="64" stroke="#5C6573" strokeWidth="3" />
+          </svg>
+          <div>
+            <div className="name">BitDynamics · Canton DevKit</div>
+            <div className="sub">canton-devkit · v0.7.2 · M2 design</div>
+          </div>
+        </div>
+        <h1>Canton <span className="accent">DevKit</span><br/>CLI &amp; Web UI</h1>
+        <p className="lede">A native DPM component and standalone CLI for LocalNet operations, debugging, observability, and CIP-0112 token testing — paired with a keyboard-first Web UI for app developers on the Canton Network.</p>
+        <div className="meta">
+          <span>by <b>BitDynamics</b></span>
+          <span>·</span>
+          <span>{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}</span>
+          <span>·</span>
+          <span>{total} screens · CLI + Web UI</span>
+        </div>
+      </div>
+
+      {/* Section dividers + pages */}
+      {(() => {
+        const out = [];
+        let lastSection = null;
+        let n = 0;
+        const sectionNums = {};
+        PAGES.forEach(([section]) => { if (!(section in sectionNums)) sectionNums[section] = Object.keys(sectionNums).length + 1; });
+        PAGES.forEach(([section, label, render, w, h], i) => {
+          if (section !== lastSection) {
+            const num = String(sectionNums[section]).padStart(2,'0');
+            const count = PAGES.filter(p => p[0] === section).length;
+            const desc = {
+              'Web UI': 'A keyboard-first companion to the CLI: live ledger state, drag-drop DAR vetting, Canton-specific Grafana, ⌘K palette, and a faucet that mirrors every CLI action.',
+              'CLI · Lifecycle': 'Every LocalNet operation as a single command. Deterministic exit codes, JSON output, friendly errors with remediation paths.',
+              'CLI · DAR Management': 'Upload, inspect, diff, and hot-deploy DARs across multiple participants. SCU-aware compatibility signals.',
+              'CLI · Contracts & Tx': 'Capabilities daml-shell does not offer — live ACS streaming, multi-dimensional transaction queries, per-party visibility projection.',
+              'CLI · Observability': 'Throughput, latency, and contract counts in a single terminal summary, with deep-links into the Grafana preset.',
+              'CLI · Tokens': 'An interactive wizard for CIP-0112 token standard testing, plus mint/transfer/burn/balance convenience commands.',
+            }[section] || '';
+            out.push(
+              <div key={'div-'+section} className="page divider">
+                <div className="page-header">
+                  <span><span className="brand">▣ BitDynamics</span> <span style={{color:'#3B434F'}}>/</span> <span className="section">Section {num}</span></span>
+                  <span>canton-devkit v0.7.2</span>
+                </div>
+                <div style={{marginTop: 'auto', marginBottom: 'auto'}}>
+                  <div className="num">SECTION · {num} / {String(Object.keys(sectionNums).length).padStart(2,'0')}  ·  {count} {count === 1 ? 'screen' : 'screens'}</div>
+                  <h2>{section}</h2>
+                  <p className="desc">{desc}</p>
+                </div>
+                <div className="page-footer">
+                  <span>splice 0.4.12 · CIP-0112</span>
+                  <span>·</span>
+                </div>
+              </div>
+            );
+            lastSection = section;
+          }
+          n++;
+          out.push(
+            <Page key={i} section={section + ' · ' + label} page={n} total={total}>
+              <Artboard w={w} h={h}>{render()}</Artboard>
+            </Page>
+          );
+        });
+        return out;
+      })()}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+// auto-print once everything's painted
+(async function autoPrint() {
+  try { await document.fonts.ready; } catch (e) {}
+  await new Promise(r => setTimeout(r, 1200));
+  window.print();
+})();
+</script>
+</body>
+</html>

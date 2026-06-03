@@ -1,0 +1,268 @@
+# Installation & Getting Started
+
+Canton DevKit is a single Go binary that orchestrates the Splice
+LocalNet Docker stack. It ships two ways:
+
+1. **DPM component** (primary) — install through the Daml Package
+   Manager and invoke as `dpm localnet …`.
+2. **Standalone binary** (`canton-devkit`) — a self-contained
+   executable for users who don't run DPM (CI, DevOps, workshop
+   facilitators). Invoke as `canton-devkit localnet …`.
+
+Both paths ship the **same binary** and expose the **same command
+tree**. Throughout the docs, `dpm localnet <cmd>` and
+`canton-devkit localnet <cmd>` are interchangeable.
+
+> **The only system prerequisite is a working Docker runtime.** DevKit
+> never installs Docker, never edits the Docker daemon config, and
+> never changes host permissions. It orchestrates the existing Splice
+> LocalNet container stack.
+
+---
+
+## 1. Prerequisites
+
+| Requirement | Why | Check |
+|---|---|---|
+| Docker Engine / Desktop | DevKit runs LocalNet as containers | `docker version` |
+| Docker Compose **v2** | LocalNet is a compose project | `docker compose version` |
+| ~8 GB free RAM for Docker | Splice stack is memory-hungry | Docker Desktop → Settings → Resources |
+| ~20 GB free disk | Splice images + volumes | `df -h` |
+
+Run the built-in host check at any time — it never modifies anything:
+
+```bash
+dpm localnet doctor          # or: canton-devkit localnet doctor
+```
+
+`doctor` exits `0` when the host is ready (warnings allowed) and `2`
+when a check fails, printing copy-pasteable remediation. It's the same
+preflight `localnet up` runs, so a green `doctor` means `up` will pass
+preflight.
+
+---
+
+## 2. Install — DPM component (primary)
+
+DevKit is published as a native DPM component to an OCI registry. Add
+it to your project's `daml.yaml` (or `multi-package.yaml`) `components`
+list and install:
+
+```yaml
+# daml.yaml
+sdk-version: <your-sdk-version>
+name: my-app
+version: 0.1.0
+source: .
+dependencies: []
+components:
+  - oci://ghcr.io/bitdynamics-ab/canton-devkit:<version>
+```
+
+```bash
+dpm install package
+dpm localnet --help          # confirms the component loaded
+```
+
+DPM registers a single top-level `localnet` command; every DevKit
+subcommand (`up`, `down`, `status`, `dar …`, `contracts …`, `token …`,
+`metrics`, `doctor`, …) lives under it. This keeps the DPM surface
+minimal and conflict-free.
+
+---
+
+## 3. Install — standalone binary
+
+Download the binary for your platform from the
+[Releases page](https://github.com/bitdynamics-ab/canton-devkit/releases),
+verify its checksum, mark it executable, and put it on your `PATH`.
+
+Release assets are named `canton-devkit_<os>_<arch>` (with `.exe` on
+Windows). GitHub exposes each asset checksum through the release API as
+an asset `digest` field. The macOS and Linux examples use `jq` to read
+that value from the API response.
+
+### macOS (Apple Silicon)
+
+```bash
+VERSION=v0.2.0   # replace with the latest release tag
+ASSET=canton-devkit_darwin_arm64
+curl -fL -o canton-devkit \
+  "https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}/${ASSET}"
+# verify (optional but recommended)
+EXPECTED_SHA256="$(
+  curl -fsSL "https://api.github.com/repos/bitdynamics-ab/canton-devkit/releases/tags/${VERSION}" |
+    jq -r --arg asset "$ASSET" '.assets[] | select(.name == $asset) | .digest | sub("^sha256:"; "")'
+)"
+ACTUAL_SHA256="$(shasum -a 256 canton-devkit | cut -d ' ' -f 1)"
+test "$ACTUAL_SHA256" = "$EXPECTED_SHA256" || {
+  printf "checksum mismatch\nexpected: %s\nactual:   %s\n" "$EXPECTED_SHA256" "$ACTUAL_SHA256"
+  exit 1
+}
+chmod +x canton-devkit
+sudo mv canton-devkit /usr/local/bin/
+# Gatekeeper: first run may need this once
+xattr -d com.apple.quarantine /usr/local/bin/canton-devkit 2>/dev/null || true
+canton-devkit version
+```
+
+### Linux (amd64)
+
+```bash
+VERSION=v0.2.0
+ASSET=canton-devkit_linux_amd64
+curl -fL -o canton-devkit \
+  "https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}/${ASSET}"
+EXPECTED_SHA256="$(
+  curl -fsSL "https://api.github.com/repos/bitdynamics-ab/canton-devkit/releases/tags/${VERSION}" |
+    jq -r --arg asset "$ASSET" '.assets[] | select(.name == $asset) | .digest | sub("^sha256:"; "")'
+)"
+printf "%s  canton-devkit\n" "$EXPECTED_SHA256" | sha256sum -c -
+chmod +x canton-devkit
+sudo mv canton-devkit /usr/local/bin/
+canton-devkit version
+```
+
+### Windows (amd64, PowerShell)
+
+```powershell
+$Version = "v0.2.0"
+$Asset = "canton-devkit_windows_amd64.exe"
+$base = "https://github.com/bitdynamics-ab/canton-devkit/releases/download/$Version"
+Invoke-WebRequest -Uri "$base/$Asset" -OutFile canton-devkit.exe
+# verify
+$release = Invoke-RestMethod -Uri "https://api.github.com/repos/bitdynamics-ab/canton-devkit/releases/tags/$Version"
+$expected = ($release.assets | Where-Object { $_.name -eq $Asset }).digest -replace "^sha256:", ""
+$actual = (Get-FileHash canton-devkit.exe -Algorithm SHA256).Hash.ToLower()
+if ($expected -ne $actual) { throw "checksum mismatch" }
+# put it somewhere on PATH, e.g. a tools dir you've added to PATH
+Move-Item canton-devkit.exe "$env:USERPROFILE\bin\canton-devkit.exe"
+canton-devkit version
+```
+
+### Homebrew (when published)
+
+```bash
+brew install bitdynamics-ab/tap/canton-devkit
+```
+
+> Homebrew availability is tracked separately; until the tap is
+> published, use the standalone download above.
+
+### From source (Go toolchain)
+
+```bash
+go install github.com/bitdynamics-ab/canton-devkit/cmd/canton-devkit@latest
+```
+
+---
+
+## 4. Zero to running LocalNet
+
+```bash
+# 1. Check the host (no changes made)
+canton-devkit localnet doctor
+
+# 2. Start a named LocalNet (downloads Splice on first run; waits for readiness)
+canton-devkit localnet up --name demo
+
+# 3. Inspect it — endpoints, health, credentials
+canton-devkit localnet status --name demo
+
+# 4. Export endpoints for your app/tests
+eval "$(canton-devkit localnet env --name demo)"
+
+# 5. Upload a DAR
+canton-devkit localnet dar upload ./my-app.dar --name demo
+
+# 6. Watch live contracts. The participant gRPC endpoint isn't
+#    host-published by default, so pass --endpoint host:port
+#    (auto-discovery from --name is a pending follow-up). Find the
+#    port under "participant_ledger_app-user" in `status` output.
+canton-devkit localnet contracts watch --name demo --endpoint localhost:<ledger-port>
+
+# 7. Tear it down
+canton-devkit localnet down --name demo
+```
+
+Replace `canton-devkit` with `dpm` if you installed via the DPM
+component. `up` waits for the stack to become healthy (Splice
+onboarding can take several minutes on a cold start) and prints the
+service endpoints and credential locations when ready.
+
+### Running two LocalNets at once
+
+```bash
+canton-devkit localnet up --name alpha
+canton-devkit localnet up --name beta
+canton-devkit localnet list           # both instances + their state
+```
+
+Each named instance gets its own deterministic compose project,
+network, and host ports, so they don't collide.
+
+---
+
+## 5. Compatibility matrix
+
+### Platforms (released, tested)
+
+| OS | Arch | Status |
+|---|---|---|
+| macOS | arm64 (Apple Silicon) | ✅ Supported |
+| Linux | amd64 | ✅ Supported |
+| Windows | amd64 | ✅ Supported |
+
+Other OS/arch combinations may work (DevKit only orchestrates Docker)
+but are untested — `localnet doctor` prints a warning on unsupported
+platforms.
+
+### Splice LocalNet versions
+
+DevKit pins a **curated** set of Splice versions in
+[`internal/splice/versions.json`](../internal/splice/versions.json);
+`localnet up --version <tag>` selects one. List them at runtime:
+
+```bash
+canton-devkit localnet versions
+```
+
+See [docs/versions.md](./versions.md) for how the catalogue is fetched
+and verified. Uncurated upstream tags can be used at your own risk via
+`up --version <tag> --allow-uncurated`.
+
+---
+
+## 6. Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `doctor` says **Docker daemon** ✗ | Docker not running | Start Docker Desktop / `sudo systemctl start docker` |
+| `doctor` says **Compose v2** ✗ | Only Compose v1 present | Upgrade to Docker Compose v2 (`docker compose`, not `docker-compose`) |
+| `up` fails **PORTS_IN_USE** | Another process holds a port | Stop the conflicting process, or use a different `--name` |
+| `up` hangs at "waiting for healthy" | Insufficient Docker memory | Raise Docker memory to ≥ 8 GB; see [docs/limitations.md](./limitations.md) |
+| Linux: `permission denied` on the Docker socket | User not in `docker` group | `sudo usermod -aG docker $USER` then re-login |
+| macOS: "cannot be opened because the developer cannot be verified" | Gatekeeper quarantine | `xattr -d com.apple.quarantine $(which canton-devkit)` |
+| Web UI / Explorer shows stale ports after a restart | Docker re-assigned ephemeral ports | DevKit re-captures them within ~15 s; or run `localnet restart --name <n>` |
+
+For anything else, attach the full `localnet doctor` output to a
+[GitHub issue](https://github.com/bitdynamics-ab/canton-devkit/issues) —
+it includes OS/arch, Docker/Compose versions, and the check results.
+
+---
+
+## 7. Uninstall / clean up
+
+```bash
+# stop + remove a single instance's containers, volumes, and state
+canton-devkit localnet clean --name demo
+
+# remove every DevKit-managed instance
+canton-devkit localnet clean --all
+
+# remove the standalone binary
+sudo rm /usr/local/bin/canton-devkit
+```
+
+`clean` refuses to touch a running instance unless you pass `--force`
+(which tears it down first). Use `--dry-run` to preview.

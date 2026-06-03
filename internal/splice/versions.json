@@ -1,0 +1,45 @@
+{
+  "$schema": "Splice version catalogue. See versions.go for field semantics.",
+  "_comment": "Maintainer flow: scripts/add-splice-version.sh <tag> resolves the tag → commit, downloads the archive, computes ContentSHA, and appends an entry here. Reviewer checks the diff before merging.",
+  "latest_alias": "0.6.4",
+  "versions": [
+    {
+      "tag": "0.5.18",
+      "commit": "b162650cd18df5b96dddeffd9bd48be5b2ff37d7",
+      "content_sha": "1a9d0b329cd7c9f76c04085674b9e8dc98169064b0404d007d7e2b22cb582150",
+      "size": 124198413,
+      "major": "0.5",
+      "min_memory_bytes": 4294967296,
+      "recommended_memory_bytes": 6442450944
+    },
+    {
+      "tag": "0.6.3",
+      "commit": "6d50c039641736b6df5358af2b1fc6c123f28e18",
+      "content_sha": "4d8e7f4eb73309574d3a023f9c13c7e00095ccb0741e06ac9eaf20fe12d45c17",
+      "size": 137565949,
+      "major": "0.6",
+      "min_memory_bytes": 8589934592,
+      "recommended_memory_bytes": 12884901888
+    },
+    {
+      "tag": "0.6.4",
+      "commit": "578b7822d62947763a48334d556aefebc7ffacec",
+      "content_sha": "db1e1336dc4e33abe7011a0df29e5becd141d11c84cdf42849e48bf2106066af",
+      "size": 137576613,
+      "major": "0.6",
+      "min_memory_bytes": 8589934592,
+      "recommended_memory_bytes": 12884901888
+    },
+    {
+      "tag": "token-standard-v2",
+      "commit": "de911e38af78ec79b6f0e6a9515e104b1e4c3d62",
+      "content_sha": "4fae533b28de046360524c0e4b9d56a5799865bfff6007b5372959bf150165c7",
+      "size": 154042565,
+      "major": "0.6",
+      "min_memory_bytes": 8589934592,
+      "recommended_memory_bytes": 12884901888,
+      "channel": "alpha",
+      "image_repo": "ghcr.io/digital-asset/decentralized-canton-sync-dev/docker"
+    }
+  ]
+}
