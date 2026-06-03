@@ -124,6 +124,11 @@ func Dial(opts DialOptions) (*Client, error) {
 //   - APIError on non-2xx (with status code + response body for the
 //     caller to surface).
 //   - wrapped non-API error on network / decode failure.
+// maxResponseBytes caps the success-path JSON body we'll read from the
+// registry. Generous (4 MiB) versus the few-KB choice contexts we
+// actually expect, but a hard ceiling against an unbounded/hostile body.
+const maxResponseBytes = 4 << 20
+
 func (c *Client) doJSON(ctx context.Context, method, path string, body, into any) error {
 	var reqBody io.Reader
 	if body != nil {
@@ -177,7 +182,11 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, into any
 	if into == nil {
 		return nil
 	}
-	if err := json.NewDecoder(resp.Body).Decode(into); err != nil {
+	// Bound the success body too (the error path was already capped). A
+	// transfer-factory / choice-context payload is a few KB; cap well
+	// above that so a misbehaving or hostile registry can't stream an
+	// unbounded body into json.Decode and exhaust memory.
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(into); err != nil {
 		return fmt.Errorf("registry.doJSON: decode %s %s response: %w", method, path, err)
 	}
 	return nil
