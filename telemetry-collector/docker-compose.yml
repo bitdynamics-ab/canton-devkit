@@ -1,0 +1,67 @@
+# Self-hosted telemetry stack: Postgres (your data) + collector (ingest)
+# + Metabase (dashboards + CSV/Excel export). Everything runs on your own
+# host; nothing leaves it. Bring it up with:
+#
+#   docker compose up -d
+#
+# Then point the CLI at the collector:
+#
+#   export CANTON_DEVKIT_TELEMETRY_ENDPOINT=http://<this-host>:8080/v1/counters
+#
+# Export your data any time — no limits, it's your Postgres:
+#   docker compose exec postgres pg_dump -U postgres telemetry > backup.sql
+#   docker compose exec postgres psql -U postgres -d telemetry \
+#     -c "\copy (SELECT * FROM counter_period) TO STDOUT CSV HEADER" > counters.csv
+#
+# Metabase also exports any chart/table to CSV/Excel/JSON with one click.
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: telemetry
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Auto-applies the schema on first boot (idempotent CREATE IF NOT EXISTS).
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  collector:
+    build: .
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-changeme}@postgres:5432/telemetry?sslmode=disable
+      LISTEN_ADDR: ":8080"
+      # Set a shared secret to require X-Telemetry-Token on every ingest.
+      INGEST_TOKEN: ${INGEST_TOKEN:-}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  metabase:
+    image: metabase/metabase:latest
+    ports:
+      - "3000:3000"
+    environment:
+      # Store Metabase's own app data in the same Postgres (separate db).
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: telemetry
+      MB_DB_PORT: 5432
+      MB_DB_USER: postgres
+      MB_DB_PASS: ${POSTGRES_PASSWORD:-changeme}
+      MB_DB_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
