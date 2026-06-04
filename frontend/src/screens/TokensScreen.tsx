@@ -636,7 +636,7 @@ function TransferModal({
     e.preventDefault();
     setBusy(true);
     try {
-      await transferToken(instance, symbol, from, to, amount, reason || undefined, autoAccept);
+      await transferToken(instance, symbol, from, to, amount, reason || undefined, undefined, autoAccept);
       onDone();
     } catch (err) {
       onError(err);
