@@ -116,3 +116,14 @@ func (*Adapter) EndpointServices() map[string]splice.ServicePort {
 }
 
 func (*Adapter) SupportsAlphaProtocol() bool { return true }
+
+// CoreServices is the BIT-222 contract: services whose absence means
+// this instance can't serve a Ledger API call. Wallet/scan/ans web
+// UIs are excluded — losing them is "partial," not "failed."
+// Observability profile services (prometheus, grafana) are excluded
+// by design — they're opt-in sidecars; an instance with only
+// sidecars and no core stack is a zombie. The list is hoisted to
+// splice.CoreServices so 0.5.x and 0.6.x can't silently diverge.
+func (*Adapter) CoreServices() []string {
+	return splice.CoreServices()
+}

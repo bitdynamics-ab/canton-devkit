@@ -67,3 +67,9 @@ func (*Adapter) EndpointServices() map[string]splice.ServicePort {
 }
 
 func (*Adapter) SupportsAlphaProtocol() bool { return false }
+
+// CoreServices is the BIT-222 contract — see internal/splice/adapter.go.
+// 0.5.x's core stack matches the canonical set in splice.CoreServices.
+func (*Adapter) CoreServices() []string {
+	return splice.CoreServices()
+}

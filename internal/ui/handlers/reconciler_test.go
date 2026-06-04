@@ -107,6 +107,15 @@ func TestReconcileOne_LockedAgainstConcurrentWrite(t *testing.T) {
 		return []ContainerHealth{{State: "running", Health: "healthy"}}, nil
 	}
 
+	// BIT-222: with the core-services hoist, evalStatus collapses to
+	// `failed` when any core service is missing from the snapshot.
+	// This test isn't about that path — stub the resolver to nil so
+	// evalStatus skips the core check and we exercise only the
+	// lock+re-read invariant.
+	origCore := coreServicesFor
+	t.Cleanup(func() { coreServicesFor = origCore })
+	coreServicesFor = func(string) []string { return nil }
+
 	// captureCantonPorts stub: simulate a concurrent writer
 	// flipping Credentials between our pre-lock state-read and
 	// the lock acquisition. If the fix is correct, ReconcileOne
@@ -233,7 +242,10 @@ func TestEvalStatus(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := evalStatus(c.cached, c.containers)
+			// nil coreServices = skip the BIT-222 core check; these
+			// cases pin the pre-BIT-222 health-averaging behaviour
+			// and must keep passing unchanged.
+			got := evalStatus(c.cached, c.containers, nil)
 			if got != c.want {
 				t.Errorf("evalStatus(%v, %d containers) = %v; want %v",
 					c.cached, len(c.containers), got, c.want)
@@ -368,6 +380,107 @@ func TestRefreshCantonPorts(t *testing.T) {
 		}
 		if state.Ports["participant_ledger_app-user"] != 58955 {
 			t.Errorf("ledger clobbered to %d; want cached 58955 to survive", state.Ports["participant_ledger_app-user"])
+		}
+	})
+}
+
+// TestEvalStatus_CoreServices pins BIT-222. The reconciler must
+// recognize the zombie state where the core stack (canton + splice +
+// postgres + nginx) has been torn down but the `--profile
+// observability` sidecars (prometheus, grafana) survived. Before
+// this check, evalStatus would happily report `running` because
+// every surviving container was healthy.
+func TestEvalStatus_CoreServices(t *testing.T) {
+	core := []string{"canton", "splice", "postgres", "nginx"}
+	healthy := func(svc string) ContainerHealth {
+		return ContainerHealth{Service: svc, State: "running", Health: "healthy"}
+	}
+	noHealthcheck := func(svc string) ContainerHealth {
+		return ContainerHealth{Service: svc, State: "running"}
+	}
+	restarting := func(svc string) ContainerHealth {
+		return ContainerHealth{Service: svc, State: "restarting"}
+	}
+
+	t.Run("obs zombie (prometheus+grafana only) → failed", func(t *testing.T) {
+		got := evalStatus(
+			registry.StatusRunning,
+			[]ContainerHealth{healthy("prometheus"), healthy("grafana")},
+			core,
+		)
+		if got != registry.StatusFailed {
+			t.Errorf("got %v, want failed — sidecar-only stack is not running", got)
+		}
+	})
+
+	t.Run("core healthy + sidecars present → running (happy path with obs)", func(t *testing.T) {
+		got := evalStatus(
+			registry.StatusPartial,
+			[]ContainerHealth{
+				healthy("canton"), healthy("splice"), healthy("postgres"),
+				noHealthcheck("nginx"),
+				healthy("wallet-web-ui-sv"), healthy("scan-web-ui"),
+				healthy("prometheus"), healthy("grafana"),
+			},
+			core,
+		)
+		if got != registry.StatusRunning {
+			t.Errorf("got %v, want running — full stack with obs sidecars should not regress", got)
+		}
+	})
+
+	t.Run("core present but canton restarting → partial (no regression)", func(t *testing.T) {
+		got := evalStatus(
+			registry.StatusRunning,
+			[]ContainerHealth{
+				restarting("canton"), healthy("splice"), healthy("postgres"),
+				noHealthcheck("nginx"),
+			},
+			core,
+		)
+		if got != registry.StatusPartial {
+			t.Errorf("got %v, want partial — restarting core member is degradation, not zombie", got)
+		}
+	})
+
+	t.Run("one core service missing → failed", func(t *testing.T) {
+		got := evalStatus(
+			registry.StatusRunning,
+			[]ContainerHealth{
+				healthy("canton"), healthy("splice"), healthy("postgres"),
+				// nginx is gone — partial stack can't actually serve, treat as failed.
+				healthy("wallet-web-ui-sv"),
+			},
+			core,
+		)
+		if got != registry.StatusFailed {
+			t.Errorf("got %v, want failed — missing core service collapses to failed", got)
+		}
+	})
+
+	t.Run("nil coreServices preserves old behaviour", func(t *testing.T) {
+		got := evalStatus(
+			registry.StatusRunning,
+			[]ContainerHealth{healthy("prometheus"), healthy("grafana")},
+			nil,
+		)
+		if got != registry.StatusRunning {
+			t.Errorf("got %v, want running — nil core list must preserve old averaging", got)
+		}
+	})
+
+	t.Run("non-core extras don't satisfy the check", func(t *testing.T) {
+		got := evalStatus(
+			registry.StatusRunning,
+			[]ContainerHealth{
+				healthy("wallet-web-ui-app-user"),
+				healthy("scan-web-ui"),
+				healthy("sv-web-ui"),
+			},
+			core,
+		)
+		if got != registry.StatusFailed {
+			t.Errorf("got %v, want failed — non-core extras don't make a working instance", got)
 		}
 	})
 }

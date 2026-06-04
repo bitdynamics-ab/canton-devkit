@@ -21,6 +21,15 @@ var captureCantonPorts = localnet.CaptureCantonPorts
 // docker. Production keeps the real wrapper.
 var reconcileContainersList = containersList
 
+// coreServicesFor resolves an instance's core compose service names
+// via the splice adapter (BIT-222). Exposed as a var so the
+// reconciler tests can swap in a deterministic list without dragging
+// the splice catalogue into the test setup. Returns nil when the
+// version isn't resolvable; evalStatus treats nil as "skip the core
+// check," preserving back-compat with registry entries whose
+// splice_version has been renamed or removed.
+var coreServicesFor = localnet.CoreServicesFor
+
 // cantonPortsCacheTTL caps how long the reconciler will reuse a
 // cached port-capture result. Each `CaptureCantonPorts` call shells
 // out to `docker compose port` 9 times — without the cache, the 15s
@@ -212,7 +221,14 @@ func ReconcileOne(ctx context.Context, name string) (old, neu registry.Status, c
 		return state.Status, state.Status, false
 	}
 
-	newStatus := evalStatus(state.Status, probed)
+	// BIT-222: pull the splice adapter's core-services list so
+	// evalStatus can distinguish "core stack missing" (failed) from
+	// "core stack running but degraded" (partial). Resolution
+	// failures (e.g. an old splice_version no longer in the
+	// catalogue) yield nil, which evalStatus interprets as "skip
+	// the core check" — preserves back-compat with stale entries.
+	coreServices := coreServicesFor(state.SpliceVersion)
+	newStatus := evalStatus(state.Status, probed, coreServices)
 
 	// BIT-221: when canton is up (or going up), re-capture the 9
 	// participant ports the screens dial. If `canton` was recreated
@@ -370,6 +386,7 @@ func refreshCantonPorts(ctx context.Context, state *registry.State, name string)
 //	cached=running  + no containers      → stopped     (compose down ran elsewhere)
 //	cached=failed   + no containers      → failed      (no change; orchestrator gave up cleanly)
 //	cached=partial  + no containers      → failed      (everything's gone; collapse to failed)
+//	any core service missing from snapshot → failed     (BIT-222; e.g. obs-only zombie)
 //	cached=*        + all healthy/running → running    (the BIT-177 happy path)
 //	cached=*        + any restarting/unhealthy/exited → partial
 //
@@ -380,7 +397,14 @@ func refreshCantonPorts(ctx context.Context, state *registry.State, name string)
 // Splice instance `running` because two of the standard
 // containers have no healthcheck and would forever drag the
 // aggregate into `partial`.
-func evalStatus(cached registry.Status, containers []ContainerHealth) registry.Status {
+//
+// coreServices is the BIT-222 contract from splice.Adapter: the
+// compose service names whose absence collapses the snapshot to
+// `failed` regardless of how the surviving containers look. Pass
+// nil to skip the core check (back-compat for callers that don't
+// know the adapter, e.g. older registry entries with an
+// unresolvable splice_version).
+func evalStatus(cached registry.Status, containers []ContainerHealth, coreServices []string) registry.Status {
 	if len(containers) == 0 {
 		// No project / all containers removed. If we thought it
 		// was running, demote to stopped — the only way we'd see
@@ -394,6 +418,26 @@ func evalStatus(cached registry.Status, containers []ContainerHealth) registry.S
 			return registry.StatusFailed
 		}
 		return cached
+	}
+
+	// BIT-222: distinguish "core stack missing" from "core stack
+	// running but degraded". If even one core service has no
+	// container in the snapshot, the instance can't serve a
+	// Ledger API call regardless of how the sidecars look. The
+	// motivating bug: an instance whose core stack was torn down
+	// but whose `--profile observability` containers (prometheus
+	// + grafana) survived would happily report `running` because
+	// the surviving sidecars were all healthy.
+	if len(coreServices) > 0 {
+		seen := make(map[string]bool, len(containers))
+		for _, c := range containers {
+			seen[c.Service] = true
+		}
+		for _, svc := range coreServices {
+			if !seen[svc] {
+				return registry.StatusFailed
+			}
+		}
 	}
 
 	allHealthy := true

@@ -76,6 +76,17 @@ type Adapter interface {
 	// SupportsAlphaProtocol reports whether the alpha-protocol-version
 	// env file should be wired through. False on 0.5.x; true on 0.6.x.
 	SupportsAlphaProtocol() bool
+
+	// CoreServices returns the compose service names whose absence
+	// means "this instance can't serve a Ledger API call." The
+	// reconciler uses this to distinguish a partially-running stack
+	// from a zombie state where only profile-only sidecars (e.g.
+	// prometheus + grafana via `--profile observability`) remain
+	// after the core stack was torn down out-of-band. Without this,
+	// `evalStatus` averages health across whatever's in the compose
+	// project and happily reports `running` when only sidecars are
+	// up — see BIT-222.
+	CoreServices() []string
 }
 
 // InstanceParams is the small bag of per-instance facts the adapter
