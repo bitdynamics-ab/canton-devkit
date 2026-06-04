@@ -1,0 +1,26 @@
+# Example: daily GitHub adoption snapshot.
+#
+# Copy to .github/workflows/github-stats.yml in the repo (or run the
+# equivalent as a host cron). Requires two secrets:
+#   TELEMETRY_DATABASE_URL  — Postgres DSN of your collector's database
+#   (GITHUB_TOKEN is provided automatically to Actions; it can read the
+#    repo's own releases + stats.)
+name: github-stats
+on:
+  schedule:
+    - cron: "17 4 * * *"   # daily 04:17 UTC
+  workflow_dispatch: {}
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4   # pin to a SHA in real use
+      - uses: actions/setup-go@v5   # pin to a SHA in real use
+        with: { go-version: "1.26" }
+      - name: snapshot downloads + visibility
+        working-directory: telemetry-collector
+        env:
+          DATABASE_URL: ${{ secrets.TELEMETRY_DATABASE_URL }}
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: go run ./cmd/github-stats

@@ -1,0 +1,5 @@
+.env
+backup*.sql*
+*.csv
+__pycache__/
+*.pyc
