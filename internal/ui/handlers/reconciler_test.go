@@ -107,6 +107,15 @@ func TestReconcileOne_LockedAgainstConcurrentWrite(t *testing.T) {
 		return []ContainerHealth{{State: "running", Health: "healthy"}}, nil
 	}
 
+	// BIT-222: with the core-services hoist, evalStatus collapses to
+	// `failed` when any core service is missing from the snapshot.
+	// This test isn't about that path — stub the resolver to nil so
+	// evalStatus skips the core check and we exercise only the
+	// lock+re-read invariant.
+	origCore := coreServicesFor
+	t.Cleanup(func() { coreServicesFor = origCore })
+	coreServicesFor = func(string) []string { return nil }
+
 	// captureCantonPorts stub: simulate a concurrent writer
 	// flipping Credentials between our pre-lock state-read and
 	// the lock acquisition. If the fix is correct, ReconcileOne
