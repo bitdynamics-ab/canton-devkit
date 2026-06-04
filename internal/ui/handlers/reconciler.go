@@ -3,10 +3,82 @@ package handlers
 import (
 	"context"
 	"log"
+	"sort"
+	"sync"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
+
+// captureCantonPorts is a test seam wrapping localnet.CaptureCantonPorts.
+// Tests override this var to feed deterministic port maps without
+// shelling out to docker. Production uses the real implementation.
+var captureCantonPorts = localnet.CaptureCantonPorts
+
+// reconcileContainersList is the test seam wrapping containersList so
+// reconciler tests can drive ReconcileOne end-to-end without exec'ing
+// docker. Production keeps the real wrapper.
+var reconcileContainersList = containersList
+
+// cantonPortsCacheTTL caps how long the reconciler will reuse a
+// cached port-capture result. Each `CaptureCantonPorts` call shells
+// out to `docker compose port` 9 times — without the cache, the 15s
+// reconcile loop would fire 9 docker subprocesses every cycle for
+// every running instance, even though host ports only change when
+// the canton container is recreated. A TTL slightly shorter than
+// the reconcile interval means: cached result for the common
+// "everything stable" case (one cycle uses cache from the previous),
+// fresh probe at most once per interval. Tests set this to zero via
+// resetCantonPortsCache to bypass the cache deterministically.
+var cantonPortsCacheTTL = 14 * time.Second
+
+type cantonPortsCacheEntry struct {
+	at    time.Time
+	ports map[string]int
+}
+
+var (
+	cantonPortsCacheMu sync.Mutex
+	cantonPortsCache   = map[string]cantonPortsCacheEntry{}
+)
+
+// cachedCaptureCantonPorts wraps captureCantonPorts with a per-project
+// TTL cache. Returns the cached map on a hit; on miss / expiry,
+// calls through and stores the fresh result. The cache holds maps
+// returned by callers BY VALUE-via-shared-reference — callers must
+// treat the returned map as read-only (the reconciler does: it only
+// diffs against state.Ports, then merges deltas into the freshly
+// re-read state under the registry lock).
+func cachedCaptureCantonPorts(ctx context.Context, project string) map[string]int {
+	cantonPortsCacheMu.Lock()
+	entry, ok := cantonPortsCache[project]
+	cantonPortsCacheMu.Unlock()
+	if ok && time.Since(entry.at) < cantonPortsCacheTTL {
+		return entry.ports
+	}
+	fresh := captureCantonPorts(ctx, project)
+	if len(fresh) == 0 {
+		// Don't poison the cache with a probe failure — keep
+		// the prior entry (if any) so a transient docker hiccup
+		// doesn't force 9 subprocesses on every cycle until the
+		// daemon recovers.
+		return fresh
+	}
+	cantonPortsCacheMu.Lock()
+	cantonPortsCache[project] = cantonPortsCacheEntry{at: time.Now(), ports: fresh}
+	cantonPortsCacheMu.Unlock()
+	return fresh
+}
+
+// resetCantonPortsCache clears the TTL cache. Exposed for tests that
+// need to assert pre/post probe behaviour without waiting out the
+// TTL. Not used in production.
+func resetCantonPortsCache() {
+	cantonPortsCacheMu.Lock()
+	cantonPortsCache = map[string]cantonPortsCacheEntry{}
+	cantonPortsCacheMu.Unlock()
+}
 
 // BIT-177 — adopt/resync from docker.
 //
@@ -132,7 +204,7 @@ func ReconcileOne(ctx context.Context, name string) (old, neu registry.Status, c
 		return state.Status, state.Status, false
 	}
 
-	probed, probeErr := containersList(ctx, state.ComposeProject)
+	probed, probeErr := reconcileContainersList(ctx, state.ComposeProject)
 	if probeErr != nil {
 		// Daemon down, project missing, transient error. Leave
 		// the cached status alone — better to render stale than
@@ -141,19 +213,152 @@ func ReconcileOne(ctx context.Context, name string) (old, neu registry.Status, c
 	}
 
 	newStatus := evalStatus(state.Status, probed)
-	if newStatus == state.Status {
+
+	// BIT-221: when canton is up (or going up), re-capture the 9
+	// participant ports the screens dial. If `canton` was recreated
+	// since the last bring-up (clean restart, OOM restart, etc.)
+	// docker reassigned its ephemeral host ports — but BIT-190's
+	// capture-on-WaitForHealthy never gets a second chance to update
+	// state.Ports. Without this the Explorer / DAR / contracts
+	// handlers happily 502 against a port that's been closed for
+	// minutes while the reconciler reports `running`.
+	//
+	// We refresh ports BEFORE the status-changed early return so the
+	// common case (cached=running, newStatus=running, only ports
+	// drifted) gets the fix too.
+	//
+	// Gate also includes `partial` — the V2 Token Standard image set
+	// has a perpetually-`starting` splice healthcheck that pegs the
+	// reconciler at `partial` forever (see assets/compose/tokens-v2.yml).
+	// Those are the instances where canton most often restarts AND
+	// the screens most need a working port set; gating on `running`
+	// alone would never fire for them.
+	// `refreshCantonPorts` itself is best-effort — missing probes
+	// leave cached values intact — so calling it during `partial`
+	// is safe (probe failure ⇒ no diff ⇒ no write).
+	// Probe ports OUTSIDE the registry lock — the docker subprocesses
+	// can take seconds, and we don't want to block concurrent writers
+	// (e.g. `localnet down`) on a slow daemon. We only diff against
+	// state.Ports here; the authoritative apply-and-write happens
+	// below under the lock against a freshly-re-read state.
+	var livePorts map[string]int
+	if state.ComposeProject != "" &&
+		(newStatus == registry.StatusRunning || newStatus == registry.StatusPartial) {
+		livePorts = cachedCaptureCantonPorts(ctx, state.ComposeProject)
+	}
+
+	if newStatus == state.Status && !portMapDiffers(state.Ports, livePorts) {
 		return state.Status, state.Status, false
 	}
 
-	oldStatus := state.Status
-	state.Status = newStatus
-	if err := registry.Write(state); err != nil {
+	// Acquire the registry lock and re-read fresh state before
+	// applying changes. Mirrors the lock+re-read pattern in
+	// internal/cli/localnet/down.go — without it a concurrent
+	// `localnet down` (or a future Web UI POST) could clobber our
+	// stale snapshot's Credentials / DSO / Tokens fields when we
+	// Write(state) here.
+	release, lockErr := registry.Lock(name)
+	if lockErr != nil {
+		// Lock contention or fs error — treat like a probe failure
+		// and leave the cached status alone for this cycle.
+		return state.Status, state.Status, false
+	}
+	defer release()
+
+	fresh, rerr := registry.Read(name)
+	if rerr != nil {
+		// Vanished between probe and lock — nothing to write.
+		return state.Status, state.Status, false
+	}
+	// Re-evaluate transitional states after re-read: a concurrent
+	// `down` may have flipped to stopping while we were probing.
+	switch fresh.Status {
+	case registry.StatusCreating, registry.StatusStopping:
+		return fresh.Status, fresh.Status, false
+	}
+
+	oldStatus := fresh.Status
+	portsChanged := applyPortDelta(fresh, livePorts, name)
+	statusChanged := newStatus != fresh.Status
+	if statusChanged {
+		fresh.Status = newStatus
+	}
+	if !statusChanged && !portsChanged {
+		return oldStatus, oldStatus, false
+	}
+	if err := registry.Write(fresh); err != nil {
 		log.Printf("reconciler: write %s status=%s: %v", name, newStatus, err)
 		return oldStatus, oldStatus, false
 	}
-	log.Printf("reconciler: %s status %s → %s (docker truth: %d containers)",
-		name, oldStatus, newStatus, len(probed))
-	return oldStatus, newStatus, true
+	if statusChanged {
+		log.Printf("reconciler: %s status %s → %s (docker truth: %d containers)",
+			name, oldStatus, newStatus, len(probed))
+	}
+	return oldStatus, fresh.Status, statusChanged || portsChanged
+}
+
+// portMapDiffers reports whether `live` contains any port that
+// disagrees with `cached`. A missing key in `live` is "I don't know"
+// (per CaptureCantonPorts contract) and does NOT count as a diff.
+// Returns false when live is empty (probe failure / not gated).
+func portMapDiffers(cached, live map[string]int) bool {
+	if len(live) == 0 {
+		return false
+	}
+	for k, v := range live {
+		if cached[k] != v {
+			return true
+		}
+	}
+	return false
+}
+
+// applyPortDelta writes only the changed keys from `live` into
+// fresh.Ports, preserving every other key (including non-canton
+// ports like app_user_ui). Returns true when at least one port
+// changed. Mirrors the original refreshCantonPorts semantics but
+// operates on the freshly-re-read state held under the registry
+// lock — so a concurrent down's Credentials/DSO/Tokens writes are
+// preserved rather than clobbered by our stale snapshot.
+func applyPortDelta(fresh *registry.State, live map[string]int, name string) bool {
+	if len(live) == 0 {
+		return false
+	}
+	if fresh.Ports == nil {
+		fresh.Ports = make(map[string]int, len(live))
+	}
+	changedKeys := make([]string, 0, 4)
+	for key, port := range live {
+		if fresh.Ports[key] != port {
+			changedKeys = append(changedKeys, key)
+			fresh.Ports[key] = port
+		}
+	}
+	if len(changedKeys) == 0 {
+		return false
+	}
+	sort.Strings(changedKeys)
+	log.Printf("reconciler: %s canton ports drifted: %v", name, changedKeys)
+	return true
+}
+
+// refreshCantonPorts probes `docker compose port` for the 9 canonical
+// canton participant ports and updates state.Ports in place with any
+// diff. Returns true when at least one port changed.
+//
+// Probe failures are tolerated — `localnet.CaptureCantonPorts` is
+// best-effort (a port that fails to query is OMITTED from the result
+// rather than returned as 0). Missing keys leave the cached value
+// alone, matching that contract — better to render stale than to
+// blank out ports on a transient docker hiccup.
+//
+// NOTE: ReconcileOne no longer calls this — it splits the probe and
+// the in-place write so the write can happen under the registry
+// lock against a freshly-re-read state. The function survives as a
+// stable unit-test seam for the in-place diff/merge logic.
+func refreshCantonPorts(ctx context.Context, state *registry.State, name string) bool {
+	live := captureCantonPorts(ctx, state.ComposeProject)
+	return applyPortDelta(state, live, name)
 }
 
 // evalStatus maps a docker-compose-ps snapshot to the registry
