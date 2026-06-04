@@ -1,8 +1,9 @@
 -- canton-devkit telemetry collector schema.
 --
--- One row per (period, chart, bucket). The CLI sends cumulative totals
--- for a period, so ingestion REPLACES count on conflict (last write
--- wins) rather than summing — re-sending a period is idempotent.
+-- One row per (period, chart, bucket). The fleet is many machines
+-- reporting the same period (zero-PII, so no machine identifier exists),
+-- so ingestion SUMS count on conflict — machine A's up=5 and machine B's
+-- up=3 for the same day aggregate to 8.
 --
 -- Zero-PII: every column is either a coarse time bucket, an allow-listed
 -- counter name, or an integer. No identifiers, no timestamps finer than

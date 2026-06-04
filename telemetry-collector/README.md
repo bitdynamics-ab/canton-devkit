@@ -109,9 +109,13 @@ charts to the dashboard automatically.
   `INGEST_TOKEN` is set and the `X-Telemetry-Token` header doesn't match,
   **500** on a storage error (the DB error is logged, never returned).
 
-**Idempotent upsert:** the CLI sends cumulative totals for a period, so a
-re-send of the same period **replaces** the prior counts (last write
-wins), keyed on `(period, chart, bucket)`.
+**Fleet aggregation:** the fleet is many machines reporting the same
+period (telemetry is zero-PII, so there's no machine identifier to dedup
+by). Ingestion **sums** on conflict, keyed on `(period, chart, bucket)` —
+machine A's `up=5` and machine B's `up=3` for the same day aggregate to
+`8`. (Tradeoff: a machine whose upload committed but whose response was
+lost over-counts that one period by one cycle on its deferred retry —
+rare, bounded, negligible for adoption trends.)
 
 ## Schema
 

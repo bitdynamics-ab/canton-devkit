@@ -29,9 +29,19 @@ func NewPgStore(ctx context.Context, dsn string) (*PgStore, error) {
 func (s *PgStore) Close() { s.pool.Close() }
 
 // UpsertCounters writes every (chart, bucket) of one period in a single
-// transaction. The CLI sends cumulative period totals, so ON CONFLICT
-// REPLACES count (last write wins) — re-sending a period is idempotent,
-// not additive. period_date/granularity/received_at are refreshed too.
+// transaction. The fleet is MANY machines reporting the same period (no
+// machine identifier exists — telemetry is zero-PII), so ON CONFLICT
+// ADDS to the running total rather than replacing it: machine A's up=5
+// and machine B's up=3 for the same day sum to 8. period_date /
+// granularity / received_at are refreshed on each submission.
+//
+// Tradeoff: there is no per-upload dedup key (a persistent one would be a
+// pseudo-identifier and break the zero-PII boundary), so a machine whose
+// upload committed but whose response was lost will over-count that one
+// period by one cycle on its deferred retry. This is rare, bounded, and
+// negligible for the adoption *trends* this feeds. (A future random,
+// per-period-file nonce — non-persistent, so not a machine id — could
+// dedup exact retries while still summing across machines.)
 func (s *PgStore) UpsertCounters(ctx context.Context, period, granularity string, periodStart *time.Time, counters map[string]map[string]int) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -44,7 +54,7 @@ func (s *PgStore) UpsertCounters(ctx context.Context, period, granularity string
 INSERT INTO counter_period (period, period_date, granularity, chart, bucket, count, received_at)
 VALUES ($1, $2, $3, $4, $5, $6, now())
 ON CONFLICT (period, chart, bucket)
-DO UPDATE SET count = EXCLUDED.count,
+DO UPDATE SET count = counter_period.count + EXCLUDED.count,
               period_date = EXCLUDED.period_date,
               granularity = EXCLUDED.granularity,
               received_at = now()`
