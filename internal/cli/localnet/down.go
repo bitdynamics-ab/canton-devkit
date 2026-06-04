@@ -37,6 +37,7 @@ func buildDown() *cobra.Command {
 	var (
 		name     string
 		keepData bool
+		force    bool
 	)
 	cmd := &cobra.Command{
 		Use:   "down",
@@ -55,7 +56,13 @@ compose-down succeeds — re-running ` + "`up`" + ` re-registers it. Pass
 + state.json).
 
 To remove docker volumes (destructive — drops all ledger state),
-use ` + "`dpm localnet clean --name <name>`" + ` instead.`,
+use ` + "`dpm localnet clean --name <name>`" + ` instead.
+
+If a normal down fails (e.g. a container is unhealthy or
+restart-looping after an out-of-memory kill, or the cached compose
+env is broken), pass --force: it tears the instance down by Docker
+project label only — bypassing the compose files/env that the
+normal path needs — and SIGKILLs containers that won't stop.`,
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -66,13 +73,15 @@ use ` + "`dpm localnet clean --name <name>`" + ` instead.`,
 			}
 			return localnet.AsExitError(
 				RunDown(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(),
-					DownOptions{Name: name, KeepData: keepData}))
+					DownOptions{Name: name, KeepData: keepData, Force: force}))
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "",
 		"Required. Identifier of the LocalNet instance to stop.")
 	cmd.Flags().BoolVar(&keepData, "keep-data", false,
 		"Keep ~/.canton-devkit/localnet/<name>/ (overlay env + state.json).")
+	cmd.Flags().BoolVar(&force, "force", false,
+		"Tear down by Docker project label only — resilient to an unhealthy/wedged instance a normal down can't remove.")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }
@@ -83,6 +92,11 @@ use ` + "`dpm localnet clean --name <name>`" + ` instead.`,
 type DownOptions struct {
 	Name     string
 	KeepData bool
+	// Force tears the instance down by Docker project label only,
+	// bypassing the compose files/env the normal path needs — for
+	// unsticking an instance a normal down can't remove (unhealthy,
+	// OOM-restarting, or with a broken/missing compose env).
+	Force bool
 }
 
 // stopperFn is the seam tests use to bypass docker. Production
@@ -202,7 +216,11 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 
 	stop := getStopper()
 	if stop == nil {
-		stop = defaultStop
+		if opts.Force {
+			stop = defaultForceStop
+		} else {
+			stop = defaultStop
+		}
 	}
 
 	start := time.Now()
@@ -282,6 +300,18 @@ func defaultStop(ctx context.Context, st *registry.State) error {
 		LogWriter:    io.Discard, // compose's logs are noisy; Step rows tell the user what's happening
 	}
 	return runner.Stop(ctx, false)
+}
+
+// defaultForceStop is the production stopper for `down --force`. It needs
+// only the project name — ForceStop tears down by Docker project label
+// without the -f compose files / env, so it works even when those are
+// broken or a container is wedged.
+func defaultForceStop(ctx context.Context, st *registry.State) error {
+	runner := &docker.ComposeRunner{
+		ProjectName: st.ComposeProject,
+		LogWriter:   io.Discard,
+	}
+	return runner.ForceStop(ctx, false)
 }
 
 // markStatus persists `s` for `state`. A write failure is soft —
