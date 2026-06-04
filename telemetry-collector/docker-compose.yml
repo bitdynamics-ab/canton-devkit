@@ -1,11 +1,11 @@
 # Self-hosted telemetry stack: Postgres (your data) + collector (ingest)
 # + Metabase (dashboards + CSV/Excel export). Everything runs on your own
-# host; nothing leaves it. Bring it up with:
+# host; nothing leaves it.
 #
+#   cp .env.example .env   # then edit the secrets
 #   docker compose up -d
 #
-# Then point the CLI at the collector:
-#
+# Point the CLI at the collector:
 #   export CANTON_DEVKIT_TELEMETRY_ENDPOINT=http://<this-host>:8080/v1/counters
 #
 # Export your data any time — no limits, it's your Postgres:
@@ -13,17 +13,19 @@
 #   docker compose exec postgres psql -U postgres -d telemetry \
 #     -c "\copy (SELECT * FROM counter_period) TO STDOUT CSV HEADER" > counters.csv
 #
-# Metabase also exports any chart/table to CSV/Excel/JSON with one click.
+# See DEPLOY.md for local-testing and production deployment.
 
 services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: telemetry
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # Auto-applies the schema on first boot (idempotent CREATE IF NOT EXISTS).
+      # First-boot init (alphabetical): 00 creates Metabase's own db, then
+      # 01 applies the counter schema to the `telemetry` db.
+      - ./init/00-create-metabase-db.sql:/docker-entrypoint-initdb.d/00-create-metabase-db.sql:ro
       - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
@@ -35,9 +37,9 @@ services:
   collector:
     build: .
     environment:
-      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-changeme}@postgres:5432/telemetry?sslmode=disable
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/telemetry?sslmode=disable
       LISTEN_ADDR: ":8080"
-      # Set a shared secret to require X-Telemetry-Token on every ingest.
+      # Optional shared secret: when set, ingest requires X-Telemetry-Token.
       INGEST_TOKEN: ${INGEST_TOKEN:-}
     ports:
       - "8080:8080"
@@ -51,13 +53,19 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # Store Metabase's own app data in the same Postgres (separate db).
+      # Metabase's OWN app data lives in the separate `metabase` database,
+      # so the `telemetry` database stays pure counter data.
       MB_DB_TYPE: postgres
-      MB_DB_DBNAME: telemetry
+      MB_DB_DBNAME: metabase
       MB_DB_PORT: 5432
       MB_DB_USER: postgres
-      MB_DB_PASS: ${POSTGRES_PASSWORD:-changeme}
+      MB_DB_PASS: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       MB_DB_HOST: postgres
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 24
     depends_on:
       postgres:
         condition: service_healthy

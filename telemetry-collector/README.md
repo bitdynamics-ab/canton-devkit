@@ -14,8 +14,13 @@ dependency graph.
 
 ```bash
 cd telemetry-collector
-POSTGRES_PASSWORD=$(openssl rand -hex 16) docker compose up -d
+cp .env.example .env          # set POSTGRES_PASSWORD
+docker compose up -d --build
 ```
+
+> **Deploying for real** — local testing vs production / mainnet release,
+> TLS, secrets, backups, and baking the endpoint into release binaries:
+> see **[DEPLOY.md](DEPLOY.md)**.
 
 This starts:
 
