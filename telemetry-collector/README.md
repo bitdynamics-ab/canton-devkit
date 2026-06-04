@@ -58,6 +58,27 @@ same against a production Metabase by setting `MB_URL`.
 Prefer the UI? You can also add the `telemetry` Postgres as a data source
 manually and chart `counter_period` / the `v_command_usage` view.
 
+## GitHub adoption signals (downloads, stars/forks)
+
+Telemetry is zero-PII, so it **can't count unique installs**. The
+install/visibility legs of the proposal's composite adoption measure come
+from GitHub instead. [`cmd/github-stats`](cmd/github-stats) snapshots
+release-asset download counts and repo stars/forks/watchers into the same
+Postgres (tables `github_release_downloads`, `github_repo_stats`, view
+`v_downloads_total`), so Metabase charts the cumulative-download trend
+toward the Milestone-4 floor and the visibility curve.
+
+Run it daily (cron / GitHub Action — see
+[`deploy/github-stats.cron.yml`](deploy/github-stats.cron.yml)):
+
+```bash
+DATABASE_URL=postgres://… GITHUB_REPO=owner/name GITHUB_TOKEN=ghp_… \
+  go run ./cmd/github-stats
+```
+
+`setup-metabase.py` adds the **Cumulative downloads** and **Stars & forks**
+charts to the dashboard automatically.
+
 ## What it accepts
 
 `POST /v1/counters`, `Content-Type: application/json`, body:

@@ -167,6 +167,19 @@ def build_cards(db_id, coll_id):
         "All counters (raw, exportable)",
         "SELECT period_date, granularity, chart, bucket, count FROM counter_period ORDER BY period_date DESC, chart, bucket",
         "table", db_id, coll_id)
+    # GitHub adoption signals (populated by cmd/github-stats). These query
+    # the github_* tables/views; they create cleanly even before the first
+    # github-stats run (the tables ship in schema.sql).
+    ids["downloads"] = native_card(
+        "Cumulative downloads (toward M4 floor)",
+        "SELECT captured_on, total_downloads FROM v_downloads_total ORDER BY captured_on",
+        "line", db_id, coll_id,
+        {"graph.dimensions": ["captured_on"], "graph.metrics": ["total_downloads"]})
+    ids["stars"] = native_card(
+        "Stars & forks over time (visibility)",
+        "SELECT captured_on, stars, forks FROM github_repo_stats ORDER BY captured_on",
+        "line", db_id, coll_id,
+        {"graph.dimensions": ["captured_on"], "graph.metrics": ["stars", "forks"]})
     return ids
 
 
@@ -190,7 +203,9 @@ def ensure_dashboard(coll_id, card_ids):
         ("os", 12, 0, 6, 6),
         ("top", 0, 6, 9, 6),
         ("exit", 9, 6, 9, 6),
-        ("raw", 0, 12, 18, 7),
+        ("downloads", 0, 12, 9, 6),
+        ("stars", 9, 12, 9, 6),
+        ("raw", 0, 18, 18, 7),
     ]
     dashcards = []
     for i, (key, col, row, w, h) in enumerate(layout):
