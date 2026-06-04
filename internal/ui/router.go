@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/telemetry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/handlers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 )
@@ -71,8 +73,47 @@ func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
 	// Middleware chain (outer → inner): access log first so it
 	// wraps everything including 403s from CSRF and 404s from
 	// /api/typo. Common headers + Origin gate run per request
-	// inside the logged span.
-	return withAccessLog(withCommonHeaders(withOriginCheck(mux)))
+	// inside the logged span. Feature telemetry sits innermost so it
+	// only records requests that reached a real handler.
+	return withAccessLog(withCommonHeaders(withOriginCheck(withFeatureTelemetry(mux))))
+}
+
+// withFeatureTelemetry records which Web UI screens a `localnet ui`
+// session touched (M2 adoption signal). Recorded once per feature per
+// process via telemetry.IncOnce, so the Explorer/Metrics polling loops
+// don't inflate the count — the signal is "this screen was used this
+// session," not request volume. Maps the request path prefix to a
+// coarse, allow-listed feature name; unknown paths record nothing.
+func withFeatureTelemetry(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if f := featureForPath(r.URL.Path); f != "" {
+			telemetry.IncOnce("dpm/ui_feature", f)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// featureForPath maps an /api/* request path to the Web UI feature it
+// belongs to. Returns "" for infra endpoints (version, auth, healthz,
+// preflight, SSE) and the asset bundle, which aren't adoption signals.
+func featureForPath(path string) string {
+	switch {
+	case strings.HasPrefix(path, "/api/dars"), strings.HasPrefix(path, "/api/dar/"):
+		return "dar"
+	case strings.HasPrefix(path, "/api/contracts"), strings.HasPrefix(path, "/api/transactions"):
+		return "explorer"
+	case strings.HasPrefix(path, "/api/metrics"):
+		return "metrics"
+	case strings.HasPrefix(path, "/api/tokens"):
+		return "tokens"
+	case strings.HasPrefix(path, "/api/skills"):
+		return "skills"
+	case strings.HasPrefix(path, "/api/snapshots"):
+		return "backup"
+	case strings.HasPrefix(path, "/api/instances"):
+		return "instances"
+	}
+	return ""
 }
 
 // statusRecorder wraps http.ResponseWriter to capture the final

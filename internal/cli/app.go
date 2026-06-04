@@ -80,6 +80,14 @@ func (a *App) Run(args []string) int {
 				outcome = "fail"
 			}
 			telemetry.Inc("dpm/command_exit", verb+"/"+outcome)
+			// CIP-0112 flow visibility (M3 adoption): record which token
+			// subcommand ran. The verb above only says "token"; this
+			// distinguishes create / mint / transfer / burn / balance.
+			if verb == "token" {
+				if act := tokenAction(cmd); act != "" {
+					telemetry.Inc("dpm/token_action", act)
+				}
+			}
 		}
 		telemetry.RecordContext()
 		telemetry.Persist()
@@ -99,6 +107,24 @@ func localnetVerb(cmd interface{ CommandPath() string }) string {
 	parts := strings.Fields(cmd.CommandPath()) // ["canton-devkit","localnet","token","mint"]
 	for i, p := range parts {
 		if p == "localnet" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
+}
+
+// tokenAction returns the direct subcommand of `localnet token` (e.g.
+// "mint" for `localnet token mint`, "party" for `localnet token party
+// new`), or "" when the command isn't under `localnet token`. The bucket
+// for dpm/token_action. Derived from the cobra command chain, never raw
+// args, so no flag or instrument name can leak.
+func tokenAction(cmd interface{ CommandPath() string }) string {
+	if cmd == nil {
+		return ""
+	}
+	parts := strings.Fields(cmd.CommandPath()) // [...,"localnet","token","mint"]
+	for i, p := range parts {
+		if p == "token" && i+1 < len(parts) {
 			return parts[i+1]
 		}
 	}
