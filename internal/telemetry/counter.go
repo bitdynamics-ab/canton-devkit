@@ -46,6 +46,28 @@ func Inc(chart, bucket string) {
 	s.Inc(chart, bucket)
 }
 
+var (
+	onceMu  sync.Mutex
+	onceSet = map[string]struct{}{}
+)
+
+// IncOnce records a counter at most once per process per (chart, bucket).
+// For "was this used at all this session" signals — e.g. a Web UI screen
+// touched during a long-lived `localnet ui` run, where the screen polls
+// and a raw Inc per request would inflate the count. The first hit is
+// recorded; later hits in the same process are no-ops.
+func IncOnce(chart, bucket string) {
+	key := chart + "\x00" + bucket
+	onceMu.Lock()
+	if _, seen := onceSet[key]; seen {
+		onceMu.Unlock()
+		return
+	}
+	onceSet[key] = struct{}{}
+	onceMu.Unlock()
+	Inc(chart, bucket)
+}
+
 // Persist flushes the run's accumulated counters to the period file (and
 // runs the upload window). Call once at process exit.
 func Persist() {

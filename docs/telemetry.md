@@ -31,7 +31,7 @@ Precedence (highest first): `DO_NOT_TRACK` → `DPM_TELEMETRY` → config file
 
 ## What is collected — counters only
 
-A closed, compile-time-enforced allow-list of ten counters. Each is a
+A closed, compile-time-enforced allow-list of twelve counters. Each is a
 `chart` with a small set of `buckets`; we keep weekly **counts** per
 bucket and nothing else:
 
@@ -39,6 +39,8 @@ bucket and nothing else:
 |---|---|
 | `dpm/command` | the localnet verb (`up`, `down`, `dar`, `token`, …) |
 | `dpm/command_exit` | `<verb>/ok` or `<verb>/fail` |
+| `dpm/token_action` | the token subcommand (`create` `mint` `transfer` `burn` `balance` …) — CIP-0112 flow visibility |
+| `dpm/ui_feature` | Web UI screen touched per session (`dar` `explorer` `metrics` `tokens` `skills` `backup` `instances`) |
 | `dpm/channel` | `stable` `nightly` `dev` |
 | `dpm/os` | `linux` `darwin` `windows` |
 | `dpm/arch` | `amd64` `arm64` |

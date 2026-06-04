@@ -21,6 +21,8 @@ var allowedCounters = map[string]map[string]struct{}{
 	"dpm/docker_engine":          set("docker", "colima", "orbstack", "podman", "other"),
 	"dpm/compose_version_bucket": set("v2.20-", "v2.20-v2.27", "v2.28+"),
 	"dpm/doctor_fail":            nil, // check IDs from internal/docker/checks.go, validated at runtime
+	"dpm/token_action":           set(tokenActions...),
+	"dpm/ui_feature":             set(uiFeatures...),
 }
 
 // commandVerbs is the bucket space for dpm/command — the localnet
@@ -30,7 +32,28 @@ var commandVerbs = []string{
 	"up", "down", "restart", "status", "list", "doctor", "logs", "env",
 	"creds", "clean", "snapshot", "restore", "versions", "ui", "container",
 	"refresh", "metrics", "contracts", "tx", "dar", "skills", "telemetry",
-	"pause", "resume",
+	"pause", "resume", "token",
+}
+
+// tokenActions is the bucket space for dpm/token_action — the direct
+// subcommands of `localnet token`. Recorded so the CIP-0112 flow
+// (create → mint → transfer → burn → balance) is measurable for
+// Milestone 3 adoption; without it, token usage only showed as the
+// single "token" command verb. Mirrors the children registered in
+// internal/cli/localnet/token/token.go.
+var tokenActions = []string{
+	"create", "mint", "transfer", "burn", "balance",
+	"balances", "summary", "activity", "party", "faucet",
+}
+
+// uiFeatures is the bucket space for dpm/ui_feature — the Web UI screens
+// a `localnet ui` session touched. Recorded once per session via IncOnce
+// so polling endpoints don't inflate the signal. Lets Milestone 2
+// adoption show which Web UI workflows (DAR, Explorer, observability,
+// tokens) external teams actually use. Mirrors the feature routes in
+// internal/ui/router.go.
+var uiFeatures = []string{
+	"instances", "dar", "explorer", "metrics", "tokens", "skills", "backup",
 }
 
 func set(items ...string) map[string]struct{} {
