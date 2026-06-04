@@ -142,45 +142,85 @@ def native_card(name, sql, display, db_id, coll_id, viz=None):
 
 
 def build_cards(db_id, coll_id):
+    """Build every saved question, tagged by source in its title:
+    [telemetry] = privacy-preserving counters, [GitHub] = release/repo
+    signals, [qualitative] = maintainer-entered evidence."""
     ids = {}
+    # ---- M1: LocalNet lifecycle (cross-platform incl. Windows) ----
     ids["daily"] = native_card(
-        "Commands per day", "SELECT period_date, sum(count) AS commands "
+        "[telemetry] Commands per day", "SELECT period_date, sum(count) AS commands "
         "FROM counter_period WHERE chart='dpm/command' GROUP BY period_date ORDER BY period_date",
         "line", db_id, coll_id,
         {"graph.dimensions": ["period_date"], "graph.metrics": ["commands"]})
+    ids["up_outcome"] = native_card(
+        "[telemetry] LocalNet starts — ok vs fail",
+        "SELECT split_part(bucket,'/',2) AS outcome, sum(count) AS n "
+        "FROM counter_period WHERE chart='dpm/command_exit' AND bucket LIKE 'up/%' GROUP BY 1 ORDER BY 1",
+        "bar", db_id, coll_id,
+        {"graph.dimensions": ["outcome"], "graph.metrics": ["n"]})
+    ids["os"] = native_card(
+        "[telemetry] Platform split (incl. Windows)", "SELECT bucket AS os, sum(count) AS total "
+        "FROM counter_period WHERE chart='dpm/os' GROUP BY bucket ORDER BY total DESC",
+        "pie", db_id, coll_id)
     ids["top"] = native_card(
-        "Top commands", "SELECT bucket AS command, sum(count) AS total "
+        "[telemetry] Top commands", "SELECT bucket AS command, sum(count) AS total "
         "FROM counter_period WHERE chart='dpm/command' GROUP BY bucket ORDER BY total DESC",
         "row", db_id, coll_id,
         {"graph.dimensions": ["command"], "graph.metrics": ["total"]})
-    ids["os"] = native_card(
-        "OS split", "SELECT bucket AS os, sum(count) AS total "
-        "FROM counter_period WHERE chart='dpm/os' GROUP BY bucket ORDER BY total DESC",
+    # ---- M2: Web UI, observability, DAR, explorer ----
+    ids["ui"] = native_card(
+        "[telemetry] Web UI features used (per session)",
+        "SELECT bucket AS feature, sum(count) AS sessions "
+        "FROM counter_period WHERE chart='dpm/ui_feature' GROUP BY 1 ORDER BY 2 DESC",
+        "row", db_id, coll_id,
+        {"graph.dimensions": ["feature"], "graph.metrics": ["sessions"]})
+    ids["ci"] = native_card(
+        "[telemetry] CI vs interactive",
+        "SELECT CASE bucket WHEN 'true' THEN 'CI' ELSE 'interactive' END AS env, sum(count) AS n "
+        "FROM counter_period WHERE chart='dpm/ci' GROUP BY 1",
         "pie", db_id, coll_id)
-    ids["exit"] = native_card(
-        "Command outcomes (ok vs fail)",
-        "SELECT split_part(bucket,'/',1) AS command, split_part(bucket,'/',2) AS outcome, sum(count) AS n "
-        "FROM counter_period WHERE chart='dpm/command_exit' GROUP BY 1,2 ORDER BY 1,2",
+    ids["agent"] = native_card(
+        "[telemetry] AI agent usage",
+        "SELECT bucket AS agent, sum(count) AS n "
+        "FROM counter_period WHERE chart='dpm/llm_agent' GROUP BY 1 ORDER BY 2 DESC",
+        "pie", db_id, coll_id)
+    # ---- M3: Token Standard CIP-0112 flow ----
+    ids["token"] = native_card(
+        "[telemetry] Token actions (CIP-0112 flow)",
+        "SELECT bucket AS action, sum(count) AS n "
+        "FROM counter_period WHERE chart='dpm/token_action' GROUP BY 1 ORDER BY 2 DESC",
         "bar", db_id, coll_id,
-        {"graph.dimensions": ["command", "outcome"], "graph.metrics": ["n"]})
-    ids["raw"] = native_card(
-        "All counters (raw, exportable)",
-        "SELECT period_date, granularity, chart, bucket, count FROM counter_period ORDER BY period_date DESC, chart, bucket",
-        "table", db_id, coll_id)
-    # GitHub adoption signals (populated by cmd/github-stats). These query
-    # the github_* tables/views; they create cleanly even before the first
-    # github-stats run (the tables ship in schema.sql).
+        {"graph.dimensions": ["action"], "graph.metrics": ["n"]})
+    # ---- M4: composite adoption — installs, visibility, qualitative ----
     ids["downloads"] = native_card(
-        "Cumulative downloads (toward M4 floor)",
+        "[GitHub] Cumulative downloads (toward 250 floor)",
         "SELECT captured_on, total_downloads FROM v_downloads_total ORDER BY captured_on",
         "line", db_id, coll_id,
         {"graph.dimensions": ["captured_on"], "graph.metrics": ["total_downloads"]})
     ids["stars"] = native_card(
-        "Stars & forks over time (visibility)",
+        "[GitHub] Stars & forks over time (visibility)",
         "SELECT captured_on, stars, forks FROM github_repo_stats ORDER BY captured_on",
         "line", db_id, coll_id,
         {"graph.dimensions": ["captured_on"], "graph.metrics": ["stars", "forks"]})
+    ids["evidence"] = native_card(
+        "[qualitative] External adoption evidence",
+        "SELECT milestone, team, evidence_type, url, noted_on FROM adoption_evidence "
+        "ORDER BY milestone, noted_on DESC",
+        "table", db_id, coll_id)
+    ids["raw"] = native_card(
+        "[telemetry] All counters (raw, exportable)",
+        "SELECT period_date, granularity, chart, bucket, count FROM counter_period ORDER BY period_date DESC, chart, bucket",
+        "table", db_id, coll_id)
     return ids
+
+
+def heading(text):
+    """A full-width markdown section header (a Metabase 'virtual' text card)."""
+    return {
+        "text": text,
+        "virtual_card": {"name": None, "display": "text",
+                         "visualization_settings": {}, "dataset_query": {}, "archived": False},
+    }
 
 
 def ensure_dashboard(coll_id, card_ids):
@@ -197,25 +237,45 @@ def ensure_dashboard(coll_id, card_ids):
     else:
         print(f"✓ dashboard '{DASHBOARD_NAME}' exists (id={dash_id})")
 
-    # 18-col grid layout.
-    layout = [
-        ("daily", 0, 0, 12, 6),
-        ("os", 12, 0, 6, 6),
-        ("top", 0, 6, 9, 6),
-        ("exit", 9, 6, 9, 6),
-        ("downloads", 0, 12, 9, 6),
-        ("stars", 9, 12, 9, 6),
-        ("raw", 0, 18, 18, 7),
+    # Milestone-grouped 18-col layout. Each section opens with a full-width
+    # markdown heading; charts are tagged by source in their titles.
+    # Entries: (kind, key/text, col, row, w, h). kind 'h'=heading, 'c'=card.
+    plan = [
+        ("h", "# canton-devkit — adoption\nSources: **[telemetry]** privacy-preserving counters · **[GitHub]** release/repo signals · **[qualitative]** maintainer-entered evidence", 0, 0, 18, 2),
+        ("h", "## M1 — LocalNet lifecycle (cross-platform incl. Windows)", 0, 2, 18, 1),
+        ("c", "daily", 0, 3, 9, 6),
+        ("c", "up_outcome", 9, 3, 4, 6),
+        ("c", "os", 13, 3, 5, 6),
+        ("c", "top", 0, 9, 18, 5),
+        ("h", "## M2 — Web UI, observability, DAR & explorer", 0, 14, 18, 1),
+        ("c", "ui", 0, 15, 8, 6),
+        ("c", "ci", 8, 15, 5, 6),
+        ("c", "agent", 13, 15, 5, 6),
+        ("h", "## M3 — Token Standard (CIP-0112) flow", 0, 21, 18, 1),
+        ("c", "token", 0, 22, 18, 6),
+        ("h", "## M4 — composite adoption (installs · visibility · qualitative)", 0, 28, 18, 1),
+        ("c", "downloads", 0, 29, 9, 6),
+        ("c", "stars", 9, 29, 9, 6),
+        ("c", "evidence", 0, 35, 18, 6),
+        ("h", "### Appendix — raw counters", 0, 41, 18, 1),
+        ("c", "raw", 0, 42, 18, 7),
     ]
     dashcards = []
-    for i, (key, col, row, w, h) in enumerate(layout):
-        dashcards.append({
-            "id": -(i + 1), "card_id": card_ids[key],
-            "row": row, "col": col, "size_x": w, "size_y": h,
-            "parameter_mappings": [], "visualization_settings": {},
-        })
+    n_cards = n_head = 0
+    for i, (kind, ref, col, row, w, h) in enumerate(plan):
+        dc = {"id": -(i + 1), "row": row, "col": col, "size_x": w, "size_y": h,
+              "parameter_mappings": []}
+        if kind == "h":
+            dc["card_id"] = None
+            dc["visualization_settings"] = heading(ref)
+            n_head += 1
+        else:
+            dc["card_id"] = card_ids[ref]
+            dc["visualization_settings"] = {}
+            n_cards += 1
+        dashcards.append(dc)
     api("PUT", f"/api/dashboard/{dash_id}", {"dashcards": dashcards})
-    print(f"✓ laid out {len(dashcards)} cards on the dashboard")
+    print(f"✓ laid out {n_cards} charts under {n_head} milestone sections")
     return dash_id
 
 

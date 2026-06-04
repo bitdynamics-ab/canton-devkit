@@ -49,11 +49,20 @@ MB_USER='you@example.com' MB_PASS='...' DB_PASS="$POSTGRES_PASSWORD" python3 set
 
 [`setup-metabase.py`](setup-metabase.py) is idempotent (re-runs update in
 place) and stdlib-only. It connects the `telemetry` database, creates a
-**canton-devkit telemetry** collection, builds five charts over
-`counter_period` (commands/day, top commands, OS split, ok-vs-fail
-outcomes, and a raw exportable table), and assembles them into a
-**canton-devkit usage** dashboard — printing its URL when done. Works the
-same against a production Metabase by setting `MB_URL`.
+**canton-devkit telemetry** collection, and assembles a **milestone-
+grouped** `canton-devkit usage` dashboard — M1/M2/M3/M4 sections, each
+chart tagged by source (`[telemetry]` / `[GitHub]` / `[qualitative]`) so
+it doubles as the adoption-transparency artifact:
+
+- **M1** — commands/day, LocalNet start ok-vs-fail, platform split (incl.
+  Windows), top commands
+- **M2** — Web UI features used, CI-vs-interactive, AI-agent usage
+- **M3** — token actions (the CIP-0112 create → mint → transfer flow)
+- **M4** — cumulative downloads (toward the 250 floor), stars/forks, and
+  the **`adoption_evidence`** table — the named external teams/projects you
+  log by hand (the leg neither telemetry nor GitHub can provide)
+
+Works the same against a production Metabase by setting `MB_URL`.
 
 Prefer the UI? You can also add the `telemetry` Postgres as a data source
 manually and chart `counter_period` / the `v_command_usage` view.

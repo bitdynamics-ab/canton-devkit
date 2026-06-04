@@ -58,3 +58,19 @@ SELECT captured_on, sum(download_count) AS total_downloads
 FROM github_release_downloads
 GROUP BY captured_on
 ORDER BY captured_on;
+
+-- Qualitative adoption evidence — the leg neither telemetry (zero-PII)
+-- nor GitHub can provide: the named external teams/projects and their
+-- proof artifacts that the milestone acceptance bars require (M1: 3
+-- teams, M2: 5, M3: 7, M4: 5 apps + case study). Filled by the
+-- maintainer (SQL insert or Metabase data entry), surfaced on the
+-- dashboard so the adoption story is one place.
+CREATE TABLE IF NOT EXISTS adoption_evidence (
+    id            serial PRIMARY KEY,
+    milestone     text NOT NULL,                 -- 'M1' | 'M2' | 'M3' | 'M4'
+    team          text NOT NULL,                 -- external team / project name
+    evidence_type text NOT NULL,                 -- issue | demo | case-study | feedback | attestation
+    url           text,                          -- link to the artifact
+    noted_on      date NOT NULL DEFAULT current_date,
+    notes         text
+);
