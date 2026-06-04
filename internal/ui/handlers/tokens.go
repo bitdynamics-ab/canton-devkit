@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	regclient "github.com/bitdynamics-ab/canton-devkit/internal/canton/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
@@ -150,13 +151,22 @@ func handleTokensCreate(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
-	res, err := token.RunCreate(nil, token.CreateOptions{
+	// Thread Endpoint+Role through to RunCreate so the UI's
+	// create-on-ledger path matches the CLI: an instance with a captured
+	// participant port submits live, otherwise RunCreate falls back to
+	// the registry-only stub. Same role/endpoint discovery shape as the
+	// mint / transfer handlers below.
+	role := roleFromQuery(r)
+	res, err := runTokenCreate(token.CreateOptions{
 		Instance:      instance,
 		Name:          req.Name,
 		Symbol:        req.Symbol,
 		Decimals:      req.Decimals,
 		InitialSupply: req.InitialSupply,
 		Issuer:        req.Issuer,
+		Endpoint:      liveLedgerEndpoint(instance, role),
+		Role:          role,
+		Insecure:      true,
 	})
 	if err != nil {
 		mapTokenError(w, err, "create")
@@ -179,11 +189,17 @@ func handleTokenMint(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
+	role := roleFromQuery(r)
 	err = token.RunMint(r.Context(), nil, token.MintOptions{
 		Instance:   instance,
 		Instrument: r.PathValue("symbol"),
 		To:         body.To,
 		Amount:     body.Amount,
+		// Live mint for on-ledger test-token instruments. Amulet /
+		// registry-only instruments still take the unsupported path.
+		Endpoint: liveLedgerEndpoint(instance, role),
+		Role:     role,
+		Insecure: true,
 	})
 	mapTokenError(w, err, "mint")
 }
@@ -205,6 +221,7 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
+	role := roleFromQuery(r)
 	err = token.RunTransfer(r.Context(), nil, token.TransferOptions{
 		Instance:   instance,
 		Instrument: r.PathValue("symbol"),
@@ -213,6 +230,13 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 		Amount:     body.Amount,
 		NoWait:     body.NoWait,
 		Reason:     body.Reason,
+		// Live-submit: resolve the role's ledger endpoint so the
+		// handler runs the real V2 transfer (registry-URL auto-derives
+		// from the instance). Absent port → RunTransfer surfaces the
+		// not-wired remediation, mapped to 412.
+		Endpoint: liveLedgerEndpoint(instance, role),
+		Role:     role,
+		Insecure: true,
 	})
 	mapTokenError(w, err, "transfer")
 }
@@ -223,9 +247,13 @@ func handleTokenAccept(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
+	role := roleFromQuery(r)
 	err = token.RunAccept(r.Context(), nil, token.AcceptOptions{
 		Instance:              instance,
 		TransferInstructionID: r.PathValue("id"),
+		Endpoint:              liveLedgerEndpoint(instance, role),
+		Role:                  role,
+		Insecure:              true,
 	})
 	mapTokenError(w, err, "accept")
 }
@@ -244,16 +272,52 @@ func handleTokenBurn(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
+	role := roleFromQuery(r)
 	err = token.RunBurn(r.Context(), nil, token.BurnOptions{
 		Instance:   instance,
 		Instrument: r.PathValue("symbol"),
 		From:       body.From,
 		Amount:     body.Amount,
+		Endpoint:   liveLedgerEndpoint(instance, role),
+		Role:       role,
+		Insecure:   true,
 	})
 	mapTokenError(w, err, "burn")
 }
 
 // --- helpers ---------------------------------------------------------
+
+// runTokenCreate is the indirection point for handleTokensCreate. Tests
+// override it to assert that the handler is wiring Endpoint+Role through
+// to the orchestration layer (the CLI gets them from flags; the UI must
+// derive them from the instance registry + request role).
+var runTokenCreate = func(opts token.CreateOptions) (*token.CreateResult, error) {
+	return token.RunCreate(nil, opts)
+}
+
+// roleFromQuery returns the `?role=` value, defaulting to app-user.
+func roleFromQuery(r *http.Request) string {
+	role := r.URL.Query().Get("role")
+	if role == "" {
+		role = "app-user"
+	}
+	return role
+}
+
+// liveLedgerEndpoint resolves the role's participant ledger gRPC
+// endpoint (host:port) from the instance's recorded ports. Empty when
+// the port wasn't captured — callers then fall back to the not-wired
+// stub. Same port-discovery shape as handleTokenHoldings + contracts.go.
+func liveLedgerEndpoint(instance, role string) string {
+	state, err := registry.Read(instance)
+	if err != nil {
+		return ""
+	}
+	if port, ok := state.Ports["participant_ledger_"+role]; ok && port > 0 {
+		return "localhost:" + strconv.Itoa(port)
+	}
+	return ""
+}
 
 // instanceFromQuery validates `?instance=` and protects the per-name
 // path-traversal surface via registry.ValidateName.
@@ -286,11 +350,12 @@ func decodeJSON(r io.ReadCloser, into any) error {
 // identical so a future ErrXxx → status mapping change only touches
 // this one function.
 //
-//   - nil                         → 204 No Content (idempotent success
-//     for mutations that don't return a body)
-//   - token.ErrNeedsV2LocalNet   → 412 Precondition Failed
-//   - token.ErrSymbolInUse       → 409 Conflict
-//   - other                      → 400 / 500 with the message
+//   - nil                              → 204 No Content (idempotent
+//     success for mutations that don't return a body)
+//   - token.ErrNeedsV2LocalNet         → 412 Precondition Failed
+//   - token.ErrUnsupportedOnInstrument → 422 Unprocessable Entity
+//   - token.ErrSymbolInUse             → 409 Conflict
+//   - other                            → 400 / 500 with the message
 //
 // partyIDFingerprint matches the fingerprint half of a fully-qualified
 // Daml party id (`<hint>::<fingerprint>`). The hint is human-readable;
@@ -313,14 +378,27 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 	case errors.Is(err, token.ErrNeedsV2LocalNet):
 		writeErrorWithCode(w, http.StatusPreconditionFailed,
 			"NEEDS_V2_LOCALNET", err.Error())
+	case errors.Is(err, token.ErrUnsupportedOnInstrument):
+		writeErrorWithCode(w, http.StatusUnprocessableEntity,
+			"UNSUPPORTED_ON_INSTRUMENT", err.Error())
 	case errors.Is(err, token.ErrSymbolInUse):
 		writeErrorWithCode(w, http.StatusConflict,
 			"SYMBOL_IN_USE", err.Error())
 	default:
+		// Off-ledger token-registry 4xx: surface the upstream status
+		// (so a 422 INSUFFICIENT_FUNDS stays a 422) and ship a short
+		// sanitized reason — never the raw 4 KiB body, which can embed
+		// party-ids / contract-ids / URLs.
+		var apiErr *regclient.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode >= 400 && apiErr.StatusCode < 500 {
+			reason := registryErrorReason(apiErr)
+			writeErrorWithCode(w, apiErr.StatusCode,
+				codeForStatus(apiErr.StatusCode), reason)
+			return
+		}
 		// Once the actions submit for real, failures arrive as gRPC
 		// status errors — map their codes to the matching HTTP status
-		// instead of flattening everything to 400. (Today the actions
-		// stub at ErrNeedsV2LocalNet → 412, so this is forward-looking.)
+		// instead of flattening everything to 400.
 		if s, ok := status.FromError(err); ok && s.Code() != codes.OK {
 			switch s.Code() {
 			case codes.NotFound:
@@ -346,8 +424,38 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 		// Non-gRPC orchestration error: user-actionable (bad amount,
 		// unknown party, malformed instrument id). Surface the cause —
 		// `writeError` would redact it to just the op name, which is
-		// correct for 5xx but unhelpful for a 400. Consistent with the
-		// explicit 400s in the per-handler decode paths.
+		// correct for 5xx but unhelpful for a 400.
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 	}
+}
+
+// registryErrorReason extracts a short, safe reason string from a
+// token-registry APIError. Splice error bodies are usually small JSON
+// of the form `{"code":"INSUFFICIENT_FUNDS","message":"..."}`; we try
+// to surface that code (very high signal, low risk) and otherwise fall
+// back to a sanitized snippet of the body capped to keep the response
+// small. Never returns the full 4 KiB body — that can leak party-ids,
+// contract-ids, and registry URLs.
+func registryErrorReason(e *regclient.APIError) string {
+	var probe struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(e.Body), &probe); err == nil {
+		if probe.Code != "" {
+			return probe.Code
+		}
+		if probe.Message != "" {
+			return sanitize400(truncate(probe.Message, 200))
+		}
+	}
+	return sanitize400(truncate(e.Body, 200))
+}
+
+// truncate caps a string at n runes with an ellipsis.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }

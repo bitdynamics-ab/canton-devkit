@@ -1049,18 +1049,33 @@ export interface TokenHoldingsResponse {
   holdings: TokenHolding[];
 }
 
-export const fetchTokens = (instance: string) =>
-  apiFetch<TokensListResponse>(
-    `/api/tokens?instance=${encodeURIComponent(instance)}`,
-  );
+// DEFAULT_ROLE matches the backend default in roleFromQuery — keep the
+// two in sync so the live-ledger endpoint discovery and JWT minting
+// pick the same participant for unrestricted UI calls.
+const DEFAULT_ROLE = "app-user";
+
+// tokenQuery builds `?instance=...&role=...` (role omitted when it
+// would just repeat the default). Centralised so every token endpoint
+// forwards the role the same way the backend's handleTokenMint /
+// handleTokenTransfer already expect — BIT-140 review fix 87.3.
+function tokenQuery(instance: string, role?: string): string {
+  const params = new URLSearchParams({ instance });
+  if (role && role !== DEFAULT_ROLE) params.set("role", role);
+  return params.toString();
+}
+
+export const fetchTokens = (instance: string, role?: string) =>
+  apiFetch<TokensListResponse>(`/api/tokens?${tokenQuery(instance, role)}`);
 
 export const fetchHoldings = (
   instance: string,
   symbol: string,
   party?: string,
+  role?: string,
 ) => {
   const params = new URLSearchParams({ instance });
   if (party) params.set("party", party);
+  if (role && role !== DEFAULT_ROLE) params.set("role", role);
   return apiFetch<TokenHoldingsResponse>(
     `/api/tokens/${encodeURIComponent(symbol)}/holdings?${params}`,
   );
@@ -1074,9 +1089,13 @@ export interface TokenCreateInput {
   issuer: string;
 }
 
-export const createToken = (instance: string, body: TokenCreateInput) =>
+export const createToken = (
+  instance: string,
+  body: TokenCreateInput,
+  role?: string,
+) =>
   apiFetch<TokenRef>(
-    `/api/tokens?instance=${encodeURIComponent(instance)}`,
+    `/api/tokens?${tokenQuery(instance, role)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1089,9 +1108,10 @@ export const mintToken = (
   symbol: string,
   to: string,
   amount: string,
+  role?: string,
 ): Promise<void> =>
   apiFetchVoid(
-    `/api/tokens/${encodeURIComponent(symbol)}/mint?instance=${encodeURIComponent(instance)}`,
+    `/api/tokens/${encodeURIComponent(symbol)}/mint?${tokenQuery(instance, role)}`,
     { to, amount },
   );
 
@@ -1102,9 +1122,10 @@ export const transferToken = (
   to: string,
   amount: string,
   reason?: string,
+  role?: string,
 ): Promise<void> =>
   apiFetchVoid(
-    `/api/tokens/${encodeURIComponent(symbol)}/transfer?instance=${encodeURIComponent(instance)}`,
+    `/api/tokens/${encodeURIComponent(symbol)}/transfer?${tokenQuery(instance, role)}`,
     { from, to, amount, reason: reason ?? "" },
   );
 
@@ -1113,18 +1134,20 @@ export const burnToken = (
   symbol: string,
   from: string,
   amount: string,
+  role?: string,
 ): Promise<void> =>
   apiFetchVoid(
-    `/api/tokens/${encodeURIComponent(symbol)}/burn?instance=${encodeURIComponent(instance)}`,
+    `/api/tokens/${encodeURIComponent(symbol)}/burn?${tokenQuery(instance, role)}`,
     { from, amount },
   );
 
 export const acceptTransfer = (
   instance: string,
   transferInstructionID: string,
+  role?: string,
 ): Promise<void> =>
   apiFetchVoid(
-    `/api/tokens/transfers/${encodeURIComponent(transferInstructionID)}/accept?instance=${encodeURIComponent(instance)}`,
+    `/api/tokens/transfers/${encodeURIComponent(transferInstructionID)}/accept?${tokenQuery(instance, role)}`,
     {},
   );
 

@@ -56,6 +56,9 @@ to skip the prompt (required when running non-interactively / in CI).`,
 	cmd.Flags().StringVar(&opts.Amount, "amount", "", "Decimal amount to burn. Required.")
 	cmd.Flags().BoolVarP(&assumeYes, "yes", "y", false,
 		"Skip the irreversible-burn confirmation prompt (required for non-interactive / CI use)")
+	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Required for the live burn (on-ledger test-token instruments).")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the burn.")
+	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	_ = cmd.MarkFlagRequired("instance")
 	_ = cmd.MarkFlagRequired("instrument")
 	_ = cmd.MarkFlagRequired("from")

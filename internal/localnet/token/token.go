@@ -51,6 +51,15 @@ type CreateOptions struct {
 	// instrument card. Status field on the resulting TokenRef
 	// reflects this: "recorded" until a real submission happens.
 	Submit bool
+
+	// Endpoint, when set (host:port), makes RunCreate create the
+	// instrument on-ledger: it ensures a TokenRules contract exists
+	// for the issuer party (admin) and records the instrument with
+	// status "on-ledger". Empty Endpoint keeps the registry-only
+	// "recorded" path. Role/Insecure mirror the other live actions.
+	Endpoint string
+	Role     string
+	Insecure bool
 }
 
 // CreateResult is what RunCreate returns to the CLI and the HTTP
@@ -87,9 +96,25 @@ func RunCreate(out io.Writer, opts CreateOptions) (*CreateResult, error) {
 		return nil, fmt.Errorf("%w: %q", ErrSymbolInUse, opts.Symbol)
 	}
 
-	instrumentID, err := newInstrumentID()
-	if err != nil {
-		return nil, fmt.Errorf("generate instrument id: %w", err)
+	// On-ledger create uses the symbol as the V2 InstrumentId.id (paired
+	// with the issuer admin party), so transfers/balance resolve the
+	// instrument by the same human symbol. The registry-only path keeps
+	// a generated opaque id.
+	instrumentID := opts.Symbol
+	status := "on-ledger"
+	if opts.Endpoint == "" {
+		var err error
+		if instrumentID, err = newInstrumentID(); err != nil {
+			return nil, fmt.Errorf("generate instrument id: %w", err)
+		}
+		status = "recorded"
+	} else {
+		// Ensure the issuer's TokenRules contract exists on-ledger.
+		// Idempotent: one TokenRules per admin anchors every instrument
+		// that admin issues.
+		if err := ensureTokenRules(opts); err != nil {
+			return nil, err
+		}
 	}
 
 	ref := registry.TokenRef{
@@ -100,9 +125,7 @@ func RunCreate(out io.Writer, opts CreateOptions) (*CreateResult, error) {
 		IssuerParty:   opts.Issuer,
 		InstrumentID:  instrumentID,
 		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
-		// "recorded" — entry is local-only until BIT-139 wires the
-		// V2 instrument-creation submission on the ledger.
-		Status: "recorded",
+		Status:        status,
 	}
 	state.Tokens[opts.Symbol] = ref
 	if err := registry.Write(state); err != nil {
@@ -115,12 +138,15 @@ func RunCreate(out io.Writer, opts CreateOptions) (*CreateResult, error) {
 				"Initial supply %s with %d decimals.\n",
 			ref.Name, ref.Symbol, ref.InstrumentID, ref.IssuerParty,
 			ref.InitialSupply, ref.Decimals)
-		if !opts.Submit {
+		if opts.Endpoint != "" {
 			_, _ = fmt.Fprintln(out,
-				"Note: instrument is recorded LOCALLY only — on-ledger creation "+
-					"lands once the V2 LocalNet is up and the splice-test-token-v2 "+
-					"DAR is vetted (BIT-139). Subsequent `token mint/transfer/burn/"+
-					"balance` commands can already resolve --instrument by symbol.")
+				"Created on-ledger: a TokenRules contract anchors this instrument "+
+					"for the issuer. `token mint --endpoint ...` can now mint supply.")
+		} else {
+			_, _ = fmt.Fprintln(out,
+				"Note: instrument is recorded LOCALLY only — pass --endpoint to "+
+					"create it on-ledger (requires the splice-test-token-v2 DAR "+
+					"uploaded). Subsequent commands can resolve --instrument by symbol.")
 		}
 	}
 	return &CreateResult{TokenRef: ref}, nil
