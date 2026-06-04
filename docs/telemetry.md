@@ -1,9 +1,13 @@
 # Telemetry
 
 canton-devkit records **anonymous, aggregate usage counters** — merged
-into a weekly total with **no per-invocation rows and no identifiers of
-any kind** — to help the team see what's used and what breaks. See the
+into a per-period total with **no per-invocation rows and no identifiers
+of any kind** — to help the team see what's used and what breaks. See the
 full design at [docs/proposals/telemetry.md](proposals/telemetry.md).
+
+> **Reviewers / Committee:** for a plain-language guide to *what each
+> metric means, what we're checking, and the privacy model*, see
+> **[docs/adoption-metrics.md](adoption-metrics.md)**.
 
 Inspect exactly what's queued any time:
 
