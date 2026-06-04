@@ -23,6 +23,7 @@ var allowedCounters = map[string]map[string]struct{}{
 	"dpm/doctor_fail":            nil, // check IDs from internal/docker/checks.go, validated at runtime
 	"dpm/token_action":           set(tokenActions...),
 	"dpm/ui_feature":             set(uiFeatures...),
+	"dpm/install":                set("linux", "darwin", "windows"), // once per machine (first non-CI run) — device-count proxy
 }
 
 // commandVerbs is the bucket space for dpm/command — the localnet

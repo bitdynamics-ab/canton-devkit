@@ -20,10 +20,14 @@ func consentPath() string { return filepath.Join(telemetryDir(), "config.json") 
 
 // consent is the persisted state. NO identifier of any kind (design #2).
 type consent struct {
-	SchemaVersion int    `json:"schema_version"`
-	Enabled       *bool  `json:"enabled,omitempty"` // nil = never chosen (use default)
-	NoticeShown   bool   `json:"notice_shown"`
-	UpdatedAt     string `json:"updated_at,omitempty"`
+	SchemaVersion int   `json:"schema_version"`
+	Enabled       *bool `json:"enabled,omitempty"` // nil = never chosen (use default)
+	NoticeShown   bool  `json:"notice_shown"`
+	// InstallCounted records that this machine has already contributed its
+	// one-per-install increment to dpm/install. A boolean, never an
+	// identifier — it only ensures the install counter fires once per host.
+	InstallCounted bool   `json:"install_counted,omitempty"`
+	UpdatedAt      string `json:"updated_at,omitempty"`
 }
 
 func loadConsent() consent {
