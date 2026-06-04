@@ -3,12 +3,16 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // tokensSrv mounts MountTokens on a fresh mux and returns an
@@ -142,5 +146,63 @@ func TestTokens_MissingInstanceIs400(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+// TestMapTokenError_DefaultIs400WithCause pins main's policy: a
+// non-gRPC orchestration error is user-actionable (bad amount,
+// unknown party, malformed instrument id), so it surfaces as 400
+// with the cause string — `writeError`'s 5xx-only redaction would
+// hide context the user needs. gRPC paths (Unavailable, Internal,
+// InvalidArgument) are exercised in their dedicated mint tests
+// where sanitize400 masks party-id fingerprints on the 400 branch.
+func TestMapTokenError_DefaultIs400WithCause(t *testing.T) {
+	cause := errors.New("amount must be a non-negative decimal")
+	rec := httptest.NewRecorder()
+	mapTokenError(rec, cause, "mint")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), ErrCodeInvalidRequest) {
+		t.Errorf("body should carry INVALID_REQUEST code; got %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "non-negative decimal") {
+		t.Errorf("body should carry the cause string; got %s", rec.Body.String())
+	}
+}
+
+// TestMapTokenError_InvalidArgumentSanitizesPartyID pins main's
+// sanitize400: a gRPC InvalidArgument whose message embeds a fully-
+// qualified party id has the fingerprint masked before reaching the
+// client. The readable hint stays so the error remains actionable.
+func TestMapTokenError_InvalidArgumentSanitizesPartyID(t *testing.T) {
+	st := status.New(codes.InvalidArgument, "party alice::abc123def456 not authorized")
+	rec := httptest.NewRecorder()
+	mapTokenError(rec, st.Err(), "mint")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "abc123def456") {
+		t.Errorf("body leaks party-id fingerprint: %s", body)
+	}
+	if !strings.Contains(body, "alice::") {
+		t.Errorf("body should keep readable hint: %s", body)
+	}
+}
+
+// TestMapTokenError_NeedsV2Maps412 pins that the V2-needed sentinel
+// still produces the dedicated remediation code even after A1's
+// default-branch tightening.
+func TestMapTokenError_NeedsV2Maps412(t *testing.T) {
+	rec := httptest.NewRecorder()
+	mapTokenError(rec, token.ErrNeedsV2LocalNet, "balance")
+	if rec.Code != http.StatusPreconditionFailed {
+		t.Errorf("status = %d, want 412", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "NEEDS_V2_LOCALNET") {
+		t.Errorf("body should carry NEEDS_V2_LOCALNET code; got %s", rec.Body.String())
 	}
 }

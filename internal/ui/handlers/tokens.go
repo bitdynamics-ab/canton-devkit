@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
@@ -93,13 +94,41 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
-	rows, err := token.RunBalance(r.Context(), nil, token.BalanceOptions{
+	// Discover the role's participant ledger port from the registry so
+	// the UI hits the live V2 ACS, same shape as contracts.go. Empty
+	// role defaults to app-user; absent port falls back to the registry
+	// pseudo-balance path (used when the instance pre-dates port
+	// capture). Auto-grant + per-party filter inside dialLedger /
+	// runBalanceLive handle the V2 alpha permission gate transparently.
+	role := r.URL.Query().Get("role")
+	if role == "" {
+		role = "app-user"
+	}
+	opts := token.BalanceOptions{
 		Instance:   instance,
 		Party:      r.URL.Query().Get("party"),
 		Instrument: r.PathValue("symbol"),
-	})
+		Role:       role,
+		Insecure:   true, // LocalNet default
+	}
+	if state, err := registry.Read(instance); err == nil {
+		if port, ok := state.Ports["participant_ledger_"+role]; ok && port > 0 {
+			opts.Endpoint = "localhost:" + strconv.Itoa(port)
+		}
+	}
+	rows, truncated, err := token.RunBalance(r.Context(), nil, opts)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "balance", err)
+		mapTokenError(w, err, "balance")
+		return
+	}
+	if truncated {
+		// Surface the truncation so the UI can render a "showing N of
+		// many" hint instead of silently misreporting the wallet.
+		writeJSON(w, http.StatusOK, map[string]any{
+			"schema_version": types.SchemaVersion,
+			"holdings":       rows,
+			"truncated":      true,
+		})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{

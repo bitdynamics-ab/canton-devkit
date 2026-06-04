@@ -17,7 +17,7 @@ func TestRunBalance_DerivesFromRegistry(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	rows, err := RunBalance(context.Background(), nil, BalanceOptions{Instance: "demo"})
+	rows, _, err := RunBalance(context.Background(), nil, BalanceOptions{Instance: "demo"})
 	if err != nil {
 		t.Fatalf("RunBalance: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestRunBalance_NonIssuerSeesZero(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	rows, err := RunBalance(context.Background(), nil, BalanceOptions{
+	rows, _, err := RunBalance(context.Background(), nil, BalanceOptions{
 		Instance: "demo", Party: "bob::xyz",
 	})
 	if err != nil {
@@ -65,12 +65,12 @@ func TestRunBalance_FilterByInstrument(t *testing.T) {
 		t.Fatalf("create STK: %v", err)
 	}
 
-	all, err := RunBalance(context.Background(), nil, BalanceOptions{Instance: "demo"})
+	all, _, err := RunBalance(context.Background(), nil, BalanceOptions{Instance: "demo"})
 	if err != nil || len(all) != 2 {
 		t.Fatalf("expected 2 rows for all instruments, got %d (%v)", len(all), err)
 	}
 
-	one, err := RunBalance(context.Background(), nil, BalanceOptions{
+	one, _, err := RunBalance(context.Background(), nil, BalanceOptions{
 		Instance: "demo", Instrument: "RTK",
 	})
 	if err != nil || len(one) != 1 || one[0].InstrumentSymbol != "RTK" {

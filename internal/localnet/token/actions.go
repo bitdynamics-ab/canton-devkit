@@ -75,6 +75,15 @@ type BalanceOptions struct {
 	Insecure bool
 }
 
+// maxHoldingsScan caps how many ACS contracts runBalanceLive will
+// consume before declaring the result truncated. A real wallet
+// rarely holds more than a few thousand contracts; the cap is a
+// belt-and-braces guard against a runaway ledger pumping us into
+// OOM (the gRPC stream is otherwise unbounded). When the cap fires
+// the caller gets truncated=true so the UI can show "showing N of
+// many" rather than silently misreporting the balance.
+const maxHoldingsScan = 10_000
+
 // BalanceRow is one row of the balance response — instrument + party
 // + summed amount across the participant's visible ACS holdings.
 type BalanceRow struct {
@@ -185,9 +194,9 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 // Returning *something* here makes the Web UI's holdings table render
 // right away on whatever instance the user is browsing, and gives a
 // deterministic surface for tests.
-func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]BalanceRow, error) {
+func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]BalanceRow, bool, error) {
 	if opts.Instance == "" {
-		return nil, errors.New("instance is required")
+		return nil, false, errors.New("instance is required")
 	}
 	// Live-ACS path takes precedence when the caller has dialed a
 	// participant. Symbol/admin pairs are joined back to the local
@@ -198,7 +207,7 @@ func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]Bala
 	}
 	state, err := registry.Read(opts.Instance)
 	if err != nil {
-		return nil, fmt.Errorf("read instance state: %w", err)
+		return nil, false, fmt.Errorf("read instance state: %w", err)
 	}
 	rows := make([]BalanceRow, 0, len(state.Tokens))
 	for _, t := range state.Tokens {
@@ -220,7 +229,7 @@ func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]Bala
 			Amount:           amount,
 		})
 	}
-	return rows, nil
+	return rows, false, nil
 }
 
 // runBalanceLive is the V2-native ACS path: stream every contract
@@ -239,10 +248,15 @@ func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]Bala
 // V2). Adding them in Go without losing precision means using a big-
 // decimal-style approach: split on '.', align scale, add as big.Ints.
 // The helper addDecimal does that.
-func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, error) {
+func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, bool, error) {
+	// Cancelling on every return path tears down the gRPC stream
+	// pump goroutine so an early break (cap, decode error) doesn't
+	// leak it for the lifetime of the request context.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	state, err := registry.Read(opts.Instance)
 	if err != nil {
-		return nil, fmt.Errorf("read instance state: %w", err)
+		return nil, false, fmt.Errorf("read instance state: %w", err)
 	}
 	// Resolve the optional --instrument filter once into the form we
 	// match against streamed views. The user can pass a symbol or a
@@ -266,18 +280,38 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, err
 	}
 	client, cleanup, err := dialLedger(ctx, conn)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer cleanup()
 
 	end, err := client.LedgerEnd(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("ledger end: %w", err)
+		return nil, false, fmt.Errorf("ledger end: %w", err)
 	}
 
 	var parties []string
 	if opts.Party != "" {
 		parties = []string{opts.Party}
+	} else {
+		// Canton's wildcard ("FiltersForAnyParty") path requires the
+		// JWT to carry the super-reader / ParticipantAdmin claim. The
+		// per-role user-tokens we mint only carry CanActAs/CanReadAs
+		// on the local parties — so a wildcard query is rejected even
+		// after the grant. Enumerate the role's local parties via
+		// PartyManagement and submit them in FiltersByParty so Canton
+		// gates per-party instead.
+		discovered, err := localPartiesForRole(ctx, client, opts.Role)
+		if err != nil {
+			return nil, false, fmt.Errorf("discover local parties for role %q: %w", opts.Role, err)
+		}
+		parties = discovered
+	}
+	if len(parties) == 0 {
+		// No parties means an empty FiltersByParty, which Canton
+		// rejects. Return an empty balance set — the participant has
+		// no parties hosted (or none matching the role prefix) so
+		// there are no holdings to report.
+		return nil, false, nil
 	}
 	req := ledger.ActiveContractsRequest{
 		ActiveAtOffset: end.Offset,
@@ -285,15 +319,24 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, err
 	}
 	stream, err := client.ActiveContracts(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("ACS query: %w", err)
+		return nil, false, fmt.Errorf("ACS query: %w", err)
 	}
 
 	type bucketKey struct{ admin, id, party string }
 	bucket := map[bucketKey]string{}
 
+	var scanned int
+	var truncated bool
 	for item := range stream {
 		if item.Err != nil {
-			return nil, fmt.Errorf("ACS stream: %w", item.Err)
+			return nil, false, fmt.Errorf("ACS stream: %w", item.Err)
+		}
+		scanned++
+		if scanned > maxHoldingsScan {
+			// Bail out and tell the caller we stopped early. cancel()
+			// (deferred above) tears down the upstream pump.
+			truncated = true
+			break
 		}
 		// ContractEntry is a oneof — only the ActiveContract branch
 		// carries the CreatedEvent we need. IncompleteAssigned /
@@ -318,7 +361,7 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, err
 			k := bucketKey{admin: hv.Admin, id: hv.InstrumentID, party: hv.Owner}
 			sum, err := addDecimal(bucket[k], hv.Amount)
 			if err != nil {
-				return nil, fmt.Errorf("sum holding amounts: %w", err)
+				return nil, false, fmt.Errorf("sum holding amounts: %w", err)
 			}
 			bucket[k] = sum
 		}
@@ -338,7 +381,7 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, err
 			Amount:           amount,
 		})
 	}
-	return rows, nil
+	return rows, truncated, nil
 }
 
 // addDecimal returns a + b for two Daml Decimal strings (e.g. "1.5",
