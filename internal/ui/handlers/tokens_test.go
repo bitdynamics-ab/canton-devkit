@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	regclient "github.com/bitdynamics-ab/canton-devkit/internal/canton/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"google.golang.org/grpc/codes"
@@ -210,5 +211,75 @@ func TestMapTokenError_NeedsV2Maps412(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "NEEDS_V2_LOCALNET") {
 		t.Errorf("body should carry NEEDS_V2_LOCALNET code; got %s", rec.Body.String())
+	}
+}
+
+// TestHandleTokensCreate_WiresEndpointAndRole pins fix 87.2: the UI's
+// POST /api/tokens must thread Endpoint+Role through to RunCreate
+// the same way the CLI does (the CLI gets them from flags; the UI
+// derives them from the request role + instance port registry).
+// Without this the create-on-ledger code path is silently CLI-only.
+func TestHandleTokensCreate_WiresEndpointAndRole(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DPM_REGISTRY_DIR", dir)
+	t.Setenv("XDG_DATA_HOME", dir)
+	const inst = "wire-create"
+	st := &registry.State{
+		SchemaVersion: 1,
+		Name:          inst,
+		Ports:         map[string]int{"participant_ledger_app-user": 13902},
+	}
+	if err := registry.Write(st); err != nil {
+		t.Fatalf("registry.Write: %v", err)
+	}
+
+	var captured token.CreateOptions
+	prev := runTokenCreate
+	runTokenCreate = func(opts token.CreateOptions) (*token.CreateResult, error) {
+		captured = opts
+		return &token.CreateResult{TokenRef: registry.TokenRef{Symbol: opts.Symbol}}, nil
+	}
+	defer func() { runTokenCreate = prev }()
+
+	srv := tokensSrv(t)
+	body := bytes.NewBufferString(`{"name":"Test","symbol":"TST","decimals":2,"initial_supply":"0","issuer":"alice"}`)
+	resp, err := http.Post(srv.URL+"/api/tokens?instance="+inst, "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	if captured.Endpoint == "" {
+		t.Errorf("Endpoint not wired through (instance has captured port); got empty")
+	}
+	if captured.Role == "" {
+		t.Errorf("Role not wired through; got empty")
+	}
+}
+
+// TestMapTokenError_RegistryAPIError pins that an off-ledger token-registry
+// 4xx is forwarded to the client with the upstream status (not flattened
+// to 500) and the upstream error code (not the raw 4 KiB body).
+func TestMapTokenError_RegistryAPIError(t *testing.T) {
+	apiErr := &regclient.APIError{
+		Method:     "POST",
+		Path:       "/transfer-factory",
+		StatusCode: http.StatusUnprocessableEntity,
+		Body:       `{"code":"INSUFFICIENT_FUNDS","message":"holder alice::abc123 short by 5 amulet"}`,
+	}
+	rec := httptest.NewRecorder()
+	mapTokenError(rec, apiErr, "transfer")
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want 422 (registry status preserved)", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "INSUFFICIENT_FUNDS") {
+		t.Errorf("body should carry registry error code; got %s", body)
+	}
+	if strings.Contains(body, "abc123") {
+		t.Errorf("body must not leak full registry body (party-id fingerprint): %s", body)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	regclient "github.com/bitdynamics-ab/canton-devkit/internal/canton/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
@@ -150,13 +151,22 @@ func handleTokensCreate(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
-	res, err := token.RunCreate(nil, token.CreateOptions{
+	// Thread Endpoint+Role through to RunCreate so the UI's
+	// create-on-ledger path matches the CLI: an instance with a captured
+	// participant port submits live, otherwise RunCreate falls back to
+	// the registry-only stub. Same role/endpoint discovery shape as the
+	// mint / transfer handlers below.
+	role := roleFromQuery(r)
+	res, err := runTokenCreate(token.CreateOptions{
 		Instance:      instance,
 		Name:          req.Name,
 		Symbol:        req.Symbol,
 		Decimals:      req.Decimals,
 		InitialSupply: req.InitialSupply,
 		Issuer:        req.Issuer,
+		Endpoint:      liveLedgerEndpoint(instance, role),
+		Role:          role,
+		Insecure:      true,
 	})
 	if err != nil {
 		mapTokenError(w, err, "create")
@@ -277,6 +287,14 @@ func handleTokenBurn(w http.ResponseWriter, r *http.Request) {
 
 // --- helpers ---------------------------------------------------------
 
+// runTokenCreate is the indirection point for handleTokensCreate. Tests
+// override it to assert that the handler is wiring Endpoint+Role through
+// to the orchestration layer (the CLI gets them from flags; the UI must
+// derive them from the instance registry + request role).
+var runTokenCreate = func(opts token.CreateOptions) (*token.CreateResult, error) {
+	return token.RunCreate(nil, opts)
+}
+
 // roleFromQuery returns the `?role=` value, defaulting to app-user.
 func roleFromQuery(r *http.Request) string {
 	role := r.URL.Query().Get("role")
@@ -367,6 +385,17 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 		writeErrorWithCode(w, http.StatusConflict,
 			"SYMBOL_IN_USE", err.Error())
 	default:
+		// Off-ledger token-registry 4xx: surface the upstream status
+		// (so a 422 INSUFFICIENT_FUNDS stays a 422) and ship a short
+		// sanitized reason — never the raw 4 KiB body, which can embed
+		// party-ids / contract-ids / URLs.
+		var apiErr *regclient.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode >= 400 && apiErr.StatusCode < 500 {
+			reason := registryErrorReason(apiErr)
+			writeErrorWithCode(w, apiErr.StatusCode,
+				codeForStatus(apiErr.StatusCode), reason)
+			return
+		}
 		// Once the actions submit for real, failures arrive as gRPC
 		// status errors — map their codes to the matching HTTP status
 		// instead of flattening everything to 400.
@@ -398,4 +427,35 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 		// correct for 5xx but unhelpful for a 400.
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 	}
+}
+
+// registryErrorReason extracts a short, safe reason string from a
+// token-registry APIError. Splice error bodies are usually small JSON
+// of the form `{"code":"INSUFFICIENT_FUNDS","message":"..."}`; we try
+// to surface that code (very high signal, low risk) and otherwise fall
+// back to a sanitized snippet of the body capped to keep the response
+// small. Never returns the full 4 KiB body — that can leak party-ids,
+// contract-ids, and registry URLs.
+func registryErrorReason(e *regclient.APIError) string {
+	var probe struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(e.Body), &probe); err == nil {
+		if probe.Code != "" {
+			return probe.Code
+		}
+		if probe.Message != "" {
+			return sanitize400(truncate(probe.Message, 200))
+		}
+	}
+	return sanitize400(truncate(e.Body, 200))
+}
+
+// truncate caps a string at n runes with an ellipsis.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
