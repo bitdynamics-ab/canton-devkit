@@ -167,6 +167,87 @@ func TestUpload_PastPeriodAndDrop(t *testing.T) {
 	}
 }
 
+// TestUpload_V1UpgradeFile_TagsWeeklyByKeyShape regression-guards the
+// v1→v2 migration boundary: a file written by a pre-v2 binary has the
+// v1 shape (a "week" key, no "granularity" field). When the v2 binary
+// loads it for upload, the granularity tag MUST be recovered from the
+// key shape ("2000-W01" → weekly), not defaulted to the current
+// aggregationPeriod — otherwise the collector receives an ISO-week
+// period stamped as "daily", or a Deferred re-save persists the wrong
+// tag back to disk.
+func TestUpload_V1UpgradeFile_TagsWeeklyByKeyShape(t *testing.T) {
+	sandbox(t)
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	t.Setenv(envEndpoint, srv.URL)
+
+	// Hand-write the v1 shape — savePeriod would now inject granularity,
+	// so we bypass it to authentically simulate a pre-v2 file on disk.
+	if err := os.MkdirAll(telemetryDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	v1 := []byte(`{
+  "schema_version": 1,
+  "week": "2000-W01",
+  "counters": {"dpm/command": {"up": 3}}
+}`)
+	if err := os.WriteFile(periodFilePath("2000-W01"), v1, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tryUpload()
+
+	evPeriod, _ := got["period"].(string)
+	evGran, _ := got["granularity"].(string)
+	if evPeriod != "2000-W01" {
+		t.Errorf("collector got period %q, want 2000-W01", evPeriod)
+	}
+	if evGran != "weekly" {
+		t.Errorf("collector got granularity %q, want weekly (inferred from -W key shape)", evGran)
+	}
+	if _, err := os.Stat(periodFilePath("2000-W01")); !os.IsNotExist(err) {
+		t.Error("file should be removed after successful upload")
+	}
+}
+
+// TestUpload_V1UpgradeFile_DeferredReSavePreservesWeeklyTag covers the
+// failure path of the same migration: when the v1 upload fails, the
+// Deferred re-save MUST stamp the inferred weekly tag onto disk so the
+// next attempt still ships the correct granularity.
+func TestUpload_V1UpgradeFile_DeferredReSavePreservesWeeklyTag(t *testing.T) {
+	sandbox(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	t.Setenv(envEndpoint, srv.URL)
+
+	if err := os.MkdirAll(telemetryDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	v1 := []byte(`{"schema_version":1,"week":"2000-W01","counters":{"dpm/command":{"up":3}}}`)
+	if err := os.WriteFile(periodFilePath("2000-W01"), v1, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tryUpload() // fails → file marked Deferred, re-saved with inferred granularity
+
+	reloaded, err := loadPeriod("2000-W01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Granularity != "weekly" {
+		t.Errorf("after Deferred re-save granularity = %q, want weekly", reloaded.Granularity)
+	}
+	if !reloaded.Deferred {
+		t.Error("should be marked Deferred after first failure")
+	}
+}
+
 func TestComposeBucket(t *testing.T) {
 	cases := map[string]string{"2.19.1": "v2.20-", "v2.20.0": "v2.20-v2.27", "2.27.9": "v2.20-v2.27", "2.28.0": "v2.28+", "2.35.1": "v2.28+", "": "", "garbage": ""}
 	for in, want := range cases {
