@@ -84,7 +84,7 @@ func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error)
 		Instance: opts.Instance,
 		Role:     opts.Role,
 	}
-	client, cleanup, err := dialLedger(ctx, conn)
+	client, cleanup, err := dialLedgerFn(ctx, conn)
 	if err != nil {
 		return nil, err
 	}

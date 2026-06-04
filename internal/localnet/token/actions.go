@@ -423,7 +423,7 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, boo
 		Instance: opts.Instance,
 		Role:     opts.Role,
 	}
-	client, cleanup, err := dialLedger(ctx, conn)
+	client, cleanup, err := dialLedgerFn(ctx, conn)
 	if err != nil {
 		return nil, false, err
 	}
