@@ -12,7 +12,46 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
+	adminv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2/admin"
 )
+
+// LedgerClient is the narrow slice of *ledger.Client that the live-ACS
+// orchestration paths (runBalanceLive, scanWorkspace) actually use.
+// Exists because review feedback on PRs #86 (m3-integration) and #89
+// (token-views backend) flagged that those paths had no unit coverage
+// for their error branches (PermissionDenied, no-parties, stream-error)
+// — *ledger.Client is a concrete struct wrapping grpc.ClientConn, so
+// there was no seam to inject a fake without going through a real
+// participant.
+//
+// The interface is deliberately small: only the methods the two
+// orchestration paths invoke (directly or via the resolveReadableParties
+// helper chain). Widening to mirror the whole Client API would defeat
+// the point — Add methods here as new orchestration paths come under
+// test, not preemptively.
+type LedgerClient interface {
+	LedgerEnd(ctx context.Context) (ledger.LedgerEnd, error)
+	ActiveContracts(ctx context.Context, req ledger.ActiveContractsRequest) (<-chan ledger.StreamItem[*lapiv2.GetActiveContractsResponse], error)
+	ResolveActAndReadParties(ctx context.Context) ([]string, error)
+	ListKnownParties(ctx context.Context) (*adminv2.ListKnownPartiesResponse, error)
+	GrantUserActAndReadAs(ctx context.Context, userID string, parties []string) error
+}
+
+// dialLedgerFn is the test seam runBalanceLive and scanWorkspace dial
+// through. Defaults to upcasting dialLedger's concrete *ledger.Client
+// to LedgerClient; tests reassign it to return a fakeLedger.
+//
+// Kept as a package var rather than threaded through BalanceOptions so
+// the seam stays invisible to CLI / HTTP callers. The token package's
+// tests run sequentially, so the package-level mutation is safe.
+//
+// dialLedger itself keeps its concrete *ledger.Client return so the
+// other eight callers (instrument_v2, run_transfer, activity, plan,
+// party) — which need methods outside this narrow interface — compile
+// unchanged.
+var dialLedgerFn = func(ctx context.Context, conn LedgerConn) (LedgerClient, func(), error) {
+	return dialLedger(ctx, conn)
+}
 
 // LedgerConn captures everything a live ledger call needs: the gRPC
 // endpoint and the Bearer JWT the participant accepts.
@@ -118,7 +157,7 @@ func redactJWTs(err error) error {
 // hosted on this participant whose names match the role. A no-op when
 // the user already has Act/Read rights (stable Splice grants these at
 // boot; second-and-later dials see prior grants).
-func ensureLocalPartyRights(ctx context.Context, c *ledger.Client, role string) error {
+func ensureLocalPartyRights(ctx context.Context, c LedgerClient, role string) error {
 	rights, err := c.ResolveActAndReadParties(ctx)
 	if err != nil {
 		return fmt.Errorf("probe user rights: %w", err)
@@ -144,7 +183,7 @@ func ensureLocalPartyRights(ctx context.Context, c *ledger.Client, role string) 
 // matches the role's expected prefix (e.g. role=app-user matches
 // `app_user_*`). IsLocal=true filters out cross-participant proxies —
 // only locally-hosted parties can be the subject of grants.
-func localPartiesForRole(ctx context.Context, c *ledger.Client, role string) ([]string, error) {
+func localPartiesForRole(ctx context.Context, c LedgerClient, role string) ([]string, error) {
 	resp, err := c.ListKnownParties(ctx)
 	if err != nil {
 		return nil, err
@@ -174,7 +213,7 @@ func localPartiesForRole(ctx context.Context, c *ledger.Client, role string) ([]
 // participant) simply never enters the filter — querying an ungranted
 // party would otherwise PermissionDenied the entire stream. The grant is
 // best-effort; its failure doesn't fail the scan.
-func resolveReadableParties(ctx context.Context, c *ledger.Client, instance, role string) ([]string, error) {
+func resolveReadableParties(ctx context.Context, c LedgerClient, instance, role string) ([]string, error) {
 	if extra := partiesFromState(instance); len(extra) > 0 {
 		_ = c.GrantUserActAndReadAs(ctx, exerciseUserID, extra)
 	}
