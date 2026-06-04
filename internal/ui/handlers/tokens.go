@@ -302,7 +302,7 @@ func handleTokenActivity(w http.ResponseWriter, r *http.Request) {
 			limit = n
 		}
 	}
-	events, err := token.RunActivity(r.Context(), token.BalanceOptions{
+	res, err := token.RunActivityResult(r.Context(), token.BalanceOptions{
 		Instance: instance, Role: role, Insecure: true, Endpoint: ep,
 		Instrument: instrumentID, Limit: limit,
 	})
@@ -312,7 +312,8 @@ func handleTokenActivity(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"schema_version": types.SchemaVersion,
-		"events":         events,
+		"events":         res.Events,
+		"truncated":      res.Truncated,
 		"aliases":        aliasMap(instance),
 	})
 }

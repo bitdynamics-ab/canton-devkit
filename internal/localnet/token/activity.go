@@ -5,11 +5,19 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
+	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
+
+// maxActivityScan caps how many ledger update items RunActivity will
+// consume before declaring the result truncated. Mirrors
+// maxWorkspaceScan in workspace.go — a runaway transaction stream on a
+// busy ledger would otherwise pump us into OOM via an unbounded slice.
+const maxActivityScan = 10_000
 
 // The activity feed (BIT-219 lens 1, Activity tab) reconstructs an
 // instrument's transfer/mint/burn history from the ledger transaction
@@ -52,6 +60,15 @@ type ActivityEvent struct {
 	Receivers  []PartyDelta `json:"receivers,omitempty"`
 }
 
+// ActivityResult is the activity feed plus a Truncated flag indicating
+// the underlying transaction stream hit maxActivityScan and stopped
+// short. The UI can then render "showing N of many" rather than silently
+// misreporting the feed.
+type ActivityResult struct {
+	Events    []ActivityEvent `json:"events"`
+	Truncated bool            `json:"truncated,omitempty"`
+}
+
 // rawHoldingDelta is one create/archive of a Holding contract.
 type rawHoldingDelta struct {
 	party      string
@@ -70,11 +87,13 @@ type rawTx struct {
 
 // buildActivity nets each transaction's holding deltas into an
 // ActivityEvent for the given instrument, newest-first, capped at limit
-// (limit <= 0 means no cap). Pure — unit-testable without a ledger.
-func buildActivity(txs []rawTx, instrument string, limit int) []ActivityEvent {
+// (limit <= 0 means no cap). decimals controls the fractional precision
+// of formatted amounts; <0 falls back to 18 (the V2 test-token cap).
+// Pure — unit-testable without a ledger.
+func buildActivity(txs []rawTx, instrument string, decimals int, limit int) []ActivityEvent {
 	out := make([]ActivityEvent, 0, len(txs))
 	for _, tx := range txs {
-		ev, ok := netTransaction(tx, instrument)
+		ev, ok := netTransaction(tx, instrument, decimals)
 		if ok {
 			out = append(out, ev)
 		}
@@ -90,8 +109,15 @@ func buildActivity(txs []rawTx, instrument string, limit int) []ActivityEvent {
 // netTransaction folds one transaction's deltas for a single instrument
 // into senders/receivers + a kind. Returns ok=false when the transaction
 // doesn't touch the instrument or nets to nothing.
-func netTransaction(tx rawTx, instrument string) (ActivityEvent, bool) {
-	net := map[string]*big.Float{}
+//
+// Amount arithmetic uses math/big.Rat (not big.Float): Float carries a
+// binary mantissa and silently drifts past ~15 decimal digits, so
+// 0.1 + 0.2 came out "0.30000000000000004" and any 18-decimal-place V2
+// amount netted wrong on the wire — the SAME class of bug #87's
+// selectInputHoldings fixed. Rat is exact for decimal input and renders
+// back via FloatString(decimals).
+func netTransaction(tx rawTx, instrument string, decimals int) (ActivityEvent, bool) {
+	net := map[string]*big.Rat{}
 	order := []string{}
 	touched := false
 	for _, d := range tx.deltas {
@@ -99,12 +125,12 @@ func netTransaction(tx rawTx, instrument string) (ActivityEvent, bool) {
 			continue
 		}
 		touched = true
-		amt, ok := new(big.Float).SetString(zeroIfEmpty(d.amount))
+		amt, ok := new(big.Rat).SetString(zeroIfEmpty(d.amount))
 		if !ok {
 			continue
 		}
 		if _, seen := net[d.party]; !seen {
-			net[d.party] = new(big.Float)
+			net[d.party] = new(big.Rat)
 			order = append(order, d.party)
 		}
 		if d.created {
@@ -118,17 +144,17 @@ func netTransaction(tx rawTx, instrument string) (ActivityEvent, bool) {
 	}
 
 	var senders, receivers []PartyDelta
-	credited := new(big.Float)
-	debited := new(big.Float)
+	credited := new(big.Rat)
+	debited := new(big.Rat)
 	for _, p := range order {
 		v := net[p]
 		switch v.Sign() {
 		case 1:
-			receivers = append(receivers, PartyDelta{Party: p, Amount: v.Text('f', -1)})
+			receivers = append(receivers, PartyDelta{Party: p, Amount: formatDecimal(v, decimals)})
 			credited.Add(credited, v)
 		case -1:
-			mag := new(big.Float).Neg(v)
-			senders = append(senders, PartyDelta{Party: p, Amount: mag.Text('f', -1)})
+			mag := new(big.Rat).Neg(v)
+			senders = append(senders, PartyDelta{Party: p, Amount: formatDecimal(mag, decimals)})
 			debited.Add(debited, mag)
 		}
 	}
@@ -154,17 +180,39 @@ func netTransaction(tx rawTx, instrument string) (ActivityEvent, bool) {
 		RecordTime: tx.recordTime,
 		Instrument: instrument,
 		Kind:       kind,
-		Amount:     amount.Text('f', -1),
+		Amount:     formatDecimal(amount, decimals),
 		Senders:    senders,
 		Receivers:  receivers,
 	}, true
 }
 
-// RunActivity scans the ledger transaction stream (offset 0 → ledger end)
-// for HoldingV2 create/archive events and reconstructs the instrument's
-// activity history. opts.Instrument selects the instrument; opts.Limit
-// caps the returned events (default 50). Read-only; no submission.
-func RunActivity(ctx context.Context, opts BalanceOptions) ([]ActivityEvent, error) {
+// formatDecimal renders r as an exact base-10 string with the given
+// number of fractional digits, trimming trailing zeros (and a bare
+// trailing '.') so "1000.0000000000" → "1000" and 0.1+0.2-0.3 → "0".
+// decimals < 0 defaults to 18 (V2 test-token cap).
+func formatDecimal(r *big.Rat, decimals int) string {
+	if decimals < 0 {
+		decimals = 18
+	}
+	s := r.FloatString(decimals)
+	if strings.Contains(s, ".") {
+		s = strings.TrimRight(s, "0")
+		s = strings.TrimSuffix(s, ".")
+	}
+	if s == "" || s == "-" {
+		return "0"
+	}
+	return s
+}
+
+// RunActivityResult scans the ledger transaction stream (offset 0 →
+// ledger end) for HoldingV2 create/archive events and reconstructs the
+// instrument's activity history. opts.Instrument selects the instrument;
+// opts.Limit caps the returned events (default 50). Truncated is set
+// when the underlying updates stream was cut short at maxActivityScan
+// to bound memory — on a busy ledger an unbounded consume would OOM the
+// UI server. Read-only; no submission.
+func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult, error) {
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 50
@@ -178,7 +226,7 @@ func RunActivity(ctx context.Context, opts BalanceOptions) ([]ActivityEvent, err
 	}
 	client, cleanup, err := dialLedger(ctx, conn)
 	if err != nil {
-		return nil, err
+		return ActivityResult{}, err
 	}
 	defer cleanup()
 
@@ -187,17 +235,20 @@ func RunActivity(ctx context.Context, opts BalanceOptions) ([]ActivityEvent, err
 	// then re-resolve the authoritative granted set.
 	parties, err := resolveReadableParties(ctx, client, opts.Instance, opts.Role)
 	if err != nil {
-		return nil, err
+		return ActivityResult{}, err
 	}
 	if len(parties) == 0 {
-		return []ActivityEvent{}, nil
+		return ActivityResult{Events: []ActivityEvent{}}, nil
 	}
 
 	end, err := client.LedgerEnd(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("ledger end: %w", err)
+		return ActivityResult{}, fmt.Errorf("ledger end: %w", err)
 	}
 	endInc := end.Offset
+	// Wrap before opening the stream so an early break (cap hit, decode
+	// error) cancels the upstream pump goroutine instead of letting it
+	// drain the rest of the ledger for the lifetime of the parent ctx.
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stream, err := client.Updates(streamCtx, ledger.UpdatesRequest{
@@ -211,16 +262,40 @@ func RunActivity(ctx context.Context, opts BalanceOptions) ([]ActivityEvent, err
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("open updates stream: %w", err)
+		return ActivityResult{}, fmt.Errorf("open updates stream: %w", err)
 	}
 
+	txs, truncated, err := consumeActivityStream(stream)
+	if err != nil {
+		return ActivityResult{}, err
+	}
+
+	decimals := instrumentDecimals(opts.Instance, opts.Instrument)
+	return ActivityResult{
+		Events:    buildActivity(txs, opts.Instrument, decimals, limit),
+		Truncated: truncated,
+	}, nil
+}
+
+// consumeActivityStream drains a ledger updates channel into rawTx
+// records, stopping once maxActivityScan items have been seen (with
+// truncated=true). Extracted from RunActivityResult so a fake channel
+// can pin the cap behavior without dialing a real participant.
+func consumeActivityStream(stream <-chan ledger.StreamItem[*lapiv2.GetUpdatesResponse]) ([]rawTx, bool, error) {
 	// contractId → its holding facts, so archived events (which carry
 	// only the contract id) can be resolved back to owner/instrument/amount.
 	byContract := map[string]rawHoldingDelta{}
 	var txs []rawTx
+	var scanned int
+	var truncated bool
 	for item := range stream {
 		if item.Err != nil {
-			return nil, fmt.Errorf("updates stream: %w", item.Err)
+			return nil, false, fmt.Errorf("updates stream: %w", item.Err)
+		}
+		scanned++
+		if scanned > maxActivityScan {
+			truncated = true
+			break
 		}
 		t := item.Value.GetTransaction()
 		if t == nil {
@@ -263,6 +338,23 @@ func RunActivity(ctx context.Context, opts BalanceOptions) ([]ActivityEvent, err
 			txs = append(txs, tx)
 		}
 	}
+	return txs, truncated, nil
+}
 
-	return buildActivity(txs, opts.Instrument, limit), nil
+// instrumentDecimals looks up the recorded decimals for an instrument
+// from the registry state, falling back to -1 (formatDecimal then uses
+// its 18-digit V2 default). Read-only; failures fall back silently.
+func instrumentDecimals(instance, instrument string) int {
+	state, err := registry.Read(instance)
+	if err != nil {
+		return -1
+	}
+	for _, ref := range state.Tokens {
+		if ref.InstrumentID == instrument || ref.Symbol == instrument {
+			if ref.Decimals > 0 {
+				return ref.Decimals
+			}
+		}
+	}
+	return -1
 }

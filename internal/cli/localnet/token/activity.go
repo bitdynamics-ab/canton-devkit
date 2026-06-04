@@ -31,15 +31,19 @@ Requires --endpoint (the participant ledger gRPC host:port) and
 --instrument (the symbol or instrument id).`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			events, err := token.RunActivity(cmd.Context(), opts)
+			res, err := token.RunActivityResult(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
+			events := res.Events
 			out := cmd.OutOrStdout()
 			if format == "json" {
 				enc := json.NewEncoder(out)
 				enc.SetIndent("", "  ")
-				return enc.Encode(events)
+				return enc.Encode(res)
+			}
+			if res.Truncated {
+				_, _ = fmt.Fprintln(out, "(activity stream truncated to bound memory; showing partial history)")
 			}
 
 			cols := []term.Column{
