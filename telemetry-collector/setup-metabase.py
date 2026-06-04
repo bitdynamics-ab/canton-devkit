@@ -148,67 +148,67 @@ def build_cards(db_id, coll_id):
     ids = {}
     # ---- M1: LocalNet lifecycle (cross-platform incl. Windows) ----
     ids["daily"] = native_card(
-        "[telemetry] Commands per day", "SELECT period_date, sum(count) AS commands "
+        "Commands per day", "SELECT period_date, sum(count) AS commands "
         "FROM counter_period WHERE chart='dpm/command' GROUP BY period_date ORDER BY period_date",
         "line", db_id, coll_id,
         {"graph.dimensions": ["period_date"], "graph.metrics": ["commands"]})
     ids["up_outcome"] = native_card(
-        "[telemetry] LocalNet starts — ok vs fail",
+        "LocalNet starts — ok vs fail",
         "SELECT split_part(bucket,'/',2) AS outcome, sum(count) AS n "
         "FROM counter_period WHERE chart='dpm/command_exit' AND bucket LIKE 'up/%' GROUP BY 1 ORDER BY 1",
         "bar", db_id, coll_id,
         {"graph.dimensions": ["outcome"], "graph.metrics": ["n"]})
     ids["os"] = native_card(
-        "[telemetry] Platform split (incl. Windows)", "SELECT bucket AS os, sum(count) AS total "
+        "Platform split (incl. Windows)", "SELECT bucket AS os, sum(count) AS total "
         "FROM counter_period WHERE chart='dpm/os' GROUP BY bucket ORDER BY total DESC",
         "pie", db_id, coll_id)
     ids["top"] = native_card(
-        "[telemetry] Top commands", "SELECT bucket AS command, sum(count) AS total "
+        "Top commands", "SELECT bucket AS command, sum(count) AS total "
         "FROM counter_period WHERE chart='dpm/command' GROUP BY bucket ORDER BY total DESC",
         "row", db_id, coll_id,
         {"graph.dimensions": ["command"], "graph.metrics": ["total"]})
     # ---- M2: Web UI, observability, DAR, explorer ----
     ids["ui"] = native_card(
-        "[telemetry] Web UI features used (per session)",
+        "Web UI features used (per session)",
         "SELECT bucket AS feature, sum(count) AS sessions "
         "FROM counter_period WHERE chart='dpm/ui_feature' GROUP BY 1 ORDER BY 2 DESC",
         "row", db_id, coll_id,
         {"graph.dimensions": ["feature"], "graph.metrics": ["sessions"]})
     ids["ci"] = native_card(
-        "[telemetry] CI vs interactive",
+        "CI vs interactive",
         "SELECT CASE bucket WHEN 'true' THEN 'CI' ELSE 'interactive' END AS env, sum(count) AS n "
         "FROM counter_period WHERE chart='dpm/ci' GROUP BY 1",
         "pie", db_id, coll_id)
     ids["agent"] = native_card(
-        "[telemetry] AI agent usage",
+        "AI agent usage",
         "SELECT bucket AS agent, sum(count) AS n "
         "FROM counter_period WHERE chart='dpm/llm_agent' GROUP BY 1 ORDER BY 2 DESC",
         "pie", db_id, coll_id)
     # ---- M3: Token Standard CIP-0112 flow ----
     ids["token"] = native_card(
-        "[telemetry] Token actions (CIP-0112 flow)",
+        "Token actions (CIP-0112 flow)",
         "SELECT bucket AS action, sum(count) AS n "
         "FROM counter_period WHERE chart='dpm/token_action' GROUP BY 1 ORDER BY 2 DESC",
         "bar", db_id, coll_id,
         {"graph.dimensions": ["action"], "graph.metrics": ["n"]})
     # ---- M4: composite adoption — installs, visibility, qualitative ----
     ids["downloads"] = native_card(
-        "[GitHub] Cumulative downloads (toward 250 floor)",
+        "Cumulative downloads (toward 250 floor)",
         "SELECT captured_on, total_downloads FROM v_downloads_total ORDER BY captured_on",
         "line", db_id, coll_id,
         {"graph.dimensions": ["captured_on"], "graph.metrics": ["total_downloads"]})
     ids["stars"] = native_card(
-        "[GitHub] Stars & forks over time (visibility)",
+        "Stars & forks over time (visibility)",
         "SELECT captured_on, stars, forks FROM github_repo_stats ORDER BY captured_on",
         "line", db_id, coll_id,
         {"graph.dimensions": ["captured_on"], "graph.metrics": ["stars", "forks"]})
     ids["evidence"] = native_card(
-        "[qualitative] External adoption evidence",
+        "External adoption evidence",
         "SELECT milestone, team, evidence_type, url, noted_on FROM adoption_evidence "
         "ORDER BY milestone, noted_on DESC",
         "table", db_id, coll_id)
     ids["raw"] = native_card(
-        "[telemetry] All counters (raw, exportable)",
+        "All counters (raw, exportable)",
         "SELECT period_date, granularity, chart, bucket, count FROM counter_period ORDER BY period_date DESC, chart, bucket",
         "table", db_id, coll_id)
     return ids
@@ -237,29 +237,55 @@ def ensure_dashboard(coll_id, card_ids):
     else:
         print(f"✓ dashboard '{DASHBOARD_NAME}' exists (id={dash_id})")
 
-    # Milestone-grouped 18-col layout. Each section opens with a full-width
-    # markdown heading; charts are tagged by source in their titles.
-    # Entries: (kind, key/text, col, row, w, h). kind 'h'=heading, 'c'=card.
-    plan = [
-        ("h", "# canton-devkit — adoption\nSources: **[telemetry]** privacy-preserving counters · **[GitHub]** release/repo signals · **[qualitative]** maintainer-entered evidence", 0, 0, 18, 2),
-        ("h", "## M1 — LocalNet lifecycle (cross-platform incl. Windows)", 0, 2, 18, 1),
-        ("c", "daily", 0, 3, 9, 6),
-        ("c", "up_outcome", 9, 3, 4, 6),
-        ("c", "os", 13, 3, 5, 6),
-        ("c", "top", 0, 9, 18, 5),
-        ("h", "## M2 — Web UI, observability, DAR & explorer", 0, 14, 18, 1),
-        ("c", "ui", 0, 15, 8, 6),
-        ("c", "ci", 8, 15, 5, 6),
-        ("c", "agent", 13, 15, 5, 6),
-        ("h", "## M3 — Token Standard (CIP-0112) flow", 0, 21, 18, 1),
-        ("c", "token", 0, 22, 18, 6),
-        ("h", "## M4 — composite adoption (installs · visibility · qualitative)", 0, 28, 18, 1),
-        ("c", "downloads", 0, 29, 9, 6),
-        ("c", "stars", 9, 29, 9, 6),
-        ("c", "evidence", 0, 35, 18, 6),
-        ("h", "### Appendix — raw counters", 0, 41, 18, 1),
-        ("c", "raw", 0, 42, 18, 7),
-    ]
+    # Milestone-grouped 18-col layout. Charts are a uniform 2-per-row
+    # (each 9 wide, 7 tall) so titles and legends never truncate;
+    # row-charts/tables span the full 18. Each section opens with a
+    # full-width heading that names the data source, so the source is
+    # clear without crowding every chart title. Entries:
+    # (kind, ref/text, col, row, w, h). kind 'h'=heading, 'c'=card.
+    GAP = 0
+    plan = []
+    r = 0
+
+    def head(text, h=1):
+        nonlocal r
+        plan.append(("h", text, 0, r, 18, h))
+        r += h
+
+    def row1(key, h=7):  # one full-width card
+        nonlocal r
+        plan.append(("c", key, 0, r, 18, h))
+        r += h
+
+    def row2(left, right, h=7):  # two side-by-side cards
+        nonlocal r
+        plan.append(("c", left, 0, r, 9, h))
+        plan.append(("c", right, 9, r, 9, h))
+        r += h
+
+    head("# Canton DevKit — Adoption metrics\n\n"
+         "Grouped by proposal milestone. **Sources:** _telemetry_ = privacy-preserving "
+         "CLI/Web-UI counters (opt-out, zero-PII) · _GitHub_ = release & repo signals · "
+         "_evidence_ = maintainer-logged external teams.", h=3)
+
+    head("## M1 · LocalNet lifecycle  —  source: telemetry")
+    row2("daily", "up_outcome")
+    row2("os", "top")
+
+    head("## M2 · Web UI, observability, DAR & Explorer  —  source: telemetry")
+    row1("ui", h=6)
+    row2("ci", "agent")
+
+    head("## M3 · Token Standard (CIP-0112) flow  —  source: telemetry")
+    row1("token")
+
+    head("## M4 · Composite adoption  —  sources: GitHub + maintainer evidence")
+    row2("downloads", "stars")
+    row1("evidence", h=6)
+
+    head("### Appendix · raw counters (one-click CSV / Excel export)")
+    row1("raw", h=8)
+
     dashcards = []
     n_cards = n_head = 0
     for i, (kind, ref, col, row, w, h) in enumerate(plan):
@@ -279,6 +305,21 @@ def ensure_dashboard(coll_id, card_ids):
     return dash_id
 
 
+def archive_stale_cards(coll_id, keep_ids):
+    """Archive any card in the collection that isn't part of the current
+    dashboard set — clears duplicates left by earlier title changes so the
+    collection stays clean. Scoped to this dedicated collection only."""
+    keep = set(keep_ids)
+    items = api("GET", f"/api/collection/{coll_id}/items?models=card")
+    n = 0
+    for it in items.get("data", []):
+        if it["id"] not in keep and not it.get("archived"):
+            api("PUT", f"/api/card/{it['id']}", {"archived": True})
+            n += 1
+    if n:
+        print(f"✓ archived {n} stale card(s) from earlier runs")
+
+
 def main():
     login()
     db_id = ensure_database()
@@ -287,6 +328,7 @@ def main():
     print("building charts:")
     card_ids = build_cards(db_id, coll_id)
     dash_id = ensure_dashboard(coll_id, card_ids)
+    archive_stale_cards(coll_id, card_ids.values())
     print()
     print("Done. Open your dashboard:")
     print(f"  {MB_URL}/dashboard/{dash_id}")
