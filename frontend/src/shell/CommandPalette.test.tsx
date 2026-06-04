@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { filter } from "./CommandPalette";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { CommandPalette, filter } from "./CommandPalette";
+import { InstanceSelectionProvider } from "./useInstanceSelection";
 
 // Pure-function tests for the palette's filter — the only piece
 // of the palette with non-trivial logic that's worth pinning in
@@ -66,3 +70,97 @@ describe("CommandPalette filter", () => {
     expect(filter(ACTIONS, "xyzzy")).toEqual([]);
   });
 });
+
+// Integration test for the palette → router navigation path. The
+// shared NAV table in ./routes flags instance-scoped routes; the
+// palette must thread `?instance=` into those links the same way
+// the sidebar does (BIT-223). Without this guard, ⌘K → Wallet
+// silently drops the selection and lands on the empty state.
+function LocationProbe() {
+  // Surfaces the current pathname + search so assertions can read
+  // exactly what navigate() landed on.
+  const loc = useLocation();
+  return <div data-testid="location">{loc.pathname + loc.search}</div>;
+}
+
+function renderPalette(initialPath: string) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/instances/")) {
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      }
+      if (url.includes("/api/instances")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              schema_version: 1,
+              instances: [
+                {
+                  name: "demo",
+                  status: "running",
+                  splice_version: "0.4.12",
+                  ports: "",
+                  started_ago: "",
+                },
+              ],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.reject(new Error(`unmocked fetch: ${url}`));
+    }),
+  );
+  return render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <InstanceSelectionProvider>
+        <CommandPalette />
+        <Routes>
+          <Route path="*" element={<LocationProbe />} />
+        </Routes>
+      </InstanceSelectionProvider>
+    </MemoryRouter>,
+  );
+}
+
+describe("CommandPalette — nav preserves ?instance= (BIT-223)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("threads ?instance= when navigating to an instance-scoped route", async () => {
+    renderPalette("/?instance=demo");
+    const user = userEvent.setup();
+
+    // ⌘K to open.
+    await user.keyboard("{Meta>}k{/Meta}");
+    await screen.findByRole("dialog", { name: /command palette/i });
+
+    // Click the Wallet row (Wallet is instance-scoped per NAV).
+    const wallet = await screen.findByRole("option", { name: /Wallet/ });
+    await user.click(wallet);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "/wallet?instance=demo",
+      );
+    });
+  });
+
+  it("does not append ?instance= to instance-INDEPENDENT routes", async () => {
+    renderPalette("/wallet?instance=demo");
+    const user = userEvent.setup();
+
+    await user.keyboard("{Meta>}k{/Meta}");
+    await screen.findByRole("dialog", { name: /command palette/i });
+
+    const overview = await screen.findByRole("option", { name: /Overview/ });
+    await user.click(overview);
+
+    await waitFor(() => {
+      // Overview should be bare; the param is dropped intentionally
+      // because the destination route doesn't read it.
+      expect(screen.getByTestId("location")).toHaveTextContent(/^\/$/);
+    });
+  });
+});
+
