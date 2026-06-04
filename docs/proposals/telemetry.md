@@ -1,0 +1,136 @@
+# Telemetry — privacy-first usage counters
+
+**Status:** Implemented (v1.0, ship-dark) · **Scope:** v1
+
+> v1.0 ships the CLI-side: counter package, allow-list, opt-out notice,
+> precedence + `DPM_TELEMETRY` + `DPM_TELEMETRY_DEBUG`, `App.Run` wiring,
+> the root `telemetry` command, and the golden tests. No production
+> collector is deployed yet — with no endpoint baked in, counters stay
+> local. **Consent model: opt-out** — telemetry is **on by default** and
+> users disable it anytime (`telemetry off` / `DPM_TELEMETRY=off` /
+> `DO_NOT_TRACK=1`). This is the canonical design; every other guardrail
+> below stands.
+
+## Goal
+
+Lightweight, anonymous usage telemetry that shows **what's used** and
+**what breaks** without compromising the privacy posture (loopback-only
+UI, JWT redaction, no PII in commits).
+
+## Non-goals
+
+Identifying users/machines/installs (no IDs of any kind) · capturing what
+a command ran against (no instance/party/contract ids, paths, hostnames,
+ports) · error content · sessionizing/sequencing invocations · any flow
+enabling a behavioral profile.
+
+## Decisions
+
+1. **Opt-out — telemetry is ON by default; users opt out anytime.**
+   This is the project's ratified consent model (an earlier opt-in draft
+   was dropped). On the first operational command a one-time TTY-gated
+   notice states it plainly: *"Telemetry is ON by default. Turn it off
+   anytime: `canton-devkit telemetry off` (or `DPM_TELEMETRY=off` /
+   `DO_NOT_TRACK=1`)."* All three switches disable it, and the choice
+   persists. Non-interactive runs never prompt and never block.
+2. **No identifier at all.** No machine id, install uuid, hashed hardware
+   id, or IP retention. Counters merge into a weekly aggregate with no
+   per-invocation row.
+3. **Counter taxonomy (10 slots).** Closed, compile-time-enforced
+   allow-list (`internal/telemetry/allowlist.go`): `dpm/command`,
+   `dpm/command_exit`, `dpm/channel`, `dpm/os`, `dpm/arch`, `dpm/ci`,
+   `dpm/llm_agent`, `dpm/docker_engine`, `dpm/compose_version_bucket`,
+   `dpm/doctor_fail`. See [docs/telemetry.md](../telemetry.md) for buckets.
+4. **Never collected.** instance/project/compose names · party/contract
+   ids · JWT fields · DAR/package/module names · file paths · hostnames ·
+   IP/MAC · args beyond the verb · error messages · stack traces · ports ·
+   env names/values · sub-week timestamps.
+5. **Transport.** No event queue. Counters live in a local weekly file.
+   A completed past week uploads once (single POST, 2 s timeout, no
+   inner retries); on failure → mark deferred, retry next window; after 2
+   misses → drop. Retrying an aggregate is privacy-safe; events are not.
+6. **Collector.** Custom minimal endpoint `POST /v1/counters` with body
+   `{schema_version, week, counters}` — not a SaaS events API. (v1.1, not
+   yet deployed; see "Backend cost gate" below.)
+7. **Retention.** Local file: **current week + 3 prior weeks** (rolling
+   4-week window — useful for offline debug, still no per-event row, no
+   sub-week timestamp, no id). Server raw intake: 24 h. Server aggregates:
+   180 days. Dashboard: aggregated weeks only. (v1.1, server-side.)
+8. **Small-cell suppression.** Start at **k = 3** for v1 — with a 3–5
+   customer cohort in M1–M2, k = 10 would suppress every cell and the
+   dashboard would render empty by construction. Ratchet k upward
+   (5 → 10) as the install base grows; encoded as a config knob, not a
+   structural change. (v1.1, server-side.)
+9. **Disclosure UX.** TTY-gated one-time notice on the first *operational*
+   localnet verb; never on `version`/help/`telemetry …`/non-TTY.
+10. **Precedence.** `DO_NOT_TRACK` → `DPM_TELEMETRY` → config file →
+    default on. `DPM_TELEMETRY_DEBUG=1` → print the would-send JSON to
+    stderr, skip the network.
+11. **CLI surface.** Root-level `canton-devkit telemetry on|off|status|preview`.
+12. **Web UI parity.** Settings toggle + `/api/telemetry` GET/POST +
+    `/api/telemetry/preview`, loopback-only. **Optional** — defer to v1.2
+    and only build if a real user surface motivates it. The CLI surface +
+    `DPM_TELEMETRY_DEBUG=1` is the audit path operators actually need;
+    AGENTS.md's parity rule is a default, not a mandate where the second
+    surface adds no signal.
+13. **Code shape.** `internal/telemetry/{allowlist,counter,store,config,
+    uploader,notice,context}.go`.
+14. **Hook point.** `internal/cli/app.go` `App.Run`, after Cobra's
+    `root.ExecuteC()` returns. The verb derives from the executed
+    `*cobra.Command` via the `localnetVerb(cmd)` helper (NOT `args[0]`,
+    which would always be `"localnet"` for `canton-devkit localnet up`).
+    The sink is installed via `App.WithTelemetry()`; tests leave the
+    package's no-op sink so they never write or send.
+15. **Channel detection.** `-ldflags -X main.channel=stable|nightly`;
+    defaults to `dev` for local `go build`.
+16. **Domain.** `telemetry.canton-devkit.dev` subdomain. (v1.1.)
+17. **Tests — defense in depth.** Two-layer enforcement of the allow-list:
+    (a) compile-time `go/ast` walk over every `telemetry.Inc(chart, bucket)`
+    literal in the tree; (b) **runtime allow-list check inside `Inc()`**
+    that silently drops unknown `(chart, bucket)` pairs — closes the gap
+    where buckets are concatenated at runtime (e.g.
+    `Inc("dpm/command_exit", verb+"/"+outcome)`) which the AST can't
+    enumerate. Plus `DO_NOT_TRACK`/precedence tests, weekly-merge no-id
+    /no-timestamp guard, 2-attempt-drop upload, `TestRunIsArgvOnly`
+    still green.
+18. **Public artifacts.** This doc; allow-list + sender code in the public
+    repo; schema changes bump `schema_version` + update this doc.
+
+## Backend cost gate (v1.1)
+
+The collector + nginx + rollup + public dashboard is a small but real
+operational surface (one VM, one nginx config, one daily rollup job,
+one static-site deploy). For a 3–5-customer M1–M2 the operational
+overhead can outweigh the signal. Three options when v1.1 lands:
+
+- **(a) Defer.** Ship v1.0 dark-only (counters local + `DPM_TELEMETRY_DEBUG=1`
+  for inspection). Revisit at M3 when the install base supports the
+  small-cell threshold meaningfully.
+- **(b) Managed-cheap.** A single object-store bucket as the intake +
+  a daily Cloud Run / Lambda job to roll up + a static site. Cuts
+  ops to "one bucket, one cronjob, no daemons."
+- **(c) Build as specced.** The nginx + custom collector design above.
+  Defensible only when (b) hits a real limit.
+
+**M3 gate:** if the committee report requires telemetry-derived
+metrics, deploy the collector by M3. Otherwise, the report can rely on
+self-reported interview data from opt-in users and the collector stays
+deferred.
+
+## Pending (not in v1.0)
+
+- **v1.1** — collector endpoint + nginx (no IP/UA/cookies) + weekly rollup
+  + k = 3-anonymized public dashboard at `telemetry.canton-devkit.dev`.
+  Subject to the cost gate above.
+- **v1.2** — Web UI parity (`/api/telemetry` + Settings panel), per the
+  AGENTS.md CLI ↔ UI rule. Optional; only build if a real user surface
+  motivates it.
+- Bake a `nightly` channel build (`[nightly]` commit trigger) when
+  nightly releases start.
+
+## Open questions
+
+None blocking. Channel, domain, banner timing, opt-out decision, hook
+point, retention window, and k-anonymity threshold are all locked.
+Backend deployment is gated on the M3 cost / committee-report check
+above — not blocking v1.0 ship-dark.

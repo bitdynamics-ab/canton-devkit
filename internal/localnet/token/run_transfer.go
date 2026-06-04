@@ -208,6 +208,8 @@ func runAcceptLive(ctx context.Context, out io.Writer, opts AcceptOptions) error
 type holdingRef struct {
 	ContractID string
 	Owner      string
+	Provider   string // account.provider ("" when None)
+	AccountID  string // account.id
 	Admin      string
 	Instrument string
 	Amount     string // decimal string, untouched precision
@@ -267,6 +269,8 @@ func listSenderHoldings(ctx context.Context, client *ledger.Client, sender, inst
 			out = append(out, holdingRef{
 				ContractID: created.GetContractId(),
 				Owner:      view.Owner,
+				Provider:   view.Provider,
+				AccountID:  view.AccountID,
 				Admin:      view.Admin,
 				Instrument: view.InstrumentID,
 				Amount:     view.Amount,

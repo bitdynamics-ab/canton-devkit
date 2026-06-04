@@ -825,6 +825,34 @@ export async function stopInstance(name: string, keepData = false): Promise<void
   }
 }
 
+// pauseInstance / resumeInstance invoke POST /api/instances/{name}/pause
+// | /resume — docker compose pause/unpause (BIT-175). Near-instant; 204
+// on success. Pause is valid only when running, resume only when paused.
+export async function pauseInstance(name: string): Promise<void> {
+  await postInstanceAction(name, "pause");
+}
+
+export async function unpauseInstance(name: string): Promise<void> {
+  await postInstanceAction(name, "resume");
+}
+
+async function postInstanceAction(name: string, action: string): Promise<void> {
+  const resp = await fetch(
+    `/api/instances/${encodeURIComponent(name)}/${action}`,
+    { method: "POST" },
+  );
+  if (!resp.ok) {
+    const text = await resp.text();
+    let body: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try {
+      body = JSON.parse(text);
+    } catch {
+      /* non-JSON; keep default */
+    }
+    throw new ApiError(resp.status, body);
+  }
+}
+
 // scrubInstance invokes DELETE /api/instances/{name} — removes the
 // registry entry entirely. Use for cleanup of zombie creating
 // entries (e.g. server restart killed the goroutine mid-up,
@@ -1081,6 +1109,225 @@ export const fetchHoldings = (
   );
 };
 
+// BIT-219 token workspace — ACS-derived lenses (instrument discovery,
+// balance matrix, per-holding UTXO rows). These hit the live ledger;
+// when no endpoint is recorded the backend falls back to the recorded
+// token list (so `instruments` may be absent — callers handle both).
+
+// InstrumentRef is an on-chain-discovered instrument (workspace.go).
+export interface InstrumentRef {
+  admin: string;
+  instrument_id: string;
+  name?: string;
+  symbol?: string;
+  decimals?: number;
+  standard?: string; // "Splice Amulet" | "CIP-0112 v2"
+  on_ledger: boolean;
+}
+
+// HoldingContract is one HoldingV2 UTXO. A balance = sum of these.
+export interface HoldingContract {
+  contract_id: string;
+  party: string;
+  admin: string;
+  instrument_id: string;
+  amount: string;
+  locked: boolean;
+}
+
+export interface MatrixCell {
+  party: string;
+  instrument_id: string;
+  amount: string;
+}
+
+export interface BalanceMatrix {
+  parties: string[];
+  instruments: InstrumentRef[];
+  cells: MatrixCell[];
+  totals: MatrixCell[];
+}
+
+interface InstrumentsResponse {
+  schema_version: number;
+  instruments?: InstrumentRef[];
+  tokens?: TokenRef[]; // fallback shape when no live endpoint
+}
+
+interface MatrixResponse {
+  schema_version: number;
+  matrix: BalanceMatrix;
+}
+
+// PartyRef — one registered party alias → its on-ledger party id
+// (BIT-215 #1). The workspace's god-mode party registry.
+export interface PartyRef {
+  alias: string;
+  party_id: string;
+  role: string;
+  is_local?: boolean;
+  created_at: string;
+}
+
+interface PartiesResponse {
+  schema_version: number;
+  parties: PartyRef[];
+}
+
+// fetchParties lists the instance's registered party aliases (seeding the
+// role parties when a live endpoint is available).
+export const fetchParties = (instance: string, role = "app-user") =>
+  apiFetch<PartiesResponse>(
+    `/api/parties?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
+  ).then((r) => r.parties);
+
+// createParty allocates a party under an alias and grants the role's user
+// act/read-as for it.
+export const createParty = (instance: string, alias: string, role = "app-user") =>
+  apiFetch<PartyRef>(`/api/parties?instance=${encodeURIComponent(instance)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ alias, role }),
+  });
+
+// removeParty forgets an alias (the on-ledger party persists).
+export const removeParty = (instance: string, alias: string) =>
+  apiFetchVoid(
+    `/api/parties/${encodeURIComponent(alias)}?instance=${encodeURIComponent(instance)}`,
+    { method: "DELETE" },
+  );
+
+// AliasMap is partyID → alias, built from fetchParties for client-side
+// labelling of party ids in the matrix / holdings / activity views.
+export type AliasMap = Record<string, string>;
+
+export const aliasMapFrom = (parties: PartyRef[]): AliasMap => {
+  const m: AliasMap = {};
+  for (const p of parties) if (p.party_id) m[p.party_id] = p.alias;
+  return m;
+};
+
+interface HoldingContractsResponse {
+  schema_version: number;
+  contracts: HoldingContract[];
+}
+
+// fetchInstruments returns ACS-discovered instruments. Falls back to the
+// recorded TokenRef list (mapped into InstrumentRef shape) when the
+// backend couldn't reach the ledger.
+export async function fetchInstruments(
+  instance: string,
+  role = "app-user",
+): Promise<InstrumentRef[]> {
+  const r = await apiFetch<InstrumentsResponse>(
+    `/api/tokens?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
+  );
+  if (r.instruments) return r.instruments;
+  return (r.tokens ?? []).map((t) => ({
+    admin: t.issuer_party,
+    instrument_id: t.instrument_id,
+    name: t.name,
+    symbol: t.symbol,
+    decimals: t.decimals,
+    standard: t.symbol === "Amulet" ? "Splice Amulet" : "CIP-0112 v2",
+    on_ledger: t.status === "on-ledger",
+  }));
+}
+
+export const fetchMatrix = (instance: string, role = "app-user") =>
+  apiFetch<MatrixResponse>(
+    `/api/tokens/matrix?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
+  ).then((r) => r.matrix);
+
+// HolderRow / InstrumentSummary — the instrument-first KPI view
+// (BIT-219 lens 1). Supply + holder/contract counts + per-holder
+// distribution, derived from one ACS scan (workspace.go).
+export interface HolderRow {
+  party: string;
+  balance: string;
+  contract_count: number;
+  pct_of_supply: string;
+}
+
+export interface InstrumentSummary {
+  instrument_id: string;
+  admin: string;
+  total_supply: string;
+  holder_count: number;
+  contract_count: number;
+  holders: HolderRow[];
+}
+
+interface InstrumentSummaryResponse {
+  schema_version: number;
+  summary: InstrumentSummary;
+}
+
+export const fetchInstrumentSummary = (
+  instance: string,
+  symbol: string,
+  role = "app-user",
+) =>
+  apiFetch<InstrumentSummaryResponse>(
+    `/api/tokens/${encodeURIComponent(symbol)}/summary?instance=${encodeURIComponent(
+      instance,
+    )}&role=${encodeURIComponent(role)}`,
+  ).then((r) => r.summary);
+
+// PartyDelta / ActivityEvent — the instrument activity feed (BIT-219
+// Activity tab). Each event is one ledger transaction netted into
+// senders/receivers + a kind (mint | burn | transfer), reconstructed
+// from HoldingV2 create/archive events (no off-ledger registry).
+export interface PartyDelta {
+  party: string;
+  amount: string;
+}
+
+export interface ActivityEvent {
+  offset: number;
+  update_id: string;
+  record_time: string;
+  instrument_id: string;
+  kind: "mint" | "burn" | "transfer";
+  amount: string;
+  senders?: PartyDelta[];
+  receivers?: PartyDelta[];
+}
+
+interface ActivityResponse {
+  schema_version: number;
+  events: ActivityEvent[];
+}
+
+export const fetchActivity = (
+  instance: string,
+  symbol: string,
+  role = "app-user",
+  limit = 50,
+) =>
+  apiFetch<ActivityResponse>(
+    `/api/tokens/${encodeURIComponent(symbol)}/activity?instance=${encodeURIComponent(
+      instance,
+    )}&role=${encodeURIComponent(role)}&limit=${limit}`,
+  ).then((r) => r.events);
+
+export const fetchHoldingContracts = (
+  instance: string,
+  symbol: string,
+  party: string,
+  role = "app-user",
+) => {
+  const params = new URLSearchParams({
+    instance,
+    role,
+    party,
+    expand: "contracts",
+  });
+  return apiFetch<HoldingContractsResponse>(
+    `/api/tokens/${encodeURIComponent(symbol)}/holdings?${params}`,
+  ).then((r) => r.contracts);
+};
+
 export interface TokenCreateInput {
   name: string;
   symbol: string;
@@ -1123,11 +1370,64 @@ export const transferToken = (
   amount: string,
   reason?: string,
   role?: string,
+  autoAccept?: boolean,
 ): Promise<void> =>
   apiFetchVoid(
     `/api/tokens/${encodeURIComponent(symbol)}/transfer?${tokenQuery(instance, role)}`,
-    { from, to, amount, reason: reason ?? "" },
+    { from, to, amount, reason: reason ?? "", auto_accept: !!autoAccept },
   );
+
+// faucetToken funds a party from a well-known source (BIT-215 #5),
+// auto-accepted. Empty source defaults to the role's funded party.
+export const faucetToken = (
+  instance: string,
+  symbol: string,
+  to: string,
+  amount: string,
+  source?: string,
+  role?: string,
+): Promise<void> =>
+  apiFetchVoid(
+    `/api/tokens/${encodeURIComponent(symbol)}/faucet?${tokenQuery(instance, role)}`,
+    { to, amount, source: source ?? "" },
+  );
+
+// TransferPlan — dry-run coin selection (BIT-219). Which Holding
+// contracts a transfer would consume, the change, and whether the
+// sender can cover it. Read-only; no ledger mutation.
+export interface TransferPlan {
+  instrument: string;
+  from: string;
+  amount: string;
+  inputs: { contract_id: string; amount: string }[];
+  total_input: string;
+  change: string;
+  sufficient: boolean;
+  shortfall?: string;
+}
+
+export async function planTransfer(
+  instance: string,
+  symbol: string,
+  from: string,
+  amount: string,
+  role = "app-user",
+): Promise<TransferPlan> {
+  const params = new URLSearchParams({ instance, role, plan: "1" });
+  const resp = await fetch(
+    `/api/tokens/${encodeURIComponent(symbol)}/transfer?${params}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: window.location.origin },
+      body: JSON.stringify({ from, to: from, amount }),
+    },
+  );
+  if (!resp.ok) {
+    throw new ApiError(resp.status, { code: "PLAN_FAILED", error: "could not compute transfer plan" });
+  }
+  const body = (await resp.json()) as { plan: TransferPlan };
+  return body.plan;
+}
 
 export const burnToken = (
   instance: string,

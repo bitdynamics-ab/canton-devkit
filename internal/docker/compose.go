@@ -480,6 +480,36 @@ func (c *ComposeRunner) Down(ctx context.Context) error {
 	return c.Stop(ctx, true)
 }
 
+// Pause runs `docker compose pause` — SIGSTOPs every container in the
+// project so they hold their in-memory state and stop consuming CPU
+// without losing it. Cheap to reverse with Unpause. Unlike Stop it keeps
+// the processes alive (no boot cost on resume) and unlike Restart it
+// doesn't bounce them. Published host ports stay bound.
+func (c *ComposeRunner) Pause(ctx context.Context) error {
+	args := append(c.composeBase(), "pause")
+	cmd := c.command(ctx, args...)
+	cmd.Stdout = c.LogWriter
+	cmd.Stderr = c.LogWriter
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("docker compose pause failed: %w", err)
+	}
+	return nil
+}
+
+// Unpause runs `docker compose unpause` — SIGCONTs the paused containers,
+// resuming them exactly where Pause froze them. No readiness wait is
+// needed (the apps never stopped), and ports are unchanged.
+func (c *ComposeRunner) Unpause(ctx context.Context) error {
+	args := append(c.composeBase(), "unpause")
+	cmd := c.command(ctx, args...)
+	cmd.Stdout = c.LogWriter
+	cmd.Stderr = c.LogWriter
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("docker compose unpause failed: %w", err)
+	}
+	return nil
+}
+
 // Restart runs `docker compose restart [services...]`. With no
 // services it restarts the whole project. Unlike down+up it keeps
 // containers, networks, and volumes — only the processes bounce —

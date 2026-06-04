@@ -8,6 +8,7 @@ import (
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
+	"github.com/bitdynamics-ab/canton-devkit/internal/telemetry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 	"github.com/spf13/cobra"
 )
@@ -68,6 +69,15 @@ ExitPreflightFail semantics).`,
 				}
 			}
 			if !rep.OK {
+				// Anonymous telemetry (no-op unless enabled): which checks
+				// failed, by stable slug. Only the check id is recorded.
+				for _, sec := range rep.Sections {
+					for _, ch := range sec.Checks {
+						if ch.Result == "fail" {
+							telemetry.Inc("dpm/doctor_fail", telemetry.Slug(ch.Label))
+						}
+					}
+				}
 				return localnet.AsExitError(localnet.ExitPreflightFail)
 			}
 			return nil

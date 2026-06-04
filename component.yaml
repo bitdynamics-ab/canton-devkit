@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/digital-asset/dpm/refs/heads/main/schema/component.v1.schema.json
+#
+# DPM component manifest for canton-devkit (Milestone 1 deliverable).
+#
+# DevKit registers a SINGLE top-level command, `localnet`, to keep the DPM
+# integration surface minimal and conflict-free with DPM builtins
+# (versions/install/resolve/publish/repo/component/login/bootstrap/tags/
+# update). Every DevKit subcommand (up/down/status/dar/contracts/tx/token/
+# metrics/doctor/…) lives under `localnet` inside our own binary.
+#
+# DPM strips the registered command name from argv and passes
+# `exec-args` + the user's args to the binary, so `dpm localnet up --name x`
+# invokes `canton-devkit localnet up --name x`. The TestRunIsArgvOnly test
+# (internal/cli/cli_test.go) locks this invariant.
+#
+# Published per-platform via `dpm publish component` from the release CI;
+# the `path` is rewritten to `canton-devkit.exe` on Windows by
+# scripts/assemble-dpm-component.sh. Install with:
+#
+#   dpm install package   # after referencing oci://…/canton-devkit:<ver>
+apiVersion: digitalasset.com/v1
+kind: Component
+spec:
+  commands:
+    - path: canton-devkit
+      name: localnet
+      desc: Manage Canton LocalNet developer environments — lifecycle, DAR, contracts, observability, and CIP-0112 token tooling.
+      exec-args: ["localnet"]
+      aliases: []

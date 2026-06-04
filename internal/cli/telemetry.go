@@ -1,0 +1,130 @@
+package cli
+
+import (
+	"encoding/json"
+	"fmt"
+	"sort"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/telemetry"
+	"github.com/spf13/cobra"
+)
+
+// buildTelemetryCmd is the ROOT-level `canton-devkit telemetry …` command
+// (sibling of `localnet` and `version`) — telemetry is tool-wide, not a
+// LocalNet concern (design decision #11).
+func buildTelemetryCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "telemetry",
+		Short: "Control and audit anonymous usage telemetry",
+		Long: `canton-devkit sends anonymous, aggregate usage counters (command name,
+OS, Docker engine, exit status — counted weekly, no IDs, no paths, no
+party ids, no JWTs, no error messages) to help prioritize fixes.
+
+It is ON by default (opt-out). Turn it off with 'telemetry off', or set
+DPM_TELEMETRY=off / DO_NOT_TRACK=1. 'telemetry preview' shows exactly the
+counters queued for this week; 'telemetry status' shows the on/off state
+and which rule decided it.`,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		Args:          cobra.NoArgs,
+		RunE:          func(c *cobra.Command, _ []string) error { return c.Help() },
+	}
+	cmd.AddCommand(
+		&cobra.Command{
+			Use: "on", Short: "Enable anonymous usage telemetry", Args: cobra.NoArgs,
+			RunE: func(c *cobra.Command, _ []string) error {
+				if err := telemetry.SetEnabled(true); err != nil {
+					return err
+				}
+				_, _ = fmt.Fprintln(c.OutOrStdout(), "Telemetry enabled.")
+				return nil
+			},
+		},
+		&cobra.Command{
+			Use: "off", Short: "Disable anonymous usage telemetry", Args: cobra.NoArgs,
+			RunE: func(c *cobra.Command, _ []string) error {
+				if err := telemetry.SetEnabled(false); err != nil {
+					return err
+				}
+				_, _ = fmt.Fprintln(c.OutOrStdout(), "Telemetry disabled. No further usage counters will be recorded.")
+				return nil
+			},
+		},
+		buildTelemetryStatus(),
+		buildTelemetryPreview(),
+	)
+	return cmd
+}
+
+func buildTelemetryStatus() *cobra.Command {
+	return &cobra.Command{
+		Use: "status", Short: "Show telemetry state + the rule that decided it", Args: cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			on, src := telemetry.Enabled()
+			state := "disabled"
+			if on {
+				state = "enabled"
+			}
+			out := c.OutOrStdout()
+			_, _ = fmt.Fprintf(out, "Telemetry:  %s\n", state)
+			_, _ = fmt.Fprintf(out, "Decided by: %s\n", src)
+			_, _ = fmt.Fprintf(out, "Channel:    %s\n", telemetry.Channel())
+			ep := telemetry.EffectiveEndpoint()
+			if ep == "" {
+				_, _ = fmt.Fprintln(out, "Collector:  (none — counters stay on this machine)")
+			} else {
+				_, _ = fmt.Fprintf(out, "Collector:  %s\n", ep)
+			}
+			_, _ = fmt.Fprintln(out, "\nThis week's queued counters: run `telemetry preview`.")
+			return nil
+		},
+	}
+}
+
+func buildTelemetryPreview() *cobra.Command {
+	var format string
+	cmd := &cobra.Command{
+		Use: "preview", Short: "Print this week's local counter file (exactly what would be sent)", Args: cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			agg, err := telemetry.PreviewCurrentWeek()
+			if err != nil {
+				return err
+			}
+			out := c.OutOrStdout()
+			if format == "json" {
+				enc := json.NewEncoder(out)
+				enc.SetIndent("", "  ")
+				return enc.Encode(map[string]any{
+					"schema_version": agg.SchemaVersion,
+					"week":           agg.Week,
+					"counters":       agg.Counters,
+				})
+			}
+			_, _ = fmt.Fprintf(out, "Week %s (file: %s)\n", agg.Week, telemetry.CurrentWeekFile())
+			if len(agg.Counters) == 0 {
+				_, _ = fmt.Fprintln(out, "  (no counters recorded yet this week)")
+				return nil
+			}
+			charts := make([]string, 0, len(agg.Counters))
+			for ch := range agg.Counters {
+				charts = append(charts, ch)
+			}
+			sort.Strings(charts)
+			for _, ch := range charts {
+				_, _ = fmt.Fprintf(out, "  %s\n", ch)
+				buckets := agg.Counters[ch]
+				keys := make([]string, 0, len(buckets))
+				for b := range buckets {
+					keys = append(keys, b)
+				}
+				sort.Strings(keys)
+				for _, b := range keys {
+					_, _ = fmt.Fprintf(out, "    %-26s %d\n", b, buckets[b])
+				}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json.")
+	return cmd
+}

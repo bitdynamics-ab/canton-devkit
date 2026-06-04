@@ -48,6 +48,10 @@ const (
 	StatusStopped  Status = "stopped"
 	StatusFailed   Status = "failed"
 	StatusPartial  Status = "partial"
+	// StatusPaused is set by `localnet pause` (docker compose pause):
+	// containers are frozen (SIGSTOP) but alive, holding state and ports.
+	// `localnet resume` (unpause) returns to running with no boot cost.
+	StatusPaused Status = "paused"
 )
 
 // State is the persisted record for a single LocalNet instance.
@@ -88,6 +92,18 @@ type State struct {
 	// decode cleanly with Tokens == nil.
 	Tokens map[string]TokenRef `json:"tokens,omitempty"`
 
+	// Parties is the per-instance party alias registry (BIT-215 #1).
+	// Keyed by alias (a human-readable name like "bob"), each entry
+	// maps to an allocated on-ledger party id. On LocalNet there is no
+	// trust boundary between parties — the `unsafe` dev secret signs for
+	// every role — so the token tooling treats the instance as one
+	// god-mode workspace and lets developers refer to parties by alias
+	// anywhere a party id is accepted. Auto-seeded with the role parties
+	// on first scan; extended via `localnet party new <alias>`.
+	// Additive — older state.json files without this key decode cleanly
+	// with Parties == nil.
+	Parties map[string]PartyRef `json:"parties,omitempty"`
+
 	// Current lifecycle status.
 	Status            Status `json:"status"`
 	LastHealthCheckAt string `json:"last_health_check_at,omitempty"`
@@ -110,6 +126,19 @@ type TokenRef struct {
 	InstrumentID  string `json:"instrument_id"`
 	CreatedAt     string `json:"created_at"`
 	Status        string `json:"status"`
+}
+
+// PartyRef is one registered party alias → its allocated on-ledger
+// party id, plus the role whose participant hosts it. MIRRORS
+// internal/api/types.PartyRef (same JSON tags); kept here so the
+// registry package stays free of an upward api/types dependency. Adding
+// a field requires updating both.
+type PartyRef struct {
+	Alias     string `json:"alias"`
+	PartyID   string `json:"party_id"`
+	Role      string `json:"role"`               // participant that hosts it (app-user/app-provider/sv)
+	IsLocal   bool   `json:"is_local,omitempty"` // locally-hosted (can be granted/acted-as)
+	CreatedAt string `json:"created_at"`
 }
 
 // Credential is a single role's auth token + the metadata needed to
@@ -245,6 +274,7 @@ func NewState(name, spliceVersion string) *State {
 		Status:        StatusCreating,
 		Ports:         map[string]int{},
 		Credentials:   map[string]Credential{},
+		Parties:       map[string]PartyRef{},
 	}
 }
 

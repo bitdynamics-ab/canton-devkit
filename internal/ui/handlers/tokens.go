@@ -42,7 +42,10 @@ const tokensBodyMax = 64 << 10 // 64 KiB
 // don't have to refactor their MountTokens call when that lands.
 func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	mux.HandleFunc("GET /api/tokens", handleTokensList)
+	mux.HandleFunc("GET /api/tokens/matrix", handleTokenMatrix)
 	mux.HandleFunc("GET /api/tokens/{symbol}", handleTokenDetail)
+	mux.HandleFunc("GET /api/tokens/{symbol}/summary", handleTokenSummary)
+	mux.HandleFunc("GET /api/tokens/{symbol}/activity", handleTokenActivity)
 	mux.HandleFunc("GET /api/tokens/{symbol}/holdings", handleTokenHoldings)
 	// State-changing POSTs are wrapped with Idempotency-Key dedup so a
 	// client retry can't mint/transfer/burn twice (opt-in: only requests
@@ -53,6 +56,99 @@ func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	mux.HandleFunc("POST /api/tokens/{symbol}/transfer", idem.wrap(handleTokenTransfer))
 	mux.HandleFunc("POST /api/tokens/transfers/{id}/accept", idem.wrap(handleTokenAccept))
 	mux.HandleFunc("POST /api/tokens/{symbol}/burn", idem.wrap(handleTokenBurn))
+	mux.HandleFunc("POST /api/tokens/{symbol}/faucet", idem.wrap(handleTokenFaucet))
+	// Party alias registry (BIT-215 #1) — the workspace's god-mode
+	// party manager. Same RunPartyX functions the `token party` CLI calls.
+	mux.HandleFunc("GET /api/parties", handlePartiesList)
+	mux.HandleFunc("POST /api/parties", handlePartiesCreate)
+	mux.HandleFunc("DELETE /api/parties/{alias}", handlePartiesRemove)
+}
+
+// aliasMap returns partyID → alias for an instance's registered parties,
+// attached to scan responses so the UI can label party ids without a
+// second round-trip. Empty map for an unknown / alias-less instance.
+func aliasMap(instance string) map[string]string {
+	out := map[string]string{}
+	state, err := registry.Read(instance)
+	if err != nil {
+		return out
+	}
+	for _, ref := range state.Parties {
+		if ref.PartyID != "" {
+			out[ref.PartyID] = ref.Alias
+		}
+	}
+	return out
+}
+
+func handlePartiesList(w http.ResponseWriter, r *http.Request) {
+	instance, err := instanceFromQuery(r)
+	if err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	role := roleFromQuery(r)
+	// Endpoint enables lazy-seeding the role parties; absent endpoint
+	// still lists whatever's recorded.
+	parties, err := token.RunPartyList(r.Context(), token.PartyOptions{
+		Instance: instance, Role: role, Insecure: true,
+		Endpoint: liveLedgerEndpoint(instance, role),
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "list parties", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema_version": types.SchemaVersion,
+		"parties":        parties,
+	})
+}
+
+func handlePartiesCreate(w http.ResponseWriter, r *http.Request) {
+	instance, err := instanceFromQuery(r)
+	if err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	var req struct {
+		Alias string `json:"alias"`
+		Role  string `json:"role"`
+	}
+	if err := decodeJSON(r.Body, &req); err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	role := req.Role
+	if role == "" {
+		role = "app-user"
+	}
+	ep := liveLedgerEndpoint(instance, role)
+	if ep == "" {
+		writeErrorWithCode(w, http.StatusServiceUnavailable, "PARTICIPANT_PORT_NOT_RECORDED",
+			"no live ledger endpoint for instance "+instance+" — restart it so ports are captured")
+		return
+	}
+	ref, err := token.RunPartyNew(r.Context(), token.PartyOptions{
+		Instance: instance, Alias: req.Alias, Role: role, Insecure: true, Endpoint: ep,
+	})
+	if err != nil {
+		mapTokenError(w, err, "party new")
+		return
+	}
+	writeJSON(w, http.StatusCreated, ref)
+}
+
+func handlePartiesRemove(w http.ResponseWriter, r *http.Request) {
+	instance, err := instanceFromQuery(r)
+	if err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	if err := token.RunPartyRemove(instance, r.PathValue("alias")); err != nil {
+		mapTokenError(w, err, "party rm")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- read paths ------------------------------------------------------
@@ -63,6 +159,26 @@ func handleTokensList(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
+	// On-chain instrument discovery (BIT-219): when a live ledger
+	// endpoint is available, list instruments seen in the ACS — so
+	// Amulet and any minted token appear without a state.Tokens seed.
+	// Falls back to the registry-recorded list when no endpoint (the
+	// instance pre-dates port capture, or the ledger is unreachable).
+	role := roleFromQuery(r)
+	if ep := liveLedgerEndpoint(instance, role); ep != "" {
+		instruments, derr := token.RunInstruments(r.Context(), token.BalanceOptions{
+			Instance: instance, Role: role, Insecure: true, Endpoint: ep,
+		})
+		if derr == nil {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"schema_version": types.SchemaVersion,
+				"instruments":    instruments,
+			})
+			return
+		}
+		// Discovery failed (e.g. ledger momentarily unreachable) — fall
+		// through to the recorded list rather than erroring the screen.
+	}
 	refs, err := token.ListTokens(instance)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "list tokens", err)
@@ -71,6 +187,35 @@ func handleTokensList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"schema_version": types.SchemaVersion,
 		"tokens":         refs,
+	})
+}
+
+// handleTokenMatrix returns the party × instrument balance matrix
+// (BIT-219 / BIT-215 #2) — the god-mode reconciliation view.
+func handleTokenMatrix(w http.ResponseWriter, r *http.Request) {
+	instance, err := instanceFromQuery(r)
+	if err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	role := roleFromQuery(r)
+	ep := liveLedgerEndpoint(instance, role)
+	if ep == "" {
+		writeErrorWithCode(w, http.StatusServiceUnavailable, "PARTICIPANT_PORT_NOT_RECORDED",
+			"no live ledger endpoint for instance "+instance+" — restart it so ports are captured")
+		return
+	}
+	matrix, err := token.RunBalanceMatrix(r.Context(), token.BalanceOptions{
+		Instance: instance, Role: role, Insecure: true, Endpoint: ep,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "balance matrix", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema_version": types.SchemaVersion,
+		"matrix":         matrix,
+		"aliases":        aliasMap(instance),
 	})
 }
 
@@ -87,6 +232,90 @@ func handleTokenDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, ref)
+}
+
+// handleTokenSummary returns the instrument-first KPI view (BIT-219
+// lens 1): total supply, holder + holding-contract counts, and the
+// per-holder distribution with share-of-supply. ACS-derived, same live
+// endpoint as the matrix.
+func handleTokenSummary(w http.ResponseWriter, r *http.Request) {
+	instance, err := instanceFromQuery(r)
+	if err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	role := roleFromQuery(r)
+	ep := liveLedgerEndpoint(instance, role)
+	if ep == "" {
+		writeErrorWithCode(w, http.StatusServiceUnavailable, "PARTICIPANT_PORT_NOT_RECORDED",
+			"no live ledger endpoint for instance "+instance+" — restart it so ports are captured")
+		return
+	}
+	// Resolve the symbol to its on-ledger instrument id so the scan's
+	// per-holding instrumentId filter lines up (the workspace keys on
+	// instrument_id, which for our native tokens == symbol).
+	sym := r.PathValue("symbol")
+	instrumentID := sym
+	if ref, rerr := token.ResolveBySymbol(instance, sym); rerr == nil && ref.InstrumentID != "" {
+		instrumentID = ref.InstrumentID
+	}
+	summary, err := token.RunInstrumentSummary(r.Context(), token.BalanceOptions{
+		Instance: instance, Role: role, Insecure: true, Endpoint: ep,
+		Instrument: instrumentID,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "instrument summary", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema_version": types.SchemaVersion,
+		"summary":        summary,
+		"aliases":        aliasMap(instance),
+	})
+}
+
+// handleTokenActivity reconstructs an instrument's transfer/mint/burn
+// history from the ledger transaction stream (BIT-219 Activity tab). No
+// off-ledger transfer-events registry needed — derived from HoldingV2
+// create/archive events. ?limit caps the result (default 50).
+func handleTokenActivity(w http.ResponseWriter, r *http.Request) {
+	instance, err := instanceFromQuery(r)
+	if err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	role := roleFromQuery(r)
+	ep := liveLedgerEndpoint(instance, role)
+	if ep == "" {
+		writeErrorWithCode(w, http.StatusServiceUnavailable, "PARTICIPANT_PORT_NOT_RECORDED",
+			"no live ledger endpoint for instance "+instance+" — restart it so ports are captured")
+		return
+	}
+	sym := r.PathValue("symbol")
+	instrumentID := sym
+	if ref, rerr := token.ResolveBySymbol(instance, sym); rerr == nil && ref.InstrumentID != "" {
+		instrumentID = ref.InstrumentID
+	}
+	limit := 50
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, perr := strconv.Atoi(v); perr == nil && n > 0 && n <= 500 {
+			limit = n
+		}
+	}
+	res, err := token.RunActivityResult(r.Context(), token.BalanceOptions{
+		Instance: instance, Role: role, Insecure: true, Endpoint: ep,
+		Instrument: instrumentID, Limit: limit,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "token activity", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema_version": types.SchemaVersion,
+		"events":         res.Events,
+		"truncated":      res.Truncated,
+		"aliases":        aliasMap(instance),
+	})
 }
 
 func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +345,21 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 		if port, ok := state.Ports["participant_ledger_"+role]; ok && port > 0 {
 			opts.Endpoint = "localhost:" + strconv.Itoa(port)
 		}
+	}
+	// expand=contracts → return the individual Holding contracts (the
+	// UTXO units) instead of the summed-per-party balance (BIT-219
+	// party-UTXO lens). A party's balance is the sum of these.
+	if r.URL.Query().Get("expand") == "contracts" && opts.Endpoint != "" {
+		contracts, cerr := token.RunWorkspaceHoldings(r.Context(), opts)
+		if cerr != nil {
+			mapTokenError(w, cerr, "holdings")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"schema_version": types.SchemaVersion,
+			"contracts":      contracts,
+		})
+		return
 	}
 	rows, truncated, err := token.RunBalance(r.Context(), nil, opts)
 	if err != nil {
@@ -211,34 +455,87 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		From   string `json:"from"`
-		To     string `json:"to"`
-		Amount string `json:"amount"`
-		NoWait bool   `json:"no_wait"`
-		Reason string `json:"reason"`
+		From       string `json:"from"`
+		To         string `json:"to"`
+		Amount     string `json:"amount"`
+		NoWait     bool   `json:"no_wait"`
+		AutoAccept bool   `json:"auto_accept"`
+		Reason     string `json:"reason"`
 	}
 	if err := decodeJSON(r.Body, &body); err != nil {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
 	role := roleFromQuery(r)
-	err = token.RunTransfer(r.Context(), nil, token.TransferOptions{
+	opts := token.TransferOptions{
 		Instance:   instance,
 		Instrument: r.PathValue("symbol"),
 		From:       body.From,
 		To:         body.To,
 		Amount:     body.Amount,
-		NoWait:     body.NoWait,
-		Reason:     body.Reason,
-		// Live-submit: resolve the role's ledger endpoint so the
-		// handler runs the real V2 transfer (registry-URL auto-derives
-		// from the instance). Absent port → RunTransfer surfaces the
-		// not-wired remediation, mapped to 412.
-		Endpoint: liveLedgerEndpoint(instance, role),
-		Role:     role,
-		Insecure: true,
-	})
-	mapTokenError(w, err, "transfer")
+		Role:       role,
+		Insecure:   true,
+		Endpoint:   liveLedgerEndpoint(instance, role),
+	}
+	// plan=1 → dry-run coin selection (consume/change preview), no submit.
+	if r.URL.Query().Get("plan") == "1" {
+		if opts.Endpoint == "" {
+			writeErrorWithCode(w, http.StatusServiceUnavailable, "PARTICIPANT_PORT_NOT_RECORDED",
+				"no live ledger endpoint for instance "+instance)
+			return
+		}
+		plan, perr := token.RunTransferPlan(r.Context(), opts)
+		if perr != nil {
+			mapTokenError(w, perr, "transfer plan")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"schema_version": types.SchemaVersion,
+			"plan":           plan,
+		})
+		return
+	}
+	// Live-submit: opts already carries the resolved endpoint/role.
+	opts.NoWait = body.NoWait
+	opts.AutoAccept = body.AutoAccept
+	opts.Reason = body.Reason
+	mapTokenError(w, token.RunTransfer(r.Context(), nil, opts), "transfer")
+}
+
+// handleTokenFaucet funds a party from a well-known source, auto-accepted
+// (BIT-215 #5). POST /api/tokens/{symbol}/faucet {to, amount, source?}.
+func handleTokenFaucet(w http.ResponseWriter, r *http.Request) {
+	instance, err := instanceFromQuery(r)
+	if err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	var body struct {
+		To     string `json:"to"`
+		Amount string `json:"amount"`
+		Source string `json:"source"`
+	}
+	if err := decodeJSON(r.Body, &body); err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	role := roleFromQuery(r)
+	ep := liveLedgerEndpoint(instance, role)
+	if ep == "" {
+		writeErrorWithCode(w, http.StatusServiceUnavailable, "PARTICIPANT_PORT_NOT_RECORDED",
+			"no live ledger endpoint for instance "+instance)
+		return
+	}
+	mapTokenError(w, token.RunFaucet(r.Context(), nil, token.FaucetOptions{
+		Instance:   instance,
+		Instrument: r.PathValue("symbol"),
+		To:         body.To,
+		Amount:     body.Amount,
+		Source:     body.Source,
+		Role:       role,
+		Insecure:   true,
+		Endpoint:   ep,
+	}), "faucet")
 }
 
 func handleTokenAccept(w http.ResponseWriter, r *http.Request) {
@@ -384,6 +681,15 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 	case errors.Is(err, token.ErrSymbolInUse):
 		writeErrorWithCode(w, http.StatusConflict,
 			"SYMBOL_IN_USE", err.Error())
+	case errors.Is(err, token.ErrAliasInvalid):
+		writeErrorWithCode(w, http.StatusBadRequest,
+			"ALIAS_INVALID", err.Error())
+	case errors.Is(err, token.ErrAliasInUse):
+		writeErrorWithCode(w, http.StatusConflict,
+			"ALIAS_IN_USE", err.Error())
+	case errors.Is(err, token.ErrAliasUnknown):
+		writeErrorWithCode(w, http.StatusNotFound,
+			"ALIAS_UNKNOWN", err.Error())
 	default:
 		// Off-ledger token-registry 4xx: surface the upstream status
 		// (so a 422 INSUFFICIENT_FUNDS stays a 422) and ship a short

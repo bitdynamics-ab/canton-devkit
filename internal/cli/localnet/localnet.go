@@ -25,6 +25,8 @@ func Build() *cobra.Command {
 	localnet.AddCommand(buildUp())
 	localnet.AddCommand(buildDown())
 	localnet.AddCommand(buildRestart())
+	localnet.AddCommand(buildPause())
+	localnet.AddCommand(buildResume())
 	localnet.AddCommand(buildClean())
 
 	// Inspection — real implementations landed on main via
