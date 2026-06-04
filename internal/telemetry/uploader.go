@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"strings"
@@ -56,6 +57,59 @@ func tryUpload() {
 			_ = savePeriod(agg)
 		}
 	}
+}
+
+// ErrNoCollector is returned by FlushNow when no collector endpoint is
+// configured, so the CLI can print an actionable message instead of
+// silently doing nothing.
+var ErrNoCollector = errors.New("no collector configured — set CANTON_DEVKIT_TELEMETRY_ENDPOINT (or use a release build with a baked-in endpoint)")
+
+// FlushNow uploads EVERY period file — including the CURRENT, still-open
+// period — to the collector immediately, removing each on success.
+// Returns the number of periods shipped.
+//
+// This is the on-demand counterpart to tryUpload (which only ships
+// completed past periods and runs automatically at process exit). It
+// exists so testers and operators don't have to wait for the daily
+// window to see counters land. Because the collector SUMS submissions and
+// each flushed file is removed locally, repeated flushes within a period
+// ship only the delta since the last flush — totals stay correct.
+func FlushNow() (int, error) {
+	url := resolveEndpoint()
+	if url == "" {
+		return 0, ErrNoCollector
+	}
+	entries, err := os.ReadDir(telemetryDir())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil // nothing recorded yet
+		}
+		return 0, err
+	}
+	var (
+		n        int
+		firstErr error
+	)
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasSuffix(name, ".json") || name == "config.json" {
+			continue
+		}
+		period := strings.TrimSuffix(name, ".json")
+		agg, err := loadPeriod(period)
+		if err != nil {
+			continue
+		}
+		if err := uploadPeriod(url, agg); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		_ = os.Remove(periodFilePath(period))
+		n++
+	}
+	return n, firstErr
 }
 
 // pendingPeriodFiles lists period identifiers with a file on disk other
