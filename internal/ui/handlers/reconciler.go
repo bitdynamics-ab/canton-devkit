@@ -11,9 +11,9 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// captureCantonPorts is a test seam wrapping localnet.CaptureCantonPorts
-// (BIT-221). Tests override this var to feed deterministic port maps
-// without shelling out to docker. Production uses the real impl.
+// captureCantonPorts is a test seam wrapping localnet.CaptureCantonPorts.
+// Tests override this var to feed deterministic port maps without
+// shelling out to docker. Production uses the real implementation.
 var captureCantonPorts = localnet.CaptureCantonPorts
 
 // reconcileContainersList is the test seam wrapping containersList so
@@ -237,15 +237,17 @@ func ReconcileOne(ctx context.Context, name string) (old, neu registry.Status, c
 	// capture-on-WaitForHealthy never gets a second chance to update
 	// state.Ports. Without this the Explorer / DAR / contracts
 	// handlers happily 502 against a port that's been closed for
-	// minutes while the reconciler reports `running` or `partial`.
+	// minutes while the reconciler reports `running`.
 	//
-	// Refresh BEFORE the status-changed early-return so the common
-	// case (cached=running, newStatus=running, only ports drifted)
-	// gets the fix. Gate also includes `partial` because the V2
-	// Token Standard image set has a perpetually-`starting` splice
-	// healthcheck (see assets/compose/tokens-v2.yml) — those are the
-	// instances where canton most often restart-loops AND the
-	// screens most need a working port set; gating on `running`
+	// We refresh ports BEFORE the status-changed early return so the
+	// common case (cached=running, newStatus=running, only ports
+	// drifted) gets the fix too.
+	//
+	// Gate also includes `partial` — the V2 Token Standard image set
+	// has a perpetually-`starting` splice healthcheck that pegs the
+	// reconciler at `partial` forever (see assets/compose/tokens-v2.yml).
+	// Those are the instances where canton most often restarts AND
+	// the screens most need a working port set; gating on `running`
 	// alone would never fire for them.
 	// `refreshCantonPorts` itself is best-effort — missing probes
 	// leave cached values intact — so calling it during `partial`
