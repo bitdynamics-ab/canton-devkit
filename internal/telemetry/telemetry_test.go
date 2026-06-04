@@ -49,7 +49,7 @@ func TestPrecedence(t *testing.T) {
 	}
 }
 
-func TestInc_WeeklyAggregate_NoIDsNoTimestamps(t *testing.T) {
+func TestInc_PeriodAggregate_NoIDsNoTimestamps(t *testing.T) {
 	sandbox(t)
 	Install(NewSink("dev"))
 	Inc("dpm/command", "up")
@@ -59,7 +59,7 @@ func TestInc_WeeklyAggregate_NoIDsNoTimestamps(t *testing.T) {
 	Inc("dpm/nonsense", "x") // not allow-listed → dropped
 	Persist()
 
-	agg, err := PreviewCurrentWeek()
+	agg, err := PreviewCurrentPeriod()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,14 +69,18 @@ func TestInc_WeeklyAggregate_NoIDsNoTimestamps(t *testing.T) {
 	if _, ok := agg.Counters["dpm/nonsense"]; ok {
 		t.Error("non-allow-listed counter leaked through")
 	}
-	// Zero-PII / no-identifier guard: the serialized week file must not
-	// contain any id/timestamp-below-week/pii token.
+	// Zero-PII / no-identifier guard: the serialized period file must not
+	// contain any id/sub-period-timestamp/pii token.
 	b, _ := json.Marshal(agg)
 	low := strings.ToLower(string(b))
 	for _, bad := range []string{"install", "uuid", "machine", "\"ts\"", "timestamp", "::", "/users/", "party", "jwt"} {
 		if strings.Contains(low, bad) {
-			t.Errorf("week file leaked %q: %s", bad, b)
+			t.Errorf("period file leaked %q: %s", bad, b)
 		}
+	}
+	// The period file is tagged with the active granularity (daily).
+	if agg.Granularity != "daily" {
+		t.Errorf("granularity = %q, want daily", agg.Granularity)
 	}
 }
 
@@ -90,13 +94,13 @@ func TestInc_DroppedWhenDisabled(t *testing.T) {
 	// With the no-op sink installed (sandbox default), Inc writes nothing.
 	Inc("dpm/command", "up")
 	Persist()
-	agg, _ := PreviewCurrentWeek()
+	agg, _ := PreviewCurrentPeriod()
 	if len(agg.Counters) != 0 {
 		t.Errorf("disabled telemetry must not record, got %+v", agg.Counters)
 	}
 }
 
-func TestUpload_PastWeekAndDrop(t *testing.T) {
+func TestUpload_PastPeriodAndDrop(t *testing.T) {
 	sandbox(t)
 	var mu sync.Mutex
 	var got map[string]any
@@ -114,43 +118,51 @@ func TestUpload_PastWeekAndDrop(t *testing.T) {
 	defer srv.Close()
 	t.Setenv(envEndpoint, srv.URL)
 
-	// Seed a PAST week file directly.
-	past := &WeeklyAggregate{SchemaVersion: SchemaVersion, Week: "2000-W01",
+	// Seed a PAST period file directly. Use a leftover WEEKLY-format key
+	// ("2000-W01") on purpose: it regression-guards the pendingPeriodFiles
+	// fix — any file that isn't the current (daily) key must still drain,
+	// even though "2000-W01" sorts AFTER a "2026-..." daily key and the
+	// old lexicographic `< cur` predicate would have stranded it forever.
+	past := &PeriodAggregate{SchemaVersion: SchemaVersion, Period: "2000-W01", Granularity: "weekly",
 		Counters: map[string]map[string]int{"dpm/command": {"up": 3}}}
-	if err := saveWeek(past); err != nil {
+	if err := savePeriod(past); err != nil {
 		t.Fatal(err)
 	}
 
 	// First attempt fails → file kept, marked deferred.
-	tryWeeklyUpload()
-	if _, err := os.Stat(weekFilePath("2000-W01")); err != nil {
+	tryUpload()
+	if _, err := os.Stat(periodFilePath("2000-W01")); err != nil {
 		t.Fatal("file should survive first failure")
 	}
-	w1, _ := loadWeek("2000-W01")
+	w1, _ := loadPeriod("2000-W01")
 	if !w1.Deferred {
 		t.Error("should be marked deferred after first failure")
 	}
 	// Second attempt fails → dropped.
-	tryWeeklyUpload()
-	if _, err := os.Stat(weekFilePath("2000-W01")); !os.IsNotExist(err) {
+	tryUpload()
+	if _, err := os.Stat(periodFilePath("2000-W01")); !os.IsNotExist(err) {
 		t.Error("file should be dropped after second failure")
 	}
 
 	// Now a successful upload clears the file.
-	if err := saveWeek(past); err != nil {
+	if err := savePeriod(past); err != nil {
 		t.Fatal(err)
 	}
 	mu.Lock()
 	fail = false
 	mu.Unlock()
-	tryWeeklyUpload()
+	tryUpload()
 	mu.Lock()
-	evWeek, _ := got["week"].(string)
+	evPeriod, _ := got["period"].(string)
+	evGran, _ := got["granularity"].(string)
 	mu.Unlock()
-	if evWeek != "2000-W01" {
-		t.Errorf("collector got week %q, want 2000-W01", evWeek)
+	if evPeriod != "2000-W01" {
+		t.Errorf("collector got period %q, want 2000-W01", evPeriod)
 	}
-	if _, err := os.Stat(weekFilePath("2000-W01")); !os.IsNotExist(err) {
+	if evGran != "weekly" {
+		t.Errorf("collector got granularity %q, want weekly (the file's own tag)", evGran)
+	}
+	if _, err := os.Stat(periodFilePath("2000-W01")); !os.IsNotExist(err) {
 		t.Error("file should be removed after successful upload")
 	}
 }

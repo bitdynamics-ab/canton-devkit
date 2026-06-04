@@ -159,10 +159,11 @@ func Slug(label string) string {
 
 // debugDump writes the JSON that WOULD be sent for the run's counters to
 // stderr and skips the network (DPM_TELEMETRY_DEBUG=1, decision #10).
-func debugDump(week string, counters map[string]map[string]int) {
+func debugDump(period string, counters map[string]map[string]int) {
 	b, _ := json.MarshalIndent(map[string]any{
 		"schema_version": SchemaVersion,
-		"week":           week,
+		"period":         period,
+		"granularity":    string(aggregationPeriod),
 		"counters":       counters,
 	}, "", "  ")
 	_, _ = fmt.Fprintf(os.Stderr, "[telemetry debug] would send:\n%s\n", b)

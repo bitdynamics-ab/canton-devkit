@@ -17,12 +17,12 @@ func buildTelemetryCmd() *cobra.Command {
 		Use:   "telemetry",
 		Short: "Control and audit anonymous usage telemetry",
 		Long: `canton-devkit sends anonymous, aggregate usage counters (command name,
-OS, Docker engine, exit status — counted weekly, no IDs, no paths, no
+OS, Docker engine, exit status — counted daily, no IDs, no paths, no
 party ids, no JWTs, no error messages) to help prioritize fixes.
 
 It is ON by default (opt-out). Turn it off with 'telemetry off', or set
 DPM_TELEMETRY=off / DO_NOT_TRACK=1. 'telemetry preview' shows exactly the
-counters queued for this week; 'telemetry status' shows the on/off state
+counters queued for today; 'telemetry status' shows the on/off state
 and which rule decided it.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -75,7 +75,7 @@ func buildTelemetryStatus() *cobra.Command {
 			} else {
 				_, _ = fmt.Fprintf(out, "Collector:  %s\n", ep)
 			}
-			_, _ = fmt.Fprintln(out, "\nThis week's queued counters: run `telemetry preview`.")
+			_, _ = fmt.Fprintln(out, "\nToday's queued counters: run `telemetry preview`.")
 			return nil
 		},
 	}
@@ -84,9 +84,9 @@ func buildTelemetryStatus() *cobra.Command {
 func buildTelemetryPreview() *cobra.Command {
 	var format string
 	cmd := &cobra.Command{
-		Use: "preview", Short: "Print this week's local counter file (exactly what would be sent)", Args: cobra.NoArgs,
+		Use: "preview", Short: "Print this period's local counter file (exactly what would be sent)", Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
-			agg, err := telemetry.PreviewCurrentWeek()
+			agg, err := telemetry.PreviewCurrentPeriod()
 			if err != nil {
 				return err
 			}
@@ -96,13 +96,14 @@ func buildTelemetryPreview() *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(map[string]any{
 					"schema_version": agg.SchemaVersion,
-					"week":           agg.Week,
+					"period":         agg.Period,
+					"granularity":    agg.Granularity,
 					"counters":       agg.Counters,
 				})
 			}
-			_, _ = fmt.Fprintf(out, "Week %s (file: %s)\n", agg.Week, telemetry.CurrentWeekFile())
+			_, _ = fmt.Fprintf(out, "%s %s (file: %s)\n", agg.Granularity, agg.Period, telemetry.CurrentPeriodFile())
 			if len(agg.Counters) == 0 {
-				_, _ = fmt.Fprintln(out, "  (no counters recorded yet this week)")
+				_, _ = fmt.Fprintln(out, "  (no counters recorded yet this period)")
 				return nil
 			}
 			charts := make([]string, 0, len(agg.Counters))
