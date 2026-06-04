@@ -7,7 +7,7 @@ import "sync"
 // package-level Inc, which routes to the installed sink.
 type Sink interface {
 	Inc(chart, bucket string)
-	Persist() // merge the run's counters into the weekly file (+ maybe upload)
+	Persist() // merge the run's counters into the period file (+ maybe upload)
 }
 
 // noopSink is the default — used in tests and whenever telemetry is not
@@ -46,8 +46,8 @@ func Inc(chart, bucket string) {
 	s.Inc(chart, bucket)
 }
 
-// Persist flushes the run's accumulated counters to the weekly file (and
-// runs the weekly upload window). Call once at process exit.
+// Persist flushes the run's accumulated counters to the period file (and
+// runs the upload window). Call once at process exit.
 func Persist() {
 	mu.Lock()
 	s := current
@@ -57,7 +57,7 @@ func Persist() {
 
 // counterSink is the real, file-backed sink. It accumulates in memory
 // during the run (so N Inc calls cost nothing on disk) and writes once on
-// Persist by merging into the current week's aggregate.
+// Persist by merging into the current period's aggregate.
 type counterSink struct {
 	mu       sync.Mutex
 	channel  string
@@ -90,9 +90,9 @@ func (c *counterSink) Persist() {
 		return
 	}
 	if debugEnabled() {
-		debugDump(currentWeek(), snapshot)
+		debugDump(currentPeriod(), snapshot)
 		return // debug mode never writes the spool or sends
 	}
-	_ = mergeWeekly(snapshot)
-	tryWeeklyUpload()
+	_ = mergePeriod(snapshot)
+	tryUpload()
 }

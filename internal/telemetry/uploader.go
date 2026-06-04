@@ -27,39 +27,44 @@ func resolveEndpoint() string {
 	return endpoint
 }
 
-// tryWeeklyUpload uploads any COMPLETED past-week files (week < current),
-// one POST each. The current week keeps accumulating and is never sent
-// while still open. On success the file is deleted; on the first failure
-// it is marked Deferred (retried next window); on a second failure it is
-// dropped. Best-effort and silent. No-op when no endpoint is configured.
-func tryWeeklyUpload() {
+// tryUpload uploads any COMPLETED past-period files (every file whose key
+// isn't the current period), one POST each. The current period keeps
+// accumulating and is never sent while still open. On success the file is
+// deleted; on the first failure it is marked Deferred (retried next
+// window); on a second failure it is dropped. Best-effort and silent.
+// No-op when no endpoint is configured.
+func tryUpload() {
 	url := resolveEndpoint()
 	if url == "" {
 		return // ship-dark
 	}
-	cur := currentWeek()
-	for _, week := range pastWeekFiles(cur) {
-		agg, err := loadWeek(week)
+	cur := currentPeriod()
+	for _, period := range pendingPeriodFiles(cur) {
+		agg, err := loadPeriod(period)
 		if err != nil {
 			continue
 		}
-		if uploadWeek(url, agg) == nil {
-			_ = os.Remove(weekFilePath(week))
+		if uploadPeriod(url, agg) == nil {
+			_ = os.Remove(periodFilePath(period))
 			continue
 		}
 		// Upload failed.
 		if agg.Deferred {
-			_ = os.Remove(weekFilePath(week)) // second miss → drop
+			_ = os.Remove(periodFilePath(period)) // second miss → drop
 		} else {
 			agg.Deferred = true
-			_ = saveWeek(agg)
+			_ = savePeriod(agg)
 		}
 	}
 }
 
-// pastWeekFiles lists week identifiers with a file on disk that are
-// strictly before `cur` (ISO week strings sort lexicographically).
-func pastWeekFiles(cur string) []string {
+// pendingPeriodFiles lists period identifiers with a file on disk other
+// than the current period. We only ever write the current period's file,
+// so any other file is by definition a completed past period ready to
+// ship — comparing by inequality (not lexicographic order) means a
+// daily↔weekly granularity switch never strands a file whose key format
+// sorts unexpectedly against the new current key.
+func pendingPeriodFiles(cur string) []string {
 	entries, err := os.ReadDir(telemetryDir())
 	if err != nil {
 		return nil
@@ -70,20 +75,22 @@ func pastWeekFiles(cur string) []string {
 		if !strings.HasSuffix(name, ".json") || name == "config.json" {
 			continue
 		}
-		week := strings.TrimSuffix(name, ".json")
-		if week < cur {
-			out = append(out, week)
+		period := strings.TrimSuffix(name, ".json")
+		if period != cur {
+			out = append(out, period)
 		}
 	}
 	return out
 }
 
-// uploadWeek POSTs one week's counters. The body carries ONLY
-// schema_version, week, and counters — never the internal Deferred flag.
-func uploadWeek(url string, agg *WeeklyAggregate) error {
+// uploadPeriod POSTs one period's counters. The body carries ONLY
+// schema_version, period, granularity, and counters — never the internal
+// Deferred flag.
+func uploadPeriod(url string, agg *PeriodAggregate) error {
 	body, err := json.Marshal(map[string]any{
 		"schema_version": SchemaVersion,
-		"week":           agg.Week,
+		"period":         agg.Period,
+		"granularity":    agg.Granularity,
 		"counters":       agg.Counters,
 	})
 	if err != nil {
@@ -115,10 +122,10 @@ func (e errBadStatus) Error() string { return "collector returned non-2xx" }
 // `telemetry status`.
 func EffectiveEndpoint() string { return resolveEndpoint() }
 
-// CurrentWeekFile returns the path of this week's local counter file, for
-// `telemetry preview`.
-func CurrentWeekFile() string { return weekFilePath(currentWeek()) }
+// CurrentPeriodFile returns the path of this period's local counter file,
+// for `telemetry preview`.
+func CurrentPeriodFile() string { return periodFilePath(currentPeriod()) }
 
-// PreviewCurrentWeek returns this week's aggregate (what's queued
+// PreviewCurrentPeriod returns this period's aggregate (what's queued
 // locally) for `telemetry preview` / `status`.
-func PreviewCurrentWeek() (*WeeklyAggregate, error) { return loadWeek(currentWeek()) }
+func PreviewCurrentPeriod() (*PeriodAggregate, error) { return loadPeriod(currentPeriod()) }
