@@ -37,9 +37,26 @@ builds via `-ldflags`):
 export CANTON_DEVKIT_TELEMETRY_ENDPOINT=http://<this-host>:8080/v1/counters
 ```
 
-Open Metabase at `http://<this-host>:3000`, finish its first-run setup,
-add the `telemetry` Postgres as a data source, and chart `counter_period`
-or the `v_command_usage` view.
+Open Metabase at `http://<this-host>:3000` and finish its first-run
+signup. Then provision the data source + dashboards in one shot:
+
+```bash
+# create an API key in Metabase: Admin → Settings → API Keys (Admin group)
+MB_API_KEY='mb_...' DB_PASS="$POSTGRES_PASSWORD" python3 setup-metabase.py
+# or with email+password instead of a key:
+MB_USER='you@example.com' MB_PASS='...' DB_PASS="$POSTGRES_PASSWORD" python3 setup-metabase.py
+```
+
+[`setup-metabase.py`](setup-metabase.py) is idempotent (re-runs update in
+place) and stdlib-only. It connects the `telemetry` database, creates a
+**canton-devkit telemetry** collection, builds five charts over
+`counter_period` (commands/day, top commands, OS split, ok-vs-fail
+outcomes, and a raw exportable table), and assembles them into a
+**canton-devkit usage** dashboard — printing its URL when done. Works the
+same against a production Metabase by setting `MB_URL`.
+
+Prefer the UI? You can also add the `telemetry` Postgres as a data source
+manually and chart `counter_period` / the `v_command_usage` view.
 
 ## What it accepts
 
