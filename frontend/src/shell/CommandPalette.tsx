@@ -6,9 +6,10 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { W, wMono, wSans } from "../tokens";
 import { useInstanceSelection } from "./useInstanceSelection";
+import { NAV, isInstanceScoped, linkTo } from "./routes";
 
 // CommandPalette — ⌘K (Ctrl+K on non-Mac) launches a centred
 // fuzzy-search modal listing every action the UI knows how to
@@ -39,15 +40,18 @@ interface Action {
   perform: () => void;
 }
 
-const NAV_ACTIONS: Array<Omit<Action, "perform"> & { path: string }> = [
-  { id: "nav-overview", group: "Navigate", label: "Overview", hint: "/", path: "/" },
-  { id: "nav-wallet", group: "Navigate", label: "Wallet", hint: "/wallet", path: "/wallet" },
-  { id: "nav-explorer", group: "Navigate", label: "Explorer", hint: "/explorer", path: "/explorer" },
-  { id: "nav-dar", group: "Navigate", label: "DAR Manager", hint: "/dar", path: "/dar" },
-  { id: "nav-metrics", group: "Navigate", label: "Metrics", hint: "/metrics", path: "/metrics" },
-  { id: "nav-tokens", group: "Navigate", label: "Tokens", hint: "/tokens", path: "/tokens" },
-  { id: "nav-agent", group: "Navigate", label: "Agent Skills", hint: "/agent", path: "/agent" },
-];
+// Derive the palette's nav rows from the shared NAV table so the
+// sidebar and the palette can never drift on routes / labels /
+// instance-scoping. Adding a tab to ./routes wires both surfaces.
+const NAV_ACTIONS: Array<Omit<Action, "perform"> & { path: string }> = NAV.map(
+  (n) => ({
+    id: `nav-${n.to === "/" ? "overview" : n.to.replace(/^\//, "")}`,
+    group: "Navigate",
+    label: n.label,
+    hint: n.to,
+    path: n.to,
+  }),
+);
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
@@ -56,6 +60,13 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const sel = useInstanceSelection();
+  // Read the currently-selected instance off the URL so palette
+  // navigation to instance-scoped routes carries `?instance=`
+  // forward — same fix as the Shell sidebar (BIT-223). Without
+  // this, ⌘K → "Wallet" bounces the user to the empty state even
+  // though the header still shows an instance.
+  const [searchParams] = useSearchParams();
+  const instance = searchParams.get("instance");
 
   // Global hotkey. ⌘K on Mac, Ctrl+K elsewhere — same as VS Code,
   // Slack, GitHub. We use the e.metaKey || e.ctrlKey gate rather
@@ -89,7 +100,7 @@ export function CommandPalette() {
   const actions = useMemo<Action[]>(() => {
     const nav = NAV_ACTIONS.map<Action>((a) => ({
       ...a,
-      perform: () => navigate(a.path),
+      perform: () => navigate(linkTo(a.path, isInstanceScoped(a.path), instance)),
     }));
     const instances = sel.instances.map<Action>((i) => ({
       id: `inst-${i.name}`,
@@ -99,7 +110,7 @@ export function CommandPalette() {
       perform: () => sel.select(i.name),
     }));
     return [...nav, ...instances];
-  }, [navigate, sel]);
+  }, [navigate, sel, instance]);
 
   const filtered = useMemo(() => filter(actions, query), [actions, query]);
 

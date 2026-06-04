@@ -4,6 +4,7 @@ import { W, wMono, wSans } from "../tokens";
 import { type ConnectionState, useConnectionHealth } from "./useConnectionHealth";
 import { type InstanceSelection, useInstanceSelection } from "./useInstanceSelection";
 import { CommandPalette } from "./CommandPalette";
+import { NAV, linkTo } from "./routes";
 
 // Shell — sidebar + topbar layout from docs/design/mockups/webui-shell.jsx
 // (AppShell + TopBar). Children render in the main content area.
@@ -356,31 +357,13 @@ function HealthPill({ conn }: { conn: ConnectionState }) {
   );
 }
 
-// instanceScoped marks routes that read `?instance=` from the URL.
-// Sidebar nav must forward the currently-selected instance into these
-// links; otherwise a user clicking from Wallet→Explorer lands on the
-// "No instance selected" empty state even though the header picker
-// still shows an instance (BIT-223).
-const NAV: Array<{ to: string; label: string; instanceScoped: boolean }> = [
-  { to: "/", label: "Overview", instanceScoped: false },
-  { to: "/wallet", label: "Wallet", instanceScoped: true },
-  { to: "/explorer", label: "Explorer", instanceScoped: true },
-  { to: "/dar", label: "DAR Manager", instanceScoped: true },
-  { to: "/metrics", label: "Metrics", instanceScoped: true },
-  { to: "/tokens", label: "Tokens", instanceScoped: true },
-  { to: "/agent", label: "Agent Skills", instanceScoped: false },
-];
-
 function Sidebar() {
   // Thread the currently-selected instance into per-instance routes so
   // sidebar clicks don't drop the selection (BIT-223). Pathname-only
-  // (isActive) is unchanged because NavLink matches on pathname.
+  // (isActive) is unchanged because NavLink matches on pathname. NAV +
+  // linkTo live in ./routes so the ⌘K palette shares the same table.
   const [params] = useSearchParams();
   const instance = params.get("instance");
-  const linkTo = (to: string, instanceScoped: boolean) =>
-    instanceScoped && instance
-      ? `${to}?instance=${encodeURIComponent(instance)}`
-      : to;
   return (
     <nav
       style={{
@@ -394,7 +377,7 @@ function Sidebar() {
       {NAV.map((item) => (
         <NavLink
           key={item.to}
-          to={linkTo(item.to, item.instanceScoped)}
+          to={linkTo(item.to, item.instanceScoped, instance)}
           end={item.to === "/"}
           style={({ isActive }) => ({
             display: "block",
