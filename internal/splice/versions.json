@@ -9,8 +9,8 @@
       "content_sha": "1a9d0b329cd7c9f76c04085674b9e8dc98169064b0404d007d7e2b22cb582150",
       "size": 124198413,
       "major": "0.5",
-      "min_memory_bytes": 4294967296,
-      "recommended_memory_bytes": 6442450944
+      "min_memory_bytes": 4000000000,
+      "recommended_memory_bytes": 6000000000
     },
     {
       "tag": "0.6.3",
@@ -18,8 +18,8 @@
       "content_sha": "4d8e7f4eb73309574d3a023f9c13c7e00095ccb0741e06ac9eaf20fe12d45c17",
       "size": 137565949,
       "major": "0.6",
-      "min_memory_bytes": 8589934592,
-      "recommended_memory_bytes": 12884901888
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
     },
     {
       "tag": "0.6.4",
@@ -27,8 +27,8 @@
       "content_sha": "db1e1336dc4e33abe7011a0df29e5becd141d11c84cdf42849e48bf2106066af",
       "size": 137576613,
       "major": "0.6",
-      "min_memory_bytes": 8589934592,
-      "recommended_memory_bytes": 12884901888
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
     },
     {
       "tag": "token-standard-v2",
@@ -36,8 +36,8 @@
       "content_sha": "4fae533b28de046360524c0e4b9d56a5799865bfff6007b5372959bf150165c7",
       "size": 154042565,
       "major": "0.6",
-      "min_memory_bytes": 8589934592,
-      "recommended_memory_bytes": 12884901888,
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000,
       "channel": "alpha",
       "image_repo": "ghcr.io/digital-asset/decentralized-canton-sync-dev/docker",
       "image_tag": "0.6.5-snapshot.20260526.2931.0.ve28a6722"

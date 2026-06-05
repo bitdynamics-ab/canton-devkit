@@ -25,8 +25,8 @@ const preflightCheckTimeout = 10 * time.Second
 // existed). If the proposal requires a bump, edit ONCE here and
 // the gate stays consistent.
 const (
-	DefaultMinDiskBytes   uint64 = 10 * 1024 * 1024 * 1024 // 10 GiB
-	DefaultMinMemoryBytes uint64 = 4 * 1024 * 1024 * 1024  // 4 GiB
+	DefaultMinDiskBytes   uint64 = 10_000_000_000 // 10 GB
+	DefaultMinMemoryBytes uint64 = 4_000_000_000  // 4 GB
 )
 
 // Status describes the outcome of a single preflight check.
