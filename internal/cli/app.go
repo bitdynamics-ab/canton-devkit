@@ -72,6 +72,12 @@ func (a *App) Run(args []string) int {
 		// the cheap context counters (channel/os/arch/ci/llm_agent). Deep
 		// code (preflight/doctor) adds docker_engine / compose / doctor_fail
 		// via telemetry.Inc directly. Then persist + run the weekly upload.
+		//
+		// Everything here is gated on a REAL localnet verb, so META
+		// commands — `version`, `telemetry status/preview/flush/on/off`,
+		// `help`, shell completion — do NOT count toward adoption. Running
+		// `telemetry status` repeatedly is auditing, not usage; counting
+		// its os/arch/install context would inflate the adoption picture.
 		verb := localnetVerb(cmd)
 		if verb != "" {
 			telemetry.Inc("dpm/command", verb)
@@ -88,11 +94,15 @@ func (a *App) Run(args []string) int {
 					telemetry.Inc("dpm/token_action", act)
 				}
 			}
+			// Context + the install proxy are recorded ONLY alongside a
+			// real localnet command, for the same anti-inflation reason.
+			telemetry.RecordContext()
+			// dpm/install: once per machine (first non-CI run) — the
+			// privacy-preserving device-count proxy. No-op on later runs.
+			telemetry.RecordInstallOnce()
 		}
-		telemetry.RecordContext()
-		// dpm/install: once per machine (first non-CI run) — the
-		// privacy-preserving device-count proxy. No-op on every later run.
-		telemetry.RecordInstallOnce()
+		// Persist + run the upload window regardless, so a `telemetry
+		// flush` (a meta command) can still ship already-recorded counters.
 		telemetry.Persist()
 	}
 	return code
