@@ -139,6 +139,7 @@ jobs:
         # softprops/action-gh-release@v3
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
         with:
+          generate_release_notes: true
           files: dist/*
 
       - name: Publish to public builds repo
@@ -147,10 +148,15 @@ jobs:
           GH_TOKEN: ${{ secrets.BUILDS_REPO_TOKEN }}
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
+          # Fetch release notes from the primary release just created above.
+          # Use GITHUB_TOKEN (not BUILDS_REPO_TOKEN) to read from this repo.
+          notes=$(GH_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
+            gh release view "${VERSION}" --repo "${GITHUB_REPOSITORY}" --json body --jq '.body')
+
           gh release create "${VERSION}" \
             --repo bitdynamics-ab/homebrew-canton-devkit \
             --title "${VERSION}" \
-            --notes "canton-devkit release ${VERSION}" \
+            --notes "${notes}" \
             dist/*
 
       - name: Update Homebrew formula in public builds repo
