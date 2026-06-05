@@ -90,6 +90,9 @@ func (a *App) Run(args []string) int {
 			}
 		}
 		telemetry.RecordContext()
+		// dpm/install: once per machine (first non-CI run) — the
+		// privacy-preserving device-count proxy. No-op on every later run.
+		telemetry.RecordInstallOnce()
 		telemetry.Persist()
 	}
 	return code

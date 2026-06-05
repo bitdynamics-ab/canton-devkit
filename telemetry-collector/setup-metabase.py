@@ -192,6 +192,12 @@ def build_cards(db_id, coll_id):
         "bar", db_id, coll_id,
         {"graph.dimensions": ["action"], "graph.metrics": ["n"]})
     # ---- M4: composite adoption — installs, visibility, qualitative ----
+    ids["installs"] = native_card(
+        "Distinct installs by platform (telemetry device-count proxy)",
+        "SELECT bucket AS platform, sum(count) AS installs "
+        "FROM counter_period WHERE chart='dpm/install' GROUP BY 1 ORDER BY 2 DESC",
+        "bar", db_id, coll_id,
+        {"graph.dimensions": ["platform"], "graph.metrics": ["installs"]})
     ids["downloads"] = native_card(
         "Cumulative downloads (toward 250 floor)",
         "SELECT captured_on, total_downloads FROM v_downloads_total ORDER BY captured_on",
@@ -279,9 +285,9 @@ def ensure_dashboard(coll_id, card_ids):
     head("## M3 · Token Standard (CIP-0112) flow  —  source: telemetry")
     row1("token")
 
-    head("## M4 · Composite adoption  —  sources: GitHub + maintainer evidence")
-    row2("downloads", "stars")
-    row1("evidence", h=6)
+    head("## M4 · Composite adoption  —  sources: telemetry installs + GitHub + maintainer evidence")
+    row2("installs", "downloads")
+    row2("stars", "evidence", h=6)
 
     head("### Appendix · raw counters (one-click CSV / Excel export)")
     row1("raw", h=8)
