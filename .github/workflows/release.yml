@@ -136,11 +136,14 @@ jobs:
 
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/')
-        # softprops/action-gh-release@v3
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
-        with:
-          generate_release_notes: true
-          files: dist/*
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          gh release create "${VERSION}" \
+            --generate-notes \
+            --title "${VERSION}" \
+            dist/*
 
       - name: Publish to public builds repo
         if: startsWith(github.ref, 'refs/tags/')
@@ -157,6 +160,7 @@ jobs:
             --repo bitdynamics-ab/homebrew-canton-devkit \
             --title "${VERSION}" \
             --notes "${notes}" \
+            --generate-notes=false \
             dist/*
 
       - name: Update Homebrew formula in public builds repo
