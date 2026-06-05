@@ -42,9 +42,9 @@ type Payload struct {
 }
 
 // Store persists a validated period of counters. Implemented by pgxStore
-// against Postgres; faked in tests. Upsert semantics: the CLI sends the
-// cumulative total for a period, so a re-send of the same period REPLACES
-// the prior counts (last write wins) rather than adding to them.
+// against Postgres; faked in tests. Aggregation semantics: many machines
+// report the same period (zero-PII, no machine id), so submissions SUM on
+// (period, chart, bucket) rather than replacing — see PgStore.UpsertCounters.
 type Store interface {
 	UpsertCounters(ctx context.Context, period, granularity string, periodStart *time.Time, counters map[string]map[string]int) error
 }
