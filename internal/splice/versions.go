@@ -46,9 +46,15 @@ type Version struct {
 	// needs to start cleanly. Empirically derived: Splice 0.6.x boots
 	// a single canton container hosting 2 sequencers + 2 mediators +
 	// 3 participants each at -Xmx 2.5 GiB, so the container OOM-loops
-	// on a stock Docker Desktop install (4 GiB default). 0.5.x is
+	// on a stock Docker Desktop install (4 GB default). 0.5.x is
 	// lighter. 0 means "use docker.DefaultMinMemoryBytes" — the
-	// historical 4 GiB floor.
+	// historical 4 GB floor.
+	//
+	// Values use decimal GB (1 GB = 10^9 bytes) to match Docker
+	// Desktop on macOS, which is the primary platform where users
+	// must manually set a memory limit. Using decimal GB ensures
+	// that "8 GB" in Docker Desktop satisfies a min_memory_bytes
+	// of 8_000_000_000.
 	MinMemoryBytes uint64 `json:"min_memory_bytes,omitempty"`
 	// RecommendedMemoryBytes is the value at which the version
 	// runs without resource warnings. UI surfaces this as the
@@ -193,7 +199,7 @@ func RecommendedMemoryFor(v Version) uint64 {
 //
 // TestThresholdParity_VersionMinAtLeastDefault asserts equality
 // with docker.DefaultMinMemoryBytes so this never drifts.
-const defaultMinMemoryBytesFallback uint64 = 4 * 1024 * 1024 * 1024
+const defaultMinMemoryBytesFallback uint64 = 4_000_000_000
 
 // Supported returns the supported tags sorted ascending. Stable order
 // makes it easy to grep error messages and renders the version list

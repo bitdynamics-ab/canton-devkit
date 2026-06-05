@@ -57,15 +57,15 @@ func remediationDiskLow() string {
 }
 
 func remediationMemoryUnknown() string {
-	return "Could not query Docker memory; ensure the daemon has at least 4 GB available."
+	return "Could not query Docker memory; ensure the daemon has enough memory available."
 }
 
 func remediationMemoryLow() string {
 	switch runtime.GOOS {
 	case "darwin", "windows":
-		return "Increase Docker Desktop's memory in Preferences → Resources → Memory (recommend 4 GB+)."
+		return "Increase Docker Desktop's memory in Preferences → Resources → Memory."
 	case "linux":
-		return "Free host RAM or extend swap; Canton + Postgres need ~4 GB."
+		return "Free host RAM or extend swap."
 	}
 	return "Increase memory available to the Docker daemon."
 }

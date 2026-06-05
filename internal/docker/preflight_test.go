@@ -71,8 +71,9 @@ func TestHumanBytes(t *testing.T) {
 	}{
 		{500, "500 B"},
 		{2048, "2 KB"},
-		{5 * 1024 * 1024, "5 MB"},
-		{3 * 1024 * 1024 * 1024, "3.0 GB"},
+		{5_000_000, "5 MB"},
+		{3_000_000_000, "3.00 GB"},
+		{8_589_934_592, "8.59 GB"},
 	}
 	for _, c := range cases {
 		if got := humanBytes(c.in); got != c.want {
