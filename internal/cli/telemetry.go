@@ -52,8 +52,44 @@ and which rule decided it.`,
 		},
 		buildTelemetryStatus(),
 		buildTelemetryPreview(),
+		buildTelemetryFlush(),
 	)
 	return cmd
+}
+
+func buildTelemetryFlush() *cobra.Command {
+	return &cobra.Command{
+		Use:   "flush",
+		Short: "Send all queued counters to the collector now (skip the daily window)",
+		Long: `Uploads every queued counter file — including today's still-open
+period — to the configured collector immediately, instead of waiting for
+the normal daily ship. Useful when testing the telemetry pipeline so you
+can see counters land in the dashboard right away.
+
+Requires a collector endpoint (CANTON_DEVKIT_TELEMETRY_ENDPOINT or a
+release build with one baked in) and telemetry enabled.`,
+		Args:          cobra.NoArgs,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(c *cobra.Command, _ []string) error {
+			out := c.OutOrStdout()
+			if on, _ := telemetry.Enabled(); !on {
+				_, _ = fmt.Fprintln(out, "Telemetry is off — nothing to send. Enable with `telemetry on`.")
+				return nil
+			}
+			n, err := telemetry.FlushNow()
+			if err != nil {
+				_, _ = fmt.Fprintf(c.ErrOrStderr(), "flush failed: %s\n", err)
+				return err
+			}
+			if n == 0 {
+				_, _ = fmt.Fprintln(out, "Nothing queued to send.")
+				return nil
+			}
+			_, _ = fmt.Fprintf(out, "Flushed %d period(s) to %s\n", n, telemetry.EffectiveEndpoint())
+			return nil
+		},
+	}
 }
 
 func buildTelemetryStatus() *cobra.Command {

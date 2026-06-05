@@ -97,8 +97,9 @@ There is no per-invocation row to profile and no identifier to correlate.
 
 ```bash
 canton-devkit telemetry status              # on/off, the rule that decided it, channel, collector
-canton-devkit telemetry preview             # this week's counters (exactly what would be sent)
+canton-devkit telemetry preview             # this period's counters (exactly what would be sent)
 canton-devkit telemetry preview --format json
+canton-devkit telemetry flush               # send all queued counters now (skip the daily window)
 DPM_TELEMETRY_DEBUG=1 canton-devkit localnet status   # print the would-send JSON to stderr, send nothing
 ```
 
