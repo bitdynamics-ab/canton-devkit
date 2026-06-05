@@ -470,7 +470,16 @@ func (c *ComposeRunner) Stop(ctx context.Context, removeVolumes bool) error {
 	if removeVolumes {
 		args = append(args, "--volumes")
 	}
-	return c.command(ctx, args...).Run()
+	// CombinedOutput so a failure surfaces the real docker error instead
+	// of a bare "exit status 1" (the message users actually see otherwise).
+	out, err := c.command(ctx, args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("docker compose down failed: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	if c.LogWriter != nil {
+		_, _ = c.LogWriter.Write(out)
+	}
+	return nil
 }
 
 // Down is the destructive variant — kept as a thin wrapper over
@@ -478,6 +487,40 @@ func (c *ComposeRunner) Stop(ctx context.Context, removeVolumes bool) error {
 // should call Stop directly with the explicit removeVolumes choice.
 func (c *ComposeRunner) Down(ctx context.Context) error {
 	return c.Stop(ctx, true)
+}
+
+// forceCommand builds a docker invocation that inherits the FULL process
+// environment (PATH for the compose plugin, etc.) and does not pin Dir or
+// Env to the cached project. Force teardown must not depend on the
+// project's recorded env/working-dir — which may be exactly what's broken.
+func (c *ComposeRunner) forceCommand(ctx context.Context, args ...string) *exec.Cmd {
+	if c.commandFn != nil {
+		return c.commandFn(ctx, "docker", args...)
+	}
+	return exec.CommandContext(ctx, "docker", args...)
+}
+
+// ForceStop tears the project down by PROJECT LABEL only — it deliberately
+// omits the -f compose files and --env-file. A normal, file-driven
+// `docker compose down` parses+interpolates those files first and errors
+// out (before removing anything) when the env is incomplete or a
+// container is unhealthy/OOM-restarting; the label-only form sidesteps
+// that, which is the whole point of `down --force`. `--timeout 10`
+// SIGKILLs containers that won't stop gracefully. The full docker output
+// is captured and returned on failure (no bare "exit status 1").
+func (c *ComposeRunner) ForceStop(ctx context.Context, removeVolumes bool) error {
+	args := []string{"compose", "-p", c.ProjectName, "down", "--remove-orphans", "--timeout", "10"}
+	if removeVolumes {
+		args = append(args, "--volumes")
+	}
+	out, err := c.forceCommand(ctx, args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("docker compose down (force) failed: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	if c.LogWriter != nil {
+		_, _ = c.LogWriter.Write(out)
+	}
+	return nil
 }
 
 // Pause runs `docker compose pause` — SIGSTOPs every container in the
