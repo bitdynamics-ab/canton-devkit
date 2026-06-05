@@ -46,6 +46,27 @@ jobs:
           # Go-compiling job now — the dpm-component job consumes the
           # binaries this job uploads, so the toolchain runs exactly once.
 
+      - name: Set up Node
+        # actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build Web UI bundle
+        # Produce the Vite production bundle into internal/ui/dist/ BEFORE
+        # `go build`, so //go:embed all:dist embeds a working Web UI. Without
+        # this the binaries ship only the committed index.html (which points
+        # at gitignored, unbuilt /assets/*.js) → `localnet ui` is a blank
+        # page. (vite build.outDir = ../internal/ui/dist.)
+        run: |
+          set -euo pipefail
+          cd frontend
+          npm ci
+          npm run build
+          test -d ../internal/ui/dist/assets   # fail loudly if the bundle is missing
+
       - name: Set release metadata
         id: meta
         run: |
