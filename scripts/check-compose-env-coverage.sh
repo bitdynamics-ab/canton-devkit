@@ -71,7 +71,7 @@ referenced=$(
 # subset of internal/splice/v05/adapter.go and v06/adapter.go.
 overlay_env=(
   LOCALNET_DIR LOCALNET_ENV_DIR IMAGE_TAG DOCKER_NETWORK PARTY_HINT
-  COMPOSE_PROFILES TEST_PORT
+  TEST_PORT
 )
 
 # 0.6.x additionally sets ALPHA_PROTOCOL_VERSION_ENV; 0.5.x deliberately

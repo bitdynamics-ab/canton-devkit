@@ -55,7 +55,6 @@ func (a *Adapter) OverlayEnv(p splice.InstanceParams) map[string]string {
 		"IMAGE_TAG":        imageTag,
 		"DOCKER_NETWORK":   p.Name,
 		"PARTY_HINT":       splice.PartyHintFor(p.Name),
-		"COMPOSE_PROFILES": "sv,app-provider,app-user,swagger-ui",
 	}
 	if a.SupportsAlphaProtocol() {
 		env["ALPHA_PROTOCOL_VERSION_ENV"] = filepath.Join(p.ProjectDir, "env", "alpha-protocol-version.env")
