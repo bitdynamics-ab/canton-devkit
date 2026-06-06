@@ -196,6 +196,37 @@ func TestDown_InterruptionMarksPartialExits3(t *testing.T) {
 	}
 }
 
+// TestDown_DefaultStopPassesEnvFiles verifies that defaultStop
+// provides compose env files to the ComposeRunner (either from the
+// persisted overlay.env or adapter fallback), preventing the
+// PARTY_HINT interpolation error.
+func TestDown_DefaultStopPassesEnvFiles(t *testing.T) {
+	dataDir := t.TempDir()
+	// Write overlay.env so the preferred path is exercised.
+	_, err := localnet.WriteOverlayEnv(dataDir, map[string]string{
+		"PARTY_HINT":   "env-test-localparty-1",
+		"IMAGE_TAG":    "0.6.4",
+		"LOCALNET_DIR": t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("WriteOverlayEnv: %v", err)
+	}
+	st := &registry.State{
+		Name:           "env-test",
+		SpliceVersion:  "0.6.4",
+		ComposeProject: "canton-env-test",
+		ProjectDir:     t.TempDir(),
+		DataDir:        dataDir,
+		ComposeFiles:   []string{"compose.yaml"},
+	}
+	stopErr := defaultStop(context.Background(), st)
+	// Will fail on docker (no real compose project), but must NOT
+	// fail with PARTY_HINT interpolation error.
+	if stopErr != nil && strings.Contains(stopErr.Error(), "PARTY_HINT") {
+		t.Fatalf("defaultStop still fails with PARTY_HINT error: %v", stopErr)
+	}
+}
+
 // TestDown_InvalidNameRejected covers the cobra-layer validation
 // (delegates to localnet.ValidateName). A name with a slash should
 // never reach RunDown — the command must reject at the flag.

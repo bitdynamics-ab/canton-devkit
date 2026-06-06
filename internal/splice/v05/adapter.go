@@ -35,7 +35,6 @@ func (*Adapter) OverlayEnv(p splice.InstanceParams) map[string]string {
 		"IMAGE_TAG":        p.Version.Tag,
 		"DOCKER_NETWORK":   p.Name,
 		"PARTY_HINT":       splice.PartyHintFor(p.Name),
-		"COMPOSE_PROFILES": "sv,app-provider,app-user,swagger-ui",
 	}
 	if p.Ephemeral {
 		env["TEST_PORT"] = ""

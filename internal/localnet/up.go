@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -418,7 +417,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	}
 	prog.FinishStep(StepPersistState, "")
 
-	// 6. Starting services. Build the compose process env and run
+	// 6. Starting services. Build the compose env files and run
 	// `up -d --wait`. Ephemeral is always true: canton participant
 	// ports get TEST_PORT="" and UI/postgres ports come from
 	// uiOverrides.
@@ -429,20 +428,32 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		Ephemeral:       true,
 		UIPortOverrides: uiOverrides,
 	}
-	env := append(os.Environ(), mapToEnv(adapter.OverlayEnv(params))...)
+	overlayVars := adapter.OverlayEnv(params)
+
+	// Persist the overlay env to a .env file so downstream commands
+	// (down, logs, pause, restart, clean) replay the exact same
+	// compose environment via --env-file — no adapter re-derivation
+	// needed. The file is written to DataDir alongside state.json.
+	overlayEnvPath, err := WriteOverlayEnv(dataDir, overlayVars)
+	if err != nil {
+		prog.FailStep(StepPersistState, "Failed to write overlay env", err)
+		return ExitRuntimeFailure
+	}
+
+	// Env files: adapter base files + the generated overlay (last wins).
+	envFiles := append(adapter.EnvFiles(), overlayEnvPath)
 
 	// NewRunner is a test seam (PR #20 #9). Production: build the
 	// real *docker.ComposeRunner (which satisfies composeOps
 	// implicitly).
 	var runner composeOps
 	if opts.NewRunner != nil {
-		runner = opts.NewRunner(state.ComposeProject, composeFiles, adapter.EnvFiles(), env, projectDir, prog.Out())
+		runner = opts.NewRunner(state.ComposeProject, composeFiles, envFiles, nil, projectDir, prog.Out())
 	} else {
 		runner = &docker.ComposeRunner{
 			ProjectName:  state.ComposeProject,
 			ComposeFiles: composeFiles,
-			EnvFiles:     adapter.EnvFiles(),
-			Env:          env,
+			EnvFiles:     envFiles,
 			WorkDir:      projectDir,
 			LogWriter:    prog.Out(),
 			// docker compose v5 treats CLI --profile as REPLACING (not
