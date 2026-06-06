@@ -61,7 +61,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
     }
     setStopping({ kind: "running" });
     try {
-      await stopInstance(name, /*keepData=*/ true);
+      await stopInstance(name);
       setStopping({ kind: "idle" });
       // Bump our own refetch tick so this card's status field
       // updates from running → stopped, then notify the parent

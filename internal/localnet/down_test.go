@@ -133,11 +133,11 @@ func TestRunDown_InterruptionExitsTimeout(t *testing.T) {
 	}
 }
 
-// TestRunDown_HappyPathDeletesRegistry is the success counterpart —
-// when compose down returns nil, the data dir / registry entry are
-// removed as the user expects. Lock-in for the existing contract so
-// the new error-path changes don't regress it.
-func TestRunDown_HappyPathDeletesRegistry(t *testing.T) {
+// TestRunDown_HappyPathPreservesRegistry is the success counterpart —
+// when compose down returns nil, the registry entry is preserved with
+// status=stopped so that a subsequent `localnet clean` can discover
+// the compose project and remove Docker volumes.
+func TestRunDown_HappyPathPreservesRegistry(t *testing.T) {
 	name := "down-happy"
 	seedRunningInstance(t, name)
 
@@ -152,8 +152,12 @@ func TestRunDown_HappyPathDeletesRegistry(t *testing.T) {
 	if code := RunDown(context.Background(), &out, &errBuf, opts); code != ExitSuccess {
 		t.Fatalf("RunDown = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
-	if _, err := registry.Read(name); err != registry.ErrNotFound {
-		t.Errorf("registry entry should be gone after happy down, got err=%v", err)
+	s, err := registry.Read(name)
+	if err != nil {
+		t.Fatalf("registry entry should be preserved after down, got err=%v", err)
+	}
+	if s.Status != registry.StatusStopped {
+		t.Errorf("Status = %q, want %q", s.Status, registry.StatusStopped)
 	}
 }
 

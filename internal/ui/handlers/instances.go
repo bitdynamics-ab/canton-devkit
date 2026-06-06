@@ -653,10 +653,8 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 const downTimeout = 3 * time.Minute
 
 // downRequest is the body shape (currently empty; reserved for
-// future --keep-data flag once the frontend has a UI for it).
-type downRequest struct {
-	KeepData bool `json:"keep_data,omitempty"`
-}
+// future per-instance down options).
+type downRequest struct{}
 
 // handleResumeInstance: POST /api/instances/{name}/up.
 //
@@ -765,8 +763,7 @@ func handleResumeInstance(hub *stream.Hub) http.HandlerFunc {
 // full SSE choreography.)
 //
 // Returns 204 on success, 5xx with the captured output on
-// failure. Body is application/json; an empty body or
-// {"keep_data": true} are both valid.
+// failure. Body is application/json; an empty body is valid.
 //
 // Refuses on `creating` (409) — a goroutine is mid-up; the
 // caller should DELETE /up to cancel first, then this endpoint
@@ -790,7 +787,7 @@ func handleDownInstance() http.HandlerFunc {
 			writeErrorWithCode(w, http.StatusBadRequest,
 				ErrCodeInvalidRequest,
 				"invalid request body",
-				"the body should be empty or {\"keep_data\": bool}")
+				"the body should be empty or {}")
 			return
 		}
 
@@ -809,8 +806,7 @@ func handleDownInstance() http.HandlerFunc {
 		// success path discards them — 204 has no body.
 		var outBuf, errBuf bytes.Buffer
 		exit := localnet.RunDown(ctx, &outBuf, &errBuf, &localnet.DownOptions{
-			Name:     name,
-			KeepData: req.KeepData,
+			Name: name,
 		})
 
 		if exit == localnet.ExitSuccess {
