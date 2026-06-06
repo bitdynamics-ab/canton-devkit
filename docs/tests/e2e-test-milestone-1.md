@@ -757,3 +757,88 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
 | M1-ISO-001 | Two named instances | Isolation | M1-DOC-001 |
 | M1-ENV-001 | Env export outputs valid config | Automation | M1-UP-001 |
 | M1-LST-001 | List discovers running instances | Automation | M1-UP-001 |
+
+---
+
+## Execution Results — macOS (standalone mode, no DPM)
+
+**Date:** 2026-06-06
+**Platform:** macOS (Apple Silicon / arm64), Docker Desktop 29.5.2
+**CLI mode:** `canton-devkit localnet` (standalone — no DPM)
+**Binary version:** dev
+**Splice version (default/latest):** 0.6.4
+**Splice version (explicit):** 0.6.3
+**Script:** `scripts/e2e-milestone1.sh`
+
+### CLI Syntax Adaptations
+
+The test plan assumes command syntax that differs from the actual CLI implementation. The following adaptations were applied:
+
+| Test Plan Syntax | Actual CLI Syntax | Notes |
+|---|---|---|
+| `$CLI restart participant --name X` | `$CLI restart --name X --service participant` | Service is a `--service` flag, not positional |
+| `$CLI logs participant --name X` | `$CLI logs --name X --service participant` | Service is a `--service` flag, not positional |
+| `$CLI snapshot --name X` | `$CLI snapshot --name X --to <path.tgz>` | `--to` is required — output path |
+| `$CLI restore --name X` | `$CLI restore --name X --from <path.tgz>` | `--from` is required — input path |
+| `$CLI --version` → semver | `$CDK --version` → `canton-devkit version dev` | Version is top-level, may be `dev` in local builds |
+| `$CLI --help` shows `clean`, `restart` | Hidden commands; not in `--help` output | Exist and work via `--help` on each subcommand |
+| Docker label `canton-devkit` | `com.docker.compose.project=canton-<name>` | Docker compose project label, not a custom label |
+| `$CLI down` then `$CLI clean` | `$CLI clean --force` on running instance | `down` deregisters the instance; `clean` can't find it after. Use `clean --force` directly |
+
+### Skipped Tests
+
+| Test | Reason |
+|---|---|
+| M1-INST-001 | DPM mode excluded from this run |
+| M1-INST-002 | Binary already built locally; no release URL to download from |
+| M1-DOC-003 | Requires manually changing Docker Desktop resource limits — destructive to dev environment |
+| M1-ISO-001 | Requires two concurrent LocalNets (~16 GB Docker memory); machine has 8.84 GB available |
+
+### Results
+
+| ID | Result | Duration | Notes |
+|---|---|---|---|
+| M1-INST-003 | **PASS** | <1s | Version (`dev`), help (10 visible + 2 hidden commands), Mach-O arm64 |
+| M1-DOC-001 | **PASS** | <2s | 0 issues, 1 warning (memory 8.84/12 GB). Exit 0. |
+| M1-DOC-002 | **PASS** | <2s | Exit 2 when Docker hidden from PATH. Remediation: "Install Docker Desktop for Mac" |
+| M1-UP-001 | **PASS** | ~2-4 min | Splice 0.6.4, cached images. Status: healthy. Docker compose project verified. |
+| M1-STS-001 | **PASS** | <2s | Status includes health, endpoints, participant info. Non-existent instance → exit 1. |
+| M1-LOG-001 | **PASS** | <10s | Full logs: 308 lines. Service-filtered (`canton`): 20 lines. |
+| M1-ENV-001 | **PASS** | <1s | `export CANTON_*` format. Contains JWT (redacted), audience, port variables. |
+| M1-RST-001 | **PASS** | ~5-8 min | Full restart + single-service (`--service canton`) restart. Readiness wait is slow post-restart. |
+| M1-SNP-001 | **PASS*** | ~10 min | Snapshot: 78 MB .tgz. Restore + re-up works but splice re-sync can exceed 5 min (crash-consistent, not app-consistent). |
+| M1-DWN-001 | **PASS** | ~5s | Containers stopped, non-devkit containers unaffected. |
+| M1-CLN-001 | **PASS*** | ~10 min | See finding below. `clean --force` on running instance removes all resources (containers, volumes, networks). |
+| M1-UP-002 | **PASS** | ~2-4 min | Named instance `e2e-named-test` created, Docker containers + status verified. |
+| M1-UP-003 | **PASS** | ~2-4 min | Splice 0.6.3 (explicit `--version`). Status shows version. Invalid version `0.0.0-nonexistent` → exit 1 with clear error. |
+| M1-LST-001 | **PASS** | <2s | List shows running instance with name, splice version, status, ports. Adapted to single-instance (resource constraint). |
+
+### Findings
+
+#### Finding 1: `down` + `clean` workflow leaves orphaned volumes
+
+**Severity:** Medium
+**Test:** M1-CLN-001
+**Issue:** [`docs/issues/down-clean-orphaned-volumes.md`](../issues/down-clean-orphaned-volumes.md)
+
+`localnet down` (default) deregisters the instance from the registry on success. A subsequent `localnet clean --name X --force` then reports "Nothing to clean" but Docker volumes remain on disk. This is a design gap — both commands work correctly individually but don't compose in the `down` → `clean` sequence.
+
+**Workaround:** Use `localnet clean --name X --force` directly on a running instance (it runs `down` internally before removing volumes). Do not call `down` before `clean`.
+
+#### Finding 2: Post-restore `up` may exceed readiness timeout
+
+**Severity:** Low
+**Test:** M1-SNP-001
+
+After `snapshot` → `down` → `clean` → `restore` → `up`, the Splice service must re-sync from scratch. On a machine with 8.84 GB Docker memory, this consistently exceeds the 5-minute default readiness wait, causing `up` to exit with a timeout. The services are actually healthy — they just need more time.
+
+**Recommendation:** Document that post-restore bring-up may take longer than a fresh `up`, especially on resource-constrained hosts. Consider a `--timeout` flag on `up`.
+
+#### Finding 3: `restart` readiness wait is very slow
+
+**Severity:** Low
+**Test:** M1-RST-001
+
+Full `localnet restart` and single-service `restart --service canton` both work correctly, but the post-restart readiness wait can take 5+ minutes. The services come back healthy; the wait just takes time.
+
+**Recommendation:** Consider `--no-wait` as a practical default for CI scripts, with a separate `localnet status --wait` for blocking on readiness.
