@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
-	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
 
 // ComposeEnv captures everything a `docker compose` invocation against
@@ -23,62 +22,36 @@ type ComposeEnv struct {
 }
 
 // ComposeEnvForInstance returns the compose invocation environment for
-// an existing instance.
+// an existing instance. All compose interpolation vars come from the
+// overlay.env file written at `up` time — Env is always nil.
 //
-// Preferred path: overlay.env exists on disk (written at `up` time).
-// All compose interpolation vars come from env files — Env is nil.
-// uiPortOverrides are written to a temporary env file that takes
-// highest priority (appended last).
-//
-// Fallback (pre-existing instances without overlay.env): re-derives
-// from the adapter and injects into the process env.
+// uiPortOverrides (e.g. observability toggle) are written to a
+// temporary override.env file appended after overlay.env so they win.
 func ComposeEnvForInstance(state *registry.State, uiPortOverrides map[string]int) (ComposeEnv, error) {
 	if state == nil {
 		return ComposeEnv{}, fmt.Errorf("ComposeEnvForInstance: nil state")
 	}
 
-	overlay := overlayEnvPath(state)
-	if fileExists(overlay) {
-		files := composeEnvFiles(state)
-		// If the caller passes port overrides (e.g. observability
-		// toggle), write them to a temporary env file that comes
-		// after overlay.env so they win.
-		if len(uiPortOverrides) > 0 {
-			overrideMap := make(map[string]string, len(uiPortOverrides))
-			for k, v := range uiPortOverrides {
-				overrideMap[k] = fmt.Sprintf("%d", v)
-			}
-			tmp, err := writeOverrideEnv(state.DataDir, overrideMap)
-			if err != nil {
-				return ComposeEnv{}, fmt.Errorf("write port overrides: %w", err)
-			}
-			files = append(files, tmp)
-		}
-		return ComposeEnv{
-			EnvFiles: files,
-			Env:      nil, // inherit process env
-		}, nil
+	files, err := composeEnvFiles(state)
+	if err != nil {
+		return ComposeEnv{}, err
 	}
 
-	// Fallback: re-derive from adapter (backward compat).
-	v, err := splice.Resolve(state.SpliceVersion)
-	if err != nil {
-		return ComposeEnv{}, fmt.Errorf("resolve splice version %q: %w", state.SpliceVersion, err)
+	if len(uiPortOverrides) > 0 {
+		overrideMap := make(map[string]string, len(uiPortOverrides))
+		for k, v := range uiPortOverrides {
+			overrideMap[k] = fmt.Sprintf("%d", v)
+		}
+		tmp, err := writeOverrideEnv(state.DataDir, overrideMap)
+		if err != nil {
+			return ComposeEnv{}, fmt.Errorf("write port overrides: %w", err)
+		}
+		files = append(files, tmp)
 	}
-	adapter, err := adapterFor(v)
-	if err != nil {
-		return ComposeEnv{}, fmt.Errorf("adapter for %q: %w", state.SpliceVersion, err)
-	}
-	params := splice.InstanceParams{
-		Name:            state.Name,
-		Version:         v,
-		ProjectDir:      state.ProjectDir,
-		Ephemeral:       true,
-		UIPortOverrides: uiPortOverrides,
-	}
+
 	return ComposeEnv{
-		EnvFiles: adapter.EnvFiles(),
-		Env:      append(os.Environ(), mapToEnv(adapter.OverlayEnv(params))...),
+		EnvFiles: files,
+		Env:      nil,
 	}, nil
 }
 
