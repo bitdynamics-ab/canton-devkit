@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>E2E Test Plan -- Milestone 3: Token Faucets &amp; Token Standard Tooling (CIP-0112)</title>
+<script>
+  (function () {
+    try {
+      var saved = localStorage.getItem('mdReportTheme');
+      var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var theme = saved || (prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    } catch (e) {}
+  })();
+</script>
+<style>
+  :root {
+    --fg: #1f2328;
+    --muted: #57606a;
+    --bg: #ffffff;
+    --panel: #f6f8fa;
+    --border: #d0d7de;
+    --accent: #0969da;
+    --accent-on: #ffffff;
+    --accent-soft: #ddf4ff;
+    --accent-soft-border: #54aeff;
+    --warn: #9a6700;
+    --warn-soft: #fff8c5;
+    --warn-border: #d4a72c;
+    --good: #1a7f37;
+    --good-soft: #dafbe1;
+    --good-border: #4ac26b;
+    --code-bg: #f6f8fa;
+    --pill-bg: #ddf4ff;
+    --pill-fg: #0969da;
+    --pill-good-bg: #dafbe1;
+    --pill-good-fg: #1a7f37;
+    --pill-warn-bg: #fff8c5;
+    --pill-warn-fg: #9a6700;
+    --pill-muted-bg: #eaeef2;
+    --pill-muted-fg: #57606a;
+    --btn-bg: #f6f8fa;
+    --btn-fg: #1f2328;
+    --btn-border: #d0d7de;
+    --shadow: 0 1px 2px rgba(31, 35, 40, 0.06);
+    --details-bg: #fafbfc;
+    --check-accent: #0969da;
+    --check-done: #1a7f37;
+    --step-border: #e1e4e8;
+    --summary-hover: #f0f3f6;
+  }
+  html[data-theme="dark"] {
+    --fg: #e6edf3;
+    --muted: #9198a1;
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --accent: #4493f8;
+    --accent-on: #0d1117;
+    --accent-soft: #0c2d6b;
+    --accent-soft-border: #1f6feb;
+    --warn: #e3b341;
+    --warn-soft: #3a2c00;
+    --warn-border: #9e6a03;
+    --good: #3fb950;
+    --good-soft: #0f2f1a;
+    --good-border: #238636;
+    --code-bg: #161b22;
+    --pill-bg: #0c2d6b;
+    --pill-fg: #79c0ff;
+    --pill-good-bg: #0f2f1a;
+    --pill-good-fg: #3fb950;
+    --pill-warn-bg: #3a2c00;
+    --pill-warn-fg: #e3b341;
+    --pill-muted-bg: #21262d;
+    --pill-muted-fg: #9198a1;
+    --btn-bg: #161b22;
+    --btn-fg: #e6edf3;
+    --btn-border: #30363d;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --details-bg: #111820;
+    --check-accent: #4493f8;
+    --check-done: #3fb950;
+    --step-border: #21262d;
+    --summary-hover: #1c2128;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+  }
+  /* Theme toggle */
+  .theme-toggle {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 100;
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    border: 1px solid var(--btn-border);
+    border-radius: 999px;
+    padding: 8px 14px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1;
+  }
+  .theme-toggle:hover { border-color: var(--accent); }
+  .theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .theme-toggle .icon { width: 14px; height: 14px; display: inline-block; }
+  html[data-theme="dark"] .theme-toggle .icon-sun { display: inline-block; }
+  html[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+  html:not([data-theme="dark"]) .theme-toggle .icon-sun { display: none; }
+  html:not([data-theme="dark"]) .theme-toggle .icon-moon { display: inline-block; }
+
+  header.page {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+  }
+  header.page h1 {
+    margin: 0 0 8px;
+    font-size: 28px;
+    line-height: 1.25;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  header.page .sub {
+    color: var(--muted);
+    font-size: 14px;
+  }
+  header.page .sub span { margin-right: 16px; }
+
+  /* Progress bar */
+  .progress-bar-container {
+    margin-top: 14px;
+  }
+  .progress-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--check-done);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
+  h2 {
+    margin: 48px 0 12px;
+    font-size: 22px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+  }
+  h3 { margin: 28px 0 8px; font-size: 17px; }
+  h4 { margin: 16px 0 6px; font-size: 15px; }
+  p { margin: 8px 0 12px; }
+  ul, ol { margin: 8px 0 12px; padding-left: 24px; }
+  li { margin: 4px 0; }
+  a { color: var(--accent); }
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.92em;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  pre code { background: transparent; padding: 0; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin: 16px 0;
+  }
+  .panel.warn { background: var(--warn-soft); border-color: var(--warn-border); }
+  .panel.good { background: var(--good-soft); border-color: var(--good-border); }
+  .panel h3 { margin-top: 0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14.5px;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--panel); font-weight: 600; }
+  .table-scroll { overflow-x: auto; }
+
+  .tldr {
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-soft-border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 16px 0 24px;
+  }
+  .tldr strong { color: var(--accent); }
+
+  .pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    vertical-align: middle;
+    background: var(--pill-bg);
+    color: var(--pill-fg);
+  }
+  .pill.good { background: var(--pill-good-bg); color: var(--pill-good-fg); }
+  .pill.warn { background: var(--pill-warn-bg); color: var(--pill-warn-fg); }
+  .pill.muted { background: var(--pill-muted-bg); color: var(--pill-muted-fg); }
+  .pill.cat-create { background: #ddf4ff; color: #0550ae; }
+  .pill.cat-ops { background: #dafbe1; color: #116329; }
+  .pill.cat-e2e { background: #fff8c5; color: #6f4e00; }
+  .pill.cat-edge { background: #ffebe9; color: #82071e; }
+  .pill.cat-webui { background: #fbefff; color: #6639ba; }
+  .pill.cat-regression { background: #eaeef2; color: #424a53; }
+  html[data-theme="dark"] .pill.cat-create { background: #0c2d6b; color: #79c0ff; }
+  html[data-theme="dark"] .pill.cat-ops { background: #0f2f1a; color: #3fb950; }
+  html[data-theme="dark"] .pill.cat-e2e { background: #3a2c00; color: #e3b341; }
+  html[data-theme="dark"] .pill.cat-edge { background: #3d0813; color: #f47067; }
+  html[data-theme="dark"] .pill.cat-webui { background: #271052; color: #d2a8ff; }
+  html[data-theme="dark"] .pill.cat-regression { background: #21262d; color: #9198a1; }
+
+  /* Test case details */
+  details.test-case {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 12px 0;
+    background: var(--bg);
+    box-shadow: var(--shadow);
+  }
+  details.test-case[open] {
+    background: var(--details-bg);
+  }
+  details.test-case summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    cursor: pointer;
+    font-size: 15px;
+    list-style: none;
+    border-radius: 8px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  details.test-case summary::-webkit-details-marker { display: none; }
+  details.test-case summary::before {
+    content: "";
+    display: inline-block;
+    width: 0;
+    height: 0;
+    border-left: 6px solid var(--muted);
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    flex-shrink: 0;
+    transition: transform 0.15s ease;
+  }
+  details.test-case[open] > summary::before {
+    transform: rotate(90deg);
+  }
+  details.test-case summary:hover {
+    background: var(--summary-hover);
+  }
+  details.test-case summary .test-id {
+    font-weight: 700;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 14px;
+    color: var(--accent);
+  }
+  details.test-case summary .test-name {
+    font-weight: 600;
+    flex: 1;
+    min-width: 120px;
+  }
+  details.test-case .test-body {
+    padding: 4px 16px 16px;
+    border-top: 1px solid var(--border);
+  }
+  details.test-case .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 12px;
+    padding-top: 8px;
+  }
+  details.test-case .meta-row strong { color: var(--fg); }
+
+  /* Step with checkbox */
+  .step {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    border-top: 1px solid var(--step-border);
+  }
+  .step:first-of-type { border-top: none; }
+  .step input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    cursor: pointer;
+    margin-top: 2px;
+    position: relative;
+    flex-shrink: 0;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .step input[type="checkbox"]:hover {
+    border-color: var(--check-accent);
+  }
+  .step input[type="checkbox"]:checked {
+    background: var(--check-done);
+    border-color: var(--check-done);
+  }
+  .step input[type="checkbox"]:checked::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 6px;
+    width: 5px;
+    height: 10px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .step input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--check-accent);
+    outline-offset: 2px;
+  }
+  .step-content {
+    flex: 1;
+    min-width: 0;
+  }
+  .step-content > p:first-child { margin-top: 0; }
+  .step-content strong.step-num {
+    font-size: 14px;
+    color: var(--accent);
+    margin-right: 4px;
+  }
+  .step-expected {
+    font-size: 13.5px;
+    color: var(--muted);
+    margin: 4px 0 2px;
+    padding-left: 4px;
+  }
+  .step-expected strong { color: var(--fg); font-size: 13px; }
+
+  .note {
+    font-size: 13.5px;
+    color: var(--muted);
+    font-style: italic;
+    margin: 8px 0;
+  }
+
+  .cleanup {
+    margin-top: 12px;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+  .cleanup strong { color: var(--fg); }
+
+  footer.page {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  footer.page a { color: var(--accent); }
+
+  @media (max-width: 520px) {
+    .wrap { padding: 64px 16px 64px; }
+    header.page h1 { font-size: 22px; }
+    h2 { font-size: 20px; }
+    .theme-toggle { padding: 6px 10px; font-size: 12px; }
+    details.test-case summary { padding: 10px 12px; font-size: 14px; }
+    details.test-case .test-body { padding: 4px 12px 12px; }
+    .step { gap: 8px; }
+    pre { font-size: 12px; padding: 10px 12px; }
+    table { font-size: 13px; }
+    th, td { padding: 6px 8px; }
+  }
+  @media (max-width: 360px) {
+    .wrap { padding: 60px 10px 48px; }
+    header.page h1 { font-size: 20px; gap: 6px; }
+    details.test-case summary { font-size: 13px; gap: 6px; padding: 8px 10px; }
+    details.test-case summary .test-id { font-size: 12px; }
+  }
+  @media print {
+    .theme-toggle { display: none; }
+    .wrap { max-width: none; padding: 0; }
+    a { color: inherit; text-decoration: underline; }
+    details.test-case { break-inside: avoid; }
+    details.test-case[open] { break-inside: auto; }
+  }
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle color theme">
+  <svg class="icon icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6 0a6 6 0 0 0 9.32 7.5A8 8 0 1 1 8.5.68 6 6 0 0 0 6 0z"/></svg>
+  <svg class="icon icon-sun" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1.5A4.5 4.5 0 1 0 8 3.5a4.5 4.5 0 0 0 0 9zM8 0a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0V.75A.75.75 0 0 1 8 0zm0 13a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 8 13zM0 8a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5H.75A.75.75 0 0 1 0 8zm13 0a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5A.75.75 0 0 1 13 8zM2.34 2.34a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 0 1-1.06 1.06L2.34 3.4a.75.75 0 0 1 0-1.06zm9.2 9.2a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 1 1-1.06 1.06l-1.06-1.06a.75.75 0 0 1 0-1.06zM2.34 13.66a.75.75 0 0 1 0-1.06l1.06-1.06a.75.75 0 1 1 1.06 1.06l-1.06 1.06a.75.75 0 0 1-1.06 0zm9.2-9.2a.75.75 0 0 1 0-1.06L12.6 2.34a.75.75 0 1 1 1.06 1.06L12.6 4.46a.75.75 0 0 1-1.06 0z"/></svg>
+  <span class="label">Theme</span>
+</button>
+
+<div class="wrap">
+
+<header class="page">
+  <h1>E2E Test Plan &mdash; Milestone 3 <span class="pill">10 Tests</span></h1>
+  <p style="margin:4px 0 0;font-size:17px;color:var(--fg);font-weight:500;">Token Faucets &amp; Token Standard Tooling (CIP-0112)</p>
+  <div class="sub" style="margin-top:8px;">
+    <span><strong>Proposal:</strong> <code>original-devkit-proposal.md</code>, Milestone 3</span>
+    <span><strong>Delivery:</strong> Month 9</span>
+    <span><strong>Platforms:</strong> macOS (Apple Silicon), Linux (amd64), Windows (amd64)</span>
+    <span><strong>Prerequisite:</strong> Milestones 1 + 2 passing</span>
+  </div>
+  <div class="progress-bar-container">
+    <div class="progress-label" id="progressLabel">0 / 0 steps completed</div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+  </div>
+</header>
+
+<!-- TL;DR -->
+<div class="tldr">
+  <strong>TL;DR.</strong> This test plan validates CIP-0112 token standard tooling: the token creation wizard, minting, transfer, burn, and balance CLI commands, a full lifecycle E2E flow, edge cases (partial burn to zero), Web UI token toolkit, and cross-platform regression across macOS, Linux, and Windows.
+</div>
+
+<!-- Overview -->
+<h2>Overview</h2>
+<p>This plan covers 10 end-to-end test cases for Milestone 3 of the Canton DevKit project. All token commands target the CIP-0112 (V2) path as the default. Non-interactive flags are used for wizard-style commands to enable AI agent execution.</p>
+
+<h3>Conventions</h3>
+<ul>
+  <li><code>$CLI</code> = <code>dpm localnet</code> or <code>canton-devkit localnet</code> (run the full suite twice, once per mode).</li>
+  <li>Token commands target the CIP-0112 (V2) path as the default.</li>
+  <li><code>$WEB_UI_URL</code> = URL of the Web UI (from <code>$CLI status</code>).</li>
+  <li>Default step timeout: 30 seconds unless noted.</li>
+</ul>
+
+<h3>Environment Setup</h3>
+<pre><code># Set CLI mode
+export CLI="dpm localnet"       # or "canton-devkit localnet"
+
+# Ensure clean state
+$CLI clean --name e2e-m3-test --force 2&gt;/dev/null || true
+
+# Start LocalNet for Milestone 3 tests
+$CLI up --name e2e-m3-test
+
+# Capture Web UI URL
+export WEB_UI_URL=$($CLI status --name e2e-m3-test 2&gt;&amp;1 | grep -oiE "https?://[^ ]*ui[^ ]*" | head -1)
+
+# Capture available wallet/party info
+export WALLET_A=$($CLI env --name e2e-m3-test 2&gt;&amp;1 | grep -iE "WALLET|ALICE" | head -1 | cut -d= -f2)
+export WALLET_B=$($CLI env --name e2e-m3-test 2&gt;&amp;1 | grep -iE "WALLET|BOB" | head -1 | cut -d= -f2)</code></pre>
+
+<!-- Test Cases -->
+<h2>Test Cases</h2>
+
+<!-- M3-TOK-001 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M3-TOK-001</span>
+    <span class="test-name">Token create wizard (non-interactive)</span>
+    <span class="pill cat-create">Token Create</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> LocalNet <code>e2e-m3-test</code> running.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 1 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 1.</strong> Create a new token using non-interactive flags (CIP-0112 path):</p>
+        <pre><code>$CLI token create \
+  --token-name "TestCoin" \
+  --symbol "TST" \
+  --decimals 8 \
+  --initial-supply 1000000 \
+  --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Exit code <code>0</code>.</p>
+        <p class="step-expected"><strong>Verify</strong> creation confirmation:</p>
+        <pre><code>$CLI token create \
+  --token-name "TestCoin" \
+  --symbol "TST" \
+  --decimals 8 \
+  --initial-supply 1000000 \
+  --name e2e-m3-test 2&gt;&amp;1 | grep -qiE "(created|success|TestCoin|TST)"</code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 2 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 2.</strong> Verify the token exists by checking balance:</p>
+        <pre><code>$CLI token balance TestCoin --name e2e-m3-test 2&gt;&amp;1 | grep -qiE "(1000000|TestCoin|TST)"</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Balance shows the initial supply.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 3 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 3.</strong> Verify CIP-0112 alignment:</p>
+        <pre><code>$CLI token create \
+  --token-name "TestCoin" \
+  --symbol "TST" \
+  --decimals 8 \
+  --initial-supply 1000000 \
+  --name e2e-m3-test 2&gt;&amp;1 | grep -qiE "(cip.0112|v2|token.standard)"</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Output references CIP-0112 / V2 path (or no V1 warnings).</p>
+      </div>
+    </div>
+
+    <p class="cleanup"><strong>Cleanup:</strong> None (token persists for subsequent tests).</p>
+  </div>
+</details>
+
+<!-- M3-TOK-002 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M3-TOK-002</span>
+    <span class="test-name">Token mint</span>
+    <span class="pill cat-ops">Token Ops</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> Token "TestCoin" created (M3-TOK-001).</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 1 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 1.</strong> Mint additional tokens:</p>
+        <pre><code>$CLI token mint TestCoin 500000 --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Exit code <code>0</code>.</p>
+        <p class="step-expected"><strong>Verify</strong> mint confirmation:</p>
+        <pre><code>$CLI token mint TestCoin 500000 --name e2e-m3-test 2&gt;&amp;1 | grep -qiE "(minted|success|500000)"</code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 2 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 2.</strong> Verify updated balance:</p>
+        <pre><code>$CLI token balance TestCoin --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Balance is now <code>1500000</code> (initial 1000000 + minted 500000).</p>
+        <p class="step-expected"><strong>Verify:</strong></p>
+        <pre><code>$CLI token balance TestCoin --name e2e-m3-test 2&gt;&amp;1 | grep -qiE "1500000"</code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 3 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 3.</strong> Mint to a specific wallet:</p>
+        <pre><code>$CLI token mint TestCoin 100000 --to "$WALLET_B" --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Exit code <code>0</code>.</p>
+      </div>
+    </div>
+
+    <p class="cleanup"><strong>Cleanup:</strong> None.</p>
+  </div>
+</details>
+
+<!-- M3-TOK-003 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M3-TOK-003</span>
+    <span class="test-name">Token transfer</span>
+    <span class="pill cat-ops">Token Ops</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> Token "TestCoin" minted (M3-TOK-002), multiple wallets available.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 1 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 1.</strong> Transfer tokens between wallets:</p>
+        <pre><code>$CLI token transfer TestCoin 250000 --to "$WALLET_B" --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Exit code <code>0</code>.</p>
+        <p class="step-expected"><strong>Verify</strong> transfer confirmation:</p>
+        <pre><code>$CLI token transfer TestCoin 250000 --to "$WALLET_B" --name e2e-m3-test 2&gt;&amp;1 | grep -qiE "(transferred|success|250000)"</code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 2 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 2.</strong> Verify sender balance decreased:</p>
+        <pre><code>SENDER_BALANCE=$($CLI token balance TestCoin --name e2e-m3-test 2&gt;&amp;1 | grep -oE "[0-9]+")
+# Sender balance should be 1500000 - 250000 = 1250000 (or adjusted based on previous mints)
+echo "Sender balance: $SENDER_BALANCE"</code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 3 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 3.</strong> Verify receiver balance increased:</p>
+        <pre><code>$CLI token balance TestCoin --to "$WALLET_B" --name e2e-m3-test 2&gt;&amp;1</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Receiver has tokens from transfer + any direct mints.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 4 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 4.</strong> Attempt transfer with insufficient balance:</p>
+        <pre><code>$CLI token transfer TestCoin 999999999999 --to "$WALLET_B" --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Non-zero exit code, error message about insufficient balance.</p>
+      </div>
+    </div>
+
+    <p class="cleanup"><strong>Cleanup:</strong> None.</p>
+  </div>
+</details>
+
+<!-- M3-TOK-004 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M3-TOK-004</span>
+    <span class="test-name">Token burn</span>
+    <span class="pill cat-ops">Token Ops</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> Token "TestCoin" exists with balance &gt; 0.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 1 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 1.</strong> Burn tokens:</p>
+        <pre><code>$CLI token burn TestCoin 100000 --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Exit code <code>0</code>.</p>
+        <p class="step-expected"><strong>Verify</strong> burn confirmation:</p>
+        <pre><code>$CLI token burn TestCoin 100000 --name e2e-m3-test 2&gt;&amp;1 | grep -qiE "(burned|burnt|success|100000)"</code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 2 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 2.</strong> Verify balance decreased after burn:</p>
+        <pre><code>$CLI token balance TestCoin --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Balance reduced by 100000 from pre-burn value.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 3 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 3.</strong> Attempt to burn more than available balance:</p>
+        <pre><code>$CLI token burn TestCoin 999999999999 --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Non-zero exit code, error message about insufficient balance.</p>
+      </div>
+    </div>
+
+    <p class="cleanup"><strong>Cleanup:</strong> None.</p>
+  </div>
+</details>
+
+<!-- M3-TOK-005 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M3-TOK-005</span>
+    <span class="test-name">Token balance query</span>
+    <span class="pill cat-ops">Token Ops</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> Token "TestCoin" exists.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 1 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 1.</strong> Query balance for default wallet:</p>
+        <pre><code>$CLI token balance TestCoin --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Exit code <code>0</code>.</p>
+        <p class="step-expected"><strong>Verify</strong> output format:</p>
+        <pre><code>$CLI token balance TestCoin --name e2e-m3-test 2&gt;&amp;1 | grep -qiE "(TestCoin|TST|balance|[0-9]+)"</code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 2 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 2.</strong> Query balance for a specific wallet:</p>
+        <pre><code>$CLI token balance TestCoin --to "$WALLET_B" --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Exit code <code>0</code>, shows balance for wallet B.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 3 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 3.</strong> Query balance for non-existent token:</p>
+        <pre><code>$CLI token balance NonExistentToken --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Non-zero exit code or zero balance, with clear message.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 4 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 4.</strong> Query all token balances (if supported):</p>
+        <pre><code>$CLI token balance --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Exit code <code>0</code>, lists all tokens and their balances.</p>
+      </div>
+    </div>
+
+    <p class="cleanup"><strong>Cleanup:</strong> None.</p>
+  </div>
+</details>
+
+<!-- M3-TOK-006 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M3-TOK-006</span>
+    <span class="test-name">Full flow: create, mint, transfer, burn, balance</span>
+    <span class="pill cat-e2e">Token E2E</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> LocalNet <code>e2e-m3-test</code> running, clean token state preferred.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+    <p>This test executes the complete token lifecycle in a single sequential flow, validating state after each step.</p>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 1 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 1.</strong> <strong>Create</strong> a new token:</p>
+        <pre><code>$CLI token create \
+  --token-name "E2ECoin" \
+  --symbol "E2E" \
+  --decimals 6 \
+  --initial-supply 0 \
+  --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Verify:</strong> Exit code <code>0</code>, creation confirmed.</p>
+        <p class="step-expected"><strong>Assert:</strong> <code>$CLI token balance E2ECoin --name e2e-m3-test</code> shows <code>0</code>.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 2 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 2.</strong> <strong>Mint</strong> initial supply:</p>
+        <pre><code>$CLI token mint E2ECoin 1000000 --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Verify:</strong> Exit code <code>0</code>.</p>
+        <p class="step-expected"><strong>Assert:</strong> <code>$CLI token balance E2ECoin --name e2e-m3-test</code> shows <code>1000000</code>.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 3 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 3.</strong> <strong>Transfer</strong> to another wallet:</p>
+        <pre><code>$CLI token transfer E2ECoin 400000 --to "$WALLET_B" --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Verify:</strong> Exit code <code>0</code>.</p>
+        <p class="step-expected"><strong>Assert sender:</strong> Balance = <code>600000</code>.</p>
+        <p class="step-expected"><strong>Assert receiver:</strong> Balance = <code>400000</code>.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 4 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 4.</strong> <strong>Burn</strong> from sender:</p>
+        <pre><code>$CLI token burn E2ECoin 100000 --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Verify:</strong> Exit code <code>0</code>.</p>
+        <p class="step-expected"><strong>Assert sender:</strong> Balance = <code>500000</code>.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 5 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 5.</strong> <strong>Final balance</strong> check:</p>
+        <pre><code>$CLI token balance E2ECoin --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Assert sender:</strong> <code>500000</code>.</p>
+        <pre><code>$CLI token balance E2ECoin --to "$WALLET_B" --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Assert receiver:</strong> <code>400000</code>.</p>
+        <p class="step-expected"><strong>Assert total supply:</strong> <code>900000</code> (1000000 minted - 100000 burned).</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 6 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 6.</strong> <strong>Ledger verification</strong> &mdash; verify token operations created transactions:</p>
+        <pre><code>$CLI tx ls --template "E2ECoin" --name e2e-m3-test 2&gt;&amp;1 | wc -l</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> At least 4 transactions (create, mint, transfer, burn).</p>
+      </div>
+    </div>
+
+    <p class="cleanup"><strong>Cleanup:</strong> None (E2ECoin persists for reference).</p>
+  </div>
+</details>
+
+<!-- M3-TOK-007 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M3-TOK-007</span>
+    <span class="test-name">Token balance after partial burn</span>
+    <span class="pill cat-edge">Token Edge</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> Token "TestCoin" exists with known balance.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 1 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 1.</strong> Record current balance:</p>
+        <pre><code>BEFORE=$($CLI token balance TestCoin --name e2e-m3-test 2&gt;&amp;1 | grep -oE "[0-9]+")
+echo "Balance before: $BEFORE"</code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 2 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 2.</strong> Burn a small amount:</p>
+        <pre><code>BURN_AMOUNT=1
+$CLI token burn TestCoin $BURN_AMOUNT --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Exit code <code>0</code>.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 3 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 3.</strong> Verify exact balance after partial burn:</p>
+        <pre><code>AFTER=$($CLI token balance TestCoin --name e2e-m3-test 2&gt;&amp;1 | grep -oE "[0-9]+")
+EXPECTED=$((BEFORE - BURN_AMOUNT))
+[ "$AFTER" -eq "$EXPECTED" ] &amp;&amp; echo "PASS: balance is $AFTER (expected $EXPECTED)" || echo "FAIL: balance is $AFTER, expected $EXPECTED"</code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 4 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 4.</strong> Burn all remaining balance:</p>
+        <pre><code>$CLI token burn TestCoin "$AFTER" --name e2e-m3-test</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Exit code <code>0</code>.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 5 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 5.</strong> Verify zero balance:</p>
+        <pre><code>$CLI token balance TestCoin --name e2e-m3-test 2&gt;&amp;1 | grep -qiE "^0$\|: 0\|balance.*0"</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Balance is exactly <code>0</code>.</p>
+      </div>
+    </div>
+
+    <p class="cleanup"><strong>Cleanup:</strong> None.</p>
+  </div>
+</details>
+
+<!-- M3-TOK-008 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M3-TOK-008</span>
+    <span class="test-name">Web UI token toolkit: create + mint</span>
+    <span class="pill cat-webui">Token Web UI</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> Web UI accessible, LocalNet running.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 1 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 1.</strong> Verify token toolkit section exists in Web UI:</p>
+        <pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(token|faucet|mint|create.*token)"</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Token section found.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 2 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 2.</strong> Verify token cards are rendered:</p>
+        <pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(token.*card|TestCoin|E2ECoin|TST|E2E)"</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Previously created tokens appear as cards.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 3 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 3.</strong> Verify mint action UI elements:</p>
+        <pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(mint|amount|supply)"</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Mint controls present.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 4 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 4.</strong> Verify create token form/wizard UI elements:</p>
+        <pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(create|wizard|name|symbol|decimals)"</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Token creation form present.</p>
+      </div>
+    </div>
+
+    <p class="note"><strong>Note:</strong> Full interactive token creation and minting via the Web UI requires browser automation. The above validates UI structure and that existing tokens are reflected.</p>
+    <p class="cleanup"><strong>Cleanup:</strong> None.</p>
+  </div>
+</details>
+
+<!-- M3-TOK-009 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M3-TOK-009</span>
+    <span class="test-name">Web UI token transfer + activity feed</span>
+    <span class="pill cat-webui">Token Web UI</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> Web UI accessible, tokens with balance exist.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 1 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 1.</strong> Verify transfer action UI elements:</p>
+        <pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(transfer|send|recipient|to.*wallet)"</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Transfer controls present.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 2 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 2.</strong> Verify recent token activity feed:</p>
+        <pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(activity|recent|history|transaction|event)"</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Activity feed section present.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 3 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 3.</strong> Verify token activity includes operations from CLI tests:</p>
+        <pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(mint|transfer|burn|create)"</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Token operations from earlier tests appear in the activity feed.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 4 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 4.</strong> Verify burn action UI elements:</p>
+        <pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(burn|destroy)"</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Burn controls present.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 5 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 5.</strong> Verify balance display:</p>
+        <pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(balance|supply|[0-9]+)"</code></pre>
+        <p class="step-expected"><strong>Expected:</strong> Token balances displayed.</p>
+      </div>
+    </div>
+
+    <p class="note"><strong>Note:</strong> Full interactive transfer and activity feed verification requires browser automation.</p>
+    <p class="cleanup"><strong>Cleanup:</strong> None.</p>
+  </div>
+</details>
+
+<!-- M3-TOK-010 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M3-TOK-010</span>
+    <span class="test-name">Cross-platform regression</span>
+    <span class="pill cat-regression">Regression</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> This is a meta-test &mdash; run the full M3-TOK-001 through M3-TOK-009 suite on each platform.</span>
+      <span><strong>Platforms:</strong> All (run once per platform)</span>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 1 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 1.</strong> Per-platform execution:</p>
+        <pre><code>echo "Running on platform: $(uname -s) $(uname -m)"</code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 2 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 2.</strong> Execute the full token test suite on the current platform:</p>
+        <pre><code># Run M3-TOK-001 through M3-TOK-009 and record results
+PASS_COUNT=0
+FAIL_COUNT=0
+
+# M3-TOK-001: Token create
+$CLI token create --token-name "PlatformCoin" --symbol "PLT" --decimals 6 --initial-supply 1000 --name e2e-m3-test &amp;&amp; PASS_COUNT=$((PASS_COUNT+1)) || FAIL_COUNT=$((FAIL_COUNT+1))
+
+# M3-TOK-002: Token mint
+$CLI token mint PlatformCoin 500 --name e2e-m3-test &amp;&amp; PASS_COUNT=$((PASS_COUNT+1)) || FAIL_COUNT=$((FAIL_COUNT+1))
+
+# M3-TOK-003: Token transfer
+$CLI token transfer PlatformCoin 200 --to "$WALLET_B" --name e2e-m3-test &amp;&amp; PASS_COUNT=$((PASS_COUNT+1)) || FAIL_COUNT=$((FAIL_COUNT+1))
+
+# M3-TOK-004: Token burn
+$CLI token burn PlatformCoin 100 --name e2e-m3-test &amp;&amp; PASS_COUNT=$((PASS_COUNT+1)) || FAIL_COUNT=$((FAIL_COUNT+1))
+
+# M3-TOK-005: Token balance
+$CLI token balance PlatformCoin --name e2e-m3-test &amp;&amp; PASS_COUNT=$((PASS_COUNT+1)) || FAIL_COUNT=$((FAIL_COUNT+1))
+
+echo "Platform regression results: PASS=$PASS_COUNT FAIL=$FAIL_COUNT"
+[ "$FAIL_COUNT" -eq 0 ] &amp;&amp; echo "PASS: all platform tests passed" || echo "FAIL: $FAIL_COUNT tests failed"</code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 3 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 3.</strong> Verify platform-specific binary integrity:</p>
+        <pre><code>case "$(uname -s)" in
+  Darwin) file $(which canton-devkit 2&gt;/dev/null || echo ".") | grep -qiE "Mach-O" &amp;&amp; echo "PASS: macOS binary" || echo "WARN" ;;
+  Linux)  file $(which canton-devkit 2&gt;/dev/null || echo ".") | grep -qiE "ELF" &amp;&amp; echo "PASS: Linux binary" || echo "WARN" ;;
+  *)      echo "Windows: verify .exe manually" ;;
+esac</code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <input type="checkbox" aria-label="Step 4 complete">
+      <div class="step-content">
+        <p><strong class="step-num">Step 4.</strong> Record platform and Docker environment:</p>
+        <pre><code>echo "=== Platform Info ==="
+uname -a
+docker version --format '{{.Server.Version}}'
+docker compose version
+$CLI --version
+echo "===================="</code></pre>
+      </div>
+    </div>
+
+    <p class="cleanup"><strong>Cleanup:</strong></p>
+    <pre><code>$CLI down --name e2e-m3-test 2&gt;/dev/null || true
+$CLI clean --name e2e-m3-test --force 2&gt;/dev/null || true</code></pre>
+  </div>
+</details>
+
+<!-- CIP-0112 Scope Note -->
+<div class="panel warn">
+  <h3>CIP-0112 Scope Note</h3>
+  <p style="margin:0;">All token tests in this plan target the <strong>CIP-0112 (Token Standard V2)</strong> path as the default, consistent with the proposal's committed scope. CIP-56 (V1) compatibility and V1-to-V2 migration helpers are explicitly out of scope for this test plan. If CIP-56 support is added later, a supplementary test plan should be created.</p>
+</div>
+
+<!-- Test Execution Summary -->
+<h2>Test Execution Summary</h2>
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Test Name</th>
+      <th>Category</th>
+      <th>Depends On</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>M3-TOK-001</code></td>
+      <td>Token create wizard (non-interactive)</td>
+      <td><span class="pill cat-create">Token Create</span></td>
+      <td>M1 + M2 suites</td>
+    </tr>
+    <tr>
+      <td><code>M3-TOK-002</code></td>
+      <td>Token mint</td>
+      <td><span class="pill cat-ops">Token Ops</span></td>
+      <td>M3-TOK-001</td>
+    </tr>
+    <tr>
+      <td><code>M3-TOK-003</code></td>
+      <td>Token transfer</td>
+      <td><span class="pill cat-ops">Token Ops</span></td>
+      <td>M3-TOK-002</td>
+    </tr>
+    <tr>
+      <td><code>M3-TOK-004</code></td>
+      <td>Token burn</td>
+      <td><span class="pill cat-ops">Token Ops</span></td>
+      <td>M3-TOK-002</td>
+    </tr>
+    <tr>
+      <td><code>M3-TOK-005</code></td>
+      <td>Token balance query</td>
+      <td><span class="pill cat-ops">Token Ops</span></td>
+      <td>M3-TOK-001</td>
+    </tr>
+    <tr>
+      <td><code>M3-TOK-006</code></td>
+      <td>Full flow: create, mint, transfer, burn, balance</td>
+      <td><span class="pill cat-e2e">Token E2E</span></td>
+      <td>M1 + M2 suites</td>
+    </tr>
+    <tr>
+      <td><code>M3-TOK-007</code></td>
+      <td>Token balance after partial burn</td>
+      <td><span class="pill cat-edge">Token Edge</span></td>
+      <td>M3-TOK-001</td>
+    </tr>
+    <tr>
+      <td><code>M3-TOK-008</code></td>
+      <td>Web UI token toolkit: create + mint</td>
+      <td><span class="pill cat-webui">Token Web UI</span></td>
+      <td>M2-WEB-001</td>
+    </tr>
+    <tr>
+      <td><code>M3-TOK-009</code></td>
+      <td>Web UI token transfer + activity feed</td>
+      <td><span class="pill cat-webui">Token Web UI</span></td>
+      <td>M2-WEB-001</td>
+    </tr>
+    <tr>
+      <td><code>M3-TOK-010</code></td>
+      <td>Cross-platform regression</td>
+      <td><span class="pill cat-regression">Regression</span></td>
+      <td>All M3 tests</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<!-- Cross-Platform Notes -->
+<h2>Cross-Platform Notes</h2>
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr>
+      <th>Platform</th>
+      <th>Special Considerations</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>macOS (Apple Silicon)</strong></td>
+      <td>Docker Desktop required. Token operations go through Ledger API on localhost. No known arm64-specific token issues expected.</td>
+    </tr>
+    <tr>
+      <td><strong>Linux (amd64)</strong></td>
+      <td>Native Docker. Token operations may be faster due to native container performance. Ensure user is in <code>docker</code> group.</td>
+    </tr>
+    <tr>
+      <td><strong>Windows (amd64)</strong></td>
+      <td>Docker Desktop with WSL 2. Token CLI commands work via PowerShell or WSL bash. <code>grep</code> and <code>cut</code> available in WSL; use PowerShell equivalents (<code>Select-String</code>, <code>ConvertFrom-Json</code>) for native Windows testing.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<footer class="page">
+  <p>Source: <a href="./e2e-test-milestone-3.md"><code>e2e-test-milestone-3.md</code></a></p>
+  <p>This page is a companion artifact generated from the source markdown.</p>
+</footer>
+
+</div>
+
+<script>
+(function () {
+  // Theme toggle
+  var btn = document.getElementById('themeToggle');
+  if (!btn) return;
+  var label = btn.querySelector('.label');
+
+  function currentTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  }
+  function applyAria() {
+    var t = currentTheme();
+    btn.setAttribute('aria-label', t === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+    if (label) label.textContent = t === 'dark' ? 'Light' : 'Dark';
+  }
+  applyAria();
+
+  btn.addEventListener('click', function () {
+    var next = currentTheme() === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('mdReportTheme', next); } catch (e) {}
+    applyAria();
+  });
+
+  if (window.matchMedia) {
+    var mq = window.matchMedia('(prefers-color-scheme: dark)');
+    var listener = function (e) {
+      try { if (localStorage.getItem('mdReportTheme')) return; } catch (err) {}
+      document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+      applyAria();
+    };
+    if (mq.addEventListener) mq.addEventListener('change', listener);
+    else if (mq.addListener) mq.addListener(listener);
+  }
+
+  // Checkbox progress counter
+  var progressLabel = document.getElementById('progressLabel');
+  var progressFill = document.getElementById('progressFill');
+  var checkboxes = document.querySelectorAll('.step input[type="checkbox"]');
+  var total = checkboxes.length;
+
+  function updateProgress() {
+    var checked = 0;
+    for (var i = 0; i < checkboxes.length; i++) {
+      if (checkboxes[i].checked) checked++;
+    }
+    if (progressLabel) progressLabel.textContent = checked + ' / ' + total + ' steps completed';
+    if (progressFill) progressFill.style.width = (total > 0 ? (checked / total * 100) : 0) + '%';
+    // Persist state
+    try {
+      var state = [];
+      for (var j = 0; j < checkboxes.length; j++) {
+        state.push(checkboxes[j].checked ? 1 : 0);
+      }
+      localStorage.setItem('m3-tok-progress', JSON.stringify(state));
+    } catch (e) {}
+  }
+
+  // Restore state
+  try {
+    var saved = localStorage.getItem('m3-tok-progress');
+    if (saved) {
+      var state = JSON.parse(saved);
+      for (var k = 0; k < Math.min(state.length, checkboxes.length); k++) {
+        checkboxes[k].checked = !!state[k];
+      }
+    }
+  } catch (e) {}
+
+  for (var i = 0; i < checkboxes.length; i++) {
+    checkboxes[i].addEventListener('change', updateProgress);
+  }
+  updateProgress();
+})();
+</script>
+
+</body>
+</html>
