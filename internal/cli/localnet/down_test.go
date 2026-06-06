@@ -79,9 +79,9 @@ func TestDown_AlreadyStoppedIsNoOpSuccess(t *testing.T) {
 // leaves the registry showing "running" while containers are gone.
 //
 // We assert by having the fake stopper READ the registry mid-call:
-// at that point Status must already be StatusStopping. After the
-// default down (no --keep-data) the entry is removed so we can
-// only observe the transitional state from inside the stopper.
+// at that point Status must already be StatusStopping. After
+// success, the entry is preserved with status=stopped so that
+// `localnet clean` can discover the instance.
 func TestDown_HappyPath_StatusStoppingBeforeCompose(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedDownInstance(t, "demo", registry.StatusRunning)
@@ -103,28 +103,10 @@ func TestDown_HappyPath_StatusStoppingBeforeCompose(t *testing.T) {
 		t.Errorf("status during compose call = %q, want %q (PR #21 contract regressed)",
 			observed, registry.StatusStopping)
 	}
-	// Post-success default: instance removed from registry.
-	if _, err := registry.Read("demo"); !errors.Is(err, registry.ErrNotFound) {
-		t.Errorf("expected ErrNotFound after default down, got %v", err)
-	}
-}
-
-// TestDown_KeepData preserves the per-instance registry entry and
-// flips status to Stopped. Mirrors PR #21's --keep-data flag.
-func TestDown_KeepData(t *testing.T) {
-	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
-	seedDownInstance(t, "demo", registry.StatusRunning)
-	installFakeStopper(t, func(context.Context, *registry.State) error { return nil })
-
-	var out, errBuf bytes.Buffer
-	code := RunDown(context.Background(), &out, &errBuf,
-		DownOptions{Name: "demo", KeepData: true})
-	if code != localnet.ExitSuccess {
-		t.Fatalf("code = %d; stderr=%q", code, errBuf.String())
-	}
+	// Post-success: registry entry preserved with status=stopped.
 	got, err := registry.Read("demo")
 	if err != nil {
-		t.Fatalf("re-read state with --keep-data: %v", err)
+		t.Fatalf("registry entry should be preserved after down, got err=%v", err)
 	}
 	if got.Status != registry.StatusStopped {
 		t.Errorf("Status = %q, want %q", got.Status, registry.StatusStopped)

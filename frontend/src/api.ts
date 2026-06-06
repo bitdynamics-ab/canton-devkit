@@ -433,10 +433,10 @@ export const fetchPreflight = (version: string) =>
   );
 
 // stopInstance invokes POST /api/instances/{name}/down — runs
-// `docker compose down` against the named instance and removes
-// per-instance data unless { keep_data: true }. Synchronous on the
-// wire (down is fast, ~10-30s on the happy path); the call blocks
-// until the server returns 204 or 5xx.
+// `docker compose down` against the named instance, preserving
+// Docker volumes and the registry entry (status=stopped).
+// Synchronous on the wire (down is fast, ~10-30s on the happy
+// path); the call blocks until the server returns 204 or 5xx.
 //
 // On failure, the server's error envelope includes a one-line
 // summary the modal shows to the user; the full output goes to
@@ -804,14 +804,10 @@ export const fetchMetricsRange = (
   );
 };
 
-export async function stopInstance(name: string, keepData = false): Promise<void> {
+export async function stopInstance(name: string): Promise<void> {
   const resp = await fetch(
     `/api/instances/${encodeURIComponent(name)}/down`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ keep_data: keepData }),
-    },
+    { method: "POST" },
   );
   if (!resp.ok) {
     const text = await resp.text();

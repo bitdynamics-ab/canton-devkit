@@ -23,7 +23,7 @@ import (
 //
 //	docker compose down  →  NO --volumes (preserves state)
 //	StatusRunning   →  StatusStopping  (BEFORE compose call)
-//	  └─ compose ok  →  StatusStopped  (or registry.Delete if !KeepData)
+//	  └─ compose ok  →  StatusStopped  (registry entry preserved for `clean`)
 //	  └─ compose err →  StatusFailed   (preserved for retry)  exit 4
 //	  └─ interrupted →  StatusPartial  (compose may still be in flight) exit 3
 //
@@ -35,28 +35,22 @@ import (
 // (ScreenDown): three Step rows + a brand-accented Box.
 func buildDown() *cobra.Command {
 	var (
-		name     string
-		keepData bool
-		force    bool
+		name  string
+		force bool
 	)
 	cmd := &cobra.Command{
 		Use:   "down",
 		Short: "Stop a Canton LocalNet instance (preserves volumes)",
 		Long: `Stops the named LocalNet instance gracefully and detaches its
-Docker networks. Volumes are preserved so a follow-up
+Docker networks. Volumes and the registry entry are preserved so
+a follow-up
 
   dpm localnet up --name <name>
 
 resumes from the same on-disk state.
 
-By default the per-instance registry entry is removed once
-compose-down succeeds — re-running ` + "`up`" + ` re-registers it. Pass
---keep-data to keep ~/.canton-devkit/localnet/<name>/ on disk
-(useful for diagnosing a failed bring-up; preserves overlay env
-+ state.json).
-
 To remove docker volumes (destructive — drops all ledger state),
-use ` + "`dpm localnet clean --name <name>`" + ` instead.
+use ` + "`dpm localnet clean --name <name>`" + ` after down.
 
 If a normal down fails (e.g. a container is unhealthy or
 restart-looping after an out-of-memory kill, or the cached compose
@@ -73,13 +67,11 @@ normal path needs — and SIGKILLs containers that won't stop.`,
 			}
 			return localnet.AsExitError(
 				RunDown(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(),
-					DownOptions{Name: name, KeepData: keepData, Force: force}))
+					DownOptions{Name: name, Force: force}))
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "",
 		"Required. Identifier of the LocalNet instance to stop.")
-	cmd.Flags().BoolVar(&keepData, "keep-data", false,
-		"Keep ~/.canton-devkit/localnet/<name>/ (overlay env + state.json).")
 	cmd.Flags().BoolVar(&force, "force", false,
 		"Tear down by Docker project label only — resilient to an unhealthy/wedged instance a normal down can't remove.")
 	_ = cmd.MarkFlagRequired("name")
@@ -90,8 +82,7 @@ normal path needs — and SIGKILLs containers that won't stop.`,
 // PR #21's shape so the future Web UI handler (BIT-131
 // POST /api/instances/:name/down) has a stable parameter to pass.
 type DownOptions struct {
-	Name     string
-	KeepData bool
+	Name string
 	// Force tears the instance down by Docker project label only,
 	// bypassing the compose files/env the normal path needs — for
 	// unsticking an instance a normal down can't remove (unhealthy,
@@ -256,24 +247,13 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 	_, _ = fmt.Fprintln(out, term.Step(term.StepCheck,
 		"Detaching networks · keeping volumes", "", ""))
 
-	// PR #21 carry-forward: by default we remove the per-instance
-	// registry entry after a clean stop. --keep-data preserves it
-	// (useful for diagnosing a failed bring-up).
-	if !opts.KeepData {
-		if delErr := registry.Delete(state.Name); delErr != nil {
-			_, _ = fmt.Fprintf(errw,
-				"warning: could not remove instance dir: %s\n", delErr)
-			// Don't fail the command — compose IS down; this is
-			// a soft cleanup follow-up.
-		}
-	} else {
-		state.Status = registry.StatusStopped
-		if werr := registry.Write(state); werr != nil {
-			_, _ = fmt.Fprintf(errw,
-				"warning: services stopped but registry write failed: %s\n", werr)
-		}
-		_, _ = fmt.Fprintln(out, term.Dimc(fmt.Sprintf(
-			"Kept instance data at %s", state.DataDir)))
+	// Preserve the registry entry with status=stopped so that a
+	// subsequent `localnet clean` can discover the compose project
+	// and remove Docker volumes.
+	state.Status = registry.StatusStopped
+	if werr := registry.Write(state); werr != nil {
+		_, _ = fmt.Fprintf(errw,
+			"warning: services stopped but registry write failed: %s\n", werr)
 	}
 
 	_, _ = fmt.Fprintln(out)

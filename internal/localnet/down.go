@@ -22,7 +22,6 @@ type composeDowner interface {
 // DownOptions captures `localnet down` flags. Cobra binds directly.
 type DownOptions struct {
 	Name      string
-	KeepData  bool
 	KeepCache bool // documented, currently informational (cache is shared across instances)
 
 	// NewRunner is a test-only seam (PR #21 Zhe review). When nil,
@@ -40,8 +39,8 @@ type DownOptions struct {
 //  2. Load state.json. If missing, exit 0 with a hint.
 //  3. Run `docker compose down --volumes --remove-orphans` with the
 //     compose files recorded in state (no --env-file needed).
-//  4. Remove the per-instance data dir (unless --keep-data).
-//  5. Remove the entry from the registry index.
+//  4. Set status=stopped and persist the registry entry so that a
+//     subsequent `localnet clean` can discover the instance.
 func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptions) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -132,17 +131,9 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 		return ExitRuntimeFailure
 	}
 
-	if !opts.KeepData {
-		if err := registry.Delete(state.Name); err != nil {
-			_, _ = fmt.Fprintf(errw, "Warning: could not remove instance dir: %s\n", err)
-			return ExitRuntimeFailure
-		}
-	} else {
-		state.Status = registry.StatusStopped
-		if err := registry.Write(state); err != nil {
-			_, _ = fmt.Fprintf(errw, "Warning: state update failed: %s\n", err)
-		}
-		_, _ = fmt.Fprintf(out, "Kept instance data at %s\n", state.DataDir)
+	state.Status = registry.StatusStopped
+	if err := registry.Write(state); err != nil {
+		_, _ = fmt.Fprintf(errw, "Warning: state update failed: %s\n", err)
 	}
 
 	_, _ = fmt.Fprintf(out, "Canton LocalNet %q stopped.\n", state.Name)
