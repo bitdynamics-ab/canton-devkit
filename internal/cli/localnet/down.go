@@ -293,10 +293,16 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 // compose. Extracted so tests can swap stopperFn without exec'ing
 // docker, and to keep RunDown's main path readable.
 func defaultStop(ctx context.Context, st *registry.State) error {
+	ce, err := localnet.ComposeEnvForInstance(st, nil)
+	if err != nil {
+		return fmt.Errorf("reconstruct compose env for %q: %w", st.Name, err)
+	}
 	runner := &docker.ComposeRunner{
 		ProjectName:  st.ComposeProject,
 		ComposeFiles: st.ComposeFiles,
 		WorkDir:      st.ProjectDir,
+		EnvFiles:     ce.EnvFiles,
+		Env:          ce.Env,
 		LogWriter:    io.Discard, // compose's logs are noisy; Step rows tell the user what's happening
 	}
 	return runner.Stop(ctx, false)

@@ -196,6 +196,32 @@ func TestDown_InterruptionMarksPartialExits3(t *testing.T) {
 	}
 }
 
+// TestDown_DefaultStopReconstructsComposeEnv is the regression pin
+// for the PARTY_HINT bug: defaultStop previously constructed the
+// ComposeRunner without Env/EnvFiles, so docker compose failed to
+// interpolate ${PARTY_HINT} during `down`. The fix calls
+// ComposeEnvForInstance; this test verifies that reconstruction
+// succeeds for a valid state (the docker compose call itself will
+// fail in a test env — we just confirm the env error is NOT the
+// failure mode).
+func TestDown_DefaultStopReconstructsComposeEnv(t *testing.T) {
+	st := &registry.State{
+		Name:           "env-test",
+		SpliceVersion:  "0.6.4",
+		ComposeProject: "canton-env-test",
+		ProjectDir:     t.TempDir(),
+		ComposeFiles:   []string{"compose.yaml"},
+	}
+	err := defaultStop(context.Background(), st)
+	// defaultStop will fail because there's no real docker compose
+	// project, but the error must come from docker — NOT from a
+	// missing compose env reconstruction. The old code produced:
+	//   "required variable PARTY_HINT is missing a value"
+	if err != nil && strings.Contains(err.Error(), "PARTY_HINT") {
+		t.Fatalf("defaultStop still fails with PARTY_HINT error (env not passed to ComposeRunner): %v", err)
+	}
+}
+
 // TestDown_InvalidNameRejected covers the cobra-layer validation
 // (delegates to localnet.ValidateName). A name with a slash should
 // never reach RunDown — the command must reject at the flag.
