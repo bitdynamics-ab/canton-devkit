@@ -292,6 +292,19 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	composeFiles := append([]string(nil), adapter.ComposeFiles()...)
 	composeFiles = append(composeFiles, overlayPath) // absolute path; not relative to projectDir
 
+	// Force all published ports to bind to 127.0.0.1 (loopback only).
+	// The upstream Splice compose.yaml binds ports without a host IP,
+	// so Docker defaults to 0.0.0.0 — exposing unauthenticated gRPC,
+	// database, and HTTP endpoints to the local network. This overlay
+	// uses Compose's !override tag (v2.24.0+) to replace the port
+	// lists with 127.0.0.1-prefixed bindings.
+	loopbackPath, err := WriteLoopbackPortsOverlay(dataDir)
+	if err != nil {
+		prog.FailStep(StepPersistState, "Failed to write loopback-ports overlay", err)
+		return ExitRuntimeFailure
+	}
+	composeFiles = append(composeFiles, loopbackPath)
+
 	// observability profile materializes the embedded Prometheus +
 	// Grafana overlay and appends its compose file.
 	// Profile activation gates the actual service-start (services
