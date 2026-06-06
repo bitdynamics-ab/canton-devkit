@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -36,24 +35,28 @@ func TestRunLogs_ConstructsDockerComposeLogsCommand(t *testing.T) {
 		t.Fatalf("RunLogs = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
 
-	wantArgs := []string{
-		"compose", "-p", "canton-logs-command",
-		"-f", "compose.yaml",
-		"-f", "/tmp/logs-command-overlay.yaml",
-		"--env-file", "compose.env",
-		"--env-file", "env/common.env",
-		"logs", "--follow", "--tail", "all", "--since", "10m", "canton", "splice",
+	// Verify the compose args contain --env-file flags including
+	// the adapter base files and the overlay.env.
+	argsStr := strings.Join(gotArgs, " ")
+	for _, want := range []string{
+		"--env-file compose.env",
+		"--env-file env/common.env",
+		"logs --follow --tail all --since 10m canton splice",
+	} {
+		if !strings.Contains(argsStr, want) {
+			t.Fatalf("args missing %q in %v", want, gotArgs)
+		}
 	}
-	if !reflect.DeepEqual(gotArgs, wantArgs) {
-		t.Fatalf("args = %#v\nwant %#v", gotArgs, wantArgs)
+	// overlay.env path is dynamic (temp dir), check suffix.
+	if !strings.Contains(argsStr, "overlay.env") {
+		t.Fatalf("args missing overlay.env in %v", gotArgs)
 	}
 	if gotDir != projectDir {
 		t.Fatalf("dir = %q, want %q", gotDir, projectDir)
 	}
-	for _, want := range []string{"LOCALNET_DIR=" + projectDir, "IMAGE_TAG=0.6.4", "DOCKER_NETWORK=logs-command"} {
-		if !containsEnv(gotEnv, want) {
-			t.Fatalf("env missing %q in %#v", want, gotEnv)
-		}
+	// With overlay.env, Env should be nil (inherits process env).
+	if gotEnv != nil {
+		t.Fatalf("env should be nil (overlay.env provides vars), got %d entries", len(gotEnv))
 	}
 }
 
@@ -100,14 +103,16 @@ func seedLogsInstance(t *testing.T, name string) string {
 	if err := registry.Write(state); err != nil {
 		t.Fatalf("registry.Write: %v", err)
 	}
-	return projectDir
-}
 
-func containsEnv(env []string, want string) bool {
-	for _, item := range env {
-		if item == want {
-			return true
-		}
+	// Write overlay.env so downstream commands can resolve env files.
+	if _, err := WriteOverlayEnv(state.DataDir, map[string]string{
+		"LOCALNET_DIR":   projectDir,
+		"IMAGE_TAG":      "0.6.4",
+		"DOCKER_NETWORK": name,
+		"PARTY_HINT":     name + "-localparty-1",
+	}); err != nil {
+		t.Fatalf("WriteOverlayEnv: %v", err)
 	}
-	return false
+
+	return projectDir
 }

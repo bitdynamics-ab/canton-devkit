@@ -582,14 +582,6 @@ func markFailed(state *registry.State, errw io.Writer) {
 	}
 }
 
-func mapToEnv(m map[string]string) []string {
-	out := make([]string, 0, len(m))
-	for k, v := range m {
-		out = append(out, k+"="+v)
-	}
-	return out
-}
-
 // renderWelcome composes the post-ready welcome screen using the term
 // package's WelcomeScreen primitive (see internal/ui/term/welcome.go).
 //

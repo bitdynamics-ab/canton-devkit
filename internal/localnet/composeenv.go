@@ -55,76 +55,37 @@ func WriteOverlayEnv(dataDir string, overlay map[string]string) (string, error) 
 // a docker compose invocation against the given instance. The overlay
 // env file (written at `up` time) comes last so its values win over
 // upstream Splice defaults.
-//
-// Preferred path: the overlay.env file exists on disk — append it to
-// the adapter's base env files.
-//
-// Fallback (pre-existing instances without overlay.env): re-derive
-// from the adapter and inject vars via the process env, matching the
-// pre-persistence behaviour.
-func composeEnvFiles(state *registry.State) []string {
+func composeEnvFiles(state *registry.State) ([]string, error) {
 	overlay := overlayEnvPath(state)
+	if !fileExists(overlay) {
+		return nil, fmt.Errorf("overlay.env not found at %s — was this instance started with the current version?", overlay)
+	}
 
-	// Adapter's base env files (relative to ProjectDir).
 	v, err := splice.Resolve(state.SpliceVersion)
 	if err != nil {
-		// Can't resolve version — return overlay only if it exists.
-		if fileExists(overlay) {
-			return []string{overlay}
-		}
-		return nil
+		return nil, fmt.Errorf("resolve version %q: %w", state.SpliceVersion, err)
 	}
 	adapter, err := adapterFor(v)
 	if err != nil {
-		if fileExists(overlay) {
-			return []string{overlay}
-		}
-		return nil
+		return nil, err
 	}
 	files := append([]string(nil), adapter.EnvFiles()...)
-	if fileExists(overlay) {
-		files = append(files, overlay)
-	}
-	return files
+	files = append(files, overlay)
+	return files, nil
 }
 
-// composeContext returns the env-file list and process env for a docker
-// compose invocation against the given instance.
+// composeContext returns the env-file list for a docker compose
+// invocation against the given instance.
 //
-// When overlay.env exists (the normal case after `up`), all compose
-// interpolation vars come from env files — no process-env injection
-// needed. The returned env is nil, which makes ComposeRunner inherit
-// the calling process's environment (PATH, DOCKER_HOST, etc.).
-//
-// Fallback (pre-existing instances without overlay.env): re-derives
-// from the adapter and injects into the process env, matching the
-// pre-persistence behaviour.
+// All compose interpolation vars come from env files — no process-env
+// injection needed. The returned env is nil, which makes ComposeRunner
+// inherit the calling process's environment (PATH, DOCKER_HOST, etc.).
 func composeContext(state *registry.State) (env []string, envFiles []string, err error) {
-	overlay := overlayEnvPath(state)
-	if fileExists(overlay) {
-		return nil, composeEnvFiles(state), nil
-	}
-
-	// Fallback: re-derive from adapter (backward compat).
-	v, err := splice.Resolve(state.SpliceVersion)
-	if err != nil {
-		return nil, nil, fmt.Errorf("resolve version %q from state: %w", state.SpliceVersion, err)
-	}
-	adapter, err := adapterFor(v)
+	files, err := composeEnvFiles(state)
 	if err != nil {
 		return nil, nil, err
 	}
-	overlayVars := adapter.OverlayEnv(splice.InstanceParams{
-		Name:       state.Name,
-		Version:    v,
-		ProjectDir: state.ProjectDir,
-	})
-
-	env = os.Environ()
-	for k, v := range overlayVars {
-		env = append(env, k+"="+v)
-	}
-	return env, adapter.EnvFiles(), nil
+	return nil, files, nil
 }
 
 func fileExists(path string) bool {
