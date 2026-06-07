@@ -40,18 +40,11 @@ func RunLogs(ctx context.Context, out io.Writer, errw io.Writer, opts *LogsOptio
 		return ExitRuntimeFailure
 	}
 
-	env, envFiles, envErr := composeContext(state)
-	if envErr != nil {
-		_, _ = fmt.Fprintf(errw, "Warning: could not reconstruct compose context: %s\n", envErr)
-	}
-
+	// `logs` only needs the already-created containers for this Compose
+	// project. Do not replay -f/--env-file here: doing so rebuilds the
+	// active Compose model and can exclude profile-gated services unless
+	// every profile from `up` is replayed exactly.
 	args := []string{"compose", "-p", state.ComposeProject}
-	for _, f := range state.ComposeFiles {
-		args = append(args, "-f", f)
-	}
-	for _, ef := range envFiles {
-		args = append(args, "--env-file", ef)
-	}
 	args = append(args, "logs")
 	if opts.Follow {
 		args = append(args, "--follow")
@@ -68,7 +61,7 @@ func RunLogs(ctx context.Context, out io.Writer, errw io.Writer, opts *LogsOptio
 	if run == nil {
 		run = runDockerLogs
 	}
-	if err := run(ctx, args, state.ProjectDir, env, out, errw); err != nil {
+	if err := run(ctx, args, "", nil, out, errw); err != nil {
 		if ctx.Err() != nil {
 			return ExitSuccess // graceful Ctrl-C
 		}
