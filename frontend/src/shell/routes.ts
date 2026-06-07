@@ -4,15 +4,14 @@
 //
 // Both Shell.tsx (sidebar NavLinks) and CommandPalette.tsx (⌘K
 // navigation actions) read from this list so they stay in lockstep.
-// BIT-223 fixed the sidebar dropping `?instance=`; a follow-up
-// surfaced that the palette had the same bug because it carried its
-// own copy of the route list. Centralising here means a future tab
-// addition can't reintroduce the divergence.
+// Centralising here means a future tab addition can't drop the
+// `?instance=` thread because the palette and sidebar carried
+// separate copies of the route list.
 
 export interface NavEntry {
   to: string;
   label: string;
-  // Routes flagged instanceScoped read `?instance=` from the URL.
+  // Routes marked instanceScoped read `?instance=` from the URL.
   // Links to these routes must thread the currently-selected
   // instance, or the user lands on "No instance selected" even
   // though the header picker still shows one.

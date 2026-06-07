@@ -17,7 +17,7 @@ func TestSpliceVersions_ListsCuratedCatalogue(t *testing.T) {
 	MountSpliceVersions(mux)
 
 	// ?offline=true so the assertion "exactly len(SupportedVersions)
-	// entries" holds — without it, BIT-171 upstream enrichment adds
+	// entries" holds — without it, upstream enrichment adds
 	// extra StatusAvailable rows for non-catalogued upstream tags.
 	req := httptest.NewRequest(http.MethodGet,
 		"/api/splice/versions?offline=true", nil)
@@ -64,7 +64,7 @@ func TestSpliceVersions_ListsCuratedCatalogue(t *testing.T) {
 func TestSpliceVersions_LatestAliasFlaggedSeparately(t *testing.T) {
 	mux := http.NewServeMux()
 	MountSpliceVersions(mux)
-	// ?offline=true skips the BIT-171 upstream enrichment path
+	// ?offline=true skips the upstream enrichment path
 	// so this test (which asserts the catalogue-only labelling
 	// of supported vs latest) doesn't need a network round trip
 	// — and doesn't flake when GitHub rate-limits CI.
@@ -144,7 +144,7 @@ func TestSpliceVersions_CarriesSchemaVersion(t *testing.T) {
 }
 
 // TestSpliceVersions_OfflineFlag_ProducesCatalogueOnly pins the
-// BIT-171 `?offline=true` escape hatch — when a user can't reach
+// `?offline=true` escape hatch — when a user can't reach
 // GitHub (corporate proxy, air-gapped CI, etc.) the API must still
 // return a useful response with the curated set.
 func TestSpliceVersions_OfflineFlag_ProducesCatalogueOnly(t *testing.T) {

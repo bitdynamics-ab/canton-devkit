@@ -1,4 +1,4 @@
-// BIT-186 — Web UI Explorer handlers.
+// Web UI Explorer handlers.
 //
 // Wraps the Canton Ledger API v2 (`internal/canton/ledger`) so the
 // browser can read an Active Contract Set snapshot without speaking
@@ -13,7 +13,7 @@
 //	          contract_id, template_id, payload, signatories, observers,
 //	          created_at, package_name, package_version
 //	        }]}
-//	  → 503 PARTICIPANT_PORT_NOT_RECORDED if state.json predates BIT-190
+//	  → 503 PARTICIPANT_PORT_NOT_RECORDED if state.json predates
 //
 // MVP scope: ACS snapshot only — no filters by template/party (the
 // JWT's claim already filters server-side), no live SSE stream, no
@@ -156,7 +156,7 @@ func handleContractsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// BIT-191: resolve the JWT's user-id → set of parties it can
+	// resolve the JWT's user-id → set of parties it can
 	// actAs / readAs. Splice LocalNet signs user-id JWTs by
 	// default, so PartyManagementService.ListKnownParties would
 	// PermissionDenied (admin claim required) and a wildcard
@@ -217,7 +217,7 @@ func handleContractsList(w http.ResponseWriter, r *http.Request) {
 					"this JWT doesn't have party-rights to read the ACS",
 					"Splice LocalNet signs user-id tokens by default; the "+
 						"explorer's per-party filter needs party rights resolved "+
-						"via UserManagementService. Tracked as a follow-up to BIT-186.")
+						"via UserManagementService. Tracked as a follow-up to .")
 				return
 			}
 			writeError(w, http.StatusBadGateway, "ACS stream", item.Err)

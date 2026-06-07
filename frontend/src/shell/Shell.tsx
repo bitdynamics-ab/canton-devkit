@@ -359,7 +359,7 @@ function HealthPill({ conn }: { conn: ConnectionState }) {
 
 function Sidebar() {
   // Thread the currently-selected instance into per-instance routes so
-  // sidebar clicks don't drop the selection (BIT-223). Pathname-only
+  // sidebar clicks don't drop the selection. Pathname-only
   // (isActive) is unchanged because NavLink matches on pathname. NAV +
   // linkTo live in ./routes so the ⌘K palette shares the same table.
   const [params] = useSearchParams();

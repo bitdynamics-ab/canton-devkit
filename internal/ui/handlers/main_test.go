@@ -15,7 +15,7 @@ import (
 // few siblings) spawn goroutines that outlive the test body. If a
 // goroutine reads registry.Root() after t.Setenv has reverted, it
 // falls back to the real user home and explodes in CI where
-// `~/.canton-devkit` is unwritable (BIT-184 CI break).
+// `~/.canton-devkit` is unwritable.
 //
 // Per-test t.Setenv overrides still work — they revert to *this*
 // tempdir after each test rather than to the real home, so leaked
@@ -35,7 +35,7 @@ func TestMain(m *testing.M) {
 	// CI runner's docker daemon meeting the version-specific memory
 	// floor. Production code path is the real implementation; the
 	// real path is exercised by integration tests, not unit tests.
-	// (BIT-184 CI break: the self-hosted runner returned
+	// (CI break: the self-hosted runner returned
 	// DOCKER_MEMORY_LOW from RunPreflight, causing handleCreate to
 	// short-circuit with 422 before the test could reach its
 	// 202-assertion.)

@@ -13,7 +13,7 @@ import {
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { TX_KIND_COLOR, W, wMono } from "../tokens";
 
-// ExplorerScreen — BIT-186 production layout.
+// ExplorerScreen — production layout.
 //
 // Matches docs/design/mockups/webui-explorer.jsx pixel-by-pixel:
 //   - ProjectionBar at top: participant + party pills, view toggle

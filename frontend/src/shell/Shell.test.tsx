@@ -152,7 +152,7 @@ describe("Shell — CommandPalette hotkey", () => {
   });
 });
 
-describe("Shell — sidebar nav preserves ?instance= (BIT-223)", () => {
+describe("Shell — sidebar nav preserves ?instance=", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   // The bug: clicking a sidebar tab on a per-instance route used to

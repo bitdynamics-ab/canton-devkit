@@ -1,17 +1,15 @@
-// BIT-172 — wire-stable error codes → localized remediation copy.
+// wire-stable error codes → localized remediation copy.
 //
 // Pure function: each known ErrorCode maps to a remediation
 // block (title + step list); unknown / undefined / explicit
 // PREFLIGHT_FAILED returns null so the renderer falls back to the
 // generic cause-text without an empty panel.
 //
-// Extracted from CreateLocalNetModal.tsx so it can be unit-tested
-// (BIT-172 review v3 — caught the silent-default regression risk
-// flagged in round-1 #3). The default-null case is the one most
-// at risk of drifting silently — a future contributor adds a new
-// code to the Go side, frontend tests would still pass against
-// the unknown→null fallback. Hence Remediation.test.ts pins the
-// 9 known codes individually.
+// Extracted from CreateLocalNetModal.tsx so it can be unit-tested.
+// The default-null case is most at risk of drifting silently — a
+// future contributor adds a new code to the Go side, frontend tests
+// would still pass against the unknown→null fallback. Hence
+// Remediation.test.ts pins the 9 known codes individually.
 
 import type { ErrorCode } from "../api";
 
@@ -74,8 +72,8 @@ export function remediationForCode(code?: ErrorCode): Remediation | null {
         ],
       };
     case "CANTON_OOM":
-      // BIT-174 review fix: thresholds are NOT hard-coded in
-      // copy. The per-version minimum + recommended bytes live
+      // Thresholds are NOT hard-coded in copy.
+      // The per-version minimum + recommended bytes live
       // in `internal/splice/versions.json` (and surface in the
       // pre-flight report's Docker-memory check detail string).
       // Pointing the user at "what the pre-flight panel said"

@@ -16,8 +16,8 @@ import (
 //
 //	/healthz       — liveness probe (200 OK, no body); cheap, no docker calls
 //	/api/version   — server identity + schema versions for handshake
-//	/api/*         — REST handlers (added by BIT-131 in a follow-on PR)
-//	/events        — SSE stream (added by BIT-130)
+//	/api/* — REST handlers (added by in a follow-on PR)
+//	/events — SSE stream (added by )
 //	/              — embedded Vite bundle with SPA fallback (assets.go)
 //
 // `hub` may be nil for callers that don't want SSE (test wiring,
@@ -34,7 +34,7 @@ func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	mux.HandleFunc("GET /api/version", handleVersion)
-	// REST handlers under /api/* (BIT-131). Each handler package
+	// REST handlers under /api/*. Each handler package
 	// owns one resource; new resources mount themselves here as
 	// they land.
 	handlers.MountInstances(mux, hub)
@@ -42,13 +42,13 @@ func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
 	handlers.MountSpliceVersions(mux)
 	handlers.MountPreflight(mux)
 	handlers.MountMetrics(mux)
-	handlers.MountSnapshots(mux)    // BIT-184 — UI parity for snapshot/restore
-	handlers.MountDAR(mux)          // BIT-187 — DAR Manager (list uploaded DARs)
-	handlers.MountContracts(mux)    // BIT-186 — Explorer (ACS snapshot)
-	handlers.MountTransactions(mux) // BIT-186 — Explorer (Transactions/Timeline)
-	handlers.MountSkills(mux)       // BIT-189 — Agent Skills (browse + install)
-	handlers.MountTokens(mux, hub)  // BIT-213 — Tokens (V2 instruments + actions)
-	// /events (SSE) — added by BIT-130. Handler does its own
+	handlers.MountSnapshots(mux)    // UI parity for snapshot/restore
+	handlers.MountDAR(mux)          // DAR Manager (list uploaded DARs)
+	handlers.MountContracts(mux)    // Explorer (ACS snapshot)
+	handlers.MountTransactions(mux) // Explorer (Transactions/Timeline)
+	handlers.MountSkills(mux)       // Agent Skills (browse + install)
+	handlers.MountTokens(mux, hub)  // Tokens (V2 instruments + actions)
+	// /events (SSE) — added by . Handler does its own
 	// Origin check (sse.go) since EventSource sends GET and the
 	// global CSRF middleware is GET-exempt.
 	if hub != nil {
@@ -59,7 +59,7 @@ func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
 				http.StatusServiceUnavailable)
 		})
 	}
-	// PR #41 #c: explicit 404 for /api/<typo> and /events/<typo>
+	// explicit 404 for /api/<typo> and /events/<typo>
 	// so a misspelled handler path doesn't fall through to the
 	// SPA index. Frontend fetch() consumers get a structured
 	// error instead of "the API returned HTML, weird".
@@ -147,7 +147,7 @@ func (s *statusRecorder) Flush() {
 //
 //	access: 200 GET /api/version  127.0.0.1  3.2ms
 //
-// Reviewer pin (PR #41 #3). Format is stable and parseable.
+// . Format is stable and parseable.
 //
 // We deliberately do NOT log query strings — they can carry
 // credentials (?include_jwt=true today, future auth tokens). The
@@ -210,7 +210,7 @@ func handleHealthz(w http.ResponseWriter, _ *http.Request) {
 //
 // `Built` is intentionally not embedded yet — we don't have a stable
 // build-info plumbing on M1 foundation. Added in M2 finalisation when
-// the release pipeline lands (BIT-141 umbrella follow-up).
+// the release pipeline lands.
 type versionPayload struct {
 	Name          string `json:"name"`
 	SchemaVersion int    `json:"schema_version"`
@@ -253,7 +253,7 @@ const schemaVersion = 1
 //
 // Auth headers, CORS, request logging — all added later in their own
 // commits with their own tests. Keeping the middleware stack minimal
-// here means BIT-130/131 review can focus on their own surfaces.
+// here means /131 review can focus on their own surfaces.
 func withCommonHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")

@@ -21,7 +21,7 @@ import (
 //
 // width controls the underline length in cells. Pass 0 for the
 // auto-size default (VisibleLen(title)+len(right)+4, capped at 80).
-// Reviewer pin on PR #31 #7: the previous fixed-60-rune separator
+// the previous fixed-60-rune separator
 // silently truncated for long titles or wasted space for short
 // ones. TestSection_SeparatorMatchesWidthArg locks this in.
 func Section(title, right, children string, width int) string {

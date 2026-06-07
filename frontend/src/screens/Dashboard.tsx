@@ -19,7 +19,7 @@ import { InstanceDetail } from "./InstanceDetail";
 // useState; the topbar couldn't see it.
 //
 // SSE wiring for live updates is deferred to a follow-on slice
-// (BIT-130 publishes "instances" topic events when an instance's
+// (publishes "instances" topic events when an instance's
 // status flips — needs a producer in internal/localnet first).
 export function Dashboard() {
   const sel = useInstanceSelection();

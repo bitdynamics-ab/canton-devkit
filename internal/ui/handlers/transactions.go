@@ -1,4 +1,4 @@
-// BIT-186 follow-up — Transactions + Timeline view backend.
+// follow-up — Transactions + Timeline view backend.
 //
 // Wraps the Canton Ledger API v2 UpdateService. The Explorer
 // screen's Transactions and Timeline tabs are projections over
@@ -131,7 +131,7 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = client.Close() }()
 
-	// BIT-191: resolve user-id → party-rights set so the filter
+	// resolve user-id → party-rights set so the filter
 	// matches what the JWT can actually see.
 	//
 	// Disambiguate the three failure modes (review blocker #5,
@@ -195,7 +195,7 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 			writeErrorWithCode(w, http.StatusServiceUnavailable,
 				"EXPLORER_NEEDS_PARTY_JWT",
 				"participant denied the updates stream",
-				"the JWT's party rights don't grant read access — see BIT-191")
+				"the JWT's party rights don't grant read access — see ")
 			return
 		}
 		writeError(w, http.StatusBadGateway, "open updates stream", err)

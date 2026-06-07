@@ -62,7 +62,7 @@ export function CommandPalette() {
   const sel = useInstanceSelection();
   // Read the currently-selected instance off the URL so palette
   // navigation to instance-scoped routes carries `?instance=`
-  // forward — same fix as the Shell sidebar (BIT-223). Without
+  // forward — same fix as the Shell sidebar. Without
   // this, ⌘K → "Wallet" bounces the user to the empty state even
   // though the header still shows an instance.
   const [searchParams] = useSearchParams();

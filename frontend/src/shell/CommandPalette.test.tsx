@@ -74,7 +74,7 @@ describe("CommandPalette filter", () => {
 // Integration test for the palette → router navigation path. The
 // shared NAV table in ./routes flags instance-scoped routes; the
 // palette must thread `?instance=` into those links the same way
-// the sidebar does (BIT-223). Without this guard, ⌘K → Wallet
+// the sidebar does. Without this guard, ⌘K → Wallet
 // silently drops the selection and lands on the empty state.
 function LocationProbe() {
   // Surfaces the current pathname + search so assertions can read
@@ -124,7 +124,7 @@ function renderPalette(initialPath: string) {
   );
 }
 
-describe("CommandPalette — nav preserves ?instance= (BIT-223)", () => {
+describe("CommandPalette — nav preserves ?instance=", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("threads ?instance= when navigating to an instance-scoped route", async () => {

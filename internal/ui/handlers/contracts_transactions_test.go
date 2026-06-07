@@ -24,7 +24,7 @@ import (
 //   - 404 on unknown registered instance
 //   - 400 on invalid role
 //   - 503 PARTICIPANT_PORT_NOT_RECORDED when state.json lacks the
-//     participant_ledger_<role> port (the BIT-190 capture didn't
+//     participant_ledger_<role> port (the capture didn't
 //     run yet for this instance)
 //   - 500 when state.json has a port but no JWT for the role
 //
@@ -108,7 +108,7 @@ func TestContracts_InvalidRole(t *testing.T) {
 func TestContracts_MissingParticipantPort(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	// No participant_ledger_app-user port — instance came up before
-	// BIT-190 captured Canton ports.
+	// captured Canton ports.
 	seedInstance(t, "demo", "0.6.4",
 		map[string]int{"app_user_ui": 4485},
 		registry.StatusRunning)

@@ -55,7 +55,7 @@ func sseHandler(hub *stream.Hub) http.Handler {
 			return
 		}
 
-		// Reviewer pin (PR #42 #c): SSE uses GET, which is exempt
+		// SSE uses GET, which is exempt
 		// from the global CSRF middleware. But the threat model
 		// still applies — a tab on evil.example.com can open
 		// EventSource("http://127.0.0.1:7777/events") and read
@@ -75,7 +75,7 @@ func sseHandler(hub *stream.Hub) http.Handler {
 
 		// SSE headers.
 		h := w.Header()
-		// Reviewer pin (PR #42 round-2 #4): charset=utf-8 is
+		// charset=utf-8 is
 		// required — without it some clients (older Safari,
 		// intermediate proxies) treat the stream as Latin-1
 		// and mangle multi-byte event data.
@@ -153,8 +153,7 @@ func writeSSEFrame(w http.ResponseWriter, e stream.Event) {
 	// Strip a single trailing newline (the most common case where
 	// callers append "\n" to a log line) so we don't emit a
 	// trailing empty `data:` line, which would change the SSE
-	// event payload from "msg" to "msg\n" — reviewer pin (PR #42
-	// round-2 #4 trailing-newline bug).
+	// event payload from "msg" to "msg\n" — .
 	body := string(e.Data)
 	body = strings.TrimRight(body, "\n")
 	for _, line := range strings.Split(body, "\n") {

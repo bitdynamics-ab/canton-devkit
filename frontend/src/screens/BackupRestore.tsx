@@ -7,7 +7,7 @@ import {
 } from "../api";
 import { W, wMono } from "../tokens";
 
-// BIT-184 — Backup & restore card.
+// Backup & restore card.
 //
 // Two actions in one card:
 //   1. Download snapshot — POST /api/instances/:name/snapshot;
@@ -20,7 +20,7 @@ import { W, wMono } from "../tokens";
 // The card lives inside InstanceDetail so the "current instance"
 // context is already known. Restore-from-here uploads to /restore
 // with name=currentInstance by default, but the user can type a
-// different name (BIT-185 unblocks the cross-name case properly;
+// different name (unblocks the cross-name case properly;
 // today it works modulo the volume-rename limitation documented
 // in that ticket).
 //

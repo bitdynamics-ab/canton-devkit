@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import type { ErrorCode } from "../api";
 import { remediationForCode } from "./remediation";
 
-// BIT-172 review v3 — pins the silent-default regression risk.
+// Pins the silent-default regression risk.
 // The default-null fallback is the dangerous case: a future
 // contributor adds a new code to the Go side (`internal/localnet/
 // coded_error.go`), and without explicit coverage on the FE side
@@ -75,13 +75,12 @@ describe("remediationForCode", () => {
   it("titles are unique across all panel-returning codes — avoids ambiguous UI", () => {
     const titles = codesWithPanel
       .map((c) => remediationForCode(c)!.title)
-      // Stripping the BIT-174 thresholds-from-catalogue rephrase
-      // keeps this test stable across copy edits.
+      // Lowercasing keeps this test stable across copy edits.
       .map((t) => t.toLowerCase());
     expect(new Set(titles).size).toBe(titles.length);
   });
 
-  it("CANTON_OOM remediation does NOT hard-code the 12 GiB / 8 GiB numbers (BIT-174 review fix)", () => {
+  it("CANTON_OOM remediation does NOT hard-code the 12 GiB / 8 GiB numbers", () => {
     // The thresholds live in internal/splice/versions.json; the
     // UI copy MUST refer users to the pre-flight panel (which
     // surfaces the catalogue numbers) rather than restating them.
