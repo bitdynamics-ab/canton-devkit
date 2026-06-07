@@ -19,14 +19,24 @@ type App struct {
 	out     io.Writer
 	err     io.Writer
 	version string
+	commit  string
 	// telemetry, when true, installs the real counter sink and records the
 	// per-invocation counters. OFF by default so tests never touch the real
 	// config dir or the network. main() turns it on.
 	telemetry bool
 }
 
-func New(out io.Writer, err io.Writer, version string) *App {
-	return &App{out: out, err: err, version: version}
+func New(out io.Writer, err io.Writer, version, commit string) *App {
+	return &App{out: out, err: err, version: version, commit: commit}
+}
+
+// versionString renders the version, appending the short git commit hash in
+// parentheses when one is known (omitted for builds without VCS info).
+func (a *App) versionString() string {
+	if a.commit == "" {
+		return a.version
+	}
+	return fmt.Sprintf("%s (%s)", a.version, a.commit)
 }
 
 // WithTelemetry enables the anonymous, aggregate, opt-out usage telemetry

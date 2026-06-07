@@ -19,7 +19,7 @@ import (
 // terminal-profile-dependent; substring assertions are robust.
 func TestLocalnetHelp_RendersMockupShape(t *testing.T) {
 	var out, errBuf bytes.Buffer
-	app := New(&out, &errBuf, "test")
+	app := New(&out, &errBuf, "test", "")
 	code := app.Run([]string{"localnet", "--help"})
 	if code != 0 {
 		t.Fatalf("help returned %d, want 0; stderr=%q", code, errBuf.String())
@@ -54,7 +54,7 @@ func TestLocalnetHelp_RendersMockupShape(t *testing.T) {
 // file to add the row.
 func TestLocalnetHelp_OmitsUnshippedCommands(t *testing.T) {
 	var out, errBuf bytes.Buffer
-	app := New(&out, &errBuf, "test")
+	app := New(&out, &errBuf, "test", "")
 	_ = app.Run([]string{"localnet", "--help"})
 
 	for _, mustNot := range []string{
@@ -75,7 +75,7 @@ func TestLocalnetHelp_OmitsUnshippedCommands(t *testing.T) {
 // DisableFlagParsing stubs.
 func TestLocalnetHelp_AdvertisedCommandsAreWired(t *testing.T) {
 	var out, errBuf bytes.Buffer
-	root := New(&out, &errBuf, "test").buildRoot()
+	root := New(&out, &errBuf, "test", "").buildRoot()
 	for _, cat := range helpCategories() {
 		for _, row := range cat.Commands {
 			args := append([]string{"localnet"}, strings.Fields(row.name)...)
@@ -149,14 +149,14 @@ func TestLocalnetHelp_LazyRenderRespectsLatePaletteChange(t *testing.T) {
 	// First call with default profile to ensure the lazy path
 	// is exercised at least once.
 	var out1, errBuf1 bytes.Buffer
-	_ = New(&out1, &errBuf1, "test").Run([]string{"localnet", "--help"})
+	_ = New(&out1, &errBuf1, "test", "").Run([]string{"localnet", "--help"})
 
 	// Now set NO_COLOR and call again. term.ShouldColor honors
 	// this; lipgloss in our package reads it on every render
 	// because we don't cache.
 	t.Setenv("NO_COLOR", "1")
 	var out2, errBuf2 bytes.Buffer
-	_ = New(&out2, &errBuf2, "test").Run([]string{"localnet", "--help"})
+	_ = New(&out2, &errBuf2, "test", "").Run([]string{"localnet", "--help"})
 
 	// The first output may or may not contain ANSI depending on
 	// the test environment's TTY detection. We don't pin that.
@@ -177,7 +177,7 @@ func TestLocalnetHelp_LazyRenderRespectsLatePaletteChange(t *testing.T) {
 func TestLocalnetHelp_NarrowTerminalFallsBackToSingleLine(t *testing.T) {
 	t.Setenv("COLUMNS", "30")
 	var out, errBuf bytes.Buffer
-	app := New(&out, &errBuf, "test")
+	app := New(&out, &errBuf, "test", "")
 	if code := app.Run([]string{"localnet", "--help"}); code != 0 {
 		t.Fatalf("help returned %d, stderr=%q", code, errBuf.String())
 	}
@@ -202,7 +202,7 @@ func TestLocalnetHelp_NarrowTerminalFallsBackToSingleLine(t *testing.T) {
 func TestLocalnetHelp_WideTerminalClampsBoxToMax(t *testing.T) {
 	t.Setenv("COLUMNS", "120")
 	var out, errBuf bytes.Buffer
-	app := New(&out, &errBuf, "test")
+	app := New(&out, &errBuf, "test", "")
 	_ = app.Run([]string{"localnet", "--help"})
 	body := out.String()
 	if !strings.Contains(body, "LIFECYCLE") {
@@ -218,7 +218,7 @@ func TestLocalnetHelp_AsciiBoxWhenNoColor(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	t.Setenv("COLUMNS", "120") // force boxed renderer
 	var out, errBuf bytes.Buffer
-	app := New(&out, &errBuf, "test")
+	app := New(&out, &errBuf, "test", "")
 	_ = app.Run([]string{"localnet", "--help"})
 	body := out.String()
 	// Scope the assertion to the top header (the dynamicBox output)
@@ -241,7 +241,7 @@ func TestLocalnetHelp_AsciiBoxWhenCLocale(t *testing.T) {
 	t.Setenv("LANG", "C")
 	t.Setenv("COLUMNS", "120") // force boxed renderer
 	var out, errBuf bytes.Buffer
-	app := New(&out, &errBuf, "test")
+	app := New(&out, &errBuf, "test", "")
 	_ = app.Run([]string{"localnet", "--help"})
 	body := out.String()
 	header := strings.Join(strings.SplitN(body, "\n", 7)[:6], "\n")
@@ -292,7 +292,7 @@ func TestRenderHelpRow_AlignsWithMultiByteName(t *testing.T) {
 // listing instead of the command's own --help flags block.
 func TestLocalnetSubcommandHelp_UsesCobraDefault(t *testing.T) {
 	var out, errBuf bytes.Buffer
-	app := New(&out, &errBuf, "test")
+	app := New(&out, &errBuf, "test", "")
 	code := app.Run([]string{"localnet", "up", "--help"})
 	if code != 0 {
 		t.Fatalf("up --help returned %d, stderr=%q", code, errBuf.String())

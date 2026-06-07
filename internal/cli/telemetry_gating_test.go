@@ -22,7 +22,7 @@ func TestTelemetry_MetaCommandsExcludedFromAdoption(t *testing.T) {
 	var o, e bytes.Buffer
 
 	// --- meta command: must record NOTHING ---
-	New(&o, &e, "1.0").WithTelemetry().Run([]string{"version"})
+	New(&o, &e, "1.0", "").WithTelemetry().Run([]string{"version"})
 	agg, _ := telemetry.PreviewCurrentPeriod()
 	for _, chart := range []string{"dpm/os", "dpm/arch", "dpm/install", "dpm/command"} {
 		if _, ok := agg.Counters[chart]; ok {
@@ -31,14 +31,14 @@ func TestTelemetry_MetaCommandsExcludedFromAdoption(t *testing.T) {
 	}
 
 	// --- also exercise `telemetry status` (a meta subcommand) ---
-	New(&o, &e, "1.0").WithTelemetry().Run([]string{"telemetry", "status"})
+	New(&o, &e, "1.0", "").WithTelemetry().Run([]string{"telemetry", "status"})
 	agg, _ = telemetry.PreviewCurrentPeriod()
 	if _, ok := agg.Counters["dpm/os"]; ok {
 		t.Error("`telemetry status` recorded dpm/os — meta commands must not count")
 	}
 
 	// --- real localnet command: context IS recorded ---
-	New(&o, &e, "1.0").WithTelemetry().Run([]string{"localnet", "list"})
+	New(&o, &e, "1.0", "").WithTelemetry().Run([]string{"localnet", "list"})
 	agg, _ = telemetry.PreviewCurrentPeriod()
 	if len(agg.Counters["dpm/os"]) == 0 {
 		t.Error("`localnet list` did not record dpm/os — real commands should count context")

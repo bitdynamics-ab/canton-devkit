@@ -27,6 +27,7 @@ set -euo pipefail
 VERSION="${1:?usage: assemble-dpm-component.sh <version> [out-dir]}"
 OUT="${2:-dist/component}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+COMMIT="${COMMIT:-$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || true)}"
 MANIFEST="$ROOT/component.yaml"
 
 # os/arch → dpm platform tuple. Mirrors the release matrix.
@@ -42,7 +43,7 @@ for target in $TARGETS; do
   [ "$os" = "windows" ] && bin="canton-devkit.exe"
 
   GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build \
-    -ldflags "-s -w -X main.version=${VERSION}" \
+    -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" \
     -o "$dir/$bin" "$ROOT/cmd/canton-devkit"
 
   # Manifest: rewrite the binary path to the platform's filename
