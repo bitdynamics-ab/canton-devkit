@@ -15,7 +15,7 @@ import (
 )
 
 func TestValidateName(t *testing.T) {
-	// DNS-label form (PR #20 #6): lowercase a-z0-9-, no leading/trailing
+	// DNS-label form: lowercase a-z0-9-, no leading/trailing
 	// hyphen, 1-63 chars. ValidateName delegates to
 	// registry.ValidateName so the rule is enforced in exactly one
 	// place; this test pins the wrapper's contract (empty-string
@@ -59,10 +59,10 @@ func TestValidateName_DelegatesToRegistry(t *testing.T) {
 	}
 }
 
-// TestRunUp_RejectsConcurrentSameNameOp covers the contract Zhe
-// flagged on PR #24: a second `localnet up` against the same name
-// must return ExitUserError immediately when another op is holding
-// the per-instance lock. Without this, two parallel `up`s would race
+// TestRunUp_RejectsConcurrentSameNameOp covers the concurrent-`up`
+// contract: a second `localnet up` against the same name must
+// return ExitUserError immediately when another op is holding the
+// per-instance lock. Without this, two parallel `up`s would race
 // the Docker compose project name collision and produce confusing
 // errors.
 //
@@ -71,8 +71,6 @@ func TestValidateName_DelegatesToRegistry(t *testing.T) {
 // RunUp against the same name. Lock acquisition is step 2 of RunUp,
 // before Fetch or compose — so the test doesn't need network or
 // Docker, and never reaches the slow code paths.
-//
-// Filed in BIT-118.
 func TestRunUp_RejectsConcurrentSameNameOp(t *testing.T) {
 	// Point the registry at a temp dir for the test's lifetime so we
 	// don't touch ~/.canton-devkit/.
@@ -108,9 +106,9 @@ func TestRunUp_RejectsConcurrentSameNameOp(t *testing.T) {
 	}
 }
 
-// TestRunUp_HappyPath_FakeDriven covers the request Zhe filed as
-// PR #20 #9: prove the bring-up orchestration sequence end-to-end
-// without docker or network. We swap in two seams:
+// TestRunUp_HappyPath_FakeDriven proves the bring-up orchestration
+// sequence end-to-end without docker or network. We swap in two
+// seams:
 //
 //   - FetchFn returns a tempdir pre-populated with env/<role>-auth-on.env
 //     files (so captureCredentials reaches signing).
@@ -241,7 +239,7 @@ func TestRunUp_AlphaVersionWarns(t *testing.T) {
 }
 
 // TestRunUp_UncuratedTagWithoutOptInRejected locks in the security
-// floor of the two-layer version model (PR #20 #2): without
+// floor of the two-layer version model: without
 // --allow-uncurated, a tag that isn't in the curated catalogue must
 // be rejected as a user error BEFORE any expensive work.
 func TestRunUp_UncuratedTagWithoutOptInRejected(t *testing.T) {
@@ -287,13 +285,12 @@ func (s *composeRunnerStub) WaitForHealthy(context.Context) error {
 	return nil
 }
 
-// TestRunUp_CLIByteEquivalence pins the CLI output contract across
-// the BIT-163a/b refactor: the TextProgress-backed RunUp must emit
-// the same set of header lines today's users see, AND must NOT emit
-// new lines for the five "silent" steps (resolve, lock, fetch,
-// persist, capture_jwts) — adding terminal noise for those is a
-// deliberate CLI behaviour change, not a side-effect of the
-// refactor.
+// TestRunUp_CLIByteEquivalence pins the CLI output contract: the
+// TextProgress-backed RunUp must emit the same set of header lines
+// today's users see, AND must NOT emit new lines for the five
+// "silent" steps (resolve, lock, fetch, persist, capture_jwts) —
+// adding terminal noise for those is a deliberate CLI behaviour
+// change, not a side-effect of refactoring.
 //
 // Asserts on substring presence rather than full byte sequence so a
 // future tweak to the "Starting Canton LocalNet ..." header

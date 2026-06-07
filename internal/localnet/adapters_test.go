@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// TestCoreServicesFor_Known pins the BIT-222 resolver against a known
-// version from the curated catalogue. The reconciler relies on the
+// TestCoreServicesFor_Known pins the core-services resolver against a
+// known version from the curated catalogue. The reconciler relies on the
 // returned slice to distinguish "core stack missing" (failed) from
 // "core stack running but degraded" (partial); if the resolver
 // silently returns nil for a curated tag, evalStatus skips the check

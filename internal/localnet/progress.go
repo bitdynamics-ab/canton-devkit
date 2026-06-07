@@ -7,29 +7,15 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 )
 
-// Progress is the structured-event substrate the Web UI (BIT-163,
-// webui-create.jsx) needs from `RunUp`. Today RunUp writes verbatim
-// strings to two io.Writers (out, errw) — a terminal user sees a
-// "Starting services..." line, the browser sees nothing structured.
+// Progress is the structured-event substrate the Web UI needs from
+// `RunUp`. RunUp writes verbatim strings to two io.Writers (out,
+// errw) — a terminal user sees a "Starting services..." line, the
+// browser sees nothing structured.
 //
 // Goal: keep the CLI output byte-identical (TextProgress below
 // reproduces the existing text exactly) while giving the Web UI a
 // typed event stream — Step + status + percent + container chips —
 // so it can render the rich progress modal the V2 mockup specifies.
-//
-// Migration plan (each step is its own PR for review traceability):
-//
-//	BIT-163a (this file) — define the interface + TextProgress + tests
-//	BIT-163b           — refactor RunUp to take Progress; CLI caller
-//	                     constructs TextProgress; byte-equivalent output
-//	BIT-163c           — add an SSEProgress impl that publishes to the
-//	                     per-instance topic on internal/ui/stream.Hub
-//	BIT-163d           — async POST /api/instances spawns goroutine
-//	                     with SSEProgress; UI subscribes to events
-//
-// Splitting this way keeps each PR small enough to audit. A single
-// PR that did all four would touch 200+ lines across CLI, registry,
-// UI, frontend — a review death trap.
 //
 // # Why an interface and not a callback channel
 //
@@ -93,8 +79,8 @@ const (
 	StatusStepFail    Status = "fail"
 )
 
-// Progress is the interface RunUp will use (BIT-163b) instead of
-// raw io.Writer calls. Implementations:
+// Progress is the interface RunUp uses instead of raw io.Writer
+// calls. Implementations:
 //
 //	TextProgress  — wraps two io.Writers, produces today's CLI bytes
 //	SSEProgress   — (future) publishes typed events to the hub
@@ -125,7 +111,7 @@ type Progress interface {
 // TextProgress is the CLI-facing implementation. Every method
 // produces a line (or block) of text on the appropriate stream.
 //
-// BIT-122 re-skin: when stdout is a TTY, we render section
+// Styled re-skin: when stdout is a TTY, we render section
 // headers + final success box via the term primitives that match
 // ScreenUp in docs/design/mockups/screens-lifecycle.jsx. When
 // stdout is NOT a TTY (pipes, CI, bytes.Buffer test injection),
@@ -143,8 +129,8 @@ type TextProgress struct {
 	OutW io.Writer
 	ErrW io.Writer
 	// tty controls whether StartStep / Done emit the boxed,
-	// glyph-prefixed rendering from BIT-121's term primitives.
-	// False (default) keeps the historical plain output so the
+	// glyph-prefixed rendering from the term primitives. False
+	// (default) keeps the historical plain output so the
 	// suite of golden tests built against the unstyled bytes
 	// keeps passing.
 	tty bool
@@ -178,8 +164,8 @@ func isTTY(out io.Writer) bool {
 // typos.
 //
 // Frontend has the same map keyed by the SAME tokens
-// (webui-create.jsx::stepLabels). A drift test (BIT-163c) will
-// verify cross-language parity once SSEProgress lands.
+// (webui-create.jsx::stepLabels). A drift test will verify
+// cross-language parity once SSEProgress lands.
 var stepLabel = map[Step]string{
 	StepResolveVersion: "Resolving version + adapter",
 	StepAcquireLock:    "Acquiring instance lock",
@@ -203,8 +189,8 @@ var stepLabel = map[Step]string{
 // JWTs) happen silently in the CLI today — either because the
 // underlying call writes its own progress (splice.Fetch streams
 // download dots into Out()) or because they're fast enough to not
-// warrant a line. Keeping the allowlist here means BIT-163b's
-// refactor can issue StartStep for ALL steps unconditionally;
+// warrant a line. Keeping the allowlist here means the
+// orchestrator can issue StartStep for ALL steps unconditionally;
 // TextProgress filters to the visible ones, and the upcoming
 // SSEProgress impl emits every event.
 //
@@ -239,7 +225,7 @@ func (t *TextProgress) StartStep(step Step, detail string) {
 		_, _ = fmt.Fprintf(t.OutW, "%s (%s)...\n", label, detail)
 		return
 	}
-	// BIT-122 styled path — mockup-aligned section header. Maps
+	// Styled path — mockup-aligned section header. Maps
 	// to the `┌─ preflight ────…` / `┌─ services ─────…` block
 	// headers in ScreenUp; we surface the same per-step label
 	// the plain path uses for the section title so a user
@@ -291,7 +277,7 @@ func (t *TextProgress) Warn(message string) {
 // followed by the endpoint listing. detail carries the full ready-
 // line; endpoint listing goes through Out() as a verbatim block.
 //
-// BIT-122 styled path on a TTY: render the ready-line inside a
+// Styled path on a TTY: render the ready-line inside a
 // brand-accented Box matching the `✦ LocalNet "<name>" is ready.`
 // block in ScreenUp.
 func (t *TextProgress) Done(detail string) {

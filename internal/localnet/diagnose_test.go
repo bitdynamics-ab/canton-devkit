@@ -2,7 +2,7 @@ package localnet
 
 import "testing"
 
-// TestDiagnoseFromObs pins the BIT-174 false-positive fix: the JVM
+// TestDiagnoseFromObs pins the JVM-warning false-positive guard: the JVM
 // `-Xmx exceeds half of the container's total memory` warning is
 // logged on EVERY startup of a memory-tight canton — it must NOT
 // alone trigger ErrCodeCantonOOM (that would false-positive every
