@@ -16,9 +16,8 @@ LocalNet pain canton-devkit removes:
 
 - Daml app developers who currently hand-roll `docker compose` against
   Splice.
-- Teams on the CIP-0112 token path (overlaps the M3 adoption goal —
-  see [BIT-83]).
-- Canton Foundation ecosystem contacts (co-marketing — see [BIT-91]).
+- Teams on the CIP-0112 token path.
+- Canton Foundation ecosystem contacts (co-marketing).
 - Internal teams at partner orgs already piloting Canton.
 
 ## The ask (copy-paste outreach template)
@@ -74,10 +73,4 @@ OK to attribute publicly? (y/n)
 
 Three rows filled with a `pass` (or a fixed `fail`) closes the M1
 adoption metric. Feed the friction notes into the UX polish backlog
-([BIT-81]) and the aggregate into the M4 adoption transparency update.
-
----
-
-[BIT-83]: M3 adoption — 7 external CIP-0112 projects ·
-[BIT-91]: Co-marketing with Canton Foundation ·
-[BIT-81]: UX polish pass
+and the aggregate into the M4 adoption transparency update.
