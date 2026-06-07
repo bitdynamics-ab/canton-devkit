@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Zero-to-LocalNet validation harness (BIT-36).
+# Zero-to-LocalNet validation harness.
 #
 # Times a cold-start developer journey and asserts it completes within a
-# budget (default 10 minutes). This is the harness behind the M1 adoption
-# metric "a new user reaches a running LocalNet in under 10 minutes" — run
-# it yourself before a release, or hand it to an external reviewer.
+# budget (default 10 minutes). The target metric is "a new user reaches
+# a running LocalNet in under 10 minutes" — run it yourself before a
+# release, or hand it to an external reviewer.
 #
 # It measures the steps a brand-new user actually performs:
 #   1. binary present / built
