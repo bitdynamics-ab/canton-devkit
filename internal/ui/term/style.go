@@ -68,7 +68,7 @@ func ShouldColor(w io.Writer) bool {
 // but not COLOR — the "TTY but NO_COLOR=1" case — can gate on
 // IsTerminal while the per-token Brandc/Errc/etc. still respect
 // ShouldColor for the ANSI sequences themselves. Reviewer pin on
-// PR #36 #3: the original code conflated the two and turned the
+// the original code conflated the two and turned the
 // Box off whenever color was off, which hid useful structure
 // from CI logs that captured a TTY without color.
 func IsTerminal(w io.Writer) bool {

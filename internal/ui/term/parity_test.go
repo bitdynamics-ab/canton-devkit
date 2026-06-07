@@ -9,8 +9,8 @@ import (
 	"testing"
 )
 
-// TestPalette_MatchesTerminalJSX is the review-pin from PR #31:
-// the color tokens in color.go MUST match the JSX TERM.* constants
+// TestPalette_MatchesTerminalJSX pins
+// // the color tokens in color.go MUST match the JSX TERM.* constants
 // in docs/design/mockups/terminal.jsx, otherwise the rendered CLI
 // drifts from the mockup and acceptance becomes "I'll just eyeball
 // it" — exactly the failure mode the mockup-as-spec model is
@@ -94,8 +94,7 @@ func TestPalette_MatchesTerminalJSX(t *testing.T) {
 
 // TestBoxKinds_DecisionTable pins every BoxKind to its rendered
 // accent color so a future "add a kind" PR fails here unless the
-// table is updated. Reviewer flagged the absence of a decision-
-// table test for the term primitives.
+// table is updated.
 func TestBoxKinds_DecisionTable(t *testing.T) {
 	cases := map[BoxKind]string{
 		BoxBrand:   "brand",
@@ -113,8 +112,7 @@ func TestBoxKinds_DecisionTable(t *testing.T) {
 		// the renderer ran. Color difference can't be asserted
 		// without ANSI inspection — we save that for the
 		// integration tests.
-		// Structural assertion via BoxLeftBorderRune (PR #31 #9
-		// review pin) — lets a future Windows ASCII profile
+		// Structural assertion via BoxLeftBorderRune lets a future Windows ASCII profile
 		// substitute the rune without rewriting this assertion.
 		if !strings.ContainsRune(got, BoxLeftBorderRune) {
 			t.Errorf("Box(%v) missing left border (rune=%q): %q",

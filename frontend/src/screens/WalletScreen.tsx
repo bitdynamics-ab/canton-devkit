@@ -3,7 +3,7 @@ import { ApiError, fetchInstance, type Instance, type Role } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { ROLE_COLOR, W, wMono } from "../tokens";
 
-// WalletScreen — BIT-192 (new in design drop 2026-05-26).
+// WalletScreen — (new in design drop 2026-05-26).
 //
 // Embeds Splice's per-role Wallet UI inside the DevKit shell so
 // users don't juggle three browser tabs (one per party). The
@@ -97,7 +97,7 @@ export function WalletScreen() {
   }
 
   // Resolve the per-role wallet URL from the endpoints projection
-  // (BIT-192 — detail handler emits one per role). Falls back to
+  //. Falls back to
   // null if the instance doesn't yet have endpoints surfaced.
   const walletURL = walletURLFor(role, state.instance.endpoints);
 

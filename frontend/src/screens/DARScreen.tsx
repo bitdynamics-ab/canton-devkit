@@ -11,7 +11,7 @@ import {
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { W, wMono } from "../tokens";
 
-// DARScreen — BIT-187 production layout.
+// DARScreen — production layout.
 //
 // Matches docs/design/mockups/webui-dar.jsx:
 //   - LEFT (320px) drag-drop upload + per-participant vetting

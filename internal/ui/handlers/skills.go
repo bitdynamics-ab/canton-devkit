@@ -1,4 +1,4 @@
-// BIT-189 — Web UI Agent Skills screen backend.
+// Web UI Agent Skills screen backend.
 //
 // Serves the same embedded skill docs the CLI `localnet skills`
 // command ships (internal/skills), so the two surfaces never drift.

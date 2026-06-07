@@ -42,7 +42,7 @@ func TopicFor(name string) string {
 
 // SSEProgress implements localnet.Progress by publishing typed
 // JSON events to a per-instance topic on a *stream.Hub. The
-// create-instance flow (BIT-163d) uses one of these per in-flight
+// create-instance flow uses one of these per in-flight
 // POST /api/instances goroutine.
 //
 // Event ID is a monotonic counter so the browser's EventSource
@@ -134,7 +134,7 @@ type stepPayload struct {
 	// RunUp recognized the failure mode (PORTS_IN_USE, DOCKER_DOWN,
 	// etc.). Frontend switches on this to render specific
 	// remediation panels instead of generic error text — see
-	// BIT-172.
+	// .
 	ErrorCode string `json:"error_code,omitempty"`
 }
 

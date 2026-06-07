@@ -37,17 +37,17 @@ function shortParty(p: string): string {
   return i > 0 ? p.slice(0, i) : p;
 }
 
-// partyLabel prefers a registered alias (BIT-215 #1) over the raw prefix:
+// partyLabel prefers a registered alias over the raw prefix:
 // `app_user_v2-localparty-1::1220…` → `app-user` when aliased, else the
 // `::`-prefix fallback.
 function partyLabel(aliases: AliasMap, p: string): string {
   return aliases[p] ?? shortParty(p);
 }
 
-// Asset capability guards — verified live (BIT-219):
+// Asset capability guards — verified live:
 //   mint  : only the native test token (CIP-0112 v2) we created on-ledger.
 //   burn  : no deployable token supports a standalone burn yet (needs
-//           AllocationV2/DvP — BIT-216).
+//           AllocationV2/DvP — ).
 function mintDisabledReason(t: InstrumentRef): string | null {
   if (t.standard !== "CIP-0112 v2")
     return `${t.symbol} (${t.standard}) has no standard mint — use the asset's wallet UI`;
@@ -59,7 +59,7 @@ const BURN_DISABLED_REASON =
   "Burn is only available on a native CIP-0112 v2 token created on this " +
   "instance — Amulet has no burn surface.";
 
-// TokensScreen — BIT-140.
+// TokensScreen — .
 //
 // V2 Token Standard surface: lists every instrument recorded on the
 // selected instance, exposes Mint / Transfer / Burn / Accept actions
@@ -121,7 +121,7 @@ export function TokensScreen() {
       return;
     }
     let cancelled = false;
-    // ACS-derived instrument discovery (BIT-219): Amulet + any minted
+    // ACS-derived instrument discovery: Amulet + any minted
     // token appear without a state.Tokens seed.
     fetchInstruments(instance)
       .then((items) => {
@@ -188,7 +188,7 @@ export function TokensScreen() {
     };
   }, [instance, activeSymbol, refreshTick]);
 
-  // Party alias registry (BIT-215 #1): one fetch per instance powers the
+  // Party alias registry: one fetch per instance powers the
   // alias labels across every lens and the party manager.
   useEffect(() => {
     if (!instance) {
@@ -208,7 +208,7 @@ export function TokensScreen() {
     };
   }, [instance, refreshTick]);
 
-  // Instrument-first KPI summary (BIT-219 lens 1): supply, holder +
+  // Instrument-first KPI summary: supply, holder +
   // contract counts, holder distribution. One ACS scan; best-effort —
   // a failure just hides the KPI strip, the holdings table still loads.
   useEffect(() => {
@@ -229,7 +229,7 @@ export function TokensScreen() {
     };
   }, [instance, activeSymbol, refreshTick]);
 
-  // Activity feed (BIT-219 Activity tab): transfer/mint/burn history
+  // Activity feed: transfer/mint/burn history
   // reconstructed from the ledger transaction stream. Fetched lazily —
   // only when the Activity tab is open — since it's a full historical
   // scan, heavier than the ACS snapshots the other lenses use.
@@ -597,7 +597,7 @@ export function TokensScreen() {
 }
 
 // TransferModal — From/To/Amount + a live coin-selection preview
-// (BIT-219). As the user fills From + Amount, it dry-runs the transfer
+//. As the user fills From + Amount, it dry-runs the transfer
 // (planTransfer) and shows which Holding contracts would be consumed and
 // the change returned — the Canton UTXO reality, before any submit.
 function TransferModal({
@@ -708,7 +708,7 @@ function TransferModal({
   );
 }
 
-// KpiRow — the instrument-first KPI strip (BIT-219 lens 1). Supply,
+// KpiRow — the instrument-first KPI strip. Supply,
 // circulating (= supply on a UTXO ledger), holder count, and the number
 // of Holding contracts backing it. All derived from one ACS scan.
 function KpiRow({ s }: { s: InstrumentSummary }) {
@@ -748,7 +748,7 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
   );
 }
 
-// HolderDistribution — per-holder stake table (BIT-219 lens 1): balance,
+// HolderDistribution — per-holder stake table: balance,
 // share of supply (with an inline bar), and how many Holding contracts
 // back each holder. Sorted biggest-first by the backend.
 function HolderDistribution({ s, aliases }: { s: InstrumentSummary; aliases: AliasMap }) {
@@ -801,7 +801,7 @@ function HolderDistribution({ s, aliases }: { s: InstrumentSummary; aliases: Ali
   );
 }
 
-// ActivityFeed — the instrument's transfer/mint/burn history (BIT-219
+// ActivityFeed — the instrument's transfer/mint/burn history (
 // Activity tab), reconstructed from the ledger transaction stream. Each
 // row is one netted transaction: kind, amount, and who sent → received.
 function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null; err: string | null; aliases: AliasMap }) {
@@ -860,8 +860,8 @@ function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null
   );
 }
 
-// MatrixLens — the god-mode party × instrument balance table (BIT-219 /
-// BIT-215 #2). One ACS scan; rows = parties, columns = instruments,
+// MatrixLens — the god-mode party × instrument balance table (/
+// #2). One ACS scan; rows = parties, columns = instruments,
 // plus a totals row. Only the parties the role's JWT can read appear.
 function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; err: string | null; aliases: AliasMap }) {
   if (err) return <div role="alert" style={{ color: W.err, fontSize: 13 }}>{err}</div>;
@@ -927,7 +927,7 @@ function Header({ right }: { right?: React.ReactNode }) {
   );
 }
 
-// PartyManagerModal — the god-mode party registry (BIT-215 #1): list the
+// PartyManagerModal — the god-mode party registry: list the
 // instance's aliased parties, allocate a new one by name, or forget an
 // alias. New parties immediately become visible in the matrix / activity
 // (the scan grants read-as for every registered party).

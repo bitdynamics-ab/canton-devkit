@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// TestMetrics_RejectsMissingQuery pins the BIT-134 input
+// TestMetrics_RejectsMissingQuery pins the input
 // validation: ?query is required. Without it the handler returns
 // 400 with the structured INVALID_REQUEST code so the frontend
 // can show a friendly prompt rather than a generic 5xx.

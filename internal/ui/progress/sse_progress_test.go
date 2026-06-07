@@ -209,7 +209,7 @@ func TestSSEProgress_TopicNamespaced(t *testing.T) {
 
 // TestSSEProgress_SatisfiesProgressInterface is a compile-time
 // proof that SSEProgress is a valid localnet.Progress impl. A
-// missing method here means the BIT-163d handler refactor would
+// missing method here means the handler refactor would
 // break the build, not just the runtime — caught at compile, not
 // at SSE-trace-time.
 func TestSSEProgress_SatisfiesProgressInterface(t *testing.T) {

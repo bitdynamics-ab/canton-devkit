@@ -22,7 +22,7 @@ import (
 const tokensBodyMax = 64 << 10 // 64 KiB
 
 // MountTokens wires the /api/tokens HTTP surface for the Web UI
-// Tokens screen (BIT-140). All handlers delegate to
+// Tokens screen. All handlers delegate to
 // internal/localnet/token.RunX — the same functions the CLI
 // subcommands call — so CLI ↔ UI parity is automatic.
 //
@@ -57,7 +57,7 @@ func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	mux.HandleFunc("POST /api/tokens/transfers/{id}/accept", idem.wrap(handleTokenAccept))
 	mux.HandleFunc("POST /api/tokens/{symbol}/burn", idem.wrap(handleTokenBurn))
 	mux.HandleFunc("POST /api/tokens/{symbol}/faucet", idem.wrap(handleTokenFaucet))
-	// Party alias registry (BIT-215 #1) — the workspace's god-mode
+	// Party alias registry — the workspace's god-mode
 	// party manager. Same RunPartyX functions the `token party` CLI calls.
 	mux.HandleFunc("GET /api/parties", handlePartiesList)
 	mux.HandleFunc("POST /api/parties", handlePartiesCreate)
@@ -159,7 +159,7 @@ func handleTokensList(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
-	// On-chain instrument discovery (BIT-219): when a live ledger
+	// On-chain instrument discovery: when a live ledger
 	// endpoint is available, list instruments seen in the ACS — so
 	// Amulet and any minted token appear without a state.Tokens seed.
 	// Falls back to the registry-recorded list when no endpoint (the
@@ -191,7 +191,7 @@ func handleTokensList(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleTokenMatrix returns the party × instrument balance matrix
-// (BIT-219 / BIT-215 #2) — the god-mode reconciliation view.
+// — the god-mode reconciliation view.
 func handleTokenMatrix(w http.ResponseWriter, r *http.Request) {
 	instance, err := instanceFromQuery(r)
 	if err != nil {
@@ -234,8 +234,8 @@ func handleTokenDetail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, ref)
 }
 
-// handleTokenSummary returns the instrument-first KPI view (BIT-219
-// lens 1): total supply, holder + holding-contract counts, and the
+// handleTokenSummary returns the instrument-first KPI view: total
+// supply, holder + holding-contract counts, and the
 // per-holder distribution with share-of-supply. ACS-derived, same live
 // endpoint as the matrix.
 func handleTokenSummary(w http.ResponseWriter, r *http.Request) {
@@ -275,7 +275,7 @@ func handleTokenSummary(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleTokenActivity reconstructs an instrument's transfer/mint/burn
-// history from the ledger transaction stream (BIT-219 Activity tab). No
+// history from the ledger transaction stream (Activity tab). No
 // off-ledger transfer-events registry needed — derived from HoldingV2
 // create/archive events. ?limit caps the result (default 50).
 func handleTokenActivity(w http.ResponseWriter, r *http.Request) {
@@ -346,9 +346,9 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 			opts.Endpoint = "localhost:" + strconv.Itoa(port)
 		}
 	}
-	// expand=contracts → return the individual Holding contracts (the
-	// UTXO units) instead of the summed-per-party balance (BIT-219
-	// party-UTXO lens). A party's balance is the sum of these.
+	// expand=contracts → return the individual Holding contracts
+	// (the UTXO units) instead of the summed-per-party balance.
+	// A party's balance is the sum of these.
 	if r.URL.Query().Get("expand") == "contracts" && opts.Endpoint != "" {
 		contracts, cerr := token.RunWorkspaceHoldings(r.Context(), opts)
 		if cerr != nil {
@@ -502,8 +502,8 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 	mapTokenError(w, token.RunTransfer(r.Context(), nil, opts), "transfer")
 }
 
-// handleTokenFaucet funds a party from a well-known source, auto-accepted
-// (BIT-215 #5). POST /api/tokens/{symbol}/faucet {to, amount, source?}.
+// handleTokenFaucet funds a party from a well-known source, auto-accepted.
+// POST /api/tokens/{symbol}/faucet {to, amount, source?}.
 func handleTokenFaucet(w http.ResponseWriter, r *http.Request) {
 	instance, err := instanceFromQuery(r)
 	if err != nil {

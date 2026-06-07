@@ -19,7 +19,7 @@ import {
   type Series,
 } from "../components/charts/types";
 
-// MetricsScreen — BIT-188 production layout.
+// MetricsScreen — production layout.
 //
 // Matches docs/design/mockups/webui-metrics-agent.jsx:
 //   - 4-up MetricCard strip (Throughput, Command completion p99,

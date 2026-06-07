@@ -11,7 +11,7 @@ import (
 
 // ErrNonLoopbackBind is returned by Listen when Config.Host resolves to
 // a non-loopback IP and AllowNonLoopback is false. Reviewer pin
-// (PR #41 #a): the previous shape merely "strongly discouraged"
+// the previous shape merely "strongly discouraged"
 // non-loopback in --host's help text, then bound anyway. Defence-in-
 // depth requires a real refusal at the bind layer — the docstring
 // is not load-bearing security.
@@ -67,7 +67,7 @@ type Config struct {
 	// (`--allow-non-loopback`) that defaults off; users who genuinely
 	// need LAN binding have to type the flag.
 	//
-	// Reviewer pin (PR #41 #a): the docstring's "loopback only"
+	// the docstring's "loopback only"
 	// claim was advisory until this gate landed. The default-deny
 	// posture means a future regression that silently widens the
 	// bind fails closed.
@@ -104,7 +104,7 @@ func (c Config) withDefaults() Config {
 //     accumulates into a small leak. 60s matches the typical proxy
 //     idle window AND is twice the SSE heartbeat (30s in sse.go),
 //     so a healthy SSE stream's keepalives reset the timer well
-//     before it fires. Reviewer pin (PR #41 #1).
+//     before it fires. .
 func New(cfg Config) *Server {
 	cfg = cfg.withDefaults()
 	return &Server{
