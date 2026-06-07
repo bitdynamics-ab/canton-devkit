@@ -44,9 +44,16 @@ func TestRunLogs_ConstructsDockerComposeLogsCommand(t *testing.T) {
 			t.Fatalf("args missing %q in %v", want, gotArgs)
 		}
 	}
-	for _, forbidden := range []string{"-f", "--env-file", "overlay.env"} {
-		if strings.Contains(argsStr, forbidden) {
-			t.Fatalf("args should not contain %q in %v", forbidden, gotArgs)
+	for _, forbidden := range []string{"-f", "--env-file"} {
+		for _, arg := range gotArgs {
+			if arg == forbidden {
+				t.Fatalf("args should not contain %q in %v", forbidden, gotArgs)
+			}
+		}
+	}
+	for _, arg := range gotArgs {
+		if strings.Contains(arg, "overlay.env") {
+			t.Fatalf("args should not contain overlay.env in %v", gotArgs)
 		}
 	}
 	if gotDir != "" {
