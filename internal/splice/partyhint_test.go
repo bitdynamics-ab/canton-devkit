@@ -2,8 +2,8 @@ package splice
 
 import "testing"
 
-// TestPartyHintFor_RejectsHyphenInName covers the bug discovered by the
-// BIT-117 integration test: instance names with hyphens (e.g.
+// TestPartyHintFor_RejectsHyphenInName covers the bug discovered by an
+// integration test: instance names with hyphens (e.g.
 // `ci-local`) were yielding party hints like
 // `app_user_ci-local-localparty-1` (after Splice's env-file prefix),
 // which Splice strictly rejects as INVALID_ARGUMENT because it expects

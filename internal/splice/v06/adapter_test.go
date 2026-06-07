@@ -91,7 +91,7 @@ func TestOverlayEnv_FullValueSurface(t *testing.T) {
 	}
 }
 
-// TestOverlayEnv_ImageRepoOverride pins the BIT-210 contract: when a
+// TestOverlayEnv_ImageRepoOverride pins: when a
 // catalogue entry sets ImageRepo (e.g. the Token Standard V2 alpha
 // snapshot), the adapter emits IMAGE_REPO so `docker compose pull`
 // hits the alpha `-dev` registry instead of the stable one.
@@ -130,7 +130,7 @@ func TestOverlayEnv_ImageRepoOverride(t *testing.T) {
 	}
 }
 
-// TestOverlayEnv_ImageTagOverride pins the BIT-210 follow-up: when a
+// TestOverlayEnv_ImageTagOverride pins: when a
 // catalogue entry sets Version.ImageTag (e.g. the V2 alpha snapshot,
 // whose ghcr tag is `0.6.5-snapshot...` while its catalogue Tag is the
 // friendly `token-standard-v2`), the adapter emits IMAGE_TAG using

@@ -11,7 +11,7 @@
 //	<name>/containers.yaml        — generated container-rename overlay
 //
 // All writes are atomic (tmp + rename), state.json is mode 0600 (JWTs land
-// here once BIT-109 is in), and concurrent up/down on the same instance is
+// here in the future), and concurrent up/down on the same instance is
 // rejected by the lock.
 package registry
 
@@ -41,9 +41,8 @@ const (
 	// it invokes `docker compose down`. Without it, a crash or SIGKILL
 	// mid-teardown would leave the registry reporting `running` while
 	// the containers may be partially torn down — `localnet status`
-	// would then lie to the user. Zhe flagged this on PR #21; lives
-	// on m1-foundation so list.go's statusGlyph and the types
-	// projection test can both reference the constant.
+	// would then lie to the user. Lives here so list.go's statusGlyph
+	// and the types projection test can both reference the constant.
 	StatusStopping Status = "stopping"
 	StatusStopped  Status = "stopped"
 	StatusFailed   Status = "failed"
@@ -79,10 +78,10 @@ type State struct {
 	// Feature flags from the version adapter
 	AlphaProtocolEnabled bool `json:"alpha_protocol_enabled"`
 
-	// Captured JWTs (BIT-109; empty for now).
+	// Captured JWTs (empty for now).
 	Credentials map[string]Credential `json:"credentials,omitempty"`
 
-	// Tokens is the per-instance V2 instrument registry (BIT-138).
+	// Tokens is the per-instance V2 instrument registry.
 	// Each entry is a TokenRef indexed by symbol — created via
 	// `localnet token create`, consumed by `mint/transfer/burn/
 	// balance` and the Web UI Tokens screen. Persisted so users
@@ -92,7 +91,7 @@ type State struct {
 	// decode cleanly with Tokens == nil.
 	Tokens map[string]TokenRef `json:"tokens,omitempty"`
 
-	// Parties is the per-instance party alias registry (BIT-215 #1).
+	// Parties is the per-instance party alias registry.
 	// Keyed by alias (a human-readable name like "bob"), each entry
 	// maps to an allocated on-ledger party id. On LocalNet there is no
 	// trust boundary between parties — the `unsafe` dev secret signs for
@@ -163,10 +162,9 @@ var ErrInvalidName = errors.New("invalid instance name")
 // component AND as a DNS label. We require DNS label form (RFC 1123)
 // because the future hostname-routing model — Splice publishes
 // {service}.{instance}.localhost endpoints — would otherwise break
-// for names containing uppercase or underscores. Zhe flagged this in
-// PR #20: keeping a single rule across registry, CLI and downstream
-// hostname construction is cheaper than wiring two policies that
-// drift.
+// for names containing uppercase or underscores. Keeping a single
+// rule across registry, CLI and downstream hostname construction is
+// cheaper than wiring two policies that drift.
 //
 // RFC 1123 label format:
 //   - lowercase a-z, 0-9, hyphen
@@ -177,7 +175,7 @@ var ErrInvalidName = errors.New("invalid instance name")
 // hyphen ("-flag"), trailing hyphen ("name-"), empty, anything Unicode
 // or with path separators / shell metacharacters.
 //
-// Migration: pre-#20 instances named with uppercase or underscores
+// Migration: instances previously named with uppercase or underscores
 // (e.g. "my_stack") need to be re-created under a DNS-label name.
 // Documented in docs/limitations.md.
 var validInstanceName = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)

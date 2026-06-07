@@ -1,7 +1,7 @@
 package splice
 
 // coreServices is the canonical list of compose service names whose
-// absence means an instance can't serve a Ledger API call (BIT-222).
+// absence means an instance can't serve a Ledger API call.
 // Hoisted to a single source of truth because every supported Splice
 // major (0.5.x, 0.6.x) returns the same set — duplicating it per
 // adapter invites the lists to silently drift on the next major bump.

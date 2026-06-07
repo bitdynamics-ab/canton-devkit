@@ -6,8 +6,7 @@ import (
 )
 
 // TestLogLine_ParsedTime covers the three-cell decision table:
-// empty input / valid RFC3339Nano / malformed. Reviewer pin on
-// PR #31 #11.
+// empty input / valid RFC3339Nano / malformed.
 func TestLogLine_ParsedTime(t *testing.T) {
 	cases := []struct {
 		name    string
