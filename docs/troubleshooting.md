@@ -85,3 +85,13 @@ warns when run against a running instance.
 - `localnet logs --name <i> [service]` — tail container logs.
 - `localnet doctor --name <i>` — host + instance diagnostics.
 - File an issue with the `doctor` output and the failing command.
+
+## Log lookup implementation note
+
+`localnet logs` intentionally asks Docker Compose for logs by project
+label only (`docker compose -p <project> logs`). It does not replay the
+cached `compose.yaml` files, generated overlays, or `--env-file` list
+from registry state. Logs are read from already-created containers, so
+rebuilding the active Compose model is unnecessary and can hide
+profile-gated services unless the exact profile set from `localnet up`
+is replayed.
