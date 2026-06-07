@@ -1,4 +1,4 @@
-# BIT-134 — Prometheus scrape config for the observability profile.
+# Prometheus scrape config for the observability profile.
 #
 # Both the Canton and Splice container images ship a
 # `/app/monitoring.conf` file that the canton entrypoint conditionally

@@ -1,4 +1,4 @@
-# BIT-134 — Grafana dashboard provisioning. Loads the canton-localnet
+# Grafana dashboard provisioning. Loads the canton-localnet
 # dashboard JSON at boot so users land on a useful view without
 # clicking through Grafana's import flow.
 apiVersion: 1

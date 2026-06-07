@@ -1,4 +1,4 @@
-# BIT-134 — observability profile overlay.
+# Observability profile overlay.
 #
 # Apply via `docker compose -f <splice-base.yaml> -f observability.yaml up`
 # OR via `dpm localnet up --profile observability` which wires the
@@ -57,10 +57,8 @@ services:
       # Disable the welcome banner / news widget on the home page.
       GF_NEWS_NEWS_FEED_ENABLED: "false"
     volumes:
-      # BIT-134 review fix: provisioning + dashboards live at
-      # assets/grafana/ (one level up from this compose file at
-      # assets/compose/). Path was previously ./grafana/... which
-      # resolved to assets/compose/grafana/ — non-existent.
+      # Provisioning + dashboards live at assets/grafana/ (one level up
+      # from this compose file at assets/compose/).
       - ../grafana/provisioning:/etc/grafana/provisioning:ro
       - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:

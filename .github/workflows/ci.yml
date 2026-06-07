@@ -49,15 +49,11 @@ jobs:
         run: go test ./...
 
   mockup-syntax:
-    # PR #31 #10 review pin: docs/design/mockups/*.jsx are
-    # acceptance specs. CI doesn't render them, but esbuild parses
-    # each file so a hand-edit that breaks the design-canvas viewer
-    # fails here rather than in a reviewer's browser.
-    #
-    # Originally used `node --check`, but plain Node can't parse JSX
-    # (the May 25 mockup refresh introduced real JSX expressions that
-    # tripped the syntax check). esbuild's `--loader=jsx` is the
-    # cheapest JSX-aware parser; no node_modules install needed.
+    # docs/design/mockups/*.jsx are acceptance specs. CI doesn't render
+    # them, but esbuild parses each file so a hand-edit that breaks the
+    # design-canvas viewer fails here rather than in a reviewer's
+    # browser. esbuild's `--loader=jsx` is the cheapest JSX-aware parser
+    # available; no node_modules install needed.
     name: Mockup JSX syntax
     runs-on: [self-hosted, Linux]
     steps:
