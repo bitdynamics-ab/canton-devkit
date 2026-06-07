@@ -24,15 +24,14 @@ import (
 // SchemaVersion constant in internal/api/types for HTTP shapes.
 const contractsTxSchemaVersion = 1
 
-// buildContracts wires `dpm localnet contracts <verb>` — BIT-136's
-// CLI surface for the Daml LF v2 Ledger API. Reuses the
+// buildContracts wires `dpm localnet contracts <verb>` — // CLI surface for the Daml LF v2 Ledger API. Reuses the
 // internal/canton/ledger client adopted from PR #66.
 //
 // Sub-verbs:
 //
 //	watch — stream Active Contract Set changes (StateService.GetActiveContracts
 //	        + UpdateService.GetUpdates for ongoing deltas).
-//	ls    — paginated snapshot of the current ACS (StateService.GetActiveContracts).
+//	ls — paginated snapshot of the current ACS (StateService.GetActiveContracts).
 //
 // Both default to text output (term.Table); --format json emits a
 // stable JSON shape with schema_version suitable for jq / CI
@@ -255,7 +254,7 @@ func buildTxLs() *cobra.Command {
 	return cmd
 }
 
-// resolveOffsetWindow implements the BIT-136 review's --from /
+// resolveOffsetWindow implements the 's --from /
 // --to / --limit precedence. Explicit --from and --to win; if
 // either is zero we substitute end/end-limit.
 //
@@ -291,7 +290,7 @@ func dialLedger(ctx context.Context, instance, endpoint, token string) (*ledger.
 			if _, err := registry.Read(instance); err == nil {
 				return nil, func() {}, fmt.Errorf(
 					"participant gRPC endpoint not yet exposed for instance %q — "+
-						"pass --endpoint host:port explicitly (see BIT-136 follow-up: participant-port exposure)",
+						"pass --endpoint host:port explicitly (host port not always exposed for v2 instances)",
 					instance)
 			}
 		}
@@ -375,7 +374,7 @@ func renderACSStream(
 
 // renderACSText delegates to term.Table so the column layout
 // matches the rest of the CLI surface (status, list, container
-// list). BIT-136 review fix.
+// list).
 func renderACSText(out io.Writer, instance string, parties []string, offset int64, rows []contractRow) error {
 	if len(rows) == 0 {
 		_, _ = fmt.Fprintln(out, term.Dimc("no active contracts"))

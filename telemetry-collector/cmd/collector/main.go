@@ -1,14 +1,16 @@
 // Command collector runs the canton-devkit telemetry ingestion endpoint.
 //
 // Env:
-//   DATABASE_URL      Postgres DSN (required), e.g.
-//                     postgres://user:pass@host:5432/telemetry?sslmode=disable
-//   LISTEN_ADDR       listen address (default ":8080")
-//   INGEST_TOKEN      optional shared secret; when set, requests must send
-//                     it in the X-Telemetry-Token header
+//
+//	DATABASE_URL      Postgres DSN (required), e.g.
+//	                  postgres://user:pass@host:5432/telemetry?sslmode=disable
+//	LISTEN_ADDR       listen address (default ":8080")
+//	INGEST_TOKEN      optional shared secret; when set, requests must send
+//	                  it in the X-Telemetry-Token header
 //
 // Point the CLI at it with:
-//   CANTON_DEVKIT_TELEMETRY_ENDPOINT=http://<host>:8080/v1/counters
+//
+//	CANTON_DEVKIT_TELEMETRY_ENDPOINT=http://<host>:8080/v1/counters
 package main
 
 import (

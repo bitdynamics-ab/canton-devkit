@@ -10,10 +10,10 @@ import (
 // the distinctive elements from docs/design/mockups/screens-tokens-
 // help.jsx (ScreenHelp):
 //
-//   - ASCII box header
-//   - "lifecycle" + "developing" section titles (uppercased by Section)
-//   - a usage line
-//   - a footer mentioning command-specific flags
+// - ASCII box header
+// - "lifecycle" + "developing" section titles (uppercased by Section)
+// - a usage line
+// - a footer mentioning command-specific flags
 //
 // We don't pin byte-exact output because lipgloss-rendered colors are
 // terminal-profile-dependent; substring assertions are robust.
@@ -60,7 +60,7 @@ func TestLocalnetHelp_OmitsUnshippedCommands(t *testing.T) {
 	for _, mustNot := range []string{
 		"restart", // still a stub on main; container restart is separate
 		"clean",   // still a stub on main
-		"token",   // BIT-138 not landed
+		"token",   // not landed
 	} {
 		if commandListed(out.String(), mustNot) {
 			t.Errorf("help body should not list unshipped command %q\nfull:\n%s",
@@ -110,8 +110,7 @@ func TestRenderHelpRow_AlignsAcrossLengths(t *testing.T) {
 	}
 }
 
-// TestDynamicBox_AutoSizesToContent is the BIT-148 review pin:
-// the original 42-col hardcode silently truncated any title
+// TestDynamicBox_AutoSizesToContent is the // the original 42-col hardcode silently truncated any title
 // edit longer than 36 visible characters (42 minus 6 padding).
 // dynamicBox must auto-size to the widest line.
 func TestDynamicBox_AutoSizesToContent(t *testing.T) {
@@ -173,7 +172,7 @@ func TestLocalnetHelp_LazyRenderRespectsLatePaletteChange(t *testing.T) {
 // TestLocalnetHelp_NarrowTerminalFallsBackToSingleLine is the
 // reviewer pin (PR #35 #1) for width adaptation: setting COLUMNS to
 // a value under narrowFallbackCols must produce the single-line
-// fallback (no box, no "Usage  ", no Section titles). Pre-fix, the
+// fallback (no box, no "Usage ", no Section titles). Pre-fix, the
 // boxed layout overflowed at narrow widths and wrapped to garbage.
 func TestLocalnetHelp_NarrowTerminalFallsBackToSingleLine(t *testing.T) {
 	t.Setenv("COLUMNS", "30")
@@ -303,7 +302,7 @@ func TestLocalnetSubcommandHelp_UsesCobraDefault(t *testing.T) {
 		t.Errorf("`localnet up --help` should NOT show parent's LIFECYCLE section, got:\n%s", body)
 	}
 	// Cobra's default flag block uses "Usage:" with a colon (not
-	// "Usage  " with two spaces like our custom template).
+	// "Usage " with two spaces like our custom template).
 	if !strings.Contains(body, "Usage:") {
 		t.Errorf("`localnet up --help` should use cobra's default template (with `Usage:`), got:\n%s", body)
 	}

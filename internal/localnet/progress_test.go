@@ -9,10 +9,10 @@ import (
 )
 
 // TestTextProgress_StartStepOutput pins the exact byte sequence
-// TextProgress.StartStep produces for each visible step. The
-// BIT-163b refactor must keep CLI output byte-identical; this test
-// catches drift introduced when the refactor migrates a
-// fmt.Fprintf callsite over to progress.StartStep.
+// TextProgress.StartStep produces for each visible step. CLI output
+// must remain byte-identical; this test catches drift introduced
+// when a refactor migrates a fmt.Fprintf callsite over to
+// progress.StartStep.
 //
 // "Visible" here = the three steps the existing CLI emits a header
 // line for (preflight / start_services / wait_healthy). The five
@@ -67,9 +67,9 @@ func TestTextProgress_StartStepOutput(t *testing.T) {
 
 // TestTextProgress_StartStepSilentSteps pins the "silent" contract
 // for the five steps the existing CLI doesn't print a header for.
-// These steps still happen — and SSEProgress (BIT-163c) will emit
-// typed events for them — but TextProgress must produce zero bytes
-// or BIT-163b's refactor would accidentally add new lines to
+// These steps still happen — and a future SSEProgress impl will
+// emit typed events for them — but TextProgress must produce zero
+// bytes or a refactor would accidentally add new lines to
 // `localnet up` output.
 //
 // Adding a step to textVisibleSteps is a deliberate CLI behaviour
@@ -181,7 +181,7 @@ func TestTextProgress_WarnPrefix(t *testing.T) {
 // TestTextProgress_UpdateAndFinishAreNoops — the CLI doesn't print
 // mid-step progress or per-step completion lines today (the next
 // step's StartStep IS the implicit "previous step done" signal).
-// Pinning this contract ensures BIT-163b doesn't accidentally add
+// Pinning this contract ensures a refactor doesn't accidentally add
 // "% complete" spam to the terminal.
 func TestTextProgress_UpdateAndFinishAreNoops(t *testing.T) {
 	var out, errw bytes.Buffer
@@ -241,10 +241,10 @@ func TestNopProgress_DoesNothing(t *testing.T) {
 // step→label map (webui-create.jsx::stepLabels) once that exists.
 //
 // Today the frontend lives at docs/design/mockups/webui-create.jsx
-// (a JSX mockup, not a TS module). After BIT-163b ships the
-// SSEProgress impl and the frontend gains a real step renderer,
-// this test should grep the .ts/.tsx source for each token and
-// fail if a constant lacks a corresponding entry.
+// (a JSX mockup, not a TS module). Once an SSEProgress impl ships
+// and the frontend gains a real step renderer, this test should
+// grep the .ts/.tsx source for each token and fail if a constant
+// lacks a corresponding entry.
 //
 // Until then, this test pins the enum membership against the
 // labels map so an internal drift (new constant added without

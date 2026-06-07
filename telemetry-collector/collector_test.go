@@ -92,14 +92,14 @@ func TestIngest_Rejects(t *testing.T) {
 		method, body string
 		want         int
 	}{
-		"GET not allowed":     {http.MethodGet, "", http.StatusMethodNotAllowed},
-		"bad json":            {http.MethodPost, `{`, http.StatusBadRequest},
-		"unknown field":       {http.MethodPost, `{"period":"2026-06-04","granularity":"daily","counters":{"x":{"y":1}},"evil":1}`, http.StatusBadRequest},
-		"bad period":          {http.MethodPost, `{"period":"notadate","granularity":"daily","counters":{"x":{"y":1}}}`, http.StatusBadRequest},
-		"bad granularity":     {http.MethodPost, `{"period":"2026-06-04","granularity":"hourly","counters":{"x":{"y":1}}}`, http.StatusBadRequest},
-		"empty counters":      {http.MethodPost, `{"period":"2026-06-04","granularity":"daily","counters":{}}`, http.StatusBadRequest},
-		"negative count":      {http.MethodPost, `{"period":"2026-06-04","granularity":"daily","counters":{"x":{"y":-1}}}`, http.StatusBadRequest},
-		"empty bucket name":   {http.MethodPost, `{"period":"2026-06-04","granularity":"daily","counters":{"x":{"":1}}}`, http.StatusBadRequest},
+		"GET not allowed":   {http.MethodGet, "", http.StatusMethodNotAllowed},
+		"bad json":          {http.MethodPost, `{`, http.StatusBadRequest},
+		"unknown field":     {http.MethodPost, `{"period":"2026-06-04","granularity":"daily","counters":{"x":{"y":1}},"evil":1}`, http.StatusBadRequest},
+		"bad period":        {http.MethodPost, `{"period":"notadate","granularity":"daily","counters":{"x":{"y":1}}}`, http.StatusBadRequest},
+		"bad granularity":   {http.MethodPost, `{"period":"2026-06-04","granularity":"hourly","counters":{"x":{"y":1}}}`, http.StatusBadRequest},
+		"empty counters":    {http.MethodPost, `{"period":"2026-06-04","granularity":"daily","counters":{}}`, http.StatusBadRequest},
+		"negative count":    {http.MethodPost, `{"period":"2026-06-04","granularity":"daily","counters":{"x":{"y":-1}}}`, http.StatusBadRequest},
+		"empty bucket name": {http.MethodPost, `{"period":"2026-06-04","granularity":"daily","counters":{"x":{"":1}}}`, http.StatusBadRequest},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

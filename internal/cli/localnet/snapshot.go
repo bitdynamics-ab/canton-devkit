@@ -1,7 +1,7 @@
-// BIT-147 — cobra wrappers for `dpm localnet snapshot` + `restore`.
+// — cobra wrappers for `dpm localnet snapshot` + `restore`.
 //
 // The orchestrators live in internal/localnet/snapshot. They were
-// extracted from this package as part of BIT-184 so the UI handlers
+// extracted from this package as part of so the UI handlers
 // (internal/ui/handlers/snapshots.go) can call the same code paths —
 // the import cycle ui→handlers→cli/localnet was blocking parity.
 //
@@ -31,7 +31,7 @@ unpacking anything.
 The instance does NOT need to be stopped. Volumes are read from
 ephemeral alpine containers — services keep using their own copy.
 
-Consistency caveat (BIT-207): a snapshot of a RUNNING instance is
+Consistency caveat: a snapshot of a RUNNING instance is
 crash-consistent, not application-consistent — in-flight ledger
 transactions or unflushed database writes may be only partially
 captured, so a restored copy can need crash recovery. For a

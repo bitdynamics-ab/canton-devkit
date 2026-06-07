@@ -50,13 +50,13 @@ Supported Splice versions: %s
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
 			// TextProgress wraps the Cobra writers so RunUp's typed
-			// step events (BIT-163a/b) render as today's terminal
+			// step events render as today's terminal
 			// lines for CLI users. The Web UI's POST handler
-			// (BIT-165) will pass an SSEProgress impl instead so
+			// will pass an SSEProgress impl instead so
 			// browsers see the full typed event stream.
 			//
 			// NewTextProgress auto-detects whether the writer is a
-			// TTY and switches between the BIT-122 mockup-styled
+			// TTY and switches between the mockup-styled
 			// rendering (Section headers, brand-accented Box for
 			// the success marker) and the historical plain text
 			// (pipes, CI, golden-byte tests). The literal struct
@@ -81,7 +81,7 @@ Supported Splice versions: %s
 	cmd.Flags().StringSliceVar(&opts.Profiles, "profile", nil,
 		"Docker compose profiles to enable. "+
 			"`--profile observability` adds Prometheus + Grafana via the "+
-			"BIT-134 overlay (extra ~600 MiB RAM); host ports allocated and "+
+			"observability overlay (extra ~600 MiB RAM); host ports allocated and "+
 			"persisted alongside the regular UI ports so re-up preserves "+
 			"bookmarked URLs. Repeatable for multiple profiles.")
 	_ = cmd.MarkFlagRequired("name")

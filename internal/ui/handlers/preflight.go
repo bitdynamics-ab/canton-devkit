@@ -93,7 +93,7 @@ func toAPIReport(r *docker.Report, v splice.Version) types.PreflightReport {
 	report := localnet.PreflightReportFromDocker(r)
 	if !report.OK {
 		report.Summary = "host does not meet Splice " + v.Tag + " requirements"
-		// BIT-172: stamp the most-specific structured code from
+		// stamp the most-specific structured code from
 		// the same priority table RunUp uses, so the Web UI's
 		// PreflightPanel can render targeted remediation (Docker
 		// not running vs memory too low) instead of generic
@@ -113,5 +113,5 @@ func toAPIReport(r *docker.Report, v splice.Version) types.PreflightReport {
 // package" — but the handler package already imports
 // internal/localnet (e.g. for ValidateName), so the dedupe is
 // free. Sharing one function means SSE + HTTP can never disagree
-// on the code emitted for the same docker.Report. BIT-172 review.
+// on the code emitted for the same docker.Report. review.
 var preflightCodeFromReport = localnet.PreflightCodeFromReport

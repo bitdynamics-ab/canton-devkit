@@ -18,7 +18,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// MountMetrics wires BIT-134's Web UI face: a per-instance
+// MountMetrics wires 's Web UI face: a per-instance
 // Prometheus passthrough so the future Metrics screen can render
 // live charts without the browser scraping Prometheus directly
 // (avoids CORS + lets the handler enforce auth/JWT once that
@@ -272,8 +272,8 @@ func handleMetricsSummary() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), metricsTimeout)
 		defer cancel()
 
-		// BIT-134 review v4: queries come from the shared
-		// metricsq package so CLI + handler can't drift.
+		// Queries come from the shared metricsq package so CLI
+		// + handler can't drift.
 		out := map[string]*float64{}
 		type res struct {
 			k metricsq.Headline
@@ -364,7 +364,7 @@ func proxyPrometheus(ctx context.Context, project, path string) ([]byte, error) 
 // discoverPrometheus resolves the per-instance Prometheus address.
 // 9090 is the CONTAINER-internal port; the host port is whatever
 // Docker ephemerally assigned, captured into state.Ports["prometheus_ui"]
-// during `localnet up` (PR #20 stable-ports contract).
+// during `localnet up` .
 //
 // Yellow Y6+Y7: project→state reverse lookup goes through the
 // authoritative registry index (instead of brittle "canton-<name>"

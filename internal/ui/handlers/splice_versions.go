@@ -97,10 +97,10 @@ func MountSpliceVersions(mux *http.ServeMux) {
 //	"catalogued-only"  — in the catalogue but no longer present
 //	                     upstream (upstream deleted the tag)
 //
-// This first slice (BIT-163f) only surfaces "supported" + "latest"
+// This first slice only surfaces "supported" + "latest"
 // because the available/drifted/catalogued-only states require a
 // live GitHub API call from the handler — that's deferred to
-// BIT-169 (needs caching + rate-limit + network-error handling).
+// (needs caching + rate-limit + network-error handling).
 // The shape is forward-compatible: when the upstream check lands,
 // it just sets Status on entries that need it.
 type SpliceVersionEntry struct {
@@ -125,7 +125,7 @@ type SpliceVersionsResponse struct {
 	SchemaVersion int                  `json:"schema_version"`
 	LatestAlias   string               `json:"latest_alias"`
 	Versions      []SpliceVersionEntry `json:"versions"`
-	// UpstreamFetched (BIT-171) is true when the response was
+	// UpstreamFetched is true when the response was
 	// enriched with live GitHub data, false when we fell back to
 	// the catalogue-only view (network failure, GitHub rate
 	// limit). Frontend renders a small "live data" / "cached"
@@ -140,7 +140,7 @@ type SpliceVersionsResponse struct {
 
 // handleSpliceVersions: GET /api/splice/versions → SpliceVersionsResponse.
 //
-// BIT-171: enriched with upstream cross-reference data. The
+// enriched with upstream cross-reference data. The
 // handler now calls splice.CrossReferenceUpstream (cached for
 // upstreamCacheTTL) to surface the four-way status taxonomy from
 // the JSX mockup: supported / latest / drifted / available /

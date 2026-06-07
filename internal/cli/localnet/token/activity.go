@@ -11,7 +11,7 @@ import (
 )
 
 // buildActivity is `token activity` — the instrument's transfer / mint /
-// burn history (BIT-219 Activity tab), reconstructed from the ledger
+// burn history , reconstructed from the ledger
 // transaction stream (HoldingV2 create/archive events), no off-ledger
 // transfer-events registry required. CLI counterpart of the Web UI
 // activity feed (CLI <-> UI parity).

@@ -42,7 +42,7 @@ func TestSSE_ReceivesPublishedEvent(t *testing.T) {
 
 	// Give the handler a beat to install its subscription before
 	// we publish; the helper polls Stats() instead of sleeping a
-	// fixed interval (PR #42 round-2 #6 — no time.Sleep in tests).
+	// fixed interval .
 	waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Second)
 	if !hub.WaitForSubscribers(waitCtx, 1) {
 		t.Fatal("subscriber didn't register")
@@ -222,8 +222,7 @@ func TestSSE_MultiLineDataGetsPerLinePrefix(t *testing.T) {
 	}
 }
 
-// TestSSE_RejectsCrossOriginConnection is the reviewer pin
-// (PR #42 #c): a browser tab on evil.example.com can open
+// TestSSE_RejectsCrossOriginConnection pins: a browser tab on evil.example.com can open
 // EventSource("http://127.0.0.1:7777/events") and read our event
 // stream — EventSource always sends GET (CSRF-exempt globally),
 // so the SSE handler must do its own Origin check.
@@ -277,8 +276,7 @@ func TestSSE_NoOriginAllowedForCurl(t *testing.T) {
 	}
 }
 
-// TestSSE_ContentTypeCharsetUTF8 is the reviewer pin (PR #42
-// round-2 #4): the SSE Content-Type must include charset=utf-8.
+// TestSSE_ContentTypeCharsetUTF8 is the the SSE Content-Type must include charset=utf-8.
 // Without it, older Safari + some proxies interpret the stream
 // as Latin-1 and mangle multi-byte event data.
 func TestSSE_ContentTypeCharsetUTF8(t *testing.T) {
@@ -301,8 +299,7 @@ func TestSSE_ContentTypeCharsetUTF8(t *testing.T) {
 	}
 }
 
-// TestSSE_TrailingNewlineStripped is the reviewer pin (PR #42
-// round-2 #4): a Data payload ending in "\n" must not produce
+// TestSSE_TrailingNewlineStripped is the a Data payload ending in "\n" must not produce
 // a spurious empty `data:` line that changes the event payload
 // from "msg" to "msg\n" on the client side.
 func TestSSE_TrailingNewlineStripped(t *testing.T) {

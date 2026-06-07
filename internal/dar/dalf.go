@@ -46,7 +46,7 @@ type PackageMeta struct {
 	IsMain bool
 
 	// Contents is the deep Daml-LF view — modules, templates (+ their
-	// choices), interfaces, data types (BIT-115). Populated for LF2
+	// choices), interfaces, data types. Populated for LF2
 	// packages; nil for LF1 or unparseable archives. Surfaced by
 	// `dar info --deep`.
 	Contents *PackageContents `json:"contents,omitempty"`

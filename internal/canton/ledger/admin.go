@@ -72,9 +72,9 @@ func (c *Client) UploadDarFile(ctx context.Context, req *adminv2.UploadDarFileRe
 
 // ListMyUserRights returns the party-rights and admin claims attached
 // to the JWT's claimed user (the empty UserId asks the participant
-// to use the token's own user). Wired for BIT-191 so the Web UI
-// Explorer can resolve a Splice LocalNet user-id token to the
-// concrete party set it can read.
+// to use the token's own user). Lets the Web UI Explorer resolve
+// a Splice LocalNet user-id token to the concrete party set it
+// can read.
 //
 // Each Right is a oneof — typical entries:
 //

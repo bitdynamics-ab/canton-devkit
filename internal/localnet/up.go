@@ -72,7 +72,7 @@ type UpOptions struct {
 	Version string // "" or "latest" → splice.LatestAlias
 
 	// AllowUncurated opts the user into layer 2 of the two-layer
-	// version model (PR #20 #2): if --version is not in the curated
+	// version model: if --version is not in the curated
 	// catalogue, RunUp consults the upstream Splice GitHub repo to
 	// resolve a commit SHA, prints a one-line "uncurated" warning, and
 	// proceeds. Without this flag, an uncurated --version fails fast
@@ -81,8 +81,8 @@ type UpOptions struct {
 	AllowUncurated bool
 
 	// Profiles is the docker compose profile set to enable on this
-	// bring-up. BIT-134: `--profile observability` adds Prometheus
-	// + Grafana via the assets/compose/observability.yaml overlay.
+	// bring-up. `--profile observability` adds Prometheus +
+	// Grafana via the assets/compose/observability.yaml overlay.
 	// Empty (default) means "no opt-in profiles" — same behavior
 	// as before this field existed.
 	Profiles []string
@@ -92,7 +92,7 @@ type UpOptions struct {
 	// Docker checks in CI. Not exposed as a CLI flag.
 	SkipPreflight bool
 
-	// Test-only seams (PR #20 #9). When nil, RunUp uses the real
+	// Test-only seams. When nil, RunUp uses the real
 	// splice.Fetch and *docker.ComposeRunner. The fake-driven happy-
 	// path test in up_test.go injects no-op stubs so we can prove the
 	// orchestration sequence without docker / network.
@@ -110,11 +110,10 @@ type UpOptions struct {
 
 // ValidateName returns an error if the supplied --name is empty or
 // fails the DNS-label rule. Thin wrapper over registry.ValidateName
-// — Zhe flagged in PR #20 that CLI and registry validation must
-// share a single rule (otherwise we maintain two policies that
-// drift). The empty-string check is hoisted here so the CLI error
-// message can mention `--name` rather than the generic
-// ErrInvalidName phrasing.
+// so CLI and registry validation share a single rule (otherwise we
+// maintain two policies that drift). The empty-string check is
+// hoisted here so the CLI error message can mention `--name` rather
+// than the generic ErrInvalidName phrasing.
 func ValidateName(name string) error {
 	if name == "" {
 		return fmt.Errorf("--name is required")
@@ -129,8 +128,8 @@ func ValidateName(name string) error {
 // (StepResolveVersion through StepCaptureJWTs in progress.go) matches
 // the eight phases the webui-create.jsx mockup renders; each phase
 // calls into the `prog` Progress interface so the CLI's TextProgress
-// emits today's terminal lines while the Web UI's SSEProgress
-// (BIT-163c) ships typed step events to the browser.
+// emits today's terminal lines while the Web UI's SSEProgress impl
+// ships typed step events to the browser.
 //
 //  1. Resolve --version against the curated list + look up the per-major
 //     adapter for that Splice tag.
@@ -167,7 +166,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 
 	// 1. Resolve version + adapter. Layer-1 (curated) is the default;
 	// AllowUncurated opts into layer-2 (upstream resolution) — see
-	// PR #20 #2 / internal/splice/resolver.go.
+	// internal/splice/resolver.go.
 	prog.StartStep(StepResolveVersion, "")
 	version, fromUpstream, err := splice.ResolveOrUpstream(ctx, opts.Version, opts.AllowUncurated)
 	if err != nil {
@@ -244,8 +243,8 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		telemetry.Inc("dpm/compose_version_bucket", telemetry.ComposeBucket(report.ComposeVersion))
 		report.Write(prog.Out())
 		if !report.OK() {
-			// BIT-172: stamp the most-specific code we can infer
-			// from the failed checks so the UI can render a
+			// Stamp the most-specific code we can infer from the
+			// failed checks so the UI can render a
 			// targeted remediation panel (Docker not running vs
 			// memory too low vs disk full, etc.) instead of a
 			// generic "preflight failed" wall of text.
@@ -257,9 +256,8 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		prog.FinishStep(StepPreflight, "")
 	}
 
-	// 4. Fetch + verify compose project. FetchFn is a test seam
-	// (PR #20 #9); in production it's nil and we call splice.Fetch
-	// directly.
+	// 4. Fetch + verify compose project. FetchFn is a test seam;
+	// in production it's nil and we call splice.Fetch directly.
 	prog.StartStep(StepFetchSplice, "")
 	cacheRoot := splice.CacheRoot()
 	fetch := opts.FetchFn
@@ -294,8 +292,8 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	composeFiles := append([]string(nil), adapter.ComposeFiles()...)
 	composeFiles = append(composeFiles, overlayPath) // absolute path; not relative to projectDir
 
-	// BIT-134: observability profile materializes the embedded
-	// Prometheus + Grafana overlay and appends its compose file.
+	// observability profile materializes the embedded Prometheus +
+	// Grafana overlay and appends its compose file.
 	// Profile activation gates the actual service-start (services
 	// in the overlay are scoped under `profiles: [observability]`).
 	hasObservabilityProfile := false
@@ -315,7 +313,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		composeFiles = append(composeFiles, overlay)
 	}
 
-	// BIT-211: tokens-v2 profile materializes the alpha-protocol
+	// tokens-v2 profile materializes the alpha-protocol
 	// Canton config overlay. Required when running the Token Standard
 	// V2 snapshot (alpha catalogue entry); a stable Splice version
 	// with this profile on is harmless — it just injects an env that
@@ -348,7 +346,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			version.Tag, TokensV2ProfileName, TokensV2ProfileName))
 	}
 
-	// PR #20 #5/#7: read any pre-existing state so we can reuse the
+	// Read any pre-existing state so we can reuse the
 	// previously assigned UI host ports — stable URLs across an
 	// up/down/up cycle is the whole point of persisting them. If no
 	// prior state exists (first run, or it was deleted), priorPorts
@@ -380,13 +378,14 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	//
 	// On first run priorPorts is nil → all ports allocated ephemerally.
 	// On re-up after a clean `down`, ReuseOrAllocateUIPorts hands back
-	// the same ports the user previously had (PR #20 #5/#7 stable-URL
-	// contract) unless one is busy, in which case we surface
-	// ErrPortBusy as a user error and stop — silently picking a new
-	// port would defeat the contract.
-	// BIT-134 review v4: when --profile observability is on,
-	// allocate Prometheus + Grafana host ports alongside the
-	// rest so they go through the stable-reuse contract too.
+	// the same ports the user previously had (stable-URL contract)
+	// unless one is busy, in which case we surface ErrPortBusy as
+	// a user error and stop — silently picking a new port would
+	// defeat the contract.
+	//
+	// When --profile observability is on, allocate Prometheus +
+	// Grafana host ports alongside the rest so they go through the
+	// stable-reuse contract too.
 	portEnvVars := UIPortEnvVars()
 	if hasObservabilityProfile {
 		portEnvVars = append(portEnvVars, ObservabilityPortEnvVars()...)
@@ -394,7 +393,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	uiOverrides, err := ReuseOrAllocateUIPorts(portEnvVars, priorPorts)
 	if err != nil {
 		if errors.Is(err, ErrPortBusy) {
-			// BIT-172: stamp PORTS_IN_USE so the frontend can
+			// Stamp PORTS_IN_USE so the frontend can
 			// render the "free the port" remediation panel
 			// instead of the generic failure dialog.
 			prog.FailStep(StepPersistState,
@@ -443,7 +442,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	// Env files: adapter base files + the generated overlay (last wins).
 	envFiles := append(adapter.EnvFiles(), overlayEnvPath)
 
-	// NewRunner is a test seam (PR #20 #9). Production: build the
+	// NewRunner is a test seam. Production: build the
 	// real *docker.ComposeRunner (which satisfies composeOps
 	// implicitly).
 	var runner composeOps
@@ -488,7 +487,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			prog.FailStep(StepWaitHealthy, "Timed out waiting for services", nil)
 			return ExitTimeout
 		}
-		// BIT-174: try to diagnose the failure by inspecting the
+		// Try to diagnose the failure by inspecting the
 		// unhealthy containers' recent logs. Most common cause on
 		// first-run with default Docker memory: canton JVM OOM-loop
 		// — its logs include "exceeds half of the container's
@@ -508,7 +507,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	}
 	prog.FinishStep(StepWaitHealthy, "")
 
-	// 8. Capture Canton participant ports (BIT-190). The Canton
+	// 8. Capture Canton participant ports. The Canton
 	// container exposes Ledger/Admin/JSON APIs per party role on
 	// Docker-ephemeral host ports — we ask docker what they ended
 	// up as and persist them so the Web UI (Explorer, DAR Manager,
@@ -629,7 +628,7 @@ func renderWelcome(out io.Writer, name, spliceVersion string, state *registry.St
 
 // diagnoseUnhealthy inspects the project's containers for the
 // known failure patterns we can give targeted remediation for.
-// Called from RunUp's wait_healthy fail path — BIT-174.
+// Called from RunUp's wait_healthy fail path.
 //
 // Returns "" when no recognized pattern matches; caller falls
 // back to ErrCodeContainerUnhealthy. Best-effort — if the docker
@@ -694,8 +693,8 @@ func diagnoseUnhealthy(ctx context.Context, project string) string {
 }
 
 // PreflightCodeFromReport (exported variant of the same logic
-// used by RunUp internally) extracts the most specific BIT-172
-// error code from a failed docker.Report. Priority order matches
+// used by RunUp internally) extracts the most specific error code
+// from a failed docker.Report. Priority order matches
 // "what's the most actionable diagnosis the user can fix first":
 //
 //	Docker CLI missing       → ErrCodeDockerNotInstalled (install Docker)
@@ -706,9 +705,9 @@ func diagnoseUnhealthy(ctx context.Context, project string) string {
 //	anything else            → ErrCodePreflightFailed   (catch-all)
 //
 // Exported so internal/ui/handlers/preflight.go can call it for
-// the HTTP-422 response — single source of truth (BIT-172 review
-// fix). The lowercase wrapper below preserves the local callsite
-// for compatibility within this file.
+// the HTTP-422 response — single source of truth. The lowercase
+// wrapper below preserves the local callsite for compatibility
+// within this file.
 func PreflightCodeFromReport(r *docker.Report) string {
 	// Walk in priority order — the first FAIL we hit wins.
 	for _, c := range r.Results {

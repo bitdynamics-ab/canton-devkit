@@ -186,10 +186,9 @@ jobs:
           GH_TOKEN: ${{ secrets.BUILDS_REPO_TOKEN }}
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          # SHA256SUMS lives at dist/SHA256SUMS now (PR #27 / BIT-19
-          # consolidated tarballs into dist/ directly and renamed the
-          # checksum file to GNU sha256sum format). Filenames stay the
-          # same so the regex anchors still match.
+          # SHA256SUMS lives at dist/SHA256SUMS — tarballs land directly
+          # in dist/ and the checksum file uses GNU sha256sum format.
+          # Filenames stay the same so the regex anchors still match.
           sha_darwin=$(grep "_${VERSION}_darwin_arm64.tar.gz$" dist/SHA256SUMS | awk '{print $1}')
           sha_linux=$(grep "_${VERSION}_linux_amd64.tar.gz$" dist/SHA256SUMS | awk '{print $1}')
           version_num="${VERSION#v}"

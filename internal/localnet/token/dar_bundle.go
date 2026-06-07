@@ -14,7 +14,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
 
-// DAR auto-bundling (BIT-216 #4). The splice-test-token-v2 instrument
+// DAR auto-bundling . The splice-test-token-v2 instrument
 // needs two upstream DARs vetted on the participant before `token create`
 // can anchor a TokenRules contract: the token itself and its burn-mint
 // dependency. Rather than make the developer run `dar upload` by hand,

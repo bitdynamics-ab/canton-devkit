@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// BIT-56: dar build-upload — shell out to `dpm build` (or `daml build`)
+// dar build-upload — shell out to `dpm build` (or `daml build`)
 // and then upload the resulting DAR. DevKit deliberately delegates the
 // compilation step; we never reimplement damlc / dpm.
 func buildBuildUpload() *cobra.Command {
@@ -81,7 +81,7 @@ Exit codes:
 				return nil
 			}
 
-			// BIT-127 review fix: bounded read via cdkdar.ReadDARFile.
+			// bounded read via cdkdar.ReadDARFile.
 			data, err := cdkdar.ReadDARFile(darPath)
 			if err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dar build-upload: read %s: %s\n", darPath, err)

@@ -22,7 +22,7 @@ var captureCantonPorts = localnet.CaptureCantonPorts
 var reconcileContainersList = containersList
 
 // coreServicesFor resolves an instance's core compose service names
-// via the splice adapter (BIT-222). Exposed as a var so the
+// via the splice adapter. Exposed as a var so the
 // reconciler tests can swap in a deterministic list without dragging
 // the splice catalogue into the test setup. Returns nil when the
 // version isn't resolvable; evalStatus treats nil as "skip the core
@@ -89,7 +89,7 @@ func resetCantonPortsCache() {
 	cantonPortsCacheMu.Unlock()
 }
 
-// BIT-177 — adopt/resync from docker.
+// Reconciler — adopt/resync registry status from docker.
 //
 // The registry's `Status` field is set ONCE per lifecycle event:
 // RunUp writes `running` on success or `failed`/`partial` on
@@ -221,7 +221,7 @@ func ReconcileOne(ctx context.Context, name string) (old, neu registry.Status, c
 		return state.Status, state.Status, false
 	}
 
-	// BIT-222: pull the splice adapter's core-services list so
+	// Pull the splice adapter's core-services list so
 	// evalStatus can distinguish "core stack missing" (failed) from
 	// "core stack running but degraded" (partial). Resolution
 	// failures (e.g. an old splice_version no longer in the
@@ -230,10 +230,10 @@ func ReconcileOne(ctx context.Context, name string) (old, neu registry.Status, c
 	coreServices := coreServicesFor(state.SpliceVersion)
 	newStatus := evalStatus(state.Status, probed, coreServices)
 
-	// BIT-221: when canton is up (or going up), re-capture the 9
+	// When canton is up (or going up), re-capture the 9
 	// participant ports the screens dial. If `canton` was recreated
 	// since the last bring-up (clean restart, OOM restart, etc.)
-	// docker reassigned its ephemeral host ports — but BIT-190's
+	// docker reassigned its ephemeral host ports — but the
 	// capture-on-WaitForHealthy never gets a second chance to update
 	// state.Ports. Without this the Explorer / DAR / contracts
 	// handlers happily 502 against a port that's been closed for
@@ -386,8 +386,8 @@ func refreshCantonPorts(ctx context.Context, state *registry.State, name string)
 //	cached=running  + no containers      → stopped     (compose down ran elsewhere)
 //	cached=failed   + no containers      → failed      (no change; orchestrator gave up cleanly)
 //	cached=partial  + no containers      → failed      (everything's gone; collapse to failed)
-//	any core service missing from snapshot → failed     (BIT-222; e.g. obs-only zombie)
-//	cached=*        + all healthy/running → running    (the BIT-177 happy path)
+//	any core service missing from snapshot → failed
+//	cached=* + all healthy/running → running (the happy path)
 //	cached=*        + any restarting/unhealthy/exited → partial
 //
 // "Healthy" is generous: a container without a HEALTHCHECK in its
@@ -398,7 +398,7 @@ func refreshCantonPorts(ctx context.Context, state *registry.State, name string)
 // containers have no healthcheck and would forever drag the
 // aggregate into `partial`.
 //
-// coreServices is the BIT-222 contract from splice.Adapter: the
+// coreServices is the contract from splice.Adapter: the
 // compose service names whose absence collapses the snapshot to
 // `failed` regardless of how the surviving containers look. Pass
 // nil to skip the core check (back-compat for callers that don't
@@ -420,7 +420,7 @@ func evalStatus(cached registry.Status, containers []ContainerHealth, coreServic
 		return cached
 	}
 
-	// BIT-222: distinguish "core stack missing" from "core stack
+	// Distinguish "core stack missing" from "core stack
 	// running but degraded". If even one core service has no
 	// container in the snapshot, the instance can't serve a
 	// Ledger API call regardless of how the sidecars look. The

@@ -1,7 +1,6 @@
 package localnet
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -77,23 +76,5 @@ func TestPreflightReportFromDocker_ResultTokensAndRemediation(t *testing.T) {
 	}
 	if len(got["Some future check"].remediation) != 0 {
 		t.Errorf("skipped remediation = %#v, want omitted", got["Some future check"].remediation)
-	}
-}
-
-func TestPreflightPluralTODOUsesCanonicalToken(t *testing.T) {
-	src, err := os.ReadFile("preflight_report.go")
-	if err != nil {
-		t.Fatalf("read preflight_report.go: %v", err)
-	}
-	idx := strings.Index(string(src), "func preflightPluralS")
-	if idx < 0 {
-		t.Fatal("func preflightPluralS not found")
-	}
-	start := idx - 400
-	if start < 0 {
-		start = 0
-	}
-	if !strings.Contains(string(src[start:idx]), "TODO(BIT-") {
-		t.Errorf("preflightPluralS comment lacks canonical TODO(BIT-NNN) token")
 	}
 }

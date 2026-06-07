@@ -27,7 +27,7 @@ func adapterFor(v splice.Version) (splice.Adapter, error) {
 	}
 }
 
-// CoreServicesFor resolves the BIT-222 core-services list (compose
+// CoreServicesFor resolves the core-services list (compose
 // service names whose absence collapses the reconciler's evalStatus
 // to `failed`) for a given persisted splice_version. Returns nil
 // when the version isn't resolvable — callers treat nil as "skip the

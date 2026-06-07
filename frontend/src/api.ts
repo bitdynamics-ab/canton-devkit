@@ -109,7 +109,7 @@ export interface Instance {
   project_dir: string;
   data_dir: string;
   live_probe_failed?: boolean;
-  /** Per-role wallet UI endpoints; populated by detail handler post-BIT-192. */
+  /** Per-role wallet UI endpoints; populated by detail handler post-. */
   endpoints?: Endpoint[];
 }
 
@@ -292,7 +292,7 @@ export const fetchAppConfigJSON = (name: string) =>
     `/api/instances/${encodeURIComponent(name)}/app-config?format=json`,
   );
 
-// ── BIT-163d/e/f: create-instance flow ────────────────────────────
+// ── /e/f: create-instance flow ────────────────────────────
 
 // SpliceVersionEntry mirrors internal/ui/handlers/splice_versions.go
 // SpliceVersionEntry. Status taxonomy matches the version picker
@@ -374,7 +374,7 @@ export interface PreflightReport {
   ok: boolean;
   sections: PreflightSection[];
   summary?: string;
-  // BIT-172 — stable machine-readable code populated when ok=false.
+  // stable machine-readable code populated when ok=false.
   // Values: PORTS_IN_USE | DOCKER_DOWN | DOCKER_NOT_INSTALLED |
   // COMPOSE_V1_OR_MISSING | DOCKER_MEMORY_LOW | DISK_LOW |
   // PREFLIGHT_FAILED. Frontend switches on this for targeted
@@ -441,7 +441,7 @@ export const fetchPreflight = (version: string) =>
 // On failure, the server's error envelope includes a one-line
 // summary the modal shows to the user; the full output goes to
 // the server log.
-// BIT-184 — snapshot / restore.
+// snapshot / restore.
 //
 // downloadSnapshot triggers POST /api/instances/:name/snapshot and
 // hands the gzipped tar to the browser via an <a download> click. We
@@ -573,7 +573,7 @@ export async function resumeInstance(name: string): Promise<ResumeAcceptedRespon
   return (await resp.json()) as ResumeAcceptedResponse;
 }
 
-// BIT-188 — Metrics summary.
+// Metrics summary.
 //
 // The four curated headline numbers the CLI's
 // `dpm localnet metrics --format json` also returns. Naming
@@ -594,11 +594,11 @@ export interface MetricsSummary {
 // caller MUST handle ApiError with body.code === "OBSERVABILITY_PROFILE_OFF"
 // to render the "raise observability" empty state — that's not
 // a hard failure, just a missing profile.
-// BIT-187 — DAR Manager.
+// DAR Manager.
 //
 // The Web UI lists DARs uploaded to a participant. Role defaults
 // to app-user (the common dev target). The backend reads the
-// per-role admin port from state.json (BIT-190) so the browser
+// per-role admin port from state.json so the browser
 // doesn't need to know about gRPC.
 export type Role = "app-user" | "app-provider" | "sv";
 
@@ -638,7 +638,7 @@ export interface DARUploadResponse {
 
 // uploadDARs posts a multipart body with one or more .dar files
 // to /api/instances/:name/dar. Uses XMLHttpRequest for upload
-// progress (the same pattern as BIT-184's BackupRestore).
+// progress (the same pattern as 's BackupRestore).
 //
 // `roles` is the set of target participants — the backend dials
 // each in parallel and returns a per-role success/error envelope.
@@ -697,7 +697,7 @@ export function uploadDARs(
   });
 }
 
-// BIT-186 — Explorer ACS snapshot.
+// Explorer ACS snapshot.
 export interface ContractRow {
   contract_id: string;
   template_id: string;
@@ -725,7 +725,7 @@ export const fetchContracts = (
     `/api/instances/${encodeURIComponent(name)}/contracts?role=${role}&limit=${limit}`,
   );
 
-// BIT-186 follow-up — Transactions + Timeline.
+// follow-up — Transactions + Timeline.
 //
 // Each row in `transactions` represents one Canton update:
 // transaction / reassignment / topology event. The frontend
@@ -822,7 +822,7 @@ export async function stopInstance(name: string): Promise<void> {
 }
 
 // pauseInstance / resumeInstance invoke POST /api/instances/{name}/pause
-// | /resume — docker compose pause/unpause (BIT-175). Near-instant; 204
+// | /resume — docker compose pause/unpause. Near-instant; 204
 // on success. Pause is valid only when running, resume only when paused.
 export async function pauseInstance(name: string): Promise<void> {
   await postInstanceAction(name, "pause");
@@ -964,7 +964,7 @@ interface StepFailedEvent {
   step: StepName;
   summary?: string;
   cause?: string;
-  // BIT-172 — stable machine-readable code, populated when the
+  // stable machine-readable code, populated when the
   // server recognized the failure mode (PORTS_IN_USE,
   // DOCKER_DOWN, DOCKER_MEMORY_LOW, etc.). useCreateProgress
   // surfaces this in the banner so the modal can render targeted
@@ -998,7 +998,7 @@ interface ApiErrorBody {
   remediation?: string[];
 }
 
-// ── Agent Skills (BIT-189) ─────────────────────────────────────────
+// ── Agent Skills ─────────────────────────────────────────
 // Mirrors internal/skills.Skill + the /api/skills handler. The same
 // embedded docs back the CLI `localnet skills` command.
 export interface Skill {
@@ -1038,7 +1038,7 @@ export const installSkills = (target: "claude" | "codex", force = false) =>
   });
 
 // -------------------------------------------------------------------
-// BIT-140 Tokens — Web UI client for /api/tokens.
+// Tokens — Web UI client for /api/tokens.
 //
 // Mirrors registry.TokenRef + the request shapes the backend handlers
 // expect. Every action is instance-scoped (`?instance=`); error mapping
@@ -1081,7 +1081,7 @@ const DEFAULT_ROLE = "app-user";
 // tokenQuery builds `?instance=...&role=...` (role omitted when it
 // would just repeat the default). Centralised so every token endpoint
 // forwards the role the same way the backend's handleTokenMint /
-// handleTokenTransfer already expect — BIT-140 review fix 87.3.
+// handleTokenTransfer already expect.
 function tokenQuery(instance: string, role?: string): string {
   const params = new URLSearchParams({ instance });
   if (role && role !== DEFAULT_ROLE) params.set("role", role);
@@ -1105,7 +1105,7 @@ export const fetchHoldings = (
   );
 };
 
-// BIT-219 token workspace — ACS-derived lenses (instrument discovery,
+// token workspace — ACS-derived lenses (instrument discovery,
 // balance matrix, per-holding UTXO rows). These hit the live ledger;
 // when no endpoint is recorded the backend falls back to the recorded
 // token list (so `instruments` may be absent — callers handle both).
@@ -1156,7 +1156,7 @@ interface MatrixResponse {
 }
 
 // PartyRef — one registered party alias → its on-ledger party id
-// (BIT-215 #1). The workspace's god-mode party registry.
+//. The workspace's god-mode party registry.
 export interface PartyRef {
   alias: string;
   party_id: string;
@@ -1236,7 +1236,7 @@ export const fetchMatrix = (instance: string, role = "app-user") =>
   ).then((r) => r.matrix);
 
 // HolderRow / InstrumentSummary — the instrument-first KPI view
-// (BIT-219 lens 1). Supply + holder/contract counts + per-holder
+//. Supply + holder/contract counts + per-holder
 // distribution, derived from one ACS scan (workspace.go).
 export interface HolderRow {
   party: string;
@@ -1270,7 +1270,7 @@ export const fetchInstrumentSummary = (
     )}&role=${encodeURIComponent(role)}`,
   ).then((r) => r.summary);
 
-// PartyDelta / ActivityEvent — the instrument activity feed (BIT-219
+// PartyDelta / ActivityEvent — the instrument activity feed (
 // Activity tab). Each event is one ledger transaction netted into
 // senders/receivers + a kind (mint | burn | transfer), reconstructed
 // from HoldingV2 create/archive events (no off-ledger registry).
@@ -1373,7 +1373,7 @@ export const transferToken = (
     { from, to, amount, reason: reason ?? "", auto_accept: !!autoAccept },
   );
 
-// faucetToken funds a party from a well-known source (BIT-215 #5),
+// faucetToken funds a party from a well-known source,
 // auto-accepted. Empty source defaults to the role's funded party.
 export const faucetToken = (
   instance: string,
@@ -1388,7 +1388,7 @@ export const faucetToken = (
     { to, amount, source: source ?? "" },
   );
 
-// TransferPlan — dry-run coin selection (BIT-219). Which Holding
+// TransferPlan — dry-run coin selection. Which Holding
 // contracts a transfer would consume, the change, and whether the
 // sender can cover it. Read-only; no ledger mutation.
 export interface TransferPlan {

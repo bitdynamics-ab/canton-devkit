@@ -2,7 +2,7 @@
 // queries the CLI's `localnet metrics` and the Web UI's
 // `/api/instances/{name}/metrics/summary` both surface.
 //
-// BIT-134 review v3 → v4: the two surfaces previously hand-typed
+// → v4: the two surfaces previously hand-typed
 // the same PromQL strings into separate maps — one in
 // `internal/cli/localnet/metrics.go`, one in
 // `internal/ui/handlers/metrics.go`. A copy-paste error or copy

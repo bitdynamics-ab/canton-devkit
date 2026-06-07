@@ -68,7 +68,7 @@ type TransferOptions struct {
 	NoWait     bool // if true, return the TransferInstruction id without waiting for accept
 	Reason     string
 
-	// AutoAccept (BIT-215 #3) chains the receiver-side accept onto the
+	// AutoAccept chains the receiver-side accept onto the
 	// transfer when the receiver is locally controlled — the common
 	// LocalNet case where you own both parties. The transfer produces a
 	// pending TransferInstruction; with AutoAccept the same flow then
@@ -248,7 +248,7 @@ func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error
 		"transfer_instruction_id": instructionID,
 	})
 
-	// Auto-accept chains the receiver-side accept (BIT-215 #3): on
+	// Auto-accept chains the receiver-side accept : on
 	// LocalNet you own the receiver, so the two-step offer→accept is just
 	// ceremony. NoWait opts out (the caller wants the instruction id to
 	// hand off). An empty instructionID means the transfer already
@@ -327,7 +327,7 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 // pseudo-balances (Amount = InitialSupply when --party matches the
 // issuer; otherwise zero). Callers that want the live ACS-derived
 // balance need a running V2 LocalNet + the future ledger ACS query —
-// that's the BIT-139 follow-up.
+// that's the follow-up.
 //
 // When that follow-up lands, the ACS query uses HoldingInterfaceV2
 // (see v2_surface.go for the qualified interface id and why V2 rather

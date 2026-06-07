@@ -243,7 +243,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
         <div style={{ color: W.err, fontSize: 13 }}>{state.error}</div>
       )}
       {state.kind === "ok" && <DetailGrid instance={state.instance} />}
-      {/* BIT-184: Backup & restore lives inside the detail card so
+      {/* Backup & restore lives inside the detail card so
           the instance-name context is implicit. Renders even on
           loading/error so the user can still take a snapshot of a
           mostly-broken instance for support tickets. */}
@@ -291,7 +291,7 @@ function DetailGrid({ instance }: { instance: Instance }) {
 
 // ActionButton dispatches the right verb(s) per instance status.
 // Registry status alone isn't enough — docker truth may diverge
-// (the BIT-178 ContainerHealth panel shows this). Specifically:
+// (the ContainerHealth panel shows this). Specifically:
 //
 //   - running        → Stop  (containers are live by definition)
 //   - failed/partial → Stop + Remove (containers MAY still be up

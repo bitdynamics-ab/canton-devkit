@@ -11,9 +11,8 @@ package types
 type Instance struct {
 	// SchemaVersion ties this response to the package SchemaVersion
 	// constant so handlers + CLI --json consumers can detect format
-	// breaks. Reviewer pin on PR #31 #3:
-	// TestAllTopLevelResponses_CarrySchemaVersion enforces that
-	// every top-level response struct here has this field.
+	// breaks. TestAllTopLevelResponses_CarrySchemaVersion enforces
+	// that every top-level response struct here has this field.
 	SchemaVersion int    `json:"schema_version"`
 	Name          string `json:"name"`
 	SpliceVersion string `json:"splice_version"`

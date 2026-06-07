@@ -60,7 +60,7 @@ func TestWriteContainerRenameOverlay_DeterministicOrder(t *testing.T) {
 // for the dep-health-timeout bug: nginx's depends_on:splice condition
 // must be downgraded to service_started. Without this, `docker compose
 // up -d` blocks on splice's healthcheck and times out before Splice's
-// ~10-min onboarding completes (caught by BIT-117 integration test).
+// ~10-min onboarding completes.
 func TestWriteContainerRenameOverlay_RelaxesNginxSpliceDep(t *testing.T) {
 	path, err := WriteContainerRenameOverlay(t.TempDir(), "alice-")
 	if err != nil {

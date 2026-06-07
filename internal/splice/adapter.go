@@ -85,7 +85,7 @@ type Adapter interface {
 	// after the core stack was torn down out-of-band. Without this,
 	// `evalStatus` averages health across whatever's in the compose
 	// project and happily reports `running` when only sidecars are
-	// up — see BIT-222.
+	// up.
 	CoreServices() []string
 }
 

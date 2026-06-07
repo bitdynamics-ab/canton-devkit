@@ -19,7 +19,7 @@ import (
 // busy ledger would otherwise pump us into OOM via an unbounded slice.
 const maxActivityScan = 10_000
 
-// The activity feed (BIT-219 lens 1, Activity tab) reconstructs an
+// The activity feed reconstructs an
 // instrument's transfer/mint/burn history from the ledger transaction
 // stream — no off-ledger transfer-events-v2 registry required. On a UTXO
 // ledger every movement archives the sender's Holding contracts and
@@ -27,14 +27,14 @@ const maxActivityScan = 10_000
 // HoldingV2 create/archive events is enough to net out who sent what to
 // whom:
 //
-//   - created holding  → a credit to its owner
-//   - archived holding → a debit from its owner
+// - created holding → a credit to its owner
+// - archived holding → a debit from its owner
 //
 // Per transaction we net the per-party deltas and classify:
 //
-//   - only credits, no debits → mint  (new supply appeared)
-//   - only debits, no credits → burn  (supply destroyed)
-//   - both                    → transfer
+// - only credits, no debits → mint (new supply appeared)
+// - only debits, no credits → burn (supply destroyed)
+// - both → transfer
 //
 // Archived events don't carry the HoldingView (only the contract id), so
 // we build a contractId → (owner, instrument, amount) map from the create
@@ -230,7 +230,7 @@ func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult
 	}
 	defer cleanup()
 
-	// Widen read-as to every registered party alias (BIT-215 #1) so the
+	// Widen read-as to every registered party alias so the
 	// activity feed reconstructs movements across ALL aliased parties,
 	// then re-resolve the authoritative granted set.
 	parties, err := resolveReadableParties(ctx, client, opts.Instance, opts.Role)

@@ -1,4 +1,4 @@
-// BIT-187 — Web UI DAR Manager handlers.
+// Web UI DAR Manager handlers.
 //
 // Wraps the Canton Admin API (`internal/canton/admin`) so the
 // browser can list uploaded DAR packages without speaking gRPC
@@ -11,7 +11,7 @@
 //	GET /api/instances/{name}/dar?role=<app_user|app_provider|sv>
 //	  → 200 {schema_version, instance, role, dars: [{main, name, version, description}]}
 //	  → 503 PARTICIPANT_PORT_NOT_RECORDED if state.json lacks the
-//	    per-role admin port (instance brought up before BIT-190
+//	    per-role admin port (instance brought up before
 //	    landed; re-`up` to capture)
 //
 // Role defaults to "app_user" since that's the common dev target.
@@ -51,7 +51,7 @@ func MountDAR(mux *http.ServeMux) {
 // darUploadMax is the hard ceiling on the multipart body for DAR
 // upload. Canton DARs are typically <10 MiB; 64 MiB covers even
 // vendored multi-module bundles without inviting "fill the disk"
-// attacks. Same shape as snapshot upload (BIT-184).
+// attacks. Same shape as snapshot upload.
 const darUploadMax = 64 << 20
 
 // validRole pins the per-role string to the literal set Splice
@@ -94,7 +94,7 @@ func handleDARList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Look up the per-role admin port that BIT-190 records into
+	// Look up the per-role admin port that records into
 	// state.json. Older instances brought up before that fix don't
 	// have the key — surface a clear 503 with the remediation
 	// rather than crashing or pretending the API is down.

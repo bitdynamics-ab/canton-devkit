@@ -13,7 +13,7 @@ import (
 // buildBalances is the god-mode `token balances` (plural) command: the
 // party × instrument matrix over the whole instance, in one ACS scan.
 // Sibling to the single-party `token balance`. CLI counterpart of the
-// Web UI HoldingsMatrix lens (BIT-219 / BIT-215 #2).
+// Web UI HoldingsMatrix lens .
 func buildBalances() *cobra.Command {
 	var opts token.BalanceOptions
 	var format string

@@ -25,10 +25,9 @@ type LogLine struct {
 
 // ParsedTime parses l.Time as RFC3339Nano and returns
 // (parsed, true) on success. Returns (zero, false) on empty
-// input or parse error — never panics. Reviewer pin on PR #31 #11:
-// pushes the parse responsibility down so every consumer doesn't
-// re-implement it (and the CLI renderer doesn't have to handle
-// a runtime parse error mid-render).
+// input or parse error — never panics. Pushes the parse responsibility
+// down so every consumer doesn't re-implement it (and the CLI renderer
+// doesn't have to handle a runtime parse error mid-render).
 func (l LogLine) ParsedTime() (time.Time, bool) {
 	if l.Time == "" {
 		return time.Time{}, false

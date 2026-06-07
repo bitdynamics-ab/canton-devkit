@@ -37,7 +37,7 @@ import (
 // at startup; if it returns true, `dpm localnet ui` prints a
 // stderr warning so a release binary that forgot to run
 // `make frontend` doesn't silently ship the dev placeholder to
-// real users. Reviewer pin (PR #41 #5).
+// real users. .
 const placeholderSentinel = "DEVKIT_FRONTEND_PLACEHOLDER"
 
 // IsPlaceholderBundle reports whether the embedded dist/index.html
@@ -75,7 +75,7 @@ var distFS embed.FS
 //
 // Cache-Control headers are intentionally NOT set here. The Vite build
 // produces hashed filenames (e.g. `app.4a2c.js`), and routing those
-// through a future cache-control middleware (BIT-129 #2 or later) is
+// through a future cache-control middleware is
 // the right shape — bolting it into the asset handler hides the policy
 // from anyone reading router.go.
 func AssetsHandler() (http.Handler, error) {
@@ -93,7 +93,7 @@ func AssetsHandler() (http.Handler, error) {
 	// "doesn't resolve" by stat-ing the FS; that's cheaper than calling
 	// the file server and inspecting its 404.
 	//
-	// Reviewer pin (PR #41 #2): defend against path traversal in
+	// defend against path traversal in
 	// the SPA-fallback path. path.Clean collapses `..` segments;
 	// any cleaned path that begins with `..` (or that escapes
 	// the embedded root) gets a 400, not a stealth SPA-index

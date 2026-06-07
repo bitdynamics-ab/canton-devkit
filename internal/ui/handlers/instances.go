@@ -3,11 +3,11 @@
 // Each file in this package owns one resource:
 //
 //	instances.go — registry-backed instance list + detail (this file)
-//	(future) jwt.go, appconfig.go — auth/credential surfaces (BIT-131 follow-on)
-//	(future) packages.go         — DAR list (depends on BIT-127 backend)
-//	(future) metrics.go          — Prometheus passthrough (depends on BIT-134)
+//	(future) jwt.go, appconfig.go — auth/credential surfaces
+//	(future) packages.go — DAR list (depends on backend)
+//	(future) metrics.go — Prometheus passthrough (depends on )
 //	(future) logs.go             — last-N docker logs
-//	(future) acs.go, tx.go       — ledger views (depend on BIT-132 client)
+//	(future) acs.go, tx.go — ledger views (depend on client)
 //
 // # Why "registry-backed" lands first
 //
@@ -70,7 +70,7 @@ const upBodyMax = 4 << 10 // 4 KiB
 //
 // This is NOT the HTTP request timeout — the POST returns 202
 // immediately; the goroutine runs on its own context, independent
-// of the request. Cancellation (BIT-163e) passes a CancelFunc
+// of the request. Cancellation passes a CancelFunc
 // into the goroutine's context that DELETE invokes.
 const upJobTimeout = 30 * time.Minute
 
@@ -123,7 +123,7 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 	mux.HandleFunc("GET /api/instances/{name}/containers", handleInstanceContainers())
 	mux.HandleFunc("GET /api/instances/{name}/containers/{container}/logs", handleContainerLogs())
 	mux.HandleFunc("POST /api/instances/{name}/containers/{container}/restart", handleContainerRestart())
-	// Pause / resume (BIT-175) — docker compose pause/unpause; hub-
+	// Pause / resume — docker compose pause/unpause; hub-
 	// independent. CLI counterpart: `localnet pause` / `localnet resume`.
 	mux.HandleFunc("POST /api/instances/{name}/pause", handlePauseInstance(true))
 	mux.HandleFunc("POST /api/instances/{name}/resume", handlePauseInstance(false))
@@ -244,7 +244,7 @@ func handleDetail(w http.ResponseWriter, r *http.Request) {
 // internal/cli/localnet/list.go's formatPortRange — see the godoc
 // there for the allowlist rationale.
 //
-// TODO(BIT-146-merge): once list.go merges, this should be
+// TODO: once list.go merges, this should be
 // extracted to a shared helper rather than duplicated.
 func formatPortRange(ports map[string]int) string {
 	if len(ports) == 0 {
@@ -326,7 +326,7 @@ func joinComma(ss []string) string {
 // human-readability (browsers and `curl | jq` both prefer it);
 // the gzip middleware (future) will erase the size cost.
 //
-// Reviewer pin (PR #43 round-2 Cache-Control): every API JSON
+// every API JSON
 // response carries no-store. Without it, browsers and HTTP
 // proxies can cache responses that include credentials (the
 // JWT endpoint, app-config) or that change frequently (instance
@@ -345,7 +345,7 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 // errorBody is the canonical error response shape — aligned with
 // PR #36's FriendlyError taxonomy in internal/localnet/friendly_errors.go.
 //
-// Reviewer pin (PR #43 #e): the previous shape was a free-form
+// the previous shape was a free-form
 // {error, detail} pair. The CLI's friendly_errors carries
 // (Code, Summary, Remediation[]) and the frontend already knows
 // how to render that triple. Mirroring keeps one error taxonomy
@@ -381,7 +381,7 @@ const (
 
 // writeError emits a structured error.
 //
-// Reviewer pin (PR #43 round-2 5xx leak): the previous shape
+// the previous shape
 // included the raw cause string for 5xx errors. That leaked
 // filesystem paths (e.g. "read /home/user/.canton-devkit/...")
 // into the response body — visible to anyone on the loopback
@@ -443,7 +443,7 @@ func codeForStatus(status int) string {
 	}
 }
 
-// ── BIT-163d: async create-instance flow ──────────────────────────
+// ── : async create-instance flow ──────────────────────────
 
 // upRequest is the body shape for POST /api/instances. Mirrors
 // `dpm localnet up` flags exactly so CLI and Web UI surface the
@@ -488,7 +488,7 @@ type upAcceptedResponse struct {
 //
 //  4. hub.EnableBuffering(topic, 128)
 //  5. context.WithCancel — cancel stored in jobs registry for
-//     the future DELETE handler (BIT-163e); context.WithTimeout
+//     the future DELETE handler; context.WithTimeout
 //     wraps that with the 10-minute job ceiling
 //  6. spawn goroutine → RunUp(ctx, SSEProgress, opts)
 //  7. return 202 with {instance, events_url}
@@ -830,7 +830,7 @@ func handleDownInstance() http.HandlerFunc {
 			cause = "down failed with exit code " + uintToString(uint64(exit))
 		}
 		log.Printf("down instance %q: exit=%d err=%s", name, exit, cause)
-		// BIT-176: RunDown writes multiple lines to errw — `Warning:`
+		// RunDown writes multiple lines to errw — `Warning:`
 		// notices about non-fatal side issues (e.g. "could not
 		// reconstruct compose context") followed by the actual
 		// fatal cause. The plain `firstLine` helper grabbed the
@@ -880,7 +880,7 @@ func firstLine(s string) string {
 // lines for non-fatal side issues (orphan-registry cleanup, state
 // persistence, compose-context reconstruction) before the actual
 // fatal cause, so a naive firstLine would surface a Warning as
-// the failure summary — see BIT-176.
+// the failure summary — see .
 //
 // Match is on a small fixed set of case variants (Warning, warning,
 // WARNING, WARN, warn, Warn) rather than truly case-insensitive
@@ -1448,7 +1448,7 @@ func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
 			writeErrorWithCode(w, http.StatusConflict,
 				"INSTANCE_RUNNING",
 				"instance "+name+" is running — stop it first",
-				"run `dpm localnet down --name "+name+"` from a terminal (the Web UI's down endpoint is BIT-173)")
+				"run `dpm localnet down --name "+name+"` from a terminal (the Web UI's down endpoint is )")
 			return
 		}
 
@@ -1604,7 +1604,7 @@ func splitLines(s string) []string {
 	return out
 }
 
-// ── BIT-163e: cancel an in-flight create-instance goroutine ───────
+// ── : cancel an in-flight create-instance goroutine ───────
 
 // handleCancelUp: DELETE /api/instances/{name}/up.
 //

@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildEnv wires `dpm localnet env --name <inst>` -- BIT-125.
+// buildEnv wires `dpm localnet env --name <inst>` -- .
 //
 // Emits a block of exported KEY=value lines describing every endpoint and
 // credential of the instance, designed for the common shell idiom:
@@ -25,11 +25,11 @@ import (
 // Output style matches docs/design/mockups/screens-tokens-help.jsx
 // (ScreenEnv). Three formats:
 //
-//	shell  (default)  export KEY='value' with POSIX quoting
-//	dotenv            KEY="value" with dotenv escaping
-//	json              api/types.EnvExport for scripted consumers
+//	shell (default) export KEY='value' with POSIX quoting
+//	dotenv KEY="value" with dotenv escaping
+//	json api/types.EnvExport for scripted consumers
 //
-// The Web UI handler (BIT-131 GET /api/instances/:name/env) will
+// The Web UI handler will
 // later call collectEnv() directly and emit the json variant.
 func buildEnv() *cobra.Command {
 	var (
@@ -105,14 +105,14 @@ const jwtRedaction = "<redacted>"
 
 // collectEnv builds the export from the registry. Two sources:
 //
-//  1. state.Ports map -> CANTON_<UPPER>_PORT for each logical name.
-//     Hyphens in the logical name become underscores so a value like
-//     "app-user-ui" produces CANTON_APP_USER_UI_PORT (matches what
-//     scripts already expect -- no env name has hyphens).
+// 1. state.Ports map -> CANTON_<UPPER>_PORT for each logical name.
+// Hyphens in the logical name become underscores so a value like
+// "app-user-ui" produces CANTON_APP_USER_UI_PORT (matches what
+// scripts already expect -- no env name has hyphens).
 //
-//  2. state.Credentials map -> CANTON_<ROLE>_JWT and the user/audience
-//     pair that signed it, so a downstream client can re-derive the
-//     JWT if it later rotates.
+// 2. state.Credentials map -> CANTON_<ROLE>_JWT and the user/audience
+// pair that signed it, so a downstream client can re-derive the
+// JWT if it later rotates.
 //
 // Plus a small set of stable convenience keys (CANTON_INSTANCE,
 // CANTON_SPLICE_VERSION, CANTON_AUTH_FILE) so shell scripts can

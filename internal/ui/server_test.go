@@ -159,7 +159,8 @@ func TestServer_HealthzReturnsOK(t *testing.T) {
 	}
 }
 
-// TestServer_IdleTimeoutSet pins PR #41 round-2 #1: every server
+// TestServer_IdleTimeoutSet pins:
+// every server
 // MUST have a non-zero IdleTimeout. Without it, keep-alive
 // connections from sleeping browser tabs pin server-side
 // goroutines indefinitely; over hours of use that accumulates

@@ -7,7 +7,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// TestCachedCaptureCantonPorts_ServesFromCache pins the BIT-221 #2
+// TestCachedCaptureCantonPorts_ServesFromCache pins the
 // fix: the reconciler hit `docker compose port` 9 times per port
 // per cycle (so 9 subprocesses every 15s per running instance). A
 // TTL cache eliminates the burst for the common stable case while
@@ -63,7 +63,7 @@ func TestCachedCaptureCantonPorts_EmptyProbeDoesNotPoisonCache(t *testing.T) {
 	}
 }
 
-// TestReconcileOne_LockedAgainstConcurrentWrite is the BIT-221 #1
+// TestReconcileOne_LockedAgainstConcurrentWrite pins the invariant —
 // regression: ReconcileOne used to read state, probe (slow), and
 // write the full struct back without re-reading under the lock —
 // so any field a concurrent writer (e.g. `localnet down` updating
@@ -107,7 +107,7 @@ func TestReconcileOne_LockedAgainstConcurrentWrite(t *testing.T) {
 		return []ContainerHealth{{State: "running", Health: "healthy"}}, nil
 	}
 
-	// BIT-222: with the core-services hoist, evalStatus collapses to
+	// with the core-services hoist, evalStatus collapses to
 	// `failed` when any core service is missing from the snapshot.
 	// This test isn't about that path — stub the resolver to nil so
 	// evalStatus skips the core check and we exercise only the
@@ -159,7 +159,7 @@ func TestReconcileOne_LockedAgainstConcurrentWrite(t *testing.T) {
 	}
 }
 
-// TestEvalStatus pins the BIT-177 decision table. Each row reads
+// TestEvalStatus pins the decision table. Each row reads
 // like a contract: "given the docker compose ps snapshot, what
 // status should the dashboard show?" Failures here would silently
 // re-introduce the bug the reconciler exists to fix.
@@ -178,7 +178,7 @@ func TestEvalStatus(t *testing.T) {
 		want       registry.Status
 	}{
 		{
-			name:   "all healthy → running (the BIT-177 happy path)",
+			name:   "all healthy → running (the happy path)",
 			cached: registry.StatusFailed,
 			containers: []ContainerHealth{
 				healthy, healthy, healthy,
@@ -242,8 +242,8 @@ func TestEvalStatus(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			// nil coreServices = skip the BIT-222 core check; these
-			// cases pin the pre-BIT-222 health-averaging behaviour
+			// nil coreServices = skip the core check; these
+			// cases pin the pre-health-averaging behaviour
 			// and must keep passing unchanged.
 			got := evalStatus(c.cached, c.containers, nil)
 			if got != c.want {
@@ -254,7 +254,7 @@ func TestEvalStatus(t *testing.T) {
 	}
 }
 
-// TestRefreshCantonPorts pins the BIT-221 fix: when canton has been
+// TestRefreshCantonPorts pins the fix: when canton has been
 // recreated and ephemeral host ports drifted, the reconciler must
 // rewrite state.Ports with the live capture, regardless of whether
 // the high-level status changed.
@@ -384,7 +384,7 @@ func TestRefreshCantonPorts(t *testing.T) {
 	})
 }
 
-// TestEvalStatus_CoreServices pins BIT-222. The reconciler must
+// TestEvalStatus_CoreServices pins . The reconciler must
 // recognize the zombie state where the core stack (canton + splice +
 // postgres + nginx) has been torn down but the `--profile
 // observability` sidecars (prometheus, grafana) survived. Before

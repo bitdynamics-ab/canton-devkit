@@ -15,7 +15,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// Party registry orchestration (BIT-215 #1). On LocalNet there is no
+// Party registry orchestration . On LocalNet there is no
 // trust boundary between parties — the `unsafe` dev secret signs for
 // every role — so the token tool treats the instance as one god-mode
 // workspace: a developer allocates a party by alias, the participant

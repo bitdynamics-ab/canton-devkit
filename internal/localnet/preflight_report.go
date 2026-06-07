@@ -75,9 +75,6 @@ func PreflightReportFromDocker(dockerRep *docker.Report) types.PreflightReport {
 
 // preflightPluralS is a tiny pluraliser inlined here until sibling command
 // branches settle on a shared text-formatting helper.
-//
-// TODO(BIT-141): DRY this up with other localnet plural helpers once the M1
-// command branches have merged.
 func preflightPluralS(n int) string {
 	if n == 1 {
 		return ""

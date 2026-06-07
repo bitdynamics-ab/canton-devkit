@@ -1,4 +1,4 @@
-# BIT-211 — Token Standard V2 alpha profile overlay (Canton config).
+# Token Standard V2 alpha profile overlay (Canton config).
 #
 # KNOWN PARTIAL OUTCOME: under the V2 alpha protocol the `splice` service's
 # healthcheck never reports `healthy`, so an instance brought up with this

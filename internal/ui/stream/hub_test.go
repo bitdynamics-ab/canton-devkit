@@ -102,7 +102,7 @@ func TestHub_DropOldestUnderBackpressure(t *testing.T) {
 // successful delivery is preceded by a synthetic Event{Topic:
 // "dropped"} so the client knows to refetch.
 //
-// Reviewer pin (PR #42 #b): the deterministic shape is:
+// the deterministic shape is:
 //
 //  1. Publish two events to fill the buf=2 buffer.
 //  2. Publish a third → drop-oldest fires, droppedSinceWarn=1.
@@ -231,8 +231,8 @@ func TestNewWithBuffer_MinimumOne(t *testing.T) {
 	}
 }
 
-// TestEvent_CarriesSchemaVersion is the reviewer pin (PR #42 #d):
-// the Event struct must have a SchemaVersion field so the wire-
+// TestEvent_CarriesSchemaVersion pins the invariant —
+// Event struct must have a SchemaVersion field so the wire-
 // level message carries the same handshake the /api/version
 // endpoint exposes. Without this, a long-running EventSource
 // can't detect a mid-session server upgrade.
@@ -257,7 +257,7 @@ func TestEvent_CarriesSchemaVersion(t *testing.T) {
 }
 
 // TestHub_NoSendOnClosedChannelAcrossCancelRace is the reviewer
-// pin (PR #42 #a): cancel() closes the subscriber's channel; a
+// pin cancel() closes the subscriber's channel; a
 // concurrent Publish that already picked up the subscription
 // could panic on send-to-closed. The fix (closeMu RWMutex)
 // serialises close with deliverTo. This test drives the race
@@ -298,7 +298,7 @@ func TestHub_NoSendOnClosedChannelAcrossCancelRace(t *testing.T) {
 }
 
 // TestHub_DropAccountingUnderConcurrentLoad is the reviewer
-// pin (PR #42 #b): the Load + Store pair in deliverTo's
+// pin the Load + Store pair in deliverTo's
 // dropped-event prepend was racy — a concurrent increment
 // between the Load and the Store would be lost. The fix uses
 // Swap(0). This test publishes faster than the subscriber
@@ -356,9 +356,9 @@ func TestHub_DropAccountingUnderConcurrentLoad(t *testing.T) {
 	}
 }
 
-// TestHub_NoGoroutineLeakAfterDisconnects is the named invariant
-// the reviewer flagged as missing: subscribe + cancel N times
-// MUST leave the goroutine count unchanged. Catches the leak
+// TestHub_NoGoroutineLeakAfterDisconnects pins the invariant that
+// subscribe + cancel N times MUST leave the goroutine count
+// unchanged. Catches the leak
 // class where cancel() forgets to remove from h.subs or to
 // close the channel, leaving the deliverTo path holding state
 // for dead subscribers.
@@ -379,9 +379,8 @@ func TestHub_NoGoroutineLeakAfterDisconnects(t *testing.T) {
 	}
 }
 
-// TestHub_SlowClientDoesNotBlockOthers is the second named
-// invariant the reviewer flagged as missing: one stuck
-// subscriber (never reads) must NOT prevent a fast subscriber
+// TestHub_SlowClientDoesNotBlockOthers pins the invariant that one
+// stuck subscriber (never reads) must NOT prevent a fast subscriber
 // from receiving events. This is the "one bad tab takes down
 // the instance" regression class — drop-oldest must isolate
 // subscribers.
@@ -434,8 +433,7 @@ func TestHub_SlowClientDoesNotBlockOthers(t *testing.T) {
 	}
 }
 
-// TestHub_NoGoroutineLeakAfterChurn is the reviewer pin (PR #42
-// round-2 #5): instead of asserting just Subscribers count
+// TestHub_NoGoroutineLeakAfterChurn is the instead of asserting just Subscribers count
 // returns to 0 (TestHub_NoGoroutineLeakAfterDisconnects),
 // take a runtime.NumGoroutine baseline before the churn and
 // assert it returns to within a small tolerance after. Catches
@@ -473,8 +471,7 @@ func TestHub_NoGoroutineLeakAfterChurn(t *testing.T) {
 	}
 }
 
-// TestHub_CloseDisconnectsActiveSubscribers is the reviewer pin
-// (PR #42 round-2 #3): Hub.Close must close every active
+// TestHub_CloseDisconnectsActiveSubscribers pins // Hub.Close must close every active
 // subscriber's channel so a downstream reader (the SSE handler's
 // for-range loop) unblocks and exits cleanly.
 func TestHub_CloseDisconnectsActiveSubscribers(t *testing.T) {
@@ -520,8 +517,8 @@ func TestHub_CloseIsIdempotent(t *testing.T) {
 	h.Close()
 }
 
-// TestHub_MultiPublisherSerialisedDeliveryNoDoubleDrop is the
-// reviewer pin (PR #42 round-2 #1): with the per-subscription
+// TestHub_MultiPublisherSerialisedDeliveryNoDoubleDrop pins the invariant —
+// with the per-subscription
 // Mutex (replacing the previous RWMutex), concurrent publishers
 // to the same subscriber serialise on s.mu. Two simultaneous
 // deliverTo calls can no longer both drain and double-count

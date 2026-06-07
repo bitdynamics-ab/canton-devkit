@@ -13,13 +13,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// BIT-123 — `dpm localnet doctor`.
+// — `dpm localnet doctor`.
 //
 // Renders the System / Resources / Network sections from
 // docs/design/mockups/screens-lifecycle.jsx (ScreenDoctor) by
 // translating docker.RunPreflight output. The same Report is also
 // surfaced as types.PreflightReport via --format=json so the Web
-// UI (BIT-131 GET /api/doctor) can call CollectDoctor and render
+// UI can call CollectDoctor and render
 // the same data.
 //
 // The check set lives in internal/localnet.CollectDoctor; this file is only the

@@ -7,7 +7,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// Party aliases (BIT-215 #1) let a developer say `--to bob` instead of
+// Party aliases let a developer say `--to bob` instead of
 // pasting a 130-char `bob::1220fa…` party id. The alias → party-id map
 // lives in registry.State.Parties; these helpers resolve in both
 // directions and are pure (they take the map) so they unit-test without

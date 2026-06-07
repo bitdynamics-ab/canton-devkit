@@ -13,30 +13,26 @@ import (
 // of these strings.
 //
 // Adding a new registry.Status constant MUST also add an entry
-// here, or TestStatus_ProjectionLockedToRegistry fails — the
-// "silent enum drift" failure mode the reviewer flagged.
+// here, or TestStatus_ProjectionLockedToRegistry fails — guards
+// against silent enum drift.
 var registryToAPI = map[registry.Status]string{
 	registry.StatusCreating: "creating",
 	registry.StatusRunning:  "running",
-	registry.StatusStopping: "stopping", // requires the BIT-124 down branch's registry change
+	registry.StatusStopping: "stopping",
 	registry.StatusStopped:  "stopped",
 	registry.StatusFailed:   "failed",
 	registry.StatusPartial:  "partial",
 }
 
 // TestStatus_ProjectionLockedToRegistry pins the registry → API
-// projection. Reviewer pin on PR #31 #2.
+// projection.
 //
-// The failure mode this catches: a future ticket adds a new
+// The failure mode this catches: a future change adds a new
 // `registry.StatusXxx` constant (e.g. `StatusMigrating`) but
 // forgets to teach the CLI / Web UI handler what string to
 // render. Without this test, the new state would surface as the
 // raw enum integer or a default-fallback rendering, breaking the
 // status display silently.
-//
-// Strategy: table-driven over every constant currently exported
-// from registry; assert each has an entry in registryToAPI and
-// the value is non-empty.
 func TestStatus_ProjectionLockedToRegistry(t *testing.T) {
 	// Hand-enumerate the registry constants we know about. If a
 	// new one is added, this list must be updated AND the

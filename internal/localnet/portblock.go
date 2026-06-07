@@ -61,7 +61,7 @@ var UIPortEnvVarToStateKey = map[string]string{
 	"SV_UI_PORT":           "sv_ui",
 	"SWAGGER_UI_PORT":      "swagger_ui",
 	"DB_PORT":              "postgres",
-	// BIT-134 review v4: observability profile ports allocated
+	// observability profile ports allocated
 	// alongside the rest so a re-up with --profile observability
 	// reuses the same Grafana / Prometheus URLs the user
 	// bookmarked. The compose overlay binds `${PROMETHEUS_HOST_PORT}
@@ -83,11 +83,11 @@ var ErrPortBusy = fmt.Errorf("previously allocated host port is busy")
 // ReuseOrAllocateUIPorts implements the stable-port contract from
 // PR #20 #5/#7. Decision table:
 //
-//	prior state.Ports     | port still free | result
+//	prior state.Ports | port still free | result
 //	──────────────────────┼─────────────────┼─────────────────────────
-//	nil / missing key / 0 |       —         | allocate ephemeral
-//	non-zero              |      yes        | reuse the same port
-//	non-zero              |      no         | ErrPortBusy (no fallback)
+//	nil / missing key / 0 | — | allocate ephemeral
+//	non-zero | yes | reuse the same port
+//	non-zero | no | ErrPortBusy (no fallback)
 //
 // The "no fallback on busy" rule is deliberate: silently switching
 // ports would re-introduce exactly the bookmark-breakage the ticket
@@ -160,7 +160,7 @@ func allocateOneEphemeral() (int, error) {
 // substitutes for host ports of non-canton services. Names are stable
 // across 0.5.x and 0.6.x (confirmed via the adapter design research).
 //
-// BIT-134 review v4 — the observability profile's PROMETHEUS_HOST_PORT
+// — the observability profile's PROMETHEUS_HOST_PORT
 // and GRAFANA_HOST_PORT come via ObservabilityPortEnvVars (separate
 // helper) so they're conditionally appended only when the profile is
 // enabled. Keeping them out of the always-on list avoids a re-up
@@ -176,7 +176,7 @@ func UIPortEnvVars() []string {
 	}
 }
 
-// ObservabilityPortEnvVars enumerates the env-var names the BIT-134
+// ObservabilityPortEnvVars enumerates the env-var names the
 // observability overlay (assets/compose/observability.yaml)
 // substitutes for the Prometheus + Grafana host ports. Allocated
 // only when `--profile observability` is enabled; the same

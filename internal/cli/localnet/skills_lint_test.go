@@ -20,22 +20,22 @@ import (
 // CLI/UI ship), parses every fenced `sh` block, extracts the
 // (verb, flags) pairs, and asserts:
 //
-//  1. each verb exists as a subcommand under `dpm localnet`
-//     (or under a sub-subcommand for multi-level verbs like
-//     `token create`)
-//  2. each `--flag` exists on that subcommand's flag set
+// 1. each verb exists as a subcommand under `dpm localnet`
+// (or under a sub-subcommand for multi-level verbs like
+// `token create`)
+// 2. each `--flag` exists on that subcommand's flag set
 //
 // Two escape hatches keep the lint usable:
 //
-//   - futureVerbs allowlist: verbs whose implementation hasn't
-//     landed yet (token, on this branch). Skills documenting future
-//     commands MUST cite their ticket ID so
-//     `grep -rn 'BIT-' internal/cli/localnet/skills_lint_test.go`
-//     enumerates outstanding implementation work.
-//   - skill-lint-ignore marker: a line in the skill can carry
-//     "<!-- skill-lint: skip-next -->" to opt out of the lint
-//     for the next fenced block (e.g. shell utility examples that
-//     don't reference dpm flags meaningfully).
+// - futureVerbs allowlist: verbs whose implementation hasn't
+// landed yet (token, on this branch). Skills documenting future
+// commands MUST cite their ticket ID so
+// `grep -rn 'BIT-' internal/cli/localnet/skills_lint_test.go`
+// enumerates outstanding implementation work.
+// - skill-lint-ignore marker: a line in the skill can carry
+// "<!-- skill-lint: skip-next -->" to opt out of the lint
+// for the next fenced block (e.g. shell utility examples that
+// don't reference dpm flags meaningfully).
 //
 // Without this test, a future cobra refactor that renames --port to
 // --tcp-port (say) silently breaks every skill that teaches an agent
@@ -69,7 +69,7 @@ func TestSkillsLint_AgainstLiveCobraSurface(t *testing.T) {
 			// Stub commands (DisableFlagParsing=true) get the
 			// flag-check skip too. On this branch `clean`/`restart`
 			// are still transitional stubs on main (their real
-			// implementations land via BIT-194/BIT-208); validating
+			// implementations land via / ); validating
 			// flags against a stub would force the skill to track the
 			// transitional shape instead of the final one. Same
 			// logging contract as futureVerbs so CI output makes the
@@ -94,19 +94,16 @@ func TestSkillsLint_AgainstLiveCobraSurface(t *testing.T) {
 // document them in advance, but the lint skips the (verb, flags)
 // check because there's no cobra command to validate against.
 //
-// Each entry must reference a real Linear ticket so cross-branch
-// follow-ups stay grep-able:
+// Each entry has a short TODO note so unfinished verbs stay
+// grep-able:
 //
-//	grep -rn 'BIT-' internal/cli/localnet/skills_lint_test.go
+//	grep -rn 'TODO' internal/cli/localnet/skills_lint_test.go
 //
 // When the verb's implementation lands, the entry MUST be removed
 // from this map. A regression then fails the lint with the real
 // flag-mismatch error rather than the allowlist skip.
-//
-// On this branch (based on main) every M1/M2 verb is real — only the
-// M3 token surface is outstanding.
 var futureVerbs = map[string]string{
-	"token": "BIT-138", // token create/mint/transfer/burn/balance (M3)
+	"token": "TODO: token create/mint/transfer/burn/balance",
 }
 
 // scannedCommand is one extracted `dpm localnet <verb> ... --flag ...`
@@ -213,9 +210,9 @@ func extractDPMCommands(text string) []scannedCommand {
 func parseBlock(lines []string, startLine int) []scannedCommand {
 	// Collapse trailing-backslash continuations so a multi-line
 	// command like
-	//   dpm localnet token create \
-	//     --symbol RTK \
-	//     --decimals 6
+	// dpm localnet token create \
+	// --symbol RTK \
+	// --decimals 6
 	// becomes one line for parsing.
 	joined := make([]string, 0, len(lines))
 	joinedLineNos := make([]int, 0, len(lines))
@@ -454,17 +451,16 @@ func TestSkillsLint_ParserHandlesEdgeCases(t *testing.T) {
 	}
 }
 
-// TestSkillsLint_FutureVerbsHaveTicketIDs is the contract pin for the
-// futureVerbs map: every entry MUST reference a real BIT-NNN ticket so
-// cross-branch follow-ups stay grep-able and outstanding skill drift
-// remains visible. Empty / malformed values get rejected.
-func TestSkillsLint_FutureVerbsHaveTicketIDs(t *testing.T) {
-	for verb, ticket := range futureVerbs {
-		if ticket == "" {
-			t.Errorf("futureVerbs[%q] has empty ticket — add a BIT-NNN reference so the entry is grep-able", verb)
+// TestSkillsLint_FutureVerbsHaveTODOs is the contract pin for the
+// futureVerbs map: every entry MUST carry a "TODO:" note so unfinished
+// skill drift stays grep-able. Empty values get rejected.
+func TestSkillsLint_FutureVerbsHaveTODOs(t *testing.T) {
+	for verb, note := range futureVerbs {
+		if note == "" {
+			t.Errorf("futureVerbs[%q] has empty note — add a TODO so the entry is grep-able", verb)
 		}
-		if !strings.HasPrefix(ticket, "BIT-") {
-			t.Errorf("futureVerbs[%q] = %q — expected BIT-NNN prefix for grep-ability", verb, ticket)
+		if !strings.HasPrefix(note, "TODO") {
+			t.Errorf("futureVerbs[%q] = %q — expected TODO prefix for grep-ability", verb, note)
 		}
 	}
 }

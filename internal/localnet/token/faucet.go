@@ -5,7 +5,7 @@ import (
 	"io"
 )
 
-// FaucetOptions funds a party from a well-known source (BIT-215 #5). It's
+// FaucetOptions funds a party from a well-known source . It's
 // a thin wrapper over the transfer engine: move `Amount` of `Instrument`
 // from a funded source party to `To`, auto-accepted, so a fresh party is
 // funded in one step with no instruction id to hand off.
