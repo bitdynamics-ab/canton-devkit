@@ -18,7 +18,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildMetrics wires `dpm localnet metrics` — BIT-134's CLI face.
+// buildMetrics wires `dpm localnet metrics` — CLI face.
 // Scrapes the per-instance Prometheus (started by the
 // `--profile observability` compose overlay) and prints a small,
 // curated set of headline values. The richer Grafana view lives
@@ -26,11 +26,11 @@ import (
 // CI assertions and SSH-only operators who can't open a browser.
 //
 // `--format json` is a one-shot JSON dump suitable for:
-//   - `dpm localnet metrics --name demo --format json | jq .ledger.tps`
-//   - CI asserts ("after 1k tx upload, p95 < 500ms")
+// - `dpm localnet metrics --name demo --format json | jq .ledger.tps`
+// - CI asserts ("after 1k tx upload, p95 < 500ms")
 //
 // Per AGENTS.md "CLI ↔ Web UI parity": the Web UI's Metrics
-// screen (BIT-178-adjacent) will eventually proxy the same
+// screen will eventually proxy the same
 // Prometheus queries; the two surfaces share the same scrape
 // config (assets/compose/prometheus.yml).
 func buildMetrics() *cobra.Command {
@@ -160,8 +160,7 @@ type MetricsReport struct {
 }
 
 // scrapeMetrics runs the curated Prometheus queries in parallel
-// and assembles them into a MetricsReport. BIT-134 review v4:
-// queries now live in internal/metricsq so CLI + handler share
+// and assembles them into a MetricsReport. // queries now live in internal/metricsq so CLI + handler share
 // one canonical map (no copy-paste drift).
 func scrapeMetrics(ctx context.Context, host string, port int) (*MetricsReport, error) {
 	base := fmt.Sprintf("http://%s:%d", host, port)

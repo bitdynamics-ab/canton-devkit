@@ -91,7 +91,7 @@ func TestDoctor_AnyFailExitsPreflightCode(t *testing.T) {
 }
 
 // TestDoctor_JSONShape pins the --format=json contract — same shape
-// the Web UI handler (BIT-131 GET /api/doctor) will consume.
+// the Web UI handler will consume.
 func TestDoctor_JSONShape(t *testing.T) {
 	installFakeDoctorProber(t, func(context.Context, docker.Options) *docker.Report {
 		return &docker.Report{Results: []docker.CheckResult{
@@ -167,8 +167,7 @@ func TestDoctor_PassesVersionToCollector(t *testing.T) {
 	}
 }
 
-// TestDoctor_CategoriserUpstreamNames is the BIT-123 review pin
-// (reviewer flagged the previous synthetic-fixture test as hiding
+// TestDoctor_CategoriserUpstreamNames is the // (reviewer flagged the previous synthetic-fixture test as hiding
 // real bugs). Uses the REAL Name strings produced by
 // internal/docker/checks.go — grepped from production at the time
 // of writing. If a future docker package change renames a check,
@@ -177,10 +176,10 @@ func TestDoctor_PassesVersionToCollector(t *testing.T) {
 // "Other".
 //
 // Specifically catches the two original-cut bugs:
-//   - "Docker memory" → must land in Resources (was System because
-//     the categoriser checked "docker" before "memory")
-//   - "Host prerequisites (linux)" → must land in System (was
-//     Other because no keyword matched)
+// - "Docker memory" → must land in Resources (was System because
+// the categoriser checked "docker" before "memory")
+// - "Host prerequisites (linux)" → must land in System (was
+// Other because no keyword matched)
 func TestDoctor_CategoriserUpstreamNames(t *testing.T) {
 	installFakeDoctorProber(t, func(context.Context, docker.Options) *docker.Report {
 		return &docker.Report{Results: []docker.CheckResult{

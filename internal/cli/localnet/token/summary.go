@@ -10,7 +10,7 @@ import (
 )
 
 // buildSummary is `token summary` — the instrument-first KPI view
-// (BIT-219 lens 1). One ACS scan yields total supply, holder + holding-
+// . One ACS scan yields total supply, holder + holding-
 // contract counts, and the per-holder distribution with share-of-supply.
 // CLI counterpart of the Web UI TokenDetail KPI strip (CLI ↔ UI parity).
 func buildSummary() *cobra.Command {

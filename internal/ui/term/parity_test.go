@@ -10,7 +10,7 @@ import (
 )
 
 // TestPalette_MatchesTerminalJSX pins
-// // the color tokens in color.go MUST match the JSX TERM.* constants
+// the color tokens in color.go MUST match the JSX TERM.* constants
 // in docs/design/mockups/terminal.jsx, otherwise the rendered CLI
 // drifts from the mockup and acceptance becomes "I'll just eyeball
 // it" — exactly the failure mode the mockup-as-spec model is

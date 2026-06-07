@@ -44,7 +44,7 @@ func ensureTokenRules(opts CreateOptions) error {
 
 	admin := opts.Issuer
 
-	// Auto-bundle the test-token DARs FIRST (BIT-216 #4) — findTokenRules
+	// Auto-bundle the test-token DARs FIRST — findTokenRules
 	// filters the ACS by the #splice-test-token-v2 package name, which the
 	// participant rejects with PACKAGE_NAMES_NOT_FOUND until the package is
 	// vetted. Upload happens before any package-name-scoped query. No-op
@@ -125,7 +125,7 @@ func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regst
 }
 
 // runBurnLive burns `amount` of the holder's tokens by archiving their
-// Holding contracts (BIT-216, "the test token's archive path").
+// Holding contracts .
 //
 // The splice-test-token-v2 example has no protocol-level standalone burn:
 // its transfer state machine unconditionally `create Token`s for the
@@ -283,8 +283,8 @@ func buildHoldingRecord(from holdingRef, amount string) *lapiv2.Record {
 func acceptMintOffer(ctx context.Context, client *ledger.Client, receiver, offerCID, accountConfigCID, tokenRulesCID string, tokenRulesDisc *lapiv2.DisclosedContract) error {
 	// The accept's choice context must carry two well-known entries the
 	// test token's state machine looks up:
-	//   testTokenV2/tokenRules     → the TokenRules contract id
-	//   testTokenV2/accountConfigs → list of AccountConfig contract ids
+	// testTokenV2/tokenRules → the TokenRules contract id
+	// testTokenV2/accountConfigs → list of AccountConfig contract ids
 	// both as tagged AnyValue (AV_ContractId / AV_List).
 	contextValues := &lapiv2.Value{Sum: &lapiv2.Value_TextMap{TextMap: &lapiv2.TextMap{
 		Entries: []*lapiv2.TextMap_Entry{
@@ -342,7 +342,7 @@ const (
 // createTokenRules creates the issuer-owned TokenRules contract that
 // anchors a test-token instrument. Returns the created contract id.
 //
-//	template TokenRules with admin : Party  (signatory admin)
+//	template TokenRules with admin : Party (signatory admin)
 //
 // Single-signer create: the admin (our acting party) is the only
 // signatory, so a plain submit-and-wait suffices.
@@ -504,10 +504,10 @@ func findTokenRulesDisclosed(ctx context.Context, client *ledger.Client, admin s
 //
 // OfferMint args (TestTokenV2.daml):
 //
-//	receiver       : Account       — { owner, provider, id }
-//	amount         : Decimal
-//	instrumentId   : InstrumentId  — { admin, id }
-//	offeredAt      : Time          — must be in the past
+//	receiver : Account — { owner, provider, id }
+//	amount : Decimal
+//	instrumentId : InstrumentId — { admin, id }
+//	offeredAt : Time — must be in the past
 //	receiverConfig : AccountConfig — per-account auth rules
 //
 // Returns the resulting offer contract id (for the accept that follows).
@@ -561,9 +561,9 @@ func mintViaOfferMint(
 // receiverConfig expects:
 //
 //	template AccountConfig with
-//	  admin         : Party
-//	  account       : Account
-//	  ownerConfig   : PartyConfig   — { canInitiate, mustApprove }
+//	  admin : Party
+//	  account : Account
+//	  ownerConfig : PartyConfig — { canInitiate, mustApprove }
 //	  providerConfig: PartyConfig
 //
 // We mirror the mintConfig the choice builds internally: owner can

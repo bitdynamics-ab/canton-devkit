@@ -161,7 +161,7 @@ func (b *topicBuffer) snapshot() []Event {
 // One per active /events HTTP request.
 //
 // mu serialises BOTH close(ch) (in cancel) AND the deliverTo body
-// per subscription. // the round-1 fix used an RWMutex that allowed multiple concurrent
+// per subscription. The earlier fix used an RWMutex that allowed multiple concurrent
 // deliverTo calls; under load that lets two publishers both drain
 // from the same channel, double-counting drops and racing the
 // retry. A single Mutex per subscription serialises sends to one

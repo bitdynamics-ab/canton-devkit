@@ -47,15 +47,15 @@ func helpCols() int {
 // applyHelp swaps Cobra's default help template on the `localnet`
 // subcommand for the ASCII-box + sectioned listing in
 // docs/design/mockups/screens-tokens-help.jsx (ScreenHelp).
-// Implements BIT-148 + the review-fix surfaced on PR #35.
+// Implements + the review-fix surfaced on PR #35.
 //
 // We only override the `localnet` subgroup (not the root) because:
-//   - The root command's help is overwhelmingly Cobra-canonical
-//     ("Usage: canton-devkit [command] …" etc.) and most users
-//     reach it via `--version`, not via reading help.
-//   - The ScreenHelp mockup is specifically the `dpm localnet
-//     --help` shape: lifecycle vs developing sections, dimmed
-//     trailing flags hint.
+// - The root command's help is overwhelmingly Cobra-canonical
+// ("Usage: canton-devkit [command] …" etc.) and most users
+// reach it via `--version`, not via reading help.
+// - The ScreenHelp mockup is specifically the `dpm localnet
+// --help` shape: lifecycle vs developing sections, dimmed
+// trailing flags hint.
 //
 // Cobra inherits help templates from parent to child unless the
 // child has its own — so before overriding `localnet`'s template

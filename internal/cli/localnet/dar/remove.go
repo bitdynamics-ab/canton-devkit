@@ -8,11 +8,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// BIT-55: dar remove — revoke vetting and/or delete a DAR.
+// dar remove — revoke vetting and/or delete a DAR.
 //
 // Two related Canton Admin API operations:
 //
-//	UnvetDar (safer)  — revokes the vetting topology transaction so the
+//	UnvetDar (safer) — revokes the vetting topology transaction so the
 //	                    packages stop being usable on the synchronizer.
 //	                    DAR bytes stay on disk; reversible with VetDar.
 //	RemoveDar (final) — UNVETS + deletes. Upstream warns this is unsafe

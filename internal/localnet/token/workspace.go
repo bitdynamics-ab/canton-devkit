@@ -12,13 +12,13 @@ import (
 )
 
 // The token "workspace" is the god-mode, ACS-derived view of an
-// instance's token state (BIT-215 / BIT-219): every instrument, every
+// instance's token state : every instrument, every
 // party's balance, and the individual Holding contracts behind each
 // balance. One ACS scan feeds three lenses:
 //
-//   - instruments    → on-chain instrument discovery (no state.Tokens seed)
-//   - balance matrix → parties × instruments → summed amount
-//   - party UTXOs    → a balance expanded into its Holding contracts
+// - instruments → on-chain instrument discovery (no state.Tokens seed)
+// - balance matrix → parties × instruments → summed amount
+// - party UTXOs → a balance expanded into its Holding contracts
 //
 // All of it is read-only and backable today: we already query HoldingV2
 // for balance; the workspace just keeps the per-contract rows instead of
@@ -92,7 +92,7 @@ func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error)
 
 	// Scan the parties the JWT is granted to read. resolveReadableParties
 	// first widens that set with CanReadAs for every registered party
-	// alias (BIT-215 #1) so the god-mode matrix sees ALL aliased parties,
+	// alias so the god-mode matrix sees ALL aliased parties,
 	// then re-resolves the authoritative granted set — a party that
 	// couldn't be granted never enters the filter (querying it would
 	// PermissionDenied the whole stream).
@@ -361,7 +361,7 @@ type HolderRow struct {
 	PctOfSupply   string `json:"pct_of_supply"` // e.g. "99.4"
 }
 
-// InstrumentSummary is the instrument-first KPI view (BIT-219 lens 1):
+// InstrumentSummary is the instrument-first KPI view :
 // total supply (= circulating, on a UTXO ledger), holder + contract
 // counts, and the per-holder distribution.
 type InstrumentSummary struct {

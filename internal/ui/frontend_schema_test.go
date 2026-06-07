@@ -12,7 +12,7 @@ import (
 )
 
 // TestFrontend_SchemaVersionMatchesTypes is the cross-language
-// parity pin // the SCHEMA_VERSION constant in frontend/src/api.ts MUST equal
+// parity pin: the SCHEMA_VERSION constant in frontend/src/api.ts MUST equal
 // types.SchemaVersion. Without this, the frontend's bootstrap
 // handshake reports a v1 client against a v2 server (or vice
 // versa) and the App refuses to render — but only at runtime,

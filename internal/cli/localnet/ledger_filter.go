@@ -7,7 +7,7 @@ import (
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
 
-// BIT-136 review fix: extracted the EventFormat / UpdateFormat
+// extracted the EventFormat / UpdateFormat
 // builders into a tested helper so `--party` and `--template` are
 // no longer silent no-ops.
 //
@@ -22,7 +22,7 @@ import (
 // + Updates take. Semantics:
 //
 //	parties: nil/empty → FiltersForAnyParty (wildcard).
-//	parties non-empty  → FiltersByParty with one Filters entry per
+//	parties non-empty → FiltersByParty with one Filters entry per
 //	                     party. Each per-party entry applies the
 //	                     same `templates` filter (or wildcard if
 //	                     none).
@@ -77,11 +77,11 @@ func buildUpdateFormat(parties, templates []string, verbose bool) *lapiv2.Update
 // buildTemplateFilters parses the user-supplied --template values
 // into the proto Filters shape. Accepts:
 //
-//	"Module:Entity"                — package-name match (any
+//	"Module:Entity" — package-name match (any
 //	                                  vetted package containing
 //	                                  this template).
-//	"pkg-name:Module:Entity"       — same, more verbose.
-//	"<package-id>:Module:Entity"   — exact package-id pin (when
+//	"pkg-name:Module:Entity" — same, more verbose.
+//	"<package-id>:Module:Entity" — exact package-id pin (when
 //	                                  the value is 64-hex).
 //
 // Returns nil for an empty/nil input — caller interprets as

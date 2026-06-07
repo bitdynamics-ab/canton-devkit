@@ -43,7 +43,7 @@ type CreateOptions struct {
 
 	// Submit toggles the actual ledger submission of the instrument
 	// creation. Currently always false at this layer — the V2
-	// instrument-creation submission lands when BIT-139 wires the
+	// instrument-creation submission lands when wires the
 	// ledger client against the live V2 splice-test-token-v2
 	// templates. For now RunCreate records the intent into the
 	// instance's registry.State.Tokens so subsequent commands can

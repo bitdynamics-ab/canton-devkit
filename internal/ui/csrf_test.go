@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-// TestServer_RejectsNonLoopbackBindByDefault pins // the previous shape merely "strongly discouraged"
+// TestServer_RejectsNonLoopbackBindByDefault pins: the previous shape merely "strongly discouraged"
 // non-loopback in the CLI help text, then bound anyway. With this
 // fix, Listen() refuses any Host whose IP isn't loopback unless
 // AllowNonLoopback is explicitly true.
@@ -299,7 +299,7 @@ func TestAssets_PlaceholderSentinel(t *testing.T) {
 	}
 }
 
-// TestRouter_AccessLogEmittedPerRequest pins // every request goes through withAccessLog
+// TestRouter_AccessLogEmittedPerRequest pins: every request goes through withAccessLog
 // and produces a stable parseable log line. Catches the
 // regression class where someone removes the middleware or
 // breaks the format.
@@ -334,7 +334,7 @@ func TestRouter_AccessLogEmittedPerRequest(t *testing.T) {
 	}
 }
 
-// TestCSRF_JWTEndpointProtectedEndToEnd pins // the /api/instances/{name}/jwt
+// TestCSRF_JWTEndpointProtectedEndToEnd pins: the /api/instances/{name}/jwt
 // route is credential-issuing and MUST go through the CSRF
 // middleware from withOriginCheck (#41). The handler-package
 // unit tests use a bare ServeMux that bypasses the middleware;

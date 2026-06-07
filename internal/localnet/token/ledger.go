@@ -58,7 +58,7 @@ var dialLedgerFn = func(ctx context.Context, conn LedgerConn) (LedgerClient, fun
 //
 // Resolved by the CLI / Web UI from --endpoint + --token (or via
 // state.Endpoints once the participant gRPC port surfacing follow-up
-// lands; tracked in BIT-136's "endpoint auto-discovery" item).
+// lands; tracked in "endpoint auto-discovery" item).
 type LedgerConn struct {
 	Endpoint string // host:port, e.g. "localhost:61169"
 	Token    string // Bearer JWT; empty allowed when the participant runs unauthenticated
@@ -80,16 +80,16 @@ type LedgerConn struct {
 // pulling cli/localnet into the import graph. Caller MUST defer the
 // returned cleanup.
 //
-// Token resolution order (the BIT-139 follow-up that drove this):
-//  1. conn.Token explicit (`--token` flag wins).
-//  2. registry.State.Credentials[Role] — populated by `localnet up`'s
-//     captureCredentials when the alpha boot is clean. The CLI mints
-//     against this via `localnet creds --role <role> --format raw`.
-//  3. splice.SignToken fallback — issues a fresh user-token from the
-//     project's env/<role>-auth-on.env files. Same shape as path #2;
-//     used when creds-capture races / fails (the V2 alpha is wobbly
-//     on cold boots and step (2) may be empty even after up succeeds).
-//  4. error pointing at `localnet creds --raw` for the user to override.
+// Token resolution order (the follow-up that drove this):
+// 1. conn.Token explicit (`--token` flag wins).
+// 2. registry.State.Credentials[Role] — populated by `localnet up`'s
+// captureCredentials when the alpha boot is clean. The CLI mints
+// against this via `localnet creds --role <role> --format raw`.
+// 3. splice.SignToken fallback — issues a fresh user-token from the
+// project's env/<role>-auth-on.env files. Same shape as path #2;
+// used when creds-capture races / fails (the V2 alpha is wobbly
+// on cold boots and step (2) may be empty even after up succeeds).
+// 4. error pointing at `localnet creds --raw` for the user to override.
 func dialLedger(ctx context.Context, conn LedgerConn) (*ledger.Client, func(), error) {
 	if conn.Endpoint == "" {
 		return nil, func() {}, fmt.Errorf("ledger endpoint is required (host:port)")
@@ -203,7 +203,7 @@ func localPartiesForRole(ctx context.Context, c LedgerClient, role string) ([]st
 
 // resolveReadableParties returns the parties a scan should cover. It
 // first widens the role's user with CanReadAs for every registered party
-// alias (BIT-215 #1) so the god-mode matrix / activity feed see ALL
+// alias so the god-mode matrix / activity feed see ALL
 // aliased parties, not just the role's own — then re-resolves the
 // authoritative granted set via ResolveActAndReadParties.
 //

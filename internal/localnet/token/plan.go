@@ -9,7 +9,7 @@ import (
 // TransferPlan is the dry-run preview of a transfer: which Holding
 // contracts (UTXOs) would be consumed, the change returned to the
 // sender, and whether the sender can cover the amount. Powers the Web
-// UI's coin-selection preview (BIT-219) — no ledger mutation.
+// UI's coin-selection preview — no ledger mutation.
 type TransferPlan struct {
 	Instrument string      `json:"instrument"`
 	From       string      `json:"from"`

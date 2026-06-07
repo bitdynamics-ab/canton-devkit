@@ -19,7 +19,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// BIT-57: dar watch — rebuild on source change, re-upload on success.
+// dar watch — rebuild on source change, re-upload on success.
 //
 // V1 uses a polling watcher (modtime sweep) rather than fsnotify so
 // it works portably without an OS-specific dependency. For dev hot-
@@ -151,7 +151,7 @@ func buildAndUpload(
 		_, _ = fmt.Fprintf(errw, "build failed: %s\n", err)
 		return "", err
 	}
-	// BIT-127 review fix: bounded read via cdkdar.ReadDARFile.
+	// bounded read via cdkdar.ReadDARFile.
 	data, err := cdkdar.ReadDARFile(darPath)
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "read DAR %s: %s\n", darPath, err)

@@ -222,7 +222,7 @@ func TestSSE_MultiLineDataGetsPerLinePrefix(t *testing.T) {
 	}
 }
 
-// TestSSE_RejectsCrossOriginConnection pins // a browser tab on evil.example.com can open
+// TestSSE_RejectsCrossOriginConnection pins: a browser tab on evil.example.com can open
 // EventSource("http://127.0.0.1:7777/events") and read our event
 // stream — EventSource always sends GET (CSRF-exempt globally),
 // so the SSE handler must do its own Origin check.

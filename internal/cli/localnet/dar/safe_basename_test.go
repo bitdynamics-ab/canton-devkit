@@ -2,8 +2,7 @@ package dar
 
 import "testing"
 
-// TestSafeBasename_NeutralisesPathTraversal pins the BIT-127 review
-// fix: a hostile participant returning name="../../etc/passwd" must
+// TestSafeBasename_NeutralisesPathTraversal pins the // fix: a hostile participant returning name="../../etc/passwd" must
 // not get DAR bytes written outside the caller's CWD.
 func TestSafeBasename_NeutralisesPathTraversal(t *testing.T) {
 	cases := []struct {

@@ -17,15 +17,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildDown wires `dpm localnet down --name <inst>` — BIT-124,
+// buildDown wires `dpm localnet down --name <inst>` — ,
 // carrying forward the contract PR #21 established and review on
 // PR #33 flagged as regressed:
 //
-//	docker compose down  →  NO --volumes (preserves state)
-//	StatusRunning   →  StatusStopping  (BEFORE compose call)
-//	  └─ compose ok  →  StatusStopped  (registry entry preserved for `clean`)
-//	  └─ compose err →  StatusFailed   (preserved for retry)  exit 4
-//	  └─ interrupted →  StatusPartial  (compose may still be in flight) exit 3
+//	docker compose down → NO --volumes (preserves state)
+//	StatusRunning → StatusStopping (BEFORE compose call)
+//	  └─ compose ok → StatusStopped (registry entry preserved for `clean`)
+//	  └─ compose err → StatusFailed (preserved for retry) exit 4
+//	  └─ interrupted → StatusPartial (compose may still be in flight) exit 3
 //
 // The transitional StatusStopping is critical: if we SIGKILL during
 // compose-down without it, `localnet status` keeps reporting
@@ -79,8 +79,7 @@ normal path needs — and SIGKILLs containers that won't stop.`,
 }
 
 // DownOptions carries the `localnet down` flags into RunDown. Mirrors
-// PR #21's shape so the future Web UI handler (BIT-131
-// POST /api/instances/:name/down) has a stable parameter to pass.
+// PR #21's shape so the future Web UI handler ( // POST /api/instances/:name/down) has a stable parameter to pass.
 type DownOptions struct {
 	Name string
 	// Force tears the instance down by Docker project label only,
@@ -98,7 +97,7 @@ type DownOptions struct {
 //
 // Modelled as a package var rather than a parameter on RunDown
 // because RunDown is also called by the future Web UI handler
-// (BIT-131 POST /api/instances/:name/down) — neither caller wants
+// — neither caller wants
 // a fake-runner argument in production. Once the Web UI ships,
 // RunDown is reachable from concurrent goroutines (one per HTTP
 // request), so the read of stopperFn is guarded by stopperMu.
@@ -107,7 +106,7 @@ type DownOptions struct {
 //
 // Reviewer pin (PR #33 #6): the var-based seam without lock
 // protection would race with concurrent Web UI requests once
-// BIT-131 lands — by then the field is exported via a getter, but
+// lands — by then the field is exported via a getter, but
 // the race would already be in shipped code. Adding the mutex
 // now is cheap and pins the contract.
 var (
@@ -220,12 +219,12 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 
 	if err := stop(ctx, state); err != nil {
 		// PR #21 carry-forward: TWO separate cells here.
-		//   ctx.Err() != nil    → interrupted, exit 3, status partial.
-		//                         compose may still be running on the host;
-		//                         user retries when the host is idle.
-		//   ctx.Err() == nil    → genuine compose failure, exit 4, status failed.
-		//                         registry entry + data dir preserved so user
-		//                         can retry.
+		// ctx.Err() != nil → interrupted, exit 3, status partial.
+		// compose may still be running on the host;
+		// user retries when the host is idle.
+		// ctx.Err() == nil → genuine compose failure, exit 4, status failed.
+		// registry entry + data dir preserved so user
+		// can retry.
 		if ctx.Err() != nil {
 			_, _ = fmt.Fprintln(errw, term.Errorc(
 				"Interrupted during docker compose down — retry once the host is idle"))

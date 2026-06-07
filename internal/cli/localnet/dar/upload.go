@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// BIT-50: dar upload — push a DAR to one or all participants of a
+// dar upload — push a DAR to one or all participants of a
 // named LocalNet via PackageService.UploadDar.
 //
 // `--all-participants` is the proposal-mandated fan-out: when set
@@ -59,7 +59,7 @@ Exit codes:
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
-			// BIT-127 review fix: bounded read (replaces
+			// bounded read (replaces
 			// os.ReadFile) — refuses DARs over MaxDARBytes
 			// before allocating the buffer.
 			data, err := cdkdar.ReadDARFile(path)

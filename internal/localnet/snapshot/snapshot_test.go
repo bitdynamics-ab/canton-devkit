@@ -635,7 +635,7 @@ func TestAvailableDiskBytes_NonZero(t *testing.T) {
 	}
 }
 
-// TestRewriteVolumeForTarget is the unit test for the BIT-185 helper.
+// TestRewriteVolumeForTarget is the unit test for the helper.
 // Pure-function table test; the integration test for the rename
 // behaviour is TestRestore_CrossNameRewritesVolumes below.
 func TestRewriteVolumeForTarget(t *testing.T) {
@@ -661,7 +661,7 @@ func TestRewriteVolumeForTarget(t *testing.T) {
 }
 
 // TestRestore_CrossNameRewritesVolumes is the integration test for
-// BIT-185. Snapshot of "demo" (compose project "canton-demo") with
+// . Snapshot of "demo" (compose project "canton-demo") with
 // two volumes, then restore --name demo-clone into a fresh registry.
 // The restored docker volumes MUST land under "canton-demo-clone_*",
 // not the original "canton-demo_*", or the cloned instance would
@@ -737,7 +737,7 @@ func keysOf(m map[string][]byte) []string {
 	return out
 }
 
-// TestSnapshot_WarnsWhenRunning asserts the BIT-207 consistency caveat is
+// TestSnapshot_WarnsWhenRunning asserts the consistency caveat is
 // surfaced when snapshotting a running instance, and NOT when stopped.
 func TestSnapshot_WarnsWhenRunning(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())

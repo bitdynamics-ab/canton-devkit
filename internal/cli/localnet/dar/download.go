@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// BIT-53: dar download — fetch a DAR back from a participant via
+// dar download — fetch a DAR back from a participant via
 // PackageService.GetDar.
 func buildDownload() *cobra.Command {
 	var (
@@ -54,7 +54,7 @@ Exit codes:
 
 			outPath := out
 			if outPath == "" {
-				// BIT-127 review fix: the participant-supplied
+				// the participant-supplied
 				// name/version are untrusted — a compromised or
 				// hostile participant could return
 				// name="../../etc/passwd" and we'd happily write

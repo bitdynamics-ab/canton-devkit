@@ -17,19 +17,18 @@ import (
 // buildInfo wires `dar info`. The command auto-routes on the single
 // positional argument:
 //
-//   - if the arg looks like a 64-hex package ID, we query the
-//     participant's Admin API (PackageService.GetPackageContents +
-//     GetPackageReferences) to surface module names, language version,
-//     and which DARs reference the package.
-//   - otherwise, the arg is treated as a path to a local .dar file
-//     and we use the offline parser (`internal/dar`).
+// - if the arg looks like a 64-hex package ID, we query the
+// participant's Admin API (PackageService.GetPackageContents +
+// GetPackageReferences) to surface module names, language version,
+// and which DARs reference the package.
+// - otherwise, the arg is treated as a path to a local .dar file
+// and we use the offline parser (`internal/dar`).
 //
 // This matches the proposal's signature `dar info <package-id|package-name>`
 // while keeping the offline file path useful for CI / on-disk
 // validation flows.
 //
-// Deep template/choice/interface inspection from local DARs (BIT-115)
-// is available on the offline path via --deep, which parses Daml-LF
+// Deep template/choice/interface inspection from local DARs // is available on the offline path via --deep, which parses Daml-LF
 // directly. The participant path still surfaces only what Canton's
 // Admin API returns (module names).
 func buildInfo() *cobra.Command {
@@ -333,7 +332,7 @@ func orDashS(s string) string {
 // truncate returns s clipped to width with an ellipsis when shortened.
 // Used by the offline-path text renderer (dependency table) and by
 // list.go's row printer.
-// printDeep renders the Daml-LF deep view (BIT-115) for one package:
+// printDeep renders the Daml-LF deep view for one package:
 // each module's templates (+ choices), interfaces (+ choices/methods),
 // and data types. No-op when the package couldn't be deep-parsed (LF1).
 func printDeep(out io.Writer, p *cdkdar.PackageMeta) {

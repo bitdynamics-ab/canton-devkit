@@ -13,16 +13,16 @@ import (
 // `docker logs --follow [--since DUR] [--tail N] <container>` and
 // scans the merged stdout+stderr line-by-line.
 //
-// Used by the CLI's bubbletea logs TUI (BIT-145). The HTTP layer
+// Used by the CLI's bubbletea logs TUI . The HTTP layer
 // uses Logs() instead (one-shot tail) because SSE-streaming logs
 // over HTTP is a separate ticket — when that lands it can call
 // Follow() too.
 //
 // Channel semantics:
-//   - Lines arrive in order.
-//   - Channel closes when ctx is done OR docker exits.
-//   - Error channel sees at most one error (the cause of close)
-//     then closes.
+// - Lines arrive in order.
+// - Channel closes when ctx is done OR docker exits.
+// - Error channel sees at most one error (the cause of close)
+// then closes.
 type FollowLine struct {
 	Text   string
 	Stream string // "stdout" or "stderr" — we merge so this is informational only

@@ -24,34 +24,34 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 )
 
-// BIT-147 — `dpm localnet snapshot` + `restore`.
+// — `dpm localnet snapshot` + `restore`.
 //
 // First-cut review surfaced five blockers; this file addresses
 // each:
 //
-//   1. Zip Slip on restore — `volumes/foo.tar` was trusted verbatim.
-//      Fix: validateArchivePath rejects anything that isn't strictly
-//      `volumes/<safename>.tar` and `validateVolumeName` constrains
-//      the inner component.
-//   2. Whole archive buffered in RAM. Fix: streamed straight into
-//      tar.Writer; restore reads streaming via io.Pipe.
-//   3. Didn't capture registry.State — restored snapshot was
-//      unbringable. Fix: state.json is the SECOND archive entry;
-//      restore re-registers via registry.Write.
-//   4. SHA "verification" was decorative. Fix: streaming sha256 on
-//      both writer + reader; mismatch aborts with the volume name.
-//   5. Splice-version mismatch silently corrupted. Fix:
-//      header.SpliceVersion compared to existing instance (or
-//      embedded state.json) and refused unless --force.
+// 1. Zip Slip on restore — `volumes/foo.tar` was trusted verbatim.
+// Fix: validateArchivePath rejects anything that isn't strictly
+// `volumes/<safename>.tar` and `validateVolumeName` constrains
+// the inner component.
+// 2. Whole archive buffered in RAM. Fix: streamed straight into
+// tar.Writer; restore reads streaming via io.Pipe.
+// 3. Didn't capture registry.State — restored snapshot was
+// unbringable. Fix: state.json is the SECOND archive entry;
+// restore re-registers via registry.Write.
+// 4. SHA "verification" was decorative. Fix: streaming sha256 on
+// both writer + reader; mismatch aborts with the volume name.
+// 5. Splice-version mismatch silently corrupted. Fix:
+// header.SpliceVersion compared to existing instance (or
+// embedded state.json) and refused unless --force.
 //
 // On-disk layout (strict):
 //
-//   snapshot.tgz
-//   ├── snapshot.json           (types.Snapshot header, FIRST)
-//   ├── state.json              (registry.State, SECOND)
-//   ├── volumes/<vol>.tar       (one per docker volume; <vol> must
-//   │                            validate via validateVolumeName)
-//   └── …
+// snapshot.tgz
+// ├── snapshot.json (types.Snapshot header, FIRST)
+// ├── state.json (registry.State, SECOND)
+// ├── volumes/<vol>.tar (one per docker volume; <vol> must
+// │ validate via validateVolumeName)
+// └── …
 
 const (
 	snapshotSchemaVersion = 1
@@ -109,7 +109,7 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 		return localnet.ExitRuntimeFailure
 	}
 
-	// Application-consistency caveat (BIT-207). Snapshotting a RUNNING
+	// Application-consistency caveat . Snapshotting a RUNNING
 	// instance copies its Docker volumes live: it captures a
 	// crash-consistent point-in-time, not an application-consistent one.
 	// In-flight ledger transactions or unflushed Postgres/Canton writes
@@ -450,7 +450,7 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 	// rollback. Now we either commit the registry on full success
 	// or leave it untouched.
 	//
-	// BIT-185: when --name differs from the embedded original, the
+	// when --name differs from the embedded original, the
 	// compose-project / network / container-prefix fields must be
 	// rewritten too. Naming convention codified at
 	// internal/localnet/up.go ~L315: ComposeProject = "canton-"+name,
@@ -504,7 +504,7 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 			}
 			continue
 		}
-		// BIT-185: rewrite the volume name so the restored docker
+		// rewrite the volume name so the restored docker
 		// volume sits under the target instance's compose-project
 		// prefix. When --name matches the embedded original this is
 		// a no-op (srcComposeProject == toWrite.ComposeProject) and
@@ -698,26 +698,26 @@ func validateVolumeName(s string) error {
 // from the embedded original. Docker compose volumes are named
 // `<project>_<suffix>`; on cross-name restore we want the same suffix
 // under the new project so the restored instance has independent
-// volumes (BIT-185).
+// volumes .
 //
 // Examples (src="canton-pebble", dst="canton-pebble-clone"):
 //
-//	canton-pebble_postgres                -> canton-pebble-clone_postgres
-//	canton-pebble_domain-upgrade-dump     -> canton-pebble-clone_domain-upgrade-dump
+//	canton-pebble_postgres -> canton-pebble-clone_postgres
+//	canton-pebble_domain-upgrade-dump -> canton-pebble-clone_domain-upgrade-dump
 //
 // Edge cases:
 //
-//   - src == dst (same-name restore): returns name unchanged. The
-//     common path stays a no-op so the no-rewrite branch can't drift.
-//   - name doesn't start with src+"_": returns name unchanged with a
-//     conservative bias. This shouldn't happen for archives produced
-//     by our snapshot path (every volume there carries the source's
-//     compose-project prefix) but a custom or hand-crafted archive
-//     might. Leaving the name alone is safer than producing a
-//     nonsense rewrite the operator can't diagnose.
-//   - src == "": returns name unchanged. The embedded state.json
-//     should always carry ComposeProject, but defending against an
-//     older snapshot is cheap.
+// - src == dst (same-name restore): returns name unchanged. The
+// common path stays a no-op so the no-rewrite branch can't drift.
+// - name doesn't start with src+"_": returns name unchanged with a
+// conservative bias. This shouldn't happen for archives produced
+// by our snapshot path (every volume there carries the source's
+// compose-project prefix) but a custom or hand-crafted archive
+// might. Leaving the name alone is safer than producing a
+// nonsense rewrite the operator can't diagnose.
+// - src == "": returns name unchanged. The embedded state.json
+// should always carry ComposeProject, but defending against an
+// older snapshot is cheap.
 func rewriteVolumeForTarget(name, srcProject, dstProject string) string {
 	if srcProject == "" || srcProject == dstProject {
 		return name

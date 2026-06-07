@@ -15,31 +15,31 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildUI wires `dpm localnet ui` — BIT-129, the M2 Web UI entry point.
+// buildUI wires `dpm localnet ui` — , the M2 Web UI entry point.
 //
 // This first slice (P2-01 skeleton) brings up the HTTP server only:
 // /healthz, /api/version handshake, and the embedded Vite bundle (which
-// currently renders the BIT-129 placeholder until BIT-133 lifts the
+// currently renders the placeholder until lifts the
 // React frontend in). Follow-on PRs slot in:
 //
-//   - BIT-130 (P2-02): SSE /events stream
-//   - BIT-131 (P2-03): REST /api/* handlers
-//   - BIT-133 (P2-05): real Vite/React bundle replacing the placeholder
+// - (P2-02): SSE /events stream
+// - (P2-03): REST /api/* handlers
+// - (P2-05): real Vite/React bundle replacing the placeholder
 //
 // # Why ship the skeleton first
 //
 // The reviewer surface that matters most for M2 isn't any single
 // handler — it's the lifecycle + bind + asset-embed shape. Landing
-// that as its own PR means BIT-130 and BIT-131 reviews focus on
+// that as its own PR means and s focus on
 // their own surfaces instead of re-litigating the loopback binding
 // or the SPA fallback every round.
 //
 // # `--port 0`
 //
 // Bind 0 = OS-assigned. Two callers care:
-//   - tests (TestUI_BindAndShutdownReadiness drives it),
-//   - CI scripts that want to spin up the UI on a random port to
-//     run a smoke test without colliding with a running dev server.
+// - tests (TestUI_BindAndShutdownReadiness drives it),
+// - CI scripts that want to spin up the UI on a random port to
+// run a smoke test without colliding with a running dev server.
 //
 // We always print the ACTUAL bound port (resolved from net.Listen) so
 // "Open http://127.0.0.1:7777" never misleads the user when 7777 is
@@ -117,7 +117,7 @@ identifiers and is not designed for LAN-wide exposure.`,
 				syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 
-			// BIT-177 — start the docker→registry reconciler. Runs
+			// — start the docker→registry reconciler. Runs
 			// until ctx is cancelled (same shutdown signal as the
 			// HTTP server). Keeps registry status eventually-
 			// consistent with `docker compose ps` so the dashboard
