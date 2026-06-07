@@ -31,7 +31,7 @@ When the work spans both:
 - **Mirror the verbs.** If the UI gets `POST /api/instances/{name}/containers/{c}/restart`, the CLI should get `dpm localnet container restart <inst> <c>`. The CLI name is a wrapper around the same handler logic; both pass through the same shared function.
 - **Mirror the guards.** If the Web UI's pre-flight gate refuses to start a Splice 0.6.4 instance on a 4 GiB host, `dpm localnet up --version 0.6.4` must refuse it for the same reason. Don't let one surface be lenient where the other is strict.
 
-**When you can't reach parity in the same PR**, file a follow-up ticket and add a `// TODO(BIT-NNN): CLI parity — <description>` comment at the divergence point so reviewers can see it. Never close out a feature as "done" while one surface is silently missing it.
+**When you can't reach parity in the same PR**, file a follow-up ticket and add a `// TODO(#issue): CLI parity — <description>` comment at the divergence point so reviewers can see it. Never close out a feature as "done" while one surface is silently missing it.
 
 ### Testing Requirements
 
@@ -94,4 +94,4 @@ Before submitting:
 3. No test coverage regression (check with `go tool cover`)
 4. Relevant documentation added/updated
 5. PR title is clear and understandable
-6. **CLI ↔ Web UI parity:** if the change touches a user-facing feature, both surfaces are updated (or a follow-up ticket is filed with a `TODO(BIT-NNN): CLI parity` / `TODO(BIT-NNN): UI parity` comment at the divergence point). See "CLI ↔ Web UI parity" rule above.
+6. **CLI ↔ Web UI parity:** if the change touches a user-facing feature, both surfaces are updated (or a follow-up ticket is filed with a `TODO(#issue): CLI parity` / `TODO(#issue): UI parity` comment at the divergence point). See "CLI ↔ Web UI parity" rule above.
