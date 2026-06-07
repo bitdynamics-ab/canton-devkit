@@ -12,7 +12,7 @@ import (
 )
 
 func TestRunLogs_ConstructsDockerComposeLogsCommand(t *testing.T) {
-	projectDir := seedLogsInstance(t, "logs-command")
+	seedLogsInstance(t, "logs-command")
 
 	var gotArgs []string
 	var gotDir string
@@ -35,28 +35,25 @@ func TestRunLogs_ConstructsDockerComposeLogsCommand(t *testing.T) {
 		t.Fatalf("RunLogs = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
 
-	// Verify the compose args contain --env-file flags including
-	// the adapter base files and the overlay.env.
 	argsStr := strings.Join(gotArgs, " ")
 	for _, want := range []string{
-		"--env-file compose.env",
-		"--env-file env/common.env",
+		"compose -p canton-logs-command logs",
 		"logs --follow --tail all --since 10m canton splice",
 	} {
 		if !strings.Contains(argsStr, want) {
 			t.Fatalf("args missing %q in %v", want, gotArgs)
 		}
 	}
-	// overlay.env path is dynamic (temp dir), check suffix.
-	if !strings.Contains(argsStr, "overlay.env") {
-		t.Fatalf("args missing overlay.env in %v", gotArgs)
+	for _, forbidden := range []string{"-f", "--env-file", "overlay.env"} {
+		if strings.Contains(argsStr, forbidden) {
+			t.Fatalf("args should not contain %q in %v", forbidden, gotArgs)
+		}
 	}
-	if gotDir != projectDir {
-		t.Fatalf("dir = %q, want %q", gotDir, projectDir)
+	if gotDir != "" {
+		t.Fatalf("dir = %q, want empty project-label lookup", gotDir)
 	}
-	// With overlay.env, Env should be nil (inherits process env).
 	if gotEnv != nil {
-		t.Fatalf("env should be nil (overlay.env provides vars), got %d entries", len(gotEnv))
+		t.Fatalf("env should be nil, got %d entries", len(gotEnv))
 	}
 }
 
