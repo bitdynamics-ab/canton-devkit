@@ -18,10 +18,12 @@ UI, JWT redaction, no PII in commits).
 
 ## Non-goals
 
-Identifying users/machines/installs (no IDs of any kind) · capturing what
-a command ran against (no instance/party/contract ids, paths, hostnames,
-ports) · error content · sessionizing/sequencing invocations · any flow
-enabling a behavioral profile.
+Identifying users or machines (no hardware-derived id, no IP) · capturing
+what a command ran against (no instance/party/contract ids, paths,
+hostnames, ports) · error content · sessionizing/sequencing invocations ·
+any flow enabling a behavioral profile. *One* exception, scoped tightly:
+a single random, hardware-independent **install token** is sent solely to
+de-duplicate install counts (Design #2) — it links to nothing else.
 
 ## Design
 
@@ -31,9 +33,17 @@ enabling a behavioral profile.
    `canton-devkit telemetry off` (or `DPM_TELEMETRY=off` /
    `DO_NOT_TRACK=1`)."* All three switches disable it, and the choice
    persists. Non-interactive runs never prompt and never block.
-2. **No identifier at all.** No machine id, install uuid, hashed hardware
-   id, or IP retention. Counters merge into a weekly aggregate with no
-   per-invocation row.
+2. **One anonymous install token, nothing else.** No machine id, no
+   hashed hardware id, no IP retention. The single exception is a random
+   UUIDv4 (`install_id`) minted client-side and stored in the telemetry
+   config — *not* derived from any hardware attribute. It rides alongside
+   counter uploads so the collector can count DISTINCT installs (the one
+   adoption number additive counters can't yield), and is stored there
+   ALONE as `(token, active-date)`, never joined to a counter. It is
+   per-config-file (a fresh container/VM/reinstall mints a new one),
+   suppressed in CI, and rotatable via `telemetry reset-id`. Counters
+   themselves still merge into a daily aggregate with no per-invocation
+   row.
 3. **Counter taxonomy (10 slots).** Closed, compile-time-enforced
    allow-list (`internal/telemetry/allowlist.go`): `dpm/command`,
    `dpm/command_exit`, `dpm/channel`, `dpm/os`, `dpm/arch`, `dpm/ci`,
@@ -48,8 +58,10 @@ enabling a behavioral profile.
    inner retries); on failure → mark deferred, retry next window; after 2
    misses → drop. Retrying an aggregate is privacy-safe; events are not.
 6. **Collector.** Custom minimal endpoint `POST /v1/counters` with body
-   `{schema_version, week, counters}` — not a SaaS events API. (v1.1, not
-   yet deployed.)
+   `{schema_version, period, granularity, counters, install_id?}` — not a
+   SaaS events API. The optional `install_id` is recorded only in a
+   separate `seen_install (token, active-date)` table for unique-install
+   counts; it is never stored beside a counter.
 7. **Retention.** Local file: **current week + 3 prior weeks** (rolling
    4-week window — useful for offline debug, still no per-event row, no
    sub-week timestamp, no id). Server raw intake: 24 h. Server aggregates:

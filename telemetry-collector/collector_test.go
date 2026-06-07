@@ -19,6 +19,10 @@ type fakeStore struct {
 	counters    map[string]map[string]int
 	calls       int
 	failWith    error
+
+	installID    string // last token passed to RecordInstall
+	installCalls int
+	installFail  error
 }
 
 func (f *fakeStore) UpsertCounters(_ context.Context, period, gran string, start *time.Time, counters map[string]map[string]int) error {
@@ -27,6 +31,15 @@ func (f *fakeStore) UpsertCounters(_ context.Context, period, gran string, start
 		return f.failWith
 	}
 	f.period, f.granularity, f.start, f.counters = period, gran, start, counters
+	return nil
+}
+
+func (f *fakeStore) RecordInstall(_ context.Context, installID, _ string, _ *time.Time) error {
+	f.installCalls++
+	if f.installFail != nil {
+		return f.installFail
+	}
+	f.installID = installID
 	return nil
 }
 
@@ -87,6 +100,45 @@ func TestIngest_LegacyWeekFieldFallback(t *testing.T) {
 	}
 }
 
+func TestIngest_InstallIDRecorded(t *testing.T) {
+	fs := &fakeStore{}
+	const id = "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+	body := `{"schema_version":2,"period":"2026-06-04","granularity":"daily",` +
+		`"install_id":"` + id + `","counters":{"dpm/command":{"up":1}}}`
+	rec := post(New(fs, ""), body)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204; body=%s", rec.Code, rec.Body)
+	}
+	if fs.installCalls != 1 || fs.installID != id {
+		t.Errorf("RecordInstall calls=%d id=%q, want 1/%q", fs.installCalls, fs.installID, id)
+	}
+	// Counters still ingested alongside the dedup record.
+	if fs.counters["dpm/command"]["up"] != 1 {
+		t.Errorf("counters not ingested: %+v", fs.counters)
+	}
+}
+
+func TestIngest_InstallIDOptional(t *testing.T) {
+	fs := &fakeStore{}
+	// No install_id (CI / old client) → counters ingest, no dedup call.
+	if rec := post(New(fs, ""), dailyBody); rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rec.Code)
+	}
+	if fs.installCalls != 0 {
+		t.Errorf("RecordInstall called %d times for id-less body, want 0", fs.installCalls)
+	}
+}
+
+func TestIngest_InstallIDFailureDoesNotFailIngest(t *testing.T) {
+	// The counters already committed; a dedup write error must not 500.
+	fs := &fakeStore{installFail: context.DeadlineExceeded}
+	body := `{"schema_version":2,"period":"2026-06-04","granularity":"daily",` +
+		`"install_id":"3f2504e0-4f89-41d3-9a0c-0305e82c3301","counters":{"dpm/command":{"up":1}}}`
+	if rec := post(New(fs, ""), body); rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204 (dedup failure swallowed)", rec.Code)
+	}
+}
+
 func TestIngest_Rejects(t *testing.T) {
 	cases := map[string]struct {
 		method, body string
@@ -100,6 +152,7 @@ func TestIngest_Rejects(t *testing.T) {
 		"empty counters":    {http.MethodPost, `{"period":"2026-06-04","granularity":"daily","counters":{}}`, http.StatusBadRequest},
 		"negative count":    {http.MethodPost, `{"period":"2026-06-04","granularity":"daily","counters":{"x":{"y":-1}}}`, http.StatusBadRequest},
 		"empty bucket name": {http.MethodPost, `{"period":"2026-06-04","granularity":"daily","counters":{"x":{"":1}}}`, http.StatusBadRequest},
+		"bad install_id":    {http.MethodPost, `{"period":"2026-06-04","granularity":"daily","install_id":"not-a-uuid","counters":{"x":{"y":1}}}`, http.StatusBadRequest},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

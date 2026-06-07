@@ -17,8 +17,10 @@ func buildTelemetryCmd() *cobra.Command {
 		Use:   "telemetry",
 		Short: "Control and audit anonymous usage telemetry",
 		Long: `canton-devkit sends anonymous, aggregate usage counters (command name,
-OS, Docker engine, exit status — counted daily, no IDs, no paths, no
-party ids, no JWTs, no error messages) to help prioritize fixes.
+OS, Docker engine, exit status — counted daily, no paths, no party ids,
+no JWTs, no error messages) to help prioritize fixes. Uploads also carry
+one random token (a UUID, not derived from your machine) used only to
+count distinct installs; rotate it with 'telemetry reset-id'.
 
 It is ON by default (opt-out). Turn it off with 'telemetry off', or set
 DPM_TELEMETRY=off / DO_NOT_TRACK=1. 'telemetry preview' shows exactly the
@@ -53,8 +55,31 @@ and which rule decided it.`,
 		buildTelemetryStatus(),
 		buildTelemetryPreview(),
 		buildTelemetryFlush(),
+		buildTelemetryResetID(),
 	)
 	return cmd
+}
+
+func buildTelemetryResetID() *cobra.Command {
+	return &cobra.Command{
+		Use:   "reset-id",
+		Short: "Rotate the anonymous install id used to de-duplicate installs",
+		Long: `canton-devkit carries one anonymous, random token (a UUID, not
+derived from any hardware detail) so the collector can count distinct
+installs without ever identifying your machine. This rotates it: a fresh
+random token is minted on the next upload, breaking any linkage between
+past and future counter submissions.`,
+		Args:          cobra.NoArgs,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if err := telemetry.ResetInstallID(); err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintln(c.OutOrStdout(), "Anonymous install id rotated. A new random token will be used on the next upload.")
+			return nil
+		},
+	}
 }
 
 func buildTelemetryFlush() *cobra.Command {

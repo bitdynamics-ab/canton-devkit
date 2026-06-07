@@ -137,16 +137,22 @@ func pendingPeriodFiles(cur string) []string {
 	return out
 }
 
-// uploadPeriod POSTs one period's counters. The body carries ONLY
-// schema_version, period, granularity, and counters — never the internal
-// Deferred flag.
+// uploadPeriod POSTs one period's counters. The body carries
+// schema_version, period, granularity, counters, and (non-CI only) the
+// anonymous install_id dedup token — never the internal Deferred flag.
 func uploadPeriod(url string, agg *PeriodAggregate) error {
-	body, err := json.Marshal(map[string]any{
+	payload := map[string]any{
 		"schema_version": SchemaVersion,
 		"period":         agg.Period,
 		"granularity":    agg.Granularity,
 		"counters":       agg.Counters,
-	})
+	}
+	// Anonymous dedup token (installid.go). Omitted in CI / on CSPRNG
+	// failure; the collector treats install_id as optional.
+	if id := installID(); id != "" {
+		payload["install_id"] = id
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}

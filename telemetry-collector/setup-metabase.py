@@ -192,6 +192,11 @@ def build_cards(db_id, coll_id):
         "bar", db_id, coll_id,
         {"graph.dimensions": ["action"], "graph.metrics": ["n"]})
     # ---- M4: composite adoption — installs, visibility, qualitative ----
+    ids["unique"] = native_card(
+        "Unique active installs / day (anonymous dedup token)",
+        "SELECT period_date, unique_installs FROM v_unique_installs_daily ORDER BY period_date",
+        "line", db_id, coll_id,
+        {"graph.dimensions": ["period_date"], "graph.metrics": ["unique_installs"]})
     ids["installs"] = native_card(
         "Distinct installs by platform (telemetry device-count proxy)",
         "SELECT bucket AS platform, sum(count) AS installs "
@@ -286,8 +291,9 @@ def ensure_dashboard(coll_id, card_ids):
     row1("token")
 
     head("## M4 · Composite adoption  —  sources: telemetry installs + GitHub + maintainer evidence")
-    row2("installs", "downloads")
-    row2("stars", "evidence", h=6)
+    row2("unique", "installs")
+    row2("downloads", "stars")
+    row1("evidence", h=6)
 
     head("### Appendix · raw counters (one-click CSV / Excel export)")
     row1("raw", h=8)
