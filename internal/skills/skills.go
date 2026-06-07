@@ -1,6 +1,6 @@
 // Package skills owns the build-time-embedded AI-agent skill
-// documents shipped with canton-devkit (BIT-135 / BIT-189) and the
-// logic to list, read, and install them.
+// documents shipped with canton-devkit and the logic to list, read,
+// and install them.
 //
 // The skill docs are editor-agnostic markdown describing safe
 // `dpm localnet` workflows. Both surfaces consume this package so
@@ -137,7 +137,7 @@ type InstallResult struct {
 // .md), matching the agent-skill convention of one directory per skill
 // containing a SKILL.md.
 //
-// Clobber safety (review fix): a destination that already exists with
+// Clobber safety: a destination that already exists with
 // DIFFERENT content is NOT overwritten unless force is true — instead
 // its path is returned in Skipped. This protects a user's hand-edited
 // SKILL.md from silently vanishing on a re-install (CLI or one-click

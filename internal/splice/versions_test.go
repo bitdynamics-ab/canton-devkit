@@ -9,8 +9,8 @@ import (
 // TestAlphaChannelEntryShape pins that the catalogue carries at least
 // one alpha entry with a non-empty ImageRepo override — the Token
 // Standard V2 snapshot — and that the IsAlpha helper agrees. This is
-// the BIT-210 contract: alpha catalogue entries opt into a separate
-// image repo via the new fields, and the CLI/up paths key off
+// Contract: alpha catalogue entries opt into a separate image repo
+// via the new fields, and the CLI/up paths key off
 // `Channel == "alpha"`.
 func TestAlphaChannelEntryShape(t *testing.T) {
 	var sawAlpha bool
@@ -116,8 +116,8 @@ func TestResolveUnsupported(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unsupported version")
 	}
-	// Post-PR #20 #2: Resolve returns ErrUncuratedTag (no longer a
-	// generic "unsupported" error) so orchestrators can distinguish
+	// Resolve returns ErrUncuratedTag (rather than a generic
+	// "unsupported" error) so orchestrators can distinguish
 	// "tag exists nowhere" from "tag is upstream but not curated."
 	// The list of curated tags is still embedded so users see what
 	// the safe options are.

@@ -122,8 +122,7 @@ func Dial(opts DialOptions) (*Client, error) {
 
 // doJSON is the centralised request seam for every typed method in this
 // package — keeps auth header injection, JSON decode, error shape
-// consistent across endpoints (per CLAUDE.md "centralise the seam that
-// everyone forgets"). New endpoint methods are typically 5 lines:
+// consistent across endpoints. New endpoint methods are typically 5 lines:
 // construct path + req body, call doJSON, return decoded result.
 //
 // The into argument is the decode target (typically `&MyResponse{}`).

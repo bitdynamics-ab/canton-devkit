@@ -43,8 +43,8 @@ type ComposeRunner struct {
 	// Profiles, when non-empty, becomes one or more `--profile P`
 	// args on every compose invocation. Compose services scoped
 	// under a profile via `profiles: [P]` are skipped unless that
-	// profile is enabled — used by BIT-134's `observability`
-	// overlay to opt users into the Prometheus + Grafana stack
+	// profile is enabled — used by the `observability` overlay
+	// to opt users into the Prometheus + Grafana stack
 	// without forcing the extra ~600 MiB on the default path.
 	Profiles []string
 
@@ -459,7 +459,7 @@ func (c *ComposeRunner) DiscoverPort(ctx context.Context, service string, contai
 // equivalent to the previous Down() semantics and what `localnet
 // clean` will use. When false it preserves volumes so a follow-up
 // `localnet up` against the same --name can resume from existing
-// state; this is what `localnet down` (BIT-124) wants.
+// state; this is what `localnet down` wants.
 //
 // --remove-orphans is always set because forgetting it leaves
 // dangling containers when a later compose project rename happens

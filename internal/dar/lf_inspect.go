@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 )
 
-// Deep Daml-LF inspection (BIT-115). The .dalf envelope parser
+// Deep Daml-LF inspection. The .dalf envelope parser
 // (dalf.go) stops at the package id + LF version. This walks one level
 // deeper — into the Daml-LF 2 Package message — to surface each module's
 // templates (with their choices), interfaces (choices + methods), and

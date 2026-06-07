@@ -14,8 +14,8 @@ import (
 	"time"
 )
 
-// Two-layer version model (PR #20 #2)
-// ====================================
+// Two-layer version model
+// =======================
 //
 // Layer 1 — Curated catalogue (versions.json). Tested entries that
 // power `--version latest` and the default `--version <tag>` flow.
@@ -34,12 +34,9 @@ import (
 //   <CacheRoot()>/resolved-versions.json
 // so subsequent invocations don't re-hit GitHub or re-prompt.
 //
-// Why this exists: prior to PR #20, `--version` was strictly limited
-// to the catalogue. Zhe asked for an escape hatch for prereleases /
-// alphas while keeping the curated path the safe default. The
-// alternative — a weekly cron that auto-bumps the catalogue (#1) —
-// added latency without solving the prerelease use-case. Once #2
-// lands, the cron is redundant and we remove it.
+// Why this exists: previously `--version` was strictly limited to the
+// catalogue. This adds an escape hatch for prereleases / alphas while
+// keeping the curated path the safe default.
 
 // ErrUncuratedTag is returned by Resolve when the requested tag is
 // not in the curated catalogue. Callers that want the uncurated

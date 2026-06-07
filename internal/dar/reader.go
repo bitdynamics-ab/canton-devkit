@@ -63,7 +63,7 @@ func Open(path string) (*Info, error) {
 	// the zip via a second read. Cheaper than streaming once and
 	// hashing twice; for DARs in the 100KB–10MB range this is fine.
 	// ReadDARFile bounds the read at MaxDARBytes so a hostile or
-	// corrupted file can't OOM the process (BIT-127 review fix).
+	// corrupted file can't OOM the process.
 	raw, err := ReadDARFile(path)
 	if err != nil {
 		return nil, err
@@ -184,7 +184,7 @@ func readDalf(f *zip.File, dalfPath string) (*PackageMeta, error) {
 		SizeBytes: int64(len(data)),
 		SHA256:    hex.EncodeToString(hasher.Sum(nil)),
 	}
-	// Deep Daml-LF inspection (BIT-115) — best-effort; nil for LF1 or
+	// Deep Daml-LF inspection — best-effort; nil for LF1 or
 	// unparseable archives. Cheap (microseconds) and small, so populate
 	// it eagerly; `dar info --deep` decides whether to render it.
 	if c, ok := InspectDalf(data); ok {

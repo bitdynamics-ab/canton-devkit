@@ -14,11 +14,9 @@ const preflightCheckTimeout = 10 * time.Second
 // DefaultMinDiskBytes / DefaultMinMemoryBytes are the shared
 // resource thresholds used by BOTH `localnet up` preflight and
 // `localnet doctor`. They MUST be equal across the two surfaces —
-// the `doctor && up` shell-gating contract (PR #39 review:
-// "doctor must not fail on a host where `up` would pass") relies
-// on it. A regression where one site drifted was caught in the
-// PR #39 follow-up review; TestThresholdParity_DoctorMatchesUp
-// pins the equality.
+// the `doctor && up` shell-gating contract ("doctor must not fail
+// on a host where `up` would pass") relies on it.
+// TestThresholdParity_DoctorMatchesUp pins the equality.
 //
 // Values chosen to match the current `up` defaults (the
 // historical authority — `up` shipped these before `doctor`
@@ -113,7 +111,7 @@ func (r *Report) Write(w io.Writer) {
 //
 // We deliberately do NOT preflight TCP ports: DevKit allocates host ports
 // for the user (ephemerally via net.Listen(":0")) so port availability is
-// never a precondition of `localnet up`. See BIT-30 discussion.
+// never a precondition of `localnet up`.
 type Options struct {
 	// DataDir is the path whose filesystem is checked for free space.
 	DataDir string

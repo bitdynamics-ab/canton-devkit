@@ -2,7 +2,7 @@
 // It is the current default; the 0.5.x adapter in sibling package v05 is
 // kept for users still on the 0.5 line.
 //
-// Differences from 0.5.x (per upstream research, see BIT-107):
+// Differences from 0.5.x:
 //   - 0.6.x adds env/alpha-protocol-version.env, wired into the `splice`
 //     service via env_file (required:false). The corresponding
 //     ALPHA_PROTOCOL_VERSION_ENV variable must point at that file.
@@ -116,7 +116,7 @@ func (*Adapter) EndpointServices() map[string]splice.ServicePort {
 
 func (*Adapter) SupportsAlphaProtocol() bool { return true }
 
-// CoreServices is the BIT-222 contract: services whose absence means
+// CoreServices: services whose absence means
 // this instance can't serve a Ledger API call. Wallet/scan/ans web
 // UIs are excluded — losing them is "partial," not "failed."
 // Observability profile services (prometheus, grafana) are excluded

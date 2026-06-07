@@ -347,8 +347,8 @@ func TestWaitForHealthyReturnsOnFatal(t *testing.T) {
 }
 
 // TestWaitForHealthyRecoversFromTransientUnhealthy proves the
-// behaviour Zhe asked for on PR #20: an unhealthy snapshot must not
-// terminate the poller. Splice routinely reports unhealthy during
+// behaviour: an unhealthy snapshot must not terminate the poller.
+// Splice routinely reports unhealthy during
 // onboarding, then settles to healthy. We script two ps calls in
 // sequence: the first returns unhealthy, the second healthy. The
 // poller must keep going past the first and succeed on the second.
