@@ -140,8 +140,16 @@ func pendingPeriodFiles(cur string) []string {
 // uploadPeriod POSTs one period's counters. The body carries
 // schema_version, period, granularity, counters, and (non-CI only) the
 // anonymous install_id dedup token — never the internal Deferred flag.
+//
+// Collector-rollout safety: a collector predating install_id rejects the
+// unknown field with a 400 (it decodes with DisallowUnknownFields). To
+// avoid a fleet upgrade dropping COUNTERS (not just unique-install dedup),
+// a 400 on a token-bearing body triggers exactly ONE retry without the
+// token. The counts then land on the old collector; only the dedup signal
+// is lost until it's upgraded. Any other status (or a 400 on a body that
+// never had a token) is returned as-is.
 func uploadPeriod(url string, agg *PeriodAggregate) error {
-	payload := map[string]any{
+	base := map[string]any{
 		"schema_version": SchemaVersion,
 		"period":         agg.Period,
 		"granularity":    agg.Granularity,
@@ -149,29 +157,58 @@ func uploadPeriod(url string, agg *PeriodAggregate) error {
 	}
 	// Anonymous dedup token (installid.go). Omitted in CI / on CSPRNG
 	// failure; the collector treats install_id as optional.
-	if id := installID(); id != "" {
+	id := installID()
+	payload := base
+	if id != "" {
+		payload = make(map[string]any, len(base)+1)
+		for k, v := range base {
+			payload[k] = v
+		}
 		payload["install_id"] = id
 	}
-	body, err := json.Marshal(payload)
+
+	status, err := postCounters(url, payload)
 	if err != nil {
 		return err
+	}
+	if status/100 == 2 {
+		return nil
+	}
+	// Old collector that doesn't know install_id → retry once without it
+	// so the counters still ingest during a rollout.
+	if status == http.StatusBadRequest && id != "" {
+		status, err = postCounters(url, base)
+		if err != nil {
+			return err
+		}
+		if status/100 == 2 {
+			return nil
+		}
+	}
+	return errBadStatus(status)
+}
+
+// postCounters marshals and POSTs one payload, returning the HTTP status
+// code (or a transport error). It performs no retries — uploadPeriod owns
+// the single install_id fallback retry.
+func postCounters(url string, payload map[string]any) (int, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return 0, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), uploadTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req) // no retries inside the attempt
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode/100 != 2 {
-		return errBadStatus(resp.StatusCode)
-	}
-	return nil
+	return resp.StatusCode, nil
 }
 
 type errBadStatus int

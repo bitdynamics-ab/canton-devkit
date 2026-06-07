@@ -104,6 +104,12 @@ func SetEnabled(on bool) error {
 	c := loadConsent()
 	c.Enabled = &on
 	c.NoticeShown = true
+	if !on {
+		// Turning telemetry off clears the anonymous install token, so a
+		// later re-enable starts from a fresh token with no linkage across
+		// the off/on cycle (matches the docs' privacy promise).
+		c.InstallID = ""
+	}
 	return saveConsent(c)
 }
 
