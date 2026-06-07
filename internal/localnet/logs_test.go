@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -13,6 +14,23 @@ import (
 
 func TestRunLogs_ConstructsDockerComposeLogsCommand(t *testing.T) {
 	seedLogsInstance(t, "logs-command")
+
+	var unfilteredArgs []string
+	var unfilteredOut, unfilteredErr bytes.Buffer
+	unfilteredCode := RunLogs(context.Background(), &unfilteredOut, &unfilteredErr, &LogsOptions{
+		Name: "logs-command",
+		Tail: "50",
+		RunFn: func(_ context.Context, args []string, _ string, _ []string, _ io.Writer, _ io.Writer) error {
+			unfilteredArgs = append([]string(nil), args...)
+			return nil
+		},
+	})
+	if unfilteredCode != ExitSuccess {
+		t.Fatalf("RunLogs unfiltered = %d, want ExitSuccess; stderr=%q", unfilteredCode, unfilteredErr.String())
+	}
+	if want := []string{"compose", "-p", "canton-logs-command", "logs", "--tail", "50"}; !slices.Equal(unfilteredArgs, want) {
+		t.Fatalf("unfiltered args = %v, want %v", unfilteredArgs, want)
+	}
 
 	var gotArgs []string
 	var gotDir string
@@ -33,6 +51,9 @@ func TestRunLogs_ConstructsDockerComposeLogsCommand(t *testing.T) {
 	})
 	if code != ExitSuccess {
 		t.Fatalf("RunLogs = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
+	}
+	if want := []string{"compose", "-p", "canton-logs-command", "logs", "--follow", "--tail", "all", "--since", "10m", "canton", "splice"}; !slices.Equal(gotArgs, want) {
+		t.Fatalf("filtered args = %v, want %v", gotArgs, want)
 	}
 
 	argsStr := strings.Join(gotArgs, " ")
