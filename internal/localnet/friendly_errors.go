@@ -9,7 +9,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 )
 
-// Package localnet (this file): the friendly-error wrapper. BIT-126.
+// Package localnet (this file): the friendly-error wrapper.
 //
 // Today the orchestrators (RunUp / RunDown / future RunDoctor) return
 // raw error strings and the caller prints them to stderr. That's
@@ -54,8 +54,8 @@ type FriendlyError struct {
 	// IncludeCause opts the cause into Error()'s one-line form.
 	// Default false: Error() emits "error · code X · summary" only.
 	//
-	// Reviewer pin (PR #36 #4): leaking the underlying cause by
-	// default risks exposing paths, hostnames, port numbers, or
+	// Leaking the underlying cause by default risks exposing
+	// paths, hostnames, port numbers, or
 	// other system details through CI/log surfaces where the
 	// FriendlyError was constructed to deliberately *replace* the
 	// raw error with a curated message. Callers that DO want the
@@ -175,9 +175,9 @@ func RenderFriendly(w io.Writer, f *FriendlyError) {
 // `return localnet.FriendlyExit(errw, err, ExitUserError)` and
 // trust that an upstream ExitTimeout still surfaces as 3.
 //
-// Box gating delegates to term.IsTerminal (NOT term.ShouldColor).
-// Reviewer pin (PR #36 #3): the original code used ShouldColor,
-// which conflated "is a TTY" with "should emit ANSI" — so a user
+// Box gating delegates to term.IsTerminal (NOT term.ShouldColor):
+// using ShouldColor would conflate "is a TTY" with "should emit
+// ANSI" — so a user
 // with NO_COLOR=1 on a real terminal (a common CI pattern) lost
 // the box STRUCTURE too. The box's value is the left ┃ accent +
 // the indented remediation list; both work without color. We now
