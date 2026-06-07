@@ -11,7 +11,7 @@ func (a *App) buildRoot() *cobra.Command {
 	root := &cobra.Command{
 		Use:           appName,
 		Short:         "canton-devkit manages Canton LocalNet developer environments.",
-		Version:       a.version,
+		Version:       a.versionString(),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          cobra.ArbitraryArgs,

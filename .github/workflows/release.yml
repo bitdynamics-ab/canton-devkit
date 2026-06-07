@@ -81,6 +81,11 @@ jobs:
       - name: Build release binaries + tarballs + checksums
         env:
           VERSION: ${{ steps.meta.outputs.version }}
+          # Short commit SHA, baked into release binaries so `version`
+          # reports `<version> (<commit>)`. -trimpath strips VCS stamping,
+          # so the binary can't recover this from debug.ReadBuildInfo() —
+          # inject it explicitly.
+          COMMIT: ${{ github.sha }}
           # Telemetry collector URL, baked into release binaries. Set the
           # repo variable TELEMETRY_ENDPOINT to enable sending; when unset
           # it stays empty and events are spooled locally only.
@@ -88,6 +93,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist component-bin
+          short_commit="${COMMIT::7}"
           tel_pkg="github.com/bitdynamics-ab/canton-devkit/internal/telemetry"
           # Tag builds are the stable release channel (telemetry decision #15).
           # Iterate the target matrix as a real array so each element is
@@ -109,7 +115,7 @@ jobs:
             mkdir -p "${bindir}"
             GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build \
               -trimpath \
-              -ldflags "-s -w -X main.version=${VERSION} -X main.channel=stable -X ${tel_pkg}.endpoint=${TELEMETRY_ENDPOINT}" \
+              -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${short_commit} -X main.channel=stable -X ${tel_pkg}.endpoint=${TELEMETRY_ENDPOINT}" \
               -o "${bindir}/${binary_name}" ./cmd/canton-devkit
 
             # Stage the standalone archive: binary + LICENSE + README for

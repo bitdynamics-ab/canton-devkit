@@ -10,7 +10,7 @@ func TestRunShowsRootHelpWithoutArgs(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 
-	code := New(&out, &err, "test").Run(nil)
+	code := New(&out, &err, "test", "").Run(nil)
 
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d", code)
@@ -27,7 +27,7 @@ func TestRunShowsVersion(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 
-	code := New(&out, &err, "1.2.3").Run([]string{"version"})
+	code := New(&out, &err, "1.2.3", "").Run([]string{"version"})
 
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d", code)
@@ -40,11 +40,28 @@ func TestRunShowsVersion(t *testing.T) {
 	}
 }
 
+func TestRunShowsVersionWithCommit(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+
+	code := New(&out, &err, "1.2.3", "abc1234").Run([]string{"version"})
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if got := out.String(); got != "canton-devkit 1.2.3 (abc1234)\n" {
+		t.Fatalf("unexpected version output: %q", got)
+	}
+	if err.Len() != 0 {
+		t.Fatalf("expected no stderr output, got %q", err.String())
+	}
+}
+
 func TestRunRejectsUnknownCommand(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 
-	code := New(&out, &err, "test").Run([]string{"bogus"})
+	code := New(&out, &err, "test", "").Run([]string{"bogus"})
 
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d", code)
@@ -59,7 +76,7 @@ func TestRunRejectsUnknownCommand(t *testing.T) {
 // guidance (not the old "not implemented yet" placeholder).
 func TestRunLocalnetClean_RequiresTarget(t *testing.T) {
 	var out, errb bytes.Buffer
-	code := New(&out, &errb, "test").Run([]string{"localnet", "clean"})
+	code := New(&out, &errb, "test", "").Run([]string{"localnet", "clean"})
 	if code == 0 {
 		t.Fatalf("clean with no target should exit non-zero, got 0")
 	}
@@ -85,7 +102,7 @@ func TestRunIsArgvOnly(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 
-	code := New(&out, &err, "test").Run([]string{"localnet", "up", "--help"})
+	code := New(&out, &err, "test", "").Run([]string{"localnet", "up", "--help"})
 
 	if code != 0 {
 		t.Fatalf("expected exit 0 for --help, got %d (stderr=%q)", code, err.String())
@@ -102,7 +119,7 @@ func TestRunLocalnetDoctorDispatch(t *testing.T) {
 	// Doctor exits 0 (PASS) or 2 (FAIL) depending on the host. Either is
 	// fine for a dispatch test — we just need to confirm the doctor code
 	// path ran (readiness line present).
-	code := New(&out, &errBuf, "test").Run([]string{"localnet", "doctor"})
+	code := New(&out, &errBuf, "test", "").Run([]string{"localnet", "doctor"})
 
 	if code != 0 && code != 2 {
 		t.Fatalf("expected exit 0 or 2, got %d (stderr=%q)", code, errBuf.String())
@@ -116,7 +133,7 @@ func TestRunLocalnetDoctorHelp(t *testing.T) {
 	var out bytes.Buffer
 	var errBuf bytes.Buffer
 
-	code := New(&out, &errBuf, "test").Run([]string{"localnet", "doctor", "--help"})
+	code := New(&out, &errBuf, "test", "").Run([]string{"localnet", "doctor", "--help"})
 
 	if code != 0 {
 		t.Fatalf("expected exit 0 for help, got %d", code)
@@ -130,7 +147,7 @@ func TestRunRejectsUnknownLocalnetCommand(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 
-	code := New(&out, &err, "test").Run([]string{"localnet", "bogus"})
+	code := New(&out, &err, "test", "").Run([]string{"localnet", "bogus"})
 
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d", code)
