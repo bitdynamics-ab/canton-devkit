@@ -87,6 +87,15 @@ type UpOptions struct {
 	// as before this field existed.
 	Profiles []string
 
+	// PortBase, when > 0, switches host-port assignment from automatic
+	// (ephemeral, stable-reuse) to DETERMINISTIC: each service is pinned
+	// to PortBase+N (see DeriveUIPorts). Used for reproducible
+	// multi-instance / CI layouts where a fixed, predictable port map
+	// matters. Every derived port must be free, or RunUp fails with a
+	// PortBaseConflict (no silent fallback). 0 (default) keeps the
+	// auto-allocation behavior.
+	PortBase int
+
 	// SkipPreflight bypasses the docker.RunPreflight call. This is a
 	// test-only knob — unit tests for the `up` orchestration can't run
 	// Docker checks in CI. Not exposed as a CLI flag.
@@ -413,14 +422,23 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	if wantGrafana {
 		portEnvVars = append(portEnvVars, "GRAFANA_HOST_PORT")
 	}
-	uiOverrides, err := ReuseOrAllocateUIPorts(portEnvVars, priorPorts)
+	// Explicit-port mode (--port-base) pins deterministic ports and
+	// fails on any conflict; default mode auto-allocates with stable
+	// reuse across re-ups.
+	var uiOverrides map[string]int
+	if opts.PortBase > 0 {
+		uiOverrides, err = DeriveUIPorts(portEnvVars, opts.PortBase)
+	} else {
+		uiOverrides, err = ReuseOrAllocateUIPorts(portEnvVars, priorPorts)
+	}
 	if err != nil {
-		if errors.Is(err, ErrPortBusy) {
+		var conflict *PortBaseConflict
+		if errors.Is(err, ErrPortBusy) || errors.As(err, &conflict) {
 			// Stamp PORTS_IN_USE so the frontend can
 			// render the "free the port" remediation panel
 			// instead of the generic failure dialog.
 			prog.FailStep(StepPersistState,
-				fmt.Sprintf("%s\nFree the conflicting process (lsof -i :<port>) or tear down the "+
+				fmt.Sprintf("%s\nFree the conflicting process (lsof -i :<port>), pick a different --port-base, or tear down the "+
 					"other instance and re-run `localnet up --name %s`.", err, opts.Name),
 				WithCode(err, ErrCodePortsInUse))
 			return ExitPreflightFail

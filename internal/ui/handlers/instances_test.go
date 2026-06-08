@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 )
 
 // seedInstance writes a minimal registry state.json so the handlers
@@ -242,4 +244,31 @@ func TestList_PartialStateFileSurfacesWarning(t *testing.T) {
 // Pulled out to keep the test body readable.
 func writeBytes(path string, body []byte) error {
 	return os.WriteFile(path, body, 0o600)
+}
+
+// TestCreate_RejectsOutOfRangePortBase pins the full-range 400 contract
+// on the create handler: BOTH a too-low and a too-high port_base must be
+// rejected synchronously with a 400, before the async bring-up spawns —
+// matching DeriveUIPorts' bounds and the CLI flag. Regression for the
+// reviewer finding that only the lower bound was guarded.
+func TestCreate_RejectsOutOfRangePortBase(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	mux := http.NewServeMux()
+	MountInstances(mux, stream.New()) // create route needs a real hub
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	for name, pb := range map[string]int{"too low": 80, "too high": 65535} {
+		t.Run(name, func(t *testing.T) {
+			body := fmt.Sprintf(`{"name":"portcheck","port_base":%d}`, pb)
+			resp, err := http.Post(srv.URL+"/api/instances", "application/json", strings.NewReader(body))
+			if err != nil {
+				t.Fatalf("POST: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Errorf("port_base=%d → status %d, want 400", pb, resp.StatusCode)
+			}
+		})
+	}
 }

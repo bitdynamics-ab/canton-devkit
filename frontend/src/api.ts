@@ -327,6 +327,9 @@ export interface CreateInstanceRequest {
   version?: string;
   allow_uncurated?: boolean;
   profiles?: string[];
+  // port_base > 0 pins deterministic host ports from this base
+  // (`dpm localnet up --port-base`). Omit / 0 → auto-allocate.
+  port_base?: number;
 }
 
 // CreateInstanceAcceptedResponse is what POST /api/instances
