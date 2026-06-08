@@ -305,16 +305,23 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	}
 	composeFiles = append(composeFiles, loopbackPath)
 
-	// observability profile materializes the embedded Prometheus +
-	// Grafana overlay and appends its compose file.
-	// Profile activation gates the actual service-start (services
-	// in the overlay are scoped under `profiles: [observability]`).
-	hasObservabilityProfile := false
-	for _, p := range opts.Profiles {
-		if p == ObservabilityProfileName {
-			hasObservabilityProfile = true
-			break
-		}
+	// Observability profile(s) materialize the embedded Prometheus +
+	// Grafana overlay and append its compose file. Per-component
+	// profiles (`prometheus`, `grafana`) and the legacy umbrella
+	// (`observability` = both) all funnel through
+	// ExpandObservabilityProfiles so the rest of the bring-up logic
+	// only deals with two booleans.
+	wantPrometheus, wantGrafana := ExpandObservabilityProfiles(opts.Profiles)
+	hasObservabilityProfile := wantPrometheus || wantGrafana
+	if wantGrafana && !wantPrometheus {
+		// Grafana without a bundled Prometheus is valid (user may
+		// point it at an external scrape source) but is a common
+		// mistake — surface a warning so an empty dashboard is
+		// expected rather than mysterious.
+		prog.Warn("--profile grafana enabled without --profile prometheus: " +
+			"Grafana will start with no bundled data source. Add " +
+			"--profile prometheus, or configure an external Prometheus " +
+			"manually before relying on the dashboards.")
 	}
 	if hasObservabilityProfile {
 		overlay, err := MaterializeObservabilityOverlay(dataDir, projectDir)
@@ -400,8 +407,11 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	// Grafana host ports alongside the rest so they go through the
 	// stable-reuse contract too.
 	portEnvVars := UIPortEnvVars()
-	if hasObservabilityProfile {
-		portEnvVars = append(portEnvVars, ObservabilityPortEnvVars()...)
+	if wantPrometheus {
+		portEnvVars = append(portEnvVars, "PROMETHEUS_HOST_PORT")
+	}
+	if wantGrafana {
+		portEnvVars = append(portEnvVars, "GRAFANA_HOST_PORT")
 	}
 	uiOverrides, err := ReuseOrAllocateUIPorts(portEnvVars, priorPorts)
 	if err != nil {
@@ -423,8 +433,10 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	state.Ports["sv_ui"] = uiOverrides["SV_UI_PORT"]
 	state.Ports["swagger_ui"] = uiOverrides["SWAGGER_UI_PORT"]
 	state.Ports["postgres"] = uiOverrides["DB_PORT"]
-	if hasObservabilityProfile {
+	if wantPrometheus {
 		state.Ports["prometheus_ui"] = uiOverrides["PROMETHEUS_HOST_PORT"]
+	}
+	if wantGrafana {
 		state.Ports["grafana_ui"] = uiOverrides["GRAFANA_HOST_PORT"]
 	}
 	prog.FinishStep(StepPersistState, "")

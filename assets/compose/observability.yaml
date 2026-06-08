@@ -22,7 +22,11 @@
 
 services:
   prometheus:
-    profiles: ["observability"]
+    # Activated by either the umbrella `observability` profile or the
+    # per-component `prometheus` profile. Splitting lets users enable
+    # metrics scraping without paying Grafana's image + RAM overhead
+    # (or vice versa — Grafana pointed at an external Prometheus).
+    profiles: ["observability", "prometheus"]
     image: prom/prometheus:v3.0.1
     container_name: ${COMPOSE_PROJECT_NAME:-canton}-prometheus
     restart: unless-stopped
@@ -42,7 +46,9 @@ services:
       - default
 
   grafana:
-    profiles: ["observability"]
+    # Per-component profile (`grafana`) plus the umbrella so legacy
+    # `--profile observability` keeps starting both services.
+    profiles: ["observability", "grafana"]
     image: grafana/grafana:11.4.0
     container_name: ${COMPOSE_PROJECT_NAME:-canton}-grafana
     restart: unless-stopped

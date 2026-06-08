@@ -56,11 +56,16 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
   const [name, setName] = useState("");
   const [version, setVersion] = useState("");
   const [allowUncurated, setAllowUncurated] = useState(false);
-  // observability: when on, bring-up adds the Prometheus + Grafana
-  // overlay (`--profile observability`). Default OFF because the
-  // overlay pulls extra container images and adds memory pressure
-  // — opt-in is friendlier for the "just spin one up" path.
-  const [observability, setObservability] = useState(false);
+  // observability: split into two per-component toggles so users can
+  // enable Prometheus and Grafana independently (e.g. metrics-only
+  // setups, or Grafana pointed at an external scrape source).
+  // Default OFF for both — the overlay pulls extra container images
+  // and adds memory pressure, opt-in is friendlier for "just spin
+  // one up". When grafana is on but prometheus is off the form
+  // shows a warning (not a block) so the combination is reachable
+  // but the empty-dashboard surprise is signposted.
+  const [prometheus, setPrometheus] = useState(false);
+  const [grafana, setGrafana] = useState(false);
   // tokensV2: when on, bring-up adds the Token Standard V2 alpha-protocol
   // Canton overlay (`--profile tokens-v2`). Needs a V2-capable Splice
   // version; default OFF.
@@ -94,7 +99,8 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
       setName("");
       setVersion("");
       setAllowUncurated(false);
-      setObservability(false);
+      setPrometheus(false);
+      setGrafana(false);
       setTokensV2(false);
       setStage({ kind: "form" });
       requestAnimationFrame(() => inputRef.current?.focus());
@@ -230,7 +236,8 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
         ...(allowUncurated ? { allow_uncurated: true } : {}),
         ...(() => {
           const profiles = [
-            ...(observability ? ["observability"] : []),
+            ...(prometheus ? ["prometheus"] : []),
+            ...(grafana ? ["grafana"] : []),
             ...(tokensV2 ? ["tokens-v2"] : []),
           ];
           return profiles.length ? { profiles } : {};
@@ -298,8 +305,10 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
               versionsError={versionsError}
               allowUncurated={allowUncurated}
               setAllowUncurated={setAllowUncurated}
-              observability={observability}
-              setObservability={setObservability}
+              prometheus={prometheus}
+              setPrometheus={setPrometheus}
+              grafana={grafana}
+              setGrafana={setGrafana}
               tokensV2={tokensV2}
               setTokensV2={setTokensV2}
               preflight={preflight}
@@ -473,8 +482,10 @@ interface FormBodyProps {
   versionsError: string | null;
   allowUncurated: boolean;
   setAllowUncurated: (b: boolean) => void;
-  observability: boolean;
-  setObservability: (b: boolean) => void;
+  prometheus: boolean;
+  setPrometheus: (b: boolean) => void;
+  grafana: boolean;
+  setGrafana: (b: boolean) => void;
   tokensV2: boolean;
   setTokensV2: (b: boolean) => void;
   preflight: PreflightState;
@@ -493,8 +504,10 @@ function FormBody({
   versionsError,
   allowUncurated,
   setAllowUncurated,
-  observability,
-  setObservability,
+  prometheus,
+  setPrometheus,
+  grafana,
+  setGrafana,
   tokensV2,
   setTokensV2,
   preflight,
@@ -534,8 +547,10 @@ function FormBody({
 
       <PreflightPanel state={preflight} />
 
-      {/* Observability profile — opt-in. Prometheus + Grafana
-          overlay; off by default to keep the cold-start small. */}
+      {/* Observability sidecars — opt-in, per-component. Splitting
+          Prometheus and Grafana lets users run metrics-scrape-only
+          (no Grafana RAM cost) or point Grafana at an external
+          scrape source. */}
       <label
         style={{
           display: "flex",
@@ -544,18 +559,19 @@ function FormBody({
           padding: "10px 12px",
           background: W.surface2,
           borderRadius: 8,
-          border: `1px solid ${observability ? W.brand : W.border}`,
+          border: `1px solid ${prometheus ? W.brand : W.border}`,
           cursor: "pointer",
         }}
       >
         <input
           type="checkbox"
-          checked={observability}
-          onChange={(e) => setObservability(e.target.checked)}
+          checked={prometheus}
+          onChange={(e) => setPrometheus(e.target.checked)}
           style={{ marginTop: 2 }}
+          aria-label="Enable Prometheus"
         />
         <div style={{ flex: 1, fontSize: 12.5, color: W.text2 }}>
-          <strong style={{ color: W.text }}>Enable observability</strong>
+          <strong style={{ color: W.text }}>Enable Prometheus</strong>
           <span
             style={{
               marginLeft: 8,
@@ -567,17 +583,80 @@ function FormBody({
               fontFamily: wMono,
             }}
           >
-            +Prometheus +Grafana
+            metrics scrape
           </span>
           <div style={{ color: W.dim, fontSize: 11.5, marginTop: 3, lineHeight: 1.5 }}>
-            Adds the metrics overlay so the Metrics screen renders live
-            charts (throughput, latency, ACS, errors). Extra ~400 MB of
-            container images; ~300 MB extra RAM at idle. Equivalent to
-            <code style={{ fontFamily: wMono, marginLeft: 4 }}>
-              --profile observability
-            </code>{" "}
+            Scrapes Canton + Splice JMX / admin metrics on a loopback-
+            only host port. Adds ~150 MB image + ~100 MB RAM. Required
+            for the Metrics screen's live charts (throughput, latency,
+            ACS, errors). Equivalent to{" "}
+            <code style={{ fontFamily: wMono }}>--profile prometheus</code>{" "}
             on the CLI.
           </div>
+        </div>
+      </label>
+
+      <label
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 10,
+          padding: "10px 12px",
+          background: W.surface2,
+          borderRadius: 8,
+          border: `1px solid ${grafana ? W.brand : W.border}`,
+          cursor: "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={grafana}
+          onChange={(e) => setGrafana(e.target.checked)}
+          style={{ marginTop: 2 }}
+          aria-label="Enable Grafana"
+        />
+        <div style={{ flex: 1, fontSize: 12.5, color: W.text2 }}>
+          <strong style={{ color: W.text }}>Enable Grafana</strong>
+          <span
+            style={{
+              marginLeft: 8,
+              fontSize: 10.5,
+              padding: "1px 6px",
+              borderRadius: 3,
+              background: `${W.brand}1A`,
+              color: W.brand,
+              fontFamily: wMono,
+            }}
+          >
+            dashboards
+          </span>
+          <div style={{ color: W.dim, fontSize: 11.5, marginTop: 3, lineHeight: 1.5 }}>
+            Provisioned with the canton-localnet dashboard on a loopback-
+            only host port. Adds ~250 MB image + ~200 MB RAM. Equivalent
+            to{" "}
+            <code style={{ fontFamily: wMono }}>--profile grafana</code>{" "}
+            on the CLI.
+          </div>
+          {grafana && !prometheus && (
+            <div
+              role="status"
+              style={{
+                marginTop: 8,
+                padding: "6px 8px",
+                background: `${W.warn}15`,
+                border: `1px solid ${W.warn}`,
+                borderRadius: 6,
+                fontSize: 11.5,
+                color: W.warn,
+                lineHeight: 1.5,
+              }}
+            >
+              Grafana without Prometheus: the bundled dashboards will
+              have no data source. Enable Prometheus too, or wire
+              Grafana to an external scrape source manually after
+              bring-up.
+            </div>
+          )}
         </div>
       </label>
 
@@ -685,7 +764,8 @@ function FormBody({
         <span style={{ color: W.brand }}>
           dpm localnet up --name {name || "<name>"} --version{" "}
           {version || "latest"}
-          {observability ? " --profile observability" : ""}
+          {prometheus ? " --profile prometheus" : ""}
+          {grafana ? " --profile grafana" : ""}
           {tokensV2 ? " --profile tokens-v2" : ""}
         </span>
       </div>

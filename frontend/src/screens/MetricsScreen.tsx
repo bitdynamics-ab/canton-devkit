@@ -596,12 +596,17 @@ function ObservabilityOffPanel({
     setBusy(true);
     setErr(null);
     try {
+      // Per-component fields are the canonical shape on the server;
+      // we send BOTH because the Metrics screen needs Prometheus
+      // (for data) AND Grafana (for the embedded dashboards). The
+      // legacy `enabled` field is also accepted but per-component
+      // is the documented, non-deprecated path.
       const resp = await fetch(
         `/api/instances/${encodeURIComponent(name)}/observability`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ enabled: true }),
+          body: JSON.stringify({ prometheus: true, grafana: true }),
         },
       );
       if (!resp.ok) {
