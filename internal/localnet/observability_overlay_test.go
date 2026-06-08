@@ -1,6 +1,11 @@
 package localnet
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 // TestExpandObservabilityProfiles pins the mapping from the user-
 // facing `--profile` strings to the (prometheus, grafana) booleans
@@ -46,5 +51,34 @@ func TestObservabilityProfileConstants(t *testing.T) {
 	}
 	if GrafanaProfileName != "grafana" {
 		t.Errorf("GrafanaProfileName = %q; want %q", GrafanaProfileName, "grafana")
+	}
+}
+
+func TestMaterializeObservabilityOverlay_RewritesVolumeMountsAbsolute(t *testing.T) {
+	dataDir := t.TempDir()
+	projectDir := t.TempDir()
+	path, err := MaterializeObservabilityOverlay(dataDir, projectDir)
+	if err != nil {
+		t.Fatalf("MaterializeObservabilityOverlay: %v", err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(body)
+	root := filepath.Join(dataDir, "observability")
+	for _, want := range []string{
+		filepath.ToSlash(filepath.Join(root, "compose", "prometheus.yml")) + ":/etc/prometheus/prometheus.yml:ro",
+		filepath.ToSlash(filepath.Join(root, "grafana", "provisioning")) + ":/etc/grafana/provisioning:ro",
+		filepath.ToSlash(filepath.Join(root, "grafana", "dashboards")) + ":/var/lib/grafana/dashboards:ro",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("materialized overlay missing absolute mount %q\n---\n%s\n---", want, s)
+		}
+	}
+	for _, stale := range []string{"./prometheus.yml", "../grafana/provisioning", "../grafana/dashboards"} {
+		if strings.Contains(s, stale) {
+			t.Errorf("materialized overlay still has relative mount %q\n---\n%s\n---", stale, s)
+		}
 	}
 }

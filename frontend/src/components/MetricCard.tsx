@@ -39,6 +39,8 @@ export function MetricCard({
   error,
   format = defaultFormat,
 }: MetricCardProps) {
+  const hasValue = value !== undefined;
+  const valueAvailable = hasValue && Number.isFinite(value);
   const deltaSign = delta === undefined ? 0 : Math.sign(delta);
   let deltaColor: string = W.dim;
   if (deltaSign !== 0 && deltaPolarity !== "neutral") {
@@ -110,8 +112,20 @@ export function MetricCard({
               minHeight: 28,
             }}
           >
-            {value === undefined ? (
+            {!hasValue ? (
               <Skeleton width={70} height={22} />
+            ) : !valueAvailable ? (
+              <span
+                style={{
+                  color: W.text,
+                  fontSize: 26,
+                  fontWeight: 700,
+                  lineHeight: 1.1,
+                  fontFamily: wMono,
+                }}
+              >
+                —
+              </span>
             ) : (
               <>
                 <span

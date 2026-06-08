@@ -92,7 +92,7 @@ func TestWriteLoopbackPortsOverlay(t *testing.T) {
 			t.Errorf("overlay missing service %q\n---\n%s\n---", svc.Name, s)
 		}
 		for _, p := range svc.Ports {
-			want := fmt.Sprintf("127.0.0.1:%s:%d", p.HostExpr, p.ContainerPort)
+			want := fmt.Sprintf("127.0.0.1:%s:%s", p.HostExpr, p.ContainerExpr)
 			if !strings.Contains(s, want) {
 				t.Errorf("overlay missing port binding %q\n---\n%s\n---", want, s)
 			}
@@ -107,6 +107,34 @@ func TestWriteLoopbackPortsOverlay(t *testing.T) {
 	// Must NOT contain 0.0.0.0 anywhere.
 	if strings.Contains(s, "0.0.0.0") {
 		t.Errorf("overlay must not contain 0.0.0.0\n---\n%s\n---", s)
+	}
+}
+
+func TestWriteLoopbackPortsOverlay_NginxUsesEnvBackedContainerPorts(t *testing.T) {
+	path, err := WriteLoopbackPortsOverlay(t.TempDir())
+	if err != nil {
+		t.Fatalf("WriteLoopbackPortsOverlay: %v", err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(body)
+
+	for _, env := range []string{"APP_USER_UI_PORT", "APP_PROVIDER_UI_PORT", "SV_UI_PORT"} {
+		want := fmt.Sprintf("127.0.0.1:${%s}:${%s}", env, env)
+		if !strings.Contains(s, want) {
+			t.Errorf("nginx UI binding must keep host and container ports aligned; missing %q\n---\n%s\n---", want, s)
+		}
+	}
+	for _, stale := range []string{
+		"127.0.0.1:${APP_USER_UI_PORT}:2000",
+		"127.0.0.1:${APP_PROVIDER_UI_PORT}:3000",
+		"127.0.0.1:${SV_UI_PORT}:4000",
+	} {
+		if strings.Contains(s, stale) {
+			t.Errorf("nginx UI binding still contains stale fixed container port %q\n---\n%s\n---", stale, s)
+		}
 	}
 }
 

@@ -61,27 +61,34 @@ interface CardState<T> {
 // "Metric-name follow-ups") will revisit when those exposures land.
 const Q = {
   // Substitute: indexer-update counter, same as HeadlineLedgerTPS.
-  throughputSeries: "sum(rate(daml_participant_api_indexer_updates[1m]))",
+  throughputSeries:
+    "sum(rate(daml_participant_api_indexer_updates[1m])) or vector(0)",
   p99: 'histogram_quantile(0.99, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
-  acsCount: "sum(daml_services_index_active_contracts)",
+  // Live Splice does not expose total ACS cardinality as a stock
+  // Prometheus metric. This is the audited ACS-related signal that
+  // exists in 0.6.4; keep UI copy honest and call it a lookup buffer.
+  acsLookupBuffer:
+    "sum(daml_participant_api_index_db_active_contract_lookup_batch_buffer_length)",
   // No daml_* command-rejection counter on Splice 0.6.4 — use the
   // user-error completion-status counter as a proxy for "things
   // the participant refused to commit". Returns 0 if not exposed.
-  errorsRate: 'sum(rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m]))',
+  errorsRate:
+    'sum(rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m])) or vector(0)',
   latencyMedian:
     'histogram_quantile(0.50, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
   latencyP99:
     'histogram_quantile(0.99, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
-  // Best-effort template throughput. Some Splice/Canton builds expose
-  // `template_id` on this counter; others collapse to a single series or
-  // no data. We still prefer the real template-grain metric family over a
-  // mislabeled grpc_method proxy so the UI matches the bundled Grafana
-  // dashboard and the proposal's intent as closely as the upstream data
-  // allows today.
-  perTemplate:
-    "sum by (template_id) (rate(daml_commands_submissions_total[5m]))",
-  errors1m: 'sum(rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m]))',
-  cpu: "sum by (container) (rate(container_cpu_usage_seconds_total[1m]))",
+  // Splice 0.6.x does not expose template-grain submission counters.
+  // Use the live gRPC method counter as a command-throughput fallback
+  // instead of querying a non-existent `daml_commands_*` family.
+  commandThroughput:
+    "sum by (grpc_method_name) (rate(daml_grpc_server_handled_total[5m]))",
+  errors1m:
+    'sum(rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m])) or vector(0)',
+  errorsByCode:
+    'sum by (grpc_code) (rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m]))',
+  resourceUsage:
+    'sum by (component) (jvm_memory_used_bytes{jvm_memory_type="heap"})',
 };
 
 const TPS_COLOR = "#7CB5F7";
@@ -166,7 +173,7 @@ export function MetricsScreen() {
       await Promise.all([
         loadSeries(name, Q.throughputSeries, "tx/s", setThroughputSeries, signal),
         loadSeries(name, Q.p99, "p99", setP99Series, signal),
-        loadSeries(name, Q.acsCount, "ACS", setAcsSeries, signal),
+        loadSeries(name, Q.acsLookupBuffer, "ACS lookup buffer", setAcsSeries, signal),
         loadSeries(name, Q.errorsRate, "errors", setErrorsSeries, signal),
         loadMultiSeries(
           name,
@@ -179,22 +186,22 @@ export function MetricsScreen() {
         ),
         loadBars(
           name,
-          Q.perTemplate,
-          (m) => m.template_id ?? "(unlabelled)",
+          Q.commandThroughput,
+          (m) => m.grpc_method_name ?? "(unlabelled)",
           setPerTemplate,
           signal,
         ),
         loadBars(
           name,
-          Q.errors1m + " by (reason)",
-          (m) => m.reason ?? "(unknown)",
+          Q.errorsByCode,
+          (m) => m.grpc_code ?? "(unknown)",
           setTopErrors,
           signal,
         ),
         loadMultiSeriesGrouped(
           name,
-          Q.cpu,
-          (m) => m.container ?? "container",
+          Q.resourceUsage,
+          (m) => m.component ?? "component",
           setCpuSeries,
           signal,
         ),
@@ -258,6 +265,10 @@ export function MetricsScreen() {
   }
 
   const m = summary.data?.metrics;
+  const p99Value =
+    summary.kind === "ok" && summary.data
+      ? (summary.data.latency?.p99_ms ?? Number.NaN)
+      : undefined;
 
   return (
     <section style={{ padding: 24 }}>
@@ -285,7 +296,7 @@ export function MetricsScreen() {
         <MetricCard
           title="Command completion p99"
           unit="ms"
-          value={summary.data?.latency?.p99_ms ?? undefined}
+          value={p99Value}
           sparkline={p99Series.data?.points.map((p) => ({ t: p.t, v: p.v * 1000 }))}
           sparklineColor={P99_COLOR}
           error={p99Series.kind === "err" ? p99Series.error : undefined}
@@ -294,7 +305,7 @@ export function MetricsScreen() {
           format={(v) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1))}
         />
         <MetricCard
-          title="Active contracts"
+          title="ACS lookup buffer"
           value={acsSeries.data?.points[acsSeries.data.points.length - 1]?.v}
           sparkline={acsSeries.data?.points}
           sparklineColor={ACS_COLOR}
@@ -340,8 +351,8 @@ export function MetricsScreen() {
         </ChartCard>
 
         <ChartCard
-          title="Per-template throughput"
-          subtitle="best-effort · submissions / 5m"
+          title="Command throughput"
+          subtitle="best-effort · gRPC methods / 5m"
         >
           {perTemplate.kind === "err" ? (
             <ErrLine msg={perTemplate.error ?? "failed"} />
@@ -354,7 +365,7 @@ export function MetricsScreen() {
           )}
         </ChartCard>
 
-        <ChartCard title="Active contracts" subtitle="trend · 1h">
+        <ChartCard title="ACS lookup buffer" subtitle="buffer length · 1h">
           {acsSeries.kind === "err" ? (
             <ErrLine msg={acsSeries.error ?? "failed"} />
           ) : acsSeries.data ? (
@@ -379,7 +390,7 @@ export function MetricsScreen() {
           ) : null}
         </ChartCard>
 
-        <ChartCard title="Resource usage" subtitle="CPU seconds / sec — containers">
+        <ChartCard title="Resource usage" subtitle="JVM heap bytes — components">
           {cpuSeries.kind === "err" ? (
             <ErrLine msg={cpuSeries.error ?? "failed"} />
           ) : (
@@ -387,7 +398,7 @@ export function MetricsScreen() {
               series={cpuSeries.data ?? []}
               width={420}
               height={170}
-              format={(v) => v.toFixed(2)}
+              format={(v) => (v / (1024 * 1024)).toFixed(0) + " MiB"}
             />
           )}
         </ChartCard>

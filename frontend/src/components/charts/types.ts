@@ -24,7 +24,9 @@ export interface Series {
 
 /**
  * Decode Prometheus's `/api/v1/query_range` response into a list of
- * Series. Skips empty results and coerces string values to numbers.
+ * Series. Skips empty results, coerces string values to numbers, and
+ * drops non-finite samples (Prometheus can emit "NaN" for quantiles
+ * when the source histogram lacks finite buckets).
  *
  * Shape we accept (subset Prometheus emits):
  * ```
@@ -67,7 +69,7 @@ export function decodePrometheusRange(
         t: t * 1000, // Prometheus returns seconds; chart wants ms.
         v: Number(v),
       }))
-      .filter((p) => !Number.isNaN(p.v)),
+      .filter((p) => Number.isFinite(p.v)),
   }));
 }
 

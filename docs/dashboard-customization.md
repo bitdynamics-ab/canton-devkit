@@ -39,16 +39,16 @@ non-existent `canton_*` names.
 
 | Panel | Type | PromQL | What it tells you |
 |---|---|---|---|
-| Ledger TPS (5m avg) | stat | `sum(rate(daml_participant_api_indexer_updates{instance=~"$instance"}[5m]))` | Steady-state ledger throughput. Drops here usually point at participant or sequencer back-pressure. |
+| Ledger TPS (5m avg) | stat | `sum(rate(daml_participant_api_indexer_updates{instance=~"$instance"}[5m])) or vector(0)` | Steady-state ledger throughput. Drops here usually point at participant or sequencer back-pressure. |
 | Active Participants | stat | `count(up{component="canton", instance=~"$instance"} == 1)` | How many Canton nodes Prometheus can scrape right now. Anything less than expected means a node is unscrapeable. |
 | Submission Sequencing Latency (p95) | stat | `histogram_quantile(0.95, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket{instance=~"$instance"}[5m])) by (le))` | Tail latency from client submit to sequenced commit. This is the closest audited “command completion” latency on stock Splice 0.6.4. |
 | DB Connections In Use | stat | `sum(db_client_connections_usage{state="used", instance=~"$instance"})` | Active DB pool usage across the stack. A creeping value here is the early signal for connection-pool pressure. |
-| Transactions per Second | timeseries | `rate(daml_participant_api_indexer_updates{instance=~"$instance"}[1m])` | Same signal as the TPS stat, broken out over time so you can see bursts and stalls. |
+| Transactions per Second | timeseries | `rate(daml_participant_api_indexer_updates{instance=~"$instance"}[1m]) or vector(0)` | Same signal as the TPS stat, broken out over time so you can see bursts and stalls. |
 | JVM Heap Used (per node) | timeseries | `jvm_memory_used_bytes{jvm_memory_type="heap", instance=~"$instance"}` | Heap pressure per component. A sawtooth rising baseline is the classic memory-leak shape. |
 | Sequencer Block Event Rate | timeseries | `rate(daml_sequencer_block_events_total{instance=~"$instance"}[1m])` | Sequencer-level event rate. Useful for separating ledger-layer slowness from transport-layer stalls. |
 | Submission Latency by Component | timeseries | p50 + p95 of `daml_sequencer_client_submissions_sequencing_duration_seconds_bucket` grouped by `component` | Shows whether latency is isolated to one node or systemic. Diverging p50/p95 is the early sign of queueing or retries. |
-| Active Contract Set Size | stat | `sum(daml_services_index_active_contracts{instance=~"$instance"})` | Total active contracts across participants. Useful for “did my app actually create state?” checks. |
-| Top 10 Templates by Throughput (best-effort) | bar gauge | `topk(10, sum by (template_id) (rate(daml_commands_submissions_total{instance=~"$instance"}[5m])))` | Template-level throughput when the upstream scrape exposes `template_id`. On stock Splice 0.6.4 this may collapse to a single aggregate series or no data. |
+| ACS Lookup Buffer Length | stat | `sum(daml_participant_api_index_db_active_contract_lookup_batch_buffer_length{instance=~"$instance"})` | ACS-related index lookup buffer length. Stock Splice 0.6.4 does not expose total active-contract cardinality as a Prometheus metric; use the Explorer / JSON API ACS lookup for exact counts. |
+| Top 10 gRPC Methods by Throughput | bar gauge | `topk(10, sum by (grpc_method_name) (rate(daml_grpc_server_handled_total{instance=~"$instance"}[5m])))` | API throughput by live gRPC method. Stock Splice 0.6.4 does not expose template-grain submission counters. |
 
 For the full metric-family audit and substitution table, see
 [docs/observability.md](observability.md).
@@ -244,7 +244,7 @@ Edit the **Ledger TPS (5m avg)** stat panel and add an alert rule
 uses:
 
 ```
-sum(rate(daml_participant_api_indexer_updates{instance=~"$instance"}[5m]))
+sum(rate(daml_participant_api_indexer_updates{instance=~"$instance"}[5m])) or vector(0)
 ```
 
 Fire when the value is below `0.01` for 5 minutes. The alert lives

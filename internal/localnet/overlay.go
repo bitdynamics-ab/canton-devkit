@@ -125,8 +125,13 @@ var SplicePortInternal = []int{2903, 3903, 4903}
 // upstream port-list change is caught by the cross-reference test
 // rather than silently masked by dynamic derivation.
 type loopbackPort struct {
-	ContainerPort int
-	HostExpr      string // "0" for Docker-ephemeral, "${VAR}" for env-driven
+	// HostExpr is "0" for Docker-ephemeral, or "${VAR}" for env-driven.
+	HostExpr string
+	// ContainerExpr is usually a literal container port. For nginx UI
+	// ports it must stay env-driven too: Splice templates nginx's
+	// `listen` directives from the same vars DevKit overrides for
+	// deterministic host ports.
+	ContainerExpr string
 }
 
 type loopbackService struct {
@@ -142,35 +147,35 @@ func loopbackPortTable() []loopbackService {
 		{
 			Name: "canton",
 			Ports: []loopbackPort{
-				{2901, "0"}, {2902, "0"}, {2975, "0"},
-				{3901, "0"}, {3902, "0"}, {3975, "0"},
-				{4901, "0"}, {4902, "0"}, {4975, "0"},
+				{"0", "2901"}, {"0", "2902"}, {"0", "2975"},
+				{"0", "3901"}, {"0", "3902"}, {"0", "3975"},
+				{"0", "4901"}, {"0", "4902"}, {"0", "4975"},
 			},
 		},
 		{
 			Name: "splice",
 			Ports: []loopbackPort{
-				{2903, "0"}, {3903, "0"}, {4903, "0"},
+				{"0", "2903"}, {"0", "3903"}, {"0", "4903"},
 			},
 		},
 		{
 			Name: "nginx",
 			Ports: []loopbackPort{
-				{2000, "${APP_USER_UI_PORT}"},
-				{3000, "${APP_PROVIDER_UI_PORT}"},
-				{4000, "${SV_UI_PORT}"},
+				{"${APP_USER_UI_PORT}", "${APP_USER_UI_PORT}"},
+				{"${APP_PROVIDER_UI_PORT}", "${APP_PROVIDER_UI_PORT}"},
+				{"${SV_UI_PORT}", "${SV_UI_PORT}"},
 			},
 		},
 		{
 			Name: "postgres",
 			Ports: []loopbackPort{
-				{5432, "${DB_PORT}"},
+				{"${DB_PORT}", "5432"},
 			},
 		},
 		{
 			Name: "swagger-ui",
 			Ports: []loopbackPort{
-				{8080, "${SWAGGER_UI_PORT}"},
+				{"${SWAGGER_UI_PORT}", "8080"},
 			},
 		},
 	}
@@ -211,7 +216,7 @@ func WriteLoopbackPortsOverlay(dataDir string) (string, error) {
 		fmt.Fprintf(&b, "  %s:\n", svc.Name)
 		b.WriteString("    ports: !override\n")
 		for _, p := range svc.Ports {
-			fmt.Fprintf(&b, "      - \"127.0.0.1:%s:%d\"\n", p.HostExpr, p.ContainerPort)
+			fmt.Fprintf(&b, "      - \"127.0.0.1:%s:%s\"\n", p.HostExpr, p.ContainerExpr)
 		}
 	}
 

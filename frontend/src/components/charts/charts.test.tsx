@@ -44,12 +44,21 @@ describe("decodePrometheusRange", () => {
     expect(series[0].points[1].v).toBe(0.5);
   });
 
-  it("skips NaN values rather than including them", () => {
+  it("skips non-finite values rather than including them", () => {
     const resp: PrometheusRangeResponse = {
       status: "success",
       data: {
         result: [
-          { metric: {}, values: [[1700000000, "1"], [1700000060, "NaN"], [1700000120, "2"]] },
+          {
+            metric: {},
+            values: [
+              [1700000000, "1"],
+              [1700000060, "NaN"],
+              [1700000120, "2"],
+              [1700000180, "+Inf"],
+              [1700000240, "-Inf"],
+            ],
+          },
         ],
       },
     };

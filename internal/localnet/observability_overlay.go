@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/bitdynamics-ab/canton-devkit/assets"
 )
@@ -78,6 +79,9 @@ func MaterializeObservabilityOverlay(dataDir, projectDir string) (string, error)
 	if _, err := os.Stat(composeFile); err != nil {
 		return "", fmt.Errorf("observability overlay missing after extract: %w", err)
 	}
+	if err := rewriteObservabilityMounts(composeFile, root); err != nil {
+		return "", err
+	}
 
 	// Drop prometheus.yml into projectDir so Docker's relative
 	// volume-mount resolution finds it. The overlay's bind mount
@@ -111,6 +115,29 @@ func MaterializeObservabilityOverlay(dataDir, projectDir string) (string, error)
 	}
 
 	return composeFile, nil
+}
+
+func rewriteObservabilityMounts(composeFile, root string) error {
+	body, err := os.ReadFile(composeFile)
+	if err != nil {
+		return fmt.Errorf("read observability overlay: %w", err)
+	}
+	s := string(body)
+	replacements := map[string]string{
+		"./prometheus.yml":        filepath.Join(root, "compose", "prometheus.yml"),
+		"../grafana/provisioning": filepath.Join(root, "grafana", "provisioning"),
+		"../grafana/dashboards":   filepath.Join(root, "grafana", "dashboards"),
+	}
+	for from, to := range replacements {
+		s = strings.ReplaceAll(s, from, filepath.ToSlash(to))
+	}
+	if string(body) == s {
+		return nil
+	}
+	if err := os.WriteFile(composeFile, []byte(s), 0o644); err != nil {
+		return fmt.Errorf("rewrite observability overlay mounts: %w", err)
+	}
+	return nil
 }
 
 // bytesEqual is a tiny shim so we don't have to import bytes for

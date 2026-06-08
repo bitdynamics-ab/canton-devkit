@@ -97,8 +97,11 @@ func TestTokens_CreateThenListAndDetail(t *testing.T) {
 func TestTokens_CreateDuplicateIsConflict(t *testing.T) {
 	seedForTokens(t, "demo")
 	srv := tokensSrv(t)
-	body := `{"name":"x","symbol":"RTK","decimals":6,"initial_supply":"1","issuer":"a"}`
+	body := `{"name":"x","symbol":"RTK","decimals":6,"initial_supply":"1","issuer":"alice::abc"}`
 	resp, _ := http.Post(srv.URL+"/api/tokens?instance=demo", "application/json", strings.NewReader(body))
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("setup create status = %d, want 201", resp.StatusCode)
+	}
 	_ = resp.Body.Close()
 
 	resp, err := http.Post(srv.URL+"/api/tokens?instance=demo", "application/json", strings.NewReader(body))
@@ -123,8 +126,11 @@ func TestTokens_MintUnsupportedOnInstrument(t *testing.T) {
 	seedForTokens(t, "demo")
 	srv := tokensSrv(t)
 	// Create first so the symbol resolves.
-	create := `{"name":"x","symbol":"RTK","decimals":6,"initial_supply":"1","issuer":"a"}`
+	create := `{"name":"x","symbol":"RTK","decimals":6,"initial_supply":"1","issuer":"alice::abc"}`
 	cr, _ := http.Post(srv.URL+"/api/tokens?instance=demo", "application/json", strings.NewReader(create))
+	if cr.StatusCode != http.StatusCreated {
+		t.Fatalf("setup create status = %d, want 201", cr.StatusCode)
+	}
 	_ = cr.Body.Close()
 
 	mint := `{"to":"bob","amount":"5"}`
