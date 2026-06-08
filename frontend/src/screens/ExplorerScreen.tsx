@@ -159,7 +159,10 @@ export function ExplorerScreen() {
   useEffect(() => {
     if (!name) return;
     if (state.kind !== "ok") return;
-    const es = openContractsStream(name, role);
+    // Resume from the snapshot's `ledger_end` so the handoff is a
+    // single atomic offset boundary — no events get skipped between
+    // the snapshot fetch and the stream open.
+    const es = openContractsStream(name, role, state.data.ledger_end);
     let opened = false;
     const onMessage = (raw: MessageEvent) => {
       opened = true;

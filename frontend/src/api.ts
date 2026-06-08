@@ -781,12 +781,25 @@ export interface ContractStreamEvent {
 // responsible for closing the returned source on unmount; the
 // backend cancels its upstream gRPC subscription via context as
 // soon as the HTTP request goroutine returns.
+//
+// `since` is the offset the stream should resume FROM (exclusive).
+// Callers should pass the `ledger_end` returned by the snapshot
+// endpoint so the snapshot→stream handoff is a single atomic offset
+// boundary — any create/archive between the snapshot and the
+// stream's open would otherwise be missed until the periodic
+// reconciliation refresh. Omit to begin from the live ledger end
+// (strict-tail semantics — direct curl, smoke tests).
 export function openContractsStream(
   name: string,
   role: Role = "app-user",
+  since?: number,
 ): EventSource {
+  const sinceParam =
+    typeof since === "number" && Number.isFinite(since) && since >= 0
+      ? `&since=${since}`
+      : "";
   return new EventSource(
-    `/api/instances/${encodeURIComponent(name)}/contracts/stream?role=${role}`,
+    `/api/instances/${encodeURIComponent(name)}/contracts/stream?role=${role}${sinceParam}`,
   );
 }
 

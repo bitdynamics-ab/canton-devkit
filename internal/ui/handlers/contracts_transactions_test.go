@@ -244,6 +244,32 @@ func TestContractsStream_UnknownInstance(t *testing.T) {
 	}
 }
 
+func TestContractsStream_InvalidSince(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "demo", "0.6.4",
+		map[string]int{"participant_ledger_app-user": 9999},
+		registry.StatusRunning)
+	srv := contractsTxMux(t)
+	cases := []struct {
+		name, query string
+	}{
+		{"non-integer", "since=abc"},
+		{"negative", "since=-1"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			resp, err := http.Get(srv.URL + "/api/instances/demo/contracts/stream?role=app-user&" + c.query)
+			if err != nil {
+				t.Fatalf("GET: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400 (since must be a non-negative integer)", resp.StatusCode)
+			}
+		})
+	}
+}
+
 func TestContractsStream_InvalidRole(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo", "0.6.4",

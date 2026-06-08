@@ -385,6 +385,21 @@ func handleContractsStream(w http.ResponseWriter, r *http.Request) {
 			"role must be one of app-user, app-provider, sv")
 		return
 	}
+	// Parse `since` BEFORE we do any work that could fail with 5xx —
+	// it's pure input validation and should reject 400 before we dial
+	// the participant or look up credentials.
+	var sinceParsed int64
+	var sincePresent bool
+	if rawSince := r.URL.Query().Get("since"); rawSince != "" {
+		v, err := strconv.ParseInt(rawSince, 10, 64)
+		if err != nil || v < 0 {
+			writeError(w, http.StatusBadRequest, "invalid since",
+				fmt.Errorf("since must be a non-negative integer offset"))
+			return
+		}
+		sinceParsed = v
+		sincePresent = true
+	}
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -440,13 +455,25 @@ func handleContractsStream(w http.ResponseWriter, r *http.Request) {
 		byParty[p] = &lapiv2.Filters{}
 	}
 
-	// Resume from current ledger end so we only emit live deltas.
-	// The snapshot endpoint owns the "fill the table" path; this
-	// stream is strictly the live tail.
-	end, err := client.LedgerEnd(setupCtx)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "ledger end probe", err)
-		return
+	// Resume offset: prefer the caller-supplied `since` query param
+	// (parsed at the top of the handler), which the Explorer screen
+	// threads from the snapshot endpoint's `ledger_end` response
+	// field. This closes the snapshot→stream handoff race: any
+	// create/archive between the snapshot's ledger_end and the
+	// stream's own LedgerEnd() probe would otherwise be skipped
+	// until the 30s reconciliation timer fires. When `since` is
+	// absent (older clients / direct curl), fall back to the live
+	// ledger end — strictly-live-tail semantics.
+	var beginExclusive int64
+	if sincePresent {
+		beginExclusive = sinceParsed
+	} else {
+		end, err := client.LedgerEnd(setupCtx)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "ledger end probe", err)
+			return
+		}
+		beginExclusive = end.Offset
 	}
 
 	// Per-call cancel covers TWO scenarios:
@@ -458,7 +485,7 @@ func handleContractsStream(w http.ResponseWriter, r *http.Request) {
 	defer cancelStream()
 
 	updates, err := client.Updates(streamCtx, ledger.UpdatesRequest{
-		BeginExclusive: end.Offset,
+		BeginExclusive: beginExclusive,
 		// EndInclusive nil = tail forever (until ctx cancels).
 		UpdateFormat: &lapiv2.UpdateFormat{
 			IncludeTransactions: &lapiv2.TransactionFormat{
