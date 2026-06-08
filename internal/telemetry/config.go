@@ -18,7 +18,11 @@ const (
 // on|off`. Lives alongside the weekly files.
 func consentPath() string { return filepath.Join(telemetryDir(), "config.json") }
 
-// consent is the persisted state. NO identifier of any kind (design #2).
+// consent is the persisted state. The only thing resembling an identifier
+// is InstallID — a random, opaque, hardware-independent token (see
+// installid.go) used solely so the collector can de-duplicate unique
+// installs. It is NOT derived from any machine attribute and never tags an
+// individual counter, so it cannot single out, locate, or profile a host.
 type consent struct {
 	SchemaVersion int   `json:"schema_version"`
 	Enabled       *bool `json:"enabled,omitempty"` // nil = never chosen (use default)
@@ -26,8 +30,14 @@ type consent struct {
 	// InstallCounted records that this machine has already contributed its
 	// one-per-install increment to dpm/install. A boolean, never an
 	// identifier — it only ensures the install counter fires once per host.
-	InstallCounted bool   `json:"install_counted,omitempty"`
-	UpdatedAt      string `json:"updated_at,omitempty"`
+	InstallCounted bool `json:"install_counted,omitempty"`
+	// InstallID is a random UUIDv4 minted once per config file (see
+	// installid.go). Sent alongside counter uploads so the collector can
+	// count DISTINCT installs without us ever learning anything about the
+	// host. Regenerates on a fresh container/VM/reinstall — by design, so
+	// each environment counts once. Empty until first generated.
+	InstallID string `json:"install_id,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
 }
 
 func loadConsent() consent {

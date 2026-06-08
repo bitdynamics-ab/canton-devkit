@@ -80,6 +80,31 @@ DO UPDATE SET count = counter_period.count + EXCLUDED.count,
 	return nil
 }
 
+// RecordInstall notes that the install identified by the opaque random
+// token was active in `period`. Idempotent on (install_id, period_date):
+// the same token re-reporting the same period collapses to one row (only
+// last_seen advances), so count(DISTINCT install_id) per period is a true
+// unique-active-install count. The token is stored ALONE — never joined
+// to or stored beside any counter — so usage can't be traced to a host.
+//
+// When periodStart is nil (unparseable key) the row is skipped: the date
+// is the dedup key, and the counters were already committed regardless.
+func (s *PgStore) RecordInstall(ctx context.Context, installID, _ string, periodStart *time.Time) error {
+	if periodStart == nil {
+		return nil
+	}
+	const q = `
+INSERT INTO seen_install (install_id, period_date, first_seen, last_seen)
+VALUES ($1, $2, now(), now())
+ON CONFLICT (install_id, period_date)
+DO UPDATE SET last_seen = now()`
+	_, err := s.pool.Exec(ctx, q, installID, *periodStart)
+	if err != nil {
+		return fmt.Errorf("record install: %w", err)
+	}
+	return nil
+}
+
 func countItems(counters map[string]map[string]int) []struct{} {
 	n := 0
 	for _, b := range counters {

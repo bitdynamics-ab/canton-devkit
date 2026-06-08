@@ -39,6 +39,12 @@ type Payload struct {
 	LegacyWeek    string                    `json:"week"` // v1 fallback
 	Granularity   string                    `json:"granularity"`
 	Counters      map[string]map[string]int `json:"counters"`
+	// InstallID is an optional anonymous dedup token (random UUIDv4 minted
+	// client-side, hardware-independent). When present it lets the store
+	// count DISTINCT installs; it is recorded only as (token, active-date)
+	// in a separate table and never linked to a counter row. Absent for CI
+	// hosts and pre-installid clients.
+	InstallID string `json:"install_id"`
 }
 
 // Store persists a validated period of counters. Implemented by pgxStore
@@ -47,7 +53,19 @@ type Payload struct {
 // (period, chart, bucket) rather than replacing — see PgStore.UpsertCounters.
 type Store interface {
 	UpsertCounters(ctx context.Context, period, granularity string, periodStart *time.Time, counters map[string]map[string]int) error
+	// RecordInstall notes that an install (identified only by the opaque
+	// random token) was active in the given period. Idempotent on
+	// (install_id, period_date): re-reports collapse to one row, so the
+	// count of distinct tokens per period is a true unique-active count.
+	// Never associates the token with any counter.
+	RecordInstall(ctx context.Context, installID, period string, periodStart *time.Time) error
 }
+
+// installIDRe bounds the optional dedup token to a UUID shape. The token
+// is opaque to us; this is a sanity/injection gate (it reaches a
+// parameterized query, but we reject anything that isn't a UUIDv4-shaped
+// string early). An empty token means "not provided" and is skipped.
+var installIDRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // Handler is the HTTP ingest handler. Construct with New.
 type Handler struct {
@@ -101,6 +119,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "storage error", http.StatusInternalServerError)
 		return
 	}
+	// Optional unique-install dedup. A failure here must not fail the
+	// counter ingest (the counters already committed), so it is logged
+	// and swallowed — the worst case is a slightly low unique count.
+	if p.InstallID != "" {
+		if err := h.store.RecordInstall(ctx, p.InstallID, p.Period, start); err != nil {
+			log.Printf("ingest: record install period=%s: %v", p.Period, err)
+		}
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -128,6 +154,10 @@ func decode(r *http.Request) (*Payload, error) {
 	}
 	if !validGranularity[p.Granularity] {
 		return nil, fmt.Errorf("granularity must be daily or weekly")
+	}
+	// install_id is optional; when present it must be UUID-shaped.
+	if p.InstallID != "" && !installIDRe.MatchString(p.InstallID) {
+		return nil, fmt.Errorf("install_id must be a UUID")
 	}
 	if len(p.Counters) == 0 {
 		return nil, fmt.Errorf("counters must be non-empty")

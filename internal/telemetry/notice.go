@@ -38,9 +38,11 @@ func MaybeNotice(w io.Writer, verb string, interactive bool) bool {
 
 const noticeText = `
 canton-devkit sends anonymous usage counters (command name, OS, Docker
-engine, exit status) to help us prioritize fixes. No IDs, no file paths,
-no instance/party ids, no JWTs, no error messages — just counters,
-aggregated daily.
+engine, exit status) to help us prioritize fixes. No file paths, no
+instance/party ids, no JWTs, no error messages — just counters,
+aggregated daily, plus one random token (a UUID, NOT derived from your
+machine) used only to count distinct installs. Rotate it anytime with
+'telemetry reset-id'.
 
 Telemetry is ON by default. Turn it off anytime:
   canton-devkit telemetry off        (or set DPM_TELEMETRY=off / DO_NOT_TRACK=1)

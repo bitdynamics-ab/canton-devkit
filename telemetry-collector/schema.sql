@@ -32,6 +32,37 @@ FROM counter_period
 WHERE chart = 'dpm/command'
 ORDER BY period_date DESC, count DESC;
 
+-- Unique-install dedup. One row per (anonymous token, active date). The
+-- token is a random UUIDv4 minted client-side (installid.go) — NOT derived
+-- from any hardware attribute, and stored here ALONE, never joined to a
+-- counter. Its only purpose is to let us count DISTINCT installs active in
+-- a period, the one adoption number the additive counter_period table
+-- cannot give. A fresh container/VM/reinstall mints a new token by design,
+-- so this counts environments, not people.
+CREATE TABLE IF NOT EXISTS seen_install (
+    install_id  text        NOT NULL,            -- opaque random UUIDv4, hardware-independent
+    period_date date        NOT NULL,            -- start-of-period the token was active in
+    first_seen  timestamptz NOT NULL DEFAULT now(),
+    last_seen   timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (install_id, period_date)
+);
+
+CREATE INDEX IF NOT EXISTS seen_install_date_idx ON seen_install (period_date);
+
+-- Unique active installs per day — the headline "how many distinct
+-- devices" number (counts each environment once per period).
+CREATE OR REPLACE VIEW v_unique_installs_daily AS
+SELECT period_date, count(DISTINCT install_id) AS unique_installs
+FROM seen_install
+GROUP BY period_date
+ORDER BY period_date;
+
+-- All-time distinct installs ever seen — cumulative unique-environment
+-- count toward the adoption floor.
+CREATE OR REPLACE VIEW v_unique_installs_total AS
+SELECT count(DISTINCT install_id) AS unique_installs_all_time
+FROM seen_install;
+
 -- GitHub adoption signals (populated by cmd/github-stats on a daily
 -- schedule). These cover the install/visibility legs of the proposal's
 -- composite adoption measure that zero-PII telemetry can't provide.

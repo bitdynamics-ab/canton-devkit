@@ -1,9 +1,12 @@
 # Telemetry
 
 canton-devkit records **anonymous, aggregate usage counters** — merged
-into a weekly total with **no per-invocation rows and no identifiers of
-any kind** — to help the team see what's used and what breaks. See the
-full design at [docs/proposals/telemetry.md](proposals/telemetry.md).
+into a daily total with **no per-invocation rows** — to help the team see
+what's used and what breaks. The only identifier sent is a single
+**anonymous random install token** (a UUID, not derived from any hardware
+detail) used purely so we can count *distinct* installs; it never tags an
+individual counter. See the full design at
+[docs/proposals/telemetry.md](proposals/telemetry.md).
 
 Inspect exactly what's queued any time:
 
@@ -67,10 +70,30 @@ A week's file is literally:
 We learn *"this week saw 5 `up` invocations on darwin/arm64"* — and
 nothing else.
 
+## The anonymous install token
+
+One value is sent that *can* distinguish installs: a random **UUIDv4**
+minted on first upload and stored in your telemetry config. It exists for
+exactly one reason — so the collector can answer *"how many distinct
+installs?"* (the one adoption number pure counters can't give). What it is
+**not**:
+
+- **Not derived from your machine** — no hostname, MAC, serial, or
+  hardware fingerprint feeds it. It's pure random bytes.
+- **Not linked to your usage** — the collector stores it alone, as
+  `(token, active-date)`, never beside a counter. We can count installs;
+  we can't see what any one install did.
+- **Per-environment, not per-person** — it lives in the config file, so a
+  fresh container, VM, or reinstall mints a new one by design. It counts
+  *environments*, not people.
+- **Suppressed in CI** and **rotatable anytime** with
+  `canton-devkit telemetry reset-id` (or cleared entirely when you
+  `telemetry off`).
+
 ## What is **never** collected
 
-No machine id, install uuid, or hashed hardware id. No IP retention. And
-by construction — the model is counters, not events — no:
+No machine id, no hashed hardware id, no IP retention. And by
+construction — the model is counters, not events — no:
 
 - instance / project / compose names, party ids, contract ids
 - DAR names/hashes, package/module names
@@ -78,7 +101,8 @@ by construction — the model is counters, not events — no:
 - command arguments beyond the verb, error messages, stack traces
 - timestamps finer than the ISO week, environment variables, hostnames
 
-There is no per-invocation row to profile and no identifier to correlate.
+There is no per-invocation row to profile, and the one token we send
+correlates only to itself (an install count) — never to your usage.
 
 ## How it works
 
