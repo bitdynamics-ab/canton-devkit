@@ -201,9 +201,9 @@ func TestResolvePrometheusEndpoint_UsesRecordedRegistryPort(t *testing.T) {
 	t.Cleanup(func() { metricsContainersList = old })
 
 	state := &registry.State{
-		Name:          "demo",
+		Name:           "demo",
 		ComposeProject: "demo",
-		Ports:         map[string]int{"prometheus_ui": 19190},
+		Ports:          map[string]int{"prometheus_ui": 19190},
 	}
 	host, port, err := resolvePrometheusEndpoint(context.Background(), state, "127.0.0.1", 0)
 	if err != nil {
