@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/metricsq"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
@@ -189,4 +190,48 @@ func TestGrafanaURLFor(t *testing.T) {
 			t.Errorf("grafanaURLFor with zero port = %q, want empty", got)
 		}
 	})
+}
+
+func TestResolvePrometheusEndpoint_UsesRecordedRegistryPort(t *testing.T) {
+	old := metricsContainersList
+	metricsContainersList = func(context.Context, string) ([]containers.Info, error) {
+		t.Fatal("should not probe docker when prometheus_ui is already recorded")
+		return nil, nil
+	}
+	t.Cleanup(func() { metricsContainersList = old })
+
+	state := &registry.State{
+		Name:          "demo",
+		ComposeProject: "demo",
+		Ports:         map[string]int{"prometheus_ui": 19190},
+	}
+	host, port, err := resolvePrometheusEndpoint(context.Background(), state, "127.0.0.1", 0)
+	if err != nil {
+		t.Fatalf("resolvePrometheusEndpoint: %v", err)
+	}
+	if host != "127.0.0.1" || port != 19190 {
+		t.Fatalf("got %s:%d, want 127.0.0.1:19190", host, port)
+	}
+}
+
+func TestResolvePrometheusEndpoint_MissingRegistryPortWithRunningContainer(t *testing.T) {
+	old := metricsContainersList
+	metricsContainersList = func(context.Context, string) ([]containers.Info, error) {
+		return []containers.Info{{Service: "prometheus", State: "running"}}, nil
+	}
+	t.Cleanup(func() { metricsContainersList = old })
+
+	state := &registry.State{
+		Name:           "demo",
+		ComposeProject: "demo",
+		Ports:          map[string]int{},
+	}
+	_, _, err := resolvePrometheusEndpoint(context.Background(), state, "127.0.0.1", 0)
+	if err == nil {
+		t.Fatal("expected error when prometheus runs but port is not recorded")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "host port was not recorded") || !strings.Contains(msg, "restart the instance") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }

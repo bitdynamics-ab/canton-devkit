@@ -72,11 +72,14 @@ const Q = {
     'histogram_quantile(0.50, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
   latencyP99:
     'histogram_quantile(0.99, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
-  // No per-template exercise counter is exposed today; the closest
-  // by-shape signal is gRPC service-handled rate. Returns flat data
-  // until a per-template metric lands upstream.
+  // Best-effort template throughput. Some Splice/Canton builds expose
+  // `template_id` on this counter; others collapse to a single series or
+  // no data. We still prefer the real template-grain metric family over a
+  // mislabeled grpc_method proxy so the UI matches the bundled Grafana
+  // dashboard and the proposal's intent as closely as the upstream data
+  // allows today.
   perTemplate:
-    "sum by (grpc_method) (rate(daml_grpc_server_handled_total[5m]))",
+    "sum by (template_id) (rate(daml_commands_submissions_total[5m]))",
   errors1m: 'sum(rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m]))',
   cpu: "sum by (container) (rate(container_cpu_usage_seconds_total[1m]))",
 };
@@ -177,7 +180,7 @@ export function MetricsScreen() {
         loadBars(
           name,
           Q.perTemplate,
-          (m) => m.template ?? "unknown",
+          (m) => m.template_id ?? "(unlabelled)",
           setPerTemplate,
           signal,
         ),
@@ -197,7 +200,7 @@ export function MetricsScreen() {
         ),
         loadHeatmap(
           name,
-          'sum(increase(canton_mediator_approval_duration_bucket[1m])) by (le)',
+          'sum(increase(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[1m])) by (le)',
           setHeatmap,
           signal,
         ),
@@ -338,7 +341,7 @@ export function MetricsScreen() {
 
         <ChartCard
           title="Per-template throughput"
-          subtitle="exercises / 5m"
+          subtitle="best-effort · submissions / 5m"
         >
           {perTemplate.kind === "err" ? (
             <ErrLine msg={perTemplate.error ?? "failed"} />
