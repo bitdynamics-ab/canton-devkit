@@ -30,7 +30,7 @@
       "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "sum(rate(canton_participant_transactions_total{instance=~\"$instance\"}[5m]))",
+          "expr": "sum(rate(daml_participant_api_indexer_updates{instance=~\"$instance\"}[5m]))",
           "legendFormat": "tx/s"
         }
       ]
@@ -48,12 +48,12 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Mediator Approval Latency (p95)",
+      "title": "Sequencer Submission Latency (p95)",
       "datasource": "Prometheus",
       "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(canton_mediator_approval_duration_bucket{instance=~\"$instance\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
           "legendFormat": "p95"
         }
       ]
@@ -61,11 +61,11 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "Postgres Conn Count",
+      "title": "DB Connections (in use)",
       "datasource": "Prometheus",
       "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
       "targets": [
-        { "expr": "sum(pg_stat_activity_count{instance=~\"$instance\"})" }
+        { "expr": "sum(db_client_connections_usage{state=\"used\", instance=~\"$instance\"})" }
       ]
     },
     {
@@ -76,8 +76,8 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
       "targets": [
         {
-          "expr": "rate(canton_participant_transactions_total{instance=~\"$instance\"}[1m])",
-          "legendFormat": "{{participant}}"
+          "expr": "rate(daml_participant_api_indexer_updates{instance=~\"$instance\"}[1m])",
+          "legendFormat": "{{component}}"
         }
       ]
     },
@@ -89,7 +89,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
       "targets": [
         {
-          "expr": "jvm_memory_used_bytes{area=\"heap\", instance=~\"$instance\"}",
+          "expr": "jvm_memory_used_bytes{jvm_memory_type=\"heap\", instance=~\"$instance\"}",
           "legendFormat": "{{component}}"
         }
       ]
@@ -97,30 +97,30 @@
     {
       "id": 12,
       "type": "timeseries",
-      "title": "Sequencer Message Rate",
+      "title": "Sequencer Block Event Rate",
       "datasource": "Prometheus",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
       "targets": [
         {
-          "expr": "rate(canton_sequencer_messages_total{instance=~\"$instance\"}[1m])",
-          "legendFormat": "{{sequencer}}"
+          "expr": "rate(daml_sequencer_block_events_total{instance=~\"$instance\"}[1m])",
+          "legendFormat": "{{component}}"
         }
       ]
     },
     {
       "id": 13,
       "type": "timeseries",
-      "title": "Transaction Processing Latency",
+      "title": "Submission Sequencing Latency",
       "datasource": "Prometheus",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(canton_participant_transaction_duration_bucket{instance=~\"$instance\"}[5m])) by (le, participant))",
-          "legendFormat": "p50 {{participant}}"
+          "expr": "histogram_quantile(0.50, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, component))",
+          "legendFormat": "p50 {{component}}"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(canton_participant_transaction_duration_bucket{instance=~\"$instance\"}[5m])) by (le, participant))",
-          "legendFormat": "p95 {{participant}}"
+          "expr": "histogram_quantile(0.95, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, component))",
+          "legendFormat": "p95 {{component}}"
         }
       ]
     }

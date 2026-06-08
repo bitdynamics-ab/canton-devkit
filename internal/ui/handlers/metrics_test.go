@@ -108,7 +108,7 @@ func TestMetricsSummary_RejectsInvalidInstanceName(t *testing.T) {
 func TestMetrics_PromQLAllowlistAccepts_HappyPath(t *testing.T) {
 	goodQueries := []string{
 		"up",
-		"rate(canton_participant_transactions_total[5m])",
+		"rate(daml_participant_api_indexer_updates[5m])",
 		`up{instance="demo"}`,
 		"sum(jvm_memory_used_bytes{area=\"heap\"})",
 		"histogram_quantile(0.95, sum(rate(x_bucket[5m])) by (le))",
