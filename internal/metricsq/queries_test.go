@@ -47,8 +47,11 @@ func TestLatencyQuantiles_WellFormed(t *testing.T) {
 		if !strings.HasPrefix(q, c.want) {
 			t.Errorf("query for %s = %q, want prefix %q", c.h, q, c.want)
 		}
-		if !strings.Contains(q, "canton_mediator_approval_duration_bucket[5m]") {
-			t.Errorf("query for %s must share the mediator approval-duration histogram; got %q", c.h, q)
+		// All three percentiles must share the same bucket source so a
+		// p50/p95/p99 comparison is meaningful (mixing histogram
+		// families would silently render incomparable numbers).
+		if !strings.Contains(q, "daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m]") {
+			t.Errorf("query for %s must share the sequencer submission-duration histogram; got %q", c.h, q)
 		}
 		if !strings.Contains(q, "by (le)") {
 			t.Errorf("query for %s missing `by (le)` grouping needed by histogram_quantile; got %q", c.h, q)

@@ -181,4 +181,3 @@ func TestSecondsToMs(t *testing.T) {
 		t.Errorf("0.045s -> %v, want ~45ms", got)
 	}
 }
-
