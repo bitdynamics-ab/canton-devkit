@@ -755,6 +755,84 @@ export const fetchContracts = (
     `/api/instances/${encodeURIComponent(name)}/contracts?role=${role}&limit=${limit}`,
   );
 
+// BIT-231 — contract-detail drawer payload. Returned by
+// GET /api/instances/{name}/contracts/{contract_id}; backed by
+// EventQueryService.GetEventsByContractId on the participant.
+export interface ContractDetail {
+  contract_id: string;
+  template_id?: string;
+  package_name?: string;
+  payload?: Record<string, unknown>;
+  signatories: string[];
+  observers: string[];
+  created_at?: string;
+  created_offset?: number;
+  created_update_id?: string;
+  archived: boolean;
+  archived_at?: string;
+  archived_offset?: number;
+  archived_update_id?: string;
+}
+
+export interface ContractDetailResponse {
+  schema_version: number;
+  instance: string;
+  role: Role;
+  contract: ContractDetail;
+}
+
+export const fetchContractDetail = (
+  name: string,
+  contractId: string,
+  role: Role = "app-user",
+) =>
+  apiFetch<ContractDetailResponse>(
+    `/api/instances/${encodeURIComponent(name)}/contracts/${encodeURIComponent(contractId)}?role=${role}`,
+  );
+
+// BIT-231 — Explorer live SSE stream events. The /contracts/stream
+// endpoint emits one frame per ACS delta. Backend caps subscriptions
+// at 10k events then flushes a final `truncated` payload — the
+// frontend treats that as a signal to fall back to snapshot
+// reconciliation.
+export interface ContractStreamEvent {
+  event: "created" | "archived" | "truncated";
+  contract_id?: string;
+  template?: string;
+  signatories?: string[];
+  observers?: string[];
+  offset?: number;
+  at?: number;
+  update_id?: string;
+  reason?: string;
+}
+
+// openContractsStream is a thin EventSource wrapper. The caller is
+// responsible for closing the returned source on unmount; the
+// backend cancels its upstream gRPC subscription via context as
+// soon as the HTTP request goroutine returns.
+//
+// `since` is the offset the stream should resume FROM (exclusive).
+// Callers should pass the `ledger_end` returned by the snapshot
+// endpoint so the snapshot→stream handoff is a single atomic offset
+// boundary — any create/archive between the snapshot and the
+// stream's open would otherwise be missed until the periodic
+// reconciliation refresh. Omit to begin from the live ledger end
+// (strict-tail semantics — direct curl, smoke tests).
+export function openContractsStream(
+  name: string,
+  role: Role = "app-user",
+  since?: number,
+): EventSource {
+  const sinceParam =
+    typeof since === "number" && Number.isFinite(since) && since >= 0
+      ? `&since=${since}`
+      : "";
+  return new EventSource(
+    `/api/instances/${encodeURIComponent(name)}/contracts/stream?role=${role}${sinceParam}`,
+  );
+}
+
 // follow-up — Transactions + Timeline.
 //
 // Each row in `transactions` represents one Canton update:

@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   fetchContracts,
   fetchTransactions,
+  openContractsStream,
   type ContractRow,
+  type ContractStreamEvent,
   type ContractsListResponse,
   type Role,
   type TransactionEvent,
@@ -12,6 +14,7 @@ import {
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { TX_KIND_COLOR, W, wMono } from "../tokens";
+import { ContractDetailDrawer } from "./ContractDetailDrawer";
 
 // ExplorerScreen — production layout.
 //
@@ -56,16 +59,33 @@ export function ExplorerScreen() {
   const [activeParties, setActiveParties] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [selectedCid, setSelectedCid] = useState<string | null>(null);
+  // BIT-231 — live-stream connection status. "live" once the
+  // EventSource has fired at least one frame; "reconnecting" when
+  // the browser has dropped the connection and is retrying;
+  // "truncated" when the backend hit its 10k event cap.
+  const [streamStatus, setStreamStatus] = useState<
+    "idle" | "live" | "reconnecting" | "truncated"
+  >("idle");
   const searchRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (!name) return;
-    let cancelled = false;
-    setState({ kind: "loading" });
-    setSelectedCid(null);
-    fetchContracts(name, role, 500)
-      .then((data) => {
-        if (cancelled) return;
+  // refreshSnapshot is the single chokepoint for "fill the table
+  // from the snapshot endpoint." Used by:
+  //   - the initial mount effect
+  //   - the 30-second reconciliation timer
+  //   - the SSE error / truncated recovery path
+  //
+  // Callers signal `quiet=true` for background refreshes so we
+  // don't flash the loading panel; the table is repopulated
+  // in-place. The initial mount uses `quiet=false` so users see
+  // "Snapshotting ACS…" before the first paint.
+  const refreshSnapshot = useCallback(
+    async (instance: string, asRole: Role, quiet: boolean) => {
+      if (!quiet) {
+        setState({ kind: "loading" });
+        setSelectedCid(null);
+      }
+      try {
+        const data = await fetchContracts(instance, asRole, 500);
         const safe = {
           ...data,
           contracts: (data.contracts ?? []).map((c) => ({
@@ -76,9 +96,7 @@ export function ExplorerScreen() {
           })),
         };
         setState({ kind: "ok", data: safe });
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
+      } catch (e: unknown) {
         if (
           e instanceof ApiError &&
           e.code === "PARTICIPANT_PORT_NOT_RECORDED"
@@ -98,15 +116,134 @@ export function ExplorerScreen() {
           });
           return;
         }
-        setState({
-          kind: "err",
-          error: e instanceof ApiError ? e.message : "failed to load ACS",
-        });
-      });
+        if (!quiet) {
+          setState({
+            kind: "err",
+            error: e instanceof ApiError ? e.message : "failed to load ACS",
+          });
+        }
+        // Quiet background reconciliation failures are swallowed —
+        // the user keeps the last-known good state, and the next
+        // tick (or SSE event) will try again.
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!name) return;
+    let cancelled = false;
+    setSelectedCid(null);
+    void (async () => {
+      if (cancelled) return;
+      await refreshSnapshot(name, role, false);
+    })();
     return () => {
       cancelled = true;
     };
-  }, [name, role]);
+  }, [name, role, refreshSnapshot]);
+
+  // BIT-231 — live SSE subscription. Mounted once the snapshot has
+  // loaded; tears down when the instance / role changes or the
+  // screen unmounts. The EventSource browser primitive auto-
+  // reconnects on transient failures (3s default backoff); we
+  // detect the dropped-connection by listening for `error` and do
+  // a snapshot refetch to recover any missed events.
+  //
+  // Events are applied via a Map<contract_id, row> in setState,
+  // which dedupes create-then-archive races: if an archive arrives
+  // before the matching create, the archive removes nothing
+  // (the row isn't in the table); if create arrives first, the
+  // archive then removes it. Either ordering converges to the same
+  // final state.
+  useEffect(() => {
+    if (!name) return;
+    if (state.kind !== "ok") return;
+    // Resume from the snapshot's `ledger_end` so the handoff is a
+    // single atomic offset boundary — no events get skipped between
+    // the snapshot fetch and the stream open.
+    const es = openContractsStream(name, role, state.data.ledger_end);
+    let opened = false;
+    const onMessage = (raw: MessageEvent) => {
+      opened = true;
+      setStreamStatus((s) => (s === "truncated" ? s : "live"));
+      let payload: ContractStreamEvent;
+      try {
+        payload = JSON.parse(raw.data) as ContractStreamEvent;
+      } catch {
+        return;
+      }
+      if (payload.event === "truncated") {
+        setStreamStatus("truncated");
+        // Backend stopped sending — reconcile and we'll re-open
+        // when the user picks a different instance.
+        void refreshSnapshot(name, role, true);
+        return;
+      }
+      if (!payload.contract_id) return;
+      setState((prev) => {
+        if (prev.kind !== "ok") return prev;
+        const map = new Map(
+          prev.data.contracts.map((c) => [c.contract_id, c]),
+        );
+        if (payload.event === "created") {
+          map.set(payload.contract_id!, {
+            contract_id: payload.contract_id!,
+            template_id: payload.template ?? "",
+            payload: {},
+            signatories: payload.signatories ?? [],
+            observers: payload.observers ?? [],
+            created_at: payload.at
+              ? new Date(payload.at * 1000).toISOString()
+              : undefined,
+          });
+        } else if (payload.event === "archived") {
+          map.delete(payload.contract_id!);
+        }
+        return {
+          ...prev,
+          data: {
+            ...prev.data,
+            contracts: [...map.values()],
+            ledger_end: payload.offset ?? prev.data.ledger_end,
+          },
+        };
+      });
+    };
+    es.addEventListener("contracts", onMessage as EventListener);
+    es.onerror = () => {
+      // EventSource auto-reconnects unless we close it. Surface
+      // the visible reconnecting state and trigger a snapshot
+      // reconciliation so any missed events backfill — the
+      // browser may have been suspended (lid-close) for minutes.
+      setStreamStatus("reconnecting");
+      if (opened) {
+        void refreshSnapshot(name, role, true);
+      }
+    };
+    return () => {
+      es.removeEventListener("contracts", onMessage as EventListener);
+      es.close();
+      setStreamStatus("idle");
+    };
+    // We intentionally depend on state.kind (not state) so the
+    // subscription is set up exactly once per "we have a snapshot"
+    // transition and not torn down on every contract-list change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, role, state.kind, refreshSnapshot]);
+
+  // BIT-231 — periodic reconciliation. Every 30s we re-pull the
+  // snapshot to correct any drift the SSE deltas missed (network
+  // hiccups, browser suspend, backend restart). Quiet — no UI flash.
+  useEffect(() => {
+    if (!name) return;
+    if (state.kind !== "ok") return;
+    const id = window.setInterval(() => {
+      void refreshSnapshot(name, role, true);
+    }, 30_000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, role, state.kind, refreshSnapshot]);
 
   // Keyboard: / focuses search; Esc clears selection. The "/"
   // shortcut must NOT trigger when the user is typing into any
@@ -183,6 +320,23 @@ export function ExplorerScreen() {
     [state, selectedCid],
   );
 
+  // BIT-231 — J/K navigation between rows. Driven over the
+  // currently *filtered* view so the user follows what they see,
+  // not the underlying ACS order. The drawer registers its own
+  // keydown listener (Esc + j/k) and invokes these callbacks.
+  const goPrev = useCallback(() => {
+    if (!selectedCid) return;
+    const i = filtered.findIndex((c) => c.contract_id === selectedCid);
+    if (i > 0) setSelectedCid(filtered[i - 1].contract_id);
+  }, [filtered, selectedCid]);
+  const goNext = useCallback(() => {
+    if (!selectedCid) return;
+    const i = filtered.findIndex((c) => c.contract_id === selectedCid);
+    if (i >= 0 && i < filtered.length - 1) {
+      setSelectedCid(filtered[i + 1].contract_id);
+    }
+  }, [filtered, selectedCid]);
+
   if (!name) {
     return (
       <section style={{ padding: 24 }}>
@@ -210,6 +364,7 @@ export function ExplorerScreen() {
         onViewChange={setView}
         acsCount={state.kind === "ok" ? state.data.contracts.length : null}
         ledgerEnd={state.kind === "ok" ? state.data.ledger_end : null}
+        streamStatus={streamStatus}
       />
 
       {state.kind === "loading" && <Status>Snapshotting ACS…</Status>}
@@ -421,8 +576,19 @@ export function ExplorerScreen() {
             </div>
           </div>
 
-          {/* RIGHT — detail drawer */}
-          <DetailDrawer row={selected} />
+          {/* RIGHT — detail drawer (BIT-231) */}
+          {selected ? (
+            <ContractDetailDrawer
+              instance={name}
+              role={role}
+              row={selected}
+              onClose={() => setSelectedCid(null)}
+              onPrev={goPrev}
+              onNext={goNext}
+            />
+          ) : (
+            <DetailDrawer row={null} />
+          )}
         </div>
       )}
 
@@ -446,6 +612,7 @@ function ProjectionBar({
   onViewChange,
   acsCount,
   ledgerEnd,
+  streamStatus,
 }: {
   instance: string;
   role: Role;
@@ -454,7 +621,24 @@ function ProjectionBar({
   onViewChange: (v: View) => void;
   acsCount: number | null;
   ledgerEnd: number | null;
+  streamStatus: "idle" | "live" | "reconnecting" | "truncated";
 }) {
+  const pillColor =
+    streamStatus === "live"
+      ? "#62E2A0"
+      : streamStatus === "reconnecting"
+        ? "#F5BF55"
+        : streamStatus === "truncated"
+          ? "#F08FB5"
+          : "#7A8B95";
+  const pillLabel =
+    streamStatus === "live"
+      ? "live"
+      : streamStatus === "reconnecting"
+        ? "reconnecting"
+        : streamStatus === "truncated"
+          ? "truncated"
+          : "idle";
   return (
     <section
       style={{
@@ -567,7 +751,7 @@ function ProjectionBar({
           </button>
         ))}
       </div>
-      <Pill color="#62E2A0">live</Pill>
+      <Pill color={pillColor}>{pillLabel}</Pill>
     </section>
   );
 }
