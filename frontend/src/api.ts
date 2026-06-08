@@ -727,6 +727,193 @@ export function uploadDARs(
   });
 }
 
+// BIT-230 #1 — DAR package-tree inspect.
+//
+// The inspect endpoint returns the deep Daml-LF structure of every
+// .dalf inside the DAR: modules, templates (+ choices), interfaces
+// (+ choices + methods), data types. The frontend renders this as
+// a tree in DARPackageTree.tsx.
+export interface DARTemplateContents {
+  name: string;
+  choices?: string[];
+}
+export interface DARIfaceContents {
+  name: string;
+  choices?: string[];
+  methods?: string[];
+}
+export interface DARModuleContents {
+  name: string;
+  templates?: DARTemplateContents[];
+  interfaces?: DARIfaceContents[];
+  data_types?: string[];
+}
+export interface DARPackageInspect {
+  package_id: string;
+  name: string;
+  version: string;
+  lf_version: string;
+  size_bytes: number;
+  is_main: boolean;
+  contents?: { modules: DARModuleContents[] };
+}
+export interface DARInspectResponse {
+  schema_version: number;
+  instance: string;
+  role: Role;
+  main: string;
+  name?: string;
+  version?: string;
+  sha256: string;
+  packages: DARPackageInspect[];
+}
+
+export const fetchDARInspect = (
+  instance: string,
+  mainID: string,
+  role: Role = "app-user",
+) =>
+  apiFetch<DARInspectResponse>(
+    `/api/instances/${encodeURIComponent(instance)}/dar/${encodeURIComponent(mainID)}/inspect?role=${role}`,
+  );
+
+// BIT-230 #2 — Structural diff between two DARs (by main package id).
+export interface DARDiffTemplateAdded {
+  module: string;
+  name: string;
+  choices?: string[];
+}
+export interface DARDiffTemplateChanged {
+  module: string;
+  name: string;
+  choices_added: string[];
+  choices_removed: string[];
+}
+export interface DARDiffIfaceAdded {
+  module: string;
+  name: string;
+  choices?: string[];
+  methods?: string[];
+}
+export interface DARDiffIfaceChanged {
+  module: string;
+  name: string;
+  choices_added: string[];
+  choices_removed: string[];
+  methods_added: string[];
+  methods_removed: string[];
+}
+export interface DARDiffSide {
+  main: string;
+  name: string;
+  version: string;
+}
+export interface DARDiffResponse {
+  schema_version: number;
+  instance: string;
+  role: Role;
+  a?: DARDiffSide;
+  b?: DARDiffSide;
+  modules_added: string[];
+  modules_removed: string[];
+  templates_added: DARDiffTemplateAdded[];
+  templates_removed: DARDiffTemplateAdded[];
+  templates_changed: DARDiffTemplateChanged[];
+  interfaces_added: DARDiffIfaceAdded[];
+  interfaces_removed: DARDiffIfaceAdded[];
+  interfaces_changed: DARDiffIfaceChanged[];
+}
+
+export const fetchDARDiff = (
+  instance: string,
+  a: string,
+  b: string,
+  role: Role = "app-user",
+) =>
+  apiFetch<DARDiffResponse>(
+    `/api/instances/${encodeURIComponent(instance)}/dar/diff?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&role=${role}`,
+  );
+
+// BIT-230 #3 — per-participant vetting state + toggle.
+export interface DARVettingRow {
+  role: Role;
+  vetted: boolean;
+  error?: string;
+}
+export interface DARVettingResponse {
+  schema_version: number;
+  instance: string;
+  main: string;
+  participants: DARVettingRow[];
+}
+
+export const fetchDARVetting = (instance: string, mainID: string) =>
+  apiFetch<DARVettingResponse>(
+    `/api/instances/${encodeURIComponent(instance)}/dar/${encodeURIComponent(mainID)}/vetting`,
+  );
+
+export interface DARVettingToggleResponse {
+  schema_version: number;
+  instance: string;
+  main: string;
+  role: Role;
+  vetted: boolean;
+}
+
+export const setDARVetting = (
+  instance: string,
+  mainID: string,
+  role: Role,
+  vetted: boolean,
+) =>
+  apiFetch<DARVettingToggleResponse>(
+    `/api/instances/${encodeURIComponent(instance)}/dar/${encodeURIComponent(mainID)}/vetting/${role}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ vetted }),
+    },
+  );
+
+// BIT-230 #4 — Hot-deploy watch indicator. SSE; not a fetch.
+export interface DARWatchEvent {
+  instance: string;
+  dar_id?: string;
+  event:
+    | "rebuild_started"
+    | "rebuild_finished"
+    | "upload_finished"
+    | "watch_started"
+    | "watch_stopped";
+  at: number;
+  detail?: string;
+}
+
+// subscribeDARWatch opens an EventSource on the watch SSE endpoint.
+// The caller is responsible for closing the returned EventSource
+// (typically on component unmount).
+export function subscribeDARWatch(
+  instance: string,
+  darID: string,
+  onEvent: (ev: DARWatchEvent) => void,
+): EventSource {
+  const url =
+    `/api/dar/watch/events?instance=${encodeURIComponent(instance)}` +
+    (darID ? `&dar=${encodeURIComponent(darID)}` : "");
+  const es = new EventSource(url);
+  es.addEventListener("message", (e) => {
+    try {
+      const ev = JSON.parse(e.data) as DARWatchEvent;
+      onEvent(ev);
+    } catch {
+      // Drop malformed payloads silently — the backend pins the
+      // event-enum on the publish side, so a parse failure here
+      // would indicate a wire-format change worth surfacing in
+      // the network tab, not the UI.
+    }
+  });
+  return es;
+}
+
 // Explorer ACS snapshot.
 export interface ContractRow {
   contract_id: string;

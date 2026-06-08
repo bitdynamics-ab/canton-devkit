@@ -26,6 +26,29 @@ func TestFeatureForPath(t *testing.T) {
 		"/healthz":             "", // infra
 		"/events":              "", // infra
 		"/assets/index.js":     "", // bundle
+
+		// Per-instance sub-resources must classify by their sub-resource,
+		// not as "instances" — otherwise feature adoption is silently
+		// underreported.
+		"/api/instances/demo/dar":              "dar",
+		"/api/instances/demo/dar/abc/inspect":  "dar",
+		"/api/instances/demo/dar/abc/vetting":  "dar",
+		"/api/instances/demo/dar/diff":         "dar",
+		"/api/instances/demo/contracts":        "explorer",
+		"/api/instances/demo/contracts/stream": "explorer",
+		"/api/instances/demo/contracts/abc123": "explorer",
+		"/api/instances/demo/transactions":     "explorer",
+		"/api/instances/demo/metrics/summary":  "metrics",
+		"/api/instances/demo/tokens":           "tokens",
+		"/api/instances/demo/snapshots":        "backup",
+		// Genuine instance-lifecycle endpoints stay "instances".
+		"/api/instances/demo":              "instances",
+		"/api/instances/demo/down":         "instances",
+		"/api/instances/demo/recreate":     "instances",
+		"/api/instances/demo/env":          "instances",
+		"/api/instances/demo/logs":         "instances",
+		"/api/instances/demo/status":       "instances",
+		"/api/instances/demo/containers/x": "instances",
 	}
 	for path, want := range cases {
 		if got := featureForPath(path); got != want {

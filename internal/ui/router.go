@@ -43,7 +43,7 @@ func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
 	handlers.MountPreflight(mux)
 	handlers.MountMetrics(mux)
 	handlers.MountSnapshots(mux)    // UI parity for snapshot/restore
-	handlers.MountDAR(mux)          // DAR Manager (list uploaded DARs)
+	handlers.MountDAR(mux, hub)     // DAR Manager (list uploaded DARs + BIT-230)
 	handlers.MountContracts(mux)    // Explorer (ACS snapshot)
 	handlers.MountTransactions(mux) // Explorer (Transactions/Timeline)
 	handlers.MountSkills(mux)       // Agent Skills (browse + install)
@@ -96,7 +96,32 @@ func withFeatureTelemetry(next http.Handler) http.Handler {
 // featureForPath maps an /api/* request path to the Web UI feature it
 // belongs to. Returns "" for infra endpoints (version, auth, healthz,
 // preflight, SSE) and the asset bundle, which aren't adoption signals.
+//
+// Most feature endpoints live under /api/instances/{name}/<sub>/...
+// (handlers use Go 1.22 ServeMux path-value patterns), so the per-
+// instance sub-resource is checked BEFORE the /api/instances
+// catch-all — otherwise DAR/Explorer/etc. calls would be silently
+// counted as "instances" and underreport their feature adoption.
 func featureForPath(path string) string {
+	if sub := instanceSubResource(path); sub != "" {
+		switch sub {
+		case "dar":
+			return "dar"
+		case "contracts", "transactions":
+			return "explorer"
+		case "metrics":
+			return "metrics"
+		case "tokens":
+			return "tokens"
+		case "skills":
+			return "skills"
+		case "snapshots", "backup":
+			return "backup"
+		}
+		// Anything else under an instance (status, env, logs,
+		// containers, down, up, recreate, …) is instance lifecycle.
+		return "instances"
+	}
 	switch {
 	case strings.HasPrefix(path, "/api/dars"), strings.HasPrefix(path, "/api/dar/"):
 		return "dar"
@@ -114,6 +139,29 @@ func featureForPath(path string) string {
 		return "instances"
 	}
 	return ""
+}
+
+// instanceSubResource returns the sub-resource segment for paths of
+// the form /api/instances/{name}/<sub-resource>... For
+// /api/instances/demo/dar/abc/inspect it returns "dar"; for
+// /api/instances/demo (no sub-resource) it returns ""; for
+// anything not under /api/instances/ it returns "".
+func instanceSubResource(path string) string {
+	const prefix = "/api/instances/"
+	if !strings.HasPrefix(path, prefix) {
+		return ""
+	}
+	rest := path[len(prefix):]
+	// Skip the {name} segment.
+	slash := strings.IndexByte(rest, '/')
+	if slash < 0 {
+		return ""
+	}
+	sub := rest[slash+1:]
+	if slash2 := strings.IndexByte(sub, '/'); slash2 >= 0 {
+		return sub[:slash2]
+	}
+	return sub
 }
 
 // statusRecorder wraps http.ResponseWriter to capture the final

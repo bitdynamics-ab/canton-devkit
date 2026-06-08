@@ -59,15 +59,36 @@ func Open(path string) (*Info, error) {
 		_ = absPath // we don't actually need abs for now
 	}
 
-	// Compute the file-level SHA256 in one pass while also reading
-	// the zip via a second read. Cheaper than streaming once and
-	// hashing twice; for DARs in the 100KB–10MB range this is fine.
-	// ReadDARFile bounds the read at MaxDARBytes so a hostile or
-	// corrupted file can't OOM the process.
 	raw, err := ReadDARFile(path)
 	if err != nil {
 		return nil, err
 	}
+	info, err := decodeDARBytes(raw, abs)
+	if err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
+// OpenBytes parses an in-memory DAR (no path). Used by the Web UI's
+// inspect / diff handlers, which fetch DAR bytes via the Canton
+// admin API rather than from disk. Path-shaped fields on the
+// returned Info are left empty.
+//
+// The byte slice is assumed to be a complete DAR; it must already
+// be under MaxDARBytes — callers fetching from gRPC are limited by
+// the admin client's MaxCallRecvMsgSize so this isn't a new
+// vector.
+func OpenBytes(raw []byte) (*Info, error) {
+	return decodeDARBytes(raw, "")
+}
+
+// decodeDARBytes is the shared core for Open and OpenBytes. Takes
+// the full file bytes and an optional path for the Info.Path field.
+func decodeDARBytes(raw []byte, path string) (*Info, error) {
+	// Compute the file-level SHA256 in one pass while also reading
+	// the zip via a second read. Cheaper than streaming once and
+	// hashing twice; for DARs in the 100KB–10MB range this is fine.
 	fileSum := sha256.Sum256(raw)
 
 	zr, err := zip.NewReader(bytesReader(raw), int64(len(raw)))
@@ -128,7 +149,7 @@ func Open(path string) (*Info, error) {
 	})
 
 	info := &Info{
-		Path:     abs,
+		Path:     path,
 		Manifest: manifest,
 		Packages: packages,
 		SHA256:   hex.EncodeToString(fileSum[:]),

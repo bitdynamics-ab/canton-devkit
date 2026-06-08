@@ -2,14 +2,21 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   fetchDARList,
+  fetchDARVetting,
+  setDARVetting,
+  subscribeDARWatch,
   uploadDARs,
   type DARListResponse,
   type DARRow,
   type DARUploadRoleResult,
+  type DARVettingRow,
+  type DARWatchEvent,
   type Role,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { W, wMono } from "../tokens";
+import { DARPackageTree } from "./DARPackageTree";
+import { DARDiff } from "./DARDiff";
 
 // DARScreen — production layout.
 //
@@ -62,6 +69,12 @@ export function DARScreen() {
     | { kind: "err"; error: string }
   >({ kind: "loading" });
   const [selectedHash, setSelectedHash] = useState<string | null>(null);
+  // Diff mode: when a "compare with" target is picked, the right
+  // drawer renders the DARDiff component instead of the inspect
+  // tree. Compare hashes are kept separately so the user can
+  // toggle the comparison off without losing their primary
+  // selection.
+  const [compareHash, setCompareHash] = useState<string | null>(null);
   const [upload, setUpload] = useState<UploadState>({ kind: "idle" });
   const [dragOver, setDragOver] = useState(false);
   const [filter, setFilter] = useState<"all" | "app">("all");
@@ -119,16 +132,16 @@ export function DARScreen() {
       });
       return;
     }
-    // Client-side size cap (review yellow): refuse > 256 MiB before
-    // we ever touch the network. The backend enforces a 64 MiB
-    // multipart cap anyway, but a 4 GiB drop would OOM the tab
-    // before the server got a chance to say no.
-    const MAX_DAR_BYTES = 256 * 1024 * 1024;
+    // Client-side size cap mirrors the backend's multipart cap in
+    // internal/ui/handlers/dar.go (darUploadMax = 64 MiB). Reject
+    // here so a 100 MiB DAR doesn't start uploading and fail
+    // server-side after a wasted progress bar.
+    const MAX_DAR_BYTES = 64 * 1024 * 1024;
     const tooBig = arr.find((f) => f.size > MAX_DAR_BYTES);
     if (tooBig) {
       setUpload({
         kind: "error",
-        message: `${tooBig.name} is ${(tooBig.size / 1024 / 1024).toFixed(1)} MiB; per-file cap is 256 MiB`,
+        message: `${tooBig.name} is ${(tooBig.size / 1024 / 1024).toFixed(1)} MiB; per-file cap is 64 MiB`,
       });
       return;
     }
@@ -175,7 +188,10 @@ export function DARScreen() {
   }, [state, filter]);
 
   const selected = useMemo(
-    () => (state.kind === "ok" ? rows.find((d) => d.main === selectedHash) ?? null : null),
+    () =>
+      state.kind === "ok"
+        ? (rows ?? []).find((d) => d.main === selectedHash) ?? null
+        : null,
     [state, rows, selectedHash],
   );
 
@@ -362,26 +378,8 @@ export function DARScreen() {
             )}
             {upload.kind === "error" && <ErrorBanner msg={upload.message} />}
 
-            <Card title="Watch mode" subtitle="dpm build → upload on change">
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                  fontSize: 12,
-                  fontFamily: wMono,
-                }}
-              >
-                <Row k="watching" v="./daml/**/*.daml" />
-                <Row k="state" v="ready" vColor={W.dim} />
-                <Row k="last upload" v="—" vColor={W.dim} />
-                <div style={{ height: 1, background: W.border, margin: "4px 0" }} />
-                <div style={{ color: W.dim, fontSize: 11.5, fontFamily: "inherit" }}>
-                  Watch mode is a follow-up; ship a filesystem watcher in
-                  CLI that pipes to this endpoint.
-                </div>
-              </div>
-            </Card>
+            <WatchModeCard instance={name} />
+
           </div>
 
           {/* MIDDLE — package list */}
@@ -479,12 +477,117 @@ export function DARScreen() {
             </div>
           </div>
 
-          {/* RIGHT — inspect drawer */}
-          <InspectDrawer row={selected} />
+          {/* RIGHT — inspect drawer / diff viewer */}
+          <InspectDrawer
+            row={selected}
+            instance={name}
+            role={role}
+            compareWith={compareHash}
+            onClearCompare={() => setCompareHash(null)}
+            allRows={rows}
+            onCompare={(other) => setCompareHash(other)}
+          />
         </div>
       )}
     </section>
   );
+}
+
+// WatchModeCard subscribes to the DAR watch SSE stream and renders
+// the latest lifecycle event as a live "watching" badge with a
+// last-rebuild ago timer. When no event has arrived (no `dar watch`
+// running, or the UI server isn't bridged), it stays in the
+// "idle — start `dpm localnet dar watch` to enable hot deploy" state.
+function WatchModeCard({ instance }: { instance: string }) {
+  const [last, setLast] = useState<DARWatchEvent | null>(null);
+  const [active, setActive] = useState(false);
+  // tick — bumped every 10s so the "ago" label refreshes without a
+  // useless full re-render every second.
+  const [, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const es = subscribeDARWatch(instance, "", (ev) => {
+      setLast(ev);
+      if (ev.event === "watch_started" || ev.event === "rebuild_started") {
+        setActive(true);
+      } else if (ev.event === "watch_stopped") {
+        setActive(false);
+      }
+    });
+    const t = window.setInterval(() => setNow(Date.now()), 10_000);
+    return () => {
+      es.close();
+      window.clearInterval(t);
+    };
+  }, [instance]);
+
+  const ago = last ? formatAgo(Date.now() / 1000 - last.at) : "never";
+  return (
+    <Card title="Watch mode" subtitle="dpm dar watch → live rebuild">
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          fontSize: 12,
+          fontFamily: wMono,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              padding: "2px 8px",
+              borderRadius: 4,
+              fontSize: 10.5,
+              background: active ? "#62E2A022" : W.border,
+              color: active ? "#62E2A0" : W.dim,
+              fontWeight: 600,
+              letterSpacing: 0.8,
+              textTransform: "uppercase",
+            }}
+          >
+            {active ? "Watching" : "Idle"}
+          </span>
+          {last && (
+            <span style={{ color: W.dim, fontSize: 11 }}>{last.event}</span>
+          )}
+        </div>
+        <Row k="last event" v={ago} vColor={last ? W.text : W.dim} />
+        <Row k="detail" v={last?.detail ?? "—"} vColor={W.dim} />
+        <div style={{ height: 1, background: W.border, margin: "4px 0" }} />
+        <div style={{ color: W.dim, fontSize: 11.5, fontFamily: "inherit" }}>
+          Start a watcher with:
+          <pre
+            style={{
+              background: W.border,
+              padding: "6px 8px",
+              marginTop: 4,
+              borderRadius: 4,
+              fontFamily: wMono,
+              fontSize: 11,
+              color: W.text2,
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {`dpm localnet dar watch \\
+  --instance ${instance} \\
+  --publish-to http://127.0.0.1:7777`}
+          </pre>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// formatAgo renders a "X ago" label for a unix-second delta. Tuned
+// for human-perceptible bands; finer than 5s is noise for this card.
+function formatAgo(deltaSec: number): string {
+  if (deltaSec < 0) return "just now";
+  if (deltaSec < 5) return "just now";
+  if (deltaSec < 60) return `${Math.floor(deltaSec)}s ago`;
+  if (deltaSec < 3600) return `${Math.floor(deltaSec / 60)}m ago`;
+  if (deltaSec < 86400) return `${Math.floor(deltaSec / 3600)}h ago`;
+  return `${Math.floor(deltaSec / 86400)}d ago`;
 }
 
 function PkgRow({
@@ -566,7 +669,23 @@ function PkgRow({
   );
 }
 
-function InspectDrawer({ row }: { row: DARRow | null }) {
+function InspectDrawer({
+  row,
+  instance,
+  role,
+  compareWith,
+  onClearCompare,
+  allRows,
+  onCompare,
+}: {
+  row: DARRow | null;
+  instance: string;
+  role: Role;
+  compareWith: string | null;
+  onClearCompare: () => void;
+  allRows: DARRow[];
+  onCompare: (other: string) => void;
+}) {
   if (!row) {
     return (
       <div
@@ -616,40 +735,227 @@ function InspectDrawer({ row }: { row: DARRow | null }) {
           <KV label="desc" value={row.description} />
         )}
       </Section>
-      <Section label="Vetting">
+      <Section label="Per-participant vetting">
+        <VettingPanel instance={instance} mainID={row.main} />
+      </Section>
+      <Section
+        label={compareWith ? "Structural diff" : "Package contents"}
+      >
+        {compareWith ? (
+          <>
+            <button
+              type="button"
+              onClick={onClearCompare}
+              style={smallBtn}
+              aria-label="exit diff mode"
+            >
+              ← back to inspect
+            </button>
+            <div style={{ marginTop: 8 }}>
+              <DARDiff instance={instance} a={row.main} b={compareWith} role={role} />
+            </div>
+          </>
+        ) : (
+          <>
+            <DARPackageTree instance={instance} mainID={row.main} role={role} />
+            <CompareSelector
+              allRows={allRows}
+              currentMain={row.main}
+              onPick={onCompare}
+            />
+          </>
+        )}
+      </Section>
+    </div>
+  );
+}
+
+const smallBtn: React.CSSProperties = {
+  background: "transparent",
+  border: `1px solid ${W.border}`,
+  color: W.text2,
+  borderRadius: 5,
+  padding: "3px 10px",
+  fontSize: 11.5,
+  fontFamily: wMono,
+  cursor: "pointer",
+};
+
+// CompareSelector renders a small "compare with…" dropdown of every
+// DAR currently visible in the list (excluding the active one).
+// Picking a target flips the drawer into diff mode.
+function CompareSelector({
+  allRows,
+  currentMain,
+  onPick,
+}: {
+  allRows: DARRow[];
+  currentMain: string;
+  onPick: (main: string) => void;
+}) {
+  const others = allRows.filter((r) => r.main !== currentMain);
+  if (others.length === 0) return null;
+  return (
+    <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+      <span style={{ color: W.dim, fontSize: 11.5 }}>Compare with</span>
+      <select
+        onChange={(e) => {
+          if (e.target.value) onPick(e.target.value);
+        }}
+        defaultValue=""
+        style={{
+          background: W.border,
+          color: W.text,
+          border: `1px solid ${W.border}`,
+          borderRadius: 4,
+          padding: "3px 6px",
+          fontSize: 11.5,
+          fontFamily: wMono,
+        }}
+        aria-label="compare current DAR with another"
+      >
+        <option value="" disabled>
+          pick a DAR…
+        </option>
+        {others.map((o) => (
+          <option key={o.main} value={o.main}>
+            {o.name}@{o.version}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// VettingPanel renders the per-participant vetting state for one
+// DAR and lets the user toggle each. Loads on mount, refetches after
+// every successful toggle so the UI never shows a stale "vetted=true"
+// after an UnvetDar succeeded.
+function VettingPanel({
+  instance,
+  mainID,
+}: {
+  instance: string;
+  mainID: string;
+}) {
+  const [state, setState] = useState<
+    | { kind: "loading" }
+    | { kind: "ok"; rows: DARVettingRow[] }
+    | { kind: "err"; msg: string }
+  >({ kind: "loading" });
+  const [pending, setPending] = useState<Role | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ kind: "loading" });
+    fetchDARVetting(instance, mainID)
+      .then((data) => {
+        if (!cancelled) setState({ kind: "ok", rows: data.participants });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setState({
+            kind: "err",
+            msg: e instanceof Error ? e.message : "failed",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instance, mainID, tick]);
+
+  async function flip(role: Role, vetted: boolean) {
+    setPending(role);
+    setError(null);
+    try {
+      await setDARVetting(instance, mainID, role, vetted);
+      setTick((n) => n + 1);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "VETTING_UNSUPPORTED") {
+        setError("This Splice/Canton version does not expose vetting toggles.");
+      } else {
+        setError(e instanceof Error ? e.message : "toggle failed");
+      }
+    } finally {
+      setPending(null);
+    }
+  }
+
+  if (state.kind === "loading") {
+    return <div style={{ color: W.dim, fontSize: 12 }}>Loading vetting state…</div>;
+  }
+  if (state.kind === "err") {
+    return <div style={{ color: W.err, fontSize: 12 }}>Vetting: {state.msg}</div>;
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {state.rows.map((r) => (
         <div
+          key={r.role}
           style={{
-            color: "#62E2A0",
-            fontSize: 12.5,
             display: "flex",
             alignItems: "center",
-            gap: 8,
+            gap: 10,
             fontFamily: wMono,
+            fontSize: 12,
           }}
         >
-          <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: "#62E2A0",
-            }}
-          />
-          vetted · synchronizers attached
+          <span style={{ width: 100, color: W.text2 }}>{r.role}</span>
+          {r.error ? (
+            <span style={{ color: W.warn, fontSize: 11.5 }}>{r.error}</span>
+          ) : (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={r.vetted}
+              aria-label={`toggle vetting on ${r.role}`}
+              disabled={pending === r.role}
+              onClick={() => flip(r.role, !r.vetted)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                background: "transparent",
+                border: "none",
+                padding: 0,
+                cursor: pending === r.role ? "wait" : "pointer",
+                color: r.vetted ? "#62E2A0" : W.dim,
+              }}
+            >
+              <span
+                style={{
+                  width: 22,
+                  height: 12,
+                  background: r.vetted ? "#62E2A0" : "#3A4248",
+                  borderRadius: 6,
+                  position: "relative",
+                  flexShrink: 0,
+                }}
+              >
+                <span
+                  style={{
+                    position: "absolute",
+                    top: 2,
+                    left: r.vetted ? 12 : 2,
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: "#FFF",
+                    transition: "left 120ms",
+                  }}
+                />
+              </span>
+              <span>{r.vetted ? "vetted" : "unvetted"}</span>
+            </button>
+          )}
         </div>
-      </Section>
-      <Section label="Diff vs prior version">
-        <div style={{ color: W.dim, fontSize: 12, lineHeight: 1.5 }}>
-          Diff view is a follow-up — needs the SCU comparator endpoint
-          backed by{" "}
-          <code style={{ fontFamily: wMono, color: W.text2 }}>internal/dar.Compare</code>
-          . The CLI{" "}
-          <code style={{ fontFamily: wMono, color: W.text2 }}>
-            dpm localnet dar diff
-          </code>{" "}
-          gives the same view today.
-        </div>
-      </Section>
+      ))}
+      {error && (
+        <div style={{ color: W.err, fontSize: 11.5, marginTop: 4 }}>{error}</div>
+      )}
     </div>
   );
 }

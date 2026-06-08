@@ -41,11 +41,29 @@ import (
 // generous ceiling — typical responses come back in <100 ms.
 const darRequestTimeout = 8 * time.Second
 
-// MountDAR installs the DAR endpoints on mux. Hub-independent
-// (pure gRPC calls, no SSE).
-func MountDAR(mux *http.ServeMux) {
+// MountDAR installs the DAR endpoints on mux. The hub is used only
+// by the dar-watch SSE bridge (BIT-230 #4); the read endpoints are
+// pure gRPC. Passing nil disables the watch SSE surface.
+func MountDAR(mux *http.ServeMux, hub watchHub) {
 	mux.HandleFunc("GET /api/instances/{name}/dar", handleDARList)
 	mux.HandleFunc("POST /api/instances/{name}/dar", handleDARUpload)
+
+	// BIT-230 #1 — package-tree inspect.
+	mux.HandleFunc("GET /api/instances/{name}/dar/{id}/inspect", handleDARInspect)
+	// BIT-230 #2 — structural diff.
+	mux.HandleFunc("GET /api/instances/{name}/dar/diff", handleDARDiff)
+	// BIT-230 #3 — per-participant vetting state + toggle.
+	mux.HandleFunc("GET /api/instances/{name}/dar/{id}/vetting", handleDARVettingList)
+	mux.HandleFunc("POST /api/instances/{name}/dar/{id}/vetting/{role}", handleDARVettingToggle)
+
+	// BIT-230 #4 — hot-deploy indicator. The publish endpoint is
+	// the cross-process bridge: a `dpm localnet dar watch` process
+	// POSTs lifecycle events to it; the SSE subscriber tails them
+	// for the Web UI's "watching" badge.
+	if hub != nil {
+		mux.Handle("POST /api/dar/watch/publish", handleDARWatchPublish(hub))
+		mux.Handle("GET /api/dar/watch/events", handleDARWatchEvents(hub))
+	}
 }
 
 // darUploadMax is the hard ceiling on the multipart body for DAR
