@@ -43,7 +43,7 @@ func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
 	handlers.MountPreflight(mux)
 	handlers.MountMetrics(mux)
 	handlers.MountSnapshots(mux)    // UI parity for snapshot/restore
-	handlers.MountDAR(mux)          // DAR Manager (list uploaded DARs)
+	handlers.MountDAR(mux, hub)     // DAR Manager (list uploaded DARs + BIT-230)
 	handlers.MountContracts(mux)    // Explorer (ACS snapshot)
 	handlers.MountTransactions(mux) // Explorer (Transactions/Timeline)
 	handlers.MountSkills(mux)       // Agent Skills (browse + install)
