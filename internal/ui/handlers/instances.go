@@ -100,7 +100,7 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("DELETE /api/instances/{name}", handleScrubInstance(hub))
 		mux.HandleFunc("POST /api/instances/{name}/down", handleDownInstance())
 		mux.HandleFunc("POST /api/instances/{name}/up", handleResumeInstance(hub))
-		mux.HandleFunc("POST /api/instances/{name}/restart", handleRestartInstance(hub))
+		mux.HandleFunc("POST /api/instances/{name}/recreate", handleRecreateInstance(hub))
 		mux.HandleFunc("POST /api/instances/{name}/observability", handleObservabilityToggle())
 	} else {
 		// Stub so a misconfigured deployment fails loudly
@@ -118,7 +118,7 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("DELETE /api/instances/{name}", stub)
 		mux.HandleFunc("POST /api/instances/{name}/down", stub)
 		mux.HandleFunc("POST /api/instances/{name}/up", stub)
-		mux.HandleFunc("POST /api/instances/{name}/restart", stub)
+		mux.HandleFunc("POST /api/instances/{name}/recreate", stub)
 	}
 	// Container probe + log tail + restart are hub-independent
 	// (pure docker calls) — mount them for every deployment.
@@ -794,7 +794,7 @@ func profilesFromComposeFiles(files []string) []string {
 	return out
 }
 
-// handleRestartInstance: POST /api/instances/{name}/restart.
+// handleRecreateInstance: POST /api/instances/{name}/recreate.
 //
 // Full down → up cycle for an existing instance, reusing the
 // recorded SpliceVersion + inferred profile set. The UI surfaces
@@ -835,7 +835,7 @@ func profilesFromComposeFiles(files []string) []string {
 //
 // What it does NOT do: regenerate credentials, recreate the
 // registry entry, allocate new ports, or upgrade the Splice version.
-func handleRestartInstance(hub *stream.Hub) http.HandlerFunc {
+func handleRecreateInstance(hub *stream.Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 		if err := localnet.ValidateName(name); err != nil {

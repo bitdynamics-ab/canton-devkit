@@ -573,7 +573,7 @@ export async function resumeInstance(name: string): Promise<ResumeAcceptedRespon
   return (await resp.json()) as ResumeAcceptedResponse;
 }
 
-// restartInstance invokes POST /api/instances/{name}/restart — a
+// recreateInstance invokes POST /api/instances/{name}/recreate — a
 // single-click "Restart" path that the backend implements as a
 // serial down → up cycle. The backend reuses the instance's recorded
 // SpliceVersion and infers the original profile set from the
@@ -585,9 +585,9 @@ export async function resumeInstance(name: string): Promise<ResumeAcceptedRespon
 // the registry; 409 INSTANCE_CREATING if a down/up/restart job is
 // already in flight for the same name (the second click is a no-op
 // by design — the original cycle continues uninterrupted).
-export async function restartInstance(name: string): Promise<ResumeAcceptedResponse> {
+export async function recreateInstance(name: string): Promise<ResumeAcceptedResponse> {
   const resp = await fetch(
-    `/api/instances/${encodeURIComponent(name)}/restart`,
+    `/api/instances/${encodeURIComponent(name)}/recreate`,
     { method: "POST" },
   );
   if (!resp.ok) {

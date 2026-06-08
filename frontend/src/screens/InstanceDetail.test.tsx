@@ -117,13 +117,13 @@ describe("InstanceDetail", () => {
     });
   });
 
-  it("posts to /restart and fires onChanged when the Restart button is clicked", async () => {
+  it("posts to /recreate and fires onChanged when the Recreate button is clicked", async () => {
     // The restart button is offered on running / paused / failed /
-    // partial. The click invokes restartInstance which POSTs to the
+    // partial. The click invokes recreateInstance which POSTs to the
     // backend; on the 202 response the detail card refetches and
     // bubbles onChanged so the dashboard's row updates.
     const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (typeof url === "string" && url.endsWith("/restart")) {
+      if (typeof url === "string" && url.endsWith("/recreate")) {
         return Promise.resolve(
           new Response(
             JSON.stringify({
@@ -161,9 +161,9 @@ describe("InstanceDetail", () => {
       <InstanceDetail name="demo" statusHint="running" onChanged={onChanged} />,
     );
 
-    // Wait for the Restart button to appear (the action-button
+    // Wait for the Recreate button to appear (the action-button
     // bar renders once statusHint resolves).
-    const restartBtn = await screen.findByRole("button", { name: /restart/i });
+    const restartBtn = await screen.findByRole("button", { name: /recreate/i });
     fireEvent.click(restartBtn);
 
     await waitFor(() => {
@@ -171,7 +171,7 @@ describe("InstanceDetail", () => {
       expect(
         calls.some(
           (u: string) =>
-            typeof u === "string" && u.endsWith("/api/instances/demo/restart"),
+            typeof u === "string" && u.endsWith("/api/instances/demo/recreate"),
         ),
       ).toBe(true);
     });

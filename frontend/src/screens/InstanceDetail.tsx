@@ -4,7 +4,7 @@ import {
   type Instance,
   fetchInstance,
   pauseInstance,
-  restartInstance,
+  recreateInstance,
   resumeInstance,
   scrubInstance,
   stopInstance,
@@ -105,10 +105,10 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
     }
   }
 
-  async function onRestart() {
+  async function onRecreate() {
     if (
       !confirm(
-        `Restart ${name}? Containers will be brought down and back up via docker compose. ` +
+        `Recreate ${name}? Containers will be brought down and back up via docker compose. ` +
           `The recorded Splice version and profiles are preserved; data volumes are NOT touched.`,
       )
     ) {
@@ -116,8 +116,8 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
     }
     setStopping({ kind: "running" });
     try {
-      await restartInstance(name);
-      // 202 — restart is async (down → up). The dashboard's 15s
+      await recreateInstance(name);
+      // 202 — recreate is async (down → up). The dashboard's 15s
       // poll will pick up the transitional `creating` status when
       // the goroutine reaches the up phase; refresh both surfaces
       // eagerly so the user sees movement within the next tick.
@@ -125,7 +125,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
       setRefetchTick((n) => n + 1);
       onChanged?.();
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : "failed to restart";
+      const msg = e instanceof ApiError ? e.message : "failed to recreate";
       setStopping({ kind: "err", message: msg });
       setRefetchTick((n) => n + 1);
       onChanged?.();
@@ -243,7 +243,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
             onPause={onPause}
             onResume={onResume}
             onRemove={onRemove}
-            onRestart={onRestart}
+            onRecreate={onRecreate}
           />
         )}
       </header>
@@ -345,7 +345,7 @@ function ActionButton({
   onPause,
   onResume,
   onRemove,
-  onRestart,
+  onRecreate,
 }: {
   status: string;
   busy: boolean;
@@ -354,13 +354,13 @@ function ActionButton({
   onPause: () => void;
   onResume: () => void;
   onRemove: () => void;
-  onRestart: () => void;
+  onRecreate: () => void;
 }) {
-  // Restart is offered alongside the existing controls on every
+  // Recreate is offered alongside the existing controls on every
   // non-transitional status: running, paused, failed, partial. The
   // `creating` and `stopping` statuses are in-flight transitions
   // where ActionButton renders nothing (the CreatingPanel and the
-  // disabled-by-busy guard cover those), so the Restart button is
+  // disabled-by-busy guard cover those), so the Recreate button is
   // implicitly hidden during those phases.
   if (status === "running") {
     return (
@@ -374,12 +374,12 @@ function ActionButton({
           {busy ? "…" : "⏸ Pause"}
         </button>
         <button
-          onClick={onRestart}
+          onClick={onRecreate}
           disabled={busy}
           title="Bring containers down then back up. Splice version, profiles, credentials, and ports preserved."
           style={btnStyle(W.brand, busy)}
         >
-          {busy ? "…" : "↻ Restart"}
+          {busy ? "…" : "↻ Recreate"}
         </button>
         <button
           onClick={onStop}
@@ -404,12 +404,12 @@ function ActionButton({
           {busy ? "…" : "▶ Resume"}
         </button>
         <button
-          onClick={onRestart}
+          onClick={onRecreate}
           disabled={busy}
           title="Bring containers down then back up. Splice version, profiles, credentials, and ports preserved."
           style={btnStyle(W.brand, busy)}
         >
-          {busy ? "…" : "↻ Restart"}
+          {busy ? "…" : "↻ Recreate"}
         </button>
         <button
           onClick={onStop}
@@ -424,19 +424,19 @@ function ActionButton({
   }
   if (status === "failed" || status === "partial") {
     // Both Stop and Remove — docker may still have live containers
-    // even though the registry gave up. Restart is also offered:
+    // even though the registry gave up. Recreate is also offered:
     // failed/partial often comes from a transient compose hiccup
     // that a clean down + up sequence resolves without losing the
     // instance metadata.
     return (
       <div style={{ display: "flex", gap: 6 }}>
         <button
-          onClick={onRestart}
+          onClick={onRecreate}
           disabled={busy}
           title="Bring containers down then back up. Splice version, profiles, credentials, and ports preserved."
           style={btnStyle(W.brand, busy)}
         >
-          {busy ? "…" : "↻ Restart"}
+          {busy ? "…" : "↻ Recreate"}
         </button>
         <button
           onClick={onStop}

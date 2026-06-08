@@ -38,7 +38,7 @@ func TestRestart_StoppedInstance202(t *testing.T) {
 		map[string]int{"app_user_ui": 44440}, registry.StatusStopped)
 	srv, _ := restartMux(t)
 
-	resp, err := http.Post(srv.URL+"/api/instances/pebble/restart",
+	resp, err := http.Post(srv.URL+"/api/instances/pebble/recreate",
 		"application/json", nil)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
@@ -73,7 +73,7 @@ func TestRestart_RunningInstance202(t *testing.T) {
 		map[string]int{"app_user_ui": 44440}, registry.StatusRunning)
 	srv, _ := restartMux(t)
 
-	resp, err := http.Post(srv.URL+"/api/instances/demo/restart",
+	resp, err := http.Post(srv.URL+"/api/instances/demo/recreate",
 		"application/json", nil)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
@@ -92,7 +92,7 @@ func TestRestart_UnknownInstance404(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	srv, _ := restartMux(t)
 
-	resp, err := http.Post(srv.URL+"/api/instances/ghost/restart",
+	resp, err := http.Post(srv.URL+"/api/instances/ghost/recreate",
 		"application/json", nil)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
@@ -115,7 +115,7 @@ func TestRestart_InvalidName400(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	srv, _ := restartMux(t)
 
-	resp, err := http.Post(srv.URL+"/api/instances/UPPERCASE/restart",
+	resp, err := http.Post(srv.URL+"/api/instances/UPPERCASE/recreate",
 		"application/json", nil)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
@@ -141,7 +141,7 @@ func TestRestart_AlreadyInFlight409(t *testing.T) {
 	// reach docker and almost certainly fail, but that doesn't
 	// matter for this test — what matters is the slot is held
 	// while the goroutine runs.
-	resp1, err := http.Post(srv.URL+"/api/instances/busy/restart",
+	resp1, err := http.Post(srv.URL+"/api/instances/busy/recreate",
 		"application/json", nil)
 	if err != nil {
 		t.Fatalf("first POST: %v", err)
@@ -152,7 +152,7 @@ func TestRestart_AlreadyInFlight409(t *testing.T) {
 	}
 
 	// Second POST must lose the race.
-	resp2, err := http.Post(srv.URL+"/api/instances/busy/restart",
+	resp2, err := http.Post(srv.URL+"/api/instances/busy/recreate",
 		"application/json", nil)
 	if err != nil {
 		t.Fatalf("second POST: %v", err)
