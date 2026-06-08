@@ -30,7 +30,7 @@
       "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "sum(rate(daml_participant_api_indexer_updates{instance=~\"$instance\"}[5m]))",
+          "expr": "sum(rate(daml_participant_api_indexer_updates{instance=~\"$instance\"}[5m])) or vector(0)",
           "legendFormat": "tx/s"
         }
       ]
@@ -76,7 +76,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
       "targets": [
         {
-          "expr": "rate(daml_participant_api_indexer_updates{instance=~\"$instance\"}[1m])",
+          "expr": "rate(daml_participant_api_indexer_updates{instance=~\"$instance\"}[1m]) or vector(0)",
           "legendFormat": "{{component}}"
         }
       ]

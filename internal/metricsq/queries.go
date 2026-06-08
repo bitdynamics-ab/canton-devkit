@@ -86,7 +86,7 @@ const (
 //     by the JVM processes — functionally the same headline a user
 //     would expect from "postgres conns".
 var SummaryQueries = map[Headline]string{
-	HeadlineLedgerTPS:    "sum(rate(daml_participant_api_indexer_updates[5m]))",
+	HeadlineLedgerTPS:    "sum(rate(daml_participant_api_indexer_updates[5m])) or vector(0)",
 	HeadlineMediatorP50:  "histogram_quantile(0.50, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))",
 	HeadlineMediatorP95:  "histogram_quantile(0.95, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))",
 	HeadlineMediatorP99:  "histogram_quantile(0.99, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))",

@@ -61,7 +61,8 @@ interface CardState<T> {
 // "Metric-name follow-ups") will revisit when those exposures land.
 const Q = {
   // Substitute: indexer-update counter, same as HeadlineLedgerTPS.
-  throughputSeries: "sum(rate(daml_participant_api_indexer_updates[1m]))",
+  throughputSeries:
+    "sum(rate(daml_participant_api_indexer_updates[1m])) or vector(0)",
   p99: 'histogram_quantile(0.99, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
   // Live Splice does not expose total ACS cardinality as a stock
   // Prometheus metric. This is the audited ACS-related signal that
