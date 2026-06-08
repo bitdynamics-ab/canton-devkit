@@ -47,18 +47,37 @@ interface CardState<T> {
 // PromQL queries. Sourced from internal/metricsq for parity with the
 // CLI's `localnet metrics` headline. Per-template / phase / heatmap
 // queries are extensions specific to this screen.
+//
+// All metric names are the daml_* / db_client_* family the Splice
+// OTel reporter actually emits (verified against a live obs profile
+// via the BIT-232 audit). The earlier `canton_*` names were
+// aspirational and silently returned no data. See queries.go +
+// docs/observability.md for the substitute mapping rationale.
+//
+// A handful of the per-screen extensions below (errors rate, per-
+// template throughput) do not have a direct daml_* equivalent on
+// Splice 0.6.4 — substitutes are the closest functional analogue,
+// marked inline. A focused follow-up (see docs/observability.md
+// "Metric-name follow-ups") will revisit when those exposures land.
 const Q = {
-  throughputSeries: "sum(rate(canton_participant_transactions_total[1m]))",
-  p99: 'histogram_quantile(0.99, sum(rate(canton_mediator_approval_duration_bucket[5m])) by (le))',
-  acsCount: "sum(canton_participant_active_contracts)",
-  errorsRate: "sum(rate(canton_participant_command_rejections_total[1m]))",
+  // Substitute: indexer-update counter, same as HeadlineLedgerTPS.
+  throughputSeries: "sum(rate(daml_participant_api_indexer_updates[1m]))",
+  p99: 'histogram_quantile(0.99, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
+  acsCount: "sum(daml_services_index_active_contracts)",
+  // No daml_* command-rejection counter on Splice 0.6.4 — use the
+  // user-error completion-status counter as a proxy for "things
+  // the participant refused to commit". Returns 0 if not exposed.
+  errorsRate: 'sum(rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m]))',
   latencyMedian:
-    'histogram_quantile(0.50, sum(rate(canton_mediator_approval_duration_bucket[5m])) by (le))',
+    'histogram_quantile(0.50, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
   latencyP99:
-    'histogram_quantile(0.99, sum(rate(canton_mediator_approval_duration_bucket[5m])) by (le))',
+    'histogram_quantile(0.99, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
+  // No per-template exercise counter is exposed today; the closest
+  // by-shape signal is gRPC service-handled rate. Returns flat data
+  // until a per-template metric lands upstream.
   perTemplate:
-    "sum by (template) (rate(canton_participant_exercises_total[5m]))",
-  errors1m: "sum(rate(canton_participant_command_rejections_total[1m]))",
+    "sum by (grpc_method) (rate(daml_grpc_server_handled_total[5m]))",
+  errors1m: 'sum(rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m]))',
   cpu: "sum by (container) (rate(container_cpu_usage_seconds_total[1m]))",
 };
 
