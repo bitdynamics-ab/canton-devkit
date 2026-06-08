@@ -614,9 +614,27 @@ export interface MetricsSummary {
   instance: string;
   metrics: {
     ledger_tps_5m?: number;
+    mediator_p50_seconds?: number;
     mediator_p95_seconds?: number;
+    mediator_p99_seconds?: number;
     jvm_heap_used_bytes?: number;
     postgres_conn_count?: number;
+  };
+  // latency mirrors the CLI's `--format json` block: mediator
+  // approval-duration percentiles in milliseconds. Nullable per
+  // field so an empty Prometheus stays distinguishable from a
+  // true 0 ms (matters during cold-start).
+  latency?: {
+    p50_ms?: number | null;
+    p95_ms?: number | null;
+    p99_ms?: number | null;
+  };
+  // dashboards.grafana_url is the deep link to the bundled
+  // canton-localnet dashboard when the observability profile is
+  // running, "" otherwise — the frontend renders a "raise
+  // observability" CTA when empty.
+  dashboards?: {
+    grafana_url?: string;
   };
 }
 

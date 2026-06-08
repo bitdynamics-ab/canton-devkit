@@ -40,7 +40,9 @@ type Headline string
 
 const (
 	HeadlineLedgerTPS    Headline = "ledger_tps_5m"
+	HeadlineMediatorP50  Headline = "mediator_p50_seconds"
 	HeadlineMediatorP95  Headline = "mediator_p95_seconds"
+	HeadlineMediatorP99  Headline = "mediator_p99_seconds"
 	HeadlineHeapUsed     Headline = "jvm_heap_used_bytes"
 	HeadlinePostgresConn Headline = "postgres_conn_count"
 )
@@ -85,7 +87,9 @@ const (
 //     would expect from "postgres conns".
 var SummaryQueries = map[Headline]string{
 	HeadlineLedgerTPS:    "sum(rate(daml_participant_api_indexer_updates[5m]))",
+	HeadlineMediatorP50:  "histogram_quantile(0.50, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))",
 	HeadlineMediatorP95:  "histogram_quantile(0.95, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))",
+	HeadlineMediatorP99:  "histogram_quantile(0.99, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))",
 	HeadlineHeapUsed:     `sum(jvm_memory_used_bytes{jvm_memory_type="heap"})`,
 	HeadlinePostgresConn: `sum(db_client_connections_usage{state="used"})`,
 }

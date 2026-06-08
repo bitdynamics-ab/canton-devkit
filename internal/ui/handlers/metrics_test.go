@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
 // TestMetrics_RejectsMissingQuery pins the input
@@ -147,3 +149,36 @@ func TestMetricsSummary_ResponseShapeStable(t *testing.T) {
 		t.Error("error response missing structured code")
 	}
 }
+
+// TestGrafanaURLForState mirrors the CLI's grafanaURLFor: only emit
+// a deep link when state.Ports["grafana_ui"] is populated. Pins the
+// CLI ↔ Web UI parity contract on the dashboard discoverability
+// surface so the two sides can't drift on the link shape.
+func TestGrafanaURLForState(t *testing.T) {
+	if got := grafanaURLForState(nil); got != "" {
+		t.Errorf("nil state should yield empty url; got %q", got)
+	}
+	off := &registry.State{Ports: map[string]int{}}
+	if got := grafanaURLForState(off); got != "" {
+		t.Errorf("obs-off should yield empty url; got %q", got)
+	}
+	on := &registry.State{Ports: map[string]int{"grafana_ui": 3001}}
+	want := "http://localhost:3001/d/canton-localnet-v1"
+	if got := grafanaURLForState(on); got != want {
+		t.Errorf("grafanaURLForState = %q, want %q", got, want)
+	}
+}
+
+// TestSecondsToMs preserves nil-vs-zero distinction (matches the
+// CLI's scaleSeconds): a missing scrape stays missing, not 0 ms.
+func TestSecondsToMs(t *testing.T) {
+	if got := secondsToMs(nil); got != nil {
+		t.Errorf("nil input should yield nil; got %v", *got)
+	}
+	v := 0.045
+	got := secondsToMs(&v)
+	if got == nil || *got < 44.9 || *got > 45.1 {
+		t.Errorf("0.045s -> %v, want ~45ms", got)
+	}
+}
+

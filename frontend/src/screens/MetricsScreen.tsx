@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   ApiError,
   fetchMetricsRange,
@@ -282,7 +282,7 @@ export function MetricsScreen() {
         <MetricCard
           title="Command completion p99"
           unit="ms"
-          value={m?.mediator_p95_seconds !== undefined ? m.mediator_p95_seconds * 1000 : undefined}
+          value={summary.data?.latency?.p99_ms ?? undefined}
           sparkline={p99Series.data?.points.map((p) => ({ t: p.t, v: p.v * 1000 }))}
           sparklineColor={P99_COLOR}
           error={p99Series.kind === "err" ? p99Series.error : undefined}
@@ -409,6 +409,14 @@ export function MetricsScreen() {
         </ChartCard>
       </div>
 
+      {/* Latency headline triplet — mirrors `dpm localnet metrics`
+          text output so CLI and UI agree on the curated quantiles. */}
+      <LatencyStrip
+        p50={summary.data?.latency?.p50_ms ?? undefined}
+        p95={summary.data?.latency?.p95_ms ?? undefined}
+        p99={summary.data?.latency?.p99_ms ?? undefined}
+      />
+
       {/* Top error sources — full width */}
       <ChartCard title="Top error sources" subtitle="last hour">
         {topErrors.kind === "err" ? (
@@ -422,7 +430,95 @@ export function MetricsScreen() {
           />
         )}
       </ChartCard>
+
+      {/* Dashboards — deep link to the bundled Grafana view. Same
+          UID the CLI's text output prints; per AGENTS.md CLI ↔ UI
+          parity rule the two surfaces must point at the same view. */}
+      <DashboardsBlock url={summary.data?.dashboards?.grafana_url} />
     </section>
+  );
+}
+
+// LatencyStrip is the in-page reminder of the three quantiles
+// `dpm localnet metrics` also prints. The 4-up MetricCard row shows
+// p99 specifically; surfacing p50/p95 next to it makes the SLA
+// shape visible at a glance.
+function LatencyStrip(props: {
+  p50?: number;
+  p95?: number;
+  p99?: number;
+}) {
+  const fmt = (v?: number) => (v === undefined ? "—" : `${Math.round(v)} ms`);
+  const cell: CSSProperties = {
+    padding: "10px 14px",
+    background: W.surface,
+    border: `1px solid ${W.border}`,
+    borderRadius: 6,
+    fontFamily: wMono,
+    fontSize: 13,
+    color: W.text,
+  };
+  const label: CSSProperties = {
+    color: W.dim,
+    marginRight: 8,
+  };
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(3, max-content)",
+        gap: 12,
+        marginBottom: 14,
+      }}
+    >
+      <div style={cell}>
+        <span style={label}>p50</span>
+        {fmt(props.p50)}
+      </div>
+      <div style={cell}>
+        <span style={label}>p95</span>
+        {fmt(props.p95)}
+      </div>
+      <div style={cell}>
+        <span style={label}>p99</span>
+        {fmt(props.p99)}
+      </div>
+    </div>
+  );
+}
+
+// DashboardsBlock surfaces the Grafana deep link returned by the
+// summary handler. When the observability profile is off the URL
+// is empty — we render the same hint as the CLI rather than hiding
+// the section, so users learn the profile exists.
+function DashboardsBlock(props: { url?: string }) {
+  const wrap: CSSProperties = {
+    marginTop: 14,
+    padding: "10px 14px",
+    background: W.surface,
+    border: `1px solid ${W.border}`,
+    borderRadius: 6,
+    fontFamily: wMono,
+    fontSize: 13,
+    color: W.text,
+  };
+  if (!props.url) {
+    return (
+      <div style={wrap}>
+        <strong style={{ marginRight: 8 }}>Dashboards:</strong>
+        <span style={{ color: W.dim }}>
+          enable observability profile to see Grafana
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div style={wrap}>
+      <strong style={{ marginRight: 8 }}>Dashboards:</strong>
+      <a href={props.url} target="_blank" rel="noreferrer" style={{ color: W.brandText }}>
+        Grafana ↗
+      </a>
+    </div>
   );
 }
 
