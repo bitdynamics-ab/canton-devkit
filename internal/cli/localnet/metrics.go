@@ -18,6 +18,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var metricsContainersList = containers.List
+
 // buildMetrics wires `dpm localnet metrics` — CLI face.
 // Scrapes the per-instance Prometheus (started by the
 // `--profile observability` compose overlay) and prints a small,
@@ -85,7 +87,7 @@ func buildMetrics() *cobra.Command {
 	cmd.Flags().StringVar(&host, "prometheus-host", "127.0.0.1",
 		"Prometheus host (set when running against a remote scrape target)")
 	cmd.Flags().IntVar(&port, "prometheus-port", 0,
-		"Prometheus host port (0 = auto-discover from `docker compose ps`)")
+		"Prometheus host port (0 = auto-discover from the instance registry)")
 	return cmd
 }
 
@@ -115,18 +117,19 @@ func resolveMetricsInstance(name string) (*registry.State, error) {
 	}
 }
 
-// resolvePrometheusEndpoint locates the prometheus container's
-// host-published port. When --prometheus-port is explicit we
-// honor it; otherwise we ask docker via the shared containers
-// package for the running container and parse its port mapping.
-//
-// When no prometheus container exists in the project, returns a
-// helpful error pointing at the --profile observability flag.
+// resolvePrometheusEndpoint locates the Prometheus host-published port.
+// The authoritative source is state.Ports["prometheus_ui"], which `up`
+// persists after host-port allocation. We only shell out to docker when
+// that registry entry is absent so we can distinguish "observability is
+// off" from "the instance is old / state is stale".
 func resolvePrometheusEndpoint(ctx context.Context, state *registry.State, host string, explicitPort int) (string, int, error) {
 	if explicitPort > 0 {
 		return host, explicitPort, nil
 	}
-	infos, err := containers.List(ctx, state.ComposeProject)
+	if port, ok := state.Ports["prometheus_ui"]; ok && port > 0 {
+		return host, port, nil
+	}
+	infos, err := metricsContainersList(ctx, state.ComposeProject)
 	if err != nil {
 		return "", 0, fmt.Errorf("docker probe: %w", err)
 	}
@@ -134,12 +137,9 @@ func resolvePrometheusEndpoint(ctx context.Context, state *registry.State, host 
 		if c.Service != "prometheus" {
 			continue
 		}
-		// The host port is published via compose; we can't
-		// reliably extract it from `compose ps --format json`
-		// without a port-inspect call. Default to 9090 — the
-		// compose overlay binds host port 9090 unless
-		// PROMETHEUS_HOST_PORT is overridden.
-		return host, 9090, nil
+		return "", 0, fmt.Errorf("prometheus is running for instance %q but its host port was not recorded — "+
+			"restart the instance with `dpm localnet restart --name %s` or pass --prometheus-port explicitly",
+			state.Name, state.Name)
 	}
 	return "", 0, fmt.Errorf("no prometheus container in compose project %q — "+
 		"start the instance with `dpm localnet up --profile observability --name %s` "+

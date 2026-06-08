@@ -31,21 +31,27 @@ single `$instance` template variable backed by
 `label_values(up, instance)` so you can scope every panel to one
 participant.
 
+The current bundle ships 10 panels (`id` 1-15 with gaps reserved for
+future inserts). The metric names match the live `daml_*`, `jvm_*`,
+and `db_client_*` families audited in
+[docs/observability.md](observability.md) — not the older
+non-existent `canton_*` names.
+
 | Panel | Type | PromQL | What it tells you |
 |---|---|---|---|
-| Ledger TPS (5m avg) | stat | `sum(rate(canton_participant_transactions_total{instance=~"$instance"}[5m]))` | Steady-state ledger throughput. Drops here usually point at participant or sequencer back-pressure. |
+| Ledger TPS (5m avg) | stat | `sum(rate(daml_participant_api_indexer_updates{instance=~"$instance"}[5m]))` | Steady-state ledger throughput. Drops here usually point at participant or sequencer back-pressure. |
 | Active Participants | stat | `count(up{component="canton", instance=~"$instance"} == 1)` | How many Canton nodes Prometheus can scrape right now. Anything less than expected means a node is unscrapeable. |
-| Mediator Approval Latency (p95) | stat | `histogram_quantile(0.95, sum(rate(canton_mediator_approval_duration_bucket{instance=~"$instance"}[5m])) by (le))` | Tail latency of mediator confirmation. The single most useful number for "is the network healthy under load?". |
-| Postgres Conn Count | stat | `sum(pg_stat_activity_count{instance=~"$instance"})` | Total live Postgres connections across the stack. A creeping value here is the early signal for a connection-pool leak. |
-| Transactions per Second | timeseries | `rate(canton_participant_transactions_total{instance=~"$instance"}[1m])` (per-participant) | Same signal as the TPS stat, broken out per participant so you can see uneven load. |
-| JVM Heap Used (per node) | timeseries | `jvm_memory_used_bytes{area="heap", instance=~"$instance"}` | Heap pressure per component. A sawtooth rising baseline is the classic memory-leak shape. |
-| Sequencer Message Rate | timeseries | `rate(canton_sequencer_messages_total{instance=~"$instance"}[1m])` | Sequencer-level message rate. Useful for separating ledger-layer slowness from transport-layer stalls. |
-| Transaction Processing Latency | timeseries | p50 + p95 of `canton_participant_transaction_duration_bucket` | Per-participant latency at two quantiles. Diverging p50/p95 is the early sign of a stuck transaction. |
+| Submission Sequencing Latency (p95) | stat | `histogram_quantile(0.95, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket{instance=~"$instance"}[5m])) by (le))` | Tail latency from client submit to sequenced commit. This is the closest audited “command completion” latency on stock Splice 0.6.4. |
+| DB Connections In Use | stat | `sum(db_client_connections_usage{state="used", instance=~"$instance"})` | Active DB pool usage across the stack. A creeping value here is the early signal for connection-pool pressure. |
+| Transactions per Second | timeseries | `rate(daml_participant_api_indexer_updates{instance=~"$instance"}[1m])` | Same signal as the TPS stat, broken out over time so you can see bursts and stalls. |
+| JVM Heap Used (per node) | timeseries | `jvm_memory_used_bytes{jvm_memory_type="heap", instance=~"$instance"}` | Heap pressure per component. A sawtooth rising baseline is the classic memory-leak shape. |
+| Sequencer Block Event Rate | timeseries | `rate(daml_sequencer_block_events_total{instance=~"$instance"}[1m])` | Sequencer-level event rate. Useful for separating ledger-layer slowness from transport-layer stalls. |
+| Submission Latency by Component | timeseries | p50 + p95 of `daml_sequencer_client_submissions_sequencing_duration_seconds_bucket` grouped by `component` | Shows whether latency is isolated to one node or systemic. Diverging p50/p95 is the early sign of queueing or retries. |
+| Active Contract Set Size | stat | `sum(daml_services_index_active_contracts{instance=~"$instance"})` | Total active contracts across participants. Useful for “did my app actually create state?” checks. |
+| Top 10 Templates by Throughput (best-effort) | bar gauge | `topk(10, sum by (template_id) (rate(daml_commands_submissions_total{instance=~"$instance"}[5m])))` | Template-level throughput when the upstream scrape exposes `template_id`. On stock Splice 0.6.4 this may collapse to a single aggregate series or no data. |
 
-All metrics use the `canton_*` and `jvm_*` namespaces emitted by the
-Splice participant's Prometheus scrape endpoint. The Postgres metric
-comes from a separate exporter that the observability overlay starts
-alongside Grafana.
+For the full metric-family audit and substitution table, see
+[docs/observability.md](observability.md).
 
 ---
 
@@ -81,26 +87,26 @@ direct path.
 Append a new entry to the `panels` array. The minimum a panel needs
 is an `id` (unique within the dashboard), a `type`, a `title`, a
 `gridPos`, and at least one Prometheus `target`. Here is a panel
-that surfaces participant indexer lag:
+that surfaces idle DB pool capacity:
 
 ```json
 {
   "id": 20,
   "type": "timeseries",
-  "title": "Indexer Lag",
+  "title": "DB Connections Idle",
   "datasource": "Prometheus",
   "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
   "targets": [
     {
-      "expr": "canton_participant_indexer_lag_seconds{instance=~\"$instance\"}",
-      "legendFormat": "{{participant}}"
+      "expr": "sum by (pool) (db_client_connections_usage{state=\"idle\", instance=~\"$instance\"})",
+      "legendFormat": "{{pool}}"
     }
   ]
 }
 ```
 
 Pick an `id` higher than any existing one (the bundled dashboard
-goes up to 13). Place the panel below the existing rows by setting
+goes up to 15). Place the panel below the existing rows by setting
 `y` past the last occupied row.
 
 ---
@@ -205,7 +211,7 @@ instance; the prefix is the compose project name printed by
 
 ## 6. Where the metrics come from
 
-Prometheus scrapes the Canton participants directly. The targets are
+Prometheus scrapes the LocalNet nodes directly. The targets are
 declared in the observability overlay's Prometheus config; you can
 list them at runtime by browsing to
 `http://localhost:<prometheus-port>/targets`.
@@ -214,16 +220,18 @@ Metric name conventions used by the bundled dashboard:
 
 | Prefix | Source | Notes |
 |---|---|---|
-| `canton_participant_*` | Canton participant node | Ledger throughput, indexer lag, transaction durations. |
-| `canton_mediator_*` | Canton mediator | Confirmation request durations, approval counters. |
-| `canton_sequencer_*` | Canton sequencer | Message rates, batch sizes. |
-| `jvm_*` | JVM metric exporter (built into Canton) | Heap, GC, thread counts. Available on every JVM-based node. |
-| `pg_*` | Postgres exporter | Per-DB connection counts and statement stats. |
+| `daml_*` | Daml participant / sequencer / mediator OTel reporter | Ledger updates, submission sequencing latency, block events. |
+| `jvm_*` | JVM runtime instrumentation | Heap, GC, thread counts. Available on every JVM-based node. |
+| `db_client_*` | HikariCP pool stats from the JVM apps | In-use / idle / pending DB pool counts. |
+| `cn_*` / `sv_*` | Scan and super-validator business metrics | App-specific counters and histograms beyond the core Canton flow. |
+| `splice_*` | Splice triggers and domain params | Trigger latencies and control-plane metrics. |
 | `up` | Prometheus self | Whether each scrape target is reachable. The `instance` label is the source for the `$instance` template variable. |
 
 If a panel renders as "No data", the fastest debug is to open
 Prometheus directly, type the metric name, and see whether the
-participant is producing it at all.
+instance is producing it at all. For the full audited substitution
+table from the earlier `canton_*` placeholders to the live names, see
+[docs/observability.md](observability.md).
 
 ---
 
@@ -236,7 +244,7 @@ Edit the **Ledger TPS (5m avg)** stat panel and add an alert rule
 uses:
 
 ```
-sum(rate(canton_participant_transactions_total{instance=~"$instance"}[5m]))
+sum(rate(daml_participant_api_indexer_updates{instance=~"$instance"}[5m]))
 ```
 
 Fire when the value is below `0.01` for 5 minutes. The alert lives
@@ -265,16 +273,17 @@ that filters to a specific `component`), add it to
 
 Then reference it in panel queries with `component=~"$component"`.
 
-### Track DAR upload count
+### Track DB pool pressure
 
 Add a stat panel with:
 
 ```
-sum(canton_participant_package_count{instance=~"$instance"})
+sum(db_client_connections_usage{state="pending", instance=~"$instance"})
 ```
 
-Useful when you're iterating on a multi-DAR app and want to see at
-a glance how many packages the participant has loaded.
+Useful when you're load-testing or chasing slow commits: a sustained
+non-zero pending count usually means callers are waiting on the DB
+pool rather than the ledger itself.
 
 ---
 
@@ -282,6 +291,8 @@ a glance how many packages the participant has loaded.
 
 - [docs/getting-started.md](getting-started.md) — installing DevKit
   and starting LocalNet with the observability overlay.
+- [docs/observability.md](observability.md) — audited metric families
+  and the `canton_*` → `daml_*` substitution table.
 - [docs/telemetry.md](telemetry.md) — what metrics DevKit itself
   emits (separate from Canton's metrics).
 - [docs/troubleshooting.md](troubleshooting.md) — common Grafana /
