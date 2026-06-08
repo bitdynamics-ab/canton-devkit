@@ -462,7 +462,9 @@ type upRequest struct {
 // string can't ride through. Keep in sync with internal/localnet's
 // known profile constants.
 var allowedProfiles = map[string]bool{
-	localnet.ObservabilityProfileName: true,
+	localnet.ObservabilityProfileName: true, // legacy umbrella; expands to prometheus + grafana
+	localnet.PrometheusProfileName:    true,
+	localnet.GrafanaProfileName:       true,
 	localnet.TokensV2ProfileName:      true,
 }
 
@@ -1864,8 +1866,38 @@ const observabilityToggleTimeout = 90 * time.Second
 
 // observabilityToggleRequest is the body for
 // POST /api/instances/{name}/observability.
+//
+// Per-component flags (`prometheus` / `grafana`) are the canonical
+// form so users can flip the two sidecars independently. The legacy
+// `enabled` flag is retained as a compatibility synonym: when
+// present (non-nil), it sets BOTH components to the same value so
+// clients that haven't been updated keep working. Per-component
+// flags win over `enabled` when both are sent in the same body.
 type observabilityToggleRequest struct {
-	Enabled bool `json:"enabled"`
+	Prometheus *bool `json:"prometheus,omitempty"`
+	Grafana    *bool `json:"grafana,omitempty"`
+	Enabled    *bool `json:"enabled,omitempty"`
+}
+
+// resolveTargets folds the three optional fields into the
+// (prometheus, grafana) target booleans. Returns the resolved
+// targets plus a flag indicating whether any field was set. The
+// per-component flags take precedence over `enabled`.
+func (r observabilityToggleRequest) resolveTargets() (prom, graf bool, ok bool) {
+	if r.Enabled != nil {
+		prom = *r.Enabled
+		graf = *r.Enabled
+		ok = true
+	}
+	if r.Prometheus != nil {
+		prom = *r.Prometheus
+		ok = true
+	}
+	if r.Grafana != nil {
+		graf = *r.Grafana
+		ok = true
+	}
+	return
 }
 
 // handleObservabilityToggle: POST /api/instances/{name}/observability.
@@ -1911,7 +1943,16 @@ func handleObservabilityToggle() http.HandlerFunc {
 			writeErrorWithCode(w, http.StatusBadRequest,
 				ErrCodeInvalidRequest,
 				"invalid request body",
-				`expected {"enabled": true|false}`)
+				`expected {"prometheus": true|false, "grafana": true|false} `+
+					`(legacy {"enabled": true|false} also accepted)`)
+			return
+		}
+		wantProm, wantGraf, ok := req.resolveTargets()
+		if !ok {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"request body must set at least one of "+
+					`"prometheus", "grafana", or "enabled"`)
 			return
 		}
 
@@ -1950,63 +1991,141 @@ func handleObservabilityToggle() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), observabilityToggleTimeout)
 		defer cancel()
 
-		if req.Enabled {
-			out, port, err := enableObservability(ctx, state)
+		// Determine the current per-component state from the persisted
+		// port map — a port present means the sidecar is up.
+		_, promOn := state.Ports["prometheus_ui"]
+		_, grafOn := state.Ports["grafana_ui"]
+
+		// Warning (not rejection) for Grafana-without-Prometheus: a
+		// user may legitimately point Grafana at an external scrape
+		// source. Surface it in the response so the UI can render the
+		// banner; don't block the request.
+		var warning string
+		if wantGraf && !wantProm {
+			warning = "Grafana enabled without Prometheus — dashboards " +
+				"will have no bundled data source. Enable Prometheus or " +
+				"configure an external scrape source manually."
+		}
+
+		var promPort int
+		if wantProm && !promOn {
+			out, port, err := enablePrometheus(ctx, state)
 			if err != nil {
-				log.Printf("observability enable %q failed: %s\noutput:\n%s", name, err, out)
+				log.Printf("prometheus enable %q failed: %s\noutput:\n%s", name, err, out)
 				writeErrorWithCode(w, http.StatusBadGateway,
 					"OBSERVABILITY_TOGGLE_FAIL",
-					"failed to enable observability: "+truncateForUser(err.Error()),
+					"failed to enable prometheus: "+truncateForUser(err.Error()),
 					"check `docker compose -p "+state.ComposeProject+" ps` and `docker logs "+state.ComposeProject+"-prometheus`")
 				return
 			}
-			state.Ports["prometheus_ui"] = port
-			if err := registry.Write(state); err != nil {
-				writeError(w, http.StatusInternalServerError, "persist port", err)
+			promPort = port
+		} else if !wantProm && promOn {
+			if out, err := disableService(ctx, state, "prometheus"); err != nil {
+				log.Printf("prometheus disable %q failed: %s\noutput:\n%s", name, err, out)
+				writeErrorWithCode(w, http.StatusBadGateway,
+					"OBSERVABILITY_TOGGLE_FAIL",
+					"failed to disable prometheus: "+truncateForUser(err.Error()))
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]any{
-				"schema_version": types.SchemaVersion,
-				"instance":       name,
-				"enabled":        true,
-				"prometheus_ui":  port,
-			})
+		}
+
+		var grafPort int
+		if wantGraf && !grafOn {
+			out, port, err := enableGrafana(ctx, state)
+			if err != nil {
+				log.Printf("grafana enable %q failed: %s\noutput:\n%s", name, err, out)
+				writeErrorWithCode(w, http.StatusBadGateway,
+					"OBSERVABILITY_TOGGLE_FAIL",
+					"failed to enable grafana: "+truncateForUser(err.Error()),
+					"check `docker compose -p "+state.ComposeProject+" ps` and `docker logs "+state.ComposeProject+"-grafana`")
+				return
+			}
+			grafPort = port
+		} else if !wantGraf && grafOn {
+			if out, err := disableService(ctx, state, "grafana"); err != nil {
+				log.Printf("grafana disable %q failed: %s\noutput:\n%s", name, err, out)
+				writeErrorWithCode(w, http.StatusBadGateway,
+					"OBSERVABILITY_TOGGLE_FAIL",
+					"failed to disable grafana: "+truncateForUser(err.Error()))
+				return
+			}
+		}
+
+		// Re-read state under lock before persisting to avoid clobbering
+		// concurrent writers (issue #92 pattern). We hold the per-instance
+		// lock for the whole handler, so the on-disk file can only have
+		// drifted via a writer that ran AND released between our earlier
+		// Read and now — defensive but cheap.
+		fresh, err := registry.Read(name)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "re-read state", err)
+			return
+		}
+		state = fresh
+
+		if wantProm {
+			if promPort != 0 {
+				state.Ports["prometheus_ui"] = promPort
+			}
+		} else {
+			delete(state.Ports, "prometheus_ui")
+		}
+		if wantGraf {
+			if grafPort != 0 {
+				state.Ports["grafana_ui"] = grafPort
+			}
+		} else {
+			delete(state.Ports, "grafana_ui")
+		}
+		if err := registry.Write(state); err != nil {
+			writeError(w, http.StatusInternalServerError, "persist toggle", err)
 			return
 		}
 
-		// Disable path.
-		out, err := disableObservability(ctx, state)
-		if err != nil {
-			log.Printf("observability disable %q failed: %s\noutput:\n%s", name, err, out)
-			writeErrorWithCode(w, http.StatusBadGateway,
-				"OBSERVABILITY_TOGGLE_FAIL",
-				"failed to disable observability: "+truncateForUser(err.Error()))
-			return
-		}
-		delete(state.Ports, "prometheus_ui")
-		if err := registry.Write(state); err != nil {
-			writeError(w, http.StatusInternalServerError, "persist port removal", err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
+		resp := map[string]any{
 			"schema_version": types.SchemaVersion,
 			"instance":       name,
-			"enabled":        false,
-		})
+			"prometheus":     wantProm,
+			"grafana":        wantGraf,
+			// `enabled` retained for legacy clients: true iff BOTH are on.
+			"enabled": wantProm && wantGraf,
+		}
+		if p, ok := state.Ports["prometheus_ui"]; ok {
+			resp["prometheus_ui"] = p
+		}
+		if p, ok := state.Ports["grafana_ui"]; ok {
+			resp["grafana_ui"] = p
+		}
+		if warning != "" {
+			resp["warning"] = warning
+		}
+		writeJSON(w, http.StatusOK, resp)
 	}
 }
 
-// enableObservability runs the docker-compose subcommands that
-// materialize the overlay and bring up prometheus + grafana for
-// a running instance. Returns the captured combined output (for
-// the 502 path) and the discovered host port for prometheus_ui.
-func enableObservability(ctx context.Context, state *registry.State) (string, int, error) {
+// enablePrometheus brings up only the prometheus sidecar via the
+// per-component compose profile. Thin wrapper over enableSidecar so
+// the caller's branching stays readable.
+func enablePrometheus(ctx context.Context, state *registry.State) (string, int, error) {
+	return enableSidecar(ctx, state, localnet.PrometheusProfileName, "prometheus", 9090)
+}
+
+// enableGrafana brings up only the grafana sidecar.
+func enableGrafana(ctx context.Context, state *registry.State) (string, int, error) {
+	return enableSidecar(ctx, state, localnet.GrafanaProfileName, "grafana", 3000)
+}
+
+// enableSidecar runs the docker-compose subcommands that materialize
+// the observability overlay and bring up a single named sidecar
+// service under the matching per-component profile. Returns the
+// captured combined output (for the 502 path) and the discovered
+// host port. portInternal is the in-container port to look up via
+// `docker compose port <svc> <port>` after the up succeeds.
+func enableSidecar(ctx context.Context, state *registry.State, profile, service string, portInternal int) (string, int, error) {
 	overlay, err := localnet.MaterializeObservabilityOverlay(state.DataDir, state.ProjectDir)
 	if err != nil {
 		return "", 0, fmt.Errorf("materialize overlay: %w", err)
 	}
-	// Ensure the overlay is reflected in state.ComposeFiles so a
-	// later resume (POST /up) sees the overlay too.
 	hasOverlay := false
 	for _, f := range state.ComposeFiles {
 		if f == overlay {
@@ -2018,23 +2137,24 @@ func enableObservability(ctx context.Context, state *registry.State) (string, in
 		state.ComposeFiles = append(state.ComposeFiles, overlay)
 	}
 
-	// Reconstruct the FULL compose env the same way RunUp does. The
-	// Splice base compose requires PARTY_HINT / LOCALNET_DIR /
-	// IMAGE_TAG / COMPOSE_PROFILES / ... — all supplied by the
-	// adapter's OverlayEnv + the --env-file flags. Without them
-	// docker compose aborts during interpolation ("required variable
-	// PARTY_HINT is missing a value") before prometheus/grafana can
-	// start. Reuse the instance's already-published UI host ports;
-	// let docker auto-assign the observability ports (PROMETHEUS/
-	// GRAFANA_HOST_PORT=0) — prometheus_ui is discovered below.
+	// Reuse the instance's already-published UI host ports; let docker
+	// auto-assign the observability ports (HOST_PORT=0) — the freshly
+	// allocated port is discovered below via `docker compose port`.
 	uiOverrides := map[string]int{
 		"APP_USER_UI_PORT":     state.Ports["app_user_ui"],
 		"APP_PROVIDER_UI_PORT": state.Ports["app_provider_ui"],
 		"SV_UI_PORT":           state.Ports["sv_ui"],
 		"SWAGGER_UI_PORT":      state.Ports["swagger_ui"],
 		"DB_PORT":              state.Ports["postgres"],
-		"PROMETHEUS_HOST_PORT": 0,
-		"GRAFANA_HOST_PORT":    0,
+		"PROMETHEUS_HOST_PORT": existingOrZero(state.Ports, "prometheus_ui"),
+		"GRAFANA_HOST_PORT":    existingOrZero(state.Ports, "grafana_ui"),
+	}
+	// Force a fresh allocation for the service we're enabling.
+	switch service {
+	case "prometheus":
+		uiOverrides["PROMETHEUS_HOST_PORT"] = 0
+	case "grafana":
+		uiOverrides["GRAFANA_HOST_PORT"] = 0
 	}
 	cenv, err := localnet.ComposeEnvForInstance(state, uiOverrides)
 	if err != nil {
@@ -2048,52 +2168,60 @@ func enableObservability(ctx context.Context, state *registry.State) (string, in
 	for _, f := range state.ComposeFiles {
 		args = append(args, "-f", f)
 	}
-	args = append(args, "--profile", localnet.ObservabilityProfileName,
-		"up", "-d", "prometheus", "grafana")
+	args = append(args, "--profile", profile, "up", "-d", service)
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Dir = state.ProjectDir
-	// Full env (os.Environ() + adapter OverlayEnv). The env-file
-	// paths above are relative to ProjectDir, which is cmd.Dir.
 	cmd.Env = cenv.Env
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(out), 0, fmt.Errorf("docker compose up: %w", err)
 	}
 
-	// Discover the freshly-assigned host port for prometheus's
-	// container-internal 9090.
 	portCmd := exec.CommandContext(ctx, "docker", "compose",
-		"-p", state.ComposeProject, "port", "prometheus", "9090")
+		"-p", state.ComposeProject, "port", service, fmt.Sprintf("%d", portInternal))
 	portCmd.Dir = state.ProjectDir
 	rawPort, perr := portCmd.CombinedOutput()
 	if perr != nil {
-		return string(out) + "\n" + string(rawPort), 0, fmt.Errorf("discover prometheus host port: %w", perr)
+		return string(out) + "\n" + string(rawPort), 0,
+			fmt.Errorf("discover %s host port: %w", service, perr)
 	}
 	port := parseHostPort(string(rawPort))
 	if port == 0 {
 		return string(out) + "\n" + string(rawPort), 0,
-			fmt.Errorf("could not parse prometheus host port from %q", string(rawPort))
+			fmt.Errorf("could not parse %s host port from %q", service, string(rawPort))
 	}
 	return string(out), port, nil
 }
 
-// disableObservability stops + removes the prometheus and grafana
-// containers without touching anything else. We deliberately do
+// existingOrZero returns the int at key or 0 if absent. Used to keep
+// the still-running sidecar's port stable when we're toggling its
+// neighbor — Docker reuses the existing container when it sees the
+// same env values, so passing 0 for an already-up service would
+// cause a needless restart.
+func existingOrZero(m map[string]int, key string) int {
+	if v, ok := m[key]; ok {
+		return v
+	}
+	return 0
+}
+
+// disableService stops + removes a single named sidecar (prometheus
+// or grafana) without touching anything else. We deliberately do
 // NOT mutate state.ComposeFiles — keeping the overlay in the list
 // makes a future re-enable a no-op materialize + spin-up.
-func disableObservability(ctx context.Context, state *registry.State) (string, error) {
+func disableService(ctx context.Context, state *registry.State, service string) (string, error) {
 	stopCmd := exec.CommandContext(ctx, "docker", "compose",
-		"-p", state.ComposeProject, "stop", "prometheus", "grafana")
+		"-p", state.ComposeProject, "stop", service)
 	stopCmd.Dir = state.ProjectDir
 	if out, err := stopCmd.CombinedOutput(); err != nil {
-		return string(out), fmt.Errorf("docker compose stop: %w", err)
+		return string(out), fmt.Errorf("docker compose stop %s: %w", service, err)
 	}
 	rmCmd := exec.CommandContext(ctx, "docker", "compose",
-		"-p", state.ComposeProject, "rm", "-f", "prometheus", "grafana")
+		"-p", state.ComposeProject, "rm", "-f", service)
 	rmCmd.Dir = state.ProjectDir
 	if out, err := rmCmd.CombinedOutput(); err != nil {
-		return string(out), fmt.Errorf("docker compose rm: %w", err)
+		return string(out), fmt.Errorf("docker compose rm %s: %w", service, err)
 	}
 	return "", nil
 }

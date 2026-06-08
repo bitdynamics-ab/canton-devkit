@@ -80,10 +80,11 @@ Supported Splice versions: %s
 			"DevKit — use for prereleases / alphas at your own risk.")
 	cmd.Flags().StringSliceVar(&opts.Profiles, "profile", nil,
 		"Docker compose profiles to enable. "+
-			"`--profile observability` adds Prometheus + Grafana via the "+
-			"observability overlay (extra ~600 MiB RAM); host ports allocated and "+
-			"persisted alongside the regular UI ports so re-up preserves "+
-			"bookmarked URLs. Repeatable for multiple profiles.")
+			"`--profile prometheus` and `--profile grafana` can be enabled "+
+			"independently to control each observability sidecar separately; "+
+			"`--profile observability` (legacy umbrella) activates both at once. "+
+			"Each adds ~250-350 MiB; host ports are allocated and persisted so "+
+			"re-up preserves bookmarked URLs. Repeatable for multiple profiles.")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }

@@ -128,8 +128,43 @@ func bytesEqual(a, b []byte) bool {
 	return true
 }
 
-// ObservabilityProfileName is the docker compose profile name
-// scoping the Prometheus + Grafana services. The compose overlay
-// declares `profiles: ["observability"]` on each service so they
-// stay off unless this profile is activated.
+// ObservabilityProfileName is the legacy umbrella docker compose
+// profile that activates BOTH Prometheus and Grafana together. Kept
+// for backward compatibility (existing scripts, docs, registry
+// entries). Prefer the per-component profiles PrometheusProfileName
+// / GrafanaProfileName for new code so users can enable each side
+// independently.
 const ObservabilityProfileName = "observability"
+
+// PrometheusProfileName activates only the Prometheus service in the
+// observability overlay. Use alongside GrafanaProfileName to mirror
+// the legacy umbrella, or alone for metrics-scrape-only setups.
+const PrometheusProfileName = "prometheus"
+
+// GrafanaProfileName activates only the Grafana service. Pointed at
+// the bundled Prometheus by default; in a Grafana-only setup the
+// user is expected to wire it to an external scrape source — the
+// API + UI surface a warning when grafana is enabled without
+// prometheus.
+const GrafanaProfileName = "grafana"
+
+// ExpandObservabilityProfiles returns the de-duplicated set of
+// per-component profiles equivalent to the input list. Legacy
+// "observability" expands to ["prometheus", "grafana"]; the
+// per-component names pass through. Used by both the CLI bring-up
+// path and the HTTP toggle so a single source-of-truth governs the
+// "which sidecars start?" decision.
+func ExpandObservabilityProfiles(profiles []string) (prometheus, grafana bool) {
+	for _, p := range profiles {
+		switch p {
+		case ObservabilityProfileName:
+			prometheus = true
+			grafana = true
+		case PrometheusProfileName:
+			prometheus = true
+		case GrafanaProfileName:
+			grafana = true
+		}
+	}
+	return
+}
