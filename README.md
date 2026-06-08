@@ -133,13 +133,15 @@ Optional `--profile observability` adds **Prometheus + Grafana** with a curated 
 <details open>
 <summary><b>Pre-built binary</b> — pick your OS  (recommended)</summary>
 
-Releases live at [github.com/bitdynamics-ab/canton-devkit/releases](https://github.com/bitdynamics-ab/canton-devkit/releases). Three platforms ship today; for anything else use the *from source* path below.
+Releases live at [github.com/bitdynamics-ab/canton-devkit/releases](https://github.com/bitdynamics-ab/canton-devkit/releases). Three platforms ship today; for anything else use the *from source* path below. The snippets below pin `v0.7` — substitute the [latest tag](https://github.com/bitdynamics-ab/canton-devkit/releases) as it advances.
 
 **macOS (Apple Silicon)**
 
 ```sh
-curl -L -o canton-devkit \
-  https://github.com/bitdynamics-ab/canton-devkit/releases/download/v0.2/canton-devkit_darwin_arm64
+V=v0.7
+curl -L -o canton-devkit.tar.gz \
+  "https://github.com/bitdynamics-ab/canton-devkit/releases/download/${V}/canton-devkit_${V}_darwin_arm64.tar.gz"
+tar -xzf canton-devkit.tar.gz
 chmod +x canton-devkit
 sudo mv canton-devkit /usr/local/bin/
 canton-devkit version
@@ -148,8 +150,10 @@ canton-devkit version
 **Linux (x86_64)**
 
 ```sh
-curl -L -o canton-devkit \
-  https://github.com/bitdynamics-ab/canton-devkit/releases/download/v0.2/canton-devkit_linux_amd64
+V=v0.7
+curl -L -o canton-devkit.tar.gz \
+  "https://github.com/bitdynamics-ab/canton-devkit/releases/download/${V}/canton-devkit_${V}_linux_amd64.tar.gz"
+tar -xzf canton-devkit.tar.gz
 chmod +x canton-devkit
 sudo mv canton-devkit /usr/local/bin/
 canton-devkit version
@@ -158,16 +162,18 @@ canton-devkit version
 **Windows (x86_64)** — PowerShell
 
 ```powershell
-$dest = "$env:USERPROFILE\bin\canton-devkit.exe"
-New-Item -ItemType Directory -Force "$env:USERPROFILE\bin" | Out-Null
+$V = "v0.7"
+$dest = "$env:USERPROFILE\bin"
+New-Item -ItemType Directory -Force $dest | Out-Null
 Invoke-WebRequest `
-  -Uri https://github.com/bitdynamics-ab/canton-devkit/releases/download/v0.2/canton-devkit_windows_amd64.exe `
-  -OutFile $dest
+  -Uri "https://github.com/bitdynamics-ab/canton-devkit/releases/download/$V/canton-devkit_${V}_windows_amd64.zip" `
+  -OutFile canton-devkit.zip
+Expand-Archive -Force canton-devkit.zip -DestinationPath $dest
 # Add %USERPROFILE%\bin to your PATH (one time), then:
 canton-devkit version
 ```
 
-> **Note** — `v0.2` is a pre-release; check the [releases page](https://github.com/bitdynamics-ab/canton-devkit/releases) for the latest tag and substitute the version in the URLs above. Once a GA release lands, `/releases/latest/download/canton-devkit_<os>_<arch>` will work as well. Intel Mac (`darwin_amd64`) and Linux ARM (`linux_arm64`) artefacts are on the roadmap; for now, build from source on those platforms.
+> **Note** — `v0.7` is a pre-release; check the [releases page](https://github.com/bitdynamics-ab/canton-devkit/releases) for the latest tag and substitute `V` in the URLs above. Each release publishes a `SHA256SUMS` file at the same base URL — pair the archive with it to verify the download (the CI examples in [`examples/ci/`](examples/ci/) show the verify pattern). Intel Mac (`darwin_amd64`) and Linux ARM (`linux_arm64`) artefacts are on the roadmap; for now, build from source on those platforms.
 
 </details>
 
