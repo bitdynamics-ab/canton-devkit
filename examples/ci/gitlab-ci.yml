@@ -13,7 +13,7 @@
 # guaranteed (GitLab's equivalent of GitHub's if: always()).
 
 variables:
-  DEVKIT_VERSION: "v0.2.0"
+  DEVKIT_VERSION: "v0.7"
   SPLICE_VERSION: "0.6.4"
   INSTANCE: "ci"
 
@@ -23,20 +23,20 @@ localnet-tests:
   # Docker/Compose must be reachable from the runner.
   image: ubuntu:24.04
   before_script:
-    - apt-get update && apt-get install -y curl ca-certificates jq
+    - apt-get update && apt-get install -y curl ca-certificates tar
     - |
       set -euo pipefail
-      asset="canton-devkit_linux_amd64"
+      # Releases publish a tar.gz per platform plus a SHA256SUMS file with
+      # one line per asset. Verify the archive against SHA256SUMS before
+      # extracting.
+      asset="canton-devkit_${DEVKIT_VERSION}_linux_amd64.tar.gz"
       base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${DEVKIT_VERSION}"
-      curl -fL -o /usr/local/bin/canton-devkit "${base}/${asset}"
-      # GitHub publishes each release asset's SHA-256 as a `digest`
-      # field in the release API; read it and verify the download.
-      expected_sha256="$(
-        curl -fsSL "https://api.github.com/repos/bitdynamics-ab/canton-devkit/releases/tags/${DEVKIT_VERSION}" |
-          jq -r --arg asset "$asset" '.assets[] | select(.name == $asset) | .digest | sub("^sha256:"; "")'
-      )"
-      printf "%s  /usr/local/bin/canton-devkit\n" "$expected_sha256" | sha256sum -c -
-      chmod +x /usr/local/bin/canton-devkit
+      curl -fL -o "${asset}" "${base}/${asset}"
+      curl -fL -o SHA256SUMS "${base}/SHA256SUMS"
+      grep " ${asset}\$" SHA256SUMS | sha256sum -c -
+      tar -xzf "${asset}"
+      chmod +x canton-devkit
+      mv canton-devkit /usr/local/bin/
       canton-devkit version
   script:
     - canton-devkit localnet doctor
