@@ -573,6 +573,36 @@ export async function resumeInstance(name: string): Promise<ResumeAcceptedRespon
   return (await resp.json()) as ResumeAcceptedResponse;
 }
 
+// restartInstance invokes POST /api/instances/{name}/restart — a
+// single-click "Restart" path that the backend implements as a
+// serial down → up cycle. The backend reuses the instance's recorded
+// SpliceVersion and infers the original profile set from the
+// compose-files on disk, so a restart does not silently upgrade,
+// regenerate credentials, or shed observability sidecars.
+//
+// Same async shape as resumeInstance: 202 with an events_url the UI
+// hands to the existing progress modal. 404 if the name isn't in
+// the registry; 409 INSTANCE_CREATING if a down/up/restart job is
+// already in flight for the same name (the second click is a no-op
+// by design — the original cycle continues uninterrupted).
+export async function restartInstance(name: string): Promise<ResumeAcceptedResponse> {
+  const resp = await fetch(
+    `/api/instances/${encodeURIComponent(name)}/restart`,
+    { method: "POST" },
+  );
+  if (!resp.ok) {
+    const text = await resp.text();
+    let body: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try {
+      body = JSON.parse(text);
+    } catch {
+      /* non-JSON; keep default */
+    }
+    throw new ApiError(resp.status, body);
+  }
+  return (await resp.json()) as ResumeAcceptedResponse;
+}
+
 // Metrics summary.
 //
 // The four curated headline numbers the CLI's

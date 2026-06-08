@@ -100,6 +100,7 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("DELETE /api/instances/{name}", handleScrubInstance(hub))
 		mux.HandleFunc("POST /api/instances/{name}/down", handleDownInstance())
 		mux.HandleFunc("POST /api/instances/{name}/up", handleResumeInstance(hub))
+		mux.HandleFunc("POST /api/instances/{name}/restart", handleRestartInstance(hub))
 		mux.HandleFunc("POST /api/instances/{name}/observability", handleObservabilityToggle())
 	} else {
 		// Stub so a misconfigured deployment fails loudly
@@ -117,6 +118,7 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("DELETE /api/instances/{name}", stub)
 		mux.HandleFunc("POST /api/instances/{name}/down", stub)
 		mux.HandleFunc("POST /api/instances/{name}/up", stub)
+		mux.HandleFunc("POST /api/instances/{name}/restart", stub)
 	}
 	// Container probe + log tail + restart are hub-independent
 	// (pure docker calls) — mount them for every deployment.
@@ -744,6 +746,188 @@ func handleResumeInstance(hub *stream.Hub) http.HandlerFunc {
 			prog := progress.New(hub, name)
 			exitCode := localnet.RunUp(jobCtx, prog, opts)
 			log.Printf("resume instance %q: exit_code=%d", name, exitCode)
+		}()
+
+		writeJSON(w, http.StatusAccepted, upAcceptedResponse{
+			SchemaVersion: types.SchemaVersion,
+			Instance:      name,
+			EventsURL:     "/api/instances/" + name + "/events",
+		})
+	}
+}
+
+// profilesFromComposeFiles infers the docker-compose profile set
+// the instance was originally created with by inspecting its
+// recorded ComposeFiles. The observability and tokens-v2 overlays
+// each ship a distinctive filename; presence of the overlay path
+// in state.ComposeFiles is a reliable signal the corresponding
+// profile is in effect.
+//
+// Used by the restart flow so a down → up cycle re-enables the
+// same `--profile <name>` flags the original `localnet up` was
+// invoked with. Without this, restarting an instance that was
+// created with `--profile observability` would silently lose its
+// Prometheus + Grafana sidecars.
+func profilesFromComposeFiles(files []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, f := range files {
+		// Match by basename so changes to the overlay's parent
+		// dir layout don't break detection.
+		base := f
+		if i := strings.LastIndexByte(f, '/'); i >= 0 {
+			base = f[i+1:]
+		}
+		switch base {
+		case "observability.yaml":
+			if !seen[localnet.ObservabilityProfileName] {
+				out = append(out, localnet.ObservabilityProfileName)
+				seen[localnet.ObservabilityProfileName] = true
+			}
+		case "tokens-v2.yaml":
+			if !seen[localnet.TokensV2ProfileName] {
+				out = append(out, localnet.TokensV2ProfileName)
+				seen[localnet.TokensV2ProfileName] = true
+			}
+		}
+	}
+	return out
+}
+
+// handleRestartInstance: POST /api/instances/{name}/restart.
+//
+// Full down → up cycle for an existing instance, reusing the
+// recorded SpliceVersion + inferred profile set. The UI surfaces
+// this as a single "Restart" button so users don't have to
+// manually compose a Stop followed by a Start.
+//
+// Verb semantics:
+//
+//   - 404 — name not in the registry
+//   - 400 — invalid name (DNS-label validation)
+//   - 409 INSTANCE_CREATING — a bring-up / down / restart goroutine
+//     is already in flight for this name (jobs.Register loses the
+//     race); caller should subscribe to the existing events stream
+//   - 202 — kicked off; events stream at /api/instances/{name}/events
+//
+// Concurrency model:
+//
+// The handler reserves the per-name slot in `jobs` BEFORE doing
+// any state read (mirrors the Y8 fix in handleResumeInstance —
+// inverting read-then-acquire avoids a window where a concurrent
+// /up/restart could win the lock between our read and our spawn).
+// Once registered, the goroutine runs RunDown then RunUp serially;
+// each of those takes the per-instance `registry.Lock` internally,
+// so the restart never bypasses the lock pattern the down/up
+// handlers depend on.
+//
+// Idempotency: a second POST while the first is running loses the
+// jobs.Register race and gets 409 INSTANCE_CREATING — it does NOT
+// double-execute the down/up cycle.
+//
+// What the restart preserves (matches the spec from the
+// completeness review #1):
+//
+//   - SpliceVersion (read from state.json before the down call)
+//   - Profiles (derived from ComposeFiles via profilesFromComposeFiles)
+//   - Overlay env, credentials, DSO state, ports — all preserved
+//     because RunDown leaves them on disk and RunUp re-reads them
+//
+// What it does NOT do: regenerate credentials, recreate the
+// registry entry, allocate new ports, or upgrade the Splice version.
+func handleRestartInstance(hub *stream.Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if err := localnet.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+
+		// Reserve the job slot first (same Y8 ordering as resume).
+		// Outer context is detached so the goroutine survives the
+		// HTTP response cycle; the timeout combines down (3min) +
+		// up (30min) with some slack.
+		jobCtx, cancelJob := context.WithTimeout(context.Background(),
+			upJobTimeout+downTimeout)
+		if !jobs.Register(name, cancelJob) {
+			cancelJob()
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_CREATING",
+				"instance "+name+" is already being created or restarted",
+				"open /api/instances/"+name+"/events to watch the existing run")
+			return
+		}
+
+		// Read state AFTER claiming the job slot. If the name isn't
+		// registered or read fails, release the slot before we
+		// surface the error.
+		prior, err := registry.Read(name)
+		if err != nil {
+			jobs.Unregister(name)
+			cancelJob()
+			if errors.Is(err, registry.ErrNotFound) {
+				writeErrorWithCode(w, http.StatusNotFound,
+					ErrCodeNotFound,
+					"instance "+name+" not registered",
+					"create it first via POST /api/instances")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "read state", err)
+			return
+		}
+
+		topic := progress.TopicFor(name)
+		hub.EnableBuffering(topic, progressBufferCap)
+
+		// Capture identity values BEFORE the goroutine spawns so we
+		// don't race the goroutine reading `prior` after the HTTP
+		// response has already returned.
+		recordedVersion := prior.SpliceVersion
+		recordedProfiles := profilesFromComposeFiles(prior.ComposeFiles)
+
+		go func() {
+			defer cancelJob()
+			defer hub.ClearBuffer(topic)
+			defer jobs.Unregister(name)
+
+			prog := progress.New(hub, name)
+
+			// Phase 1: down. RunDown takes the per-instance lock
+			// itself; we don't pre-acquire one here or we'd
+			// deadlock. Capture stderr so a down failure can be
+			// logged (the user will see the failure event via SSE
+			// progress; this is for the operator-side log only).
+			var downOut, downErr bytes.Buffer
+			downExit := localnet.RunDown(jobCtx, &downOut, &downErr,
+				&localnet.DownOptions{Name: name})
+			if downExit != localnet.ExitSuccess {
+				log.Printf("restart instance %q: down phase failed exit=%d err=%s",
+					name, downExit, downErr.String())
+				// Surface as a synthetic warning on the progress
+				// stream so the UI sees something even though
+				// RunDown writes its own stderr to buffers, not
+				// the hub.
+				prog.Warn("down phase failed during restart: " +
+					firstNonWarningLine(downErr.String()))
+				// Continue to up anyway — RunDown is idempotent and
+				// a partial-down state still lets RunUp try to
+				// reconcile.
+			}
+
+			// Phase 2: up. Reuses the recorded version + profiles
+			// so the restart doesn't silently upgrade or shed
+			// overlays. RunUp emits the full step-event sequence
+			// to `prog` the create flow uses.
+			upOpts := &localnet.UpOptions{
+				Name:     name,
+				Version:  recordedVersion,
+				Profiles: recordedProfiles,
+			}
+			exitCode := localnet.RunUp(jobCtx, prog, upOpts)
+			log.Printf("restart instance %q: down_exit=%d up_exit=%d",
+				name, downExit, exitCode)
 		}()
 
 		writeJSON(w, http.StatusAccepted, upAcceptedResponse{
