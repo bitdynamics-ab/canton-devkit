@@ -12,7 +12,7 @@ Start LocalNet with the overlay enabled to get Prometheus + Grafana
 on the side:
 
 ```bash
-canton-devkit localnet up --name demo --with observability
+canton-devkit localnet up --name demo --profile observability
 ```
 
 Grafana then runs at `http://localhost:<grafana-port>` (see

@@ -185,7 +185,7 @@ canton-devkit localnet contracts watch \
   --endpoint localhost:<ledger-port>
 
 # Recent transactions.
-canton-devkit localnet contracts tx ls \
+canton-devkit localnet tx ls \
   --name demo \
   --endpoint localhost:<ledger-port>
 ```
