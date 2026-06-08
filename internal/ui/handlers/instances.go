@@ -625,18 +625,30 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 			}
 		}
 
-		// port_base, when supplied, must be a usable base (0 = auto).
-		// Reject obviously-bad values up front with a 400 rather than
-		// failing mid-run.
-		if req.PortBase != 0 && req.PortBase < localnet.MinPortBase {
-			cancelJob()
-			hub.ClearBuffer(topic)
-			jobs.Unregister(req.Name)
-			writeErrorWithCode(w, http.StatusBadRequest,
-				ErrCodeInvalidRequest,
-				fmt.Sprintf("port_base %d is too low", req.PortBase),
-				fmt.Sprintf("use 0 (auto) or a base ≥ %d", localnet.MinPortBase))
-			return
+		// port_base, when supplied, must fit a usable block (0 = auto).
+		// Validate the FULL range up front with a 400 — both too-low and
+		// too-high — rather than letting a bad value fail later inside
+		// DeriveUIPorts. The upper bound mirrors up.go's effective
+		// env-var block (the observability profile adds two ports), so
+		// the gate matches exactly what RunUp will try to allocate.
+		if req.PortBase != 0 {
+			nPorts := len(localnet.UIPortEnvVars())
+			for _, p := range req.Profiles {
+				if p == localnet.ObservabilityProfileName {
+					nPorts += len(localnet.ObservabilityPortEnvVars())
+				}
+			}
+			maxBase := 65535 - nPorts
+			if req.PortBase < localnet.MinPortBase || req.PortBase > maxBase {
+				cancelJob()
+				hub.ClearBuffer(topic)
+				jobs.Unregister(req.Name)
+				writeErrorWithCode(w, http.StatusBadRequest,
+					ErrCodeInvalidRequest,
+					fmt.Sprintf("port_base %d is out of range", req.PortBase),
+					fmt.Sprintf("use 0 (auto) or a base in %d..%d", localnet.MinPortBase, maxBase))
+				return
+			}
 		}
 
 		opts := &localnet.UpOptions{
