@@ -68,6 +68,28 @@ func TestResetInstallID_RotatesToken(t *testing.T) {
 	}
 }
 
+func TestSetEnabledOff_ClearsInstallID(t *testing.T) {
+	withCleanEnv(t)
+	id := installID()
+	if id == "" {
+		t.Fatal("setup: empty id")
+	}
+	// Turning telemetry off must clear the token (privacy promise in docs).
+	if err := SetEnabled(false); err != nil {
+		t.Fatalf("SetEnabled(false): %v", err)
+	}
+	if c := loadConsent(); c.InstallID != "" {
+		t.Errorf("telemetry off did not clear install id: %q", c.InstallID)
+	}
+	// Re-enabling mints a fresh token, not the old one.
+	if err := SetEnabled(true); err != nil {
+		t.Fatalf("SetEnabled(true): %v", err)
+	}
+	if id2 := installID(); id2 == "" || id2 == id {
+		t.Errorf("re-enable reused or dropped the token: before=%q after=%q", id, id2)
+	}
+}
+
 func TestNewInstallID_DistinctAndShaped(t *testing.T) {
 	a, b := newInstallID(), newInstallID()
 	if a == "" || b == "" {
