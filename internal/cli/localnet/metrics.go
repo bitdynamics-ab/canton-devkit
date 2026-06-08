@@ -69,6 +69,7 @@ func buildMetrics() *cobra.Command {
 					"prometheus query failed: "+err.Error())
 				return localnet.AsExitError(localnet.ExitRuntimeFailure)
 			}
+			report.Dashboards.GrafanaURL = grafanaURLFor(state)
 			if format == "json" {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
@@ -152,12 +153,40 @@ func resolvePrometheusEndpoint(ctx context.Context, state *registry.State, host 
 // text rather than 0 — distinguishes "value is zero" from "we
 // couldn't ask Prometheus."
 type MetricsReport struct {
-	SchemaVersion int      `json:"schema_version"`
-	LedgerTPS     *float64 `json:"ledger_tps_5m,omitempty"`
-	MediatorP95   *float64 `json:"mediator_p95_seconds,omitempty"`
-	HeapBytes     *float64 `json:"jvm_heap_used_bytes,omitempty"`
-	PostgresConn  *float64 `json:"postgres_conn_count,omitempty"`
+	SchemaVersion int             `json:"schema_version"`
+	LedgerTPS     *float64        `json:"ledger_tps_5m,omitempty"`
+	MediatorP95   *float64        `json:"mediator_p95_seconds,omitempty"`
+	HeapBytes     *float64        `json:"jvm_heap_used_bytes,omitempty"`
+	PostgresConn  *float64        `json:"postgres_conn_count,omitempty"`
+	Latency       LatencyReport   `json:"latency"`
+	Dashboards    DashboardsBlock `json:"dashboards"`
 }
+
+// LatencyReport groups the mediator-approval latency quantiles in
+// milliseconds. Each field is a pointer so a missing scrape
+// (Prometheus has no samples yet) is distinguishable from a true
+// zero. The JSON keys match what the Web UI's MetricsSummary
+// renders so the two surfaces stay in lock-step.
+type LatencyReport struct {
+	P50Ms *float64 `json:"p50_ms,omitempty"`
+	P95Ms *float64 `json:"p95_ms,omitempty"`
+	P99Ms *float64 `json:"p99_ms,omitempty"`
+}
+
+// DashboardsBlock is the discoverability hand-off — the CLI surface
+// can't render charts, so we point at where they live (Grafana).
+// GrafanaURL is empty when the instance was started without the
+// observability profile; the text renderer turns that into a hint.
+type DashboardsBlock struct {
+	GrafanaURL string `json:"grafana_url,omitempty"`
+}
+
+// grafanaDashboardUID pins the UID of the bundled Canton LocalNet
+// dashboard provisioned under assets/grafana/dashboards/. The UID is
+// baked into the JSON so a deep link is stable across restarts —
+// hardcoding here keeps `dpm localnet metrics` from having to read
+// the asset at runtime.
+const grafanaDashboardUID = "canton-localnet-v1"
 
 // scrapeMetrics runs the curated Prometheus queries in parallel
 // and assembles them into a MetricsReport. // queries now live in internal/metricsq so CLI + handler share
@@ -191,7 +220,27 @@ func scrapeMetrics(ctx context.Context, host string, port int) (*MetricsReport, 
 		MediatorP95:   results[metricsq.HeadlineMediatorP95],
 		HeapBytes:     results[metricsq.HeadlineHeapUsed],
 		PostgresConn:  results[metricsq.HeadlinePostgresConn],
+		Latency: LatencyReport{
+			P50Ms: scaleSeconds(results[metricsq.HeadlineMediatorP50]),
+			P95Ms: scaleSeconds(results[metricsq.HeadlineMediatorP95]),
+			P99Ms: scaleSeconds(results[metricsq.HeadlineMediatorP99]),
+		},
 	}, nil
+}
+
+// grafanaURLFor returns the deep link to the bundled Canton LocalNet
+// dashboard when the instance was started with the observability
+// profile (signal: grafana_ui port is registered). Returns "" when
+// observability is off so the caller can render a hint instead.
+func grafanaURLFor(state *registry.State) string {
+	if state == nil {
+		return ""
+	}
+	port, ok := state.Ports["grafana_ui"]
+	if !ok || port == 0 {
+		return ""
+	}
+	return fmt.Sprintf("http://localhost:%d/d/%s", port, grafanaDashboardUID)
 }
 
 // promQuery executes one PromQL query and returns the scalar
@@ -253,12 +302,25 @@ func renderMetricsText(out io.Writer, instance, host string, port int, r *Metric
 		}
 		return term.KV(k, val, 22)
 	}
-	body := strings.Join([]string{
+	rows := []string{
 		kv("ledger TPS (5m)", r.LedgerTPS, "tx/s"),
-		kv("submission p95", scaleSeconds(r.MediatorP95), "ms"),
 		kv("JVM heap used", scaleBytes(r.HeapBytes), "MiB"),
 		kv("DB conns (used)", r.PostgresConn, ""),
-	}, "\n")
+		"",
+		"Latency:",
+		kv("  p50", r.Latency.P50Ms, "ms"),
+		kv("  p95", r.Latency.P95Ms, "ms"),
+		kv("  p99", r.Latency.P99Ms, "ms"),
+		"",
+		"Dashboards:",
+	}
+	if r.Dashboards.GrafanaURL != "" {
+		rows = append(rows, term.KV("  Grafana", r.Dashboards.GrafanaURL, 22))
+	} else {
+		rows = append(rows, term.KV("  Grafana",
+			"(enable observability profile to see dashboards)", 22))
+	}
+	body := strings.Join(rows, "\n")
 	right := fmt.Sprintf("prometheus %s:%d", host, port)
 	_, _ = fmt.Fprintln(out, term.Section("metrics · "+instance, right, body, 0))
 }

@@ -306,12 +306,55 @@ func handleMetricsSummary() http.HandlerFunc {
 				return
 			}
 		}
+		// Build the latency block in milliseconds — same scaling
+		// as the CLI's `--format json` shape so the two surfaces
+		// stay byte-identical for the curated panels.
+		latency := map[string]*float64{
+			"p50_ms": secondsToMs(out[string(metricsq.HeadlineMediatorP50)]),
+			"p95_ms": secondsToMs(out[string(metricsq.HeadlineMediatorP95)]),
+			"p99_ms": secondsToMs(out[string(metricsq.HeadlineMediatorP99)]),
+		}
+		dashboards := map[string]string{
+			"grafana_url": grafanaURLForState(state),
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"schema_version": 1,
 			"instance":       name,
 			"metrics":        out,
+			"latency":        latency,
+			"dashboards":     dashboards,
 		})
 	}
+}
+
+// grafanaDashboardUID pins the bundled Canton LocalNet dashboard UID.
+// Mirrors the CLI's constant so both surfaces deep-link to the same
+// view. See assets/grafana/dashboards/canton-localnet.json.
+const grafanaDashboardUID = "canton-localnet-v1"
+
+// grafanaURLForState returns the Web UI deep link to the bundled
+// dashboard when observability is on for the instance, or "" so the
+// frontend can render a "enable observability profile" CTA.
+func grafanaURLForState(state *registry.State) string {
+	if state == nil {
+		return ""
+	}
+	port, ok := state.Ports["grafana_ui"]
+	if !ok || port == 0 {
+		return ""
+	}
+	return fmt.Sprintf("http://localhost:%d/d/%s", port, grafanaDashboardUID)
+}
+
+// secondsToMs converts a seconds-valued Prometheus scalar into the
+// milliseconds the frontend expects for latency cards. nil-safe so
+// "no samples yet" stays distinguishable from "0 ms".
+func secondsToMs(v *float64) *float64 {
+	if v == nil {
+		return nil
+	}
+	ms := *v * 1000
+	return &ms
 }
 
 // proxyPrometheus does the actual HTTP call against the
