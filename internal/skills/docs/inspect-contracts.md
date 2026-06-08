@@ -35,6 +35,16 @@ The user asks to "watch contracts", "see transactions for a party",
    party's visibility — the same transaction looks different to
    different parties, which is the point.
 
+4. **Replay a single transaction** by id or offset (tree shape — shows
+   exercised choices, not just ACS delta):
+   ```
+   dpm localnet tx replay --name dev --id <update-id>
+   dpm localnet tx replay --name dev --offset <int>
+   dpm localnet tx replay --name dev --offset 42 --party alice --format json
+   ```
+   Exactly one of `--id` / `--offset` is required. Pairs well with
+   `tx ls` — list to find the offset, then replay to see the events.
+
 ## Guardrails
 - Visibility is always projected through an explicit (participant,
   party) pair — there is no "global ledger" view; pick the party
