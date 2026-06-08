@@ -123,6 +123,45 @@
           "legendFormat": "p95 {{component}}"
         }
       ]
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Active Contract Set Size",
+      "description": "Total active contracts across participants. Uses `daml_services_index_active_contracts` (Daml participant indexer gauge). If your Canton image does not expose this metric, the panel will read 'No data' — fall back to `canton_participant_active_contracts` by editing the query, or use the JSON API ACS lookup.",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "expr": "sum(daml_services_index_active_contracts{instance=~\"$instance\"})",
+          "legendFormat": "active contracts"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "bargauge",
+      "title": "Top 10 Templates by Throughput (ops/s, 5m)",
+      "description": "Top templates ranked by command-submission rate. Uses `daml_commands_submissions_total` aggregated by `template_id`. Requires Canton/Daml to expose the `template_id` label on the submissions counter — on Splice 0.6.4 stock images this label may be absent, in which case the panel renders as a single aggregate bar. Replace the metric name with whatever your image exposes (e.g. `daml_participant_api_commands_submissions_total`) if needed.",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (template_id) (rate(daml_commands_submissions_total{instance=~\"$instance\"}[5m])))",
+          "legendFormat": "{{template_id}}"
+        }
+      ]
     }
   ]
 }
