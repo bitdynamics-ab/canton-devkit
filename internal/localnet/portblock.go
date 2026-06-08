@@ -3,6 +3,7 @@ package localnet
 import (
 	"fmt"
 	"net"
+	"strings"
 )
 
 // AllocateUIPorts picks a free OS-assigned host port for each envVar
@@ -122,6 +123,55 @@ func ReuseOrAllocateUIPorts(envVars []string, prior map[string]int) (map[string]
 			return nil, fmt.Errorf("allocate port for %s: %w", ev, err)
 		}
 		out[ev] = p
+	}
+	return out, nil
+}
+
+// MinPortBase is the lowest --port-base we accept. Below 1024 needs root
+// on Unix and collides with well-known ports, so we reject it early.
+const MinPortBase = 1024
+
+// PortBaseConflict is returned by DeriveUIPorts when one or more of the
+// deterministic ports derived from --port-base is already bound. It lists
+// the busy `ENV=port` pairs so the user knows exactly what to free.
+// Unlike auto-allocation, explicit-port mode never falls back to a
+// different port — determinism across runs/machines/CI is the contract,
+// so a conflict is surfaced rather than silently worked around.
+type PortBaseConflict struct{ Busy []string }
+
+func (e *PortBaseConflict) Error() string {
+	return fmt.Sprintf("explicit ports already in use: %s", strings.Join(e.Busy, ", "))
+}
+
+// DeriveUIPorts assigns DETERMINISTIC host ports from `base`, one per
+// envVar in slice order (base, base+1, base+2, …). It is the
+// explicit-port counterpart to ReuseOrAllocateUIPorts: given the same
+// base and profile, a given service always lands on the same port —
+// across re-ups, across machines, across CI. This is the surface behind
+// `localnet up --port-base`.
+//
+// Every derived port must currently be free. If any is busy, it returns a
+// *PortBaseConflict listing them and the caller aborts — explicit mode
+// does NOT fall back to a different port (that would defeat the
+// determinism the flag exists to provide). This is also the "fixed
+// required-port preflight" the explicit-port mode promises: the check
+// happens up front, before compose runs.
+func DeriveUIPorts(envVars []string, base int) (map[string]int, error) {
+	if base < MinPortBase || base+len(envVars) > 65535 {
+		return nil, fmt.Errorf("port base %d out of range: must be %d..%d to fit %d consecutive ports",
+			base, MinPortBase, 65535-len(envVars), len(envVars))
+	}
+	out := make(map[string]int, len(envVars))
+	var busy []string
+	for i, ev := range envVars {
+		p := base + i
+		out[ev] = p
+		if !portIsFree(p) {
+			busy = append(busy, fmt.Sprintf("%s=%d", ev, p))
+		}
+	}
+	if len(busy) > 0 {
+		return nil, &PortBaseConflict{Busy: busy}
 	}
 	return out, nil
 }

@@ -84,8 +84,12 @@ run "$CDK" localnet logs --name "$NAME" --tail 15 || true
 
 # --- optional: a second, isolated instance --------------------------
 if [ "$TWO_INSTANCE" = 1 ]; then
-  step "Bring up a SECOND instance — isolated ports + resources"
-  run "$CDK" localnet up --name "$NAME2"
+  # The first instance auto-allocated its host ports; this second one
+  # pins an EXPLICIT, non-conflicting port base so the two layouts are
+  # deterministic and provably non-overlapping (the proposal's explicit
+  # non-conflicting ports). --port-base 31000 → each service at 31000+N.
+  step "Bring up a SECOND instance — explicit non-conflicting ports (--port-base)"
+  run "$CDK" localnet up --name "$NAME2" --port-base 31000
   run "$CDK" localnet list
 fi
 

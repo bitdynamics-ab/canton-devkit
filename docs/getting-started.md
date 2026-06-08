@@ -195,6 +195,30 @@ canton-devkit localnet list           # both instances + their state
 Each named instance gets its own deterministic compose project,
 network, and host ports, so they don't collide.
 
+#### Explicit, deterministic ports (`--port-base`)
+
+By default DevKit **auto-allocates** host ports — the simplest path, and
+it never conflicts because the kernel hands out free ports. When you need
+a **fixed, predictable** port map instead — reproducible CI layouts, or
+multiple instances at known offsets — pin a base:
+
+```bash
+canton-devkit localnet up --name alpha --port-base 20000   # services at 20000+N
+canton-devkit localnet up --name beta  --port-base 30000   # services at 30000+N
+```
+
+Each service lands on `base + N`, identically across runs and machines.
+Every derived port must be free or `up` fails fast (no silent fallback) —
+so the layout you asked for is the layout you get. Pre-flight a base
+before bringing anything up:
+
+```bash
+canton-devkit localnet doctor --port-base 20000   # are 20000..20000+services free?
+```
+
+The same control is available in the Web UI's **New instance** dialog
+under *Advanced → Fixed port base*.
+
 ---
 
 ## 5. Compatibility matrix

@@ -85,6 +85,11 @@ Supported Splice versions: %s
 			"`--profile observability` (legacy umbrella) activates both at once. "+
 			"Each adds ~250-350 MiB; host ports are allocated and persisted so "+
 			"re-up preserves bookmarked URLs. Repeatable for multiple profiles.")
+	cmd.Flags().IntVar(&opts.PortBase, "port-base", 0,
+		"Pin host ports deterministically from this base instead of auto-allocating "+
+			"(e.g. --port-base 20000 → each service gets base+N). Use for reproducible "+
+			"multi-instance or CI layouts; every derived port must be free or `up` fails "+
+			"fast (no silent fallback). 0 (default) = auto-allocate with stable reuse.")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }

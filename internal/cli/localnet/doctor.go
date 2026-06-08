@@ -30,6 +30,7 @@ var doctorCollectFn = localnet.CollectDoctor
 func buildDoctor() *cobra.Command {
 	var format string
 	var version string
+	var portBase int
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check host readiness for LocalNet (docker, resources, network)",
@@ -52,7 +53,7 @@ ExitPreflightFail semantics).`,
 					"--format must be table or json (got %q)\n", format)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
-			rep, err := doctorCollectFn(cmd.Context(), localnet.DoctorOptions{Version: version})
+			rep, err := doctorCollectFn(cmd.Context(), localnet.DoctorOptions{Version: version, PortBase: portBase})
 			if err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s\n", err)
 				return localnet.AsExitError(localnet.ExitUserError)
@@ -85,6 +86,8 @@ ExitPreflightFail semantics).`,
 	}
 	cmd.Flags().StringVar(&format, "format", "table", "Output format: table | json")
 	cmd.Flags().StringVar(&version, "version", "latest", "Splice version used for memory thresholds")
+	cmd.Flags().IntVar(&portBase, "port-base", 0,
+		"Check the FIXED host-port block `up --port-base <N>` would claim (N..N+services) instead of ephemeral-port availability. Use to pre-flight a deterministic-port layout.")
 	return cmd
 }
 

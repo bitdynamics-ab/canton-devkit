@@ -21,6 +21,13 @@ type DoctorOptions struct {
 	ListenFunc func(network, address string) (net.Listener, error)
 	GOOS       string
 	GOARCH     string
+
+	// PortBase, when > 0, switches the port check from "can the host
+	// allocate ephemeral loopback ports" to "is the FIXED block a
+	// `localnet up --port-base <PortBase>` would claim currently free".
+	// This is the fixed-required-port preflight that matches explicit-
+	// port mode. 0 (default) keeps the ephemeral-availability check.
+	PortBase int
 }
 
 // CollectDoctor runs the same preflight gate as `localnet up` for the selected
@@ -60,12 +67,64 @@ func CollectDoctor(ctx context.Context, opts DoctorOptions) (types.PreflightRepo
 	if listen == nil {
 		listen = net.Listen
 	}
+	portCheck := ephemeralPortAvailabilityCheck(listen)
+	if opts.PortBase > 0 {
+		// Explicit-port mode: check the exact fixed block instead.
+		portCheck = fixedPortAvailabilityCheck(listen, opts.PortBase)
+	}
 	report.Results = append(report.Results,
 		platformSupportCheck(goos, goarch),
-		ephemeralPortAvailabilityCheck(listen),
+		portCheck,
 	)
 
 	return PreflightReportFromDocker(report), nil
+}
+
+// fixedPortAvailabilityCheck probes the deterministic block of host ports
+// that `localnet up --port-base <base>` would claim — base..base+N-1,
+// where N is the number of UI port env vars. A busy port is a hard FAIL
+// (not a warning): unlike auto-allocation, explicit-port mode can't fall
+// back, so `up --port-base <base>` would itself fail. This is the
+// fixed-required-port preflight for explicit-port mode.
+func fixedPortAvailabilityCheck(listen func(string, string) (net.Listener, error), base int) docker.CheckResult {
+	if base < MinPortBase || base+len(UIPortEnvVars()) > 65535 {
+		return docker.CheckResult{
+			Name:        "Fixed ports (--port-base)",
+			Status:      docker.StatusFail,
+			Detail:      fmt.Sprintf("port base %d is out of range", base),
+			Remediation: fmt.Sprintf("Choose a base in %d..%d.", MinPortBase, 65535-len(UIPortEnvVars())),
+		}
+	}
+	n := len(UIPortEnvVars())
+	held := make([]net.Listener, 0, n)
+	defer func() {
+		for _, ln := range held {
+			_ = ln.Close()
+		}
+	}()
+	var busy []int
+	for i := 0; i < n; i++ {
+		p := base + i
+		ln, err := listen("tcp", fmt.Sprintf("127.0.0.1:%d", p))
+		if err != nil {
+			busy = append(busy, p)
+			continue
+		}
+		held = append(held, ln)
+	}
+	if len(busy) > 0 {
+		return docker.CheckResult{
+			Name:        "Fixed ports (--port-base)",
+			Status:      docker.StatusFail,
+			Detail:      fmt.Sprintf("ports already in use for base %d: %v", base, busy),
+			Remediation: fmt.Sprintf("Free these ports (lsof -i :<port>) or pick a different --port-base; `up --port-base %d` would fail until they're free.", base),
+		}
+	}
+	return docker.CheckResult{
+		Name:   "Fixed ports (--port-base)",
+		Status: docker.StatusOK,
+		Detail: fmt.Sprintf("fixed ports %d-%d are free", base, base+n-1),
+	}
 }
 
 // supportedPlatforms is DevKit's released OS/arch matrix (GOOS/GOARCH), kept

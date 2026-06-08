@@ -455,6 +455,7 @@ type upRequest struct {
 	Version        string   `json:"version,omitempty"`         // empty → "latest" server-side
 	AllowUncurated bool     `json:"allow_uncurated,omitempty"` // resolve unknown tags upstream
 	Profiles       []string `json:"profiles,omitempty"`        // docker-compose profiles; e.g. ["observability"]
+	PortBase       int      `json:"port_base,omitempty"`       // >0 → deterministic ports from this base (CLI --port-base parity)
 }
 
 // allowedProfiles caps what the HTTP surface will accept. Mirrors
@@ -624,11 +625,26 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 			}
 		}
 
+		// port_base, when supplied, must be a usable base (0 = auto).
+		// Reject obviously-bad values up front with a 400 rather than
+		// failing mid-run.
+		if req.PortBase != 0 && req.PortBase < localnet.MinPortBase {
+			cancelJob()
+			hub.ClearBuffer(topic)
+			jobs.Unregister(req.Name)
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				fmt.Sprintf("port_base %d is too low", req.PortBase),
+				fmt.Sprintf("use 0 (auto) or a base ≥ %d", localnet.MinPortBase))
+			return
+		}
+
 		opts := &localnet.UpOptions{
 			Name:           req.Name,
 			Version:        req.Version,
 			AllowUncurated: req.AllowUncurated,
 			Profiles:       req.Profiles,
+			PortBase:       req.PortBase,
 		}
 
 		go func() {

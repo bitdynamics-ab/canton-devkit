@@ -70,6 +70,9 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
   // Canton overlay (`--profile tokens-v2`). Needs a V2-capable Splice
   // version; default OFF.
   const [tokensV2, setTokensV2] = useState(false);
+  // portBase: when non-empty, pins deterministic host ports from this
+  // base (`--port-base`) instead of auto-allocating. Empty = auto.
+  const [portBase, setPortBase] = useState("");
   const [versions, setVersions] = useState<SpliceVersionEntry[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [versionsError, setVersionsError] = useState<string | null>(null);
@@ -102,6 +105,7 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
       setPrometheus(false);
       setGrafana(false);
       setTokensV2(false);
+      setPortBase("");
       setStage({ kind: "form" });
       requestAnimationFrame(() => inputRef.current?.focus());
       // Refresh the version catalogue on open. Cached on the
@@ -242,6 +246,7 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
           ];
           return profiles.length ? { profiles } : {};
         })(),
+        ...(portBase.trim() ? { port_base: Number(portBase.trim()) } : {}),
       });
       setStage({ kind: "progress", accepted });
     } catch (e) {
@@ -311,6 +316,8 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
               setGrafana={setGrafana}
               tokensV2={tokensV2}
               setTokensV2={setTokensV2}
+              portBase={portBase}
+              setPortBase={setPortBase}
               preflight={preflight}
               onSubmit={submit}
             />
@@ -488,6 +495,8 @@ interface FormBodyProps {
   setGrafana: (b: boolean) => void;
   tokensV2: boolean;
   setTokensV2: (b: boolean) => void;
+  portBase: string;
+  setPortBase: (s: string) => void;
   preflight: PreflightState;
   onSubmit: (e: React.FormEvent) => void;
 }
@@ -510,6 +519,8 @@ function FormBody({
   setGrafana,
   tokensV2,
   setTokensV2,
+  portBase,
+  setPortBase,
   preflight,
   onSubmit,
 }: FormBodyProps) {
@@ -747,6 +758,43 @@ function FormBody({
             </div>
           </div>
         </label>
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 8,
+            padding: "8px 12px",
+            background: W.surface2,
+            borderRadius: 8,
+          }}
+        >
+          <input
+            type="number"
+            min={1024}
+            placeholder="auto"
+            value={portBase}
+            onChange={(e) => setPortBase(e.target.value)}
+            style={{
+              width: 88,
+              fontFamily: wMono,
+              fontSize: 12,
+              padding: "4px 6px",
+              background: W.surface,
+              color: W.text,
+              border: `1px solid ${W.border}`,
+              borderRadius: 6,
+            }}
+          />
+          <div style={{ flex: 1, fontSize: 12, color: W.text2 }}>
+            <strong>Fixed port base</strong>
+            <div style={{ color: W.dim, fontSize: 11, marginTop: 2 }}>
+              Pin deterministic host ports from this base (
+              <code style={{ fontFamily: wMono }}>--port-base</code>) for
+              reproducible multi-instance / CI layouts. Empty = auto-allocate.
+            </div>
+          </div>
+        </label>
       </details>
 
       <div
@@ -767,6 +815,7 @@ function FormBody({
           {prometheus ? " --profile prometheus" : ""}
           {grafana ? " --profile grafana" : ""}
           {tokensV2 ? " --profile tokens-v2" : ""}
+          {portBase.trim() ? ` --port-base ${portBase.trim()}` : ""}
         </span>
       </div>
     </form>
