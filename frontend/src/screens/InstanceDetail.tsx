@@ -4,6 +4,7 @@ import {
   type Instance,
   fetchInstance,
   pauseInstance,
+  recreateInstance,
   resumeInstance,
   scrubInstance,
   stopInstance,
@@ -99,6 +100,33 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
       onChanged?.();
     } catch (e) {
       setStopping({ kind: "err", message: e instanceof ApiError ? e.message : "failed to resume" });
+      setRefetchTick((n) => n + 1);
+      onChanged?.();
+    }
+  }
+
+  async function onRecreate() {
+    if (
+      !confirm(
+        `Recreate ${name}? Containers will be brought down and back up via docker compose. ` +
+          `The recorded Splice version and profiles are preserved; data volumes are NOT touched.`,
+      )
+    ) {
+      return;
+    }
+    setStopping({ kind: "running" });
+    try {
+      await recreateInstance(name);
+      // 202 — recreate is async (down → up). The dashboard's 15s
+      // poll will pick up the transitional `creating` status when
+      // the goroutine reaches the up phase; refresh both surfaces
+      // eagerly so the user sees movement within the next tick.
+      setStopping({ kind: "idle" });
+      setRefetchTick((n) => n + 1);
+      onChanged?.();
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "failed to recreate";
+      setStopping({ kind: "err", message: msg });
       setRefetchTick((n) => n + 1);
       onChanged?.();
     }
@@ -215,6 +243,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
             onPause={onPause}
             onResume={onResume}
             onRemove={onRemove}
+            onRecreate={onRecreate}
           />
         )}
       </header>
@@ -316,6 +345,7 @@ function ActionButton({
   onPause,
   onResume,
   onRemove,
+  onRecreate,
 }: {
   status: string;
   busy: boolean;
@@ -324,7 +354,14 @@ function ActionButton({
   onPause: () => void;
   onResume: () => void;
   onRemove: () => void;
+  onRecreate: () => void;
 }) {
+  // Recreate is offered alongside the existing controls on every
+  // non-transitional status: running, paused, failed, partial. The
+  // `creating` and `stopping` statuses are in-flight transitions
+  // where ActionButton renders nothing (the CreatingPanel and the
+  // disabled-by-busy guard cover those), so the Recreate button is
+  // implicitly hidden during those phases.
   if (status === "running") {
     return (
       <div style={{ display: "flex", gap: 6 }}>
@@ -335,6 +372,14 @@ function ActionButton({
           style={btnStyle(W.warn, busy)}
         >
           {busy ? "…" : "⏸ Pause"}
+        </button>
+        <button
+          onClick={onRecreate}
+          disabled={busy}
+          title="Bring containers down then back up. Splice version, profiles, credentials, and ports preserved."
+          style={btnStyle(W.brand, busy)}
+        >
+          {busy ? "…" : "↻ Recreate"}
         </button>
         <button
           onClick={onStop}
@@ -359,6 +404,14 @@ function ActionButton({
           {busy ? "…" : "▶ Resume"}
         </button>
         <button
+          onClick={onRecreate}
+          disabled={busy}
+          title="Bring containers down then back up. Splice version, profiles, credentials, and ports preserved."
+          style={btnStyle(W.brand, busy)}
+        >
+          {busy ? "…" : "↻ Recreate"}
+        </button>
+        <button
           onClick={onStop}
           disabled={busy}
           title="Bring containers down via docker compose. Data volumes preserved."
@@ -371,9 +424,20 @@ function ActionButton({
   }
   if (status === "failed" || status === "partial") {
     // Both Stop and Remove — docker may still have live containers
-    // even though the registry gave up.
+    // even though the registry gave up. Recreate is also offered:
+    // failed/partial often comes from a transient compose hiccup
+    // that a clean down + up sequence resolves without losing the
+    // instance metadata.
     return (
       <div style={{ display: "flex", gap: 6 }}>
+        <button
+          onClick={onRecreate}
+          disabled={busy}
+          title="Bring containers down then back up. Splice version, profiles, credentials, and ports preserved."
+          style={btnStyle(W.brand, busy)}
+        >
+          {busy ? "…" : "↻ Recreate"}
+        </button>
         <button
           onClick={onStop}
           disabled={busy}
