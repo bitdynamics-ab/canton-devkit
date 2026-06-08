@@ -44,8 +44,8 @@ func fakePromHandler(t *testing.T, vals map[metricsq.Headline]float64) http.Hand
 			_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
 			return
 		}
-		body := `{"status":"success","data":{"resultType":"vector","result":[[1,` +
-			strconv.Quote(strconv.FormatFloat(*v, 'f', -1, 64)) + `]]}}`
+		body := `{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1,` +
+			strconv.Quote(strconv.FormatFloat(*v, 'f', -1, 64)) + `]}]}}`
 		_, _ = w.Write([]byte(body))
 	})
 }
@@ -84,6 +84,38 @@ func TestScrapeMetrics_PopulatesLatencyBlock(t *testing.T) {
 	}
 	if report.Latency.P99Ms == nil || *report.Latency.P99Ms < 119.9 || *report.Latency.P99Ms > 120.1 {
 		t.Errorf("p99 = %v, want ~120 ms", report.Latency.P99Ms)
+	}
+}
+
+func TestPromQuery_DecodesPrometheusVectorObject(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[{"metric":{"job":"canton"},"value":[1780912963.012,"0.2605"]}]}}`))
+	}))
+	defer srv.Close()
+
+	got, err := promQuery(context.Background(), srv.URL, "up")
+	if err != nil {
+		t.Fatalf("promQuery: %v", err)
+	}
+	if got == nil || *got < 0.2604 || *got > 0.2606 {
+		t.Fatalf("promQuery = %v, want 0.2605", got)
+	}
+}
+
+func TestPromQuery_TreatsNaNAsMissingSample(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1780912963.012,"NaN"]}]}}`))
+	}))
+	defer srv.Close()
+
+	got, err := promQuery(context.Background(), srv.URL, "up")
+	if err != nil {
+		t.Fatalf("promQuery: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("promQuery NaN = %v, want nil", *got)
 	}
 }
 

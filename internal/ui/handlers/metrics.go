@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -492,8 +493,10 @@ func storePromCache(project, host string, port int, err error) {
 
 var errPrometheusNotRunning = errors.New("prometheus container not present in compose project")
 
+var proxyPrometheusFn = proxyPrometheus
+
 func singleScalar(ctx context.Context, project, query string) (*float64, error) {
-	body, err := proxyPrometheus(ctx, project,
+	body, err := proxyPrometheusFn(ctx, project,
 		"/api/v1/query?"+url.Values{"query": {query}}.Encode())
 	if err != nil {
 		return nil, err
@@ -501,7 +504,9 @@ func singleScalar(ctx context.Context, project, query string) (*float64, error) 
 	var parsed struct {
 		Status string `json:"status"`
 		Data   struct {
-			Result [][]any `json:"result"`
+			Result []struct {
+				Value []any `json:"value"`
+			} `json:"result"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
@@ -510,7 +515,7 @@ func singleScalar(ctx context.Context, project, query string) (*float64, error) 
 	if parsed.Status != "success" || len(parsed.Data.Result) == 0 {
 		return nil, nil
 	}
-	entry := parsed.Data.Result[0]
+	entry := parsed.Data.Result[0].Value
 	if len(entry) < 2 {
 		return nil, nil
 	}
@@ -521,6 +526,9 @@ func singleScalar(ctx context.Context, project, query string) (*float64, error) 
 	v, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return nil, err
+	}
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return nil, nil
 	}
 	return &v, nil
 }

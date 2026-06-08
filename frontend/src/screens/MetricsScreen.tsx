@@ -63,7 +63,9 @@ const Q = {
   // Substitute: indexer-update counter, same as HeadlineLedgerTPS.
   throughputSeries: "sum(rate(daml_participant_api_indexer_updates[1m]))",
   p99: 'histogram_quantile(0.99, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
-  acsCount: "sum(daml_services_index_active_contracts)",
+  // Live Splice exposes the participant active-contract index buffer,
+  // not the older `daml_services_index_active_contracts` gauge.
+  acsCount: "sum(daml_participant_api_index_active_contracts_buffer_size)",
   // No daml_* command-rejection counter on Splice 0.6.4 — use the
   // user-error completion-status counter as a proxy for "things
   // the participant refused to commit". Returns 0 if not exposed.
@@ -72,16 +74,16 @@ const Q = {
     'histogram_quantile(0.50, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
   latencyP99:
     'histogram_quantile(0.99, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
-  // Best-effort template throughput. Some Splice/Canton builds expose
-  // `template_id` on this counter; others collapse to a single series or
-  // no data. We still prefer the real template-grain metric family over a
-  // mislabeled grpc_method proxy so the UI matches the bundled Grafana
-  // dashboard and the proposal's intent as closely as the upstream data
-  // allows today.
-  perTemplate:
-    "sum by (template_id) (rate(daml_commands_submissions_total[5m]))",
+  // Splice 0.6.x does not expose template-grain submission counters.
+  // Use the live gRPC method counter as a command-throughput fallback
+  // instead of querying a non-existent `daml_commands_*` family.
+  commandThroughput:
+    "sum by (grpc_method) (rate(daml_grpc_server_handled_total[5m]))",
   errors1m: 'sum(rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m]))',
-  cpu: "sum by (container) (rate(container_cpu_usage_seconds_total[1m]))",
+  errorsByCode:
+    'sum by (grpc_code) (rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m]))',
+  resourceUsage:
+    'sum by (component) (jvm_memory_used_bytes{jvm_memory_type="heap"})',
 };
 
 const TPS_COLOR = "#7CB5F7";
@@ -179,22 +181,22 @@ export function MetricsScreen() {
         ),
         loadBars(
           name,
-          Q.perTemplate,
-          (m) => m.template_id ?? "(unlabelled)",
+          Q.commandThroughput,
+          (m) => m.grpc_method ?? "(unlabelled)",
           setPerTemplate,
           signal,
         ),
         loadBars(
           name,
-          Q.errors1m + " by (reason)",
-          (m) => m.reason ?? "(unknown)",
+          Q.errorsByCode,
+          (m) => m.grpc_code ?? "(unknown)",
           setTopErrors,
           signal,
         ),
         loadMultiSeriesGrouped(
           name,
-          Q.cpu,
-          (m) => m.container ?? "container",
+          Q.resourceUsage,
+          (m) => m.component ?? "component",
           setCpuSeries,
           signal,
         ),
@@ -340,8 +342,8 @@ export function MetricsScreen() {
         </ChartCard>
 
         <ChartCard
-          title="Per-template throughput"
-          subtitle="best-effort · submissions / 5m"
+          title="Command throughput"
+          subtitle="best-effort · gRPC methods / 5m"
         >
           {perTemplate.kind === "err" ? (
             <ErrLine msg={perTemplate.error ?? "failed"} />
@@ -379,7 +381,7 @@ export function MetricsScreen() {
           ) : null}
         </ChartCard>
 
-        <ChartCard title="Resource usage" subtitle="CPU seconds / sec — containers">
+        <ChartCard title="Resource usage" subtitle="JVM heap bytes — components">
           {cpuSeries.kind === "err" ? (
             <ErrLine msg={cpuSeries.error ?? "failed"} />
           ) : (
@@ -387,7 +389,7 @@ export function MetricsScreen() {
               series={cpuSeries.data ?? []}
               width={420}
               height={170}
-              format={(v) => v.toFixed(2)}
+              format={(v) => (v / (1024 * 1024)).toFixed(0) + " MiB"}
             />
           )}
         </ChartCard>

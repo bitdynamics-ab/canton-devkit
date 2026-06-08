@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -264,8 +266,10 @@ func promQuery(ctx context.Context, base, query string) (*float64, error) {
 	var body struct {
 		Status string `json:"status"`
 		Data   struct {
-			ResultType string          `json:"resultType"`
-			Result     [][]interface{} `json:"result"`
+			ResultType string `json:"resultType"`
+			Result     []struct {
+				Value []interface{} `json:"value"`
+			} `json:"result"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
@@ -274,9 +278,10 @@ func promQuery(ctx context.Context, base, query string) (*float64, error) {
 	if body.Status != "success" || len(body.Data.Result) == 0 {
 		return nil, nil
 	}
-	// Vector result: each entry is [timestamp, "value"]. Take
+	// Prometheus vector result: each entry is
+	// {"metric": {...}, "value": [timestamp, "value"]}. Take
 	// the first sample's value.
-	entry := body.Data.Result[0]
+	entry := body.Data.Result[0].Value
 	if len(entry) < 2 {
 		return nil, nil
 	}
@@ -284,9 +289,12 @@ func promQuery(ctx context.Context, base, query string) (*float64, error) {
 	if !ok {
 		return nil, nil
 	}
-	var v float64
-	if _, err := fmt.Sscanf(s, "%g", &v); err != nil {
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
 		return nil, err
+	}
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return nil, nil
 	}
 	return &v, nil
 }

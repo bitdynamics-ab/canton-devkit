@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -179,5 +181,50 @@ func TestSecondsToMs(t *testing.T) {
 	got := secondsToMs(&v)
 	if got == nil || *got < 44.9 || *got > 45.1 {
 		t.Errorf("0.045s -> %v, want ~45ms", got)
+	}
+}
+
+func TestSingleScalar_DecodesPrometheusVectorObject(t *testing.T) {
+	oldProxy := proxyPrometheusFn
+	proxyPrometheusFn = func(context.Context, string, string) ([]byte, error) {
+		return []byte(`{"status":"success","data":{"resultType":"vector","result":[{"metric":{"job":"canton"},"value":[1780912963.012,"0.2605"]}]}}`), nil
+	}
+	t.Cleanup(func() { proxyPrometheusFn = oldProxy })
+
+	got, err := singleScalar(context.Background(), "canton-demo", "up")
+	if err != nil {
+		t.Fatalf("singleScalar: %v", err)
+	}
+	if got == nil || *got < 0.2604 || *got > 0.2606 {
+		t.Fatalf("singleScalar = %v, want 0.2605", got)
+	}
+}
+
+func TestSingleScalar_TreatsNaNAsMissingSample(t *testing.T) {
+	oldProxy := proxyPrometheusFn
+	proxyPrometheusFn = func(context.Context, string, string) ([]byte, error) {
+		return []byte(`{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1780912963.012,"NaN"]}]}}`), nil
+	}
+	t.Cleanup(func() { proxyPrometheusFn = oldProxy })
+
+	got, err := singleScalar(context.Background(), "canton-demo", "up")
+	if err != nil {
+		t.Fatalf("singleScalar: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("singleScalar NaN = %v, want nil", *got)
+	}
+}
+
+func TestSingleScalar_PropagatesProxyError(t *testing.T) {
+	oldProxy := proxyPrometheusFn
+	want := errors.New("proxy failed")
+	proxyPrometheusFn = func(context.Context, string, string) ([]byte, error) {
+		return nil, want
+	}
+	t.Cleanup(func() { proxyPrometheusFn = oldProxy })
+
+	if _, err := singleScalar(context.Background(), "canton-demo", "up"); !errors.Is(err, want) {
+		t.Fatalf("singleScalar error = %v, want %v", err, want)
 	}
 }
