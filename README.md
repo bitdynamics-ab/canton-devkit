@@ -118,6 +118,8 @@ Optional `--profile observability` adds **Prometheus + Grafana** with a curated 
 >
 > **Docs index:** [Getting started](docs/getting-started.md) ·
 > [Tokens (CIP-0112 / V2)](docs/tokens.md) ·
+> [Explorer](docs/explorer.md) ·
+> [Dashboard customization](docs/dashboard-customization.md) ·
 > [FAQ](docs/faq.md) ·
 > [Troubleshooting](docs/troubleshooting.md) ·
 > [Versions](docs/versions.md) ·
