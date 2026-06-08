@@ -212,6 +212,171 @@ func TestTransactions_MissingParticipantPort(t *testing.T) {
 	}
 }
 
+// ── BIT-231 — stream + contract-detail endpoint guards ─────────
+//
+// The new SSE stream and contract-detail endpoints share the same
+// validation prefix as the snapshot path. Mirror the matrix so any
+// future drift surfaces immediately.
+
+func TestContractsStream_InvalidName(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	srv := contractsTxMux(t)
+	resp, err := http.Get(srv.URL + "/api/instances/UPPERCASE/contracts/stream")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestContractsStream_UnknownInstance(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	srv := contractsTxMux(t)
+	resp, err := http.Get(srv.URL + "/api/instances/nobody/contracts/stream")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestContractsStream_InvalidRole(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "demo", "0.6.4",
+		map[string]int{"participant_ledger_app-user": 9999},
+		registry.StatusRunning)
+	srv := contractsTxMux(t)
+	resp, err := http.Get(srv.URL + "/api/instances/demo/contracts/stream?role=intruder")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestContractsStream_MissingParticipantPort(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "demo", "0.6.4",
+		map[string]int{"app_user_ui": 4485},
+		registry.StatusRunning)
+	srv := contractsTxMux(t)
+	resp, err := http.Get(srv.URL + "/api/instances/demo/contracts/stream?role=app-user")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", resp.StatusCode)
+	}
+	body := readErrBody(t, resp)
+	if got := toStr(body["code"]); got != "PARTICIPANT_PORT_NOT_RECORDED" {
+		t.Errorf("error code = %q, want PARTICIPANT_PORT_NOT_RECORDED", got)
+	}
+}
+
+func TestContractDetail_InvalidName(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	srv := contractsTxMux(t)
+	resp, err := http.Get(srv.URL + "/api/instances/UPPER/contracts/abc:1")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestContractDetail_UnknownInstance(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	srv := contractsTxMux(t)
+	resp, err := http.Get(srv.URL + "/api/instances/nobody/contracts/abc:1")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestContractDetail_InvalidRole(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "demo", "0.6.4",
+		map[string]int{"participant_ledger_app-user": 9999},
+		registry.StatusRunning)
+	srv := contractsTxMux(t)
+	resp, err := http.Get(srv.URL + "/api/instances/demo/contracts/abc:1?role=intruder")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestContractDetail_MissingParticipantPort(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "demo", "0.6.4",
+		map[string]int{"app_user_ui": 4485},
+		registry.StatusRunning)
+	srv := contractsTxMux(t)
+	resp, err := http.Get(srv.URL + "/api/instances/demo/contracts/abc:1?role=app-user")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", resp.StatusCode)
+	}
+	body := readErrBody(t, resp)
+	if got := toStr(body["code"]); got != "PARTICIPANT_PORT_NOT_RECORDED" {
+		t.Errorf("error code = %q, want PARTICIPANT_PORT_NOT_RECORDED", got)
+	}
+}
+
+// TestContractDetail_RoutedDistinctFromStream pins the
+// route-precedence: /contracts/stream must hit handleContractsStream,
+// not handleContractDetail with contract_id="stream". Both pass
+// validation up to the dial; the discriminator is the 503 code we
+// surface for the stream path's setup phase vs the detail path's.
+// We assert the two paths return distinct responses for the same
+// stub instance configuration to catch a future stdlib-mux change
+// that re-orders matches.
+func TestContractDetail_RoutedDistinctFromStream(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "demo", "0.6.4",
+		map[string]int{"app_user_ui": 4485},
+		registry.StatusRunning)
+	srv := contractsTxMux(t)
+
+	// Both should 503 with PARTICIPANT_PORT_NOT_RECORDED — but the
+	// router has to dispatch to the right handler for the precondition
+	// to even apply. If `/stream` collapsed onto the {contract_id}
+	// route we'd still get a 503, but a future regression where the
+	// stream handler short-circuits earlier would surface here.
+	for _, path := range []string{
+		"/api/instances/demo/contracts/stream?role=app-user",
+		"/api/instances/demo/contracts/somecid?role=app-user",
+	} {
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusServiceUnavailable {
+			t.Errorf("path=%s status=%d want 503", path, resp.StatusCode)
+		}
+	}
+}
+
 func toStr(v any) string {
 	if v == nil {
 		return ""

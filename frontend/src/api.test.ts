@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, SCHEMA_VERSION, apiFetch, issueJwt } from "./api";
+import {
+  ApiError,
+  SCHEMA_VERSION,
+  apiFetch,
+  fetchContractDetail,
+  issueJwt,
+  openContractsStream,
+} from "./api";
 
 // apiFetch is the single chokepoint for every backend call.
 // Cover the four classes of behaviour that matter:
@@ -146,5 +153,82 @@ describe("issueJwt", () => {
     // %2F = '/', so '..%2Fetc%2Fpasswd' — never reaches the
     // server as a literal slash that could be mis-routed.
     expect(url).toBe("/api/instances/..%2Fetc%2Fpasswd/jwt");
+  });
+});
+
+// BIT-231 — Explorer contract-detail + SSE clients.
+describe("fetchContractDetail", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("encodes both instance and contract id components in the path", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          schema_version: 1,
+          instance: "demo",
+          role: "app-user",
+          contract: {
+            contract_id: "00abc:0",
+            signatories: [],
+            observers: [],
+            archived: false,
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    await fetchContractDetail("demo", "00abc:0", "app-user");
+    const [url] = fetchSpy.mock.calls[0];
+    // : is an unreserved character per RFC 3986 in path segments
+    // but encodeURIComponent escapes it as %3A — that's fine,
+    // the backend's PathValue decode handles it.
+    expect(url).toBe("/api/instances/demo/contracts/00abc%3A0?role=app-user");
+  });
+
+  it("propagates 404 NOT_FOUND from the backend as an ApiError", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            code: "NOT_FOUND",
+            error: "contract not visible to this party set",
+          }),
+          { status: 404, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    await expect(
+      fetchContractDetail("demo", "missing", "app-user"),
+    ).rejects.toThrow(/not visible/);
+  });
+});
+
+describe("openContractsStream", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("constructs an EventSource against /contracts/stream with role", () => {
+    const seen: string[] = [];
+    class FakeEventSource {
+      url: string;
+      constructor(url: string) {
+        this.url = url;
+        seen.push(url);
+      }
+      close() {}
+      addEventListener() {}
+      removeEventListener() {}
+    }
+    vi.stubGlobal("EventSource", FakeEventSource as unknown as typeof EventSource);
+    const es = openContractsStream("demo", "app-provider");
+    expect(seen).toEqual([
+      "/api/instances/demo/contracts/stream?role=app-provider",
+    ]);
+    es.close();
   });
 });

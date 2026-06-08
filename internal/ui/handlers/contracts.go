@@ -53,11 +53,35 @@ const (
 	contractsMaxLimit       = 1000
 )
 
-// MountContracts installs the Explorer ACS endpoint on mux. Pure
+// MountContracts installs the Explorer endpoints on mux. Pure
 // gRPC call, hub-independent.
+//
+// Endpoints:
+//   - GET /api/instances/{name}/contracts                — ACS snapshot
+//   - GET /api/instances/{name}/contracts/stream         — SSE live updates
+//   - GET /api/instances/{name}/contracts/{contract_id}  — contract detail
+//
+// The /stream path is matched first by Go 1.22 stdlib mux (more
+// specific routes win), so {contract_id} never captures "stream".
 func MountContracts(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/instances/{name}/contracts", handleContractsList)
+	mux.HandleFunc("GET /api/instances/{name}/contracts/stream", handleContractsStream)
+	mux.HandleFunc("GET /api/instances/{name}/contracts/{contract_id}", handleContractDetail)
 }
+
+const (
+	// maxStreamEvents caps the number of SSE events a single
+	// /contracts/stream subscription will emit before closing with a
+	// `truncated` final event. Mirrors PR #89 — one browser tab can't
+	// OOM the UI server with an unbounded stream. 10k events at the
+	// typical ~120-byte JSON payload is ~1.2 MB per client.
+	maxStreamEvents = 10_000
+	// contractsStreamHeartbeat is the keep-alive cadence on the SSE
+	// stream. Idle proxies / browser tabs drop a TCP connection
+	// after ~60s; a 25s SSE comment keeps the socket warm and is
+	// invisible to the client.
+	contractsStreamHeartbeat = 25 * time.Second
+)
 
 // contractRow is the projection we expose over JSON. We deliberately
 // flatten the proto's discriminated-union shape into a flat struct so
@@ -273,6 +297,480 @@ func handleContractsList(w http.ResponseWriter, r *http.Request) {
 		// truncated:true means the participant had more matching
 		"truncated": truncated,
 		"limit":     limit,
+	})
+}
+
+// resolveLedgerForRole replicates the registry → port → JWT lookup
+// the snapshot and stream paths share. Returns the participant
+// endpoint, a TokenSource ready for ledger.Dial, and a true ok on
+// success. On failure it has already written a structured error
+// envelope to w; the caller just returns.
+func resolveLedgerForRole(w http.ResponseWriter, name, role string) (endpoint string, tok ledger.TokenSource, ok bool) {
+	state, err := registry.Read(name)
+	if err != nil {
+		if errors.Is(err, registry.ErrNotFound) {
+			writeErrorWithCode(w, http.StatusNotFound,
+				ErrCodeNotFound,
+				"instance "+name+" not registered")
+			return "", nil, false
+		}
+		writeError(w, http.StatusInternalServerError, "read state", err)
+		return "", nil, false
+	}
+	portKey := "participant_ledger_" + role
+	ledgerPort, hasPort := state.Ports[portKey]
+	if !hasPort || ledgerPort == 0 {
+		writeErrorWithCode(w, http.StatusServiceUnavailable,
+			"PARTICIPANT_PORT_NOT_RECORDED",
+			"instance "+name+" was started before participant ports were recorded",
+			"restart the instance with `dpm localnet down --name "+name+
+				"` followed by `dpm localnet up --name "+name+
+				"` — the new up flow captures all Canton API ports")
+		return "", nil, false
+	}
+	cred, hasCred := state.Credentials[role]
+	if !hasCred {
+		writeError(w, http.StatusInternalServerError,
+			"no JWT recorded for role "+role,
+			fmt.Errorf("missing credential for role %q", role))
+		return "", nil, false
+	}
+	return "localhost:" + strconv.Itoa(ledgerPort), ledger.StaticToken(cred.JWT), true
+}
+
+// streamEventFrame is the JSON shape we publish for each
+// create/archive over /contracts/stream. Mirrors the snapshot's
+// contractRow projection so the frontend can apply the same de-dup
+// + render path on both surfaces.
+type streamEventFrame struct {
+	Event       string   `json:"event"` // "created" | "archived" | "truncated"
+	ContractID  string   `json:"contract_id,omitempty"`
+	Template    string   `json:"template,omitempty"`
+	Signatories []string `json:"signatories,omitempty"`
+	Observers   []string `json:"observers,omitempty"`
+	Offset      int64    `json:"offset,omitempty"`
+	At          int64    `json:"at,omitempty"` // unix-ts seconds
+	UpdateID    string   `json:"update_id,omitempty"`
+	Reason      string   `json:"reason,omitempty"` // for "truncated"
+}
+
+// handleContractsStream serves Server-Sent Events over the
+// participant's UpdateService stream. One subscription per HTTP
+// request; the upstream gRPC stream is cancelled when the client
+// disconnects (ctx.WithCancel + defer cancel). Hard-capped at
+// maxStreamEvents events per subscription.
+//
+// Wire format (one frame per published payload):
+//
+//	event: contracts
+//	data: {"event":"created","contract_id":"…", …}
+//
+// A final synthetic `{"event":"truncated", …}` is emitted before
+// the connection closes when the cap is hit, so the frontend can
+// switch to its snapshot reconciliation path.
+func handleContractsStream(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if err := registry.ValidateName(name); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance name", err)
+		return
+	}
+	role := r.URL.Query().Get("role")
+	if role == "" {
+		role = "app-user"
+	}
+	if !validRole[role] {
+		writeErrorWithCode(w, http.StatusBadRequest,
+			ErrCodeInvalidRequest,
+			"invalid role: "+role,
+			"role must be one of app-user, app-provider, sv")
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError,
+			"streaming unsupported", fmt.Errorf("ResponseWriter is not http.Flusher"))
+		return
+	}
+
+	endpoint, tok, ok := resolveLedgerForRole(w, name, role)
+	if !ok {
+		return
+	}
+
+	// Bound the dial+resolve phase by a short timeout so a slow
+	// participant never holds the request open without surfacing
+	// progress. The streaming phase below runs on the parent r.Context()
+	// so it can outlive this timeout.
+	setupCtx, cancelSetup := context.WithTimeout(r.Context(), contractsRequestTimeout)
+	defer cancelSetup()
+
+	client, err := ledger.Dial(setupCtx, ledger.DialOptions{
+		Endpoint:  endpoint,
+		Token:     tok,
+		PlainText: true,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "dial canton ledger", err)
+		return
+	}
+	defer func() { _ = client.Close() }()
+
+	parties, err := client.ResolveActAndReadParties(setupCtx)
+	if err != nil {
+		if isPermissionDenied(err) {
+			writeErrorWithCode(w, http.StatusServiceUnavailable,
+				"EXPLORER_NEEDS_PARTY_JWT",
+				"participant denied user-rights lookup",
+				"grant actAs/readAs via UserManagementService")
+			return
+		}
+		writeError(w, http.StatusBadGateway, "resolve user rights", err)
+		return
+	}
+	if len(parties) == 0 {
+		writeErrorWithCode(w, http.StatusServiceUnavailable,
+			"EXPLORER_NEEDS_PARTY_JWT",
+			"this JWT has no party-rights",
+			"grant actAs/readAs rights to the user via UserManagementService")
+		return
+	}
+	byParty := make(map[string]*lapiv2.Filters, len(parties))
+	for _, p := range parties {
+		byParty[p] = &lapiv2.Filters{}
+	}
+
+	// Resume from current ledger end so we only emit live deltas.
+	// The snapshot endpoint owns the "fill the table" path; this
+	// stream is strictly the live tail.
+	end, err := client.LedgerEnd(setupCtx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "ledger end probe", err)
+		return
+	}
+
+	// Per-call cancel covers TWO scenarios:
+	//   1. Client disconnects (r.Context().Done()) → cancel propagates
+	//      to the upstream gRPC stream so we don't leak it.
+	//   2. We hit maxStreamEvents → we cancel to terminate the upstream
+	//      before returning the truncated frame.
+	streamCtx, cancelStream := context.WithCancel(r.Context())
+	defer cancelStream()
+
+	updates, err := client.Updates(streamCtx, ledger.UpdatesRequest{
+		BeginExclusive: end.Offset,
+		// EndInclusive nil = tail forever (until ctx cancels).
+		UpdateFormat: &lapiv2.UpdateFormat{
+			IncludeTransactions: &lapiv2.TransactionFormat{
+				EventFormat: &lapiv2.EventFormat{
+					FiltersByParty: byParty,
+					Verbose:        false,
+				},
+				TransactionShape: lapiv2.TransactionShape_TRANSACTION_SHAPE_ACS_DELTA,
+			},
+		},
+	})
+	if err != nil {
+		if isPermissionDenied(err) {
+			writeErrorWithCode(w, http.StatusServiceUnavailable,
+				"EXPLORER_NEEDS_PARTY_JWT",
+				"participant denied the updates stream",
+				"the JWT's party rights don't grant read access")
+			return
+		}
+		writeError(w, http.StatusBadGateway, "open updates stream", err)
+		return
+	}
+
+	// SSE headers + immediate flush so the browser's onopen fires
+	// before the first event arrives.
+	h := w.Header()
+	h.Set("Content-Type", "text/event-stream; charset=utf-8")
+	h.Set("Cache-Control", "no-cache, no-transform")
+	h.Set("Connection", "keep-alive")
+	h.Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	heartbeat := time.NewTicker(contractsStreamHeartbeat)
+	defer heartbeat.Stop()
+
+	emitted := 0
+	// emit returns false when the cap is hit (the caller should
+	// flush a `truncated` frame and exit).
+	emit := func(p streamEventFrame) bool {
+		buf, err := json.Marshal(p)
+		if err != nil {
+			return true // skip; should never happen
+		}
+		_, _ = fmt.Fprintf(w, "event: contracts\ndata: %s\n\n", buf)
+		flusher.Flush()
+		emitted++
+		return emitted < maxStreamEvents
+	}
+
+	for {
+		select {
+		case <-streamCtx.Done():
+			return
+		case <-heartbeat.C:
+			_, _ = w.Write([]byte(": keepalive\n\n"))
+			flusher.Flush()
+		case item, ok := <-updates:
+			if !ok {
+				return
+			}
+			if item.Err != nil {
+				if errors.Is(item.Err, io.EOF) ||
+					errors.Is(item.Err, context.Canceled) ||
+					errors.Is(item.Err, context.DeadlineExceeded) {
+					return
+				}
+				// Mid-stream failure: surface as a final SSE error
+				// frame rather than a 502 (we've already 200'd).
+				_, _ = fmt.Fprintf(w, "event: error\ndata: %q\n\n", item.Err.Error())
+				flusher.Flush()
+				return
+			}
+			cont := true
+			projectStreamEvents(item.Value, func(p streamEventFrame) {
+				if !cont {
+					return
+				}
+				if !emit(p) {
+					cont = false
+				}
+			})
+			if !cont {
+				// Hit the cap — emit the truncated marker and bail.
+				_ = emitTruncated(w, flusher)
+				return
+			}
+		}
+	}
+}
+
+func emitTruncated(w http.ResponseWriter, flusher http.Flusher) error {
+	buf, _ := json.Marshal(streamEventFrame{
+		Event:  "truncated",
+		Reason: fmt.Sprintf("stream cap of %d events reached", maxStreamEvents),
+	})
+	_, err := fmt.Fprintf(w, "event: contracts\ndata: %s\n\n", buf)
+	flusher.Flush()
+	return err
+}
+
+// projectStreamEvents walks one GetUpdatesResponse and invokes
+// `out` for each create/archive event we care about. Reassignments
+// and topology updates are ignored — the contracts table only
+// cares about ACS deltas.
+func projectStreamEvents(resp *lapiv2.GetUpdatesResponse, out func(streamEventFrame)) {
+	if resp == nil {
+		return
+	}
+	tx := resp.GetTransaction()
+	if tx == nil {
+		return
+	}
+	var atUnix int64
+	if rt := tx.GetRecordTime(); rt != nil {
+		atUnix = rt.AsTime().Unix()
+	}
+	for _, ev := range tx.GetEvents() {
+		if c := ev.GetCreated(); c != nil {
+			sigs := c.GetSignatories()
+			if sigs == nil {
+				sigs = []string{}
+			}
+			obs := c.GetObservers()
+			if obs == nil {
+				obs = []string{}
+			}
+			out(streamEventFrame{
+				Event:       "created",
+				ContractID:  c.GetContractId(),
+				Template:    formatTemplateID(c.GetTemplateId()),
+				Signatories: sigs,
+				Observers:   obs,
+				Offset:      tx.GetOffset(),
+				At:          atUnix,
+				UpdateID:    tx.GetUpdateId(),
+			})
+			continue
+		}
+		if a := ev.GetArchived(); a != nil {
+			out(streamEventFrame{
+				Event:      "archived",
+				ContractID: a.GetContractId(),
+				Template:   formatTemplateID(a.GetTemplateId()),
+				Offset:     tx.GetOffset(),
+				At:         atUnix,
+				UpdateID:   tx.GetUpdateId(),
+			})
+		}
+	}
+}
+
+// contractDetail is the deep-view payload returned by the drawer
+// endpoint. Captures everything the side-drawer renders: the
+// create event's payload + parties, and the archive event (if
+// present) with the archiving transaction id.
+type contractDetail struct {
+	ContractID     string         `json:"contract_id"`
+	TemplateID     string         `json:"template_id,omitempty"`
+	PackageName    string         `json:"package_name,omitempty"`
+	Payload        map[string]any `json:"payload,omitempty"`
+	Signatories    []string       `json:"signatories"`
+	Observers      []string       `json:"observers"`
+	CreatedAt      string         `json:"created_at,omitempty"`
+	CreatedOffset  int64          `json:"created_offset,omitempty"`
+	CreatedTxID    string         `json:"created_update_id,omitempty"`
+	Archived       bool           `json:"archived"`
+	ArchivedAt     string         `json:"archived_at,omitempty"`
+	ArchivedOffset int64          `json:"archived_offset,omitempty"`
+	ArchivedTxID   string         `json:"archived_update_id,omitempty"`
+}
+
+// handleContractDetail returns a deep view of one contract — the
+// CreatedEvent payload + the ArchivedEvent (if any) — using
+// EventQueryService.GetEventsByContractId. The same primitive `tx
+// replay` uses; we just project through the JWT's party set.
+func handleContractDetail(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if err := registry.ValidateName(name); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance name", err)
+		return
+	}
+	cid := r.PathValue("contract_id")
+	if cid == "" {
+		writeErrorWithCode(w, http.StatusBadRequest,
+			ErrCodeInvalidRequest,
+			"contract_id is required")
+		return
+	}
+	role := r.URL.Query().Get("role")
+	if role == "" {
+		role = "app-user"
+	}
+	if !validRole[role] {
+		writeErrorWithCode(w, http.StatusBadRequest,
+			ErrCodeInvalidRequest,
+			"invalid role: "+role,
+			"role must be one of app-user, app-provider, sv")
+		return
+	}
+
+	endpoint, tok, ok := resolveLedgerForRole(w, name, role)
+	if !ok {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), contractsRequestTimeout)
+	defer cancel()
+
+	client, err := ledger.Dial(ctx, ledger.DialOptions{
+		Endpoint:  endpoint,
+		Token:     tok,
+		PlainText: true,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "dial canton ledger", err)
+		return
+	}
+	defer func() { _ = client.Close() }()
+
+	parties, err := client.ResolveActAndReadParties(ctx)
+	if err != nil {
+		if isPermissionDenied(err) {
+			writeErrorWithCode(w, http.StatusServiceUnavailable,
+				"EXPLORER_NEEDS_PARTY_JWT",
+				"participant denied user-rights lookup",
+				"grant actAs/readAs via UserManagementService")
+			return
+		}
+		writeError(w, http.StatusBadGateway, "resolve user rights", err)
+		return
+	}
+	if len(parties) == 0 {
+		writeErrorWithCode(w, http.StatusServiceUnavailable,
+			"EXPLORER_NEEDS_PARTY_JWT",
+			"this JWT has no party-rights")
+		return
+	}
+	byParty := make(map[string]*lapiv2.Filters, len(parties))
+	for _, p := range parties {
+		byParty[p] = &lapiv2.Filters{}
+	}
+
+	resp, err := client.EventsByContractId(ctx, &lapiv2.GetEventsByContractIdRequest{
+		ContractId: cid,
+		EventFormat: &lapiv2.EventFormat{
+			FiltersByParty: byParty,
+			Verbose:        true,
+		},
+	})
+	if err != nil {
+		// NotFound from the participant means the JWT can't see this
+		// contract — surface as 404 so the frontend can render "not
+		// visible" instead of a generic 502.
+		if s, ok := status.FromError(err); ok && s.Code() == codes.NotFound {
+			writeErrorWithCode(w, http.StatusNotFound,
+				ErrCodeNotFound,
+				"contract not visible to this party set")
+			return
+		}
+		if isPermissionDenied(err) {
+			writeErrorWithCode(w, http.StatusServiceUnavailable,
+				"EXPLORER_NEEDS_PARTY_JWT",
+				"participant denied events lookup")
+			return
+		}
+		writeError(w, http.StatusBadGateway, "events by contract id", err)
+		return
+	}
+
+	detail := contractDetail{
+		ContractID:  cid,
+		Signatories: []string{},
+		Observers:   []string{},
+	}
+	if cev := resp.GetCreated(); cev != nil && cev.GetCreatedEvent() != nil {
+		e := cev.GetCreatedEvent()
+		detail.TemplateID = formatTemplateID(e.GetTemplateId())
+		detail.PackageName = e.GetPackageName()
+		if sigs := e.GetSignatories(); sigs != nil {
+			detail.Signatories = sigs
+		}
+		if obs := e.GetObservers(); obs != nil {
+			detail.Observers = obs
+		}
+		if e.CreatedAt != nil {
+			detail.CreatedAt = e.CreatedAt.AsTime().Format(time.RFC3339)
+		}
+		detail.CreatedOffset = e.GetOffset()
+		if e.CreateArguments != nil {
+			detail.Payload = recordToMap(e.CreateArguments)
+		}
+	}
+	if av := resp.GetArchived(); av != nil && av.GetArchivedEvent() != nil {
+		ae := av.GetArchivedEvent()
+		detail.Archived = true
+		detail.ArchivedOffset = ae.GetOffset()
+		// ArchivedEvent has no record_time / update_id directly;
+		// the wrapping Archived envelope carries the synchronizer
+		// but not the tx id. We surface offset + a follow-up note
+		// to wire the full archive transaction lookup once the
+		// drawer needs it.
+		if detail.TemplateID == "" {
+			detail.TemplateID = formatTemplateID(ae.GetTemplateId())
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema_version": 1,
+		"instance":       name,
+		"role":           role,
+		"contract":       detail,
 	})
 }
 
