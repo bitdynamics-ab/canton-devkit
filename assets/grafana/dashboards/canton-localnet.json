@@ -127,8 +127,8 @@
     {
       "id": 14,
       "type": "stat",
-      "title": "Active Contract Set Size",
-      "description": "Total active contracts across participants. Uses `daml_services_index_active_contracts` (Daml participant indexer gauge). If your Canton image does not expose this metric, the panel will read 'No data' — there is no audited stock-metric fallback on Splice 0.6.4, so prefer the Web UI Explorer / JSON API ACS lookup instead.",
+      "title": "ACS Lookup Buffer Length",
+      "description": "ACS-related index lookup buffer length across participants. Stock Splice 0.6.4 does not expose total active-contract cardinality as a Prometheus metric; use the Web UI Explorer / JSON API ACS lookup for exact active contract counts.",
       "datasource": "Prometheus",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
       "options": {
@@ -139,16 +139,16 @@
       },
       "targets": [
         {
-          "expr": "sum(daml_services_index_active_contracts{instance=~\"$instance\"})",
-          "legendFormat": "active contracts"
+          "expr": "sum(daml_participant_api_index_db_active_contract_lookup_batch_buffer_length{instance=~\"$instance\"})",
+          "legendFormat": "ACS lookup buffer"
         }
       ]
     },
     {
       "id": 15,
       "type": "bargauge",
-      "title": "Top 10 Templates by Throughput (ops/s, 5m)",
-      "description": "Top templates ranked by command-submission rate. Uses `daml_commands_submissions_total` aggregated by `template_id`. Requires Canton/Daml to expose the `template_id` label on the submissions counter — on Splice 0.6.4 stock images this label may be absent, in which case the panel renders as a single aggregate bar or no data. Treat this as a best-effort panel until upstream template-grain metrics are guaranteed.",
+      "title": "Top 10 gRPC Methods by Throughput (ops/s, 5m)",
+      "description": "Command/API throughput by live gRPC method. Stock Splice 0.6.4 does not expose template-grain submission counters, so this panel uses the audited `daml_grpc_server_handled_total` method label instead of a non-existent template metric.",
       "datasource": "Prometheus",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
       "options": {
@@ -158,8 +158,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (template_id) (rate(daml_commands_submissions_total{instance=~\"$instance\"}[5m])))",
-          "legendFormat": "{{template_id}}"
+          "expr": "topk(10, sum by (grpc_method_name) (rate(daml_grpc_server_handled_total{instance=~\"$instance\"}[5m])))",
+          "legendFormat": "{{grpc_method_name}}"
         }
       ]
     }

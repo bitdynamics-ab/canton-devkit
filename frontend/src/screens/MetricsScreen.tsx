@@ -63,13 +63,16 @@ const Q = {
   // Substitute: indexer-update counter, same as HeadlineLedgerTPS.
   throughputSeries: "sum(rate(daml_participant_api_indexer_updates[1m]))",
   p99: 'histogram_quantile(0.99, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
-  // Live Splice exposes the participant active-contract index buffer,
-  // not the older `daml_services_index_active_contracts` gauge.
-  acsCount: "sum(daml_participant_api_index_active_contracts_buffer_size)",
+  // Live Splice does not expose total ACS cardinality as a stock
+  // Prometheus metric. This is the audited ACS-related signal that
+  // exists in 0.6.4; keep UI copy honest and call it a lookup buffer.
+  acsLookupBuffer:
+    "sum(daml_participant_api_index_db_active_contract_lookup_batch_buffer_length)",
   // No daml_* command-rejection counter on Splice 0.6.4 — use the
   // user-error completion-status counter as a proxy for "things
   // the participant refused to commit". Returns 0 if not exposed.
-  errorsRate: 'sum(rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m]))',
+  errorsRate:
+    'sum(rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m])) or vector(0)',
   latencyMedian:
     'histogram_quantile(0.50, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
   latencyP99:
@@ -78,8 +81,9 @@ const Q = {
   // Use the live gRPC method counter as a command-throughput fallback
   // instead of querying a non-existent `daml_commands_*` family.
   commandThroughput:
-    "sum by (grpc_method) (rate(daml_grpc_server_handled_total[5m]))",
-  errors1m: 'sum(rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m]))',
+    "sum by (grpc_method_name) (rate(daml_grpc_server_handled_total[5m]))",
+  errors1m:
+    'sum(rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m])) or vector(0)',
   errorsByCode:
     'sum by (grpc_code) (rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m]))',
   resourceUsage:
@@ -168,7 +172,7 @@ export function MetricsScreen() {
       await Promise.all([
         loadSeries(name, Q.throughputSeries, "tx/s", setThroughputSeries, signal),
         loadSeries(name, Q.p99, "p99", setP99Series, signal),
-        loadSeries(name, Q.acsCount, "ACS", setAcsSeries, signal),
+        loadSeries(name, Q.acsLookupBuffer, "ACS lookup buffer", setAcsSeries, signal),
         loadSeries(name, Q.errorsRate, "errors", setErrorsSeries, signal),
         loadMultiSeries(
           name,
@@ -182,7 +186,7 @@ export function MetricsScreen() {
         loadBars(
           name,
           Q.commandThroughput,
-          (m) => m.grpc_method ?? "(unlabelled)",
+          (m) => m.grpc_method_name ?? "(unlabelled)",
           setPerTemplate,
           signal,
         ),
@@ -260,6 +264,10 @@ export function MetricsScreen() {
   }
 
   const m = summary.data?.metrics;
+  const p99Value =
+    summary.kind === "ok" && summary.data
+      ? (summary.data.latency?.p99_ms ?? Number.NaN)
+      : undefined;
 
   return (
     <section style={{ padding: 24 }}>
@@ -287,7 +295,7 @@ export function MetricsScreen() {
         <MetricCard
           title="Command completion p99"
           unit="ms"
-          value={summary.data?.latency?.p99_ms ?? undefined}
+          value={p99Value}
           sparkline={p99Series.data?.points.map((p) => ({ t: p.t, v: p.v * 1000 }))}
           sparklineColor={P99_COLOR}
           error={p99Series.kind === "err" ? p99Series.error : undefined}
@@ -296,7 +304,7 @@ export function MetricsScreen() {
           format={(v) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1))}
         />
         <MetricCard
-          title="Active contracts"
+          title="ACS lookup buffer"
           value={acsSeries.data?.points[acsSeries.data.points.length - 1]?.v}
           sparkline={acsSeries.data?.points}
           sparklineColor={ACS_COLOR}
@@ -356,7 +364,7 @@ export function MetricsScreen() {
           )}
         </ChartCard>
 
-        <ChartCard title="Active contracts" subtitle="trend · 1h">
+        <ChartCard title="ACS lookup buffer" subtitle="buffer length · 1h">
           {acsSeries.kind === "err" ? (
             <ErrLine msg={acsSeries.error ?? "failed"} />
           ) : acsSeries.data ? (
