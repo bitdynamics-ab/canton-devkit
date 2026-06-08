@@ -73,6 +73,15 @@ jobs:
           short_sha="${GITHUB_SHA::7}"
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             version="${GITHUB_REF_NAME}"
+            # Reject a non-semver tag (e.g. v0.7) up front, before any
+            # release or asset is created — the DPM-component job would
+            # fail on it later anyway (invalid OCI semver). Keep the two
+            # jobs' tag contract identical.
+            semver_re='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+            if [[ ! "${version#v}" =~ $semver_re ]]; then
+              echo "::error::Release tag '${version}' is not full semver. Tag a MAJOR.MINOR.PATCH release, e.g. v0.7.1 (not v0.7)." >&2
+              exit 1
+            fi
           else
             version="main-${short_sha}"
           fi
@@ -251,9 +260,18 @@ jobs:
         run: |
           short_sha="${GITHUB_SHA::7}"
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            # DPM expects a semver-shaped version string for the OCI
-            # tag — strip the `v` prefix.
+            # DPM expects a full MAJOR.MINOR.PATCH semver string for the OCI
+            # tag — strip the `v` prefix. A 2-part tag like `v0.7` strips to
+            # `0.7`, which DPM's `publish component` rejects as invalid
+            # semver (this is exactly what broke the v0.7 release). Fail
+            # FAST here with an actionable message rather than letting the
+            # cryptic dpm usage dump surface three steps later.
             version="${GITHUB_REF_NAME#v}"
+            semver_re='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+            if [[ ! "${version}" =~ $semver_re ]]; then
+              echo "::error::Release tag '${GITHUB_REF_NAME}' is not full semver. Tag a MAJOR.MINOR.PATCH release, e.g. v0.7.1 (not v0.7)." >&2
+              exit 1
+            fi
             push="true"
           else
             version="0.0.0-${short_sha}"
