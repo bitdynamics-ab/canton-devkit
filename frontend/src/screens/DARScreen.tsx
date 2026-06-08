@@ -132,16 +132,16 @@ export function DARScreen() {
       });
       return;
     }
-    // Client-side size cap (review yellow): refuse > 256 MiB before
-    // we ever touch the network. The backend enforces a 64 MiB
-    // multipart cap anyway, but a 4 GiB drop would OOM the tab
-    // before the server got a chance to say no.
-    const MAX_DAR_BYTES = 256 * 1024 * 1024;
+    // Client-side size cap mirrors the backend's multipart cap in
+    // internal/ui/handlers/dar.go (darUploadMax = 64 MiB). Reject
+    // here so a 100 MiB DAR doesn't start uploading and fail
+    // server-side after a wasted progress bar.
+    const MAX_DAR_BYTES = 64 * 1024 * 1024;
     const tooBig = arr.find((f) => f.size > MAX_DAR_BYTES);
     if (tooBig) {
       setUpload({
         kind: "error",
-        message: `${tooBig.name} is ${(tooBig.size / 1024 / 1024).toFixed(1)} MiB; per-file cap is 256 MiB`,
+        message: `${tooBig.name} is ${(tooBig.size / 1024 / 1024).toFixed(1)} MiB; per-file cap is 64 MiB`,
       });
       return;
     }
