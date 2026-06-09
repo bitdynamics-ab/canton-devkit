@@ -191,25 +191,42 @@ func freeBase(t *testing.T, n int) int {
 // identical inputs (the determinism --port-base exists to provide).
 func TestDeriveUIPorts_DeterministicAndSequential(t *testing.T) {
 	envVars := []string{"A", "B", "C"}
-	base := freeBase(t, len(envVars))
-	got, err := DeriveUIPorts(envVars, base)
-	if err != nil {
-		t.Fatalf("DeriveUIPorts: %v", err)
-	}
-	want := map[string]int{"A": base, "B": base + 1, "C": base + 2}
-	for k, v := range want {
-		if got[k] != v {
-			t.Errorf("port[%s] = %d, want %d", k, got[k], v)
+	// freeBase only proves the block was free at scan time; a concurrent
+	// process could grab a port before DeriveUIPorts re-probes (TOCTOU).
+	// Treat that as a benign race: rescan and retry rather than flake.
+	const maxAttempts = 6
+	for attempt := 1; ; attempt++ {
+		base := freeBase(t, len(envVars))
+		got, err := DeriveUIPorts(envVars, base)
+		if err != nil {
+			var conflict *PortBaseConflict
+			if errors.As(err, &conflict) && attempt < maxAttempts {
+				continue // lost a port to another process — rescan
+			}
+			t.Fatalf("DeriveUIPorts: %v", err)
 		}
-	}
-	got2, err := DeriveUIPorts(envVars, base)
-	if err != nil {
-		t.Fatalf("DeriveUIPorts (2nd): %v", err)
-	}
-	for k := range want {
-		if got2[k] != got[k] {
-			t.Errorf("non-deterministic for %s: %d vs %d", k, got2[k], got[k])
+		want := map[string]int{"A": base, "B": base + 1, "C": base + 2}
+		for k, v := range want {
+			if got[k] != v {
+				t.Errorf("port[%s] = %d, want %d", k, got[k], v)
+			}
 		}
+		// Determinism: re-deriving at the same base yields the identical
+		// mapping (base+i is a pure function of base).
+		got2, err := DeriveUIPorts(envVars, base)
+		if err != nil {
+			var conflict *PortBaseConflict
+			if errors.As(err, &conflict) && attempt < maxAttempts {
+				continue // race on the second derive — rescan the whole test
+			}
+			t.Fatalf("DeriveUIPorts (2nd): %v", err)
+		}
+		for k := range want {
+			if got2[k] != got[k] {
+				t.Errorf("non-deterministic for %s: %d vs %d", k, got2[k], got[k])
+			}
+		}
+		return
 	}
 }
 
