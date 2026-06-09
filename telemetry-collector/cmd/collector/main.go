@@ -50,7 +50,7 @@ func main() {
 	// does the heavy DDoS absorption — see DEPLOY.md).
 	handler := collector.RateLimit(h, collector.RateLimitConfigFromEnv())
 	mux := http.NewServeMux()
-	mux.Handle("/", handler) // accepts POST on any path; /healthz is special-cased
+	mux.Handle("/", handler) // handler serves POST /v1/counters + /healthz; 404s the rest
 
 	srv := &http.Server{
 		Addr:              addr,

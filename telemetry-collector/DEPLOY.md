@@ -112,12 +112,12 @@ cloudflared tunnel route dns canton-telemetry telemetry.yourdomain.tld
 cloudflared tunnel run --url http://127.0.0.1:8080 canton-telemetry
 ```
 
-Then in the Cloudflare dashboard add a **Rate Limiting rule** on
-`telemetry.yourdomain.tld/v1/counters` — e.g. *10 requests / minute / IP →
-block for 1 minute*. A real client POSTs ~once per day, so this is far
-above any legitimate use. With the Tunnel, the CLI's `CF-Connecting-IP`
-header is set by Cloudflare and the collector's per-IP limiter (below)
-keys off it correctly.
+Then in the Cloudflare dashboard add a **Rate Limiting rule** scoped to
+the **whole hostname** `telemetry.yourdomain.tld` (all paths, not just
+`/v1/counters`) — e.g. *10 requests / minute / IP → block for 1 minute*. A
+real client POSTs ~once per day, so this is far above any legitimate use.
+(The collector also 404s every path except `/v1/counters` and `/healthz`,
+so a host-wide rule can't be sidestepped by POSTing to another path.)
 
 If you prefer Caddy/nginx instead of Cloudflare, you get TLS but **not**
 upstream DDoS scrubbing — the flood still hits your bandwidth. Cloudflare
@@ -136,10 +136,31 @@ RATE_BURST=15             # per-IP burst allowance
 RATE_GLOBAL_PER_SEC=50    # ceiling on total accepted req/s (protects the DB)
 ```
 
-Over-limit requests get `429 Too Many Requests` + `Retry-After`. `/healthz`
-is never limited. Per-IP buckets are keyed off `CF-Connecting-IP` →
-`X-Forwarded-For` → peer address, so they only work correctly **behind**
-the tunnel/proxy — which is the documented deployment.
+Over-limit requests get `429 Too Many Requests` + `Retry-After` (and a
+sampled log line so an attack is visible). `/healthz` is never limited.
+
+**Per-IP keying — set `TRUSTED_IP_HEADER` to match your front.** A client
+can forge any header, so the limiter trusts **none** by default and keys
+off the transport peer. Tell it which header carries the real client IP
+for *your* deployment:
+
+```bash
+# Behind a Cloudflare Tunnel — CF sets (and overwrites) this, so it can't
+# be spoofed:
+TRUSTED_IP_HEADER=CF-Connecting-IP
+
+# Behind a single Caddy/nginx that appends the client to X-Forwarded-For
+# (the limiter takes the LAST hop, which the client can't forge):
+TRUSTED_IP_HEADER=X-Forwarded-For
+
+# Directly exposed (no proxy) — leave UNSET; the peer address is used and
+# spoofed headers are ignored.
+```
+
+If you leave it unset behind a proxy, per-IP limiting degrades to "all
+traffic under the proxy's IP" (i.e. effectively the global cap only) —
+safe, just coarser. Setting the *wrong* header for your topology is the
+only way to reintroduce spoofing, so match it to your front.
 
 #### On `INGEST_TOKEN` (it's a speed bump, not auth)
 
