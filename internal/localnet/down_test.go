@@ -13,11 +13,10 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// TestRunDown_PersistsStoppingBeforeCompose locks in the contract Zhe
-// asked for on PR #21: RunDown must persist Status=stopping BEFORE
-// calling `docker compose down`, otherwise a crash mid-teardown
-// leaves the registry reporting `running` while the host is in an
-// indeterminate state.
+// TestRunDown_PersistsStoppingBeforeCompose locks in the contract:
+// RunDown must persist Status=stopping BEFORE calling `docker compose
+// down`, otherwise a crash mid-teardown leaves the registry reporting
+// `running` while the host is in an indeterminate state.
 //
 // The test injects a downer stub that, when invoked, reads the
 // on-disk state.json and records what Status it observes. If RunDown
@@ -53,12 +52,11 @@ func TestRunDown_PersistsStoppingBeforeCompose(t *testing.T) {
 	}
 }
 
-// TestRunDown_PreservesStateOnComposeFailure covers Zhe's other PR #21
-// ask: a `docker compose down` failure must NOT silently fall through
-// to registry.Delete. The state must stay on disk with Status=failed
-// and the command must exit non-zero so the user can retry cleanup
-// instead of losing the metadata while resources are potentially
-// still running.
+// TestRunDown_PreservesStateOnComposeFailure: a `docker compose down`
+// failure must NOT silently fall through to registry.Delete. The state
+// must stay on disk with Status=failed and the command must exit
+// non-zero so the user can retry cleanup instead of losing the metadata
+// while resources are potentially still running.
 func TestRunDown_PreservesStateOnComposeFailure(t *testing.T) {
 	name := "compose-fails"
 	seedRunningInstance(t, name)
@@ -78,9 +76,9 @@ func TestRunDown_PreservesStateOnComposeFailure(t *testing.T) {
 		t.Fatalf("RunDown = %d, want ExitRuntimeFailure; stderr=%q", code, errBuf.String())
 	}
 
-	// Registry entry MUST still exist with Status=failed; the prior
+	// Registry entry MUST still exist with Status=failed; a prior
 	// implementation deleted it after the warning and returned 0,
-	// which is the exact bug Zhe flagged.
+	// which is the bug this guards against.
 	s, err := registry.Read(name)
 	if err != nil {
 		t.Fatalf("registry.Read after compose failure: %v (state was deleted — regression)", err)

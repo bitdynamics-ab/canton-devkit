@@ -12,9 +12,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TestSkillsLint_AgainstLiveCobraSurface is the structural pin
-// (carried over from the superseded PR #44): skill docs reference
-// `dpm localnet <verb>` commands and `--flag` arguments, and manual
+// TestSkillsLint_AgainstLiveCobraSurface is the structural pin:
+// skill docs reference `dpm localnet <verb>` commands and `--flag`
+// arguments, and manual
 // review can't keep them in sync with the live cobra surface. This
 // test reads every bundled skill via skills.List() (the same docs the
 // CLI/UI ship), parses every fenced `sh` block, extracts the
@@ -28,9 +28,8 @@ import (
 // Two escape hatches keep the lint usable:
 //
 // - futureVerbs allowlist: verbs whose implementation hasn't
-// landed yet (token, on this branch). Skills documenting future
-// commands MUST cite their ticket ID so
-// `grep -rn 'BIT-' internal/cli/localnet/skills_lint_test.go`
+// landed yet. Skills documenting future commands carry a "TODO:"
+// note so `grep -rn 'TODO' internal/cli/localnet/skills_lint_test.go`
 // enumerates outstanding implementation work.
 // - skill-lint-ignore marker: a line in the skill can carry
 // "<!-- skill-lint: skip-next -->" to opt out of the lint
@@ -62,17 +61,15 @@ func TestSkillsLint_AgainstLiveCobraSurface(t *testing.T) {
 			}
 			cmd, found := resolveCobra(root, sc.verbPath)
 			if !found {
-				t.Errorf("verb %q not found under `dpm localnet`; skill at %s references a command that doesn't exist (typo, or add to futureVerbs with a Linear ticket)",
+				t.Errorf("verb %q not found under `dpm localnet`; skill at %s references a command that doesn't exist (typo, or add it to futureVerbs with a TODO note)",
 					strings.Join(sc.verbPath, " "), sc.location)
 				return
 			}
 			// Stub commands (DisableFlagParsing=true) get the
-			// flag-check skip too. On this branch `clean`/`restart`
-			// are still transitional stubs on main (their real
-			// implementations land via / ); validating
-			// flags against a stub would force the skill to track the
-			// transitional shape instead of the final one. Same
-			// logging contract as futureVerbs so CI output makes the
+			// flag-check skip too. Validating flags against a
+			// transitional stub would force the skill to track the
+			// stub shape instead of the final one. Same logging
+			// contract as futureVerbs so CI output makes the
 			// deferred verification visible.
 			if cmd.DisableFlagParsing {
 				t.Logf("verb %q is a stub (DisableFlagParsing=true) — flag checks skipped until real impl lands",

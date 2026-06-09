@@ -11,7 +11,7 @@ import (
 
 // buildTelemetryCmd is the ROOT-level `canton-devkit telemetry …` command
 // (sibling of `localnet` and `version`) — telemetry is tool-wide, not a
-// LocalNet concern (design decision #11).
+// LocalNet concern.
 func buildTelemetryCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "telemetry",

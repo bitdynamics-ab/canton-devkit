@@ -2,7 +2,7 @@
 // queries the CLI's `localnet metrics` and the Web UI's
 // `/api/instances/{name}/metrics/summary` both surface.
 //
-// → v4: the two surfaces previously hand-typed
+// The two surfaces previously hand-typed
 // the same PromQL strings into separate maps — one in
 // `internal/cli/localnet/metrics.go`, one in
 // `internal/ui/handlers/metrics.go`. A copy-paste error or copy
@@ -13,7 +13,7 @@
 // per sequencer) is a one-line edit that both surfaces pick up
 // automatically.
 //
-// → BIT-232: the previous queries here used a `canton_*` prefix
+// The previous queries here used a `canton_*` prefix
 // (e.g. `canton_participant_transactions_total`,
 // `canton_mediator_approval_duration_bucket`) that does NOT exist
 // in the live Splice Canton's Prometheus. Probing the obs profile
@@ -57,7 +57,7 @@ const (
 // an entry is a wire-breaking change to the JSON shape — bump
 // the response schema_version when doing it.
 //
-// Query rationale (BIT-232, verified against Splice 0.6.4):
+// Query rationale (verified against Splice 0.6.4):
 //
 //   - LedgerTPS: `daml_participant_api_indexer_updates` is the
 //     counter the indexer increments on each ledger update it
@@ -98,7 +98,8 @@ var SummaryQueries = map[Headline]string{
 // response. Bumped on a wire-breaking change (rename / removal of
 // a Headline). Adding is non-breaking and doesn't require a bump.
 //
-// BIT-232 did NOT bump this: the JSON keys (ledger_tps_5m,
-// mediator_p95_seconds, jvm_heap_used_bytes, postgres_conn_count)
-// are unchanged. Only the PromQL strings that back them moved.
+// The PromQL-string fix to the real metric names did NOT bump this:
+// the JSON keys (ledger_tps_5m, mediator_p95_seconds,
+// jvm_heap_used_bytes, postgres_conn_count) are unchanged. Only the
+// PromQL strings that back them moved.
 const SchemaVersion = 1

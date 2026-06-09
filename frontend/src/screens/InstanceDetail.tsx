@@ -22,9 +22,8 @@ import { BackupRestore } from "./BackupRestore";
 // summary table only carries name/status/version/ports/started
 // — the rest is hidden behind this fetch.
 //
-// Pure-frontend slice: the endpoint shipped in PR #43 but no
-// screen consumed it. Wiring it surfaces the data without
-// changing the backend.
+// Pure-frontend slice: this wires the existing detail endpoint
+// into a screen without changing the backend.
 interface Props {
   name: string;
   // statusHint comes from sel.instances (the always-fresh list)

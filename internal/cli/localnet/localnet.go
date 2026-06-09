@@ -29,9 +29,7 @@ func Build() *cobra.Command {
 	localnet.AddCommand(buildResume())
 	localnet.AddCommand(buildClean())
 
-	// Inspection — real implementations landed on main via
-	// (status, list), (creds, logs),
-	// (doctor), (env).
+	// Inspection.
 	localnet.AddCommand(buildStatus())
 	localnet.AddCommand(buildList())
 	localnet.AddCommand(buildEnv())
@@ -39,16 +37,14 @@ func Build() *cobra.Command {
 	localnet.AddCommand(buildLogs())
 	localnet.AddCommand(buildCreds())
 
-	// — snapshot/restore. Source-copied from
-	// srikanth/bit-147-p1-10; wires UI parity on top.
 	localnet.AddCommand(buildSnapshot())
 	localnet.AddCommand(buildRestore())
 
 	localnet.AddCommand(buildVersions())
 	localnet.AddCommand(buildUI())
 
-	// — AI-agent skill docs. Same embedded docs back the
-	// Web UI Agent Skills screen .
+	// AI-agent skill docs. The same embedded docs back the
+	// Web UI Agent Skills screen.
 	localnet.AddCommand(buildSkills())
 
 	// CLI ↔ Web UI parity (see AGENTS.md): every per-container
@@ -58,16 +54,14 @@ func Build() *cobra.Command {
 	localnet.AddCommand(buildRefresh())
 	localnet.AddCommand(buildMetrics())
 
-	// contracts/tx CLI — uses internal/canton/ledger
-	// from PR #66. Endpoint discovery (auto-resolving the
-	// participant gRPC port from registry state) is a follow-up;
+	// contracts/tx CLI. Endpoint discovery (auto-resolving the
+	// participant gRPC port from registry state) is not yet done;
 	// callers pass --endpoint host:port for now.
 	localnet.AddCommand(buildContracts())
 	localnet.AddCommand(buildTx())
 
 	// DAR admin commands (upload/list/download/info/diff/
-	// remove/build-upload/watch/connect) — adopted from the
-	// `srikanth/bit-track-b-dar-admin` branch.
+	// remove/build-upload/watch/connect).
 	localnet.AddCommand(dar.Build())
 
 	// Token Standard V2 commands (create wizard +

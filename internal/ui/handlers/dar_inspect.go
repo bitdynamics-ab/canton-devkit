@@ -1,5 +1,5 @@
 // DAR deep-inspection, structural diff, and per-participant vetting
-// handlers — BIT-230 Web UI parity for the DAR screen.
+// handlers — Web UI parity for the DAR screen.
 //
 // Endpoints registered here (mounted from dar.go's MountDAR):
 //
@@ -728,7 +728,7 @@ func handleDARVettingToggle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Lock+re-read on the registry (#92 pattern). Writes to state
+	// Lock+re-read on the registry. Writes to state
 	// are limited to recording the toggled state, NOT to fields the
 	// reconciler is responsible for; the lock is still the canonical
 	// guard against torn reads with a concurrent up/down.

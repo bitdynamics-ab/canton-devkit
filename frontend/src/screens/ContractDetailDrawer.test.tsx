@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { ContractDetailDrawer } from "./ContractDetailDrawer";
 import type { ContractRow } from "../api";
 
-// BIT-231 — ContractDetailDrawer
+// ContractDetailDrawer
 //
 // The drawer renders synchronously from the ACS row props while
 // the deep-view fetch is in flight, then re-renders with the

@@ -1,4 +1,4 @@
-// BIT-230 #1 — DAR package-tree explorer.
+// DAR package-tree explorer.
 //
 // Renders a /api/instances/:name/dar/:id/inspect response as an
 // expandable tree: package → module → (template | interface | data

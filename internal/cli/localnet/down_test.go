@@ -31,9 +31,9 @@ func installFakeStopper(t *testing.T, fn func(ctx context.Context, st *registry.
 	installStopper(t, fn)
 }
 
-// TestDown_NotFoundIsIdempotentSuccess pins the PR #21 carry-forward:
-// a missing instance is NOT a user error — scripts that wrap `down`
-// should be able to call it idempotently without checking first.
+// TestDown_NotFoundIsIdempotentSuccess: a missing instance is NOT a
+// user error — scripts that wrap `down` should be able to call it
+// idempotently without checking first.
 func TestDown_NotFoundIsIdempotentSuccess(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 
@@ -73,10 +73,10 @@ func TestDown_AlreadyStoppedIsNoOpSuccess(t *testing.T) {
 }
 
 // TestDown_HappyPath_StatusStoppingBeforeCompose pins the most
-// important PR #21 carry-forward (regressed in PR #33, surfaced in
-// review): the transitional `stopping` status MUST be persisted
-// BEFORE the compose call. Without it, a SIGKILL mid-teardown
-// leaves the registry showing "running" while containers are gone.
+// important contract: the transitional `stopping` status MUST be
+// persisted BEFORE the compose call. Without it, a SIGKILL
+// mid-teardown leaves the registry showing "running" while
+// containers are gone.
 //
 // We assert by having the fake stopper READ the registry mid-call:
 // at that point Status must already be StatusStopping. After
@@ -100,7 +100,7 @@ func TestDown_HappyPath_StatusStoppingBeforeCompose(t *testing.T) {
 		t.Fatalf("code = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
 	if observed != registry.StatusStopping {
-		t.Errorf("status during compose call = %q, want %q (PR #21 contract regressed)",
+		t.Errorf("status during compose call = %q, want %q (stopping must persist before compose)",
 			observed, registry.StatusStopping)
 	}
 	// Post-success: registry entry preserved with status=stopped.
@@ -113,11 +113,10 @@ func TestDown_HappyPath_StatusStoppingBeforeCompose(t *testing.T) {
 	}
 }
 
-// TestDown_ComposeFailureMarksFailedExits4 is the PR #21 cell
-// reviewer flagged as collapsed: a genuine compose-down failure
-// (NOT interruption) MUST mark StatusFailed and return
-// ExitRuntimeFailure (4), preserving the registry entry so the
-// user can retry.
+// TestDown_ComposeFailureMarksFailedExits4: a genuine compose-down
+// failure (NOT interruption) MUST mark StatusFailed and return
+// ExitRuntimeFailure (4), preserving the registry entry so the user
+// can retry.
 func TestDown_ComposeFailureMarksFailedExits4(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedDownInstance(t, "demo", registry.StatusRunning)
@@ -136,7 +135,7 @@ func TestDown_ComposeFailureMarksFailedExits4(t *testing.T) {
 		t.Fatalf("registry entry should be preserved for retry: %v", err)
 	}
 	if got.Status != registry.StatusFailed {
-		t.Errorf("Status = %q, want %q (PR #21 cell regressed)",
+		t.Errorf("Status = %q, want %q",
 			got.Status, registry.StatusFailed)
 	}
 	if !strings.Contains(errBuf.String(), "preserved") {
@@ -144,10 +143,10 @@ func TestDown_ComposeFailureMarksFailedExits4(t *testing.T) {
 	}
 }
 
-// TestDown_InterruptionMarksPartialExits3 is the OTHER cell PR #33
-// collapsed. SIGINT during compose-down must return ExitTimeout (3)
-// and mark StatusPartial — distinct from the genuine-failure cell
-// because the compose process may still be running on the host.
+// TestDown_InterruptionMarksPartialExits3: SIGINT during compose-down
+// must return ExitTimeout (3) and mark StatusPartial — distinct from
+// the genuine-failure case because the compose process may still be
+// running on the host.
 func TestDown_InterruptionMarksPartialExits3(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedDownInstance(t, "demo", registry.StatusRunning)
@@ -170,7 +169,7 @@ func TestDown_InterruptionMarksPartialExits3(t *testing.T) {
 		t.Fatalf("registry entry should be preserved for retry: %v", err)
 	}
 	if got.Status != registry.StatusPartial {
-		t.Errorf("Status = %q, want %q (interruption cell regressed)",
+		t.Errorf("Status = %q, want %q",
 			got.Status, registry.StatusPartial)
 	}
 	if !strings.Contains(errBuf.String(), "Interrupted") {
@@ -224,10 +223,10 @@ func TestDown_InvalidNameRejected(t *testing.T) {
 	}
 }
 
-// TestDown_LockAcquiredBeforeStateBranch is the reviewer pin (PR #33
-// #4) for lock-ordering. The original code read state, branched on
-// StatusStopped, THEN acquired the lock — racy: a concurrent writer
-// flipping status between the Read and the Lock would slip through.
+// TestDown_LockAcquiredBeforeStateBranch pins lock-ordering. Reading
+// state, branching on StatusStopped, THEN acquiring the lock would be
+// racy: a concurrent writer flipping status between the Read and the
+// Lock could slip through.
 //
 // We pin the corrected order with a NEGATIVE assertion: seed an
 // already-stopped instance, hold the lock from this goroutine, then

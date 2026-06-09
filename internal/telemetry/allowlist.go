@@ -1,15 +1,14 @@
 package telemetry
 
-// allowedCounters is the CLOSED allow-list of telemetry counters (design
-// v1, decision #3). Format is "<chart>": {set of allowed "<bucket>"}.
+// allowedCounters is the CLOSED allow-list of telemetry counters.
+// Format is "<chart>": {set of allowed "<bucket>"}.
 //
 // Nothing is recorded that isn't here. A compile-time test
 // (allowlist_test.go) walks every telemetry.Inc("chart","bucket") call
 // site in the repo and asserts it against this map — so a new counter or
 // bucket cannot be slipped past review. The dpm/command and
-// dpm/command_exit buckets are validated at runtime against
-// commandBuckets (their bucket space is the verb set, too large to inline
-// twice).
+// dpm/command_exit buckets are validated at runtime against the verb set
+// (too large to inline twice).
 var allowedCounters = map[string]map[string]struct{}{
 	"dpm/command":                set(commandVerbs...),
 	"dpm/command_exit":           nil, // "<verb>/<ok|fail>" — validated against commandVerbs at runtime
@@ -38,9 +37,9 @@ var commandVerbs = []string{
 
 // tokenActions is the bucket space for dpm/token_action — the direct
 // subcommands of `localnet token`. Recorded so the CIP-0112 flow
-// (create → mint → transfer → burn → balance) is measurable for
-// Milestone 3 adoption; without it, token usage only showed as the
-// single "token" command verb. Mirrors the children registered in
+// (create → mint → transfer → burn → balance) is measurable on its own;
+// without it, token usage only showed as the single "token" command
+// verb. Mirrors the children registered in
 // internal/cli/localnet/token/token.go.
 var tokenActions = []string{
 	"create", "mint", "transfer", "burn", "balance",
@@ -49,10 +48,9 @@ var tokenActions = []string{
 
 // uiFeatures is the bucket space for dpm/ui_feature — the Web UI screens
 // a `localnet ui` session touched. Recorded once per session via IncOnce
-// so polling endpoints don't inflate the signal. Lets Milestone 2
-// adoption show which Web UI workflows (DAR, Explorer, observability,
-// tokens) external teams actually use. Mirrors the feature routes in
-// internal/ui/router.go.
+// so polling endpoints don't inflate the signal. Shows which Web UI
+// workflows (DAR, Explorer, observability, tokens) actually get used.
+// Mirrors the feature routes in internal/ui/router.go.
 var uiFeatures = []string{
 	"instances", "dar", "explorer", "metrics", "tokens", "skills", "backup",
 }

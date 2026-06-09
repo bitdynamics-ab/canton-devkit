@@ -15,22 +15,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildEnv wires `dpm localnet env --name <inst>` -- .
+// buildEnv wires `dpm localnet env --name <inst>`.
 //
 // Emits a block of exported KEY=value lines describing every endpoint and
 // credential of the instance, designed for the common shell idiom:
 //
 //	eval "$(dpm localnet env --name hubble)"
 //
-// Output style matches docs/design/mockups/screens-tokens-help.jsx
-// (ScreenEnv). Three formats:
+// Three formats:
 //
 //	shell (default) export KEY='value' with POSIX quoting
 //	dotenv KEY="value" with dotenv escaping
 //	json api/types.EnvExport for scripted consumers
 //
-// The Web UI handler will
-// later call collectEnv() directly and emit the json variant.
+// The Web UI handler reuses collectEnv() to emit the json variant.
 func buildEnv() *cobra.Command {
 	var (
 		name       string
@@ -131,11 +129,10 @@ func collectEnv(name string, includeJWT bool) (apitypes.EnvExport, error) {
 	out.Vars["CANTON_INSTANCE"] = name
 	out.Vars["CANTON_SPLICE_VERSION"] = state.SpliceVersion
 	// AuthFile points at the per-instance auth.json the user can
-	// load with `jq` -- matches the path-shape used by the mockup's
-	// ScreenEnv (~/.canton-devkit/<name>/auth.json).
+	// load with `jq` (~/.canton-devkit/<name>/auth.json).
 	// filepath.Join (not "/" concat) so the path is correct on
 	// Windows and doesn't duplicate separators if state.DataDir
-	// has a trailing slash. Reviewer pin on PR #34.
+	// has a trailing slash.
 	out.Vars["CANTON_AUTH_FILE"] = filepath.Join(state.DataDir, "auth.json")
 
 	for logical, port := range state.Ports {

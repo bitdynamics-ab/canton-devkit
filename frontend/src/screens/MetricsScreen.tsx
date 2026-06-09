@@ -49,10 +49,10 @@ interface CardState<T> {
 // queries are extensions specific to this screen.
 //
 // All metric names are the daml_* / db_client_* family the Splice
-// OTel reporter actually emits (verified against a live obs profile
-// via the BIT-232 audit). The earlier `canton_*` names were
-// aspirational and silently returned no data. See queries.go +
-// docs/observability.md for the substitute mapping rationale.
+// OTel reporter actually emits (verified against a live obs profile).
+// The earlier `canton_*` names were aspirational and silently
+// returned no data. See queries.go + docs/observability.md for the
+// substitute mapping rationale.
 //
 // A handful of the per-screen extensions below (errors rate, per-
 // template throughput) do not have a direct daml_* equivalent on
@@ -124,15 +124,15 @@ export function MetricsScreen() {
 
   useEffect(() => {
     if (!name) return;
-    // AbortController (review blocker #2). The previous `cancelled`
-    // boolean was passed BY VALUE to each loader, so flipping it on
-    // unmount didn't reach in-flight loaders that had already
-    // started — they would resolve and setState on a dead
-    // component. AbortSignal solves both: fetch aborts mid-flight
-    // and loaders short-circuit on signal.aborted.
+    // AbortController. The previous `cancelled` boolean was passed BY
+    // VALUE to each loader, so flipping it on unmount didn't reach
+    // in-flight loaders that had already started — they would resolve
+    // and setState on a dead component. AbortSignal solves both:
+    // fetch aborts mid-flight and loaders short-circuit on
+    // signal.aborted.
     //
-    // We also gate polling on document.visibilityState (yellow): no
-    // point hammering Prometheus when the tab is hidden.
+    // We also gate polling on document.visibilityState: no point
+    // hammering Prometheus when the tab is hidden.
     let outer: AbortController | null = null;
     const tick = async () => {
       // Abort the prior tick's in-flight requests before starting a
@@ -217,8 +217,8 @@ export function MetricsScreen() {
     };
   }, [name]);
 
-  // Yellow Y14: memoize the 4 delta calls. MUST sit ABOVE every
-  // conditional return below so hook order is stable across the
+  // Memoize the 4 delta calls. MUST sit ABOVE every conditional
+  // return below so hook order is stable across the
   // (!name) and (observabilityOff) early-exit paths — rules of
   // hooks. Without memo the body of deltaFromSeries (walks the
   // series, computes time deltas, runs comparisons) ran four times

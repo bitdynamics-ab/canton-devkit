@@ -12,7 +12,7 @@ adds two containers to the compose project:
 The host ports for both UIs are allocated at `up` time and
 persisted in the registry so re-up preserves bookmarked URLs.
 
-## Metric naming convention (BIT-232)
+## Metric naming convention
 
 The live Splice 0.6.4 Prometheus surfaces **three** metric prefix
 families. Earlier versions of the dashboard and `internal/metricsq`
@@ -45,7 +45,7 @@ synchronizer / participant metric should use `daml_*` (where the
 metric is emitted by the Daml participant) or `daml_sequencer_*` /
 `daml_mediator_*` (where it comes from the protocol layer).
 
-### Substitute mapping (what changed in BIT-232)
+### Substitute mapping (what changed)
 
 | Old (non-existent)                              | Replacement                                                              | Notes                                                                                 |
 | ----------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |

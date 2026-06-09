@@ -148,11 +148,11 @@ func extractURL(stdout string) string {
 	return rest[:end]
 }
 
-// TestUI_LoopbackFlagRejectsNonLoopback is the CLI-level pin for
-// PR #41 #a: `dpm localnet ui --host 0.0.0.0` (without
-// --allow-non-loopback) must fail at Listen() with the
-// ErrNonLoopbackBind error surfaced to stderr. Catches the
-// regression class where someone widens the gate by accident.
+// TestUI_LoopbackFlagRejectsNonLoopback is the CLI-level pin:
+// `dpm localnet ui --host 0.0.0.0` (without --allow-non-loopback)
+// must fail at Listen() with the ErrNonLoopbackBind error surfaced
+// to stderr. Catches the regression class where someone widens the
+// gate by accident.
 func TestUI_LoopbackFlagRejectsNonLoopback(t *testing.T) {
 	cmd := buildUI()
 	var out, errBuf safeBuffer
@@ -175,9 +175,9 @@ func TestUI_LoopbackFlagRejectsNonLoopback(t *testing.T) {
 	}
 }
 
-// TestUI_NonLoopbackHostReturnsUserExitCode is the reviewer pin
-// (PR #41 round-2 #4): bind failures must wrap with the right
-// ExitCodeError so the outer cobra exit-code plumbing surfaces
+// TestUI_NonLoopbackHostReturnsUserExitCode pins that bind failures
+// must wrap with the right ExitCodeError so the outer cobra
+// exit-code plumbing surfaces
 // 1 (user error) vs 4 (runtime failure). Without this, the CLI
 // loses the distinction users branch on (`dpm ui || ...`).
 func TestUI_NonLoopbackHostReturnsUserExitCode(t *testing.T) {

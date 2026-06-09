@@ -3,24 +3,25 @@
 // Each file in this package owns one resource:
 //
 //	instances.go — registry-backed instance list + detail (this file)
-//	(future) jwt.go, appconfig.go — auth/credential surfaces
-//	(future) packages.go — DAR list (depends on backend)
-//	(future) metrics.go — Prometheus passthrough (depends on )
-//	(future) logs.go             — last-N docker logs
-//	(future) acs.go, tx.go — ledger views (depend on client)
+//	jwt.go, appconfig.go — auth/credential surfaces
+//	packages.go — DAR list
+//	metrics.go — Prometheus passthrough
+//	logs.go — last-N docker logs
+//	acs.go, tx.go — ledger views
 //
 // # Why "registry-backed" lands first
 //
 // The instance list and detail responses can be built from on-disk
 // registry state alone — no docker calls, no ledger client, no
 // JWT signer. That's the cheapest meaningful slice to land and review;
-// it also gives the M2 frontend something to consume on day one.
+// it also gives the frontend something to consume on day one.
 //
 // # Why detail delegates to localnet.CollectStatus
 //
 // The CLI status command and Web UI detail endpoint share
 // localnet.CollectStatus so JSON shape, Docker soft-fail handling,
-// endpoint projection, and JWT redaction do not drift.
+// endpoint projection, and JWT redaction do not drift. See AGENTS.md
+// "CLI ↔ Web UI parity".
 package handlers
 
 import (
@@ -246,8 +247,8 @@ func handleDetail(w http.ResponseWriter, r *http.Request) {
 // internal/cli/localnet/list.go's formatPortRange — see the godoc
 // there for the allowlist rationale.
 //
-// TODO: once list.go merges, this should be
-// extracted to a shared helper rather than duplicated.
+// future: extract to a shared helper rather than duplicating across the
+// CLI and handler surfaces.
 func formatPortRange(ports map[string]int) string {
 	if len(ports) == 0 {
 		return "—"
@@ -328,9 +329,8 @@ func joinComma(ss []string) string {
 // human-readability (browsers and `curl | jq` both prefer it);
 // the gzip middleware (future) will erase the size cost.
 //
-// every API JSON
-// response carries no-store. Without it, browsers and HTTP
-// proxies can cache responses that include credentials (the
+// Every API JSON response carries no-store. Without it, browsers and
+// HTTP proxies can cache responses that include credentials (the
 // JWT endpoint, app-config) or that change frequently (instance
 // list). The Vite bundle (handled in assets.go) opts INTO
 // hashed-file caching separately; this default applies only to
@@ -344,14 +344,12 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	_ = enc.Encode(body)
 }
 
-// errorBody is the canonical error response shape — aligned with
-// PR #36's FriendlyError taxonomy in internal/localnet/friendly_errors.go.
+// errorBody is the canonical error response shape — aligned with the
+// FriendlyError taxonomy in internal/localnet/friendly_errors.go.
 //
-// the previous shape was a free-form
-// {error, detail} pair. The CLI's friendly_errors carries
-// (Code, Summary, Remediation[]) and the frontend already knows
-// how to render that triple. Mirroring keeps one error taxonomy
-// across CLI and UI surfaces.
+// The CLI's friendly_errors carries (Code, Summary, Remediation[]) and
+// the frontend already knows how to render that triple. Mirroring keeps
+// one error taxonomy across CLI and UI surfaces.
 //
 // Fields:
 //   - Code: stable token scripts/frontends branch on (e.g.
@@ -383,11 +381,11 @@ const (
 
 // writeError emits a structured error.
 //
-// the previous shape
-// included the raw cause string for 5xx errors. That leaked
-// filesystem paths (e.g. "read /home/user/.canton-devkit/...")
-// into the response body — visible to anyone on the loopback
-// AND to anyone who can screenshot a JS error. Now:
+// The cause string is never shipped to the client for 5xx errors:
+// including it would leak filesystem paths (e.g.
+// "read /home/user/.canton-devkit/...") into the response body — visible
+// to anyone on the loopback AND to anyone who can screenshot a JS error.
+// Instead:
 //   - 4xx: code + summary only (no cause)
 //   - 5xx: code + summary only AS WELL — the cause is LOGGED
 //     server-side via log.Default so the operator can diagnose,
@@ -413,11 +411,8 @@ func writeError(w http.ResponseWriter, status int, summary string, cause error) 
 
 // writeErrorWithCode is the variant used when the handler wants
 // to pin a specific stable code rather than the status-derived
-// default. Currently called from sibling handlers (snapshots,
-// metrics, …) that may not exist on every branch — keep as
-// exported-to-package even when no caller is in this file.
-//
-//nolint:unused // intentional package-public; consumed by sibling handlers
+// default. Used across this and sibling handlers (snapshots,
+// metrics, …).
 func writeErrorWithCode(w http.ResponseWriter, status int, code, summary string, remediation ...string) {
 	writeJSON(w, status, errorBody{
 		Code:        code,
@@ -445,7 +440,7 @@ func codeForStatus(status int) string {
 	}
 }
 
-// ── : async create-instance flow ──────────────────────────
+// ── async create-instance flow ────────────────────────────
 
 // upRequest is the body shape for POST /api/instances. Mirrors
 // `dpm localnet up` flags exactly so CLI and Web UI surface the
@@ -716,14 +711,14 @@ func handleResumeInstance(hub *stream.Hub) http.HandlerFunc {
 				"invalid instance name: "+err.Error())
 			return
 		}
-		// Yellow Y8 — invert read-then-acquire order. The original
-		// code read state, decided to proceed, then registered the
-		// job. Between those two points a concurrent /up could
-		// register first, get the lock, and flip the instance to
-		// running — leaving us racing to start a duplicate. Now:
-		// reserve the job slot FIRST, then read state, recheck
-		// status. If anything changed after we won the slot we
-		// release and surface the right 409.
+		// Invert read-then-acquire order to close a TOCTOU race.
+		// Reading state, deciding to proceed, then registering the
+		// job leaves a window where a concurrent /up could register
+		// first, get the lock, and flip the instance to running —
+		// leaving us racing to start a duplicate. Instead: reserve
+		// the job slot FIRST, then read state, recheck status. If
+		// anything changed after we won the slot we release and
+		// surface the right 409.
 		jobCtx, cancelJob := context.WithTimeout(context.Background(), upJobTimeout)
 		if !jobs.Register(name, cancelJob) {
 			cancelJob()
@@ -843,7 +838,7 @@ func profilesFromComposeFiles(files []string) []string {
 // Concurrency model:
 //
 // The handler reserves the per-name slot in `jobs` BEFORE doing
-// any state read (mirrors the Y8 fix in handleResumeInstance —
+// any state read (same ordering as handleResumeInstance —
 // inverting read-then-acquire avoids a window where a concurrent
 // /up/restart could win the lock between our read and our spawn).
 // Once registered, the goroutine runs RunDown then RunUp serially;
@@ -855,8 +850,7 @@ func profilesFromComposeFiles(files []string) []string {
 // jobs.Register race and gets 409 INSTANCE_CREATING — it does NOT
 // double-execute the down/up cycle.
 //
-// What the restart preserves (matches the spec from the
-// completeness review #1):
+// What the restart preserves:
 //
 //   - SpliceVersion (read from state.json before the down call)
 //   - Profiles (derived from ComposeFiles via profilesFromComposeFiles)
@@ -875,7 +869,7 @@ func handleRecreateInstance(hub *stream.Hub) http.HandlerFunc {
 			return
 		}
 
-		// Reserve the job slot first (same Y8 ordering as resume).
+		// Reserve the job slot first (same ordering as resume).
 		// Outer context is detached so the goroutine survives the
 		// HTTP response cycle; the timeout combines down (3min) +
 		// up (30min) with some slack.
@@ -1094,7 +1088,7 @@ func firstLine(s string) string {
 // lines for non-fatal side issues (orphan-registry cleanup, state
 // persistence, compose-context reconstruction) before the actual
 // fatal cause, so a naive firstLine would surface a Warning as
-// the failure summary — see .
+// the failure summary.
 //
 // Match is on a small fixed set of case variants (Warning, warning,
 // WARNING, WARN, warn, Warn) rather than truly case-insensitive
@@ -1601,7 +1595,7 @@ func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
 			return
 		}
 
-		// Yellow Y9 — acquire the per-instance flock so the read +
+		// Acquire the per-instance flock so the read +
 		// status check + index/state delete is a true CAS. Without
 		// this a concurrent POST /api/instances or POST /up that
 		// races the goroutine-Active probe above could re-register
@@ -1662,7 +1656,7 @@ func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
 			writeErrorWithCode(w, http.StatusConflict,
 				"INSTANCE_RUNNING",
 				"instance "+name+" is running — stop it first",
-				"run `dpm localnet down --name "+name+"` from a terminal (the Web UI's down endpoint is )")
+				"run `dpm localnet down --name "+name+"` from a terminal")
 			return
 		}
 
@@ -1818,7 +1812,7 @@ func splitLines(s string) []string {
 	return out
 }
 
-// ── : cancel an in-flight create-instance goroutine ───────
+// ── cancel an in-flight create-instance goroutine ─────────
 
 // handleCancelUp: DELETE /api/instances/{name}/up.
 //
@@ -2080,7 +2074,7 @@ func handleObservabilityToggle() http.HandlerFunc {
 		}
 
 		// Re-read state under lock before persisting to avoid clobbering
-		// concurrent writers (issue #92 pattern). We hold the per-instance
+		// concurrent writers. We hold the per-instance
 		// lock for the whole handler, so the on-disk file can only have
 		// drifted via a writer that ran AND released between our earlier
 		// Read and now — defensive but cheap.

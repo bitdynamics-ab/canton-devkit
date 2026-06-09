@@ -17,9 +17,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildDown wires `dpm localnet down --name <inst>` — ,
-// carrying forward the contract PR #21 established and review on
-// PR #33 flagged as regressed:
+// buildDown wires `dpm localnet down --name <inst>`. The state
+// machine it drives:
 //
 //	docker compose down → NO --volumes (preserves state)
 //	StatusRunning → StatusStopping (BEFORE compose call)
@@ -31,8 +30,7 @@ import (
 // compose-down without it, `localnet status` keeps reporting
 // `running` while containers are partially gone.
 //
-// Output matches docs/design/mockups/screens-lifecycle.jsx
-// (ScreenDown): three Step rows + a brand-accented Box.
+// Output: three Step rows + a brand-accented Box.
 func buildDown() *cobra.Command {
 	var (
 		name  string
@@ -78,8 +76,9 @@ normal path needs — and SIGKILLs containers that won't stop.`,
 	return cmd
 }
 
-// DownOptions carries the `localnet down` flags into RunDown. Mirrors
-// PR #21's shape so the future Web UI handler ( // POST /api/instances/:name/down) has a stable parameter to pass.
+// DownOptions carries the `localnet down` flags into RunDown. A
+// stable shape so the Web UI handler (POST /api/instances/:name/down)
+// can pass the same parameter.
 type DownOptions struct {
 	Name string
 	// Force tears the instance down by Docker project label only,
@@ -96,19 +95,12 @@ type DownOptions struct {
 // the test wants.
 //
 // Modelled as a package var rather than a parameter on RunDown
-// because RunDown is also called by the future Web UI handler
-// — neither caller wants
-// a fake-runner argument in production. Once the Web UI ships,
-// RunDown is reachable from concurrent goroutines (one per HTTP
-// request), so the read of stopperFn is guarded by stopperMu.
-// Tests use installStopper (below) which swaps under the mutex
+// because RunDown is also called by the Web UI handler — neither
+// caller wants a fake-runner argument in production. RunDown is
+// reachable from concurrent goroutines (one per HTTP request), so
+// the read of stopperFn is guarded by stopperMu to avoid a data
+// race. Tests use installStopper (below) which swaps under the mutex
 // and restores via t.Cleanup.
-//
-// Reviewer pin (PR #33 #6): the var-based seam without lock
-// protection would race with concurrent Web UI requests once
-// lands — by then the field is exported via a getter, but
-// the race would already be in shipped code. Adding the mutex
-// now is cheap and pins the contract.
 var (
 	stopperMu sync.RWMutex
 	stopperFn func(ctx context.Context, state *registry.State) error
@@ -139,8 +131,8 @@ func installStopper(t interface {
 	})
 }
 
-// RunDown is exported so the future Web UI handler can call the
-// same code path without forking the implementation.
+// RunDown is exported so the Web UI handler can call the same code
+// path without forking the implementation.
 func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOptions) int {
 	ctx, stopSignal := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stopSignal()
@@ -148,9 +140,9 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 	state, err := registry.Read(opts.Name)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
-			// PR #21 carry-forward: a missing entry is the
-			// no-op idempotent case for scripts. We also scrub
-			// any orphan index row defensively.
+			// A missing entry is the no-op idempotent case for
+			// scripts. We also scrub any orphan index row
+			// defensively.
 			if delErr := registry.Delete(opts.Name); delErr != nil {
 				_, _ = fmt.Fprintf(errw,
 					"warning: could not scrub orphan registry entry: %s\n", delErr)
@@ -163,14 +155,13 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 		return localnet.ExitRuntimeFailure
 	}
 
-	// Reviewer pin (PR #33 #4): lock-ordering. The original code
-	// read state, branched on StatusStopped, THEN acquired the
-	// lock — racy if a concurrent `down` (or future Web UI POST)
-	// flipped status between the Read and the Lock. Now: take the
-	// lock first, re-Read inside the critical section, and branch
-	// on the authoritative state. The early `state` Read above
-	// stays only to provide a friendly ErrNotFound message before
-	// we even attempt to lock.
+	// Lock-ordering matters here: reading state, branching on
+	// StatusStopped, THEN acquiring the lock would be racy if a
+	// concurrent `down` (or Web UI POST) flipped status between the
+	// Read and the Lock. So: take the lock first, re-Read inside the
+	// critical section, and branch on the authoritative state. The
+	// early `state` Read above stays only to provide a friendly
+	// ErrNotFound message before we even attempt to lock.
 	release, err := registry.Lock(opts.Name)
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "%s\n", err)
@@ -194,11 +185,10 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 		term.Amberc("--name"), opts.Name)))
 	_, _ = fmt.Fprintln(out)
 
-	// PR #21 carry-forward: persist transitional state BEFORE
-	// compose. If we crash or SIGKILL mid-teardown without this,
-	// `localnet status` keeps reporting "running" while containers
-	// are partially down. A write failure here is non-fatal —
-	// reverts to the pre-fix behaviour.
+	// Persist transitional state BEFORE compose. If we crash or
+	// SIGKILL mid-teardown without this, `localnet status` keeps
+	// reporting "running" while containers are partially down. A
+	// write failure here is non-fatal.
 	state.Status = registry.StatusStopping
 	if werr := registry.Write(state); werr != nil {
 		_, _ = fmt.Fprintf(errw, "warning: could not persist stopping state: %s\n", werr)
@@ -218,7 +208,7 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 		"Draining ledger", "in-flight commands", ""))
 
 	if err := stop(ctx, state); err != nil {
-		// PR #21 carry-forward: TWO separate cells here.
+		// Two distinct outcomes here:
 		// ctx.Err() != nil → interrupted, exit 3, status partial.
 		// compose may still be running on the host;
 		// user retries when the host is idle.
@@ -310,7 +300,7 @@ func markStatus(state *registry.State, s registry.Status, errw io.Writer) {
 }
 
 // elapsedSince formats a duration as the short "0.2s" / "1.4s" form
-// the mockup Step rows use. One decimal place for sub-second so fast
+// the Step rows use. One decimal place for sub-second so fast
 // operations don't render as "0s".
 func elapsedSince(start time.Time) string {
 	d := time.Since(start)

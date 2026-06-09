@@ -24,25 +24,22 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 )
 
-// — `dpm localnet snapshot` + `restore`.
+// Implements `dpm localnet snapshot` + `restore`. Key safety
+// properties:
 //
-// First-cut review surfaced five blockers; this file addresses
-// each:
-//
-// 1. Zip Slip on restore — `volumes/foo.tar` was trusted verbatim.
-// Fix: validateArchivePath rejects anything that isn't strictly
-// `volumes/<safename>.tar` and `validateVolumeName` constrains
-// the inner component.
-// 2. Whole archive buffered in RAM. Fix: streamed straight into
+// 1. Zip Slip on restore is rejected: validateArchivePath only
+// accepts strictly `volumes/<safename>.tar` and validateVolumeName
+// constrains the inner component.
+// 2. Nothing is buffered whole in RAM: volumes stream straight into
 // tar.Writer; restore reads streaming via io.Pipe.
-// 3. Didn't capture registry.State — restored snapshot was
-// unbringable. Fix: state.json is the SECOND archive entry;
-// restore re-registers via registry.Write.
-// 4. SHA "verification" was decorative. Fix: streaming sha256 on
-// both writer + reader; mismatch aborts with the volume name.
-// 5. Splice-version mismatch silently corrupted. Fix:
-// header.SpliceVersion compared to existing instance (or
-// embedded state.json) and refused unless --force.
+// 3. registry.State is captured as the SECOND archive entry so a
+// restored snapshot is bringable; restore re-registers via
+// registry.Write.
+// 4. Content is verified: streaming sha256 on both writer + reader;
+// mismatch aborts with the volume name.
+// 5. Splice-version mismatch is refused (unless --force):
+// header.SpliceVersion is compared to the existing instance or the
+// embedded state.json.
 //
 // On-disk layout (strict):
 //
@@ -85,8 +82,8 @@ var archiverFn volumeArchiver = dockerVolumeArchiver{}
 // copy header + state.json + intermediate into the real archive in
 // strict on-disk order.
 func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest string) int {
-	// Per-instance exclusive lock (review blocker #7). Snapshot
-	// reads volumes via temporary `docker run` containers and
+	// Per-instance exclusive lock. Snapshot reads volumes via
+	// temporary `docker run` containers and
 	// concurrent execution against the same instance can produce a
 	// half-snapshotted archive. The lock is the SAME one held by
 	// `localnet up`/`down`, so a snapshot while the instance is
@@ -109,7 +106,7 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 		return localnet.ExitRuntimeFailure
 	}
 
-	// Application-consistency caveat . Snapshotting a RUNNING
+	// Application-consistency caveat. Snapshotting a RUNNING
 	// instance copies its Docker volumes live: it captures a
 	// crash-consistent point-in-time, not an application-consistent one.
 	// In-flight ledger transactions or unflushed Postgres/Canton writes
@@ -311,7 +308,7 @@ func streamVolumeToTemp(ctx context.Context, vol, dir string) (string, int64, st
 // instance, re-registers from embedded state.json, restores each
 // volume while re-hashing to verify ContentSHA.
 func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src string, force bool) int {
-	// Per-instance exclusive lock (review blocker #7). Without this,
+	// Per-instance exclusive lock. Without this,
 	// `dpm localnet restore --name X` and `POST /api/instances/X/
 	// snapshot/restore` can run simultaneously and half-merge two
 	// volume sets, with the registry pointing at whichever Write
@@ -372,13 +369,12 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 		fmt.Sprintf("schema %d · %d volume(s) · captured %s",
 			meta.SchemaVersion, len(meta.Volumes), meta.CreatedAt), ""))
 
-	// Reviewer pin (PR #37 #6): the original `existing, _ :=
-	// registry.Read(name)` swallowed every error including
-	// permission denied and corrupt JSON, then assumed nil meant
-	// "no existing instance" — masking real failures and letting a
-	// restore overwrite a state file the caller was warned about.
-	// We now distinguish ErrNotFound (the legitimate "no existing"
-	// case) from every other error (surface + bail).
+	// Distinguish ErrNotFound (the legitimate "no existing instance"
+	// case) from every other error. A bare `existing, _ :=
+	// registry.Read(name)` would swallow permission-denied and corrupt
+	// JSON, then assume nil meant "no existing instance" — masking real
+	// failures and letting a restore overwrite a state file. Surface
+	// any non-ErrNotFound error and bail.
 	existing, rerr := registry.Read(name)
 	if rerr != nil && !errors.Is(rerr, registry.ErrNotFound) {
 		_, _ = fmt.Fprintf(errw, "read existing registry state for %q: %s\n", name, rerr)
@@ -400,9 +396,9 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 		}
 	}
 
-	// Reviewer pin (PR #37 #7b): if the user-supplied --name
-	// differs from the snapshot's embedded original name, surface
-	// a warning. The restore proceeds (renaming-on-restore is a
+	// If the user-supplied --name differs from the snapshot's embedded
+	// original name, surface a warning. The restore proceeds
+	// (renaming-on-restore is a
 	// supported workflow) but the user should know they're not
 	// recovering the original identity — e.g. agents, log paths,
 	// and credentials baked into the embedded state may reference
@@ -414,8 +410,8 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 			embedded.Name, name)))
 	}
 
-	// Reviewer pin (PR #37 #7a): disk preflight. Restore unpacks
-	// every volume tar into the docker volume root; without a
+	// Disk preflight. Restore unpacks every volume tar into the docker
+	// volume root; without a
 	// preflight the user can fill the disk mid-restore and leave
 	// a half-populated registry entry behind. Sum the expected
 	// volume sizes from the snapshot header and refuse if the
@@ -442,18 +438,17 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 	// isn't available. The unpack loop will still surface ENOSPC
 	// with a useful error.
 
-	// Build the registry record we WOULD write — but defer the
-	// actual Write until after all volumes restore successfully
-	// (review blocker #8). The old code wrote to the registry first
-	// and then unpacked volumes, so any volume failure left a
-	// registry entry pointing at a half-restored instance with no
-	// rollback. Now we either commit the registry on full success
-	// or leave it untouched.
+	// Build the registry record we WOULD write — but defer the actual
+	// Write until after all volumes restore successfully. Writing the
+	// registry first and unpacking volumes after would leave a registry
+	// entry pointing at a half-restored instance with no rollback on a
+	// volume failure. Either commit the registry on full success or
+	// leave it untouched.
 	//
-	// when --name differs from the embedded original, the
+	// When --name differs from the embedded original, the
 	// compose-project / network / container-prefix fields must be
-	// rewritten too. Naming convention codified at
-	// internal/localnet/up.go ~L315: ComposeProject = "canton-"+name,
+	// rewritten too, matching the naming convention in
+	// internal/localnet/up.go: ComposeProject = "canton-"+name,
 	// DockerNetwork = name, ContainerPrefix = name+"-".
 	toWrite := *embedded
 	toWrite.Name = name
@@ -465,8 +460,8 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 		toWrite.ContainerPrefix = name + "-"
 	}
 
-	// Cumulative tar-size budget (review blocker #9). The
-	// per-entry maxArchiveEntry cap (16 GiB) doesn't bound N×16 GiB
+	// Cumulative tar-size budget. The per-entry maxArchiveEntry cap
+	// (16 GiB) doesn't bound N×16 GiB
 	// across the archive. Re-derive available disk now and track
 	// extracted bytes across the loop; abort if we'd exceed the
 	// budget. avail==0 means availableDiskBytes failed earlier; we
@@ -518,8 +513,8 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 				dstVolName, hdr.Size, maxArchiveEntry)
 			return localnet.ExitRuntimeFailure
 		}
-		// Blocker #9: cumulative budget check BEFORE extracting.
-		// Using hdr.Size (the tar-declared size); the streaming
+		// Cumulative budget check BEFORE extracting, using hdr.Size
+		// (the tar-declared size); the streaming
 		// copy is also bounded to hdr.Size via io.LimitReader, so a
 		// rogue archive cannot blow past this number even with a
 		// truncated header.
@@ -544,8 +539,8 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 			copyErr <- err
 		}()
 		restErr := archiverFn.RestoreVolume(ctx, dstVolName, pr)
-		// Yellow Y10: if the alpine `tar xf -` exited early (e.g.
-		// disk full mid-stream), pr's reader side is closed but
+		// If the alpine `tar xf -` exited early (e.g. disk full
+		// mid-stream), pr's reader side is closed but
 		// the goroutine on the other end may still be blocked
 		// writing into the pipe buffer. Closing pr with the error
 		// unblocks the writer so we don't leak a goroutine on the
@@ -579,8 +574,8 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 		_, _ = fmt.Fprintln(out, term.Step(term.StepCheck, "Restored volume", dstVolName, ""))
 	}
 
-	// Blocker #8 commit point: only NOW do we write the registry.
-	// Up to here any failure leaves the existing registry entry (if
+	// Commit point: only NOW do we write the registry. Up to here any
+	// failure leaves the existing registry entry (if
 	// any) and the volumes we did unpack in place — but no
 	// half-committed registry row claiming an instance is restored
 	// when it isn't.
@@ -647,8 +642,8 @@ func readEmbeddedState(tr *tar.Reader) (*registry.State, error) {
 	return &s, nil
 }
 
-// validateArchivePath is the Zip Slip gate — the reviewer-flagged
-// blocker. Rejects anything that isn't strictly
+// validateArchivePath is the Zip Slip gate. Rejects anything that
+// isn't strictly
 // `volumes/<safename>.tar`. Returns the extracted volume name on
 // success.
 func validateArchivePath(name string) (string, bool) {
@@ -698,7 +693,7 @@ func validateVolumeName(s string) error {
 // from the embedded original. Docker compose volumes are named
 // `<project>_<suffix>`; on cross-name restore we want the same suffix
 // under the new project so the restored instance has independent
-// volumes .
+// volumes.
 //
 // Examples (src="canton-pebble", dst="canton-pebble-clone"):
 //

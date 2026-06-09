@@ -24,8 +24,9 @@ import (
 // SchemaVersion constant in internal/api/types for HTTP shapes.
 const contractsTxSchemaVersion = 1
 
-// buildContracts wires `dpm localnet contracts <verb>` — // CLI surface for the Daml LF v2 Ledger API. Reuses the
-// internal/canton/ledger client adopted from PR #66.
+// buildContracts wires `dpm localnet contracts <verb>` — the CLI
+// surface for the Daml LF v2 Ledger API, backed by the
+// internal/canton/ledger client.
 //
 // Sub-verbs:
 //
@@ -39,14 +40,12 @@ const contractsTxSchemaVersion = 1
 //
 // Endpoint discovery: LocalNet's participant gRPC ports are
 // network-internal (not host-published) — pass --endpoint
-// host:port explicitly. A follow-up ticket will add a
-// `--participant` flag that auto-resolves from the registry once
-// participant-port exposure ships.
+// host:port explicitly.
 func buildContracts() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "contracts",
 		Short:         "Operate on the participant's Active Contract Set (ACS)",
-		Long:          "Subcommands wrap the Daml LF v2 Ledger API's StateService for ACS reads. Mirrors the Explorer ACS table in the future Web UI (the same internal/canton/ledger package backs both surfaces per AGENTS.md \"CLI ↔ Web UI parity\").",
+		Long:          "Subcommands wrap the Daml LF v2 Ledger API's StateService for ACS reads. The same internal/canton/ledger package backs both the CLI and the Web UI surfaces.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -266,7 +265,7 @@ func buildTxLs() *cobra.Command {
 // ledger client. Mirrors the token package's LedgerClient seam: keeps
 // the production path on *ledger.Client while letting unit tests inject
 // a fake without dialing a real participant. Add methods only as new
-// orchestration paths come under test (per AGENTS.md).
+// orchestration paths come under test.
 type txReplayLedger interface {
 	UpdateById(ctx context.Context, req *lapiv2.GetUpdateByIdRequest) (*lapiv2.GetUpdateResponse, error)
 	UpdateByOffset(ctx context.Context, req *lapiv2.GetUpdateByOffsetRequest) (*lapiv2.GetUpdateResponse, error)
@@ -377,8 +376,8 @@ func buildTxReplay() *cobra.Command {
 }
 
 // txEventRow is the per-event JSON/text shape for `tx replay`. Mirrors
-// contractRow's shape contract (CLI ↔ Web UI parity per AGENTS.md): the
-// transaction-detail drawer in the Explorer will reuse this projection.
+// contractRow's shape contract so the CLI and the Web UI's
+// transaction-detail drawer share one projection.
 type txEventRow struct {
 	Kind          string   `json:"kind"` // "created" | "exercised" | "archived"
 	NodeID        int32    `json:"node_id"`
@@ -499,9 +498,9 @@ func identString(id *lapiv2.Identifier) string {
 	return fmt.Sprintf("%s:%s:%s", id.PackageId, id.ModuleName, id.EntityName)
 }
 
-// resolveOffsetWindow implements the 's --from /
-// --to / --limit precedence. Explicit --from and --to win; if
-// either is zero we substitute end/end-limit.
+// resolveOffsetWindow implements the --from / --to / --limit
+// precedence. Explicit --from and --to win; if either is zero we
+// substitute end/end-limit.
 //
 // Returns (beginExclusive, endInclusive, error). When --from >
 // --to we fail loudly rather than silently producing an empty
@@ -559,10 +558,10 @@ func dialLedger(ctx context.Context, instance, endpoint, token string) (*ledger.
 }
 
 // contractRow is the per-contract JSON/text shape. Mirrors the
-// Web UI handler's projection (handlers/contracts.go) so CLI and
-// browser surfaces always see the same JSON shape — AGENTS.md
-// CLI↔UI parity rule. The field name is `template_id`, matching
-// Canton/Daml convention and the gRPC Identifier message.
+// Web UI handler's projection (handlers/contracts.go) so the CLI and
+// browser surfaces always emit the same JSON shape. The field name is
+// `template_id`, matching Canton/Daml convention and the gRPC
+// Identifier message.
 type contractRow struct {
 	ContractID  string   `json:"contract_id"`
 	TemplateID  string   `json:"template_id"`

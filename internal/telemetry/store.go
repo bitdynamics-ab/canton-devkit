@@ -10,9 +10,9 @@ import (
 )
 
 // SchemaVersion is the counter-payload shape version. Adding/renaming a
-// counter bumps it (design decision #18). v2 renamed the period key from
-// "week" to "period" and added the self-describing "granularity" tag when
-// aggregation moved from weekly to daily.
+// counter bumps it. v2 renamed the period key from "week" to "period" and
+// added the self-describing "granularity" tag when aggregation moved from
+// weekly to daily.
 const SchemaVersion = 2
 
 // envDir overrides the telemetry state directory in tests so nothing

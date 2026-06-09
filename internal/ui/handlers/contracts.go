@@ -17,8 +17,8 @@
 //
 // MVP scope: ACS snapshot only — no filters by template/party (the
 // JWT's claim already filters server-side), no live SSE stream, no
-// contract-detail drawer. Those are tracked as follow-ups in the
-// ticket. limit defaults to 100; cap is 1000 (server-side defence).
+// contract-detail drawer. Those are follow-ups. limit defaults to 100;
+// cap is 1000 (server-side defence).
 package handlers
 
 import (
@@ -72,8 +72,8 @@ func MountContracts(mux *http.ServeMux) {
 const (
 	// maxStreamEvents caps the number of SSE events a single
 	// /contracts/stream subscription will emit before closing with a
-	// `truncated` final event. Mirrors PR #89 — one browser tab can't
-	// OOM the UI server with an unbounded stream. 10k events at the
+	// `truncated` final event — one browser tab can't OOM the UI
+	// server with an unbounded stream. 10k events at the
 	// typical ~120-byte JSON payload is ~1.2 MB per client.
 	maxStreamEvents = 10_000
 	// contractsStreamHeartbeat is the keep-alive cadence on the SSE
@@ -241,7 +241,7 @@ func handleContractsList(w http.ResponseWriter, r *http.Request) {
 					"this JWT doesn't have party-rights to read the ACS",
 					"Splice LocalNet signs user-id tokens by default; the "+
 						"explorer's per-party filter needs party rights resolved "+
-						"via UserManagementService. Tracked as a follow-up to .")
+						"via UserManagementService.")
 				return
 			}
 			writeError(w, http.StatusBadGateway, "ACS stream", item.Err)

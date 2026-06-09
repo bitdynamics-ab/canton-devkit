@@ -8,7 +8,7 @@ import {
 } from "../api";
 import { W, wMono } from "../tokens";
 
-// ContractDetailDrawer — BIT-231 feature #2.
+// ContractDetailDrawer
 //
 // Slides in from the right of the ACS table when a row is clicked.
 // Fetches the deep view from /api/instances/{name}/contracts/{cid}

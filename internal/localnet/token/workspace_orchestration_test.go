@@ -17,8 +17,7 @@ import (
 // branch in scanWorkspace: when neither ResolveActAndReadParties nor
 // the localPartiesForRole fallback yields a party (a fresh JWT before
 // any grant lands, or a role with no local hosts), scanWorkspace
-// returns an empty *Workspace rather than failing the ACS query. This
-// was the no-parties skip note on PR #89's review.
+// returns an empty *Workspace rather than failing the ACS query.
 func TestScanWorkspace_NoReadablePartiesReturnsEmpty(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo")
@@ -77,8 +76,8 @@ func TestScanWorkspace_StreamErrorIsWrapped(t *testing.T) {
 }
 
 // TestScanWorkspace_PermissionDeniedOnResolveBubbles pins the
-// "PermissionDenied widens" intent from PR #89's review: when
-// ResolveActAndReadParties fails with PermissionDenied (the role's
+// "PermissionDenied widens" intent: when ResolveActAndReadParties
+// fails with PermissionDenied (the role's
 // JWT was rejected outright), the orchestration surfaces the
 // wrapped error so the handler can either retry with a higher-
 // privilege role or map it to 403. A best-effort grant failure in
