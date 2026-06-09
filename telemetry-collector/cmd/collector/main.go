@@ -7,6 +7,10 @@
 //	LISTEN_ADDR       listen address (default ":8080")
 //	INGEST_TOKEN      optional shared secret; when set, requests must send
 //	                  it in the X-Telemetry-Token header
+//	RATE_PER_IP_PER_MIN, RATE_BURST, RATE_GLOBAL_PER_SEC
+//	                  in-process rate-limit knobs (defaults 30 / 15 / 50).
+//	                  Defense-in-depth; run behind a Cloudflare Tunnel for
+//	                  edge DDoS absorption — see DEPLOY.md.
 //
 // Point the CLI at it with:
 //
@@ -42,8 +46,11 @@ func main() {
 	defer store.Close()
 
 	h := collector.New(store, os.Getenv("INGEST_TOKEN"))
+	// Wrap with the in-process rate limiter (defense-in-depth; the edge
+	// does the heavy DDoS absorption — see DEPLOY.md).
+	handler := collector.RateLimit(h, collector.RateLimitConfigFromEnv())
 	mux := http.NewServeMux()
-	mux.Handle("/", h) // accepts POST on any path; /healthz is special-cased
+	mux.Handle("/", handler) // accepts POST on any path; /healthz is special-cased
 
 	srv := &http.Server{
 		Addr:              addr,

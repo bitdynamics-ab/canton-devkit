@@ -89,6 +89,68 @@ Then **don't** publish `:8080` / `:3000` to the public internet directly —
 bind them to `127.0.0.1` in compose (`"127.0.0.1:8080:8080"`) so only the
 proxy reaches them.
 
+#### Edge protection & rate limiting (do this before ANY public exposure)
+
+The most important DDoS control is **at the edge, not in the app** — by
+the time a volumetric flood reaches your VM, the bandwidth is already
+spent. This is also how anonymous-telemetry endpoints are protected in
+practice (Next.js posts to a Vercel edge function; you can't authenticate
+a client whose credential ships inside a public binary, so the defense is
+edge + validation, not client auth).
+
+**Recommended: a Cloudflare Tunnel (free).** The origin opens an
+outbound-only connection to Cloudflare, so there are **zero open inbound
+ports**, the origin IP is hidden, TLS is automatic, and Cloudflare absorbs
+L3/L4 DDoS before traffic reaches you:
+
+```bash
+# on the collector host
+cloudflared tunnel login
+cloudflared tunnel create canton-telemetry
+# route a hostname to the local collector (still bound to 127.0.0.1:8080)
+cloudflared tunnel route dns canton-telemetry telemetry.yourdomain.tld
+cloudflared tunnel run --url http://127.0.0.1:8080 canton-telemetry
+```
+
+Then in the Cloudflare dashboard add a **Rate Limiting rule** on
+`telemetry.yourdomain.tld/v1/counters` — e.g. *10 requests / minute / IP →
+block for 1 minute*. A real client POSTs ~once per day, so this is far
+above any legitimate use. With the Tunnel, the CLI's `CF-Connecting-IP`
+header is set by Cloudflare and the collector's per-IP limiter (below)
+keys off it correctly.
+
+If you prefer Caddy/nginx instead of Cloudflare, you get TLS but **not**
+upstream DDoS scrubbing — the flood still hits your bandwidth. Cloudflare
+(or any CDN/WAF) is the meaningfully stronger posture for a public
+endpoint.
+
+#### In-process rate limiting (defense-in-depth, ON by default)
+
+The collector also rate-limits itself — this protects Postgres from write
+amplification and bounds anything that slips past the edge. Tune via env
+(defaults shown):
+
+```bash
+RATE_PER_IP_PER_MIN=30    # sustained requests/min per client IP
+RATE_BURST=15             # per-IP burst allowance
+RATE_GLOBAL_PER_SEC=50    # ceiling on total accepted req/s (protects the DB)
+```
+
+Over-limit requests get `429 Too Many Requests` + `Retry-After`. `/healthz`
+is never limited. Per-IP buckets are keyed off `CF-Connecting-IP` →
+`X-Forwarded-For` → peer address, so they only work correctly **behind**
+the tunnel/proxy — which is the documented deployment.
+
+#### On `INGEST_TOKEN` (it's a speed bump, not auth)
+
+`INGEST_TOKEN` (§2c) gates on a shared header, but since any token would
+ship inside the public CLI binary it can't be a real secret — treat it
+like a casual-scanner deterrent, the way PostHog's public project key or
+an App Insights instrumentation key works. The load-bearing controls are
+the edge rate-limit + the in-process limiter + strict payload validation,
+**not** the token. (If you ever switch to a known, opt-in tester cohort,
+issue per-tester credentials via Cloudflare Access instead.)
+
 ### 2c. Secrets
 
 In `.env` on the host (never commit it):
