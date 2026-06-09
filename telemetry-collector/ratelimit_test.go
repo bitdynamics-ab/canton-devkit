@@ -21,7 +21,7 @@ func reqFrom(ip, path string) *http.Request {
 func TestRateLimit_PerIPBurstThenBlock(t *testing.T) {
 	// 60/min = 1/s sustained, burst 2: first 2 immediate requests pass,
 	// the 3rd is blocked (bucket empty, no time to refill).
-	h := RateLimit(okHandler, RateLimitConfig{PerIPPerMinute: 60, Burst: 2, GlobalPerSec: 1000})
+	h := RateLimit(okHandler, RateLimitConfig{PerIPPerMinute: 60, Burst: 2, GlobalPerSec: 1000, TrustedIPHeader: "CF-Connecting-IP"})
 	codes := []int{}
 	for i := 0; i < 3; i++ {
 		rec := httptest.NewRecorder()
@@ -37,7 +37,7 @@ func TestRateLimit_PerIPBurstThenBlock(t *testing.T) {
 }
 
 func TestRateLimit_DistinctIPsIndependent(t *testing.T) {
-	h := RateLimit(okHandler, RateLimitConfig{PerIPPerMinute: 60, Burst: 1, GlobalPerSec: 1000})
+	h := RateLimit(okHandler, RateLimitConfig{PerIPPerMinute: 60, Burst: 1, GlobalPerSec: 1000, TrustedIPHeader: "CF-Connecting-IP"})
 	// IP A exhausts its single-token burst.
 	recA1 := httptest.NewRecorder()
 	h.ServeHTTP(recA1, reqFrom("10.0.0.1", "/v1/counters"))
@@ -82,28 +82,34 @@ func TestRateLimit_HealthzExempt(t *testing.T) {
 	}
 }
 
-func TestClientIP_HeaderPrecedence(t *testing.T) {
+func TestClientIP(t *testing.T) {
 	cases := []struct {
-		name            string
-		cf, xff, remote string
-		want            string
+		name          string
+		trusted       string // configured trusted header (empty = none)
+		header, value string // a header to set on the request
+		remote        string
+		want          string
 	}{
-		{"cf wins", "203.0.113.5", "198.51.100.1, 10.0.0.1", "192.0.2.9:443", "203.0.113.5"},
-		{"xff first hop", "", "198.51.100.1, 10.0.0.1", "192.0.2.9:443", "198.51.100.1"},
-		{"remote fallback", "", "", "192.0.2.9:443", "192.0.2.9"},
+		// Default (no trusted header): peer address wins, forged headers ignored.
+		{"no-trust ignores spoofed CF", "", "CF-Connecting-IP", "203.0.113.5", "192.0.2.9:443", "192.0.2.9"},
+		{"no-trust ignores spoofed XFF", "", "X-Forwarded-For", "198.51.100.1", "192.0.2.9:443", "192.0.2.9"},
+		// CF Tunnel: trust CF-Connecting-IP (CF overwrites it).
+		{"cf header trusted", "CF-Connecting-IP", "CF-Connecting-IP", "203.0.113.5", "192.0.2.9:443", "203.0.113.5"},
+		// XFF behind one appending proxy: take the LAST hop (proxy-appended
+		// real client), NOT the client-controlled first hop.
+		{"xff last hop", "X-Forwarded-For", "X-Forwarded-For", "1.1.1.1, 198.51.100.1", "192.0.2.9:443", "198.51.100.1"},
+		// Garbage in the trusted header → peer fallback (no junk keys).
+		{"garbage header → peer", "CF-Connecting-IP", "CF-Connecting-IP", "not-an-ip", "192.0.2.9:443", "192.0.2.9"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/v1/counters", nil)
 			r.RemoteAddr = tc.remote
-			if tc.cf != "" {
-				r.Header.Set("CF-Connecting-IP", tc.cf)
+			if tc.header != "" {
+				r.Header.Set(tc.header, tc.value)
 			}
-			if tc.xff != "" {
-				r.Header.Set("X-Forwarded-For", tc.xff)
-			}
-			if got := clientIP(r); got != tc.want {
-				t.Errorf("clientIP = %q, want %q", got, tc.want)
+			if got := clientIP(r, tc.trusted); got != tc.want {
+				t.Errorf("clientIP(trusted=%q) = %q, want %q", tc.trusted, got, tc.want)
 			}
 		})
 	}

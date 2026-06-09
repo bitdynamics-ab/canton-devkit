@@ -215,3 +215,15 @@ func TestHealthz(t *testing.T) {
 		t.Errorf("healthz status = %d, want 200", rec.Code)
 	}
 }
+
+func TestIngest_NonIngestPathIs404(t *testing.T) {
+	// Only /v1/counters accepts ingest; any other path 404s so an edge
+	// rate-limit rule scoped to /v1/counters can't be bypassed by POSTing
+	// elsewhere.
+	req := httptest.NewRequest(http.MethodPost, "/v1/anything-else", strings.NewReader(dailyBody))
+	rec := httptest.NewRecorder()
+	New(&fakeStore{}, "").ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("POST /v1/anything-else = %d, want 404", rec.Code)
+	}
+}

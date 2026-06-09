@@ -88,9 +88,17 @@ var periodKeyRe = regexp.MustCompile(`^\d{4}-(\d{2}-\d{2}|W\d{2})$`)
 var validGranularity = map[string]bool{"daily": true, "weekly": true}
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/healthz" {
+	if r.URL.Path == "/healthz" || r.URL.Path == "/healthz/" {
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, "ok")
+		return
+	}
+	// Ingest lives at exactly /v1/counters. Reject any other path with a
+	// 404 so the only real endpoint is a single fixed path — an edge
+	// rate-limit rule scoped to that path can't be sidestepped by POSTing
+	// to /anything-else, and scanners probing other paths get nothing.
+	if r.URL.Path != "/v1/counters" {
+		http.NotFound(w, r)
 		return
 	}
 	if r.Method != http.MethodPost {
