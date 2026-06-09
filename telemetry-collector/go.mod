@@ -2,7 +2,10 @@ module github.com/bitdynamics-ab/canton-devkit/telemetry-collector
 
 go 1.26.3
 
-require github.com/jackc/pgx/v5 v5.10.0
+require (
+	github.com/jackc/pgx/v5 v5.10.0
+	golang.org/x/time v0.15.0
+)
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
