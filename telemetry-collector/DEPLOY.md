@@ -54,7 +54,38 @@ Tear down (and wipe data): `docker compose down -v`.
 
 ## 2. Production / mainnet release
 
-### 2a. Where to host
+### 2a. The production override + our hosted instance
+
+For any internet-facing deployment, run the base compose **with the
+production override**:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+The override (`docker-compose.prod.yml`) hardens the dev stack:
+
+- Binds every published port to `127.0.0.1` only (the host reverse proxy is
+  the sole public entrypoint) and stops publishing Postgres to the host
+  entirely.
+- Turns on the in-process rate limiter, keyed off `X-Forwarded-For` (set by
+  the front nginx).
+- Exposes the collector on `127.0.0.1:${COLLECTOR_PORT:-8090}` so it can sit
+  beside other services on a shared host.
+
+> **Our hosted instance (`canton-devkit-telemetry.bitdynamics.me`).** The
+> nginx vhost, TLS/certbot scripts, the `.env`, and the deployment runbook for
+> the instance we operate do **not** live in this repo — they live in the
+> **`canton-infra`** repo under **`telemetry/`** (tracked as task 024). That
+> repo holds only the server/deploy glue; the collector code and compose
+> files stay here in `canton-devkit` as the single source of truth. The
+> server checks out both repos and runs this compose with `--env-file`
+> pointing at `canton-infra/telemetry/.env`. See `canton-infra/telemetry/README.md`.
+
+The rest of this section documents the generic self-host path (your own VM,
+your own proxy) for anyone running their own collector.
+
+### 2a-bis. Where to host
 
 The data volume is tiny (weekly/daily aggregates from N machines), so a
 **single small VM runs the whole stack comfortably**:
