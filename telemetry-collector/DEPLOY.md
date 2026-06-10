@@ -235,13 +235,18 @@ So to turn on telemetry for the released ("mainnet") fleet:
 1. **Settings → Secrets and variables → Actions → Variables → New
    repository variable**
    - Name: `TELEMETRY_ENDPOINT`
-   - Value: `https://telemetry.yourdomain.tld/v1/counters`
+   - Value: the HTTPS `/v1/counters` URL of the collector.
 2. Cut a release tag. The published binaries now POST there by default.
 
+> **Current state:** the variable is **set** to our deployed instance,
+> `https://canton-devkit-telemetry.bitdynamics.me/v1/counters` (the collector
+> running on the TestNet host — see `canton-infra` task 024). The next stable
+> release tag will bake this in; binaries cut before that still ship "dark".
+
 Leave the variable **unset** and binaries ship "dark" (counters spool
-locally, nothing sent) — which is the current state. Users can always
-override or disable at runtime: `CANTON_DEVKIT_TELEMETRY_ENDPOINT=...`,
-`dpm telemetry off`, `DPM_TELEMETRY=off`, or `DO_NOT_TRACK=1`.
+locally, nothing sent). Users can always override or disable at runtime:
+`CANTON_DEVKIT_TELEMETRY_ENDPOINT=...`, `dpm telemetry off`,
+`DPM_TELEMETRY=off`, or `DO_NOT_TRACK=1`.
 
 ### 2e. Backups (your "export when I need", automated)
 
@@ -284,6 +289,7 @@ and how to opt out (`dpm telemetry off` / `DO_NOT_TRACK=1`).
 - [ ] Smoke: POST a sample payload, confirm a row in `counter_period`
 - [ ] Metabase admin created; `telemetry` DB added; a starter dashboard saved
 - [ ] Nightly `pg_dump` cron → off-host storage
-- [ ] Repo variable `TELEMETRY_ENDPOINT` set to the HTTPS `/v1/counters` URL
+- [x] Repo variable `TELEMETRY_ENDPOINT` set to the HTTPS `/v1/counters` URL
+      (`https://canton-devkit-telemetry.bitdynamics.me/v1/counters`)
 - [ ] Cut a release tag; download a binary; confirm a counter lands after a day’s use
 - [ ] Privacy note published; opt-out verified (`dpm telemetry off`)
