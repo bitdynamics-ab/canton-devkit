@@ -8,9 +8,9 @@
 //     match what this bundle was built against, the UI refuses
 //     to render and tells the user to restart `dpm localnet ui`.
 //
-//  2. Error envelope shape mirrors PR #36 / handlers/errorBody:
-//     { code, error, detail?, remediation? }. We surface `error`
-//     as a toast and `remediation` as a follow-up action.
+//  2. Error envelope shape: { code, error, detail?, remediation? }.
+//     We surface `error` as a toast and `remediation` as a
+//     follow-up action.
 //
 // All API calls go through `apiFetch` so the schema check, error
 // envelope, and credentials posture stay in one place.
@@ -87,8 +87,7 @@ export interface ListResponse {
 }
 
 // Instance mirrors internal/api/types.Instance (subset; full shape
-// has Services/Endpoints/Parties/Credentials once the live probe
-// lands — added per-screen as those land).
+// has Services/Endpoints/Parties/Credentials from the live probe).
 export interface Endpoint {
   label: string;
   url: string;
@@ -109,7 +108,7 @@ export interface Instance {
   project_dir: string;
   data_dir: string;
   live_probe_failed?: boolean;
-  /** Per-role wallet UI endpoints; populated by detail handler post-. */
+  /** Per-role wallet UI endpoints; populated by the detail handler. */
   endpoints?: Endpoint[];
 }
 
@@ -292,13 +291,13 @@ export const fetchAppConfigJSON = (name: string) =>
     `/api/instances/${encodeURIComponent(name)}/app-config?format=json`,
   );
 
-// ── /e/f: create-instance flow ────────────────────────────
+// ── create-instance flow ──────────────────────────────────
 
 // SpliceVersionEntry mirrors internal/ui/handlers/splice_versions.go
 // SpliceVersionEntry. Status taxonomy matches the version picker
-// badges in webui-create.jsx (latest / supported / available /
-// drifted / catalogued-only). Today the backend only emits
-// latest+supported; the rest are reserved for the upstream check.
+// badges (latest / supported / available / drifted /
+// catalogued-only). Today the backend only emits latest+supported;
+// the rest are reserved for the upstream check.
 export interface SpliceVersionEntry {
   tag: string;
   status: "latest" | "supported" | "available" | "drifted" | "catalogued-only";
@@ -689,7 +688,7 @@ export interface DARUploadResponse {
 
 // uploadDARs posts a multipart body with one or more .dar files
 // to /api/instances/:name/dar. Uses XMLHttpRequest for upload
-// progress (the same pattern as 's BackupRestore).
+// progress (the same pattern as BackupRestore).
 //
 // `roles` is the set of target participants — the backend dials
 // each in parallel and returns a per-role success/error envelope.
@@ -748,7 +747,7 @@ export function uploadDARs(
   });
 }
 
-// BIT-230 #1 — DAR package-tree inspect.
+// DAR package-tree inspect.
 //
 // The inspect endpoint returns the deep Daml-LF structure of every
 // .dalf inside the DAR: modules, templates (+ choices), interfaces
@@ -798,7 +797,7 @@ export const fetchDARInspect = (
     `/api/instances/${encodeURIComponent(instance)}/dar/${encodeURIComponent(mainID)}/inspect?role=${role}`,
   );
 
-// BIT-230 #2 — Structural diff between two DARs (by main package id).
+// Structural diff between two DARs (by main package id).
 export interface DARDiffTemplateAdded {
   module: string;
   name: string;
@@ -855,7 +854,7 @@ export const fetchDARDiff = (
     `/api/instances/${encodeURIComponent(instance)}/dar/diff?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&role=${role}`,
   );
 
-// BIT-230 #3 — per-participant vetting state + toggle.
+// Per-participant vetting state + toggle.
 export interface DARVettingRow {
   role: Role;
   vetted: boolean;
@@ -895,7 +894,7 @@ export const setDARVetting = (
     },
   );
 
-// BIT-230 #4 — Hot-deploy watch indicator. SSE; not a fetch.
+// Hot-deploy watch indicator. SSE; not a fetch.
 export interface DARWatchEvent {
   instance: string;
   dar_id?: string;
@@ -963,7 +962,7 @@ export const fetchContracts = (
     `/api/instances/${encodeURIComponent(name)}/contracts?role=${role}&limit=${limit}`,
   );
 
-// BIT-231 — contract-detail drawer payload. Returned by
+// Contract-detail drawer payload. Returned by
 // GET /api/instances/{name}/contracts/{contract_id}; backed by
 // EventQueryService.GetEventsByContractId on the participant.
 export interface ContractDetail {
@@ -998,7 +997,7 @@ export const fetchContractDetail = (
     `/api/instances/${encodeURIComponent(name)}/contracts/${encodeURIComponent(contractId)}?role=${role}`,
   );
 
-// BIT-231 — Explorer live SSE stream events. The /contracts/stream
+// Explorer live SSE stream events. The /contracts/stream
 // endpoint emits one frame per ACS delta. Backend caps subscriptions
 // at 10k events then flushes a final `truncated` payload — the
 // frontend treats that as a signal to fall back to snapshot
@@ -1041,7 +1040,7 @@ export function openContractsStream(
   );
 }
 
-// follow-up — Transactions + Timeline.
+// Transactions + Timeline.
 //
 // Each row in `transactions` represents one Canton update:
 // transaction / reassignment / topology event. The frontend
@@ -1471,8 +1470,8 @@ interface MatrixResponse {
   matrix: BalanceMatrix;
 }
 
-// PartyRef — one registered party alias → its on-ledger party id
-//. The workspace's god-mode party registry.
+// PartyRef — one registered party alias → its on-ledger party id.
+// The workspace's god-mode party registry.
 export interface PartyRef {
   alias: string;
   party_id: string;
@@ -1551,9 +1550,9 @@ export const fetchMatrix = (instance: string, role = "app-user") =>
     `/api/tokens/matrix?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
   ).then((r) => r.matrix);
 
-// HolderRow / InstrumentSummary — the instrument-first KPI view
-//. Supply + holder/contract counts + per-holder
-// distribution, derived from one ACS scan (workspace.go).
+// HolderRow / InstrumentSummary — the instrument-first KPI view.
+// Supply + holder/contract counts + per-holder distribution,
+// derived from one ACS scan (workspace.go).
 export interface HolderRow {
   party: string;
   balance: string;
@@ -1586,8 +1585,8 @@ export const fetchInstrumentSummary = (
     )}&role=${encodeURIComponent(role)}`,
   ).then((r) => r.summary);
 
-// PartyDelta / ActivityEvent — the instrument activity feed (
-// Activity tab). Each event is one ledger transaction netted into
+// PartyDelta / ActivityEvent — the instrument activity feed
+// (Activity tab). Each event is one ledger transaction netted into
 // senders/receivers + a kind (mint | burn | transfer), reconstructed
 // from HoldingV2 create/archive events (no off-ledger registry).
 export interface PartyDelta {

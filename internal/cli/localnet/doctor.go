@@ -13,17 +13,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// — `dpm localnet doctor`.
+// `dpm localnet doctor`.
 //
-// Renders the System / Resources / Network sections from
-// docs/design/mockups/screens-lifecycle.jsx (ScreenDoctor) by
-// translating docker.RunPreflight output. The same Report is also
-// surfaced as types.PreflightReport via --format=json so the Web
-// UI can call CollectDoctor and render
-// the same data.
+// Renders the System / Resources / Network sections by translating
+// docker.RunPreflight output. The same Report is also surfaced as
+// types.PreflightReport via --format=json so the Web UI can call
+// CollectDoctor and render the same data.
 //
-// The check set lives in internal/localnet.CollectDoctor; this file is only the
-// CLI surface — flags + rendering + JSON.
+// The check set lives in internal/localnet.CollectDoctor; this file
+// is only the CLI surface — flags + rendering + JSON.
 
 var doctorCollectFn = localnet.CollectDoctor
 
@@ -91,21 +89,17 @@ ExitPreflightFail semantics).`,
 	return cmd
 }
 
-// writeDoctorTable renders ScreenDoctor: one Section per category
-// with Step rows for each check + a colored summary Box.
+// writeDoctorTable renders one Section per category with Step rows
+// for each check + a colored summary Box.
 func writeDoctorTable(w io.Writer, rep types.PreflightReport) {
 	_, _ = fmt.Fprintln(w, term.Dimc("Checking host readiness for Canton LocalNet…"))
 	_, _ = fmt.Fprintln(w)
 
-	// Reviewer pin (PR #39 #4): the original renderer emitted a
-	// loose stack of Step rows per section. Sections with one
-	// check looked indistinguishable from prose, and the columns
-	// (status glyph / label / detail) didn't align across sections
-	// because Step is whitespace-padded, not column-aligned. We
-	// now render each section as its own term.Table with a fixed
-	// column layout (status · check · detail) so the eye can
-	// scan vertically. Section headers stay so users can tell
-	// System checks from Resources checks at a glance.
+	// Each section renders as its own term.Table with a fixed column
+	// layout (status · check · detail) so the columns align across
+	// rows and the eye can scan vertically — a loose stack of
+	// whitespace-padded Step rows doesn't align. Section headers let
+	// users tell System checks from Resources checks at a glance.
 	for _, sec := range rep.Sections {
 		rows := make([][]string, 0, len(sec.Checks))
 		for _, c := range sec.Checks {
@@ -126,16 +120,13 @@ func writeDoctorTable(w io.Writer, rep types.PreflightReport) {
 
 	// Per-section remediation block on failure/warning checks.
 	// We surface remediation as a friendly Box at the END so the
-	// scan-table-then-act flow matches the JSX mockup.
+	// scan-table-then-act flow reads top to bottom.
 	//
-	// Reviewer pin (PR #39 #4 round-4): the previous shape
-	// flattened multi-step remediations by joining them with " · "
-	// into one line per check — so a three-step recovery (e.g.
-	// "free port, retry up, run doctor") rendered as a single
-	// dense Step row that visually fused unrelated actions. We now
-	// keep each remediation step on its own row under the check
-	// label, like a sub-list. Each (label, [steps]) pair becomes
-	// one labelled header + N indented step rows.
+	// Each remediation step renders on its own row under the check
+	// label, like a sub-list — joining multi-step remediations with
+	// " · " into one line visually fuses unrelated actions (e.g.
+	// "free port, retry up, run doctor"). Each (label, [steps]) pair
+	// becomes one labelled header + N indented step rows.
 	type remediationBlock struct {
 		label string
 		steps []string

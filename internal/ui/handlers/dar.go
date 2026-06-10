@@ -11,8 +11,8 @@
 //	GET /api/instances/{name}/dar?role=<app_user|app_provider|sv>
 //	  → 200 {schema_version, instance, role, dars: [{main, name, version, description}]}
 //	  → 503 PARTICIPANT_PORT_NOT_RECORDED if state.json lacks the
-//	    per-role admin port (instance brought up before
-//	    landed; re-`up` to capture)
+//	    per-role admin port (instance brought up before per-role
+//	    port capture landed; re-`up` to capture)
 //
 // Role defaults to "app_user" since that's the common dev target.
 // Upload + diff endpoints are deferred to a follow-up — the MVP is
@@ -42,21 +42,21 @@ import (
 const darRequestTimeout = 8 * time.Second
 
 // MountDAR installs the DAR endpoints on mux. The hub is used only
-// by the dar-watch SSE bridge (BIT-230 #4); the read endpoints are
+// by the dar-watch SSE bridge; the read endpoints are
 // pure gRPC. Passing nil disables the watch SSE surface.
 func MountDAR(mux *http.ServeMux, hub watchHub) {
 	mux.HandleFunc("GET /api/instances/{name}/dar", handleDARList)
 	mux.HandleFunc("POST /api/instances/{name}/dar", handleDARUpload)
 
-	// BIT-230 #1 — package-tree inspect.
+	// Package-tree inspect.
 	mux.HandleFunc("GET /api/instances/{name}/dar/{id}/inspect", handleDARInspect)
-	// BIT-230 #2 — structural diff.
+	// Structural diff.
 	mux.HandleFunc("GET /api/instances/{name}/dar/diff", handleDARDiff)
-	// BIT-230 #3 — per-participant vetting state + toggle.
+	// Per-participant vetting state + toggle.
 	mux.HandleFunc("GET /api/instances/{name}/dar/{id}/vetting", handleDARVettingList)
 	mux.HandleFunc("POST /api/instances/{name}/dar/{id}/vetting/{role}", handleDARVettingToggle)
 
-	// BIT-230 #4 — hot-deploy indicator. The publish endpoint is
+	// Hot-deploy indicator. The publish endpoint is
 	// the cross-process bridge: a `dpm localnet dar watch` process
 	// POSTs lifecycle events to it; the SSE subscriber tails them
 	// for the Web UI's "watching" badge.

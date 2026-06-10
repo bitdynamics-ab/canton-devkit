@@ -132,8 +132,8 @@ ledger primitive, just a convenience wrapper.
 
 ## What stays the same
 
-- The low-level live transfer/accept/balance orchestration (PR #87) is
-  the engine; this is all sugar + discovery on top.
+- The low-level live transfer/accept/balance orchestration is the
+  engine; this is all sugar + discovery on top.
 - Production-shaped single-party commands remain for users who want to
   exercise real wallet semantics.
 - No change to the auth model — still the `unsafe` dev secret,

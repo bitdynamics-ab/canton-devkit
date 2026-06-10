@@ -14,9 +14,7 @@ func buildUp() *cobra.Command {
 	opts := &localnet.UpOptions{}
 	// Source paths dynamically so the help text reflects whatever
 	// CANTON_DEVKIT_REGISTRY override the user has active at help time,
-	// and never goes stale when the on-disk layout changes (e.g. the
-	// ~/.canton → ~/.canton-devkit rename that prompted Zhe's catch on
-	// PR #20).
+	// and never goes stale when the on-disk layout changes.
 	cacheRoot := splice.CacheRoot()
 	instanceRoot := registry.Root()
 	cmd := &cobra.Command{
@@ -50,19 +48,17 @@ Supported Splice versions: %s
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
 			// TextProgress wraps the Cobra writers so RunUp's typed
-			// step events render as today's terminal
-			// lines for CLI users. The Web UI's POST handler
-			// will pass an SSEProgress impl instead so
-			// browsers see the full typed event stream.
+			// step events render as terminal lines for CLI users.
+			// The Web UI's POST handler passes an SSEProgress impl
+			// instead so browsers see the full typed event stream.
 			//
 			// NewTextProgress auto-detects whether the writer is a
-			// TTY and switches between the mockup-styled
-			// rendering (Section headers, brand-accented Box for
-			// the success marker) and the historical plain text
-			// (pipes, CI, golden-byte tests). The literal struct
-			// form is kept for backward compatibility — tests
-			// that constructed TextProgress directly still get
-			// the plain bytes they assert on.
+			// TTY and switches between the styled rendering (Section
+			// headers, brand-accented Box for the success marker)
+			// and plain text (pipes, CI, golden-byte tests). The
+			// literal struct form is kept for backward
+			// compatibility — tests that constructed TextProgress
+			// directly still get the plain bytes they assert on.
 			prog := localnet.NewTextProgress(
 				cmd.OutOrStdout(), cmd.ErrOrStderr())
 			return localnet.AsExitError(

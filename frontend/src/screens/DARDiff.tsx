@@ -1,4 +1,4 @@
-// BIT-230 #2 — DAR structural diff viewer.
+// DAR structural diff viewer.
 //
 // Renders /api/instances/:name/dar/diff between two DARs as a set
 // of expandable sections: modules added/removed, templates

@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Env knobs (design decision #10 precedence + #10 debug).
+// Env knobs.
 const (
 	envDoNotTrack = "DO_NOT_TRACK"        // any non-empty, non-"0" value → off
 	envToggle     = "DPM_TELEMETRY"       // "on"/"off"
@@ -78,7 +78,7 @@ const (
 
 // Enabled reports the effective on/off state and which rule decided it.
 // Precedence (highest first): DO_NOT_TRACK → DPM_TELEMETRY → config file
-// → default ON (opt-out — design decision #1, ratified opt-out).
+// → default ON (opt-out).
 func Enabled() (bool, Source) {
 	if v := os.Getenv(envDoNotTrack); v != "" && v != "0" {
 		return false, SourceDoNotTrack

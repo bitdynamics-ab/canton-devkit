@@ -29,9 +29,9 @@ type connectFlags struct {
 	// Instance is the DevKit registry instance name. When set
 	// without --admin-host, we look up the admin port from
 	// state.json's port map. When state lacks the participant admin
-	// port (the current Splice LocalNet integration in PR #14 only
-	// records UI ports), the command surfaces a clear error
-	// pointing the user at --admin-host.
+	// port (some Splice LocalNet integrations only record UI ports),
+	// the command surfaces a clear error pointing the user at
+	// --admin-host.
 	Instance string
 	// Role selects which participant within the named instance to
 	// target. Splice LocalNet runs three participants (sv,
@@ -63,8 +63,8 @@ func (f *connectFlags) register(cmd *cobra.Command) {
 //
 // Instance resolution caveats:
 //   - The registry must contain a "participant_admin_<role>" port for
-//     us to derive a host. Today's registry only persists UI ports
-//     (PR #14 scope); when that's the case we error with a clear hint.
+//     us to derive a host. When the registry only persists UI ports,
+//     we error with a clear hint.
 //   - The JWT is signed locally using splice.SignToken, derived from
 //     the per-role auth env files in the cached compose project.
 func (f *connectFlags) resolve() (admin.Config, error) {
@@ -131,7 +131,7 @@ func (f *connectFlags) connect(ctx context.Context) (*admin.Client, error) {
 // one captured. Currently unused — RunUp captures these — but ready
 // for future flows where the instance is bootstrapped externally.
 //
-//nolint:unused // intentional API surface for future re-use; see TODO.
+//nolint:unused // intentional API surface for future re-use.
 func signTokenForInstance(state *registry.State, role string) (string, error) {
 	inputs, err := splice.LoadCredentialInputs(state.ProjectDir)
 	if err != nil {

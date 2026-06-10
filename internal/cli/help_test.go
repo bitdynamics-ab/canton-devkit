@@ -7,8 +7,7 @@ import (
 )
 
 // TestLocalnetHelp_RendersMockupShape verifies the help body contains
-// the distinctive elements from docs/design/mockups/screens-tokens-
-// help.jsx (ScreenHelp):
+// the distinctive elements of the custom layout:
 //
 // - ASCII box header
 // - "lifecycle" + "developing" section titles (uppercased by Section)
@@ -50,8 +49,8 @@ func TestLocalnetHelp_RendersMockupShape(t *testing.T) {
 //
 // This pins the explicit-rather-than-scrape design choice in
 // renderHelpRow's comment: when new commands land (snapshot, dar,
-// contracts, token, metrics), their tickets MUST also touch this
-// file to add the row.
+// contracts, token, metrics), the change that lands them MUST also
+// touch this file to add the row.
 func TestLocalnetHelp_OmitsUnshippedCommands(t *testing.T) {
 	var out, errBuf bytes.Buffer
 	app := New(&out, &errBuf, "test", "")
@@ -110,9 +109,9 @@ func TestRenderHelpRow_AlignsAcrossLengths(t *testing.T) {
 	}
 }
 
-// TestDynamicBox_AutoSizesToContent is the // the original 42-col hardcode silently truncated any title
-// edit longer than 36 visible characters (42 minus 6 padding).
-// dynamicBox must auto-size to the widest line.
+// TestDynamicBox_AutoSizesToContent pins that the box auto-sizes to
+// the widest line: a fixed-width box would silently truncate any
+// title longer than its hardcoded width.
 func TestDynamicBox_AutoSizesToContent(t *testing.T) {
 	short := dynamicBox([]string{"abc"})
 	long := dynamicBox([]string{"this title is significantly longer than 36 characters"})
@@ -135,11 +134,10 @@ func TestDynamicBox_AutoSizesToContent(t *testing.T) {
 }
 
 // TestLocalnetHelp_LazyRenderRespectsLatePaletteChange covers the
-// reviewer-flagged "ANSI cached at install time" bug: if a user
-// sets NO_COLOR after process start (e.g. a wrapper script that
-// rewrites env between subcommand invocations), the help output
-// MUST honor it. The original cut baked the ANSI at applyHelp
-// time and ignored later env changes.
+// "ANSI cached at install time" hazard: if a user sets NO_COLOR
+// after process start (e.g. a wrapper script that rewrites env
+// between subcommand invocations), the help output MUST honor it.
+// Caching the ANSI at applyHelp time would ignore later env changes.
 //
 // We assert by toggling the term renderer to ASCII via the
 // test helper, then snapshotting the output. If the render were
@@ -169,11 +167,11 @@ func TestLocalnetHelp_LazyRenderRespectsLatePaletteChange(t *testing.T) {
 	}
 }
 
-// TestLocalnetHelp_NarrowTerminalFallsBackToSingleLine is the
-// reviewer pin (PR #35 #1) for width adaptation: setting COLUMNS to
-// a value under narrowFallbackCols must produce the single-line
-// fallback (no box, no "Usage ", no Section titles). Pre-fix, the
-// boxed layout overflowed at narrow widths and wrapped to garbage.
+// TestLocalnetHelp_NarrowTerminalFallsBackToSingleLine pins width
+// adaptation: setting COLUMNS to a value under narrowFallbackCols
+// must produce the single-line fallback (no box, no "Usage ", no
+// Section titles). The boxed layout overflows at narrow widths and
+// wraps to garbage otherwise.
 func TestLocalnetHelp_NarrowTerminalFallsBackToSingleLine(t *testing.T) {
 	t.Setenv("COLUMNS", "30")
 	var out, errBuf bytes.Buffer
@@ -210,10 +208,10 @@ func TestLocalnetHelp_WideTerminalClampsBoxToMax(t *testing.T) {
 	}
 }
 
-// TestLocalnetHelp_AsciiBoxWhenNoColor is the reviewer pin
-// (PR #35 #2b): with NO_COLOR set, the help box must use ASCII
-// glyphs (+, -, |) instead of Unicode (┌, ─, │) — CI logs with
-// LANG=C render U+2500 as garbage and the box looks broken.
+// TestLocalnetHelp_AsciiBoxWhenNoColor: with NO_COLOR set, the help
+// box must use ASCII glyphs (+, -, |) instead of Unicode (┌, ─, │) —
+// CI logs with LANG=C render U+2500 as garbage and the box looks
+// broken.
 func TestLocalnetHelp_AsciiBoxWhenNoColor(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	t.Setenv("COLUMNS", "120") // force boxed renderer
@@ -256,11 +254,10 @@ func TestLocalnetHelp_AsciiBoxWhenCLocale(t *testing.T) {
 	}
 }
 
-// TestRenderHelpRow_AlignsWithMultiByteName is the reviewer pin
-// (PR #35 #3): renderHelpRow used len(name) which counts BYTES.
-// A multi-byte command name (e.g. an i18n alias like "日本") would
-// produce 6 byte len for 2 rune width and shift the description
-// left, misaligning the column. Now uses term.VisibleLen.
+// TestRenderHelpRow_AlignsWithMultiByteName: renderHelpRow must use
+// rune width, not byte length. A multi-byte command name (e.g. an
+// i18n alias like "日本") would otherwise count 6 bytes for 2 runes
+// of width and shift the description left, misaligning the column.
 func TestRenderHelpRow_AlignsWithMultiByteName(t *testing.T) {
 	ascii := renderHelpRow("up", "x")
 	multi := renderHelpRow("日本", "y")
@@ -284,12 +281,12 @@ func TestRenderHelpRow_AlignsWithMultiByteName(t *testing.T) {
 	}
 }
 
-// TestLocalnetSubcommandHelp_UsesCobraDefault is the reviewer pin
-// (PR #35 #5): the help override is scoped to the `localnet`
-// subgroup ONLY — child commands (`localnet up --help`, etc.) must
-// fall through to cobra's default flag-listing template. If the
-// parent override bled down, child help would render the section
-// listing instead of the command's own --help flags block.
+// TestLocalnetSubcommandHelp_UsesCobraDefault: the help override is
+// scoped to the `localnet` subgroup ONLY — child commands (`localnet
+// up --help`, etc.) must fall through to cobra's default
+// flag-listing template. If the parent override bled down, child
+// help would render the section listing instead of the command's own
+// --help flags block.
 func TestLocalnetSubcommandHelp_UsesCobraDefault(t *testing.T) {
 	var out, errBuf bytes.Buffer
 	app := New(&out, &errBuf, "test", "")

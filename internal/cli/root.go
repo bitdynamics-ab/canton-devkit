@@ -27,9 +27,9 @@ func (a *App) buildRoot() *cobra.Command {
 	root.SetErr(a.err)
 
 	root.AddCommand(a.buildVersionCmd())
-	root.AddCommand(buildTelemetryCmd()) // root-level, tool-wide (design #11)
+	root.AddCommand(buildTelemetryCmd()) // root-level: telemetry is tool-wide, not a LocalNet concern
 	ln := localnet.Build()
-	applyHelp(ln) // ScreenHelp template for `localnet --help`
+	applyHelp(ln) // custom boxed/sectioned template for `localnet --help`
 	root.AddCommand(ln)
 	return root
 }

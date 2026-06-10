@@ -1,6 +1,6 @@
 //go:build integration
 
-// smoke_test.go is the BIT-232 drift guard: every Headline query in
+// smoke_test.go is the metric-drift guard: every Headline query in
 // SummaryQueries must resolve against a real Splice Canton's
 // Prometheus and return at least one sample. The unit-test layer
 // can only verify the map is structurally sound; this file is the

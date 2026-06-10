@@ -11,13 +11,13 @@ import (
 
 // narrowFallbackCols is the width below which the help template
 // abandons its boxed/sectioned layout and prints a single-line
-// summary. The 50-col threshold matches the JSX ScreenHelp's minimum
+// summary. The 50-col threshold is the boxed layout's minimum
 // visible content width (45 cols box + 5 cols slack).
 const narrowFallbackCols = 50
 
 // helpDefaultCols is the assumed terminal width when COLUMNS is
 // unset and we can't measure (e.g. piped output). 80 cols is the
-// long-standing CLI default and matches the JSX mockup.
+// long-standing CLI default.
 const helpDefaultCols = 80
 
 // helpCols resolves the terminal width for the help-template only.
@@ -45,17 +45,12 @@ func helpCols() int {
 }
 
 // applyHelp swaps Cobra's default help template on the `localnet`
-// subcommand for the ASCII-box + sectioned listing in
-// docs/design/mockups/screens-tokens-help.jsx (ScreenHelp).
-// Implements + the review-fix surfaced on PR #35.
+// subcommand for a custom ASCII-box + sectioned listing.
 //
-// We only override the `localnet` subgroup (not the root) because:
-// - The root command's help is overwhelmingly Cobra-canonical
-// ("Usage: canton-devkit [command] …" etc.) and most users
-// reach it via `--version`, not via reading help.
-// - The ScreenHelp mockup is specifically the `dpm localnet
-// --help` shape: lifecycle vs developing sections, dimmed
-// trailing flags hint.
+// We only override the `localnet` subgroup (not the root) because the
+// root command's help is overwhelmingly Cobra-canonical and most users
+// reach it via `--version`; the custom layout is specifically the
+// `localnet --help` shape (lifecycle vs developing sections).
 //
 // Cobra inherits help templates from parent to child unless the
 // child has its own — so before overriding `localnet`'s template
@@ -63,33 +58,21 @@ func helpCols() int {
 // Without this, `localnet up --help` would render the parent's
 // section listing instead of `up`'s detailed flags help.
 //
-// PR #35 review pin: render is LAZY (per-call HelpFunc) rather
-// than baked at install time. The original cut cached the ANSI
-// once during init, which meant NO_COLOR or --no-color set after
-// startup (a real CI pattern) was ignored. The lazy func calls
-// the term package on every invocation so palette overrides take
-// effect.
-//
-// PR #35 review pin: box width is DYNAMIC. The original cut
-// hardcoded 42 columns — adding a new title or a longer subtitle
-// would silently overflow the box. dynamicBox sizes to the
-// widest title/body line plus padding.
+// Render is LAZY (per-call HelpFunc) rather than baked at install
+// time, so NO_COLOR / --no-color set after startup (a real CI
+// pattern) is honored. The box width is dynamic so a longer title
+// or subtitle can't overflow it.
 //
 // Categories are intentionally hand-listed rather than scraped
-// from the cobra tree — the mockup groups by intent, not
-// alphabetically. New commands need one new line each in
-// `categories` below; that's the right friction.
+// from the cobra tree — they group by intent, not alphabetically,
+// and unshipped commands must not appear until they land. New
+// commands need one new line each in helpCategories below.
 func applyHelp(localnet *cobra.Command) {
-	// Pin each child's BOTH template + helpFunc so the parent's
-	// overrides below don't bleed down via cobra's parent-walk.
-	// Both fields are inherited — without the explicit pin,
-	// `localnet up --help` would render the parent's section
-	// listing instead of `up`'s own detailed flags help
-	// (TestRunIsArgvOnly is the canary that caught this).
-	//
-	// We capture each child's currently-inherited HelpFunc and
-	// re-bind it directly so the parent override below doesn't
-	// reach the child via the walk-up.
+	// Pin each child's template + helpFunc so the parent's overrides
+	// below don't bleed down via cobra's parent-walk. Both fields are
+	// inherited — without the explicit pin, `localnet up --help` would
+	// render the parent's section listing instead of `up`'s own
+	// detailed flags help.
 	for _, child := range localnet.Commands() {
 		child.SetHelpTemplate(child.HelpTemplate())
 		fn := child.HelpFunc() // currently-inherited (cobra default)
@@ -108,10 +91,9 @@ func applyHelp(localnet *cobra.Command) {
 // while costing the lazy-palette correctness.
 //
 // w is the destination writer — used only to derive the terminal
-// width (via $COLUMNS or fallback) for box layout. Reviewer pin
-// (PR #35 #1): on narrow terminals (<50 cols) the boxed layout
-// overflows and wraps ugly; we fall back to a single-line summary
-// in that case.
+// width (via $COLUMNS or fallback) for box layout. On narrow
+// terminals (<50 cols) the boxed layout overflows and wraps ugly, so
+// we fall back to a single-line summary in that case.
 func renderLocalnetHelp(w interface {
 	Write([]byte) (int, error)
 }) string {
@@ -125,7 +107,7 @@ func renderLocalnetHelp(w interface {
 
 // renderNarrowHelp is the <50-col fallback: a single bold title
 // line + one line per command. No boxes, no sections, no padding
-// math — terminals this narrow can't render the JSX mockup
+// math — terminals this narrow can't render the boxed layout
 // faithfully and a clipped box is worse than a plain list.
 func renderNarrowHelp() string {
 	var b strings.Builder
@@ -144,8 +126,8 @@ func renderNarrowHelp() string {
 
 // helpCategories returns the canonical hand-list shared by the
 // boxed and narrow renderers. Hand-listed (not scraped from cobra)
-// because the mockup groups by intent, and unshipped commands
-// (snapshot, dar, etc.) must NOT appear until they land.
+// because the listing groups by intent, and unshipped commands
+// must NOT appear until they land.
 func helpCategories() []helpCategory {
 	return []helpCategory{
 		{
@@ -184,8 +166,8 @@ func renderBoxedHelp() string {
 
 	var b strings.Builder
 
-	// Dynamic-width ASCII box (review pin: hardcoded 42 was a bug
-	// waiting to happen for any title edit).
+	// Dynamic-width ASCII box: auto-sizes so a longer title can't
+	// overflow it.
 	boxBody := []string{
 		helpTitle(),
 		"manage Canton LocalNets like a normal",
@@ -230,15 +212,11 @@ func renderBoxedHelp() string {
 }
 
 // boxGlyphs is the rune set used for one box-drawing pass. We pick
-// either Unicode (default, matches the JSX mockup) or pure ASCII
-// (LANG=C, NO_COLOR, or non-TTY where the user has signalled the
-// renderer can't safely emit U+2500-range glyphs).
-//
-// Reviewer pin (PR #35 #2b): the previous implementation always
-// wrote Unicode box-drawing characters. CI logs with LANG=C and
-// many Windows terminals print these as `???` or `~~`, which makes
-// the help box look broken. ASCII fallback keeps the structure
-// readable even when fancy glyphs can't render.
+// either Unicode (default) or pure ASCII (LANG=C, NO_COLOR, or
+// non-TTY where the renderer can't safely emit U+2500-range glyphs).
+// CI logs with LANG=C and many Windows terminals print Unicode
+// box-drawing chars as `???` or `~~`; the ASCII fallback keeps the
+// structure readable when those glyphs can't render.
 type boxGlyphs struct {
 	tl, tr, bl, br, h, v string
 }
@@ -312,8 +290,8 @@ func indentHelp(s string, n int) string {
 }
 
 // dynamicBox renders a box-drawing frame around `lines`, auto-sized
-// to the widest line + 6 cells of padding (3 on each side, matching
-// the mockup's visual breathing room). Returns the 2 frame lines +
+// to the widest line + 6 cells of padding (3 on each side). Returns
+// the 2 frame lines +
 // N body lines + 1 frame line, in order. Glyph set is chosen by
 // pickBoxGlyphs (Unicode normally, ASCII when the terminal can't
 // render U+2500-range).
@@ -339,7 +317,7 @@ func dynamicBox(lines []string) []string {
 	return out
 }
 
-// helpCategory is one bucket in the mockup ("lifecycle" / "developing").
+// helpCategory is one bucket ("lifecycle" / "developing").
 type helpCategory struct {
 	Title    string
 	Commands []helpRow
@@ -351,11 +329,10 @@ type helpRow struct {
 }
 
 // renderHelpRow pads the command name out to nameWidth visible
-// cells so two rows in the same section align. Reviewer pin
-// (PR #35 #3): `len(name)` counted bytes, which for any multi-byte
-// name (e.g. an i18n alias) over-counted and produced a
-// short-padded — and visually misaligned — column. We now use
-// term.VisibleLen which counts runes after stripping ANSI.
+// cells so two rows in the same section align. Uses term.VisibleLen
+// (runes after stripping ANSI) rather than len(name): a multi-byte
+// name (e.g. an i18n alias) would otherwise over-count bytes and
+// misalign the column.
 const nameWidth = 12
 
 func renderHelpRow(name, desc string) string {

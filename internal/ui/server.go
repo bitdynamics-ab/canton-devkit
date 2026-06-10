@@ -10,11 +10,9 @@ import (
 )
 
 // ErrNonLoopbackBind is returned by Listen when Config.Host resolves to
-// a non-loopback IP and AllowNonLoopback is false. Reviewer pin
-// the previous shape merely "strongly discouraged"
-// non-loopback in --host's help text, then bound anyway. Defence-in-
-// depth requires a real refusal at the bind layer — the docstring
-// is not load-bearing security.
+// a non-loopback IP and AllowNonLoopback is false. A docstring saying
+// "loopback only" is not load-bearing security — defence-in-depth needs
+// a real refusal at the bind layer.
 var ErrNonLoopbackBind = errors.New("ui server: refusing non-loopback bind without AllowNonLoopback")
 
 // Server wraps a configured *http.Server with lifecycle plumbing the CLI
@@ -65,10 +63,7 @@ type Config struct {
 	// that resolves to anything other than a loopback IP with
 	// ErrNonLoopbackBind. The CLI exposes this as an explicit flag
 	// (`--allow-non-loopback`) that defaults off; users who genuinely
-	// need LAN binding have to type the flag.
-	//
-	// the docstring's "loopback only"
-	// claim was advisory until this gate landed. The default-deny
+	// need LAN binding have to type the flag. The default-deny
 	// posture means a future regression that silently widens the
 	// bind fails closed.
 	AllowNonLoopback bool
@@ -104,7 +99,7 @@ func (c Config) withDefaults() Config {
 //     accumulates into a small leak. 60s matches the typical proxy
 //     idle window AND is twice the SSE heartbeat (30s in sse.go),
 //     so a healthy SSE stream's keepalives reset the timer well
-//     before it fires. .
+//     before it fires.
 func New(cfg Config) *Server {
 	cfg = cfg.withDefaults()
 	return &Server{

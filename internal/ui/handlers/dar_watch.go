@@ -1,4 +1,4 @@
-// DAR hot-deploy SSE bridge (BIT-230 #4).
+// DAR hot-deploy SSE bridge.
 //
 // `dpm localnet dar watch` is a separate CLI process from the
 // `dpm localnet ui` server, so it can't publish to the same
@@ -22,8 +22,8 @@
 // ui_url field — falling back to a noisy stderr warning when the
 // UI isn't running, so the watch loop still functions standalone.
 //
-// Topic format: `dar:watch:<instance>:<dar-id>` matches the
-// contract spec in BIT-230. A trailing dar-id of "*" subscribes
+// Topic format: `dar:watch:<instance>:<dar-id>`. A trailing
+// dar-id of "*" subscribes
 // to every DAR for the instance, used by the DAR screen when no
 // specific row is expanded.
 

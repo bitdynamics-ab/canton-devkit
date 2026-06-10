@@ -1,6 +1,6 @@
-// BIT-230 — DARScreen vitest. Exercises the new package tree,
-// vetting panel, and watch indicator integrations. Follows the
-// same render-with-stubbed-fetch pattern as TokensScreen.test.tsx.
+// DARScreen vitest. Exercises the package tree, vetting panel, and
+// watch indicator integrations. Follows the same
+// render-with-stubbed-fetch pattern as TokensScreen.test.tsx.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -91,7 +91,7 @@ const fakeDAR = {
   ],
 };
 
-describe("DARScreen (BIT-230)", () => {
+describe("DARScreen", () => {
   it("renders the watch-mode indicator with the Idle badge by default", async () => {
     // Replace EventSource before the screen mounts so its useEffect
     // picks up the stub.

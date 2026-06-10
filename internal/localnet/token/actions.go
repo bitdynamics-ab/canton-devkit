@@ -21,8 +21,7 @@ import (
 var ErrNeedsV2LocalNet = errors.New(
 	"V2 ledger action not yet wired: bring up a V2 LocalNet first via " +
 		"`localnet up --version token-standard-v2 --profile tokens-v2`, " +
-		"then re-run; the V2 instrument-creation + transfer submission " +
-		"lands incrementally on top of this PR")
+		"then re-run")
 
 // ErrUnsupportedOnInstrument signals that the asset implementing the
 // instrument doesn't expose a standard mint or burn choice. Amulet is
@@ -248,8 +247,8 @@ func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error
 		"transfer_instruction_id": instructionID,
 	})
 
-	// Auto-accept chains the receiver-side accept : on
-	// LocalNet you own the receiver, so the two-step offer→accept is just
+	// Auto-accept chains the receiver-side accept: on LocalNet you own
+	// the receiver, so the two-step offer→accept is just
 	// ceremony. NoWait opts out (the caller wants the instruction id to
 	// hand off). An empty instructionID means the transfer already
 	// settled (e.g. self-transfer) — nothing to accept.
@@ -641,10 +640,8 @@ func isZeroDecimal(s string) bool {
 	return true
 }
 
-// validatePartyID + partyIDPattern live in token.go (added by the
-// create-wizard PR #82, which merged to main first). The mint/transfer/
-// burn actions in this file reuse it; the duplicate copy that used to
-// live here was removed on merge to avoid a redeclaration.
+// validatePartyID + partyIDPattern live in token.go. The
+// mint/transfer/burn actions in this file reuse them.
 
 // emit writes a human-readable "going to run X with Y" line on the
 // caller's writer before the action returns ErrNeedsV2LocalNet, so

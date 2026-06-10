@@ -104,7 +104,7 @@ A reviewer then:
   merging.
 - Commits + pushes.
 
-## Two-layer resolution (PR #20 #2)
+## Two-layer resolution
 
 DevKit now exposes the catalogue as the *default* tier of a two-layer
 version model — the curated path stays audited, and an explicit

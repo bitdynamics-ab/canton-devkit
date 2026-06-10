@@ -15,7 +15,7 @@ import {
 //      client-side so a typo can't escape to a third-party URL.
 //   2. JSON happy path
 //   3. error envelope decoding into ApiError (preserves code,
-//      detail, remediation per PR #43 handler shape)
+//      detail, remediation per the handler shape)
 //   4. POST request bodies trigger Content-Type: application/json
 //      via the conditional header — issueJwt is the canonical
 //      caller and its include_jwt query toggle is part of the
@@ -63,7 +63,7 @@ describe("apiFetch", () => {
   });
 
   it("decodes the error envelope into ApiError", async () => {
-    // Mirror the handlers/errorBody shape from PR #36 / PR #43.
+    // Mirror the handlers/errorBody shape.
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -156,7 +156,7 @@ describe("issueJwt", () => {
   });
 });
 
-// BIT-231 — Explorer contract-detail + SSE clients.
+// Explorer contract-detail + SSE clients.
 describe("fetchContractDetail", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

@@ -167,19 +167,17 @@ func TestDoctor_PassesVersionToCollector(t *testing.T) {
 	}
 }
 
-// TestDoctor_CategoriserUpstreamNames is the // (reviewer flagged the previous synthetic-fixture test as hiding
-// real bugs). Uses the REAL Name strings produced by
-// internal/docker/checks.go — grepped from production at the time
-// of writing. If a future docker package change renames a check,
-// this test fails here, forcing the categoriser keywords to be
-// updated rather than silently dumping the renamed check into
-// "Other".
+// TestDoctor_CategoriserUpstreamNames uses the REAL Name strings
+// produced by internal/docker/checks.go. If a future docker package
+// change renames a check, this test fails here, forcing the
+// categoriser keywords to be updated rather than silently dumping the
+// renamed check into "Other".
 //
-// Specifically catches the two original-cut bugs:
-// - "Docker memory" → must land in Resources (was System because
-// the categoriser checked "docker" before "memory")
-// - "Host prerequisites (linux)" → must land in System (was
-// Other because no keyword matched)
+// Specifically guards two tricky cases:
+// - "Docker memory" → must land in Resources (not System: the
+// categoriser must check "memory" before "docker")
+// - "Host prerequisites (linux)" → must land in System (not Other,
+// which would happen if no keyword matched)
 func TestDoctor_CategoriserUpstreamNames(t *testing.T) {
 	installFakeDoctorProber(t, func(context.Context, docker.Options) *docker.Report {
 		return &docker.Report{Results: []docker.CheckResult{
@@ -318,19 +316,16 @@ func TestResultToken(t *testing.T) {
 // port allocator can't accidentally make a test fixture look like
 // a real port.
 //
-// Reviewer pin (PR #39 #3): the original fixtures used 4485 — a
-// number close enough to up.go's allocations (4441/4480/4487/etc.)
-// that a reader couldn't tell if the test was asserting against
-// real behavior or a synthetic placeholder. The clearly-synthetic
-// 65535 removes the ambiguity.
+// A clearly-synthetic 65535 (vs. a number near up.go's real
+// allocations like 4485) removes any ambiguity about whether a
+// fixture is asserting real behavior or a placeholder.
 const syntheticTestPort = 65535
 
-// TestDoctor_JSONErrorIsSurfacedOnStderr is the reviewer pin
-// (PR #39 #5) for the swallowed JSON encode error. The original
-// branch returned ExitRuntimeFailure without writing anything to
-// stderr, so users saw exit-4 with no diagnostic. We exercise the
-// error path by piping --format=json output to a writer that
-// fails on Write, and assert the error message reaches stderr.
+// TestDoctor_JSONErrorIsSurfacedOnStderr guards against swallowing
+// the JSON encode error: returning ExitRuntimeFailure without writing
+// anything to stderr leaves users with exit-4 and no diagnostic. We
+// exercise the error path by piping --format=json output to a writer
+// that fails on Write, and assert the error message reaches stderr.
 func TestDoctor_JSONErrorIsSurfacedOnStderr(t *testing.T) {
 	installFakeDoctorProber(t, func(context.Context, docker.Options) *docker.Report {
 		return &docker.Report{Results: []docker.CheckResult{
@@ -353,7 +348,7 @@ func TestDoctor_JSONErrorIsSurfacedOnStderr(t *testing.T) {
 	// the fix, stderr would be empty and the user would see only
 	// the exit code.
 	if errBuf.Len() == 0 {
-		t.Errorf("stderr empty — JSON encode error was swallowed (PR #39 #5 regression)")
+		t.Errorf("stderr empty — JSON encode error was swallowed")
 	}
 	if !strings.Contains(errBuf.String(), "write JSON output") {
 		t.Errorf("stderr should mention 'write JSON output', got %q", errBuf.String())
@@ -398,14 +393,12 @@ func TestDoctor_InvalidFormatExitsUserError(t *testing.T) {
 	}
 }
 
-// TestDoctor_TableRendersAsAlignedColumns is the reviewer pin
-// (PR #39 #4) for the table-flattening issue. The pre-fix
-// renderer emitted a loose stack of Step rows per section; the
-// fix uses term.Table so the (glyph, check, detail) columns
-// align across rows. We pin the columnar contract by asserting
-// that two rows in the same section have their detail strings at
-// the same column offset (modulo ANSI). Pre-fix, Step's
-// whitespace-padded rendering allowed misalignment.
+// TestDoctor_TableRendersAsAlignedColumns guards the columnar
+// layout: the (glyph, check, detail) columns must align across rows.
+// We pin the contract by asserting that two rows in the same section
+// have their detail strings at the same column offset (modulo ANSI).
+// A loose stack of whitespace-padded Step rows would allow
+// misalignment.
 func TestDoctor_TableRendersAsAlignedColumns(t *testing.T) {
 	installFakeDoctorProber(t, func(context.Context, docker.Options) *docker.Report {
 		return &docker.Report{Results: []docker.CheckResult{
@@ -484,17 +477,16 @@ func (failingWriter) Write(p []byte) (int, error) {
 // test fixture is updated to reference it directly.
 var _ = syntheticTestPort
 
-// TestDoctor_RemediationStepsRenderOnSeparateRows is the reviewer
-// pin (PR #39 #4 round-4): the previous renderer joined a multi-
-// step remediation into one Step row with " · " separators, so
-// three actions ("free port", "retry up", "run doctor") visually
-// fused into a single dense line. Each step must now render on
-// its own indented numbered row under the check label.
+// TestDoctor_RemediationStepsRenderOnSeparateRows: each remediation
+// step must render on its own indented numbered row under the check
+// label. Joining a multi-step remediation into one Step row with
+// " · " separators visually fuses unrelated actions ("free port",
+// "retry up", "run doctor") into a single dense line.
 //
 // We pin the contract by seeding ONE failing check with THREE
 // remediation lines, then asserting the rendered output contains
-// three numbered ("1." "2." "3.") rows AND does NOT contain the
-// pre-fix " · " separator joining them.
+// three numbered ("1." "2." "3.") rows AND does NOT contain a " · "
+// separator joining them.
 func TestDoctor_RemediationStepsRenderOnSeparateRows(t *testing.T) {
 	installFakeDoctorProber(t, func(context.Context, docker.Options) *docker.Report {
 		return &docker.Report{Results: []docker.CheckResult{
@@ -535,6 +527,6 @@ func TestDoctor_RemediationStepsRenderOnSeparateRows(t *testing.T) {
 	// "step1 · step2" fusion is the regression marker.)
 	bad := "Stop the conflicting process · Retry localnet up"
 	if strings.Contains(body, bad) {
-		t.Errorf("remediation steps flattened with ' · ' separator (PR #39 #4 regression):\n%s", body)
+		t.Errorf("remediation steps flattened with ' · ' separator:\n%s", body)
 	}
 }

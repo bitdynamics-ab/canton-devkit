@@ -30,8 +30,7 @@ func liveOpts(instance, role string) BalanceOptions {
 // JWT can't read any local party), runBalanceLive returns (nil, nil)
 // rather than failing the ACS query with an empty FiltersByParty
 // (which Canton rejects with INVALID_ARGUMENT). The handler then
-// surfaces an empty balance, not a 500. This was the no-parties skip
-// note on PR #86's review.
+// surfaces an empty balance, not a 500.
 func TestRunBalanceLive_NoPartiesReturnsEmpty(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo")
@@ -99,8 +98,8 @@ func TestRunBalanceLive_StreamErrorIsWrapped(t *testing.T) {
 }
 
 // TestRunBalanceLive_PermissionDeniedOnLocalParties pins the
-// "PermissionDenied widens" intent from PR #86's review: when the
-// per-role JWT can't enumerate parties (ListKnownParties returns
+// "PermissionDenied widens" intent: when the per-role JWT can't
+// enumerate parties (ListKnownParties returns
 // PermissionDenied), the orchestration surfaces a wrapped error
 // rather than silently masking it as an empty balance — so the
 // handler caller can widen to a higher-privilege role on retry.
@@ -128,8 +127,8 @@ func TestRunBalanceLive_PermissionDeniedOnLocalParties(t *testing.T) {
 	}
 }
 
-// TestRunBalanceLive_TruncatesAtCap pins B2 from PR #86's review: a
-// runaway ACS stream (10_001 items) is capped at maxWorkspaceScan and
+// TestRunBalanceLive_TruncatesAtCap: a runaway ACS stream (10_001
+// items) is capped at maxWorkspaceScan and
 // the truncated flag flows back so the public RunBalance wrapper can
 // surface a partial-result warning. The empty ContractEntry shape
 // decodes cleanly past the type-assertion but yields no

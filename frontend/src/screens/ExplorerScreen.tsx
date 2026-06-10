@@ -59,7 +59,7 @@ export function ExplorerScreen() {
   const [activeParties, setActiveParties] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [selectedCid, setSelectedCid] = useState<string | null>(null);
-  // BIT-231 — live-stream connection status. "live" once the
+  // Live-stream connection status. "live" once the
   // EventSource has fired at least one frame; "reconnecting" when
   // the browser has dropped the connection and is retrying;
   // "truncated" when the backend hit its 10k event cap.
@@ -143,7 +143,7 @@ export function ExplorerScreen() {
     };
   }, [name, role, refreshSnapshot]);
 
-  // BIT-231 — live SSE subscription. Mounted once the snapshot has
+  // Live SSE subscription. Mounted once the snapshot has
   // loaded; tears down when the instance / role changes or the
   // screen unmounts. The EventSource browser primitive auto-
   // reconnects on transient failures (3s default backoff); we
@@ -232,7 +232,7 @@ export function ExplorerScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, role, state.kind, refreshSnapshot]);
 
-  // BIT-231 — periodic reconciliation. Every 30s we re-pull the
+  // Periodic reconciliation. Every 30s we re-pull the
   // snapshot to correct any drift the SSE deltas missed (network
   // hiccups, browser suspend, backend restart). Quiet — no UI flash.
   useEffect(() => {
@@ -248,7 +248,7 @@ export function ExplorerScreen() {
   // Keyboard: / focuses search; Esc clears selection. The "/"
   // shortcut must NOT trigger when the user is typing into any
   // editable surface — INPUT, TEXTAREA, or a contenteditable
-  // element (review yellow).
+  // element.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
@@ -320,7 +320,7 @@ export function ExplorerScreen() {
     [state, selectedCid],
   );
 
-  // BIT-231 — J/K navigation between rows. Driven over the
+  // J/K navigation between rows. Driven over the
   // currently *filtered* view so the user follows what they see,
   // not the underlying ACS order. The drawer registers its own
   // keydown listener (Esc + j/k) and invokes these callbacks.
@@ -576,7 +576,7 @@ export function ExplorerScreen() {
             </div>
           </div>
 
-          {/* RIGHT — detail drawer (BIT-231) */}
+          {/* RIGHT — detail drawer */}
           {selected ? (
             <ContractDetailDrawer
               instance={name}

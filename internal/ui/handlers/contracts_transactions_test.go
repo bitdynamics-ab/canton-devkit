@@ -11,14 +11,13 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// Yellow Y1 — error-path coverage for the Explorer handlers
+// Error-path coverage for the Explorer handlers
 // (handlers/contracts.go + handlers/transactions.go). These
 // exercise every validation/lookup branch above the gRPC dial
 // without needing a real Canton ledger.
 //
 // The full happy-path test requires a ledger.Client interface +
-// fake — tracked as a follow-up (file a Linear ticket once this
-// PR lands). What we cover here:
+// fake — tracked as a follow-up. What we cover here:
 //
 //   - 400 on invalid instance name
 //   - 404 on unknown registered instance
@@ -212,7 +211,7 @@ func TestTransactions_MissingParticipantPort(t *testing.T) {
 	}
 }
 
-// ── BIT-231 — stream + contract-detail endpoint guards ─────────
+// ── stream + contract-detail endpoint guards ───────────────────
 //
 // The new SSE stream and contract-detail endpoints share the same
 // validation prefix as the snapshot path. Mirror the matrix so any

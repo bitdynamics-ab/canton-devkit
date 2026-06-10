@@ -8,7 +8,7 @@ import (
 // noticeOperationalVerbs are the localnet subcommands "real" enough to
 // trigger the one-time disclosure. Informational commands (version,
 // help, `telemetry …`) deliberately don't, so a user can read and decide
-// before any operational run (design decision #9).
+// before any operational run.
 var noticeOperationalVerbs = set("up", "down", "restart", "status", "doctor", "clean", "snapshot", "restore")
 
 // MaybeNotice prints the one-time opt-out disclosure to w and records it,

@@ -24,10 +24,9 @@ type DownOptions struct {
 	Name      string
 	KeepCache bool // documented, currently informational (cache is shared across instances)
 
-	// NewRunner is a test-only seam (PR #21 Zhe review). When nil,
-	// RunDown constructs the real *docker.ComposeRunner. Tests inject a
-	// stub to assert the compose-failure / interruption decision table
-	// without docker.
+	// NewRunner is a test-only seam. When nil, RunDown constructs the
+	// real *docker.ComposeRunner. Tests inject a stub to assert the
+	// compose-failure / interruption decision table without docker.
 	NewRunner func(projectName string, composeFiles, envFiles, env []string, workDir string, logw io.Writer) composeDowner
 }
 
@@ -72,12 +71,11 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 	_, _ = fmt.Fprintf(out, "Stopping Canton LocalNet %q (Splice %s)...\n",
 		state.Name, state.SpliceVersion)
 
-	// Persist the transitional `stopping` state BEFORE invoking compose
-	// (Zhe review, PR #21). If we crashed or were SIGKILLed mid-
-	// teardown without this, `localnet status` would keep reporting
-	// `running` even though containers are partially down. Failure to
-	// write the transitional state is non-fatal — the worst case
-	// reverts to the pre-fix behaviour.
+	// Persist the transitional `stopping` state BEFORE invoking compose.
+	// If we crashed or were SIGKILLed mid-teardown without this,
+	// `localnet status` would keep reporting `running` even though
+	// containers are partially down. Failure to write the transitional
+	// state is non-fatal.
 	state.Status = registry.StatusStopping
 	if err := registry.Write(state); err != nil {
 		_, _ = fmt.Fprintf(errw, "Warning: could not persist stopping state: %s\n", err)
@@ -104,12 +102,12 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 		}
 	}
 	if err := runner.Down(ctx); err != nil {
-		// Zhe review (PR #21): a compose-down failure must NOT silently
-		// fall through to registry.Delete — doing so would scrub the
-		// retry metadata while containers / volumes may still be
-		// running. Preserve state as Failed, leave the data dir +
-		// registry entry intact so the user can retry, and exit
-		// non-zero so scripts see the failure.
+		// A compose-down failure must NOT silently fall through to
+		// registry.Delete — doing so would scrub the retry metadata
+		// while containers / volumes may still be running. Preserve
+		// state as Failed, leave the data dir + registry entry intact
+		// so the user can retry, and exit non-zero so scripts see the
+		// failure.
 		//
 		// Interruption (Ctrl-C / SIGTERM) is a separate cell:
 		// ExitTimeout rather than ExitRuntimeFailure, since the

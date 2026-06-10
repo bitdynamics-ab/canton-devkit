@@ -12,12 +12,12 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 )
 
-// NewRouter wires the M2 Web UI HTTP surface:
+// NewRouter wires the Web UI HTTP surface:
 //
 //	/healthz       — liveness probe (200 OK, no body); cheap, no docker calls
 //	/api/version   — server identity + schema versions for handshake
-//	/api/* — REST handlers (added by in a follow-on PR)
-//	/events — SSE stream (added by )
+//	/api/*         — REST handlers
+//	/events        — SSE stream
 //	/              — embedded Vite bundle with SPA fallback (assets.go)
 //
 // `hub` may be nil for callers that don't want SSE (test wiring,
@@ -34,23 +34,22 @@ func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	mux.HandleFunc("GET /api/version", handleVersion)
-	// REST handlers under /api/*. Each handler package
-	// owns one resource; new resources mount themselves here as
-	// they land.
+	// REST handlers under /api/*. Each handler package owns one
+	// resource; new resources mount themselves here as they land.
 	handlers.MountInstances(mux, hub)
 	handlers.MountAuth(mux)
 	handlers.MountSpliceVersions(mux)
 	handlers.MountPreflight(mux)
 	handlers.MountMetrics(mux)
 	handlers.MountSnapshots(mux)    // UI parity for snapshot/restore
-	handlers.MountDAR(mux, hub)     // DAR Manager (list uploaded DARs + BIT-230)
+	handlers.MountDAR(mux, hub)     // DAR Manager (list/upload/inspect/diff/vetting/watch)
 	handlers.MountContracts(mux)    // Explorer (ACS snapshot)
 	handlers.MountTransactions(mux) // Explorer (Transactions/Timeline)
 	handlers.MountSkills(mux)       // Agent Skills (browse + install)
 	handlers.MountTokens(mux, hub)  // Tokens (V2 instruments + actions)
-	// /events (SSE) — added by . Handler does its own
-	// Origin check (sse.go) since EventSource sends GET and the
-	// global CSRF middleware is GET-exempt.
+	// /events (SSE). Handler does its own Origin check (sse.go)
+	// since EventSource sends GET and the global CSRF middleware
+	// is GET-exempt.
 	if hub != nil {
 		mux.Handle("GET /events", sseHandler(hub))
 	} else {
@@ -79,7 +78,7 @@ func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
 }
 
 // withFeatureTelemetry records which Web UI screens a `localnet ui`
-// session touched (M2 adoption signal). Recorded once per feature per
+// session touched (adoption signal). Recorded once per feature per
 // process via telemetry.IncOnce, so the Explorer/Metrics polling loops
 // don't inflate the count — the signal is "this screen was used this
 // session," not request volume. Maps the request path prefix to a
@@ -195,7 +194,7 @@ func (s *statusRecorder) Flush() {
 //
 //	access: 200 GET /api/version  127.0.0.1  3.2ms
 //
-// . Format is stable and parseable.
+// Format is stable and parseable.
 //
 // We deliberately do NOT log query strings — they can carry
 // credentials (?include_jwt=true today, future auth tokens). The
@@ -256,9 +255,8 @@ func handleHealthz(w http.ResponseWriter, _ *http.Request) {
 // refuse to talk to a v2 backend (or vice versa) with a clear error
 // instead of silently mis-decoding responses.
 //
-// `Built` is intentionally not embedded yet — we don't have a stable
-// build-info plumbing on M1 foundation. Added in M2 finalisation when
-// the release pipeline lands.
+// `Built` is intentionally not embedded yet — we don't have stable
+// build-info plumbing here yet. Added once the release pipeline lands.
 type versionPayload struct {
 	Name          string `json:"name"`
 	SchemaVersion int    `json:"schema_version"`
@@ -301,7 +299,7 @@ const schemaVersion = 1
 //
 // Auth headers, CORS, request logging — all added later in their own
 // commits with their own tests. Keeping the middleware stack minimal
-// here means /131 review can focus on their own surfaces.
+// here keeps each surface's review self-contained.
 func withCommonHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")

@@ -11,7 +11,7 @@ import (
 
 // channel is the release channel. main() sets it from its own
 // -ldflags "-X main.channel=stable|nightly" build var via SetChannel.
-// Defaults to "dev" for a local `go build` (design decision #15).
+// Defaults to "dev" for a local `go build`.
 var channel = "dev"
 
 // SetChannel records the release channel (called once by main at start).
@@ -76,7 +76,7 @@ func detectCI() bool {
 }
 
 // detectAgent buckets the running LLM coding agent from well-known env
-// vars. Unknown/none → "none" (never "other"), per design decision #3.
+// vars. Unknown/none → "none" (never "other").
 func detectAgent() string {
 	switch {
 	case os.Getenv("CLAUDECODE") != "" || os.Getenv("CLAUDE_CODE") != "":
@@ -93,8 +93,8 @@ func detectAgent() string {
 }
 
 // ComposeBucket maps a `docker compose version --short` string to the
-// allow-listed bucket (decision #3, matching the preflight buckets).
-// Empty version → "" (dropped).
+// allow-listed bucket (matching the preflight buckets). Empty version →
+// "" (dropped).
 func ComposeBucket(version string) string {
 	v := strings.TrimPrefix(strings.TrimSpace(version), "v")
 	maj, min, ok := majorMinor(v)
@@ -158,7 +158,7 @@ func Slug(label string) string {
 }
 
 // debugDump writes the JSON that WOULD be sent for the run's counters to
-// stderr and skips the network (DPM_TELEMETRY_DEBUG=1, decision #10).
+// stderr and skips the network (DPM_TELEMETRY_DEBUG=1).
 func debugDump(period string, counters map[string]map[string]int) {
 	b, _ := json.MarshalIndent(map[string]any{
 		"schema_version": SchemaVersion,

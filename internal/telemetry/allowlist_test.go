@@ -11,10 +11,10 @@ import (
 )
 
 // TestAllCallSitesAreAllowListed walks every telemetry.Inc(...) call site
-// in the repo (design decision #17.1) and asserts: the chart literal is a
-// known chart, and when the bucket is also a literal, (chart,bucket) is
-// allow-listed. This catches a new counter or a typo'd bucket slipped
-// past review — the allow-list is the single source of truth.
+// in the repo and asserts: the chart literal is a known chart, and when
+// the bucket is also a literal, (chart,bucket) is allow-listed. This
+// catches a new counter or a typo'd bucket slipped past review — the
+// allow-list is the single source of truth.
 func TestAllCallSitesAreAllowListed(t *testing.T) {
 	root := repoRoot(t)
 	fset := token.NewFileSet()

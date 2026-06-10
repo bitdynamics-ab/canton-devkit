@@ -54,20 +54,20 @@ func lastByte(s string, b byte) int {
 // `down` can hand the user back the same URLs they bookmarked.
 //
 // The mapping is the inverse of the assignments in RunUp step 8
-// — keep them in sync. Zhe flagged in PR #20 #5/#7 that
-// re-up should not surprise the user with new ports.
+// — keep them in sync so a re-up doesn't surprise the user with
+// new ports.
 var UIPortEnvVarToStateKey = map[string]string{
 	"APP_USER_UI_PORT":     "app_user_ui",
 	"APP_PROVIDER_UI_PORT": "app_provider_ui",
 	"SV_UI_PORT":           "sv_ui",
 	"SWAGGER_UI_PORT":      "swagger_ui",
 	"DB_PORT":              "postgres",
-	// observability profile ports allocated
-	// alongside the rest so a re-up with --profile observability
-	// reuses the same Grafana / Prometheus URLs the user
-	// bookmarked. The compose overlay binds `${PROMETHEUS_HOST_PORT}
-	// :9090` / `${GRAFANA_HOST_PORT}:3000` so the chosen ephemeral
-	// host port is fed in via env (same as the existing UI vars).
+	// Observability profile ports are allocated alongside the rest so
+	// a re-up with --profile observability reuses the same Grafana /
+	// Prometheus URLs the user bookmarked. The compose overlay binds
+	// `${PROMETHEUS_HOST_PORT}:9090` / `${GRAFANA_HOST_PORT}:3000`, so
+	// the chosen ephemeral host port is fed in via env (same as the
+	// existing UI vars).
 	"PROMETHEUS_HOST_PORT": "prometheus_ui",
 	"GRAFANA_HOST_PORT":    "grafana_ui",
 }
@@ -81,8 +81,8 @@ var UIPortEnvVarToStateKey = map[string]string{
 // stable-URL contract this helper exists to enforce).
 var ErrPortBusy = fmt.Errorf("previously allocated host port is busy")
 
-// ReuseOrAllocateUIPorts implements the stable-port contract from
-// PR #20 #5/#7. Decision table:
+// ReuseOrAllocateUIPorts implements the stable-port contract.
+// Decision table:
 //
 //	prior state.Ports | port still free | result
 //	──────────────────────┼─────────────────┼─────────────────────────
@@ -91,8 +91,8 @@ var ErrPortBusy = fmt.Errorf("previously allocated host port is busy")
 //	non-zero | no | ErrPortBusy (no fallback)
 //
 // The "no fallback on busy" rule is deliberate: silently switching
-// ports would re-introduce exactly the bookmark-breakage the ticket
-// is about. We surface a clear error and let the user decide.
+// ports would re-introduce exactly the bookmark-breakage this helper
+// exists to prevent. We surface a clear error and let the user decide.
 //
 // `prior` may be nil on first-run; that case is equivalent to "every
 // key missing" and triggers full ephemeral allocation.
@@ -208,10 +208,10 @@ func allocateOneEphemeral() (int, error) {
 
 // UIPortEnvVars enumerates the env-var names the Splice LocalNet compose
 // substitutes for host ports of non-canton services. Names are stable
-// across 0.5.x and 0.6.x (confirmed via the adapter design research).
+// across 0.5.x and 0.6.x.
 //
-// — the observability profile's PROMETHEUS_HOST_PORT
-// and GRAFANA_HOST_PORT come via ObservabilityPortEnvVars (separate
+// The observability profile's PROMETHEUS_HOST_PORT and
+// GRAFANA_HOST_PORT come via ObservabilityPortEnvVars (separate
 // helper) so they're conditionally appended only when the profile is
 // enabled. Keeping them out of the always-on list avoids a re-up
 // without `--profile observability` allocating two ephemeral ports
