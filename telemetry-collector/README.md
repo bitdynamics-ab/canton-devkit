@@ -34,7 +34,10 @@ Point the CLI at the collector (on every machine, or bake it into release
 builds via `-ldflags`):
 
 ```bash
+# Local/dev stack:
 export CANTON_DEVKIT_TELEMETRY_ENDPOINT=http://<this-host>:8080/v1/counters
+# Our deployed instance (production):
+# export CANTON_DEVKIT_TELEMETRY_ENDPOINT=https://canton-devkit-telemetry.bitdynamics.me/v1/counters
 ```
 
 Open Metabase at `http://<this-host>:3000` and finish its first-run

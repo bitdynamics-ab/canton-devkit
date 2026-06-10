@@ -11,10 +11,12 @@ import (
 	"time"
 )
 
-// endpoint is the collector URL (design: telemetry.canton-devkit.dev/v1/
-// counters). Empty by default = "ship dark": counters accumulate locally
-// and nothing is sent. Baked at release-build time via -ldflags, or
-// overridden by CANTON_DEVKIT_TELEMETRY_ENDPOINT (test seam).
+// endpoint is the collector URL (deployed:
+// https://canton-devkit-telemetry.bitdynamics.me/v1/counters). Empty by
+// default = "ship dark": counters accumulate locally and nothing is sent.
+// Baked at release-build time via -ldflags (from the TELEMETRY_ENDPOINT
+// Actions variable), or overridden by CANTON_DEVKIT_TELEMETRY_ENDPOINT
+// (test seam).
 var endpoint = ""
 
 const envEndpoint = "CANTON_DEVKIT_TELEMETRY_ENDPOINT"
