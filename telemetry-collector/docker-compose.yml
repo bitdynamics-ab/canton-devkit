@@ -2,6 +2,18 @@
 # + Metabase (dashboards + CSV/Excel export). Everything runs on your own
 # host; nothing leaves it.
 #
+# THIS FILE IS THE LOCAL / DEV STACK: ports are published on all interfaces
+# (0.0.0.0) and the collector is built from source for quick iteration. For a
+# PUBLIC, INTERNET-FACING DEPLOYMENT, layer the production override on top —
+# it binds everything to loopback (so only a reverse proxy reaches it) and
+# turns on the rate limiter:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# See DEPLOY.md (and, for our hosted instance, the canton-infra repo's
+# telemetry/ directory which holds the nginx + TLS glue).
+#
+# Local quick start:
 #   cp .env.example .env   # then edit the secrets
 #   docker compose up -d
 #
@@ -12,8 +24,6 @@
 #   docker compose exec postgres pg_dump -U postgres telemetry > backup.sql
 #   docker compose exec postgres psql -U postgres -d telemetry \
 #     -c "\copy (SELECT * FROM counter_period) TO STDOUT CSV HEADER" > counters.csv
-#
-# See DEPLOY.md for local-testing and production deployment.
 
 services:
   postgres:
