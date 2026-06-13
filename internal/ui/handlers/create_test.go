@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/progress"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 )
@@ -203,6 +205,61 @@ func TestCreate_DuplicateNameReturns409(t *testing.T) {
 
 	jobs.Cancel("dupcreate")
 	waitJobsDrain(t, time.Second)
+}
+
+// TestCreate_UncuratedRunsPreflightGate is the #73 UI-parity
+// regression: an uncurated tag with allow_uncurated must STILL pass
+// through the synchronous preflight gate (with the Major-aware memory
+// floor) before the 202 — previously the uncurated path skipped the
+// gate entirely and let the UI accept a host RunUp would then refuse.
+// We stub resolveForGate so the test stays offline, and make the
+// preflight report fail; the handler must surface 422, not 202.
+func TestCreate_UncuratedRunsPreflightGate(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	jobsReset()
+
+	// Stub the upstream resolution so no network is hit: pretend the
+	// uncurated tag resolved to a 0.6 version.
+	origResolve := resolveForGate
+	resolveForGate = func(_ context.Context, requested string, allowUncurated bool) (splice.Version, bool) {
+		if !allowUncurated {
+			t.Fatalf("resolveForGate called with allowUncurated=false for %q", requested)
+		}
+		return splice.Version{Tag: requested, Major: "0.6"}, true
+	}
+	defer func() { resolveForGate = origResolve }()
+
+	// Make the gate fail for THIS test only (TestMain stubs it to OK).
+	origPreflight := runPreflightForVersion
+	runPreflightForVersion = func(_ context.Context, v splice.Version) types.PreflightReport {
+		if v.Major != "0.6" {
+			t.Errorf("preflight got Major %q, want the resolved 0.6", v.Major)
+		}
+		return types.PreflightReport{SchemaVersion: types.SchemaVersion, OK: false,
+			ErrorCode: "DOCKER_MEMORY_LOW"}
+	}
+	defer func() { runPreflightForVersion = origPreflight }()
+
+	hub := stream.New()
+	defer hub.Close()
+	handler := handleCreate(hub)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/instances",
+		strings.NewReader(`{"name":"unc","version":"0.6.99-rc.1","allow_uncurated":true}`))
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422 (gate must run for uncurated); body: %s", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("X-Preflight-Failed") != "1" {
+		t.Errorf("missing X-Preflight-Failed header on uncurated gate failure")
+	}
+	// No goroutine should have been spawned — the gate refused before
+	// jobs.Register.
+	if jobs.Active("unc") {
+		t.Errorf("a bring-up goroutine was spawned despite the preflight gate failing")
+	}
 }
 
 // TestInstanceEvents_StreamsBufferedEvents pins the late-subscriber

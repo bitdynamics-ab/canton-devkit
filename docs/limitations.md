@@ -18,15 +18,20 @@ and links to follow-up tickets where applicable. Updated as we ship.
 
 ## Concurrency / locking
 
-- **Windows: registry locking is process-local only.**
-  `internal/registry/lock_windows.go` returns a no-op `Lock()` and
-  `withIndexLock` uses a `sync.Mutex` that protects only within the
-  same canton-devkit process. Two concurrent `localnet up --name foo`
-  invocations on Windows can race past the lock. We print a one-line
-  stderr warning on every `Lock` call so users notice. A proper fix
-  needs `CreateFileW` + `LockFileEx` via `golang.org/x/sys/windows`;
-  out of scope until someone hits this in practice.
-  *Linux/macOS use `syscall.Flock` and are unaffected.*
+- **(resolved)** *Earlier the Windows registry lock was a no-op and
+  `withIndexLock` was a process-local `sync.Mutex`, so two concurrent
+  `localnet up --name foo` invocations on Windows could race past the
+  lock.* Both now take real cross-process locks via
+  `windows.LockFileEx` (`internal/registry/lock_windows.go` uses
+  `LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY` for the
+  fail-fast per-instance lock; `internal/registry/index_lock_windows.go`
+  uses the blocking `LOCKFILE_EXCLUSIVE_LOCK` for the index
+  read-modify-write). The OS releases the lock when the handle closes
+  or the process exits, so there is no stale lock file to recover. This
+  uses `golang.org/x/sys/windows`, already a direct dependency (e.g.
+  `internal/localnet/snapshot/diskspace_windows.go`).
+  *Linux/macOS use `syscall.Flock`; behaviour is now equivalent across
+  platforms.*
 
 ## Splice version pinning
 
@@ -39,6 +44,28 @@ and links to follow-up tickets where applicable. Updated as we ship.
   enough; we hash the extracted tree, not the gzip envelope, so a
   gzip-level rewrite (compression-level change, mtime drift) has no
   effect. See `docs/versions.md`.
+
+## Container image pinning
+
+- **Splice container images are pulled by mutable ghcr tags, not
+  digests.** The catalogue pins the source TREE (commit SHA +
+  post-extract ContentSHA), but Splice's compose references every image
+  through a single shared `IMAGE_TAG` variable
+  (`image: "${IMAGE_REPO}canton:${IMAGE_TAG}"`,
+  `${IMAGE_REPO}splice-app:${IMAGE_TAG}`, the web UIs, …). Because one
+  variable addresses ~6 distinct images, we can't inject per-image
+  `@sha256:` digests via the compose env — a single digest can't pin six
+  different images.
+
+  Instead DevKit VERIFIES post-up: after services are healthy it records
+  each running image's content digest (image ID) in `state.json`
+  (`image_digests`) and, on a later `up`/`restart` of the SAME version,
+  WARNs if a digest changed — i.e. a mutable ghcr tag was republished
+  under you. See `internal/localnet/image_digests.go`. This is a warning,
+  not a gate (a digest can legitimately change if you manually re-pull),
+  and it's best-effort (a capture failure just skips the check). True
+  digest-pinning at pull time would need upstream Splice to expose
+  per-image digest variables in its compose.
 
 ## Compose env reconstruction
 

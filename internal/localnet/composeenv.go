@@ -61,7 +61,12 @@ func composeEnvFiles(state *registry.State) ([]string, error) {
 		return nil, fmt.Errorf("overlay.env not found at %s — was this instance started with the current version?", overlay)
 	}
 
-	v, err := splice.Resolve(state.SpliceVersion)
+	// ResolveForOperation (not Resolve): an instance brought up with
+	// --allow-uncurated has a tag that isn't in the catalogue, but it
+	// already exists and must stay operable (down / logs / restart /
+	// clean). The adapter only needs the Major, which ResolveForOperation
+	// recovers from the resolved-versions cache or the tag itself.
+	v, err := splice.ResolveForOperation(state.SpliceVersion)
 	if err != nil {
 		return nil, fmt.Errorf("resolve version %q: %w", state.SpliceVersion, err)
 	}

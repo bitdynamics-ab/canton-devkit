@@ -34,11 +34,17 @@ func adapterFor(v splice.Version) (splice.Adapter, error) {
 // core-services check" to preserve back-compat with registry entries
 // whose splice_version has been renamed or removed.
 //
+// Uses ResolveForOperation (not Resolve) so an uncurated instance —
+// whose tag isn't in the catalogue — still gets its core-services
+// evaluated by the reconciler instead of silently skipping the check.
+// The list depends only on the adapter Major, which ResolveForOperation
+// recovers from the resolved cache or the tag.
+//
 // Exported here so handlers (which can't see adapterFor) have a
 // single-call entry point and keep the adapter-resolver invariants
 // in one place rather than scattered across packages.
 func CoreServicesFor(spliceVersion string) []string {
-	v, err := splice.Resolve(spliceVersion)
+	v, err := splice.ResolveForOperation(spliceVersion)
 	if err != nil {
 		return nil
 	}

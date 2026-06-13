@@ -44,24 +44,54 @@ var tarballURL = func(v Version) string {
 	return fmt.Sprintf("https://github.com/canton-network/splice/archive/%s.tar.gz", v.Commit)
 }
 
+// contentSHAMarker is the filename written inside a cached projectDir
+// recording the ContentSHA of the extracted tree. It lets a cache hit
+// be re-validated against the catalogue (or the recorded TOFU value)
+// without re-hashing the whole tree on every Fetch — we compare the
+// cheap marker, and only re-download when it diverges from what we
+// expect.
+const contentSHAMarker = ".content-sha"
+
 // Fetch ensures the compose project for v is present and verified under
 // cacheRoot. Returns the absolute path of the project directory (the one
 // containing `compose.yaml`).
 //
 // Cache semantics:
-//   - If the project directory already exists and contains compose.yaml,
-//     Fetch returns immediately. A previously-verified tarball does not
-//     need to be re-downloaded or re-hashed.
-//   - On cache miss, the tarball is downloaded, its SHA256 is verified
-//     against v.SHA256, and only the cluster/compose/localnet subtree is
-//     extracted. SHA256 mismatch is fatal — the partial cache is removed.
+//   - The project directory is keyed by tag+commit (see ProjectDir), so
+//     re-pinning a mutable-stream tag to a new commit lands in a fresh
+//     directory rather than reusing stale content.
+//   - On a cache hit, the recorded ContentSHA marker is compared against
+//     the expected hash. For a curated entry the expected hash is
+//     v.ContentSHA; if the marker is missing or differs (a catalogue
+//     re-pin to the SAME commit, or local tampering of the marker), the
+//     hit is rejected and the tree is re-fetched. A previously-verified
+//     tree with a matching marker is NOT re-hashed.
+//   - On a cache miss the tarball is downloaded and only the
+//     cluster/compose/localnet subtree is extracted. For curated entries
+//     the extracted tree is verified against v.ContentSHA (mismatch is
+//     fatal). For uncurated entries (empty v.ContentSHA) the tree hash is
+//     computed on first extraction (trust-on-first-use) and persisted to
+//     resolved-versions.json so later runs verify against it.
 //
 // Fetch never modifies anything outside cacheRoot and never writes to the
 // system temp dir for the final cache (only short-lived staging dirs).
 func Fetch(ctx context.Context, v Version, cacheRoot string, progress io.Writer) (string, error) {
 	projectDir := ProjectDir(cacheRoot, v)
 	if _, err := os.Stat(filepath.Join(projectDir, "compose.yaml")); err == nil {
-		return projectDir, nil
+		// Re-validate the hit against the expected ContentSHA before
+		// trusting it. For uncurated entries (empty v.ContentSHA) the
+		// expected value is whatever was recorded on first install —
+		// we trust the keyed-by-commit directory and accept the hit.
+		if cacheHitIsValid(projectDir, v.ContentSHA) {
+			return projectDir, nil
+		}
+		// Marker missing or mismatched: drop the stale tree and fall
+		// through to a fresh fetch + verify.
+		if progress != nil {
+			_, _ = fmt.Fprintf(progress,
+				"Cached Splice %s failed content re-verification — re-fetching\n", v.Tag)
+		}
+		_ = os.RemoveAll(projectDir)
 	}
 
 	if err := os.MkdirAll(cacheRoot, 0o755); err != nil {
@@ -92,7 +122,8 @@ func Fetch(ctx context.Context, v Version, cacheRoot string, progress io.Writer)
 		// Unknown size in the catalogue → fall back to a hard 512 MB cap.
 		maxBytes = 512 * 1024 * 1024
 	}
-	if err := downloadAndExtract(ctx, url, v.ContentSHA, maxBytes, stagingDir); err != nil {
+	gotSHA, err := downloadAndExtract(ctx, url, v.ContentSHA, maxBytes, stagingDir)
+	if err != nil {
 		// Staging dir is cleaned by the deferred RemoveAll above; nothing
 		// extra needed here.
 		return "", err
@@ -110,6 +141,12 @@ func Fetch(ctx context.Context, v Version, cacheRoot string, progress io.Writer)
 		return "", fmt.Errorf("stat staged compose.yaml: %w", err)
 	}
 
+	// Record the (verified or freshly-computed) ContentSHA inside the
+	// staged tree so future cache hits can be re-validated cheaply.
+	if err := os.WriteFile(filepath.Join(stagingDir, contentSHAMarker), []byte(gotSHA), 0o644); err != nil {
+		return "", fmt.Errorf("write content-sha marker: %w", err)
+	}
+
 	if err := os.Rename(stagingDir, projectDir); err != nil {
 		// If another concurrent Fetch already moved a directory into
 		// projectDir, treat that as a success — the artifact is now
@@ -120,15 +157,77 @@ func Fetch(ctx context.Context, v Version, cacheRoot string, progress io.Writer)
 		return "", fmt.Errorf("install cache: %w", err)
 	}
 
+	// Trust-on-first-use for uncurated tags: persist the computed hash
+	// back into resolved-versions.json so the next Fetch verifies the
+	// tree against it instead of recomputing TOFU. Best-effort — a write
+	// failure must not fail an otherwise-successful bring-up (the keyed-
+	// by-commit cache dir already pins what we extracted).
+	if v.ContentSHA == "" && gotSHA != "" {
+		recordTOFUContentSHA(v.Tag, gotSHA)
+	}
+
 	if progress != nil {
 		_, _ = fmt.Fprintf(progress, "Cached at %s\n", projectDir)
 	}
 	return projectDir, nil
 }
 
+// cacheHitIsValid reports whether the cached projectDir can be trusted.
+// When wantContentSHA is non-empty (curated entry) the recorded marker
+// must match it exactly — a missing or divergent marker means the
+// catalogue was re-pinned to the same commit, or the marker/tree was
+// tampered with, so the hit is rejected. When wantContentSHA is empty
+// (uncurated, TOFU) we trust the commit-keyed directory and accept any
+// hit that carries a marker (proving it was a complete prior install).
+func cacheHitIsValid(projectDir, wantContentSHA string) bool {
+	marker, err := os.ReadFile(filepath.Join(projectDir, contentSHAMarker))
+	if err != nil {
+		// Legacy caches (installed before the marker existed) have no
+		// marker. For curated entries we re-fetch to gain the marker;
+		// for uncurated entries there's nothing to compare against, so
+		// accept the hit to avoid a needless re-download.
+		return wantContentSHA == ""
+	}
+	got := strings.TrimSpace(string(marker))
+	if wantContentSHA == "" {
+		return got != ""
+	}
+	return strings.EqualFold(got, wantContentSHA)
+}
+
+// recordTOFUContentSHA persists a freshly-computed ContentSHA for an
+// uncurated tag into resolved-versions.json so subsequent Fetches verify
+// against it (the "verify thereafter" half of trust-on-first-use). The
+// resolved entry is created by ResolveUpstream with an empty ContentSHA;
+// here we fill it in. Best-effort: any error is swallowed because the
+// commit-keyed cache directory already pins the extracted bytes.
+func recordTOFUContentSHA(tag, contentSHA string) {
+	cache, err := ReadResolvedCache()
+	if err != nil || cache == nil {
+		return
+	}
+	hit, ok := cache.LookupResolved(tag)
+	if !ok || hit.ContentSHA == contentSHA {
+		return // nothing cached to update, or already recorded
+	}
+	hit.ContentSHA = contentSHA
+	cache.Upsert(hit)
+	_ = WriteResolvedCache(cache)
+}
+
 // downloadAndExtract streams the tarball at url, extracts the
-// cluster/compose/localnet subtree into destDir, and verifies the
-// extracted tree against wantContentSHA.
+// cluster/compose/localnet subtree into destDir, and returns the
+// SHA-256 of the extracted tree.
+//
+// Verification policy:
+//   - wantContentSHA != "" (curated entry): the computed tree hash MUST
+//     equal it; a mismatch is fatal.
+//   - wantContentSHA == "" (uncurated entry): trust-on-first-use — the
+//     computed hash is returned (not refused) so the caller can record
+//     it for later verification. ResolveUpstream synthesises uncurated
+//     versions with an empty ContentSHA precisely so this path can fill
+//     it in; refusing here is what made --allow-uncurated fail end to
+//     end.
 //
 // Single-layer integrity model: the URL itself encodes a git commit
 // SHA (immutable, content-addressable — see tarballURL); GitHub's
@@ -141,59 +240,54 @@ func Fetch(ctx context.Context, v Version, cacheRoot string, progress io.Writer)
 // returns an arbitrary-sized stream (misconfigured CDN, malicious
 // proxy) can't OOM the host. The +1 lets us tell "exactly maxBytes"
 // from "more than maxBytes" — only the latter is an attack signal.
-func downloadAndExtract(ctx context.Context, url, wantContentSHA string, maxBytes int64, destDir string) error {
+func downloadAndExtract(ctx context.Context, url, wantContentSHA string, maxBytes int64, destDir string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, downloadTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return fmt.Errorf("build request: %w", err)
+		return "", fmt.Errorf("build request: %w", err)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("download %s: %w", url, err)
+		return "", fmt.Errorf("download %s: %w", url, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download %s: HTTP %d", url, resp.StatusCode)
+		return "", fmt.Errorf("download %s: HTTP %d", url, resp.StatusCode)
 	}
 
 	limited := &cappedReader{r: io.LimitReader(resp.Body, maxBytes+1), max: maxBytes}
 
 	gzr, err := gzip.NewReader(limited)
 	if err != nil {
-		return fmt.Errorf("gunzip: %w", err)
+		return "", fmt.Errorf("gunzip: %w", err)
 	}
 	defer func() { _ = gzr.Close() }()
 
 	if err := extractLocalNet(tar.NewReader(gzr), destDir); err != nil {
-		return err
+		return "", err
 	}
 
 	// Drain remaining bytes so we catch a body that's larger than the
 	// extracted subtree alone (and trip the cap if applicable).
 	if _, err := io.Copy(io.Discard, limited); err != nil {
-		return fmt.Errorf("drain tarball: %w", err)
+		return "", fmt.Errorf("drain tarball: %w", err)
 	}
 	if limited.overflow {
-		return fmt.Errorf("download %s: response exceeded %d-byte cap", url, maxBytes)
+		return "", fmt.Errorf("download %s: response exceeded %d-byte cap", url, maxBytes)
 	}
 
-	if wantContentSHA == "" {
-		// Should not happen — every catalogue entry has a ContentSHA.
-		// Fail loud rather than silently accepting arbitrary content.
-		return fmt.Errorf("no ContentSHA recorded for %s; refusing to install unverified tree", url)
-	}
 	gotContentSHA, err := computeTreeSHA(destDir)
 	if err != nil {
-		return fmt.Errorf("compute content hash: %w", err)
+		return "", fmt.Errorf("compute content hash: %w", err)
 	}
-	if !strings.EqualFold(gotContentSHA, wantContentSHA) {
-		return fmt.Errorf("content hash mismatch for %s: extracted tree hashed to %s, want %s",
+	if wantContentSHA != "" && !strings.EqualFold(gotContentSHA, wantContentSHA) {
+		return "", fmt.Errorf("content hash mismatch for %s: extracted tree hashed to %s, want %s",
 			url, gotContentSHA, wantContentSHA)
 	}
-	return nil
+	return gotContentSHA, nil
 }
 
 // computeTreeSHA hashes the file tree under root. The algorithm is

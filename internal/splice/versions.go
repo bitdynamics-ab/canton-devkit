@@ -26,6 +26,14 @@ import (
 // can drift — so the gzip hash was unreliable. The commit-SHA URL +
 // post-extract ContentSHA combo replaces it cleanly.
 //
+// Container images: this catalogue pins the source TREE, but the ghcr
+// images Splice's compose pulls are referenced by mutable tags (a single
+// shared IMAGE_TAG addresses ~6 distinct images, so per-image @sha256
+// pinning via the compose env is not possible). DevKit instead records
+// the resolved image digests post-up and warns on drift — see
+// internal/localnet/image_digests.go and docs/limitations.md ("Container
+// image pinning").
+//
 // # Maintainer flow
 //
 // Add a new entry via:
@@ -164,31 +172,87 @@ func Resolve(req string) (Version, error) {
 }
 
 // MinMemoryFor returns the version-specific Docker daemon memory
-// floor for v, falling back to docker.DefaultMinMemoryBytes when
-// the entry has no override. Called from both `dpm localnet up`
-// (CLI gate) and the Web UI's GET /api/preflight handler so the
-// two surfaces enforce identical numbers (see AGENTS.md "CLI ↔
-// Web UI parity"). The fallback constant is duplicated as a
-// runtime value below to avoid an import cycle with internal/docker.
+// floor for v. Called from both `dpm localnet up` (CLI gate) and the
+// Web UI's GET /api/preflight handler so the two surfaces enforce
+// identical numbers (see AGENTS.md "CLI ↔ Web UI parity"). The
+// fallback constant is duplicated as a runtime value below to avoid
+// an import cycle with internal/docker.
+//
+// Resolution order:
+//  1. v.MinMemoryBytes when the entry sets it (curated entries).
+//  2. The STRICTEST (largest) MinMemoryFor across every catalogued
+//     entry that shares v.Major — this is the uncurated path. An
+//     uncurated 0.6.x tag has no memory fields of its own, but its
+//     resource profile is governed by the Splice major, not by
+//     whether DevKit reviewed the tag; reusing the catalogued floor
+//     for the same major means the escape hatch TIGHTENS the gate to
+//     match curated 0.6.x (8 GiB) instead of silently loosening it to
+//     the global 4 GiB default, which is exactly backwards for the
+//     least-tested versions.
+//  3. The global defaultMinMemoryBytesFallback when neither applies
+//     (e.g. a major with no catalogued entry at all).
 //
 // Invariant pinned by TestThresholdParity_VersionMinAtLeastDefault:
-// every catalogued MinMemoryBytes must be >= the global default,
-// so a version override can only TIGHTEN the gate, never weaken
-// it. A user on a 4 GiB host always sees a refusal regardless of
-// which version they pick.
+// every catalogued MinMemoryBytes is >= the global default, so the
+// derived floor for a known major is also >= the default. A user on a
+// 4 GiB host always sees a refusal regardless of which version they
+// pick, curated or not.
 func MinMemoryFor(v Version) uint64 {
 	if v.MinMemoryBytes > 0 {
 		return v.MinMemoryBytes
+	}
+	if m := strictestMinForMajor(v.Major); m > 0 {
+		return m
 	}
 	return defaultMinMemoryBytesFallback
 }
 
 // RecommendedMemoryFor returns the version's recommended memory
-// (above which there are no resource warnings) or 0 when no
-// recommendation is set. 0 disables the WARN tier in
-// docker.checkDockerMemory — see internal/docker/checks.go.
+// (above which there are no resource warnings). For uncurated entries
+// (no recommendation of their own) it falls back to the strictest
+// catalogued recommendation for the same major, so the WARN tier is
+// not silently disabled for the least-tested versions. Returns 0 only
+// when neither the entry nor any same-major catalogue entry sets a
+// recommendation; 0 disables the WARN tier in docker.checkDockerMemory
+// — see internal/docker/checks.go.
 func RecommendedMemoryFor(v Version) uint64 {
-	return v.RecommendedMemoryBytes
+	if v.RecommendedMemoryBytes > 0 {
+		return v.RecommendedMemoryBytes
+	}
+	return strictestRecommendedForMajor(v.Major)
+}
+
+// strictestMinForMajor returns the largest MinMemoryBytes among
+// catalogued entries whose Major matches, or 0 when major is empty or
+// no catalogued entry shares it. "Strictest" (max) is deliberate: the
+// gate must refuse a host that any same-major curated entry would
+// refuse.
+func strictestMinForMajor(major string) uint64 {
+	if major == "" {
+		return 0
+	}
+	var max uint64
+	for _, v := range SupportedVersions {
+		if v.Major == major && v.MinMemoryBytes > max {
+			max = v.MinMemoryBytes
+		}
+	}
+	return max
+}
+
+// strictestRecommendedForMajor mirrors strictestMinForMajor for the
+// recommended (WARN) threshold.
+func strictestRecommendedForMajor(major string) uint64 {
+	if major == "" {
+		return 0
+	}
+	var max uint64
+	for _, v := range SupportedVersions {
+		if v.Major == major && v.RecommendedMemoryBytes > max {
+			max = v.RecommendedMemoryBytes
+		}
+	}
+	return max
 }
 
 // defaultMinMemoryBytesFallback mirrors docker.DefaultMinMemoryBytes.

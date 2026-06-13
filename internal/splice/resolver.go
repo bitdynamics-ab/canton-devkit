@@ -122,6 +122,14 @@ func ReadResolvedCache() (*ResolvedVersionCache, error) {
 // WriteResolvedCache persists the cache atomically (tmp + rename) so
 // a crash mid-write leaves the previous file intact. Creates the
 // cache directory if missing.
+//
+// The staging file is created with os.CreateTemp (unique suffix) rather
+// than a fixed `<path>.tmp` sibling so two concurrent processes writing
+// the resolved cache can't collide on the same staging path. Contents
+// are fsync'd before the rename so a power loss can't leave a truncated
+// resolved-versions.json — the cache is the only record of an uncurated
+// tag's commit + ContentSHA, so a torn write would orphan the extracted
+// tree.
 func WriteResolvedCache(c *ResolvedVersionCache) error {
 	if c == nil {
 		return errors.New("nil cache")
@@ -133,21 +141,46 @@ func WriteResolvedCache(c *ResolvedVersionCache) error {
 	sort.Slice(c.Entries, func(i, j int) bool { return c.Entries[i].Tag < c.Entries[j].Tag })
 
 	path := ResolvedCachePath()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("mkdir cache root: %w", err)
 	}
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal cache: %w", err)
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+
+	tmp, err := os.CreateTemp(dir, "resolved-versions-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create tmp cache: %w", err)
+	}
+	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		if !committed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
 		return fmt.Errorf("write tmp cache: %w", err)
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+	if err := tmp.Chmod(0o644); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("chmod tmp cache: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("sync tmp cache: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close tmp cache: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
 		return fmt.Errorf("rename cache: %w", err)
 	}
+	committed = true
 	return nil
 }
 
@@ -175,6 +208,41 @@ func (c *ResolvedVersionCache) Upsert(r ResolvedVersion) {
 		}
 	}
 	c.Entries = append(c.Entries, r)
+}
+
+// ResolveForOperation resolves a PERSISTED version tag to a Version for
+// operating an instance that already exists (down / restart / logs /
+// clean / status), as opposed to Resolve which gates a fresh `up` to the
+// curated catalogue.
+//
+// Resolution order:
+//  1. The curated catalogue (the common case).
+//  2. The resolved-versions cache — an uncurated tag that a prior
+//     `up --allow-uncurated` resolved and recorded.
+//  3. A minimal synthesised Version carrying only the Major inferred
+//     from the tag string. The adapter selection (and therefore the
+//     env-file list and core-services list) depends only on Major, so
+//     this is enough to operate the instance even if the resolved cache
+//     was cleared. Returns an error only when the tag is so malformed
+//     that no Major can be inferred.
+//
+// This exists because an uncurated instance, once brought up, must stay
+// operable from a fresh shell — Resolve alone would reject its tag with
+// ErrUncuratedTag and strand down/restart/logs/clean.
+func ResolveForOperation(tag string) (Version, error) {
+	if v, err := Resolve(tag); err == nil {
+		return v, nil
+	}
+	if cache, err := ReadResolvedCache(); err == nil {
+		if hit, ok := cache.LookupResolved(tag); ok {
+			return hit.Version, nil
+		}
+	}
+	if major := majorFromTag(tag); major != "" {
+		return Version{Tag: tag, Major: major}, nil
+	}
+	return Version{}, fmt.Errorf("cannot operate instance: version %q is neither curated, "+
+		"cached, nor a recognisable Splice tag (expected v?N.N.…)", tag)
 }
 
 // ResolveUpstream is the Layer 2 entry point. It returns a Version{}
