@@ -183,21 +183,25 @@ type authFileEntry struct {
 // next to the instance's data dir. This is what makes CANTON_AUTH_FILE
 // resolve — previously nothing wrote it.
 //
-// Best-effort and idempotent: it is a no-op (leaving any existing file
-// untouched) when there are no credentials yet, the parent data dir
-// doesn't exist (a stale/half-removed instance — we never MkdirAll one),
-// or marshalling/writing fails. Callers always emit the path regardless;
-// a missing parent dir is an abnormal-instance edge, not the common
-// case this fixes. Safe to call on every env export — both the CLI
-// `env` command and the Web UI app-config handler do.
+// Best-effort: it is a no-op when there are no credentials yet, the
+// parent data dir doesn't exist (a stale/half-removed instance — we
+// never MkdirAll one), or marshalling/writing fails. Callers always
+// emit the path regardless; a missing parent dir is an abnormal-instance
+// edge, not the common case this fixes. Safe to call on every env export
+// — both the CLI `env` command and the Web UI app-config handler do.
+//
+// The write goes through a temp-file-in-same-dir + explicit Chmod(0600)
+// + Rename rather than os.WriteFile, mirroring registry.atomicWrite. This
+// is rerun on every export (not skipped when the file already exists) so
+// a pre-existing world-readable auth.json is re-tightened to 0600 — the
+// file carries dev JWTs — and the Chmod is umask-independent. The rename
+// is atomic, so a crash mid-write can never leave partial JSON behind.
 func writeAuthFile(path string, creds map[string]registry.Credential) {
 	if len(creds) == 0 {
 		return
 	}
-	if _, err := os.Stat(path); err == nil {
-		return // already written
-	}
-	if info, err := os.Stat(filepath.Dir(path)); err != nil || !info.IsDir() {
+	dir := filepath.Dir(path)
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		return // data dir absent — don't create a tree for a stale instance
 	}
 	entries := make(map[string]authFileEntry, len(creds))
@@ -208,5 +212,32 @@ func writeAuthFile(path string, creds map[string]registry.Credential) {
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(path, append(body, '\n'), 0o600)
+	tmp, err := os.CreateTemp(dir, ".tmp-auth-*")
+	if err != nil {
+		return
+	}
+	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		if !committed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if _, err := tmp.Write(append(body, '\n')); err != nil {
+		_ = tmp.Close()
+		return
+	}
+	// Chmod explicitly (umask-independent) so the temp — and the file it
+	// becomes after the rename — is 0600 regardless of the process umask.
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		return
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return
+	}
+	committed = true
 }

@@ -155,6 +155,57 @@ func TestBuildEnvExport_AuthFileNotWrittenWhenDirMissing(t *testing.T) {
 	}
 }
 
+// TestBuildEnvExport_AuthFileRewriteTightensPerms pins that an export
+// rewrites auth.json atomically every call and re-tightens a
+// pre-existing world-readable file. The old writeAuthFile only set 0600
+// on CREATE and early-returned when the file already existed, so a
+// loose-perm auth.json (carrying dev JWTs) was left readable; it also
+// truncated in place, risking partial JSON on a crash. After rewriting
+// over a pre-seeded 0644 file the perms must be 0600 and the body must
+// still be valid JSON.
+func TestBuildEnvExport_AuthFileRewriteTightensPerms(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	dataDir := t.TempDir()
+	s := registry.NewState("demo", "0.6.4")
+	s.Status = registry.StatusRunning
+	s.DataDir = dataDir
+	s.Credentials = map[string]registry.Credential{
+		"app-provider": {Role: "app-provider", User: "ap-user", Audience: "aud", JWT: "eyJ.real.sig"},
+	}
+	if err := registry.Write(s); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Pre-seed a stale, world-readable auth.json the export must replace.
+	authPath := filepath.Join(dataDir, "auth.json")
+	if err := os.WriteFile(authPath, []byte("{\"stale\":true}\n"), 0o644); err != nil {
+		t.Fatalf("pre-seed auth.json: %v", err)
+	}
+
+	if _, err := BuildEnvExport("demo", false); err != nil {
+		t.Fatalf("BuildEnvExport: %v", err)
+	}
+
+	info, err := os.Stat(authPath)
+	if err != nil {
+		t.Fatalf("stat auth.json: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("auth.json perms = %o, want 600 after rewrite (carries dev JWTs)", perm)
+	}
+	body, err := os.ReadFile(authPath)
+	if err != nil {
+		t.Fatalf("read auth.json: %v", err)
+	}
+	var got map[string]authFileEntry
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("auth.json is not valid JSON after rewrite: %v\n%s", err, body)
+	}
+	if got["app-provider"].JWT != "eyJ.real.sig" {
+		t.Errorf("auth.json was not rewritten: app-provider jwt = %q, want the real token", got["app-provider"].JWT)
+	}
+}
+
 // TestBuildEnvExport_ScanUIURL pins that the scan UI is surfaced under
 // an explicit, self-describing key carrying the scan.localhost vhost
 // hint — the proposal lists "scan UI" as a distinct value.
