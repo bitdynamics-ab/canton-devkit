@@ -25,6 +25,10 @@ func TestAllTopLevelResponses_CarrySchemaVersion(t *testing.T) {
 	topLevel := []interface{}{
 		ContractsListResponse{},
 		ContractDetailResponse{},
+		DARListResponse{},
+		DARUploadResponse{},
+		DARVettingResponse{},
+		DARVettingToggleResponse{},
 		EnvExport{},
 		Instance{},
 		ListResponse{},

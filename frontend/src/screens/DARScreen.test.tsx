@@ -315,6 +315,67 @@ describe("DARScreen", () => {
     expect(sent.sendCount).toBe(0);
   });
 
+  it("renders REAL per-participant vetting dots in the package list, not a hardcoded badge", async () => {
+    // Regression for #53/#79: every list row used to show a green
+    // "vetted" badge regardless of ledger state. Now each row's column
+    // reflects the real GET …/vetting response per participant.
+    vi.stubGlobal("EventSource", FakeEventSource as unknown as typeof EventSource);
+    const mainA = "a".repeat(64);
+    const mainB = "b".repeat(64);
+    stubFetch({
+      "/api/version": { name: "canton-devkit", schema_version: 1 },
+      "/api/instances": {
+        schema_version: 1,
+        instances: [{ name: "demo", status: "running" }],
+      },
+      // The vetting URLs are longer than the list URL, so the
+      // longest-prefix matcher routes them here first.
+      [`/api/instances/demo/dar/${mainA}/vetting`]: {
+        schema_version: 1,
+        instance: "demo",
+        main: mainA,
+        participants: [
+          { role: "app-user", vetted: true },
+          { role: "app-provider", vetted: false },
+          { role: "sv", vetted: true },
+        ],
+      },
+      [`/api/instances/demo/dar/${mainB}/vetting`]: {
+        schema_version: 1,
+        instance: "demo",
+        main: mainB,
+        participants: [
+          { role: "app-user", vetted: false },
+          { role: "app-provider", vetted: false },
+          { role: "sv", error: "port not recorded" },
+        ],
+      },
+      "/api/instances/demo/dar": fakeDAR,
+    });
+
+    render(withProviders(<DARScreen />));
+    await waitFor(() =>
+      expect(screen.getByText(/demo-pkg/i)).toBeInTheDocument(),
+    );
+
+    // Row A: app-user vetted. The cell carries a per-participant title
+    // attribute we can assert on (real state, not a static label).
+    await waitFor(() => {
+      expect(screen.getByTitle("app-user: vetted")).toBeInTheDocument();
+    });
+    // app-provider is NOT vetted on either row — the exact case the
+    // old hardcoded "vetted" badge got wrong. Both rows render it.
+    expect(
+      screen.getAllByTitle("app-provider: not vetted").length,
+    ).toBeGreaterThanOrEqual(2);
+    // Row B: app-user is unvetted (distinct from row A's vetted state),
+    // proving the cell is per-row real data, not a constant.
+    expect(screen.getByTitle("app-user: not vetted")).toBeInTheDocument();
+    // Row B: a participant that couldn't be probed surfaces its error,
+    // not a false "vetted".
+    expect(screen.getByTitle(/sv: port not recorded/i)).toBeInTheDocument();
+  });
+
   it("loads per-participant vetting state when a row is selected", async () => {
     vi.stubGlobal("EventSource", FakeEventSource as unknown as typeof EventSource);
     const vetURL = `/api/instances/demo/dar/${"a".repeat(64)}/vetting`;

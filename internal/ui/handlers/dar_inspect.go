@@ -48,13 +48,14 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/admin"
 	adminproto "github.com/bitdynamics-ab/canton-devkit/internal/canton/admin/proto"
 	cdkdar "github.com/bitdynamics-ab/canton-devkit/internal/dar"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/darops"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
@@ -108,7 +109,7 @@ func handleDARInspect(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read state", err)
 		return
 	}
-	adminPort, cred, ok := requireParticipantAccess(w, state, name, role)
+	cfg, ok := requireParticipantAccess(w, state, name, role)
 	if !ok {
 		return
 	}
@@ -116,11 +117,7 @@ func handleDARInspect(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), inspectRequestTimeout)
 	defer cancel()
 
-	client, err := admin.Connect(ctx, admin.Config{
-		Host:     "localhost:" + strconv.Itoa(adminPort),
-		Token:    cred.JWT,
-		Insecure: true,
-	})
+	client, err := admin.Connect(ctx, cfg)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "dial canton admin", err)
 		return
@@ -256,29 +253,34 @@ func resolveRoleParam(w http.ResponseWriter, r *http.Request) (string, bool) {
 	return role, true
 }
 
-// requireParticipantAccess pulls the per-role admin port + JWT from
-// state. Mirrors handleDARList's preconditions so the error envelope
-// stays consistent across DAR endpoints.
-func requireParticipantAccess(w http.ResponseWriter, state *registry.State, name, role string) (int, registry.Credential, bool) {
-	portKey := "participant_admin_" + role
-	adminPort, hasPort := state.Ports[portKey]
-	if !hasPort || adminPort == 0 {
+// requireParticipantAccess resolves the per-role admin config via the
+// shared darops.ResolveParticipant (the single port/JWT lookup both
+// surfaces use) and maps its typed errors onto the DAR endpoints'
+// consistent HTTP error envelope. Returns the dial config on success.
+func requireParticipantAccess(w http.ResponseWriter, state *registry.State, name, role string) (admin.Config, bool) {
+	cfg, err := darops.ResolveParticipant(state, role, "", true)
+	if err == nil {
+		return cfg, true
+	}
+	var portErr *darops.ErrPortNotRecorded
+	if errors.As(err, &portErr) {
 		writeErrorWithCode(w, http.StatusServiceUnavailable,
 			"PARTICIPANT_PORT_NOT_RECORDED",
 			"instance "+name+" was started before participant ports were recorded",
 			"restart the instance with `dpm localnet down --name "+name+
 				"` followed by `dpm localnet up --name "+name+
 				"` — the new up flow captures all Canton API ports")
-		return 0, registry.Credential{}, false
+		return admin.Config{}, false
 	}
-	cred, hasCred := state.Credentials[role]
-	if !hasCred {
+	var credErr *darops.ErrNoCredential
+	if errors.As(err, &credErr) {
 		writeError(w, http.StatusInternalServerError,
-			"no JWT recorded for role "+role,
-			fmt.Errorf("missing credential for role %q", role))
-		return 0, registry.Credential{}, false
+			"no JWT recorded for role "+role, credErr)
+		return admin.Config{}, false
 	}
-	return adminPort, cred, true
+	// Unknown role or other — bad request.
+	writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+	return admin.Config{}, false
 }
 
 // handleDARDiff returns the structural delta between two DARs by
@@ -319,7 +321,7 @@ func handleDARDiff(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read state", err)
 		return
 	}
-	adminPort, cred, ok := requireParticipantAccess(w, state, name, role)
+	cfg, ok := requireParticipantAccess(w, state, name, role)
 	if !ok {
 		return
 	}
@@ -327,11 +329,7 @@ func handleDARDiff(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), inspectRequestTimeout)
 	defer cancel()
 
-	client, err := admin.Connect(ctx, admin.Config{
-		Host:     "localhost:" + strconv.Itoa(adminPort),
-		Token:    cred.JWT,
-		Insecure: true,
-	})
+	client, err := admin.Connect(ctx, cfg)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "dial canton admin", err)
 		return
@@ -599,11 +597,12 @@ func sortedSetDiff(a, b map[string]struct{}) []string {
 // ────────────────────────────────────────────────────────────────────
 
 // handleDARVettingList probes every recorded participant for whether
-// the given DAR is vetted. We don't have a native "is this DAR
-// vetted?" RPC — instead we read ListDars and check whether the
-// main id is present. A DAR uploaded with vet_all_packages=true is
-// vetted iff it's in the list (the participant prunes unvetted
-// DARs lazily, but for the dev-flow this is a faithful signal).
+// the given DAR is vetted. The per-participant probe lives in the
+// neutral darops package (shared with the CLI's `dar list --vetting`
+// enrichment) so the two surfaces agree on what "vetted" means: we
+// have no native "is this DAR vetted?" RPC, so a DAR present in a
+// participant's ListDars (uploaded with vet_all_packages=true) is
+// treated as vetted there.
 func handleDARVettingList(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := registry.ValidateName(name); err != nil {
@@ -630,61 +629,13 @@ func handleDARVettingList(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), inspectRequestTimeout)
 	defer cancel()
 
-	type partRow struct {
-		Role   string `json:"role"`
-		Vetted bool   `json:"vetted"`
-		Error  string `json:"error,omitempty"`
-	}
-	rows := make([]partRow, 0, 3)
+	rows := darops.ListVetting(ctx, darops.DialAdmin, state, mainID)
 
-	// Iterate roles in a stable order so the UI rendering is
-	// deterministic regardless of map iteration order.
-	for _, role := range []string{"app-user", "app-provider", "sv"} {
-		row := partRow{Role: role}
-		portKey := "participant_admin_" + role
-		adminPort, hasPort := state.Ports[portKey]
-		if !hasPort || adminPort == 0 {
-			row.Error = "port not recorded"
-			rows = append(rows, row)
-			continue
-		}
-		cred, hasCred := state.Credentials[role]
-		if !hasCred {
-			row.Error = "no JWT"
-			rows = append(rows, row)
-			continue
-		}
-		client, err := admin.Connect(ctx, admin.Config{
-			Host:     "localhost:" + strconv.Itoa(adminPort),
-			Token:    cred.JWT,
-			Insecure: true,
-		})
-		if err != nil {
-			row.Error = "dial: " + err.Error()
-			rows = append(rows, row)
-			continue
-		}
-		resp, lerr := client.Package.ListDars(ctx, &adminproto.ListDarsRequest{})
-		_ = client.Close()
-		if lerr != nil {
-			row.Error = "list: " + lerr.Error()
-			rows = append(rows, row)
-			continue
-		}
-		for _, d := range resp.GetDars() {
-			if d.GetMain() == mainID {
-				row.Vetted = true
-				break
-			}
-		}
-		rows = append(rows, row)
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"schema_version": 1,
-		"instance":       name,
-		"main":           mainID,
-		"participants":   rows,
+	writeJSON(w, http.StatusOK, types.DARVettingResponse{
+		SchemaVersion: types.SchemaVersion,
+		Instance:      name,
+		Main:          mainID,
+		Participants:  rows,
 	})
 }
 
@@ -749,7 +700,7 @@ func handleDARVettingToggle(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read state", err)
 		return
 	}
-	adminPort, cred, ok := requireParticipantAccess(w, state, name, role)
+	cfg, ok := requireParticipantAccess(w, state, name, role)
 	if !ok {
 		return
 	}
@@ -757,11 +708,7 @@ func handleDARVettingToggle(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), inspectRequestTimeout)
 	defer cancel()
 
-	client, err := admin.Connect(ctx, admin.Config{
-		Host:     "localhost:" + strconv.Itoa(adminPort),
-		Token:    cred.JWT,
-		Insecure: true,
-	})
+	client, err := admin.Connect(ctx, cfg)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "dial canton admin", err)
 		return
@@ -796,11 +743,11 @@ func handleDARVettingToggle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"schema_version": 1,
-		"instance":       name,
-		"main":           mainID,
-		"role":           role,
-		"vetted":         body.Vetted,
+	writeJSON(w, http.StatusOK, types.DARVettingToggleResponse{
+		SchemaVersion: types.SchemaVersion,
+		Instance:      name,
+		Main:          mainID,
+		Role:          role,
+		Vetted:        body.Vetted,
 	})
 }

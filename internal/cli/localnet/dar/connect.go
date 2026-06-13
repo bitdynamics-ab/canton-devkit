@@ -126,6 +126,25 @@ func (f *connectFlags) connect(ctx context.Context) (*admin.Client, error) {
 	return admin.Connect(ctx, cfg)
 }
 
+// resolveState returns the registry State for --instance. Used by the
+// cross-participant vetting enrichment in `dar list --vetting`, which
+// needs to dial every participant (not just the --role target) and so
+// can't go through the single-target resolve(). Errors when run in
+// --admin-host mode (no instance to read).
+func (f *connectFlags) resolveState() (*registry.State, error) {
+	if f.Instance == "" {
+		return nil, fmt.Errorf("--vetting requires --instance (cross-participant vetting reads the registry)")
+	}
+	state, err := registry.Read(f.Instance)
+	if err == registry.ErrNotFound {
+		return nil, fmt.Errorf("instance %q not registered (run `localnet up` first)", f.Instance)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read instance state: %w", err)
+	}
+	return state, nil
+}
+
 // signTokenForInstance derives a token from the per-role auth env
 // files (`splice.SignToken`) when the registry doesn't already have
 // one captured. Currently unused — RunUp captures these — but ready
