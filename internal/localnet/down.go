@@ -150,6 +150,12 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 		_, _ = fmt.Fprintf(errw, "Warning: state update failed: %s\n", err)
 	}
 
+	// Deregister from the shared observability stack (#39) and tear it
+	// down if no instance still references it. Best-effort — a stopped
+	// instance has no live :10013 for the shared Prometheus to scrape.
+	_ = DeregisterInstanceTargets(state.Name)
+	_ = TeardownSharedStackIfIdle(ctx, io.Discard)
+
 	_, _ = fmt.Fprintf(out, "Canton LocalNet %q stopped.\n", state.Name)
 	return ExitSuccess
 }

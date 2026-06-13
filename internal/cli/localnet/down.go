@@ -245,6 +245,11 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 			"warning: services stopped but registry write failed: %s\n", werr)
 	}
 
+	// Deregister from the shared observability stack (#39); tear it down
+	// if no instance still references it. Best-effort.
+	_ = localnet.DeregisterInstanceTargets(opts.Name)
+	_ = localnet.TeardownSharedStackIfIdle(ctx, io.Discard)
+
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, term.Box(term.BoxBrand,
 		fmt.Sprintf("%s Stopped LocalNet %s %s\n%s",

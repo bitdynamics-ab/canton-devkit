@@ -122,6 +122,33 @@ func CaptureCantonPorts(ctx context.Context, project string) map[string]int {
 	return out
 }
 
+// CaptureMetricsPorts discovers the loopback host ports for the canton
+// and splice :10013 Prometheus-reporter endpoints, keyed as
+// PortCantonMetrics / PortSpliceMetrics. The shared host-level Prometheus
+// (#39) scrapes these via host.docker.internal:<port>. An absent key
+// means the instance didn't publish :10013 (e.g. an older bring-up that
+// predates the publish) — the caller registers whatever was found.
+func CaptureMetricsPorts(ctx context.Context, project string) map[string]int {
+	out := make(map[string]int, 2)
+	for _, svc := range []struct{ service, key string }{
+		{"canton", PortCantonMetrics},
+		{"splice", PortSpliceMetrics},
+	} {
+		subCtx, cancel := context.WithTimeout(ctx, captureCantonPortsTimeout)
+		raw, err := composePortCmd(subCtx, project, svc.service, 10013)
+		cancel()
+		if err != nil {
+			continue
+		}
+		host, err := parseComposePortLine(string(raw))
+		if err != nil {
+			continue
+		}
+		out[svc.key] = host
+	}
+	return out
+}
+
 // parseComposePortLine extracts the host port from a `docker compose
 // port` output line. The CLI emits one of:
 //

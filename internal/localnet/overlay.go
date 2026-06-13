@@ -150,12 +150,21 @@ func loopbackPortTable() []loopbackService {
 				{"0", "2901"}, {"0", "2902"}, {"0", "2975"},
 				{"0", "3901"}, {"0", "3902"}, {"0", "3975"},
 				{"0", "4901"}, {"0", "4902"}, {"0", "4975"},
+				// :10013 is the built-in Prometheus reporter (JVM + canton
+				// metrics). Published to loopback so the SHARED host-level
+				// Prometheus (#39) can scrape it via host.docker.internal —
+				// it lives in its own compose network and can't reach the
+				// `canton` service name. Ephemeral host port, captured as
+				// canton_metrics.
+				{"0", "10013"},
 			},
 		},
 		{
 			Name: "splice",
 			Ports: []loopbackPort{
 				{"0", "2903"}, {"0", "3903"}, {"0", "4903"},
+				// :10013 — splice's Prometheus reporter; see canton above.
+				{"0", "10013"},
 			},
 		},
 		{
