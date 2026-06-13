@@ -2078,10 +2078,15 @@ func handleObservabilityToggle() http.HandlerFunc {
 		}
 		if err != nil {
 			log.Printf("observability toggle %q failed: %v", name, err)
+			// Point the docker-logs hint at the container that actually
+			// failed (prometheus vs grafana) instead of always naming
+			// prometheus — SetObservability wraps the failure with a
+			// component-specific prefix we can key off.
+			svc := failedObservabilityService(err)
 			writeErrorWithCode(w, http.StatusBadGateway,
 				"OBSERVABILITY_TOGGLE_FAIL",
 				"failed to apply observability toggle: "+truncateForUser(err.Error()),
-				"check `docker compose -p "+state.ComposeProject+" ps` and `docker logs "+state.ComposeProject+"-prometheus`")
+				"check `docker compose -p "+state.ComposeProject+" ps` and `docker logs "+state.ComposeProject+"-"+svc+"`")
 			return
 		}
 
@@ -2104,6 +2109,19 @@ func handleObservabilityToggle() http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, resp)
 	}
+}
+
+// failedObservabilityService maps a SetObservability error to the
+// sidecar the remediation hint should name. SetObservability wraps
+// every component failure with an "enable/disable prometheus|grafana"
+// prefix, so a grafana-only failure yields "grafana"; everything else
+// (including the prometheus path and any non-component error) falls
+// back to "prometheus".
+func failedObservabilityService(err error) string {
+	if err != nil && strings.Contains(err.Error(), "grafana") {
+		return "grafana"
+	}
+	return "prometheus"
 }
 
 // truncateForUser keeps error messages from leaking the full docker
