@@ -71,7 +71,8 @@ func handleDoctor(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			writeErrorWithCode(w, http.StatusBadRequest,
 				ErrCodeInvalidRequest,
-				"port_base must be an integer: "+raw)
+				"port_base must be an integer: "+raw,
+				"pass a numeric ?port_base= (the host port block that up --port-base N would claim)")
 			return
 		}
 		portBase = n
