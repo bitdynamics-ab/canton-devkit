@@ -915,6 +915,13 @@ func (dockerVolumeArchiver) RestoreVolume(ctx context.Context, composeProject, v
 	// the restored content equals the captured content exactly. The
 	// wipe and the extract share one `docker run` so a single mount
 	// (and a single container start) covers both.
+	//
+	// This wipe-then-untar is destructive: if `tar` fails after the
+	// `find -mindepth 1 -delete` has run, the target volume is left
+	// emptied. That's acceptable because restore is the recovery path
+	// and the source archive is intact, so the operator can simply
+	// re-run; the half-applied state is the wiped volume, not a
+	// silently corrupted merge.
 	cmd := exec.CommandContext(ctx, "docker", "run", "--rm", "-i",
 		"-v", volume+":/dst",
 		"alpine:3.20", "sh", "-c",
