@@ -14,11 +14,20 @@
 //	          created_at, package_name, package_version
 //	        }]}
 //	  → 503 PARTICIPANT_PORT_NOT_RECORDED if state.json predates
+//	An ACS snapshot at ledger end. limit defaults to 100; cap is 1000
+//	(server-side defence). No filters by template/party — the JWT's
+//	claim already filters server-side.
 //
-// MVP scope: ACS snapshot only — no filters by template/party (the
-// JWT's claim already filters server-side), no live SSE stream, no
-// contract-detail drawer. Those are follow-ups. limit defaults to 100;
-// cap is 1000 (server-side defence).
+//	GET /api/instances/{name}/contracts/stream?role=<…>
+//	  → 200 text/event-stream of `event: contracts` frames carrying
+//	    {"event":"created|archived", …} as the participant's
+//	    UpdateService publishes them. Hard-capped at maxStreamEvents per
+//	    subscription; a final {"event":"truncated"} frame precedes close.
+//
+//	GET /api/instances/{name}/contracts/{contract_id}?role=<…>
+//	  → 200 {schema_version, instance, role, contract: {…}} — a deep view
+//	    of one contract (CreatedEvent payload + ArchivedEvent, if any)
+//	    backing the contract-detail drawer.
 package handlers
 
 import (
