@@ -2,6 +2,7 @@ package dar
 
 import (
 	"archive/zip"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -102,17 +103,25 @@ func decodeDARBytes(raw []byte, path string) (*Info, error) {
 		entries[f.Name] = f
 	}
 
+	// Track cumulative decompressed bytes across every entry we read.
+	// The compressed file is already capped by ReadDARFile, but DEFLATE
+	// compresses up to ~1032:1 — so each entry is bounded individually
+	// (MaxEntryDecompressedBytes) AND in aggregate (MaxTotalDecompressedBytes)
+	// to defeat a zip bomb that stays under the per-entry cap by
+	// spreading across many entries.
+	remaining := MaxTotalDecompressedBytes
+
 	// Parse the manifest.
 	manifestFile, ok := entries["META-INF/MANIFEST.MF"]
 	if !ok {
 		return nil, fmt.Errorf("%s: missing META-INF/MANIFEST.MF", path)
 	}
-	manifestRC, err := manifestFile.Open()
+	manifestBytes, err := readZipEntry(manifestFile, entryCap(remaining))
 	if err != nil {
-		return nil, fmt.Errorf("open manifest: %w", err)
+		return nil, fmt.Errorf("read manifest of %s: %w", path, err)
 	}
-	manifest, err := parseManifest(manifestRC)
-	_ = manifestRC.Close()
+	remaining -= int64(len(manifestBytes))
+	manifest, err := parseManifest(bytes.NewReader(manifestBytes))
 	if err != nil {
 		return nil, fmt.Errorf("parse manifest of %s: %w", path, err)
 	}
@@ -127,10 +136,11 @@ func decodeDARBytes(raw []byte, path string) (*Info, error) {
 		if !ok {
 			return nil, fmt.Errorf("%s: dalf %q listed in manifest but missing from archive", path, dalfPath)
 		}
-		pkg, err := readDalf(f, dalfPath)
+		pkg, n, err := readDalf(f, dalfPath, entryCap(remaining))
 		if err != nil {
 			return nil, fmt.Errorf("decode %s/%s: %w", path, dalfPath, err)
 		}
+		remaining -= n
 		pkg.IsMain = (dalfPath == manifest.MainDalf)
 		packages = append(packages, pkg)
 	}
@@ -160,25 +170,35 @@ func decodeDARBytes(raw []byte, path string) (*Info, error) {
 	return info, nil
 }
 
-// readDalf reads one .dalf entry: streams its bytes, computes SHA256,
-// decodes the archive envelope for the package id + LF version, parses
-// the filename for name + version.
-func readDalf(f *zip.File, dalfPath string) (*PackageMeta, error) {
-	rc, err := f.Open()
-	if err != nil {
-		return nil, err
+// entryCap clamps the per-entry decompressed ceiling to whatever is
+// left of the cumulative budget, so a single oversize entry can't be
+// admitted just because it fits the per-entry cap when the running
+// total is nearly spent. Never returns negative.
+func entryCap(remaining int64) int64 {
+	if remaining < MaxEntryDecompressedBytes {
+		if remaining < 0 {
+			return 0
+		}
+		return remaining
 	}
-	defer func() { _ = rc.Close() }()
+	return MaxEntryDecompressedBytes
+}
 
-	hasher := sha256.New()
-	data, err := io.ReadAll(io.TeeReader(rc, hasher))
+// readDalf reads one .dalf entry under the decompressed-size cap,
+// computes SHA256, decodes the archive envelope for the package id +
+// LF version, and parses the filename for name + version. Returns the
+// number of decompressed bytes consumed so the caller can debit the
+// cumulative budget.
+func readDalf(f *zip.File, dalfPath string, cap int64) (*PackageMeta, int64, error) {
+	data, err := readZipEntry(f, cap)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
+	sum := sha256.Sum256(data)
 
 	pkgID, lfMajor, lfMinor, err := decodeArchiveEnvelope(data)
 	if err != nil {
-		return nil, fmt.Errorf("envelope: %w", err)
+		return nil, 0, fmt.Errorf("envelope: %w", err)
 	}
 
 	name, version, hashFromName := parseDalfFilename(dalfPath)
@@ -189,7 +209,7 @@ func readDalf(f *zip.File, dalfPath string) (*PackageMeta, error) {
 	// etc.) and we surface them as errors so downstream tooling
 	// doesn't quietly trust a wrong ID.
 	if hashFromName != "" && pkgID != "" && hashFromName != pkgID {
-		return nil, fmt.Errorf("package id mismatch: filename %q says %s, envelope says %s",
+		return nil, 0, fmt.Errorf("package id mismatch: filename %q says %s, envelope says %s",
 			dalfPath, hashFromName, pkgID)
 	}
 	if pkgID == "" {
@@ -203,7 +223,7 @@ func readDalf(f *zip.File, dalfPath string) (*PackageMeta, error) {
 		LFMajor:   lfMajor,
 		LFMinor:   lfMinor,
 		SizeBytes: int64(len(data)),
-		SHA256:    hex.EncodeToString(hasher.Sum(nil)),
+		SHA256:    hex.EncodeToString(sum[:]),
 	}
 	// Deep Daml-LF inspection — best-effort; nil for LF1 or
 	// unparseable archives. Cheap (microseconds) and small, so populate
@@ -211,7 +231,7 @@ func readDalf(f *zip.File, dalfPath string) (*PackageMeta, error) {
 	if c, ok := InspectDalf(data); ok {
 		meta.Contents = c
 	}
-	return meta, nil
+	return meta, int64(len(data)), nil
 }
 
 // bytesReader is a tiny zero-alloc adapter so we can hand a []byte to

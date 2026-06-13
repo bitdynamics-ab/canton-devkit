@@ -73,6 +73,53 @@ class FakeEventSource {
   }
 }
 
+// stubXHR replaces XMLHttpRequest with a fake that resolves send()
+// with a canned status + body. uploadDARs() uses XHR (for progress),
+// not fetch, so the fetch stub above can't intercept it. Returns a
+// handle whose sendCount lets a test assert send() was (or wasn't)
+// reached.
+function stubXHR(resp: { status: number; responseText: string }) {
+  const handle = { sendCount: 0 };
+  class FakeXHR {
+    status = 0;
+    responseText = "";
+    private loadFns: Array<() => void> = [];
+    upload = { addEventListener: (_: string, __: (e: unknown) => void) => {} };
+    open(_method: string, _url: string) {
+      /* no-op */
+    }
+    addEventListener(name: string, fn: () => void) {
+      if (name === "load") this.loadFns.push(fn);
+    }
+    send(_body?: unknown) {
+      handle.sendCount++;
+      this.status = resp.status;
+      this.responseText = resp.responseText;
+      // Fire load asynchronously so the Promise in uploadDARs settles
+      // on a later microtask, like a real request.
+      queueMicrotask(() => this.loadFns.forEach((fn) => fn()));
+    }
+  }
+  vi.stubGlobal("XMLHttpRequest", FakeXHR as unknown as typeof XMLHttpRequest);
+  return handle;
+}
+
+// darFile builds a small valid-named .dar File for the upload input.
+function darFile(name: string): File {
+  return new File([new Uint8Array([1, 2, 3])], name, {
+    type: "application/octet-stream",
+  });
+}
+
+// oversizeDarFile builds a .dar File whose reported size exceeds the
+// client cap without allocating the bytes — jsdom derives size from
+// content, so we override the size getter directly.
+function oversizeDarFile(name: string, size: number): File {
+  const f = darFile(name);
+  Object.defineProperty(f, "size", { value: size });
+  return f;
+}
+
 function withProviders(ui: React.ReactElement) {
   return (
     <MemoryRouter>
@@ -145,6 +192,127 @@ describe("DARScreen", () => {
     await waitFor(() =>
       expect(screen.getByText(/Watching/i)).toBeInTheDocument(),
     );
+  });
+
+  it("shows the partial-upload banner when one participant fails", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource as unknown as typeof EventSource);
+    stubFetch({
+      "/api/version": { name: "canton-devkit", schema_version: 1 },
+      "/api/instances": {
+        schema_version: 1,
+        instances: [{ name: "demo", status: "running" }],
+      },
+      "/api/instances/demo/dar": fakeDAR,
+    });
+    // uploadDARs uses XMLHttpRequest; stub it so send() resolves with a
+    // 200 partial-failure envelope (one role ok, one role failed) —
+    // the backend's documented partial-success shape.
+    stubXHR({
+      status: 200,
+      responseText: JSON.stringify({
+        schema_version: 1,
+        instance: "demo",
+        total_uploaded: 1,
+        results: [
+          { role: "app-user", ok: true, dar_ids: ["id1"], count: 1 },
+          { role: "sv", ok: false, count: 0, error: "participant_admin port not recorded for role sv" },
+        ],
+      }),
+    });
+
+    const user = userEvent.setup();
+    const { container } = render(withProviders(<DARScreen />));
+    await waitFor(() =>
+      expect(screen.getByText(/demo-pkg/i)).toBeInTheDocument(),
+    );
+
+    const fileInput = container.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    await user.upload(fileInput, darFile("app.dar"));
+
+    // The partial banner (role="alert") names the X/Y participant
+    // count and surfaces the failing role's error.
+    await waitFor(() =>
+      expect(screen.getByText(/Partial upload/i)).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/1\/2 participants succeeded/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/port not recorded for role sv/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the success banner when every participant succeeds", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource as unknown as typeof EventSource);
+    stubFetch({
+      "/api/version": { name: "canton-devkit", schema_version: 1 },
+      "/api/instances": {
+        schema_version: 1,
+        instances: [{ name: "demo", status: "running" }],
+      },
+      "/api/instances/demo/dar": fakeDAR,
+    });
+    stubXHR({
+      status: 200,
+      responseText: JSON.stringify({
+        schema_version: 1,
+        instance: "demo",
+        total_uploaded: 3,
+        results: [
+          { role: "app-user", ok: true, dar_ids: ["id1"], count: 1 },
+          { role: "app-provider", ok: true, dar_ids: ["id2"], count: 1 },
+          { role: "sv", ok: true, dar_ids: ["id3"], count: 1 },
+        ],
+      }),
+    });
+
+    const user = userEvent.setup();
+    const { container } = render(withProviders(<DARScreen />));
+    await waitFor(() =>
+      expect(screen.getByText(/demo-pkg/i)).toBeInTheDocument(),
+    );
+    const fileInput = container.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    await user.upload(fileInput, darFile("app.dar"));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Uploaded 3 packages/i)).toBeInTheDocument(),
+    );
+    // The success banner uses role=status; the partial alert must NOT
+    // be present.
+    expect(screen.queryByText(/Partial upload/i)).not.toBeInTheDocument();
+  });
+
+  it("rejects an over-cap file client-side before any upload starts", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource as unknown as typeof EventSource);
+    stubFetch({
+      "/api/version": { name: "canton-devkit", schema_version: 1 },
+      "/api/instances": {
+        schema_version: 1,
+        instances: [{ name: "demo", status: "running" }],
+      },
+      "/api/instances/demo/dar": fakeDAR,
+    });
+    // If the client gate works, XHR.send must never be called — fail
+    // loudly if it is.
+    const sent = stubXHR({ status: 200, responseText: "{}" });
+
+    const user = userEvent.setup();
+    const { container } = render(withProviders(<DARScreen />));
+    await waitFor(() =>
+      expect(screen.getByText(/demo-pkg/i)).toBeInTheDocument(),
+    );
+    const fileInput = container.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    // 65 MiB — just over the 64 MiB client cap (mirrors darUploadMax).
+    await user.upload(fileInput, oversizeDarFile("huge.dar", 65 * 1024 * 1024));
+
+    await waitFor(() =>
+      expect(screen.getByText(/per-file cap is 64 MiB/i)).toBeInTheDocument(),
+    );
+    expect(sent.sendCount).toBe(0);
   });
 
   it("loads per-participant vetting state when a row is selected", async () => {

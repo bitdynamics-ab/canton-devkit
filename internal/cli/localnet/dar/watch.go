@@ -46,8 +46,9 @@ targeted participant.
 
 Watch mechanism:
   Polls the source tree (every --interval, default 1s) for changes to
-  any .daml file. Triggers a build-and-upload when a change is
-  detected. Ctrl-C exits cleanly.
+  any .daml or .yaml file (so daml.yaml version bumps are caught too).
+  Triggers a build-and-upload when a change is detected. Ctrl-C exits
+  cleanly.
 
 The build tool and upload path mirror ` + "`dar build-upload`" + `; see
 that command's help for builder selection and connection flags.
@@ -290,9 +291,16 @@ func runBuildCtx(ctx context.Context, tool, project string, stderr io.Writer) (s
 }
 
 // hashSources walks the project tree and returns a hex SHA256 over
-// (path, size, mtime) tuples for every *.daml file. Cheap change
-// detector. Excludes generated dirs (.daml, .git) so a successful
-// build doesn't immediately re-trigger.
+// (path, size, mtime) tuples for every build-relevant source file.
+// Cheap change detector. Excludes generated dirs (.daml, .git) so a
+// successful build doesn't immediately re-trigger.
+//
+// Build-relevant means *.daml AND *.yaml: daml.yaml is the file you
+// edit to bump the package `version` (the canonical SCU loop) or to
+// change name/dependencies/build-options, and multi-package projects
+// keep additional daml/*.yaml manifests. Hashing only *.daml would
+// silently ignore the most upgrade-relevant edits, leaving the user in
+// a hot-deploy loop that never rebuilds on a version bump.
 func hashSources(root string) (string, error) {
 	h := sha256.New()
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
@@ -306,7 +314,7 @@ func hashSources(root string) (string, error) {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(d.Name(), ".daml") {
+		if !isWatchedSource(d.Name()) {
 			return nil
 		}
 		info, err := d.Info()
@@ -320,4 +328,15 @@ func hashSources(root string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// isWatchedSource reports whether a filename is a build input the
+// watch loop should hash. Daml source plus YAML build manifests
+// (daml.yaml and any *.yaml the project layout uses); the generated
+// .daml/ tree is already pruned in hashSources so a .yaml emitted
+// there can't re-trigger.
+func isWatchedSource(name string) bool {
+	return strings.HasSuffix(name, ".daml") ||
+		strings.HasSuffix(name, ".yaml") ||
+		strings.HasSuffix(name, ".yml")
 }
