@@ -199,6 +199,11 @@ func TestHandleDoctor_BadPortBaseIs400(t *testing.T) {
 	if body.Code != ErrCodeInvalidRequest {
 		t.Errorf("code = %q, want %q", body.Code, ErrCodeInvalidRequest)
 	}
+	// The bad-port_base error must carry a remediation hint, for parity
+	// with the unknown-version branch (both are user-fixable input errors).
+	if len(body.Remediation) == 0 {
+		t.Error("port_base 400 carries no remediation hint; want one")
+	}
 }
 
 func TestHandleDoctor_UnknownVersionIs400(t *testing.T) {
