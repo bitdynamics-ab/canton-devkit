@@ -194,6 +194,119 @@ func TestEnv_DotenvUsesDoubleQuoteAndEscapes(t *testing.T) {
 	}
 }
 
+// TestEnv_GithubEnvIsBareKeyValue pins the github-env format that the
+// CI examples / ci-localnet skill doc pipe into $GITHUB_ENV. The GitHub
+// Actions env-file parser is NOT a shell: it rejects the `#` comment
+// header and treats surrounding quotes as literal value characters, so
+// the output must be bare KEY=value with no comments and no quoting.
+// This is the regression guard for the broken
+// `localnet env --name ci >> "$GITHUB_ENV"` idiom.
+func TestEnv_GithubEnvIsBareKeyValue(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedEnvInstance(t, "demo")
+
+	cmd := buildEnv()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--name", "demo", "--format=github-env"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	got := out.String()
+
+	// Bare KEY=value, no `export`, no quotes around the value.
+	for _, want := range []string{
+		"CANTON_INSTANCE=demo\n",
+		"CANTON_SPLICE_VERSION=0.6.4\n",
+		"CANTON_APP_USER_UI_PORT=4485\n",
+		"CANTON_POSTGRES_PORT=5432\n",
+		"CANTON_SV_USER=sv-user\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("github-env output missing %q\nfull:\n%s", want, got)
+		}
+	}
+
+	// The GitHub Actions parser rejects comment lines and `export`.
+	// None of the shell/dotenv header noise may appear.
+	for _, banned := range []string{"#", "export ", "='", `="`} {
+		if strings.Contains(got, banned) {
+			t.Errorf("github-env output must not contain %q (GITHUB_ENV rejects it)\nfull:\n%s", banned, got)
+		}
+	}
+
+	// Every non-empty line must be a bare KEY=VALUE (or a heredoc
+	// marker, exercised separately) -- never a shell `export`.
+	for _, line := range strings.Split(strings.TrimSpace(got), "\n") {
+		if line == "" {
+			continue
+		}
+		if !strings.Contains(line, "=") && !strings.Contains(line, "<<") {
+			t.Errorf("github-env line is not KEY=VALUE: %q", line)
+		}
+	}
+}
+
+// TestEnv_GithubEnvMultilineUsesHeredoc verifies that a value carrying a
+// newline (a hostile DataDir can) is emitted with GitHub's documented
+// heredoc syntax rather than a bare line that the runner would
+// misparse, and that the delimiter cannot be terminated early by the
+// value's own content.
+func TestEnv_GithubEnvMultilineUsesHeredoc(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	s := registry.NewState("demo", "0.6.4")
+	s.ComposeProject = "canton-demo"
+	s.DockerNetwork = "demo"
+	s.ContainerPrefix = "demo-"
+	s.ProjectDir = t.TempDir()
+	// A newline in the path forces the heredoc branch.
+	s.DataDir = "/tmp/line1\nline2"
+	s.Status = registry.StatusRunning
+	if err := registry.Write(s); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	cmd := buildEnv()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--name", "demo", "--format=github-env"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	got := out.String()
+	want := filepath.Join(s.DataDir, "auth.json")
+	delim := githubEnvDelimiter(want)
+	block := "CANTON_AUTH_FILE<<" + delim + "\n" + want + "\n" + delim + "\n"
+	if !strings.Contains(got, block) {
+		t.Errorf("multi-line value not emitted as heredoc\nfull:\n%s\nwant block:\n%s", got, block)
+	}
+	// The chosen delimiter must not appear inside the value, or the
+	// runner would close the heredoc early.
+	if strings.Contains(want, delim) {
+		t.Errorf("heredoc delimiter %q occurs in value %q", delim, want)
+	}
+}
+
+func TestGithubEnvDelimiter(t *testing.T) {
+	// Default token when absent from the value.
+	if got := githubEnvDelimiter("nothing special"); got != "CANTON_DEVKIT_EOF" {
+		t.Errorf("githubEnvDelimiter(plain) = %q, want CANTON_DEVKIT_EOF", got)
+	}
+	// Widens until absent when the value contains the token.
+	v := "x CANTON_DEVKIT_EOF y"
+	got := githubEnvDelimiter(v)
+	if strings.Contains(v, got) {
+		t.Errorf("githubEnvDelimiter returned %q which occurs in value", got)
+	}
+	if got != "CANTON_DEVKIT_EOF_" {
+		t.Errorf("githubEnvDelimiter = %q, want CANTON_DEVKIT_EOF_", got)
+	}
+}
+
 func TestShellQuote(t *testing.T) {
 	cases := map[string]string{
 		"":            "''",
@@ -346,7 +459,7 @@ func TestEnv_RejectsUnknownFormat(t *testing.T) {
 	if exit, ok := err.(corelocalnet.ExitCodeError); !ok || int(exit) != corelocalnet.ExitUserError {
 		t.Fatalf("error = %T %[1]v, want ExitUserError", err)
 	}
-	if !strings.Contains(out.String(), `--format must be shell, dotenv, or json (got "xml")`) {
+	if !strings.Contains(out.String(), `--format must be shell, dotenv, github-env, or json (got "xml")`) {
 		t.Errorf("stderr = %q, want format validation message", out.String())
 	}
 }
@@ -378,9 +491,10 @@ func TestEnv_WriterErrorsPropagate(t *testing.T) {
 		Vars:          map[string]string{"CANTON_INSTANCE": "demo"},
 	}
 	for name, write := range map[string]func(io.Writer, apitypes.EnvExport) error{
-		"shell":  writeEnvShell,
-		"dotenv": writeEnvDotenv,
-		"json":   writeEnvJSON,
+		"shell":      writeEnvShell,
+		"dotenv":     writeEnvDotenv,
+		"github-env": writeEnvGithub,
+		"json":       writeEnvJSON,
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := write(failingEnvWriter{}, ex); !errors.Is(err, errEnvWriter) {

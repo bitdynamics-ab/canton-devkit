@@ -167,7 +167,7 @@ canton-devkit localnet status --name demo
 eval "$(canton-devkit localnet env --name demo)"
 
 # 5. Upload a DAR
-canton-devkit localnet dar upload ./my-app.dar --name demo
+canton-devkit localnet dar upload ./my-app.dar --instance demo
 
 # 6. Watch live contracts. The participant gRPC endpoint isn't
 #    host-published by default, so pass --endpoint host:port

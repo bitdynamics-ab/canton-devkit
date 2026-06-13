@@ -21,9 +21,10 @@ brew install --formula \
 ```
 
 > Note: the formula's stable `url` + `sha256` start as placeholders
-> (`version "0.0.0"`, all-zero SHA) until the first release tag is cut
-> and `scripts/update-homebrew-formula.sh` rewrites them. There is no
-> public `--HEAD` install path because the source repository is private.
+> (`version "0.0.0"`, all-zero SHA) until the first release tag is cut;
+> the release workflow then rewrites them automatically (see below).
+> There is no public `--HEAD` install path because the source repository
+> is private.
 
 ## Install (via tap)
 
@@ -34,28 +35,29 @@ brew install canton-devkit
 
 ## How the formula stays in sync
 
-On every release tag (`v*`):
+This is **automatic** on every release tag (`v*`). `.github/workflows/release.yml`:
 
-1. `.github/workflows/release.yml` builds and publishes the per-platform
-   tarballs and a `checksums.txt` manifest to a public GitHub Release in
+1. Builds and publishes the per-platform tarballs and a single GNU
+   `sha256sum` manifest named `SHA256SUMS` to a public GitHub Release in
    `bitdynamics-ab/homebrew-canton-devkit`.
-2. A maintainer runs:
+2. Reads the `darwin_arm64` and `linux_amd64` digests out of
+   `dist/SHA256SUMS`, rewrites the `version` + two `sha256` fields of the
+   public builds repo's `Formula/canton-devkit.rb`, and commits the
+   change back via the GitHub contents API (commit message
+   `chore: bump Homebrew formula to <tag>`).
 
-   ```sh
-   scripts/update-homebrew-formula.sh v0.1.0
-   ```
+No maintainer action is required for a normal release.
 
-   The script downloads `checksums.txt` from the public builds release,
-   extracts the `darwin_arm64` and `linux_amd64` digests, and rewrites
-   the `version` + two `sha256` fields in the checked-out public builds
-   repo's `Formula/canton-devkit.rb`.
+### Manual / break-glass: `scripts/update-homebrew-formula.sh`
 
-3. The diff is committed in `bitdynamics-ab/homebrew-canton-devkit` with a
-   message such as `chore: bump Homebrew formula to v0.1.0`.
-
-The script does NOT commit or push automatically. Review the diff in the public
-builds repo first, then commit. This keeps the human in the loop in case the
-release tarballs themselves are wrong.
+`scripts/update-homebrew-formula.sh v0.1.0 [path/to/homebrew-canton-devkit]`
+does the same rewrite locally against a checked-out public builds repo.
+Use it only when the automated step failed, or to re-pin an existing
+tag. It downloads `SHA256SUMS` from the public release, extracts the two
+digests, rewrites the formula in place, and prints a diff — it does
+**not** commit or push, so review the diff and commit by hand. This
+keeps a human in the loop when the release tarballs themselves might be
+wrong.
 
 ## Smoke test
 

@@ -68,15 +68,18 @@ jobs:
 
       - name: Export endpoints for the test step
         run: |
-          # `localnet env` prints .env-style KEY=VALUE lines (Ledger API,
-          # JSON API, admin API, wallet/scan URLs, party IDs). Append them
-          # to $GITHUB_ENV so subsequent steps see them as env vars.
-          canton-devkit localnet env --name "${INSTANCE}" >> "${GITHUB_ENV}"
+          # `localnet env --format github-env` prints bare KEY=VALUE lines
+          # (Ledger API, JSON API, admin API, wallet/scan URLs, party IDs).
+          # Append them to $GITHUB_ENV so subsequent steps see them as env
+          # vars. The github-env format is required here: the default
+          # `shell` format emits `#` comment lines and `export KEY='value'`,
+          # which the GitHub Actions env-file parser rejects.
+          canton-devkit localnet env --name "${INSTANCE}" --format github-env >> "${GITHUB_ENV}"
 
       - name: (Optional) Upload your DAR
         run: |
           if [ -f ./dist/my-app.dar ]; then
-            canton-devkit localnet dar upload ./dist/my-app.dar --name "${INSTANCE}"
+            canton-devkit localnet dar upload ./dist/my-app.dar --instance "${INSTANCE}"
           else
             echo "No DAR to upload — skipping."
           fi
