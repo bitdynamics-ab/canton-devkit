@@ -78,3 +78,62 @@ canton-devkit localnet clean --name metric-audit --force
 The test is **skipped** when `METRICSQ_SMOKE_PROM` is unset, so
 `go test -tags=integration ./...` on a box with no LocalNet stays
 green. Set the env var in CI to fail-fast.
+
+## Toggling observability on a running instance
+
+You don't have to decide about metrics at `up` time. Both surfaces
+expose a runtime toggle that brings Prometheus + Grafana up (or down)
+on an already-running instance **without restarting Canton**:
+
+- **Web UI** — the Metrics screen's "Enable observability now" button
+  (`POST /api/instances/{name}/observability`).
+- **CLI** — `dpm localnet observability enable|disable|status`:
+
+  ```
+  # Turn both sidecars on for a running instance
+  canton-devkit localnet observability enable --name demo
+
+  # Just Prometheus (no Grafana image / RAM)
+  canton-devkit localnet observability enable --name demo --prometheus
+
+  # Turn Grafana back off, leave Prometheus scraping
+  canton-devkit localnet observability disable --name demo --grafana
+
+  # Report what's running + the dashboard URL (works while stopped too)
+  canton-devkit localnet observability status --name demo --format json
+  ```
+
+Both surfaces call the **same** neutral orchestration
+(`internal/localnet.SetObservability`) — there is no second
+docker-compose code path that could drift. With neither `--prometheus`
+nor `--grafana`, the verb acts on both sidecars (the legacy umbrella
+semantics); pass one flag to operate on a single component.
+
+## Survives a down → up cycle
+
+The profile set an instance was brought up with — whether via
+`--profile observability` at create time or via the runtime toggle — is
+persisted in the registry (`state.json`'s `profiles` field). A later
+`down` + `up` (or the Web UI **Restart**) **re-enables the same
+profiles automatically**; you do not have to re-pass `--profile`. An
+explicit `--profile` on the re-up still wins (replaces, doesn't merge),
+so you can deliberately drop observability. This closes the prior gap
+where Prometheus/Grafana silently vanished on every restart even though
+the stable-port contract kept the bookmarked Grafana URL alive.
+
+## Stack topology — per-instance, not host-shared (known scope)
+
+Today the observability stack is **per-instance**: each
+observability-enabled LocalNet gets its own Prometheus + Grafana pair,
+joined to that instance's docker network so the scrape targets
+(`canton:10013`, `splice:10013`) resolve over service-name DNS without
+publishing the metrics ports to the host.
+
+The original proposal (line 188) envisioned a single **host-level**
+stack serving multiple instances via Prometheus file-based service
+discovery, to avoid the duplicated overhead when several environments
+run at once. That rework is **not yet implemented** — see the
+trade-off and follow-up in [docs/limitations.md](limitations.md#shared-observability-stack).
+The runtime toggle and down→up persistence above are deliberately
+designed so the eventual host-level migration is additive (the toggle
+already funnels through one neutral function; only its body changes).

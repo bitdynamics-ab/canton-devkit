@@ -86,6 +86,17 @@ type State struct {
 	PortBlockStart int            `json:"port_block_start"` // 0 = no offset
 	Ports          map[string]int `json:"ports"`            // logical name → host port
 
+	// Profiles records the docker-compose profile set this instance
+	// was brought up with (e.g. ["observability"], ["prometheus",
+	// "grafana"], ["tokens-v2"]). Persisted so a down → up cycle
+	// re-enables the same profiles without the caller having to
+	// re-pass `--profile` — losing observability on every restart was
+	// the bug #41. Authoritative over sniffing the compose overlay
+	// filenames. Additive — older state.json files without this key
+	// decode cleanly with Profiles == nil, and RunUp falls back to
+	// the empty set (no opt-in profiles), matching pre-field behavior.
+	Profiles []string `json:"profiles,omitempty"`
+
 	// Feature flags from the version adapter
 	AlphaProtocolEnabled bool `json:"alpha_protocol_enabled"`
 

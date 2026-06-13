@@ -168,6 +168,17 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Reject unknown --profile values up front (#42). Shared with the
+	// Web UI create handler via ValidateProfiles so a typo'd
+	// `--profile observabilty` fails fast with a user error here
+	// instead of silently producing a metric-less instance — the
+	// exact failure the UI's allowlist already prevents with a 400.
+	// A pure input check: runs before the lock / any side effect.
+	if err := ValidateProfiles(opts.Profiles); err != nil {
+		prog.FailStep(StepResolveVersion, err.Error(), nil)
+		return ExitUserError
+	}
+
 	// Wall-clock start for the welcome screen's "ready in Nm Ns" line.
 	// Captured at the top of RunUp so it includes resolve+preflight
 	// time, not just compose-up time — gives the user a realistic
@@ -315,6 +326,26 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	}
 	composeFiles = append(composeFiles, loopbackPath)
 
+	// Re-up profile continuity (#41). When the caller passes no
+	// explicit profiles, inherit the set the instance was last brought
+	// up with so a `down` → `up` cycle (or the UI Restart) doesn't
+	// silently shed observability / tokens-v2. An explicit --profile
+	// still wins (overrides, doesn't merge) so a user can deliberately
+	// drop a profile. We read the persisted Profiles field — the
+	// authoritative record written below — rather than sniffing
+	// compose filenames. Best-effort: a missing/old state.json (no
+	// Profiles key) leaves opts.Profiles empty, matching the
+	// pre-field behavior.
+	if len(opts.Profiles) == 0 {
+		if prior, err := registry.Read(opts.Name); err == nil && len(prior.Profiles) > 0 {
+			opts.Profiles = append([]string(nil), prior.Profiles...)
+			prog.Warn(fmt.Sprintf(
+				"re-enabling profiles from the previous up of %q: %s "+
+					"(pass --profile explicitly to change the set)",
+				opts.Name, strings.Join(opts.Profiles, ", ")))
+		}
+	}
+
 	// Observability profile(s) materialize the embedded Prometheus +
 	// Grafana overlay and append its compose file. Per-component
 	// profiles (`prometheus`, `grafana`) and the legacy umbrella
@@ -428,6 +459,10 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	state.ProjectDir = projectDir
 	state.DataDir = dataDir
 	state.Ports = adapter.EndpointMap() // overwritten post-up if ephemeral
+	// Persist the (possibly inherited) profile set so a later down → up
+	// re-enables the same overlays without --profile (#41). Stored as
+	// resolved above: explicit flags, or the prior set when none given.
+	state.Profiles = opts.Profiles
 	state.AlphaProtocolEnabled = adapter.SupportsAlphaProtocol()
 	state.Status = registry.StatusCreating
 	if err := registry.Write(state); err != nil {

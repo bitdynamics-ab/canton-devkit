@@ -118,7 +118,8 @@ func handleMetricsQuery() http.HandlerFunc {
 				writeErrorWithCode(w, http.StatusServiceUnavailable,
 					"OBSERVABILITY_PROFILE_OFF",
 					"observability profile not running for instance "+name,
-					"restart the instance with `dpm localnet up --profile observability --name "+name+"`")
+					"enable it without a restart: `dpm localnet observability enable --name "+name+"` "+
+						"(or the Web UI Metrics screen's \"Enable observability now\" button)")
 				return
 			}
 			writeErrorWithCode(w, http.StatusBadGateway,
@@ -233,7 +234,8 @@ func handleMetricsRange() http.HandlerFunc {
 				writeErrorWithCode(w, http.StatusServiceUnavailable,
 					"OBSERVABILITY_PROFILE_OFF",
 					"observability profile not running for instance "+name,
-					"restart the instance with `dpm localnet up --profile observability --name "+name+"`")
+					"enable it without a restart: `dpm localnet observability enable --name "+name+"` "+
+						"(or the Web UI Metrics screen's \"Enable observability now\" button)")
 				return
 			}
 			writeError(w, http.StatusBadGateway, "prometheus query_range", err)
@@ -303,7 +305,8 @@ func handleMetricsSummary() http.HandlerFunc {
 				writeErrorWithCode(w, http.StatusServiceUnavailable,
 					"OBSERVABILITY_PROFILE_OFF",
 					"observability profile not running for instance "+name,
-					"restart the instance with `dpm localnet up --profile observability --name "+name+"`")
+					"enable it without a restart: `dpm localnet observability enable --name "+name+"` "+
+						"(or the Web UI Metrics screen's \"Enable observability now\" button)")
 				return
 			}
 		}

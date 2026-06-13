@@ -1156,6 +1156,41 @@ export const fetchMetricsSummary = (name: string, signal?: AbortSignal) =>
     { signal },
   );
 
+// ObservabilityToggleResponse mirrors the POST
+// /api/instances/{name}/observability response. `enabled` is the
+// legacy synonym (true iff BOTH sidecars are on); the per-component
+// booleans are canonical. Ports are present only when the matching
+// sidecar is up.
+export interface ObservabilityToggleResponse {
+  schema_version: number;
+  instance: string;
+  prometheus: boolean;
+  grafana: boolean;
+  enabled: boolean;
+  prometheus_ui?: number;
+  grafana_ui?: number;
+  warning?: string;
+}
+
+// setObservability toggles the Prometheus + Grafana sidecars on a
+// running instance via the per-component HTTP body. Routed through
+// apiFetch (the single chokepoint) so the envelope decoding +
+// ApiError mapping apply uniformly — the previous hand-rolled fetch
+// in MetricsScreen bypassed that (#80). The CLI mirror is
+// `dpm localnet observability enable|disable`.
+export function setObservability(
+  name: string,
+  want: { prometheus: boolean; grafana: boolean },
+): Promise<ObservabilityToggleResponse> {
+  return apiFetch<ObservabilityToggleResponse>(
+    `/api/instances/${encodeURIComponent(name)}/observability`,
+    {
+      method: "POST",
+      body: JSON.stringify(want),
+    },
+  );
+}
+
 // Prometheus range-query response (subset). The backend's
 // /metrics/range endpoint passes Prometheus's response through
 // verbatim, so the frontend decodes the same shape Prometheus
