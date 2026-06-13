@@ -67,13 +67,12 @@ func TestSkillsLint_AgainstLiveCobraSurface(t *testing.T) {
 				return
 			}
 			// Stub commands (DisableFlagParsing=true) get the
-			// flag-check skip too. On this branch `clean`/`restart`
-			// are still transitional stubs on main (their real
-			// implementations land via BIT-194/BIT-208); validating
-			// flags against a stub would force the skill to track the
-			// transitional shape instead of the final one. Same
-			// logging contract as futureVerbs so CI output makes the
-			// deferred verification visible.
+			// flag-check skip too — validating flags against a stub
+			// would force the skill to track the transitional shape
+			// instead of the final one. No current command is a stub;
+			// the branch stays as a guard for future scaffolding.
+			// Same logging contract as futureVerbs so CI output makes
+			// the deferred verification visible.
 			if cmd.DisableFlagParsing {
 				t.Logf("verb %q is a stub (DisableFlagParsing=true) — flag checks skipped until real impl lands",
 					strings.Join(sc.verbPath, " "))
@@ -103,11 +102,10 @@ func TestSkillsLint_AgainstLiveCobraSurface(t *testing.T) {
 // from this map. A regression then fails the lint with the real
 // flag-mismatch error rather than the allowlist skip.
 //
-// On this branch (based on main) every M1/M2 verb is real — only the
-// M3 token surface is outstanding.
-var futureVerbs = map[string]string{
-	"token": "BIT-138", // token create/mint/transfer/burn/balance (M3)
-}
+// Currently empty: every documented verb (including the BIT-138 token
+// surface) has a real implementation. Add entries here only when a
+// skill documents a command ahead of its landing.
+var futureVerbs = map[string]string{}
 
 // scannedCommand is one extracted `dpm localnet <verb> ... --flag ...`
 // invocation, paired with its source location for error attribution.

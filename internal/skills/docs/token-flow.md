@@ -15,33 +15,35 @@ The user asks to "create a test token", "mint/transfer/burn tokens", or
 
 ## Safe workflow
 
-1. **Ensure LocalNet is up and a wallet party exists**:
+1. **Ensure LocalNet is up with the tokens-v2 profile** (the V2
+   on-ledger surfaces need it; see `dpm localnet versions` for an
+   alpha-channel Splice version that supports it):
    ```
+   dpm localnet up --name dev --profile tokens-v2
    dpm localnet status --name dev
    ```
 
-2. **Create a token** (interactive wizard — name, symbol, decimals,
-   initial supply, aligned with CIP-0112):
+2. **Create a token instrument**. Interactive wizard in a terminal
+   (`dpm localnet token create --instance dev`), or fully flag-driven
+   for agents and CI:
    ```
-   dpm localnet token create
+   dpm localnet token create --instance dev --non-interactive \
+     --name "Rocket Token" --symbol RTK --decimals 6 \
+     --initial-supply 1000000 --issuer <issuer-party-id>
    ```
 
-3. **Common operations**:
+3. **Common operations** (parties are full party ids — get them from
+   `dpm localnet status --name dev`):
    ```
-   dpm localnet token mint RTK 1000 --to alice --name dev
-   dpm localnet token transfer RTK 250 --to bob --name dev
-   dpm localnet token burn RTK 100 --name dev
-   dpm localnet token balance RTK --name dev
+   dpm localnet token mint --instance dev --instrument RTK --to <party-id> --amount 1000
+   dpm localnet token transfer --instance dev --instrument RTK --from <sender> --to <receiver> --amount 250
+   dpm localnet token burn --instance dev --instrument RTK --from <party-id> --amount 100 --yes
+   dpm localnet token balance --instance dev --instrument RTK
    ```
 
 ## Guardrails
 - This is a LocalNet faucet/testing surface, not production token
   infrastructure. Do not point it at MainNet.
-- CIP-0112 (V2) is the committed default; CIP-56 (V1) support is
-  optional/out-of-scope unless explicitly enabled.
+- V2 (CIP-0112) only — V1 / CIP-0056 is not supported by this CLI.
 - All operations go through the Ledger API / Registry API on the
   selected instance; verify with `token balance` after each step.
-
-> Status: token commands are a Milestone 3 deliverable. If a command
-> reports "not implemented yet", the network is fine — the token
-> surface just isn't wired in this build.
