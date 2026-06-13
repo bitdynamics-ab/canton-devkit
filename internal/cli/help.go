@@ -164,6 +164,7 @@ func helpCategories() []helpCategory {
 				{"dar", "upload, list, download, diff, and watch DAR files"},
 				{"token", "create, mint, transfer, burn, and check token balances"},
 				{"metrics", "inspect observability endpoints and metrics state"},
+				{"observability", "enable, disable, or inspect Prometheus + Grafana sidecars"},
 				{"skills", "browse and install AI-agent skill docs for DevKit workflows"},
 			},
 		},

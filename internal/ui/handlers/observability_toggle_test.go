@@ -59,6 +59,10 @@ func TestFailedObservabilityServiceNamesComponent(t *testing.T) {
 		{"grafana-only failure", errors.New("enable grafana: docker compose up: exit status 1"), "grafana"},
 		{"disable grafana failure", errors.New("disable grafana: docker compose stop: exit status 1"), "grafana"},
 		{"prometheus failure", errors.New("enable prometheus: docker compose up: exit status 1"), "prometheus"},
+		// The wrapped docker output of a PROMETHEUS failure can mention
+		// the grafana service (a compose error listing both); the prefix
+		// match must still name prometheus, not be fooled by the tail.
+		{"prometheus failure whose output names grafana", errors.New("enable prometheus: docker compose up: exit status 1\noutput:\nservice \"grafana\" depends on undefined network"), "prometheus"},
 		{"non-component error falls back", errors.New("persist observability toggle: disk full"), "prometheus"},
 		{"nil error falls back", nil, "prometheus"},
 	}

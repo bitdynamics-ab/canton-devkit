@@ -2112,14 +2112,20 @@ func handleObservabilityToggle() http.HandlerFunc {
 }
 
 // failedObservabilityService maps a SetObservability error to the
-// sidecar the remediation hint should name. SetObservability wraps
-// every component failure with an "enable/disable prometheus|grafana"
-// prefix, so a grafana-only failure yields "grafana"; everything else
-// (including the prometheus path and any non-component error) falls
-// back to "prometheus".
+// sidecar the remediation hint should name. SetObservability wraps every
+// component failure with a leading "enable|disable <component>: ..."
+// prefix, so we match that PREFIX rather than searching the whole error:
+// the wrapped docker output (the "...\noutput:\n<stderr>" tail) can
+// mention the other component (e.g. a compose error listing both
+// services), which a substring match would mis-attribute. A grafana
+// prefix yields "grafana"; the prometheus path and any non-component
+// error fall back to "prometheus".
 func failedObservabilityService(err error) string {
-	if err != nil && strings.Contains(err.Error(), "grafana") {
-		return "grafana"
+	if err != nil {
+		msg := err.Error()
+		if strings.HasPrefix(msg, "enable grafana") || strings.HasPrefix(msg, "disable grafana") {
+			return "grafana"
+		}
 	}
 	return "prometheus"
 }
