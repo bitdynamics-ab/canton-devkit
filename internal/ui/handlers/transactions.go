@@ -18,8 +18,10 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	apitypes "github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
@@ -41,36 +43,21 @@ const (
 	transactionsWindowSpan = 10_000
 )
 
-// MountTransactions installs the Explorer transactions endpoint.
+// MountTransactions installs the Explorer transactions endpoints.
+//
+//   - GET /api/instances/{name}/transactions
+//     — bounded list (party/template/from/to filters, like CLI `tx ls`)
+//   - GET /api/instances/{name}/transactions/{update_id}/replay
+//     — per-party visibility projection of one transaction (CLI `tx replay`)
 func MountTransactions(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/instances/{name}/transactions", handleTransactionsList)
+	mux.HandleFunc("GET /api/instances/{name}/transactions/{update_id}/replay", handleTxReplay)
 }
 
-// txRow is the unified projection across the GetUpdatesResponse
-// oneof. Each row has a kind discriminator so the frontend can
-// pick its render path without re-walking the proto.
-type txRow struct {
-	Kind         string       `json:"kind"` // "transaction" | "reassignment" | "topology" | "checkpoint"
-	Offset       int64        `json:"offset"`
-	UpdateID     string       `json:"update_id,omitempty"`
-	WorkflowID   string       `json:"workflow_id,omitempty"`
-	CommandID    string       `json:"command_id,omitempty"`
-	RecordTime   string       `json:"record_time,omitempty"`
-	Synchronizer string       `json:"synchronizer,omitempty"`
-	EventCount   int          `json:"event_count,omitempty"`
-	Events       []txEventRow `json:"events,omitempty"`
-}
-
-// txEventRow projects a CreatedEvent / ArchivedEvent into a flat
-// shape the table + timeline can render directly. We keep the full
-// CreatedEvent payload for transactions because the Explorer's
-// drawer needs it; ArchivedEvent's contract_id is enough.
-type txEventRow struct {
-	Kind       string   `json:"kind"` // "create" | "archive" | "exercise"
-	ContractID string   `json:"contract_id,omitempty"`
-	Template   string   `json:"template,omitempty"`
-	Witnesses  []string `json:"witnesses,omitempty"`
-}
+// The transaction list row + event shapes are shared with the CLI
+// `tx ls --format json` via internal/api/types
+// (apitypes.TransactionRow / TransactionEvent / TransactionsListResponse),
+// so the two surfaces can never drift (#23).
 
 func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
@@ -97,6 +84,32 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 			}
 			limit = n
 		}
+	}
+
+	// Filters — mirror the CLI `tx ls`'s --party / --template /
+	// --from / --to (#24). `party` / `template` are repeatable
+	// (?party=a&party=b) AND comma-splittable; `from` / `to` are
+	// inclusive/exclusive offset bounds. Validate them BEFORE any
+	// gRPC work so a bad value fails 400 rather than 502.
+	reqParties := splitCSV(r.URL.Query()["party"])
+	reqTemplates := splitCSV(r.URL.Query()["template"])
+	if _, err := ledger.BuildTemplateFilters(reqTemplates); err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest,
+			"invalid template filter: "+err.Error(),
+			"template accepts Module:Entity or pkg:Module:Entity")
+		return
+	}
+	fromOff, fromSet, ferr := parseOffsetParam(r.URL.Query().Get("from"))
+	if ferr != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest,
+			"invalid from: "+ferr.Error())
+		return
+	}
+	toOff, toSet, terr := parseOffsetParam(r.URL.Query().Get("to"))
+	if terr != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest,
+			"invalid to: "+terr.Error())
+		return
 	}
 
 	state, err := registry.Read(name)
@@ -141,36 +154,41 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = client.Close() }()
 
-	// resolve user-id → party-rights set so the filter
-	// matches what the JWT can actually see.
+	// Party scope: an explicit ?party / ?template is honoured verbatim
+	// (mirrors the CLI's `tx ls --party/--template`, where any explicit
+	// filter pins a valid shape the participant accepts). With neither,
+	// project through the JWT's own act/read parties — Splice LocalNet
+	// signs user-id JWTs by default, so a bare wildcard would be
+	// PermissionDenied; resolving the user's concrete parties is the
+	// shape that returns data.
 	//
 	// Disambiguate the three failure modes (mirrors
 	// handlers/contracts.go):
 	//   - transport / dial error  → 502 BAD_GATEWAY
 	//   - PermissionDenied        → 503 EXPLORER_NEEDS_PARTY_JWT
 	//   - no party rights granted → 503 EXPLORER_NEEDS_PARTY_JWT
-	parties, err := client.ResolveActAndReadParties(ctx)
-	if err != nil {
-		if isPermissionDenied(err) {
-			writeErrorWithCode(w, http.StatusServiceUnavailable,
-				"EXPLORER_NEEDS_PARTY_JWT",
-				"participant denied user-rights lookup",
-				"the JWT's user has no party-rights — grant actAs/readAs via UserManagementService")
+	effParties := reqParties
+	if len(reqParties) == 0 && len(reqTemplates) == 0 {
+		resolved, err := client.ResolveActAndReadParties(ctx)
+		if err != nil {
+			if isPermissionDenied(err) {
+				writeErrorWithCode(w, http.StatusServiceUnavailable,
+					"EXPLORER_NEEDS_PARTY_JWT",
+					"participant denied user-rights lookup",
+					"the JWT's user has no party-rights — grant actAs/readAs via UserManagementService")
+				return
+			}
+			writeError(w, http.StatusBadGateway, "resolve party rights", err)
 			return
 		}
-		writeError(w, http.StatusBadGateway, "resolve party rights", err)
-		return
-	}
-	if len(parties) == 0 {
-		writeErrorWithCode(w, http.StatusServiceUnavailable,
-			"EXPLORER_NEEDS_PARTY_JWT",
-			"this JWT has no party-rights",
-			"grant actAs/readAs rights to the user via UserManagementService")
-		return
-	}
-	byParty := make(map[string]*lapiv2.Filters, len(parties))
-	for _, p := range parties {
-		byParty[p] = &lapiv2.Filters{}
+		if len(resolved) == 0 {
+			writeErrorWithCode(w, http.StatusServiceUnavailable,
+				"EXPLORER_NEEDS_PARTY_JWT",
+				"this JWT has no party-rights",
+				"grant actAs/readAs rights to the user via UserManagementService")
+			return
+		}
+		effParties = resolved
 	}
 	end, err := client.LedgerEnd(ctx)
 	if err != nil {
@@ -178,23 +196,29 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Offset window. Mirrors the CLI's resolveOffsetWindow precedence:
+	//   - ?to set  → that exact end; otherwise the current ledger end.
+	//   - ?from set → that exact begin (so from=0 reads from genesis).
+	//   - ?from unset → a generous recent window
+	//     (end - transactionsWindowSpan), independent of limit, so a
+	//     sparse filtered match is still found without O(history) work.
 	endInc := end.Offset
-	// Lower-bound the scan at a recent offset instead of 0.
-	//
-	// The old floor of BeginExclusive:0 re-scanned the WHOLE ledger
-	// on every request and, once history exceeded streamCap, the
-	// ascending stream meant we processed only the OLDEST streamCap
-	// updates and returned "newest N of the oldest streamCap" — i.e.
-	// ancient activity labelled "newest first" — with HTTP 200.
-	// Splice LocalNet continuously emits amulet round/system
-	// transactions, so an instance left up for days easily crosses
-	// that threshold. Since we already know the ledger end, we floor
-	// the window at end-transactionsWindowSpan: a generous recent
-	// window that captures the newest matches without O(history) work
-	// on every tab switch.
-	beginExclusive := endInc - transactionsWindowSpan
-	if beginExclusive < 0 {
-		beginExclusive = 0
+	if toSet {
+		endInc = toOff
+	}
+	var beginExclusive int64
+	if fromSet {
+		beginExclusive = fromOff
+	} else {
+		beginExclusive = endInc - transactionsWindowSpan
+		if beginExclusive < 0 {
+			beginExclusive = 0
+		}
+	}
+	if beginExclusive > endInc {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest,
+			fmt.Sprintf("from %d must be <= to %d", beginExclusive, endInc))
+		return
 	}
 	// Stream context is derived from the request context so we can
 	// cancel mid-iteration when we've reached `limit` without
@@ -207,15 +231,11 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	stream, err := client.Updates(streamCtx, ledger.UpdatesRequest{
 		BeginExclusive: beginExclusive,
 		EndInclusive:   &endInc,
-		UpdateFormat: &lapiv2.UpdateFormat{
-			IncludeTransactions: &lapiv2.TransactionFormat{
-				EventFormat: &lapiv2.EventFormat{
-					FiltersByParty: byParty,
-					Verbose:        true,
-				},
-				TransactionShape: lapiv2.TransactionShape_TRANSACTION_SHAPE_ACS_DELTA,
-			},
-		},
+		// Shared filter builder so ?party/?template behave exactly like
+		// the CLI's flags (#24). ACS_DELTA = the flat create/archive
+		// projection the table renders.
+		UpdateFormat: ledger.BuildUpdateFormat(effParties, reqTemplates, true,
+			lapiv2.TransactionShape_TRANSACTION_SHAPE_ACS_DELTA),
 	})
 	if err != nil {
 		if isPermissionDenied(err) {
@@ -267,7 +287,7 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	if streamCap < 10_000 {
 		streamCap = 10_000
 	}
-	buf := make([]txRow, limit)
+	buf := make([]apitypes.TransactionRow, limit)
 	head, count := 0, 0
 	processed := 0
 	// windowTruncated is true when we stopped before draining the
@@ -322,7 +342,7 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	}
 	// Unwrap the ring into chronological order (oldest first), then
 	// reverse below to newest-first for the table.
-	rows := make([]txRow, 0, count)
+	rows := make([]apitypes.TransactionRow, 0, count)
 	start := (head - count + limit) % limit
 	for i := 0; i < count; i++ {
 		rows = append(rows, buf[(start+i)%limit])
@@ -333,20 +353,19 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 		rows[i], rows[j] = rows[j], rows[i]
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"schema_version": 1,
-		"instance":       name,
-		"role":           role,
-		"ledger_end":     endInc,
-		"transactions":   rows,
-		"count":          len(rows),
-		// scanned_from is the lower bound (exclusive) of the offset
-		// window we inspected; window_truncated is true when we
-		// stopped before reaching EOF (streamCap / deadline), so the
-		// rows are the newest of a clipped scan rather than the
-		// complete recent history.
-		"scanned_from":     beginExclusive,
-		"window_truncated": windowTruncated,
+	// scanned_from is the lower bound (exclusive) of the offset window
+	// inspected; window_truncated is true when we stopped before
+	// reaching EOF (streamCap / deadline), so the rows are the newest
+	// of a clipped scan rather than the complete recent history.
+	writeJSON(w, http.StatusOK, apitypes.TransactionsListResponse{
+		SchemaVersion:   apitypes.SchemaVersion,
+		Instance:        name,
+		Role:            role,
+		LedgerEnd:       endInc,
+		Transactions:    rows,
+		Count:           len(rows),
+		ScannedFrom:     beginExclusive,
+		WindowTruncated: windowTruncated,
 	})
 }
 
@@ -369,9 +388,10 @@ func eventKindAbbrev(k ledger.EventKind) string {
 }
 
 // projectUpdate folds the GetUpdatesResponse oneof into a unified
-// txRow. Returns nil for entries we don't surface (currently only
-// OffsetCheckpoint, since those are heartbeats not state changes).
-func projectUpdate(resp *lapiv2.GetUpdatesResponse) *txRow {
+// apitypes.TransactionRow. Returns nil for entries we don't surface
+// (currently only OffsetCheckpoint, since those are heartbeats not
+// state changes).
+func projectUpdate(resp *lapiv2.GetUpdatesResponse) *apitypes.TransactionRow {
 	if resp == nil {
 		return nil
 	}
@@ -380,16 +400,16 @@ func projectUpdate(resp *lapiv2.GetUpdatesResponse) *txRow {
 		// the CLI Explorer (`contracts watch` / `tx ls`) and this
 		// handler agree on the create/archive/exercise projection.
 		summaries := ledger.ProjectTransactionEvents(t)
-		events := make([]txEventRow, 0, len(summaries))
+		events := make([]apitypes.TransactionEvent, 0, len(summaries))
 		for _, s := range summaries {
-			events = append(events, txEventRow{
+			events = append(events, apitypes.TransactionEvent{
 				Kind:       eventKindAbbrev(s.Kind),
 				ContractID: s.ContractID,
 				Template:   s.TemplateID,
 				Witnesses:  s.Witnesses,
 			})
 		}
-		row := txRow{
+		row := apitypes.TransactionRow{
 			Kind:         "transaction",
 			Offset:       t.GetOffset(),
 			UpdateID:     t.GetUpdateId(),
@@ -405,7 +425,7 @@ func projectUpdate(resp *lapiv2.GetUpdatesResponse) *txRow {
 		return &row
 	}
 	if rs := resp.GetReassignment(); rs != nil {
-		row := txRow{
+		row := apitypes.TransactionRow{
 			Kind:       "reassignment",
 			Offset:     rs.GetOffset(),
 			UpdateID:   rs.GetUpdateId(),
@@ -418,7 +438,7 @@ func projectUpdate(resp *lapiv2.GetUpdatesResponse) *txRow {
 		return &row
 	}
 	if tp := resp.GetTopologyTransaction(); tp != nil {
-		row := txRow{
+		row := apitypes.TransactionRow{
 			Kind:     "topology",
 			Offset:   tp.GetOffset(),
 			UpdateID: tp.GetUpdateId(),
@@ -430,4 +450,38 @@ func projectUpdate(resp *lapiv2.GetUpdatesResponse) *txRow {
 	}
 	// OffsetCheckpoint and unspecified kinds are skipped.
 	return nil
+}
+
+// splitCSV flattens repeated query values AND comma-separated values
+// into a trimmed, non-empty slice. So ?party=a,b&party=c yields
+// [a b c]. Mirrors the CLI's StringSliceVar comma semantics so the
+// two surfaces parse multi-value filters identically.
+func splitCSV(vals []string) []string {
+	out := make([]string, 0, len(vals))
+	for _, v := range vals {
+		for _, part := range strings.Split(v, ",") {
+			if p := strings.TrimSpace(part); p != "" {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
+}
+
+// parseOffsetParam parses an optional non-negative int64 offset query
+// param. Returns (0, false, nil) when the param is absent, (n, true,
+// nil) when present and valid, and an error for a malformed or
+// negative value so the handler can reject it 400.
+func parseOffsetParam(s string) (int64, bool, error) {
+	if s == "" {
+		return 0, false, nil
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0, false, fmt.Errorf("%q is not an integer offset", s)
+	}
+	if n < 0 {
+		return 0, false, fmt.Errorf("offset must be >= 0, got %d", n)
+	}
+	return n, true, nil
 }

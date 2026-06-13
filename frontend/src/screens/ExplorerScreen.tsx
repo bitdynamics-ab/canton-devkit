@@ -9,21 +9,22 @@ import {
   type ContractsListResponse,
   type Role,
   type TransactionEvent,
+  type TransactionFilters,
   type TransactionRow,
   type TransactionsListResponse,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { TX_KIND_COLOR, W, wMono } from "../tokens";
 import { ContractDetailDrawer } from "./ContractDetailDrawer";
+import { TxReplayDrawer } from "./TxReplayDrawer";
 
 // ExplorerScreen — production layout.
 //
-// Matches docs/design/mockups/webui-explorer.jsx pixel-by-pixel:
 //   - ProjectionBar at top: participant + party pills, view toggle
 //     (Contracts/Transactions/Timeline), live status + count strip
 //   - 3-column body grid:
 //       LEFT (232px)  filter sidebar — Templates + Parties chips
-//                     with counts, Time range buttons
+//                     with counts, plus a manual snapshot refresh
 //       CENTER (1fr)  ACS table with custom AcsRow layout
 //                     (template · cid · party · amount · age · sig·obs)
 //                     + search box with "/" hotkey + active row +
@@ -31,9 +32,12 @@ import { ContractDetailDrawer } from "./ContractDetailDrawer";
 //       RIGHT (380px) detail drawer — pills, template+version,
 //                     CID, payload, witnesses
 //
-// The "Transactions" and "Timeline" views are scoped as
-// follow-ups (need UpdateService streaming); the toggle's UI is
-// in place so the visual contract is complete.
+// The ACS table is a live snapshot + SSE delta stream: an initial
+// snapshot fills it, an EventSource applies create/archive deltas, and
+// a 30s timer reconciles drift. The Transactions view supports the
+// same party/template/offset filters the CLI `tx ls` has, and each
+// transaction row can be replayed as a per-party visibility projection
+// (the Web UI counterpart of `tx replay`).
 
 const ROLES: Role[] = ["app-user", "app-provider", "sv"];
 const PALETTE = [
@@ -426,23 +430,41 @@ export function ExplorerScreen() {
                 />
               ))}
             </Card>
-            <Card title="Time range">
-              <div style={{ display: "flex", gap: 6 }}>
-                {(["Live", "5m", "1h", "24h"] as const).map((w, i) => (
-                  <button
-                    key={w}
-                    style={timeBtn(i === 2)}
-                    onClick={() => {
-                      /* future: query window — wired in follow-up */
-                    }}
-                  >
-                    {w}
-                  </button>
-                ))}
-              </div>
+            <Card title="Snapshot">
+              {/* The ACS is a point-in-time snapshot kept live by the
+                  SSE delta stream + a 30s reconciliation timer. A
+                  manual refresh re-pulls it immediately — there is no
+                  time-range to pick (the dead Live/5m/1h/24h buttons
+                  were removed in #25/#78). */}
+              <button
+                onClick={() => void refreshSnapshot(name, role, false)}
+                style={{
+                  width: "100%",
+                  padding: "6px",
+                  fontSize: 12,
+                  borderRadius: 5,
+                  border: `1px solid ${W.border}`,
+                  background: W.border,
+                  color: W.text,
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Refresh snapshot
+              </button>
               <div
                 style={{
                   marginTop: 8,
+                  color: W.dim,
+                  fontSize: 11,
+                  fontFamily: wMono,
+                }}
+              >
+                stream · {streamStatus}
+              </div>
+              <div
+                style={{
+                  marginTop: 4,
                   color: W.dim,
                   fontSize: 11,
                   fontFamily: wMono,
@@ -476,8 +498,14 @@ export function ExplorerScreen() {
                   Active Contract Set
                 </div>
                 <div style={{ color: W.dim, fontSize: 11.5, marginTop: 2 }}>
-                  {filtered.length} of {state.data.contracts.length} contracts ·
-                  streaming creates and archives
+                  {filtered.length} of {state.data.contracts.length} contracts ·{" "}
+                  {streamStatus === "live"
+                    ? "streaming creates and archives"
+                    : streamStatus === "reconnecting"
+                      ? "reconnecting to live stream…"
+                      : streamStatus === "truncated"
+                        ? "stream capped — reconciling via snapshot"
+                        : "snapshot (stream idle)"}
                 </div>
               </div>
               <span style={{ marginLeft: "auto" }} />
@@ -570,7 +598,8 @@ export function ExplorerScreen() {
             >
               <span>
                 Showing {filtered.length} of {state.data.contracts.length} ·{" "}
-                live snapshot
+                {streamStatus === "live" ? "live" : "snapshot"} @ offset{" "}
+                {state.data.ledger_end ?? "—"}
               </span>
               <span>↑↓ navigate · ↵ open · / focus search · esc close</span>
             </div>
@@ -1040,8 +1069,13 @@ function DetailDrawer({ row }: { row: ContractRow | null }) {
 
 // TransactionsView — table of recent ledger updates (transactions,
 // reassignments, topology events) projected from
-// UpdateService.GetUpdates. Each transaction row expands inline
-// to show its event tree.
+// UpdateService.GetUpdates. Each transaction row expands inline to
+// show its event tree and can be replayed as a per-party visibility
+// projection. The filter bar mirrors the CLI `tx ls --party /
+// --template / --from / --to` (#24): filters are applied server-side
+// over the offset window, so a contract outside the row cap can still
+// be found by narrowing the query — not just hidden by a client-side
+// filter over an already-truncated snapshot.
 function TransactionsView({ name, role }: { name: string; role: Role }) {
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -1051,11 +1085,17 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
     | { kind: "err"; error: string }
   >({ kind: "loading" });
   const [openId, setOpenId] = useState<string | null>(null);
+  const [replayId, setReplayId] = useState<string | null>(null);
+  // Draft filter inputs (raw strings) vs the applied filters used in
+  // the fetch effect. Applying on submit (not keystroke) avoids a
+  // round-trip per character and a focus-stealing re-render storm.
+  const [draft, setDraft] = useState<TxFilterDraft>(emptyDraft);
+  const [applied, setApplied] = useState<TransactionFilters>({});
 
   useEffect(() => {
     let cancelled = false;
     setState({ kind: "loading" });
-    fetchTransactions(name, role, 200)
+    fetchTransactions(name, role, 200, applied)
       .then((data) => {
         if (cancelled) return;
         setState({ kind: "ok", data });
@@ -1089,116 +1129,324 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
     return () => {
       cancelled = true;
     };
-  }, [name, role]);
+  }, [name, role, applied]);
 
-  if (state.kind === "loading") {
-    return <Status>Loading updates stream…</Status>;
-  }
-  if (state.kind === "err") {
-    return <ErrorPanel msg={state.error} />;
-  }
-  if (state.kind === "port-missing") {
-    return (
-      <EmptyPanel
-        title="Participant ports not recorded"
-        body="This instance pre-dates the Canton-port persistence fix."
-        remediation={state.remediation}
-      />
-    );
-  }
-  if (state.kind === "needs-jwt") {
-    return (
-      <EmptyPanel
-        title="JWT lacks party-rights"
-        body="Resolving user → party rights needs UserManagementService."
-        remediation={state.remediation}
-      />
-    );
-  }
+  // Party options for the replay drawer's "visible to" selector,
+  // derived from the witnesses present in the loaded rows.
+  const partyOptions = useMemo(() => {
+    if (state.kind !== "ok") return [];
+    const set = new Set<string>();
+    for (const tx of state.data.transactions) {
+      for (const ev of tx.events ?? []) {
+        for (const wparty of ev.witnesses ?? []) set.add(wparty);
+      }
+    }
+    return [...set].sort();
+  }, [state]);
 
+  const applyFilters = useCallback(() => setApplied(parseDraft(draft)), [draft]);
+  const clearFilters = useCallback(() => {
+    setDraft(emptyDraft);
+    setApplied({});
+  }, []);
+  const hasFilters =
+    applied.parties?.length ||
+    applied.templates?.length ||
+    applied.from !== undefined ||
+    applied.to !== undefined;
+
+  const body = (() => {
+    if (state.kind === "loading") {
+      return <Status>Loading updates stream…</Status>;
+    }
+    if (state.kind === "err") {
+      return <ErrorPanel msg={state.error} />;
+    }
+    if (state.kind === "port-missing") {
+      return (
+        <EmptyPanel
+          title="Participant ports not recorded"
+          body="This instance pre-dates the Canton-port persistence fix."
+          remediation={state.remediation}
+        />
+      );
+    }
+    if (state.kind === "needs-jwt") {
+      return (
+        <EmptyPanel
+          title="JWT lacks party-rights"
+          body="Resolving user → party rights needs UserManagementService."
+          remediation={state.remediation}
+        />
+      );
+    }
+
+    return (
+      <div
+        style={{
+          background: W.surface,
+          border: `1px solid ${W.border}`,
+          borderRadius: 10,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            padding: "11px 14px",
+            borderBottom: `1px solid ${W.border}`,
+            display: "flex",
+            alignItems: "baseline",
+            gap: 12,
+          }}
+        >
+          <div>
+            <div style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}>
+              Transactions
+            </div>
+            <div style={{ color: W.dim, fontSize: 11.5, marginTop: 2 }}>
+              {state.data.transactions.length} updates · newest first ·{" "}
+              {hasFilters ? "filtered · " : ""}
+              scanned from {state.data.scanned_from?.toLocaleString() ?? "—"} to
+              ledger end {state.data.ledger_end.toLocaleString()}
+              {state.data.window_truncated ? " · partial window" : ""}
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "70px 110px 1.4fr 1.1fr 0.8fr 56px 70px",
+            gap: 14,
+            padding: "9px 14px",
+            color: W.dim,
+            fontSize: 10.5,
+            letterSpacing: 1.4,
+            textTransform: "uppercase",
+            fontWeight: 600,
+            borderBottom: `1px solid ${W.border}`,
+          }}
+        >
+          <span>Kind</span>
+          <span>Offset</span>
+          <span>Command / Update id</span>
+          <span>Workflow</span>
+          <span>Time</span>
+          <span style={{ textAlign: "right" }}>Events</span>
+          <span style={{ textAlign: "right" }}>Replay</span>
+        </div>
+
+        {state.data.transactions.length === 0 && (
+          <div style={{ padding: 18, color: W.dim, fontSize: 12.5 }}>
+            {hasFilters
+              ? "No updates matched the filters in the scanned window."
+              : "No updates in the current ledger window."}
+          </div>
+        )}
+
+        <div style={{ maxHeight: "60vh", overflowY: "auto" }}>
+          {state.data.transactions.map((tx) => (
+            <TxRowComponent
+              key={`${tx.offset}-${tx.update_id ?? ""}`}
+              tx={tx}
+              open={openId === (tx.update_id ?? `o-${tx.offset}`)}
+              onToggle={() =>
+                setOpenId((cur) =>
+                  cur === (tx.update_id ?? `o-${tx.offset}`)
+                    ? null
+                    : tx.update_id ?? `o-${tx.offset}`,
+                )
+              }
+              onReplay={
+                tx.kind === "transaction" && tx.update_id
+                  ? () => setReplayId(tx.update_id!)
+                  : undefined
+              }
+            />
+          ))}
+        </div>
+        <div
+          style={{
+            padding: "10px 14px",
+            color: W.dim,
+            fontSize: 11.5,
+            borderTop: `1px solid ${W.border}`,
+          }}
+        >
+          Click a row to expand its event tree · Replay shows the per-party
+          visibility projection.
+        </div>
+      </div>
+    );
+  })();
+
+  return (
+    <div>
+      <TxFilterBar
+        draft={draft}
+        onChange={setDraft}
+        onApply={applyFilters}
+        onClear={clearFilters}
+        active={!!hasFilters}
+      />
+      {replayId ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 380px",
+            gap: 14,
+            alignItems: "start",
+          }}
+        >
+          {body}
+          <TxReplayDrawer
+            instance={name}
+            role={role}
+            updateId={replayId}
+            partyOptions={partyOptions}
+            onClose={() => setReplayId(null)}
+          />
+        </div>
+      ) : (
+        body
+      )}
+    </div>
+  );
+}
+
+// TxFilterDraft holds the raw filter-bar inputs. party/template are
+// comma-separated free text; from/to are offset strings.
+interface TxFilterDraft {
+  party: string;
+  template: string;
+  from: string;
+  to: string;
+}
+
+const emptyDraft: TxFilterDraft = { party: "", template: "", from: "", to: "" };
+
+// parseDraft converts the raw inputs into the typed TransactionFilters
+// the API client forwards. Blank fields drop out; non-numeric
+// from/to are ignored (the input is type=number, so this is belt +
+// braces).
+function parseDraft(d: TxFilterDraft): TransactionFilters {
+  const split = (s: string) =>
+    s
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+  const f: TransactionFilters = {};
+  const parties = split(d.party);
+  if (parties.length > 0) f.parties = parties;
+  const templates = split(d.template);
+  if (templates.length > 0) f.templates = templates;
+  const from = Number(d.from);
+  if (d.from.trim() !== "" && Number.isFinite(from) && from >= 0) f.from = from;
+  const to = Number(d.to);
+  if (d.to.trim() !== "" && Number.isFinite(to) && to >= 0) f.to = to;
+  return f;
+}
+
+function TxFilterBar({
+  draft,
+  onChange,
+  onApply,
+  onClear,
+  active,
+}: {
+  draft: TxFilterDraft;
+  onChange: (d: TxFilterDraft) => void;
+  onApply: () => void;
+  onClear: () => void;
+  active: boolean;
+}) {
+  const input = (
+    key: keyof TxFilterDraft,
+    placeholder: string,
+    width: number,
+    numeric = false,
+  ) => (
+    <input
+      type={numeric ? "number" : "text"}
+      value={draft[key]}
+      placeholder={placeholder}
+      onChange={(e) => onChange({ ...draft, [key]: e.target.value })}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onApply();
+      }}
+      aria-label={placeholder}
+      style={{
+        background: W.border,
+        border: `1px solid ${W.border}`,
+        color: W.text,
+        fontSize: 12,
+        fontFamily: wMono,
+        padding: "5px 8px",
+        borderRadius: 6,
+        width,
+      }}
+    />
+  );
   return (
     <div
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
         borderRadius: 10,
-        overflow: "hidden",
+        padding: "10px 14px",
+        marginBottom: 12,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        flexWrap: "wrap",
       }}
     >
-      <div
+      <span
         style={{
-          padding: "11px 14px",
-          borderBottom: `1px solid ${W.border}`,
-          display: "flex",
-          alignItems: "baseline",
-          gap: 12,
-        }}
-      >
-        <div>
-          <div style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}>
-            Transactions
-          </div>
-          <div style={{ color: W.dim, fontSize: 11.5, marginTop: 2 }}>
-            {state.data.transactions.length} updates · newest first · ledger
-            end {state.data.ledger_end.toLocaleString()}
-          </div>
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "70px 110px 1.4fr 1.2fr 0.8fr 60px",
-          gap: 14,
-          padding: "9px 14px",
           color: W.dim,
           fontSize: 10.5,
           letterSpacing: 1.4,
           textTransform: "uppercase",
           fontWeight: 600,
-          borderBottom: `1px solid ${W.border}`,
         }}
       >
-        <span>Kind</span>
-        <span>Offset</span>
-        <span>Command / Update id</span>
-        <span>Workflow</span>
-        <span>Time</span>
-        <span style={{ textAlign: "right" }}>Events</span>
-      </div>
-
-      {state.data.transactions.length === 0 && (
-        <div style={{ padding: 18, color: W.dim, fontSize: 12.5 }}>
-          No updates in the current ledger window.
-        </div>
-      )}
-
-      <div style={{ maxHeight: "65vh", overflowY: "auto" }}>
-        {state.data.transactions.map((tx) => (
-          <TxRowComponent
-            key={`${tx.offset}-${tx.update_id ?? ""}`}
-            tx={tx}
-            open={openId === (tx.update_id ?? `o-${tx.offset}`)}
-            onToggle={() =>
-              setOpenId((cur) =>
-                cur === (tx.update_id ?? `o-${tx.offset}`)
-                  ? null
-                  : tx.update_id ?? `o-${tx.offset}`,
-              )
-            }
-          />
-        ))}
-      </div>
-      <div
+        Filters
+      </span>
+      {input("party", "party id (comma-sep)", 200)}
+      {input("template", "Module:Entity (comma-sep)", 200)}
+      {input("from", "from offset", 110, true)}
+      {input("to", "to offset", 110, true)}
+      <button
+        onClick={onApply}
         style={{
-          padding: "10px 14px",
-          color: W.dim,
-          fontSize: 11.5,
-          borderTop: `1px solid ${W.border}`,
+          padding: "5px 12px",
+          fontSize: 12,
+          borderRadius: 6,
+          border: "none",
+          background: W.brand,
+          color: "#082018",
+          fontWeight: 600,
+          cursor: "pointer",
         }}
       >
-        Click a row to expand its event tree.
-      </div>
+        Apply
+      </button>
+      {active && (
+        <button
+          onClick={onClear}
+          style={{
+            padding: "5px 12px",
+            fontSize: 12,
+            borderRadius: 6,
+            border: `1px solid ${W.border}`,
+            background: "transparent",
+            color: W.dim,
+            cursor: "pointer",
+          }}
+        >
+          Clear
+        </button>
+      )}
     </div>
   );
 }
@@ -1207,10 +1455,12 @@ function TxRowComponent({
   tx,
   open,
   onToggle,
+  onReplay,
 }: {
   tx: TransactionRow;
   open: boolean;
   onToggle: () => void;
+  onReplay?: () => void;
 }) {
   const kindColor = TX_KIND_COLOR;
   return (
@@ -1219,7 +1469,7 @@ function TxRowComponent({
         onClick={onToggle}
         style={{
           display: "grid",
-          gridTemplateColumns: "70px 110px 1.4fr 1.2fr 0.8fr 60px",
+          gridTemplateColumns: "70px 110px 1.4fr 1.1fr 0.8fr 56px 70px",
           gap: 14,
           padding: "9px 14px",
           alignItems: "center",
@@ -1277,6 +1527,31 @@ function TxRowComponent({
           }}
         >
           {tx.event_count ?? "—"}
+        </span>
+        <span style={{ textAlign: "right" }}>
+          {onReplay ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onReplay();
+              }}
+              title="Replay this transaction's per-party visibility projection"
+              style={{
+                fontSize: 10.5,
+                fontFamily: wMono,
+                padding: "2px 7px",
+                borderRadius: 5,
+                border: `1px solid ${W.border}`,
+                background: "transparent",
+                color: W.brand,
+                cursor: "pointer",
+              }}
+            >
+              replay
+            </button>
+          ) : (
+            <span style={{ color: W.dim, fontSize: 11 }}>—</span>
+          )}
         </span>
       </div>
       {open && tx.events && tx.events.length > 0 && (
@@ -1924,21 +2199,6 @@ function toggle<T>(set: Set<T>, item: T): Set<T> {
   if (next.has(item)) next.delete(item);
   else next.add(item);
   return next;
-}
-
-function timeBtn(active: boolean): React.CSSProperties {
-  return {
-    flex: 1,
-    padding: "5px",
-    fontSize: 11.5,
-    borderRadius: 5,
-    border: `1px solid ${active ? W.brand : W.border}`,
-    background: active ? `${W.brand}1A` : "transparent",
-    color: active ? W.brand : W.dim,
-    cursor: "pointer",
-    fontWeight: active ? 600 : 500,
-    fontFamily: wMono,
-  };
 }
 
 function ago(iso: string): string {

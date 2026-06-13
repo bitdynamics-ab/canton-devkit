@@ -70,6 +70,8 @@ func TestSchemaShape_GoldenPinsFieldLevelShape(t *testing.T) {
 // escape the pin.
 func schemaShapeRoots() []any {
 	return []any{
+		ContractsListResponse{},
+		ContractDetailResponse{},
 		EnvExport{},
 		Instance{},
 		InstanceSummary{},
@@ -81,6 +83,8 @@ func schemaShapeRoots() []any {
 		Snapshot{},
 		TokenCreateRequest{},
 		TokenRef{},
+		TransactionsListResponse{},
+		TxReplayResponse{},
 	}
 }
 
@@ -214,6 +218,51 @@ const wantSchemaShape = `skills.Skill {
   name string
   description string
   body string
+}
+
+types.ContractDetail {
+  contract_id string
+  template_id string
+  package_name string
+  payload map[string]interface
+  signatories []string
+  observers []string
+  created_at string
+  created_offset int64
+  created_update_id string
+  archived bool
+  archived_at string
+  archived_offset int64
+  archived_update_id string
+}
+
+types.ContractDetailResponse {
+  schema_version int
+  instance string
+  role string
+  contract types.ContractDetail
+}
+
+types.ContractRow {
+  contract_id string
+  template_id string
+  payload map[string]interface
+  signatories []string
+  observers []string
+  created_at string
+  package_name string
+  package_version string
+}
+
+types.ContractsListResponse {
+  schema_version int
+  instance string
+  role string
+  parties []string
+  ledger_end int64
+  contracts []types.ContractRow
+  truncated bool
+  limit int
 }
 
 types.Credential {
@@ -364,4 +413,59 @@ types.TokenRef {
   instrument_id string
   created_at string
   status string
+}
+
+types.TransactionEvent {
+  kind string
+  contract_id string
+  template string
+  witnesses []string
+}
+
+types.TransactionRow {
+  kind string
+  offset int64
+  update_id string
+  workflow_id string
+  command_id string
+  record_time string
+  synchronizer string
+  event_count int
+  events []types.TransactionEvent
+}
+
+types.TransactionsListResponse {
+  schema_version int
+  instance string
+  role string
+  parties []string
+  ledger_end int64
+  transactions []types.TransactionRow
+  count int
+  scanned_from int64
+  window_truncated bool
+}
+
+types.TxReplayEvent {
+  kind string
+  node_id int32
+  contract_id string
+  template_id string
+  choice string
+  acting_parties []string
+  consuming bool
+  signatories []string
+  observers []string
+}
+
+types.TxReplayResponse {
+  schema_version int
+  instance string
+  parties []string
+  update_id string
+  offset int64
+  workflow_id string
+  effective_at string
+  event_count int
+  events []types.TxReplayEvent
 }`

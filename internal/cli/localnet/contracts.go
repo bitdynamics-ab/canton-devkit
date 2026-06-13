@@ -11,10 +11,19 @@ import (
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 	"github.com/spf13/cobra"
 
+	apitypes "github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 )
+
+// recordToMap decodes a Daml-LF Record into the JSON payload shape
+// `contracts ls --format json` emits. Delegates to the shared
+// ledger.RecordToMap so the CLI and Web UI decode payloads
+// identically (#24).
+func recordToMap(r *lapiv2.Record) map[string]any {
+	return ledger.RecordToMap(r)
+}
 
 // contractsTxSchemaVersion is the wire-stable schema version for
 // the JSON output of `contracts ls`, `contracts watch`, `tx ls`,
@@ -417,75 +426,49 @@ func buildTxReplay() *cobra.Command {
 	return cmd
 }
 
-// txEventRow is the per-event JSON/text shape for `tx replay`. Mirrors
-// contractRow's shape contract so the CLI and the Web UI's
-// transaction-detail drawer share one projection.
-type txEventRow struct {
-	Kind          string   `json:"kind"` // "created" | "exercised" | "archived"
-	NodeID        int32    `json:"node_id"`
-	ContractID    string   `json:"contract_id"`
-	TemplateID    string   `json:"template_id,omitempty"`
-	Choice        string   `json:"choice,omitempty"`         // exercised only
-	ActingParties []string `json:"acting_parties,omitempty"` // exercised only
-	Consuming     bool     `json:"consuming,omitempty"`      // exercised only
-	Signatories   []string `json:"signatories,omitempty"`    // created only
-	Observers     []string `json:"observers,omitempty"`      // created only
-}
+// The per-event `tx replay` shape is shared with the Web UI replay
+// endpoint via apitypes.TxReplayEvent / TxReplayResponse, and the
+// projection itself is ledger.ProjectReplayEvents — so the two
+// surfaces can never drift on which fields a replay surfaces (#20/#23).
 
 func renderTxReplay(out io.Writer, instance string, parties []string, format string, txn *lapiv2.Transaction) error {
-	rows := make([]txEventRow, 0, len(txn.Events))
-	for _, ev := range txn.Events {
-		switch {
-		case ev.GetCreated() != nil:
-			ce := ev.GetCreated()
-			rows = append(rows, txEventRow{
-				Kind:        "created",
-				NodeID:      ce.NodeId,
-				ContractID:  ce.ContractId,
-				TemplateID:  identString(ce.TemplateId),
-				Signatories: ce.Signatories,
-				Observers:   ce.Observers,
-			})
-		case ev.GetExercised() != nil:
-			xe := ev.GetExercised()
-			rows = append(rows, txEventRow{
-				Kind:          "exercised",
-				NodeID:        xe.NodeId,
-				ContractID:    xe.ContractId,
-				TemplateID:    identString(xe.TemplateId),
-				Choice:        xe.Choice,
-				ActingParties: xe.ActingParties,
-				Consuming:     xe.Consuming,
-			})
-		case ev.GetArchived() != nil:
-			ae := ev.GetArchived()
-			rows = append(rows, txEventRow{
-				Kind:       "archived",
-				NodeID:     ae.NodeId,
-				ContractID: ae.ContractId,
-				TemplateID: identString(ae.TemplateId),
-			})
-		}
+	summaries := ledger.ProjectReplayEvents(txn)
+	rows := make([]apitypes.TxReplayEvent, 0, len(summaries))
+	for _, s := range summaries {
+		rows = append(rows, apitypes.TxReplayEvent{
+			Kind:          string(s.Kind),
+			NodeID:        s.NodeID,
+			ContractID:    s.ContractID,
+			TemplateID:    s.TemplateID,
+			Choice:        s.Choice,
+			ActingParties: s.ActingParties,
+			Consuming:     s.Consuming,
+			Signatories:   s.Signatories,
+			Observers:     s.Observers,
+		})
 	}
 	if format == "json" {
+		resp := apitypes.TxReplayResponse{
+			SchemaVersion: contractsTxSchemaVersion,
+			Instance:      instance,
+			Parties:       parties,
+			UpdateID:      txn.UpdateId,
+			Offset:        txn.Offset,
+			WorkflowID:    txn.WorkflowId,
+			EventCount:    len(rows),
+			Events:        rows,
+		}
+		if txn.EffectiveAt != nil {
+			resp.EffectiveAt = txn.EffectiveAt.AsTime().Format(time.RFC3339)
+		}
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
-		return enc.Encode(map[string]any{
-			"schema_version": contractsTxSchemaVersion,
-			"instance":       instance,
-			"parties":        parties,
-			"update_id":      txn.UpdateId,
-			"offset":         txn.Offset,
-			"workflow_id":    txn.WorkflowId,
-			"effective_at":   txn.EffectiveAt.AsTime(),
-			"event_count":    len(rows),
-			"events":         rows,
-		})
+		return enc.Encode(resp)
 	}
 	return renderTxReplayText(out, instance, parties, txn, rows)
 }
 
-func renderTxReplayText(out io.Writer, instance string, parties []string, txn *lapiv2.Transaction, rows []txEventRow) error {
+func renderTxReplayText(out io.Writer, instance string, parties []string, txn *lapiv2.Transaction, rows []apitypes.TxReplayEvent) error {
 	if len(rows) == 0 {
 		_, _ = fmt.Fprintln(out, term.Dimc("no events in this transaction"))
 		return nil
@@ -681,17 +664,13 @@ func resolveDefaultParties(
 	return resolved, nil
 }
 
-// contractRow is the per-contract JSON/text shape. Mirrors the
-// Web UI handler's projection (handlers/contracts.go) so the CLI and
-// browser surfaces always emit the same JSON shape. The field name is
-// `template_id`, matching Canton/Daml convention and the gRPC
-// Identifier message.
-type contractRow struct {
-	ContractID  string   `json:"contract_id"`
-	TemplateID  string   `json:"template_id"`
-	Signatories []string `json:"signatories,omitempty"`
-	Observers   []string `json:"observers,omitempty"`
-}
+// The per-contract row + list response shapes are shared with the Web
+// UI ACS handler via apitypes.ContractRow / ContractsListResponse, so
+// the two surfaces emit the same JSON and TestSchemaShape_GoldenPins…
+// keeps them aligned with frontend/src/api.ts (#23). `contracts ls
+// --format json` now also includes the decoded payload (the UI always
+// did) so the jq/CI use case the docstring advertises can read field
+// values, not just ids (#24).
 
 func renderACSStream(
 	out io.Writer,
@@ -701,7 +680,7 @@ func renderACSStream(
 	format string,
 	stream <-chan ledger.StreamItem[*lapiv2.GetActiveContractsResponse],
 ) error {
-	rows := []contractRow{}
+	rows := []apitypes.ContractRow{}
 	for item := range stream {
 		if item.Err != nil {
 			return item.Err
@@ -711,30 +690,40 @@ func renderACSStream(
 			continue
 		}
 		ev := ac.CreatedEvent
-		row := contractRow{
-			ContractID:  ev.ContractId,
-			Signatories: ev.Signatories,
-			Observers:   ev.Observers,
+		// nilToEmpty: marshal nil slices as [] not null so the wire
+		// contract is "always an array" (matches the UI handler).
+		sigs := ev.GetSignatories()
+		if sigs == nil {
+			sigs = []string{}
 		}
-		if ev.TemplateId != nil {
-			row.TemplateID = fmt.Sprintf("%s:%s:%s",
-				ev.TemplateId.PackageId,
-				ev.TemplateId.ModuleName,
-				ev.TemplateId.EntityName)
+		obs := ev.GetObservers()
+		if obs == nil {
+			obs = []string{}
+		}
+		row := apitypes.ContractRow{
+			ContractID:  ev.ContractId,
+			TemplateID:  identString(ev.TemplateId),
+			Signatories: sigs,
+			Observers:   obs,
+			PackageName: ev.GetPackageName(),
+		}
+		if ev.CreatedAt != nil {
+			row.CreatedAt = ev.CreatedAt.AsTime().Format(time.RFC3339)
+		}
+		if ev.CreateArguments != nil {
+			row.Payload = recordToMap(ev.CreateArguments)
 		}
 		rows = append(rows, row)
 	}
 	if format == "json" {
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
-		return enc.Encode(map[string]any{
-			"schema_version": contractsTxSchemaVersion,
-			"instance":       instance,
-			"parties":        parties,
-			"templates":      templates,
-			"at_offset":      offset,
-			"contracts":      rows,
-			"contract_count": len(rows),
+		return enc.Encode(apitypes.ContractsListResponse{
+			SchemaVersion: contractsTxSchemaVersion,
+			Instance:      instance,
+			Parties:       parties,
+			LedgerEnd:     offset,
+			Contracts:     rows,
 		})
 	}
 	return renderACSText(out, instance, parties, offset, rows)
@@ -743,7 +732,7 @@ func renderACSStream(
 // renderACSText delegates to term.Table so the column layout
 // matches the rest of the CLI surface (status, list, container
 // list).
-func renderACSText(out io.Writer, instance string, parties []string, offset int64, rows []contractRow) error {
+func renderACSText(out io.Writer, instance string, parties []string, offset int64, rows []apitypes.ContractRow) error {
 	if len(rows) == 0 {
 		_, _ = fmt.Fprintln(out, term.Dimc("no active contracts"))
 		return nil

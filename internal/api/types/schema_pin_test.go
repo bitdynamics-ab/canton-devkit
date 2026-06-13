@@ -23,6 +23,8 @@ import (
 // fails either way if you forget.
 func TestAllTopLevelResponses_CarrySchemaVersion(t *testing.T) {
 	topLevel := []interface{}{
+		ContractsListResponse{},
+		ContractDetailResponse{},
 		EnvExport{},
 		Instance{},
 		ListResponse{},
@@ -30,6 +32,8 @@ func TestAllTopLevelResponses_CarrySchemaVersion(t *testing.T) {
 		SkillsInstallResponse{},
 		SkillsListResponse{},
 		Snapshot{},
+		TransactionsListResponse{},
+		TxReplayResponse{},
 	}
 	for _, v := range topLevel {
 		typ := reflect.TypeOf(v)
@@ -63,6 +67,46 @@ func TestSchemaVersion_ConsistentAcrossResponses(t *testing.T) {
 		marshal func() ([]byte, error)
 		want    int // expected emitted schema_version
 	}{
+		{
+			name: "ContractsListResponse",
+			marshal: func() ([]byte, error) {
+				return json.Marshal(ContractsListResponse{
+					SchemaVersion: SchemaVersion,
+					Instance:      "x",
+				})
+			},
+			want: SchemaVersion,
+		},
+		{
+			name: "ContractDetailResponse",
+			marshal: func() ([]byte, error) {
+				return json.Marshal(ContractDetailResponse{
+					SchemaVersion: SchemaVersion,
+					Instance:      "x",
+				})
+			},
+			want: SchemaVersion,
+		},
+		{
+			name: "TransactionsListResponse",
+			marshal: func() ([]byte, error) {
+				return json.Marshal(TransactionsListResponse{
+					SchemaVersion: SchemaVersion,
+					Instance:      "x",
+				})
+			},
+			want: SchemaVersion,
+		},
+		{
+			name: "TxReplayResponse",
+			marshal: func() ([]byte, error) {
+				return json.Marshal(TxReplayResponse{
+					SchemaVersion: SchemaVersion,
+					Instance:      "x",
+				})
+			},
+			want: SchemaVersion,
+		},
 		{
 			name: "EnvExport",
 			marshal: func() ([]byte, error) {

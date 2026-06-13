@@ -21,8 +21,8 @@ top bar:
 
 | View | What it shows |
 |---|---|
-| **Contracts** | The Active Contract Set as a table, with a left-hand facet sidebar (templates, parties, time range) and a right-hand detail drawer. |
-| **Transactions** | Recent ledger updates from the participant's `UpdateService`. Each row expands inline to show its event tree (creates, archives, exercises). |
+| **Contracts** | The Active Contract Set as a live table — an initial snapshot kept current by a server-sent-events delta stream — with a left-hand facet sidebar (templates, parties, manual refresh) and a right-hand detail drawer. |
+| **Transactions** | Recent ledger updates from the participant's `UpdateService`, with party / template / offset-range filters (mirroring the CLI `tx ls`). Each row expands inline to show its event tree (creates, archives, exercises) and can be **replayed** as a per-party visibility projection. |
 | **Timeline** | A density strip and per-update glyph row. Hover a glyph to preview, click to pin a selection. Useful for "what happened in the last minute". |
 
 All three views project through the **same instance** and **the
@@ -56,7 +56,7 @@ Dashboard tab or pass `?instance=<name>` in the URL.
 ## 3. Filtering
 
 The Contracts view has three filter surfaces, all client-side
-against the snapshot already loaded:
+against the (live) snapshot already loaded:
 
 - **Templates sidebar.** Click a template chip to restrict the
   table to that template. Click again to clear. Multiple chips
@@ -71,6 +71,11 @@ against the snapshot already loaded:
 
 Filters compose: template chip AND party chip AND search needle
 all have to match.
+
+These are client-side facets over the loaded ACS. The
+**Transactions** view, by contrast, filters **server-side** over the
+participant's offset window — see §5 — so a transaction outside the
+loaded row cap can still be found by narrowing the query.
 
 A few keyboard shortcuts inside the Contracts view:
 
@@ -119,9 +124,35 @@ the participant's `UpdateService`. Each row shows:
 Click a row to expand its event tree (create / archive / exercise
 nodes with template + contract ID).
 
-The Transactions view is bounded — it pulls up to 200 recent
-updates by default — and is a one-shot fetch, not a live stream.
-Refresh the page to pick up new updates.
+### Filters
+
+The filter bar above the table mirrors the CLI `tx ls` flags and is
+applied **server-side** over the participant's offset window:
+
+- **party** — comma-separate to project through specific parties.
+  Omit to project through the role JWT's own parties.
+- **template** — `Module:Entity` or `pkg:Module:Entity`,
+  comma-separated for multiple.
+- **from / to** — bound the scanned ledger-offset window (`from` is
+  exclusive, `to` inclusive). Leave blank for a generous recent
+  window.
+
+Press **Apply** (or Enter in any field) to re-query; **Clear** resets
+to the default window. The header shows the scanned offset range and
+flags a **partial window** when the scan hit its cap before draining
+the window — the rows are then the newest of a clipped scan.
+
+### Replay (per-party visibility projection)
+
+Each `transaction` row has a **replay** button. It opens a drawer
+that re-fetches that transaction with the `LEDGER_EFFECTS` shape
+(exercised choices, not just the ACS delta) projected through a party
+set. The **visible to** selector lets you ask "what did party *P* see
+in this transaction?" — the same id projected through different
+parties yields different event sets. This is the Web UI counterpart of
+`canton-devkit localnet tx replay --id <update-id>`.
+
+The Transactions view pulls up to 200 recent updates by default.
 
 ---
 
@@ -146,22 +177,29 @@ happen?" and "where in the last few minutes was the spike?".
 
 ## 7. Snapshot vs. live
 
-Everything the Explorer shows today is a **snapshot**:
+The **Contracts** view is live:
 
-- The Contracts view calls `StateService.GetActiveContracts` at
-  the participant's current ledger end.
-- The Transactions and Timeline views call `UpdateService` for
-  the most recent N updates.
+1. It first calls `StateService.GetActiveContracts` at the
+   participant's current ledger end (the snapshot).
+2. It then opens a server-sent-events stream
+   (`GET .../contracts/stream`) resuming from the snapshot's
+   `ledger_end`, applying create/archive deltas in place. The
+   handoff is a single atomic offset boundary, so no event between
+   the snapshot and the stream is missed.
+3. A 30-second timer re-snapshots quietly to reconcile any drift
+   (a suspended laptop, a dropped connection, a backend restart),
+   and the **Refresh snapshot** button in the sidebar forces one
+   immediately.
 
-This means: contracts archived after you loaded the page still
-appear, new creates do not. **Live streaming** (server-sent
-events on top of the same gRPC streams) is planned but not yet
-implemented. For now, refresh the tab to re-snapshot.
+The stream-status pill in the top bar and the table sub-header
+report the real connection state — `live`, `reconnecting`,
+`truncated` (the backend capped the stream; reconciliation takes
+over), or `idle`. The wording is honest: it tracks the stream, not
+a hard-coded label.
 
-The status strip at the bottom of the Contracts table reads
-"live snapshot" — the wording reflects how fresh the snapshot is
-when loaded; it does **not** mean the table updates as new
-contracts arrive.
+The **Transactions** and **Timeline** views are still snapshots —
+they call `UpdateService` for the most recent N updates. Re-apply
+the filters (or switch tabs back) to pull a fresh window.
 
 ---
 
@@ -184,11 +222,25 @@ canton-devkit localnet contracts watch \
   --name demo \
   --endpoint localhost:<ledger-port>
 
-# Recent transactions.
+# Recent transactions. --party / --template / --from / --to are the
+# same filters the Web UI Transactions view exposes.
 canton-devkit localnet tx ls \
   --name demo \
-  --endpoint localhost:<ledger-port>
+  --endpoint localhost:<ledger-port> \
+  --party alice \
+  --template Token:Holding
+
+# Replay one transaction's per-party visibility projection — the
+# CLI mirror of the Transactions view's "replay" button.
+canton-devkit localnet tx replay \
+  --name demo \
+  --id <update-id> \
+  --party alice
 ```
+
+The `contracts ls --format json` output now includes the decoded
+contract `payload` (the same field the Web UI drawer shows), so a
+`jq` consumer can read field values, not just contract IDs.
 
 A typical workflow: use the Explorer to navigate, pick out a
 template ID or contract ID, then drop into the CLI to pipe the
@@ -205,9 +257,9 @@ exposed ports under entries like `participant_ledger_app-user`.
 
 Things the Explorer does **not** do today:
 
-- **No live streaming.** The Contracts, Transactions, and
-  Timeline views all read a snapshot. Refresh to update.
-  Server-sent events are planned.
+- **Transactions / Timeline are not live.** Only the Contracts view
+  streams (snapshot + SSE deltas). The Transactions and Timeline
+  views read a bounded snapshot; re-apply the filters to refresh.
 - **No exercise/create UI.** The drawer is read-only. Use the CLI
   or your app to write to the ledger.
 - **No cross-instance comparison.** One instance at a time.

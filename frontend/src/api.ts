@@ -1139,16 +1139,95 @@ export interface TransactionsListResponse {
   ledger_end: number;
   transactions: TransactionRow[];
   count: number;
+  // scanned_from is the exclusive lower bound of the offset window
+  // inspected; window_truncated is true when the scan stopped before
+  // reaching the window end (stream cap / deadline) — the rows are the
+  // newest of a clipped scan, not the complete recent history.
+  scanned_from?: number;
+  window_truncated?: boolean;
+}
+
+// TransactionFilters mirror the CLI `tx ls` flags now also accepted by
+// the transactions endpoint (#24): party / template are repeatable
+// (each is comma-joined onto one query param), from / to bound the
+// scanned offset window (from is exclusive, to inclusive). Omit a
+// field to leave it unset — the backend then projects through the
+// JWT's parties and scans a generous recent window.
+export interface TransactionFilters {
+  parties?: string[];
+  templates?: string[];
+  from?: number;
+  to?: number;
 }
 
 export const fetchTransactions = (
   name: string,
   role: Role = "app-user",
   limit = 100,
-) =>
-  apiFetch<TransactionsListResponse>(
-    `/api/instances/${encodeURIComponent(name)}/transactions?role=${role}&limit=${limit}`,
+  filters: TransactionFilters = {},
+) => {
+  const params = new URLSearchParams({ role, limit: String(limit) });
+  if (filters.parties && filters.parties.length > 0) {
+    params.set("party", filters.parties.join(","));
+  }
+  if (filters.templates && filters.templates.length > 0) {
+    params.set("template", filters.templates.join(","));
+  }
+  if (typeof filters.from === "number" && Number.isFinite(filters.from)) {
+    params.set("from", String(filters.from));
+  }
+  if (typeof filters.to === "number" && Number.isFinite(filters.to)) {
+    params.set("to", String(filters.to));
+  }
+  return apiFetch<TransactionsListResponse>(
+    `/api/instances/${encodeURIComponent(name)}/transactions?${params.toString()}`,
   );
+};
+
+// tx replay — per-party visibility projection of one transaction.
+//
+// Mirrors internal/api/types.TxReplayEvent / TxReplayResponse and the
+// CLI `dpm localnet tx replay --id <id>`. Querying the SAME transaction
+// as different parties yields different event sets — pass `parties` to
+// project through specific parties, omit to use the JWT's own.
+export interface TxReplayEvent {
+  kind: "created" | "exercised" | "archived";
+  node_id: number;
+  contract_id: string;
+  template_id?: string;
+  choice?: string; // exercised only
+  acting_parties?: string[]; // exercised only
+  consuming?: boolean; // exercised only
+  signatories?: string[]; // created only
+  observers?: string[]; // created only
+}
+
+export interface TxReplayResponse {
+  schema_version: number;
+  instance: string;
+  parties?: string[];
+  update_id: string;
+  offset: number;
+  workflow_id?: string;
+  effective_at?: string;
+  event_count: number;
+  events: TxReplayEvent[];
+}
+
+export const fetchTxReplay = (
+  name: string,
+  updateId: string,
+  role: Role = "app-user",
+  parties?: string[],
+) => {
+  const params = new URLSearchParams({ role });
+  if (parties && parties.length > 0) params.set("party", parties.join(","));
+  return apiFetch<TxReplayResponse>(
+    `/api/instances/${encodeURIComponent(name)}/transactions/${encodeURIComponent(
+      updateId,
+    )}/replay?${params.toString()}`,
+  );
+};
 
 export const fetchMetricsSummary = (name: string, signal?: AbortSignal) =>
   apiFetch<MetricsSummary>(
