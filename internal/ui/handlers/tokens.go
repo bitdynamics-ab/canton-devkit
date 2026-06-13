@@ -333,20 +333,27 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 	// dialLedger / runBalanceLive handle the V2 alpha permission gate
 	// transparently. Empty role defaults to app-user.
 	role := roleFromQuery(r)
+	// Resolve the role's participant ledger endpoint ONCE and thread it
+	// via opts.Endpoint, rather than letting the expand guard, RunBalance,
+	// and BalanceSource each re-resolve it independently (≈4 registry-file
+	// reads per request). A present endpoint means the live V2 ACS path
+	// (rows tagged SourceLedger); an absent one falls back to the registry
+	// pseudo-balance path (SourceRegistry). Auto-grant + per-party filter
+	// inside dialLedger / runBalanceLive handle the V2 alpha permission
+	// gate transparently. Empty role defaults to app-user.
+	endpoint := token.ResolveLedgerEndpoint(instance, role)
 	opts := token.BalanceOptions{
 		Instance:   instance,
 		Party:      r.URL.Query().Get("party"),
 		Instrument: r.PathValue("symbol"),
 		Role:       role,
-		Insecure:   true, // LocalNet default
-		// Endpoint is resolved by RunBalance via the shared
-		// token.ResolveLedgerEndpoint when left empty — the same
-		// participant the CLI's `token balance` auto-discovers.
+		Insecure:   true,     // LocalNet default
+		Endpoint:   endpoint, // resolved once above; "" → registry fallback
 	}
 	// expand=contracts → return the individual Holding contracts
 	// (the UTXO units) instead of the summed-per-party balance.
 	// A party's balance is the sum of these. Requires a live endpoint.
-	if r.URL.Query().Get("expand") == "contracts" && token.ResolveLedgerEndpoint(instance, role) != "" {
+	if r.URL.Query().Get("expand") == "contracts" && endpoint != "" {
 		contracts, cerr := token.RunWorkspaceHoldings(r.Context(), opts)
 		if cerr != nil {
 			mapTokenError(w, cerr, "holdings")
@@ -364,14 +371,20 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// #63: tell the client whether these are live on-ledger balances or
-	// the registry pseudo-balance fallback, so the UI can flag the
-	// latter instead of presenting fabricated rows as real holdings.
-	// Both the response-level Source and each row's Source are set —
-	// the rows carry it from RunBalance; the response-level value lets
-	// the UI render one disclaimer banner without scanning every row.
+	// the registry pseudo-balance fallback, so the UI can flag the latter
+	// instead of presenting fabricated rows as real holdings. Derived from
+	// the same resolved endpoint — equivalent to token.BalanceSource,
+	// which keys on endpoint availability (not reachability), exactly as
+	// RunBalance branches. Each row also carries its Source from RunBalance;
+	// the response-level value lets the UI render one disclaimer banner
+	// without scanning every row.
+	source := token.SourceRegistry
+	if endpoint != "" {
+		source = token.SourceLedger
+	}
 	writeJSON(w, http.StatusOK, types.TokenHoldingsResponse{
 		SchemaVersion: types.SchemaVersion,
-		Source:        types.HoldingSource(token.BalanceSource(opts)),
+		Source:        types.HoldingSource(source),
 		Holdings:      toHoldings(rows),
 		Truncated:     truncated,
 	})
