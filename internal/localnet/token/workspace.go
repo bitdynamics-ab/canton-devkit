@@ -313,6 +313,15 @@ func RunBalanceMatrix(ctx context.Context, opts BalanceOptions) (*BalanceMatrix,
 	// and the explorer commands, instead of forcing a hand-typed --endpoint.
 	if opts.Endpoint == "" {
 		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
+		// Resolution still came back empty and the caller passed no
+		// explicit --endpoint: the instance is absent or stopped. Surface
+		// an instance-specific remedy here instead of letting it fall
+		// through to dialLedger's generic "ledger endpoint is required
+		// (host:port)" guard, mirroring the contracts/ledger_endpoint
+		// precedent that names the instance and the up/--endpoint fix.
+		if opts.Endpoint == "" {
+			return nil, fmt.Errorf("instance %q has no reachable participant ledger port — is it running? run localnet up --name %s, or pass --endpoint host:port", opts.Instance, opts.Instance)
+		}
 	}
 	ws, err := scanWorkspace(ctx, opts)
 	if err != nil {
