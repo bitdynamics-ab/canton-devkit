@@ -56,6 +56,26 @@ func handlePreflight(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, report)
 }
 
+// resolveForGate resolves the version handleCreate should feed to the
+// synchronous preflight gate. Curated tags resolve offline via
+// splice.Resolve. When allowUncurated is set and the tag is uncurated,
+// it falls through to ResolveOrUpstream so the gate still gets a
+// Major-tagged Version (and thus the Major-aware memory floor) — this
+// is what lets the UI refuse an under-provisioned host BEFORE the 202
+// for uncurated bring-ups, matching the CLI.
+//
+// Returns ok=false when no Version could be resolved (unknown curated
+// tag, or an upstream lookup that failed); the caller decides whether
+// that's a hard 400 (curated path) or a soft defer-to-RunUp (uncurated
+// path). It's a package var so handler tests can stub the network hop.
+var resolveForGate = func(ctx context.Context, requested string, allowUncurated bool) (splice.Version, bool) {
+	v, _, err := splice.ResolveOrUpstream(ctx, requested, allowUncurated)
+	if err != nil {
+		return splice.Version{}, false
+	}
+	return v, true
+}
+
 // runPreflightForVersion is a package-level test seam. Production
 // resolves to runPreflightForVersionImpl below; tests in main_test.go
 // override it with a no-op so handler tests (TestCancelUp,
@@ -72,16 +92,17 @@ func runPreflightForVersionImpl(ctx context.Context, v splice.Version) types.Pre
 	ctx, cancel := context.WithTimeout(ctx, preflightTimeout)
 	defer cancel()
 
-	min := v.MinMemoryBytes
-	if min == 0 {
-		min = docker.DefaultMinMemoryBytes
-	}
-
+	// Use the shared splice helpers (NOT v.MinMemoryBytes directly) so
+	// this gate enforces the exact same floor as `up.go` and
+	// `doctor.go` — including the Major-aware derivation that gives an
+	// uncurated 0.6.x tag the curated 0.6.x floor instead of the global
+	// 4 GiB default. Reading the raw field here would let the UI accept
+	// a host that RunUp's in-stream preflight then refuses.
 	rpt := docker.RunPreflight(ctx, docker.Options{
 		DataDir:                registry.Root(),
 		MinDiskBytes:           docker.DefaultMinDiskBytes,
-		MinMemoryBytes:         min,
-		RecommendedMemoryBytes: v.RecommendedMemoryBytes,
+		MinMemoryBytes:         splice.MinMemoryFor(v),
+		RecommendedMemoryBytes: splice.RecommendedMemoryFor(v),
 	})
 
 	return toAPIReport(rpt, v)

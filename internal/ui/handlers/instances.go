@@ -43,7 +43,6 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
-	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/httpsec"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/progress"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
@@ -561,21 +560,27 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 			return
 		}
 
-		// Resolve the version up front so the preflight gate uses
-		// the same Splice catalogue entry RunUp will. If the user
-		// asked for an uncurated tag with AllowUncurated, skip
-		// the version-specific memory floor — there's no curated
-		// requirement to enforce — and rely on RunUp's own
-		// in-stream preflight for the global defaults.
-		if v, err := splice.Resolve(req.Version); err == nil {
-			report := runPreflightForVersion(r.Context(), v)
+		// Resolve the version up front so the synchronous preflight
+		// gate uses the same Splice version RunUp will. Curated tags
+		// resolve offline; uncurated tags (allow_uncurated) resolve
+		// against upstream so the gate can apply the Major-aware
+		// memory floor (see splice.MinMemoryFor) — previously the
+		// uncurated path skipped this gate entirely and deferred to
+		// RunUp's in-stream check with the weakened 4 GiB default,
+		// letting the Web UI 202 a host that then OOM-loops mid
+		// bring-up. If upstream resolution itself fails (network blip,
+		// bad tag) we DON'T fail the create here — RunUp surfaces that
+		// in-stream with the proper error code.
+		if gateVersion, ok := resolveForGate(r.Context(), req.Version, req.AllowUncurated); ok {
+			report := runPreflightForVersion(r.Context(), gateVersion)
 			if !report.OK {
 				w.Header().Set("X-Preflight-Failed", "1")
 				writeJSON(w, http.StatusUnprocessableEntity, report)
 				return
 			}
 		} else if !req.AllowUncurated {
-			// Same shape RunUp would produce for the same input.
+			// Curated resolution failed and the caller didn't opt into
+			// uncurated — same shape RunUp would produce for this input.
 			writeErrorWithCode(w, http.StatusBadRequest,
 				ErrCodeInvalidRequest,
 				"unknown splice version: "+req.Version,

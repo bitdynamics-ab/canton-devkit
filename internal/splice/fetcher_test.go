@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -79,31 +80,27 @@ func TestFetchInstallsAndVerifiesContent(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// First pass: extract to compute the expected ContentSHA.
+	// First pass: empty wantContentSHA now means trust-on-first-use —
+	// downloadAndExtract extracts and RETURNS the computed hash rather
+	// than refusing. (Previously this refused, which is the #68 bug.)
 	scratch := t.TempDir()
-	if err := downloadAndExtract(context.Background(), srv.URL, "", 1<<20, scratch); err == nil {
-		t.Fatal("expected error when ContentSHA is empty (refusing to install unverified)")
-	}
-	// Workaround: directly compute the tree SHA from a successful
-	// extraction. We do this by faking it — write the files manually
-	// in a way the scratch dir contains them. Simpler path: do a
-	// real extract via a private call that bypasses the empty-hash
-	// guard. We achieve the same by computing the expected hash
-	// from the file contents directly, which is identical to what
-	// computeTreeSHA would produce.
-	expectedTree := t.TempDir()
-	_ = os.WriteFile(filepath.Join(expectedTree, "compose.yaml"), []byte("services: {}\n"), 0o644)
-	_ = os.MkdirAll(filepath.Join(expectedTree, "env"), 0o755)
-	_ = os.WriteFile(filepath.Join(expectedTree, "env", "common.env"), []byte("DB_PORT=5432\n"), 0o644)
-	wantContent, err := computeTreeSHA(expectedTree)
+	wantContent, err := downloadAndExtract(context.Background(), srv.URL, "", 1<<20, scratch)
 	if err != nil {
-		t.Fatalf("computeTreeSHA: %v", err)
+		t.Fatalf("TOFU extract (empty ContentSHA) should succeed, got %v", err)
+	}
+	if len(wantContent) != 64 {
+		t.Fatalf("computed ContentSHA looks wrong: %q", wantContent)
 	}
 
-	// Second pass: real install with the correct ContentSHA.
+	// Second pass: real install pinned to the hash the first pass
+	// computed — must verify clean and return the same hash.
 	dest := t.TempDir()
-	if err := downloadAndExtract(context.Background(), srv.URL, wantContent, 1<<20, dest); err != nil {
+	got, err := downloadAndExtract(context.Background(), srv.URL, wantContent, 1<<20, dest)
+	if err != nil {
 		t.Fatalf("downloadAndExtract: %v", err)
+	}
+	if got != wantContent {
+		t.Errorf("returned SHA %q != pinned %q", got, wantContent)
 	}
 
 	// compose.yaml present
@@ -130,7 +127,7 @@ func TestDownloadAndExtractRejectsOversizedBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := downloadAndExtract(context.Background(), srv.URL,
+	_, err := downloadAndExtract(context.Background(), srv.URL,
 		strings.Repeat("0", 64), 1<<20, t.TempDir())
 	if err == nil {
 		t.Fatal("expected cap error, got nil")
@@ -152,7 +149,7 @@ func TestDownloadAndExtractRejectsContentMismatch(t *testing.T) {
 		"splice-x/cluster/compose/localnet/compose.yaml": "services: {}\n",
 	})
 
-	err := downloadAndExtract(context.Background(), serveBytesURL(t, tarball),
+	_, err := downloadAndExtract(context.Background(), serveBytesURL(t, tarball),
 		strings.Repeat("1", 64), // wrong content hash
 		1<<20, t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "content hash mismatch") {
@@ -160,17 +157,25 @@ func TestDownloadAndExtractRejectsContentMismatch(t *testing.T) {
 	}
 }
 
-// TestDownloadAndExtractRejectsEmptyContentSHA verifies the
-// defense-in-depth check: a Version with no ContentSHA is rejected so
-// we never silently install unverified content.
-func TestDownloadAndExtractRejectsEmptyContentSHA(t *testing.T) {
+// TestDownloadAndExtractTOFUOnEmptyContentSHA pins the #68 fix: an empty
+// wantContentSHA (uncurated tag) is trust-on-first-use — the tree is
+// extracted and the computed hash returned, NOT refused. Refusing here
+// is what made `--allow-uncurated` fail end to end at StepFetchSplice.
+func TestDownloadAndExtractTOFUOnEmptyContentSHA(t *testing.T) {
 	tarball := buildTestTarball(t, map[string]string{
 		"splice-x/cluster/compose/localnet/compose.yaml": "services: {}\n",
 	})
-	err := downloadAndExtract(context.Background(), serveBytesURL(t, tarball),
-		"", 1<<20, t.TempDir())
-	if err == nil || !strings.Contains(err.Error(), "no ContentSHA") {
-		t.Fatalf("expected refusal for empty ContentSHA, got %v", err)
+	dest := t.TempDir()
+	got, err := downloadAndExtract(context.Background(), serveBytesURL(t, tarball),
+		"", 1<<20, dest)
+	if err != nil {
+		t.Fatalf("TOFU extract should succeed on empty ContentSHA, got %v", err)
+	}
+	if len(got) != 64 {
+		t.Errorf("expected a 64-char tree SHA, got %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "compose.yaml")); err != nil {
+		t.Errorf("compose.yaml not extracted under TOFU: %v", err)
 	}
 }
 
@@ -237,13 +242,18 @@ func servePinnedTarball(t *testing.T, body []byte) (server *httptest.Server, cle
 
 func TestFetchCacheHitSkipsDownload(t *testing.T) {
 	cacheRoot := t.TempDir()
-	v := Version{Tag: "test", Commit: "testcommit", ContentSHA: "ignored-on-cache-hit"}
+	v := Version{Tag: "test", Commit: "testcommit", ContentSHA: "cafef00d"}
 	projectDir := ProjectDir(cacheRoot, v)
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Pre-seed the cache.
+	// Pre-seed the cache, including the content-sha marker that matches
+	// the catalogue ContentSHA — a valid hit short-circuits without a
+	// re-hash or re-download.
 	if err := os.WriteFile(filepath.Join(projectDir, "compose.yaml"), []byte("cached: true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, contentSHAMarker), []byte(v.ContentSHA), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -385,6 +395,11 @@ func TestFetchHandlesConcurrentRenameRace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(projectDir, "SENTINEL"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// A matching content-sha marker makes this a VALID hit so Fetch
+	// short-circuits instead of re-verifying + re-fetching.
+	if err := os.WriteFile(filepath.Join(projectDir, contentSHAMarker), []byte(v.ContentSHA), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Because compose.yaml already exists in projectDir, Fetch should
 	// short-circuit on the FIRST stat — never download, never stage.
@@ -407,6 +422,139 @@ func TestFetchHandlesConcurrentRenameRace(t *testing.T) {
 	}
 	// Avoid unused-var warning on tarball/sum in this path.
 	_ = tarball
+}
+
+// TestProjectDirIncludesCommit pins the #70 cache-key change: the cache
+// directory folds in the short commit so a mutable-stream tag re-pinned
+// to a new commit lands in a DIFFERENT directory (forcing a re-fetch)
+// rather than silently reusing the stale tree.
+func TestProjectDirIncludesCommit(t *testing.T) {
+	root := "/cache"
+	a := ProjectDir(root, Version{Tag: "token-standard-v2", Commit: "aaaaaaaabbbb"})
+	b := ProjectDir(root, Version{Tag: "token-standard-v2", Commit: "ccccccccdddd"})
+	if a == b {
+		t.Fatalf("re-pinned tag reused the same cache dir: %q", a)
+	}
+	if !strings.Contains(a, "token-standard-v2-aaaaaaaa") {
+		t.Errorf("ProjectDir = %q, want it to embed the short commit", a)
+	}
+	// Empty commit (degenerate fixtures) falls back to tag-only.
+	if got := ProjectDir(root, Version{Tag: "x"}); !strings.HasSuffix(got, "splice-x") {
+		t.Errorf("empty-commit ProjectDir = %q, want tag-only fallback", got)
+	}
+}
+
+// TestFetchRejectsTamperedCacheMarker pins the #70 re-verification: a
+// cache hit whose recorded ContentSHA marker no longer matches the
+// catalogue (a re-pin to the same commit, or local tampering) must be
+// dropped and re-fetched, not blindly trusted.
+func TestFetchRejectsTamperedCacheMarker(t *testing.T) {
+	tarball := buildTestTarball(t, map[string]string{
+		"splice-x/cluster/compose/localnet/compose.yaml": "services: {}\n",
+	})
+	_, cleanup := servePinnedTarball(t, tarball)
+	defer cleanup()
+
+	cacheRoot := t.TempDir()
+	v := versionForTarball(t, tarball) // real ContentSHA + commit
+	projectDir := ProjectDir(cacheRoot, v)
+
+	// Seed a stale cache: compose.yaml present, but the marker carries
+	// the WRONG hash (as if the catalogue was re-pinned, or the tree was
+	// tampered with).
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, "compose.yaml"), []byte("stale: true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, contentSHAMarker), []byte("0000bad0"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Fetch(context.Background(), v, cacheRoot, nil)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	// The stale tree must have been replaced by the freshly-fetched one.
+	body, err := os.ReadFile(filepath.Join(got, "compose.yaml"))
+	if err != nil {
+		t.Fatalf("compose.yaml: %v", err)
+	}
+	if strings.Contains(string(body), "stale: true") {
+		t.Errorf("Fetch trusted the tampered cache instead of re-fetching: %q", string(body))
+	}
+	// And the marker now matches the verified hash.
+	marker, _ := os.ReadFile(filepath.Join(got, contentSHAMarker))
+	if strings.TrimSpace(string(marker)) != v.ContentSHA {
+		t.Errorf("marker after re-fetch = %q, want %q", marker, v.ContentSHA)
+	}
+}
+
+// TestResolveUpstreamThenFetch_RecordsTOFU is the #68 end-to-end:
+// ResolveUpstream synthesises an uncurated Version with an empty
+// ContentSHA; Fetch must extract it (trust-on-first-use), record the
+// computed hash into resolved-versions.json, and a second Fetch must
+// then verify the cached tree against that recorded hash. Previously
+// Fetch refused the empty ContentSHA, so the whole flow failed.
+func TestResolveUpstreamThenFetch_RecordsTOFU(t *testing.T) {
+	withTempCache(t)
+
+	// Fake GitHub ref endpoint so ResolveUpstream resolves the tag to a
+	// commit without touching the network.
+	refSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprint(w, `{"object":{"type":"commit","sha":"feedface1234"}}`)
+	}))
+	defer refSrv.Close()
+	origEndpoint := upstreamTagRefEndpoint
+	upstreamTagRefEndpoint = refSrv.URL + "/repos/canton-network/splice/git/refs/tags/"
+	defer func() { upstreamTagRefEndpoint = origEndpoint }()
+
+	v, err := ResolveUpstream(context.Background(), "0.7.0-alpha.9")
+	if err != nil {
+		t.Fatalf("ResolveUpstream: %v", err)
+	}
+	if v.ContentSHA != "" {
+		t.Fatalf("ResolveUpstream should synthesise an empty ContentSHA, got %q", v.ContentSHA)
+	}
+
+	// Serve the source tarball Fetch will download.
+	tarball := buildTestTarball(t, map[string]string{
+		"splice-x/cluster/compose/localnet/compose.yaml": "services: {}\n",
+	})
+	_, cleanup := servePinnedTarball(t, tarball)
+	defer cleanup()
+
+	cacheRoot := t.TempDir()
+	projectDir, err := Fetch(context.Background(), v, cacheRoot, nil)
+	if err != nil {
+		t.Fatalf("Fetch (TOFU) failed — the #68 bug: %v", err)
+	}
+
+	// The resolved cache must now carry the computed ContentSHA.
+	cache, err := ReadResolvedCache()
+	if err != nil {
+		t.Fatalf("ReadResolvedCache: %v", err)
+	}
+	hit, ok := cache.LookupResolved("0.7.0-alpha.9")
+	if !ok {
+		t.Fatal("resolved cache lost the entry after Fetch")
+	}
+	if len(hit.ContentSHA) != 64 {
+		t.Fatalf("TOFU ContentSHA not recorded into resolved cache: %q", hit.ContentSHA)
+	}
+	// The on-disk marker must match what was recorded.
+	marker, _ := os.ReadFile(filepath.Join(projectDir, contentSHAMarker))
+	if strings.TrimSpace(string(marker)) != hit.ContentSHA {
+		t.Errorf("marker %q != recorded ContentSHA %q", marker, hit.ContentSHA)
+	}
+
+	// Second Fetch with the now-recorded ContentSHA must verify clean
+	// against the cached tree (the "verify thereafter" half of TOFU).
+	verified := hit // carries the recorded ContentSHA
+	if _, err := Fetch(context.Background(), verified.Version, cacheRoot, nil); err != nil {
+		t.Errorf("second Fetch (verify-thereafter) failed: %v", err)
+	}
 }
 
 // buildTestTarball returns a gzipped tar archive containing the named
