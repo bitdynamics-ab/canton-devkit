@@ -75,6 +75,29 @@ describe("BackupRestore card", () => {
     expect(document.querySelector('iframe[name="_dpm_dl"]')).not.toBeNull();
   });
 
+  it("surfaces a download-failure banner when the server returns an error instead of a file", async () => {
+    // Regression: the hidden-iframe download swallowed server errors
+    // (instance gone, docker failure, 5xx) — the button just flashed
+    // and the user assumed success. The iframe navigates to the JSON
+    // error body and fires `load`; the card must show an alert.
+    vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(
+      function (this: HTMLFormElement) {
+        const frame = document.querySelector(
+          'iframe[name="_dpm_dl"]',
+        ) as HTMLIFrameElement;
+        frame.dispatchEvent(new Event("load"));
+      },
+    );
+    render(<BackupRestore instanceName="ghost" />);
+    await userEvent.click(
+      screen.getByRole("button", { name: /download snapshot/i }),
+    );
+    await waitFor(() => {
+      const alert = screen.getByRole("alert");
+      expect(alert.textContent).toMatch(/download failed/i);
+    });
+  });
+
   it("posts multipart with file + name fields when restoring (no --force by default)", async () => {
     const fd: FormData[] = [];
     const sendSpy = vi

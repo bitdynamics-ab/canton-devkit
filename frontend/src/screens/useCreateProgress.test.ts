@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { INITIAL_STATE, reducer } from "./useCreateProgress";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import {
+  INITIAL_STATE,
+  parseEventId,
+  reducer,
+  useCreateProgress,
+} from "./useCreateProgress";
 import type { CreateProgressEvent } from "../api";
 
 // Reducer tests — pure, no React, no DOM. The SSE plumbing is
@@ -150,5 +156,115 @@ describe("useCreateProgress reducer", () => {
     // identical times the reducer should preserve the first.
     const t2 = reducer(t1, { kind: "warn", message: "second" });
     expect(t2.startedAt).toBe(firstStamp);
+  });
+});
+
+describe("parseEventId", () => {
+  it("parses a numeric SSE id", () => {
+    expect(parseEventId("7")).toBe(7);
+  });
+  it("returns null for a missing id (apply unconditionally)", () => {
+    expect(parseEventId(undefined)).toBeNull();
+    expect(parseEventId("")).toBeNull();
+  });
+  it("returns null for a non-numeric id", () => {
+    expect(parseEventId("abc")).toBeNull();
+    expect(parseEventId("1.5")).toBeNull();
+  });
+});
+
+// FakeEventSource lets a test drive onmessage with controlled
+// `lastEventId` values, including a simulated reconnect where the
+// server replays the whole ring buffer (the real per-instance
+// handler does SubscribeWithReplay and ignores Last-Event-ID).
+class FakeEventSource {
+  static last: FakeEventSource | null = null;
+  url: string;
+  onmessage: ((ev: MessageEvent) => void) | null = null;
+  onerror: ((ev: Event) => void) | null = null;
+  closed = false;
+  constructor(url: string) {
+    this.url = url;
+    FakeEventSource.last = this;
+  }
+  close() {
+    this.closed = true;
+  }
+  // Helper: deliver one frame with a server sequence id.
+  emit(id: number, payload: CreateProgressEvent) {
+    this.onmessage?.({
+      data: JSON.stringify(payload),
+      lastEventId: String(id),
+    } as MessageEvent);
+  }
+}
+
+describe("useCreateProgress SSE dedupe on reconnect", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("drops replayed events after a reconnect so output/warn don't duplicate", () => {
+    vi.stubGlobal(
+      "EventSource",
+      FakeEventSource as unknown as typeof EventSource,
+    );
+    const { result } = renderHook(() =>
+      useCreateProgress("/api/instances/dev/events"),
+    );
+    const es = FakeEventSource.last!;
+
+    // First connection: ids 1..3 arrive.
+    act(() => {
+      es.emit(1, { kind: "output", stream: "stdout", text: "line A" });
+      es.emit(2, { kind: "warn", message: "uncurated tag" });
+      es.emit(3, { kind: "output", stream: "stdout", text: "line B" });
+    });
+    expect(result.current.terminal).toEqual([
+      { stream: "stdout", text: "line A" },
+      { stream: "stdout", text: "line B" },
+    ]);
+    expect(result.current.warnings).toEqual(["uncurated tag"]);
+
+    // Transient drop → EventSource reconnects and the handler
+    // replays the WHOLE buffer (ids 1..3 again), then continues
+    // with a fresh id 4. The replayed 1..3 must be ignored.
+    act(() => {
+      es.emit(1, { kind: "output", stream: "stdout", text: "line A" });
+      es.emit(2, { kind: "warn", message: "uncurated tag" });
+      es.emit(3, { kind: "output", stream: "stdout", text: "line B" });
+      es.emit(4, { kind: "output", stream: "stdout", text: "line C" });
+    });
+
+    // No duplicates: only the genuinely-new id 4 was appended.
+    expect(result.current.terminal).toEqual([
+      { stream: "stdout", text: "line A" },
+      { stream: "stdout", text: "line B" },
+      { stream: "stdout", text: "line C" },
+    ]);
+    expect(result.current.warnings).toEqual(["uncurated tag"]);
+  });
+
+  it("applies every event when frames carry no id (no dedupe possible)", () => {
+    vi.stubGlobal(
+      "EventSource",
+      FakeEventSource as unknown as typeof EventSource,
+    );
+    const { result } = renderHook(() =>
+      useCreateProgress("/api/instances/dev/events"),
+    );
+    const es = FakeEventSource.last!;
+    act(() => {
+      // lastEventId === "" → parseEventId returns null → applied.
+      es.onmessage?.({
+        data: JSON.stringify({ kind: "warn", message: "one" }),
+        lastEventId: "",
+      } as MessageEvent);
+      es.onmessage?.({
+        data: JSON.stringify({ kind: "warn", message: "two" }),
+        lastEventId: "",
+      } as MessageEvent);
+    });
+    expect(result.current.warnings).toEqual(["one", "two"]);
   });
 });

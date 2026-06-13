@@ -46,6 +46,7 @@ type RestoreState =
 
 export function BackupRestore({ instanceName }: Props) {
   const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [restore, setRestore] = useState<RestoreState>({ kind: "idle" });
   const [targetName, setTargetName] = useState(instanceName);
   const [force, setForce] = useState(false);
@@ -64,17 +65,24 @@ export function BackupRestore({ instanceName }: Props) {
     setTargetName(instanceName);
     setRestore({ kind: "idle" });
     setForce(false);
+    setDownloadError(null);
   }, [instanceName]);
 
   async function onDownload() {
     setDownloading(true);
+    setDownloadError(null);
     try {
       await downloadSnapshot(instanceName);
+    } catch (e) {
+      // downloadSnapshot rejects when the server returned an error
+      // document instead of a file (instance gone, docker failure,
+      // 5xx). Without surfacing it the button would just flash and
+      // the user would assume the download succeeded.
+      setDownloadError(
+        e instanceof ApiError ? e.message : "snapshot download failed",
+      );
     } finally {
-      // The form-submit dispatches synchronously; the
-      // browser owns the rest. A short flash on the button
-      // is enough visual feedback.
-      setTimeout(() => setDownloading(false), 600);
+      setDownloading(false);
     }
   }
 
@@ -154,6 +162,24 @@ export function BackupRestore({ instanceName }: Props) {
           </code>
         </span>
       </div>
+
+      {/* Download error banner */}
+      {downloadError && (
+        <div
+          role="alert"
+          style={{
+            marginTop: 10,
+            background: `${W.err}10`,
+            border: `1px solid ${W.err}`,
+            borderRadius: 6,
+            padding: "8px 12px",
+            fontSize: 12,
+            color: W.err,
+          }}
+        >
+          Download failed: {downloadError}
+        </div>
+      )}
 
       {/* Restore row */}
       <div style={{ marginTop: 18 }}>

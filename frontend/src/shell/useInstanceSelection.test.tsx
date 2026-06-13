@@ -181,3 +181,155 @@ describe("useInstanceSelection auto-pick", () => {
     spy.mockRestore();
   });
 });
+
+describe("useInstanceSelection background refresh resilience", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function instancesResponse(status: string) {
+    return new Response(
+      JSON.stringify({
+        schema_version: 1,
+        instances: [
+          {
+            name: "demo",
+            status,
+            splice_version: "0.6.4",
+            ports: "",
+            started_ago: "",
+          },
+        ],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  it("does NOT flip to loading on background ticks (no table flash)", async () => {
+    // Repro: every 15s tick set loading:true, so the whole table +
+    // topbar switcher flashed out for the fetch duration. After the
+    // fix, only the first fetch shows loading; refreshes stay quiet.
+    vi.useFakeTimers();
+    let resolveSecond: ((r: Response) => void) | null = null;
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => {
+        call++;
+        if (call === 1) return Promise.resolve(instancesResponse("running"));
+        // Second fetch hangs so we can observe `loading` mid-flight.
+        return new Promise<Response>((res) => {
+          resolveSecond = res;
+        });
+      }),
+    );
+    const { result } = renderHook(() => useInstanceSelection(), {
+      wrapper: wrap(["/"]),
+    });
+    await vi.waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Kick the 15s poll; the second fetch is in flight (unresolved).
+    await act(async () => {
+      vi.advanceTimersByTime(15_000);
+    });
+    // loading MUST remain false during the background refresh.
+    expect(result.current.loading).toBe(false);
+    expect(result.current.instances[0]?.status).toBe("running");
+
+    // Let the in-flight fetch settle so we don't leak it.
+    await act(async () => {
+      resolveSecond?.(instancesResponse("stopped"));
+    });
+    vi.useRealTimers();
+  });
+
+  it("keeps the last-good list and marks stale when a background poll fails", async () => {
+    vi.useFakeTimers();
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => {
+        call++;
+        if (call === 1) return Promise.resolve(instancesResponse("running"));
+        // Transient registry hiccup on the refresh.
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ code: "INTERNAL", error: "registry read failed" }),
+            { status: 500, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }),
+    );
+    const { result } = renderHook(() => useInstanceSelection(), {
+      wrapper: wrap(["/"]),
+    });
+    await vi.waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.instances).toHaveLength(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(15_000);
+    });
+    await vi.waitFor(() => expect(result.current.stale).toBe(true));
+
+    // The dashboard is NOT wiped: prior data survives, no hard error,
+    // and `selected` still resolves so detail panels stay mounted.
+    expect(result.current.instances).toHaveLength(1);
+    expect(result.current.instances[0]?.status).toBe("running");
+    expect(result.current.error).toBeNull();
+    expect(result.current.selected).toBe("demo");
+    vi.useRealTimers();
+  });
+
+  it("surfaces a hard error when the FIRST load fails (nothing to keep)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ code: "INTERNAL", error: "registry read failed" }),
+          { status: 500, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    const { result } = renderHook(() => useInstanceSelection(), {
+      wrapper: wrap(["/"]),
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toMatch(/registry read failed/);
+    expect(result.current.instances).toHaveLength(0);
+    expect(result.current.stale).toBe(false);
+  });
+
+  it("clears stale after a subsequent successful refresh", async () => {
+    vi.useFakeTimers();
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => {
+        call++;
+        if (call === 2) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ code: "INTERNAL", error: "blip" }),
+              { status: 500, headers: { "Content-Type": "application/json" } },
+            ),
+          );
+        }
+        return Promise.resolve(instancesResponse("running"));
+      }),
+    );
+    const { result } = renderHook(() => useInstanceSelection(), {
+      wrapper: wrap(["/"]),
+    });
+    await vi.waitFor(() => expect(result.current.loading).toBe(false));
+    // Tick 1 → failing poll → stale.
+    await act(async () => {
+      vi.advanceTimersByTime(15_000);
+    });
+    await vi.waitFor(() => expect(result.current.stale).toBe(true));
+    // Tick 2 → recovering poll → stale clears.
+    await act(async () => {
+      vi.advanceTimersByTime(15_000);
+    });
+    await vi.waitFor(() => expect(result.current.stale).toBe(false));
+    expect(result.current.instances).toHaveLength(1);
+    vi.useRealTimers();
+  });
+});
