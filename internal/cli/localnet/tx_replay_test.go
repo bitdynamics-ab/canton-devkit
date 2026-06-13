@@ -51,7 +51,7 @@ func (f *fakeReplayLedger) UpdateByOffset(_ context.Context, req *lapiv2.GetUpda
 func withFakeReplayLedger(t *testing.T, fake txReplayLedger) {
 	t.Helper()
 	prev := dialTxReplayLedgerFn
-	dialTxReplayLedgerFn = func(_ context.Context, _, _, _ string) (txReplayLedger, func(), error) {
+	dialTxReplayLedgerFn = func(_ context.Context, _, _, _, _ string) (txReplayLedger, func(), error) {
 		return fake, func() {}, nil
 	}
 	t.Cleanup(func() { dialTxReplayLedgerFn = prev })
