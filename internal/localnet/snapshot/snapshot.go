@@ -15,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -67,13 +68,39 @@ const (
 // volumeArchiver is the seam tests use; production uses
 // dockerVolumeArchiver. All three methods are streaming so neither
 // side ever holds a whole volume in memory.
+//
+// RestoreVolume takes the target compose project so it can re-apply
+// the `com.docker.compose.project` / `com.docker.compose.volume`
+// labels Compose itself stamps on `up`. Compose does NOT relabel a
+// pre-existing volume — so without this, a restored volume is
+// invisible to ListVolumes' label filter and every later snapshot of
+// the restored instance silently captures zero volumes.
 type volumeArchiver interface {
 	ListVolumes(ctx context.Context, composeProject string) ([]string, error)
 	ArchiveVolume(ctx context.Context, volume string, w io.Writer) error
-	RestoreVolume(ctx context.Context, volume string, r io.Reader) error
+	RestoreVolume(ctx context.Context, composeProject, volume string, r io.Reader) error
+	// VolumeStorageAvailableBytes reports the free space on the
+	// filesystem Docker extracts volumes into (its data root), NOT the
+	// host filesystem holding the snapshot archive. On macOS/Windows
+	// the volume store lives inside the Docker VM's disk image, which a
+	// host statfs cannot see — so the restore preflight must ask Docker.
+	VolumeStorageAvailableBytes(ctx context.Context) (uint64, error)
 }
 
 var archiverFn volumeArchiver = dockerVolumeArchiver{}
+
+// SetArchiverForTest swaps the docker-backed archiver for a fake and
+// returns a restore func. It exists so callers in OTHER packages —
+// notably the Web UI snapshot handler tests — can exercise the
+// snapshot/restore happy path without a docker daemon, the same way
+// installFakeArchiver does for this package's own tests. Production
+// code never calls this; the in-package tests use the unexported
+// installFakeArchiver helper instead.
+func SetArchiverForTest(a volumeArchiver) (restore func()) {
+	prev := archiverFn
+	archiverFn = a
+	return func() { archiverFn = prev }
+}
 
 // RunSnapshot streams a snapshot to dest. Memory footprint per
 // volume is bounded by the tar copy buffer, not the volume size.
@@ -112,12 +139,15 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 	// In-flight ledger transactions or unflushed Postgres/Canton writes
 	// may be only partially present, so a restored copy can need crash
 	// recovery (or, rarely, be inconsistent). For a guaranteed-consistent
-	// snapshot, `localnet pause` (or `down`) the instance first.
+	// snapshot, `localnet pause` the instance first.
+	//
+	// The wording is shared with the Web UI via RunningSnapshotWarning
+	// so both surfaces tell the operator the same thing (CLI↔UI
+	// parity): the CLI prints it as a StepWarn here, the snapshot
+	// handler echoes it in a response header.
 	if state.Status == registry.StatusRunning {
 		_, _ = fmt.Fprintln(errw, term.Step(term.StepWarn,
-			"Snapshotting a running instance",
-			"crash-consistent only — in-flight writes may be partial; "+
-				"`localnet pause --name "+name+"` first for an application-consistent copy", ""))
+			"Snapshotting a running instance", RunningSnapshotWarning(name), ""))
 	}
 
 	volumes, err := archiverFn.ListVolumes(ctx, state.ComposeProject)
@@ -131,6 +161,25 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 			_, _ = fmt.Fprintf(errw, "volume %q rejected: %s\n", v, err)
 			return localnet.ExitRuntimeFailure
 		}
+	}
+
+	// Empty-volume guard. ListVolumes filters on the
+	// com.docker.compose.project label; an empty result almost always
+	// means the instance has never been brought up, or its volumes
+	// lost their Compose labels (the classic symptom of a restore that
+	// didn't relabel). Either way, writing a header+state-only archive
+	// and reporting "0 volume(s)" success would silently discard all
+	// data on a snapshot→restore→snapshot round-trip. Refuse so the
+	// failure is loud at capture time rather than at the next restore.
+	if len(volumes) == 0 {
+		_, _ = fmt.Fprintln(errw, term.Step(term.StepWarn,
+			"No docker volumes found for "+state.ComposeProject,
+			"nothing to capture — has the instance been brought up? "+
+				"(a restored instance whose volumes lost their Compose "+
+				"labels also shows up empty)", ""))
+		_, _ = fmt.Fprintf(errw,
+			"refusing to write an empty snapshot of %q\n", name)
+		return localnet.ExitUserError
 	}
 
 	_, _ = fmt.Fprintln(out, term.Prompt("", "", "", fmt.Sprintf(
@@ -272,6 +321,17 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 	return localnet.ExitSuccess
 }
 
+// RunningSnapshotWarning is the canonical plain-text caveat shown when
+// a snapshot is taken of a RUNNING instance. It lives here, not at the
+// call sites, so the CLI (RunSnapshot, as a StepWarn) and the Web UI
+// (the snapshot handler's X-Snapshot-Warning response header) emit
+// identical wording — CLI↔UI parity for the same guard. The plain
+// string (no ANSI) is what HTTP surfaces carry.
+func RunningSnapshotWarning(name string) string {
+	return "crash-consistent only — in-flight writes may be partial; " +
+		"`localnet pause --name " + name + "` first for an application-consistent copy"
+}
+
 // streamVolumeToTemp runs ArchiveVolume into a temp file under
 // dir, computing sha256 and a size ceiling as it goes. Returns
 // (path, written, sha) on success. Caller owns the temp file's
@@ -410,33 +470,43 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 			embedded.Name, name)))
 	}
 
-	// Disk preflight. Restore unpacks every volume tar into the docker
-	// volume root; without a
-	// preflight the user can fill the disk mid-restore and leave
-	// a half-populated registry entry behind. Sum the expected
-	// volume sizes from the snapshot header and refuse if the
-	// destination filesystem has less free space + a 20% safety
-	// margin. The header sizes are the compressed-tar bytes; the
-	// margin covers tar overhead and filesystem block rounding.
-	if avail, err := availableDiskBytes(filepath.Dir(src)); err == nil {
+	// Disk preflight. Restore unpacks every volume tar into Docker's
+	// volume store, NOT the filesystem holding the snapshot archive
+	// (src). Those are routinely different filesystems — and on
+	// macOS/Windows the volume store lives inside the Docker VM's disk
+	// image, invisible to a host statfs of src's directory. Measuring
+	// the wrong one lets the gate both false-refuse (tiny /tmp, huge
+	// Docker disk) and false-pass (roomy home, full Docker VM), the
+	// latter reintroducing the half-populated-volume-on-ENOSPC failure
+	// this preflight exists to prevent. So ask Docker. The host check
+	// on filepath.Dir(src) is kept only as a secondary fallback (and
+	// as a bound on the spooled archive itself) when the Docker probe
+	// is unavailable.
+	volAvail, volAvailErr := archiverFn.VolumeStorageAvailableBytes(ctx)
+	if volAvailErr != nil {
+		// Probe failed (old docker, no alpine image, daemon hiccup):
+		// fall back to the host filesystem holding the archive. Better
+		// an approximate gate than none.
+		volAvail, _ = availableDiskBytes(filepath.Dir(src))
+	}
+	if volAvail > 0 {
 		var need int64
 		for _, v := range meta.Volumes {
 			need += v.SizeBytes
 		}
 		needWithMargin := need + need/5 // 20%
-		if avail > 0 && needWithMargin > 0 && avail < uint64(needWithMargin) {
+		if needWithMargin > 0 && volAvail < uint64(needWithMargin) {
 			_, _ = fmt.Fprintf(errw,
-				"insufficient disk space to restore: snapshot needs ~%d MiB (with margin) but only %d MiB available. "+
+				"insufficient disk space to restore: snapshot needs ~%d MiB (with margin) but only %d MiB available on Docker's volume storage. "+
 					"Free space and retry.\n",
-				needWithMargin/1024/1024, avail/1024/1024)
+				needWithMargin/1024/1024, volAvail/1024/1024)
 			return localnet.ExitUserError
 		}
 	}
-	// availableDiskBytes returning an error (unsupported FS,
-	// permissions) is non-fatal: we proceed without the preflight
-	// rather than blocking restore in environments where statfs
-	// isn't available. The unpack loop will still surface ENOSPC
-	// with a useful error.
+	// A zero/unknown availability (probe AND host statfs both failed,
+	// e.g. unsupported FS or permissions) is non-fatal: we proceed
+	// without the preflight rather than blocking restore. The unpack
+	// loop will still surface ENOSPC with a useful error.
 
 	// Build the registry record we WOULD write — but defer the actual
 	// Write until after all volumes restore successfully. Writing the
@@ -462,17 +532,19 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 
 	// Cumulative tar-size budget. The per-entry maxArchiveEntry cap
 	// (16 GiB) doesn't bound N×16 GiB
-	// across the archive. Re-derive available disk now and track
-	// extracted bytes across the loop; abort if we'd exceed the
-	// budget. avail==0 means availableDiskBytes failed earlier; we
-	// fall back to a hard 256 GiB cumulative ceiling — well above
-	// any reasonable LocalNet snapshot but a backstop against a
-	// hostile archive with under-reported SizeBytes.
+	// across the archive. Track extracted bytes across the loop and
+	// abort if we'd exceed the budget. Reuse the Docker volume-storage
+	// availability computed for the size preflight above — that's the
+	// filesystem the bytes actually land on. volAvail==0 means both
+	// the Docker probe and the host fallback failed; we then fall back
+	// to a hard 256 GiB cumulative ceiling — well above any reasonable
+	// LocalNet snapshot but a backstop against a hostile archive with
+	// under-reported SizeBytes.
 	const cumulativeFloor = int64(256) << 30 // 256 GiB
 	cumulativeBudget := cumulativeFloor
-	if a, err := availableDiskBytes(filepath.Dir(src)); err == nil && a > 0 {
+	if volAvail > 0 {
 		// Leave a 20% margin to avoid filling the filesystem.
-		margin := uint64(float64(a) * 0.8)
+		margin := uint64(float64(volAvail) * 0.8)
 		if margin > 0 && int64(margin) < cumulativeBudget {
 			cumulativeBudget = int64(margin)
 		}
@@ -538,7 +610,7 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 			_ = pw.CloseWithError(err)
 			copyErr <- err
 		}()
-		restErr := archiverFn.RestoreVolume(ctx, dstVolName, pr)
+		restErr := archiverFn.RestoreVolume(ctx, toWrite.ComposeProject, dstVolName, pr)
 		// If the alpine `tar xf -` exited early (e.g. disk full
 		// mid-stream), pr's reader side is closed but
 		// the goroutine on the other end may still be blocked
@@ -809,14 +881,102 @@ func (dockerVolumeArchiver) ArchiveVolume(ctx context.Context, volume string, w 
 	return cmd.Run()
 }
 
-func (dockerVolumeArchiver) RestoreVolume(ctx context.Context, volume string, r io.Reader) error {
-	if err := exec.CommandContext(ctx, "docker", "volume", "create", volume).Run(); err != nil {
+func (dockerVolumeArchiver) RestoreVolume(ctx context.Context, composeProject, volume string, r io.Reader) error {
+	// Re-stamp the Compose labels Compose itself applies on `up`.
+	// `docker volume create` is a no-op when the volume already
+	// exists, but it does NOT add labels to a pre-existing volume —
+	// and Compose never relabels one either (it only warns "volume
+	// already exists but was not created by Docker Compose"). So we
+	// pass the labels here on the create. The label set must match
+	// ListVolumes' filter (com.docker.compose.project) or every later
+	// snapshot of the restored instance finds an empty volume list.
+	create := []string{"volume", "create"}
+	if composeProject != "" {
+		create = append(create,
+			"--label", "com.docker.compose.project="+composeProject)
+		if suffix := volumeSuffix(composeProject, volume); suffix != "" {
+			create = append(create,
+				"--label", "com.docker.compose.volume="+suffix)
+		}
+	}
+	create = append(create, volume)
+	if err := exec.CommandContext(ctx, "docker", create...).Run(); err != nil {
 		return fmt.Errorf("create volume %q: %w", volume, err)
 	}
+
+	// Restore is a REPLACE, not a merge. `docker volume create` is a
+	// no-op on an existing volume, and `tar xf` only adds/overwrites
+	// the entries in the archive — files present in the volume but
+	// absent from the snapshot survive. Restoring over a stopped-but-
+	// extant instance would then leave old+new merged: e.g. Postgres
+	// WAL segments written after the snapshot sitting alongside the
+	// rewound data files, a state that is neither the snapshot nor the
+	// pre-restore one and can fail recovery. Wipe the volume first so
+	// the restored content equals the captured content exactly. The
+	// wipe and the extract share one `docker run` so a single mount
+	// (and a single container start) covers both.
 	cmd := exec.CommandContext(ctx, "docker", "run", "--rm", "-i",
 		"-v", volume+":/dst",
-		"alpine:3.20", "tar", "xf", "-", "-C", "/dst")
+		"alpine:3.20", "sh", "-c",
+		"find /dst -mindepth 1 -delete && tar xf - -C /dst")
 	cmd.Stdin = r
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// volumeSuffix recovers the Compose `volumes:` key for a volume named
+// "<project>_<suffix>". Compose stamps that key as the
+// com.docker.compose.volume label. Returns "" when the name doesn't
+// carry the project prefix (a hand-crafted archive, or an older
+// snapshot) — in which case we omit the per-volume label rather than
+// guess. The project label alone is what ListVolumes filters on, so
+// discovery still works; the volume label is best-effort fidelity.
+func volumeSuffix(composeProject, volume string) string {
+	prefix := composeProject + "_"
+	if !strings.HasPrefix(volume, prefix) {
+		return ""
+	}
+	return volume[len(prefix):]
+}
+
+// VolumeStorageAvailableBytes reports free space on Docker's volume
+// store by mounting a throwaway anonymous volume into a probe
+// container and reading `df` on the mount. The anonymous volume lives
+// under Docker's data root, so the mount's filesystem IS the one
+// restore extracts into — including the in-VM disk image on
+// macOS/Windows that a host statfs cannot reach. `--rm -v /probe`
+// (anonymous mount) is auto-removed with the container, so no volume
+// leaks. POSIX `df -Pk` prints 1K-blocks in column 4 (Available) of
+// the data row; we multiply back to bytes.
+func (dockerVolumeArchiver) VolumeStorageAvailableBytes(ctx context.Context) (uint64, error) {
+	out, err := exec.CommandContext(ctx, "docker", "run", "--rm",
+		"-v", "/probe",
+		"alpine:3.20", "df", "-Pk", "/probe").Output()
+	if err != nil {
+		return 0, fmt.Errorf("probe docker volume storage: %w", err)
+	}
+	return parseDfAvailableKB(string(out))
+}
+
+// parseDfAvailableKB extracts the Available column (1K-blocks) from
+// POSIX `df -Pk` output and returns it as bytes. The -P (portable)
+// format prints one data line with whitespace-separated fields:
+// Filesystem 1024-blocks Used Available Capacity Mounted-on. We scan
+// lines and return the first whose 4th field parses as a number — the
+// header row's 4th field is "Available" (non-numeric) so it is skipped
+// without a hard-coded line index.
+func parseDfAvailableKB(dfOut string) (uint64, error) {
+	for _, line := range strings.Split(strings.TrimSpace(dfOut), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		availKB, err := strconv.ParseUint(fields[3], 10, 64)
+		if err != nil {
+			// Header row (or any non-data line) — skip.
+			continue
+		}
+		return availKB * 1024, nil
+	}
+	return 0, fmt.Errorf("df output not parseable: %q", dfOut)
 }
