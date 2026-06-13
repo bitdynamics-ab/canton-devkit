@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/bitdynamics-ab/canton-devkit/assets"
 	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
@@ -117,7 +118,11 @@ func targetGroupsFor(state *registry.State) []fileSDGroup {
 		}
 		groups = append(groups, fileSDGroup{
 			Targets: []string{fmt.Sprintf("host.docker.internal:%d", port)},
-			Labels:  map[string]string{"instance": state.Name, "component": component, "job": component},
+			// No "job" label: file_sd's job would override the scrape
+			// config's job_name (localnet) in shared-prometheus.yml. The
+			// dashboard filters on {instance,component}, so component is
+			// already its own label — leave job=localnet from the config.
+			Labels: map[string]string{"instance": state.Name, "component": component},
 		})
 	}
 	add("canton", state.Ports[PortCantonMetrics])
@@ -154,6 +159,76 @@ func DeregisterInstanceTargets(instance string) error {
 		return err
 	}
 	return nil
+}
+
+// RegisterInstanceAndEnsureStack registers the instance's scrape targets
+// and (re)starts the shared stack as ONE step under the shared-stack lock
+// (lockSharedStack), so a concurrent `down` of the last other instance
+// can't observe a zero refcount and tear the stack down between this
+// instance's register and ensure — which would leave it registered
+// against a stopped stack. It also reconciles away target files orphaned
+// by a crash before counting/ensuring. Best-effort at the call site: a
+// returned error is surfaced as a warning, never a failed bring-up.
+func RegisterInstanceAndEnsureStack(ctx context.Context, state *registry.State, logw io.Writer) (SharedStackPorts, error) {
+	release, err := lockSharedStack()
+	if err != nil {
+		return SharedStackPorts{}, err
+	}
+	defer release()
+	if err := RegisterInstanceTargets(state); err != nil {
+		return SharedStackPorts{}, err
+	}
+	reconcileSharedTargets()
+	return EnsureSharedStack(ctx, logw)
+}
+
+// DeregisterInstanceAndTeardownIfIdle removes the instance's scrape
+// targets and tears the shared stack down if no instance still references
+// it — as ONE step under the shared-stack lock, the teardown counterpart
+// to RegisterInstanceAndEnsureStack. Reconciles orphaned target files
+// first so a crashed instance's stale file can't pin the stack alive.
+func DeregisterInstanceAndTeardownIfIdle(ctx context.Context, instance string, logw io.Writer) error {
+	release, err := lockSharedStack()
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err := DeregisterInstanceTargets(instance); err != nil {
+		return err
+	}
+	reconcileSharedTargets()
+	return TeardownSharedStackIfIdle(ctx, logw)
+}
+
+// reconcileSharedTargets drops target files orphaned by a crash or a
+// removed instance: any targets/<name>.json whose instance is absent from
+// the registry index, or recorded stopped, is removed. Otherwise the
+// shared Prometheus keeps scraping a dead host.docker.internal:<port> and
+// sharedTargetCount() stays inflated so the idle teardown never fires.
+// Best-effort and called only under the shared-stack lock.
+func reconcileSharedTargets() {
+	entries, err := os.ReadDir(sharedTargetsDir())
+	if err != nil {
+		return
+	}
+	idx, err := registry.ReadIndex()
+	if err != nil {
+		return
+	}
+	status := make(map[string]registry.Status, len(idx.Entries))
+	for _, e := range idx.Entries {
+		status[e.Name] = e.Status
+	}
+	for _, ent := range entries {
+		if ent.IsDir() || filepath.Ext(ent.Name()) != ".json" {
+			continue
+		}
+		name := strings.TrimSuffix(ent.Name(), ".json")
+		// Keep running/creating instances; drop absent or stopped ones.
+		if st, known := status[name]; !known || st == registry.StatusStopped {
+			_ = os.Remove(filepath.Join(sharedTargetsDir(), ent.Name()))
+		}
+	}
 }
 
 // InstanceObservabilityEnabled reports whether the instance is registered

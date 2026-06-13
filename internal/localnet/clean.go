@@ -226,9 +226,9 @@ func cleanOne(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOpt
 	}
 
 	// Deregister from the shared observability stack (#39) and tear it
-	// down if this was the last instance referencing it. Best-effort.
-	_ = DeregisterInstanceTargets(name)
-	_ = TeardownSharedStackIfIdle(ctx, io.Discard)
+	// down if this was the last instance referencing it — atomically under
+	// the shared-stack lock so a concurrent `up` can't race the teardown.
+	_ = DeregisterInstanceAndTeardownIfIdle(ctx, name, io.Discard)
 
 	_, _ = fmt.Fprintf(out, "Cleaned %q.\n", name)
 	return ExitSuccess

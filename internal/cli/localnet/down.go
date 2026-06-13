@@ -246,9 +246,9 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 	}
 
 	// Deregister from the shared observability stack (#39); tear it down
-	// if no instance still references it. Best-effort.
-	_ = localnet.DeregisterInstanceTargets(opts.Name)
-	_ = localnet.TeardownSharedStackIfIdle(ctx, io.Discard)
+	// if no instance still references it — atomically under the
+	// shared-stack lock so a concurrent `up` can't race the teardown.
+	_ = localnet.DeregisterInstanceAndTeardownIfIdle(ctx, opts.Name, io.Discard)
 
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, term.Box(term.BoxBrand,

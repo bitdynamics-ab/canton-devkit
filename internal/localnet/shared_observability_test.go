@@ -24,6 +24,56 @@ func seedMetricsState(name string, cantonPort, splicePort int) *registry.State {
 	return s
 }
 
+// TestReconcileSharedTargets_DropsOrphanAndStopped pins the orphan-target
+// GC: a target file is kept only while its instance is present-and-not-
+// stopped in the registry index. A crash that leaves a target file behind
+// (no index entry) or a stopped instance must not keep scraping a dead
+// endpoint or pin the shared stack alive via an inflated refcount.
+func TestReconcileSharedTargets_DropsOrphanAndStopped(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+
+	// live: present in the registry index as running -> kept.
+	live := seedMetricsState("live", 30001, 30002)
+	live.Status = registry.StatusRunning
+	if err := registry.Write(live); err != nil {
+		t.Fatalf("write live: %v", err)
+	}
+	if err := RegisterInstanceTargets(live); err != nil {
+		t.Fatalf("register live: %v", err)
+	}
+
+	// stopped: present in the index but stopped -> dropped.
+	stopped := seedMetricsState("stopped", 30003, 30004)
+	stopped.Status = registry.StatusStopped
+	if err := registry.Write(stopped); err != nil {
+		t.Fatalf("write stopped: %v", err)
+	}
+	if err := RegisterInstanceTargets(stopped); err != nil {
+		t.Fatalf("register stopped: %v", err)
+	}
+
+	// orphan: target file present but absent from the index (crash) -> dropped.
+	orphan := seedMetricsState("orphan", 30005, 30006)
+	if err := RegisterInstanceTargets(orphan); err != nil {
+		t.Fatalf("register orphan: %v", err)
+	}
+
+	reconcileSharedTargets()
+
+	if !InstanceObservabilityEnabled("live") {
+		t.Error("live target was dropped; want kept (running in index)")
+	}
+	if InstanceObservabilityEnabled("stopped") {
+		t.Error("stopped target was kept; want dropped (stopped in index)")
+	}
+	if InstanceObservabilityEnabled("orphan") {
+		t.Error("orphan target was kept; want dropped (absent from index)")
+	}
+	if n := sharedTargetCount(); n != 1 {
+		t.Errorf("sharedTargetCount = %d, want 1 (live only)", n)
+	}
+}
+
 // TestRegisterInstanceTargets_WritesFileSDShape pins the file_sd JSON the
 // shared Prometheus reads: host.docker.internal:<hostport> targets with
 // {instance,component} labels so the bundled dashboard's `instance` var

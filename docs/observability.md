@@ -121,19 +121,37 @@ so you can deliberately drop observability. This closes the prior gap
 where Prometheus/Grafana silently vanished on every restart even though
 the stable-port contract kept the bookmarked Grafana URL alive.
 
-## Stack topology — per-instance, not host-shared (known scope)
+## Stack topology — host-shared, with a transitional per-instance overlay
 
-Today the observability stack is **per-instance**: each
-observability-enabled LocalNet gets its own Prometheus + Grafana pair,
-joined to that instance's docker network so the scrape targets
-(`canton:10013`, `splice:10013`) resolve over service-name DNS without
-publishing the metrics ports to the host.
+A single **host-level** Prometheus + Grafana (#39) serves every running
+LocalNet, fulfilling the original proposal (line 188). It runs as its own
+compose project (`canton-devkit-observability`), independent of any
+instance's lifecycle. Each observability-enabled instance publishes its
+canton/splice `:10013` metrics ports on `127.0.0.1:<ephemeral>` and writes
+a Prometheus **file_sd** target file (`host.docker.internal:<hostport>`,
+labelled `instance` + `component`); the shared Prometheus discovers
+instances from those files. The **number of target files is the refcount**:
+the stack starts on the first instance's `up` and is torn down when the
+last instance's `down`/`clean` removes its target file. Register+ensure and
+deregister+teardown each run under a dedicated **shared-stack lock** so a
+concurrent `up` and `down` of different instances can't race the stack into
+a "registered but torn down" state, and orphaned target files (left by a
+crash) are reconciled against the registry index. On native Linux the
+Prometheus service carries `extra_hosts: ["host.docker.internal:host-gateway"]`
+so the loopback-published ports resolve; on Docker Desktop the name is
+auto-provided.
 
-The original proposal (line 188) envisioned a single **host-level**
-stack serving multiple instances via Prometheus file-based service
-discovery, to avoid the duplicated overhead when several environments
-run at once. That rework is **not yet implemented** — see the
-trade-off and follow-up in [docs/limitations.md](limitations.md#shared-observability-stack).
-The runtime toggle and down→up persistence above are deliberately
-designed so the eventual host-level migration is additive (the toggle
-already funnels through one neutral function; only its body changes).
+**Transitional dual stack (known trade-off).** Each observability-enabled
+instance currently *also* still runs its own per-instance Prometheus +
+Grafana overlay alongside the shared stack — so while running, an obs
+instance has **two** Prometheus and **two** Grafana containers. This is a
+deliberate, kept fallback: both the CLI and the Web UI read **shared-first**
+and fall back to the per-instance Prometheus when the shared stack isn't
+up, and the per-instance scrape uses in-network service DNS
+(`canton:10013`) rather than `host.docker.internal`, so it works on any
+platform regardless of the Linux `host-gateway` mapping. Gating the
+per-instance overlay off (to drop the duplication) is deferred until the
+shared-only path can be end-to-end validated on a native Linux Docker host
+— see [docs/limitations.md](limitations.md#shared-observability-stack). The
+extra resource cost (a second Prometheus+Grafana per instance) is the price
+of that fallback on a dev machine; it carries no correctness impact.

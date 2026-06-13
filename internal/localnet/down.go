@@ -151,10 +151,10 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 	}
 
 	// Deregister from the shared observability stack (#39) and tear it
-	// down if no instance still references it. Best-effort — a stopped
-	// instance has no live :10013 for the shared Prometheus to scrape.
-	_ = DeregisterInstanceTargets(state.Name)
-	_ = TeardownSharedStackIfIdle(ctx, io.Discard)
+	// down if no instance still references it — atomically under the
+	// shared-stack lock so a concurrent `up` can't race the teardown.
+	// Best-effort — a stopped instance has no live :10013 to scrape.
+	_ = DeregisterInstanceAndTeardownIfIdle(ctx, state.Name, io.Discard)
 
 	_, _ = fmt.Fprintf(out, "Canton LocalNet %q stopped.\n", state.Name)
 	return ExitSuccess
