@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/metricsq"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
@@ -275,22 +276,29 @@ func handleMetricsSummary() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), metricsTimeout)
 		defer cancel()
 
+		// Scope the queries to this instance when it's served by the
+		// shared multi-instance stack; "" sums over the single-instance
+		// per-instance Prometheus (the fallback). The frontend reads the
+		// returned scope to scope its own chart queries identically.
+		scope := promScopeFor(ctx, name)
+
 		// Queries come from the shared metricsq package so CLI
 		// + handler can't drift.
 		out := map[string]*float64{}
+		queries := metricsq.SummaryQueriesFor(scope)
 		type res struct {
 			k metricsq.Headline
 			v *float64
 		}
-		ch := make(chan res, len(metricsq.SummaryQueries))
-		for k, q := range metricsq.SummaryQueries {
+		ch := make(chan res, len(queries))
+		for k, q := range queries {
 			go func(k metricsq.Headline, q string) {
 				v, _ := singleScalar(ctx, state.ComposeProject, q)
 				ch <- res{k, v}
 			}(k, q)
 		}
 		anyFound := false
-		for range metricsq.SummaryQueries {
+		for range queries {
 			r := <-ch
 			if r.v != nil {
 				out[string(r.k)] = r.v
@@ -324,11 +332,31 @@ func handleMetricsSummary() http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"schema_version": 1,
 			"instance":       name,
-			"metrics":        out,
-			"latency":        latency,
-			"dashboards":     dashboards,
+			// scope is the instance label to filter chart queries by when
+			// non-empty (shared multi-instance stack); "" means the
+			// single-instance per-instance Prometheus, so the frontend
+			// leaves its chart queries unscoped.
+			"scope":      scope,
+			"metrics":    out,
+			"latency":    latency,
+			"dashboards": dashboards,
 		})
 	}
+}
+
+// promScopeFor reports the instance label the metrics queries should be
+// filtered by: the instance name when it's served by the shared
+// multi-instance observability stack (#39), or "" when it falls back to a
+// single-instance per-instance Prometheus (which holds only that
+// instance, so no filter is needed). The frontend mirrors this for its
+// own chart queries via the summary response's `scope` field.
+func promScopeFor(ctx context.Context, name string) string {
+	if localnet.InstanceObservabilityEnabled(name) {
+		if _, _, err := localnet.SharedPrometheusEndpoint(ctx); err == nil {
+			return name
+		}
+	}
+	return ""
 }
 
 // grafanaDashboardUID pins the bundled Canton LocalNet dashboard UID.
@@ -423,6 +451,19 @@ func proxyPrometheus(ctx context.Context, project, path string) ([]byte, error) 
 func discoverPrometheus(ctx context.Context, project string) (string, int, error) {
 	if host, port, err, ok := lookupPromCache(project); ok {
 		return host, port, err
+	}
+	// Shared host-level stack first (#39): when this project's instance
+	// is registered with it and the stack is up, every metrics surface
+	// reads from the one shared Prometheus. Falls through to the
+	// per-instance Prometheus below otherwise (no regression for
+	// instances brought up before the shared stack existed).
+	if st, err := registry.LookupByComposeProject(project); err == nil {
+		if localnet.InstanceObservabilityEnabled(st.Name) {
+			if h, p, e := localnet.SharedPrometheusEndpoint(ctx); e == nil {
+				storePromCache(project, h, p, nil)
+				return h, p, nil
+			}
+		}
 	}
 	infos, err := containers.List(ctx, project)
 	if err != nil {

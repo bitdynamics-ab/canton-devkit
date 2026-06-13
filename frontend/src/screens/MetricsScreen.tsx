@@ -92,6 +92,27 @@ const Q = {
     'sum by (component) (jvm_memory_used_bytes{jvm_memory_type="heap"})',
 };
 
+// scopeQ injects instance="<scope>" into every metric selector of a chart
+// query when the summary reports a scope — i.e. when this instance is
+// served by the shared multi-instance Prometheus (#39), so a chart shows
+// one instance, not the sum across all of them. It targets our known
+// metric-name prefixes, so it never touches function names (sum, rate,
+// histogram_quantile) or `by (...)` label lists, and composes with a
+// metric's existing label without an invalid trailing comma. An empty
+// scope (the single-instance per-instance Prometheus) returns the query
+// unchanged.
+export function scopeQ(query: string, scope: string): string {
+  if (!scope) return query;
+  const inst = `instance="${scope}"`;
+  return query.replace(
+    /\b(daml_[a-z0-9_]+|jvm_[a-z0-9_]+|db_client[a-z0-9_]+)(\{[^}]*\})?/g,
+    (_full: string, metric: string, braces?: string) => {
+      if (!braces || braces === "{}") return `${metric}{${inst}}`;
+      return `${metric}{${inst},${braces.slice(1)}`;
+    },
+  );
+}
+
 const TPS_COLOR = "#7CB5F7";
 const P99_COLOR = "#F5BF55";
 const ACS_COLOR = "#5BD7C5";
@@ -149,9 +170,13 @@ export function MetricsScreen() {
       outer?.abort();
       outer = new AbortController();
       const signal = outer.signal;
+      // Instance label to scope the chart queries by — set when the
+      // summary reports we're reading the shared multi-instance stack.
+      let scope = "";
       try {
         const s = await fetchMetricsSummary(name, signal);
         if (signal.aborted) return;
+        scope = s.scope ?? "";
         setSummary({ kind: "ok", data: s });
         setObservabilityOff(null);
       } catch (e) {
@@ -172,43 +197,43 @@ export function MetricsScreen() {
         });
       }
       await Promise.all([
-        loadSeries(name, Q.throughputSeries, "tx/s", setThroughputSeries, signal),
-        loadSeries(name, Q.p99, "p99", setP99Series, signal),
-        loadSeries(name, Q.acsLookupBuffer, "ACS lookup buffer", setAcsSeries, signal),
-        loadSeries(name, Q.errorsRate, "errors", setErrorsSeries, signal),
+        loadSeries(name, scopeQ(Q.throughputSeries, scope), "tx/s", setThroughputSeries, signal),
+        loadSeries(name, scopeQ(Q.p99, scope), "p99", setP99Series, signal),
+        loadSeries(name, scopeQ(Q.acsLookupBuffer, scope), "ACS lookup buffer", setAcsSeries, signal),
+        loadSeries(name, scopeQ(Q.errorsRate, scope), "errors", setErrorsSeries, signal),
         loadMultiSeries(
           name,
           [
-            { query: Q.latencyMedian, label: "median", color: CHART_PALETTE[1] },
-            { query: Q.latencyP99, label: "p99", color: CHART_PALETTE[3] },
+            { query: scopeQ(Q.latencyMedian, scope), label: "median", color: CHART_PALETTE[1] },
+            { query: scopeQ(Q.latencyP99, scope), label: "p99", color: CHART_PALETTE[3] },
           ],
           setLatencyPhase,
           signal,
         ),
         loadBars(
           name,
-          Q.commandThroughput,
+          scopeQ(Q.commandThroughput, scope),
           (m) => m.grpc_method_name ?? "(unlabelled)",
           setPerTemplate,
           signal,
         ),
         loadBars(
           name,
-          Q.errorsByCode,
+          scopeQ(Q.errorsByCode, scope),
           (m) => m.grpc_code ?? "(unknown)",
           setTopErrors,
           signal,
         ),
         loadMultiSeriesGrouped(
           name,
-          Q.resourceUsage,
+          scopeQ(Q.resourceUsage, scope),
           (m) => m.component ?? "component",
           setCpuSeries,
           signal,
         ),
         loadHeatmap(
           name,
-          'sum(increase(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[1m])) by (le)',
+          scopeQ('sum(increase(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[1m])) by (le)', scope),
           setHeatmap,
           signal,
         ),

@@ -701,6 +701,11 @@ export async function recreateInstance(name: string): Promise<ResumeAcceptedResp
 export interface MetricsSummary {
   schema_version: number;
   instance: string;
+  // scope is the instance label to filter chart queries by when
+  // non-empty (the shared multi-instance Prometheus, #39); "" means the
+  // single-instance per-instance Prometheus, so chart queries stay
+  // unscoped. The Metrics screen mirrors this for its own range queries.
+  scope?: string;
   metrics: {
     ledger_tps_5m?: number;
     mediator_p50_seconds?: number;
