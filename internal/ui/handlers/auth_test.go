@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	apitypes "github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
@@ -35,6 +37,13 @@ func authMux(t *testing.T) *httptest.Server {
 // app-provider credential — exercises the path where the JWT
 // handler picks up the recorded party ID instead of falling back
 // to the role name.
+//
+// The seed also records the participant Ledger/Admin/JSON ports and a
+// real on-ledger party id under the "app-provider" alias, so the
+// app-config tests can assert the shared EnvExport surfaces them (the
+// participant ports are exactly what the old hand-rolled
+// endpointsFromPorts hid; the party id is distinct from the
+// credential's user name).
 func seedWithCredentials(t *testing.T, name, party string) {
 	t.Helper()
 	s := registry.NewState(name, "0.6.4")
@@ -44,11 +53,14 @@ func seedWithCredentials(t *testing.T, name, party string) {
 	s.ProjectDir = t.TempDir()
 	s.DataDir = t.TempDir()
 	s.Ports = map[string]int{
-		"app_user_ui":     4441,
-		"app_provider_ui": 4445,
-		"sv_ui":           4480,
-		"swagger_ui":      4487,
-		"postgres":        5432,
+		"app_user_ui":                     4441,
+		"app_provider_ui":                 4445,
+		"sv_ui":                           4480,
+		"swagger_ui":                      4487,
+		"postgres":                        5432,
+		"participant_ledger_app-provider": 3901,
+		"participant_admin_app-provider":  3902,
+		"participant_json_app-provider":   3975,
 	}
 	s.Status = registry.StatusRunning
 	s.Credentials = map[string]registry.Credential{
@@ -57,6 +69,13 @@ func seedWithCredentials(t *testing.T, name, party string) {
 			User:     party,
 			Audience: "https://canton.network.global",
 			JWT:      "", // we re-issue via the endpoint, not seed
+		},
+	}
+	s.Parties = map[string]registry.PartyRef{
+		"app-provider": {
+			Alias:   "app-provider",
+			PartyID: "app-provider::1220deadbeef",
+			Role:    "app-provider",
 		},
 	}
 	if err := registry.Write(s); err != nil {
@@ -187,16 +206,53 @@ func TestAppConfig_EnvFormatIsDefault(t *testing.T) {
 	}
 	body, _ := io.ReadAll(resp.Body)
 	for _, want := range []string{"# demo · splice 0.6.4",
-		"APP_PROVIDER_UI=http://localhost:",
-		"PARTY_APP_PROVIDER=app-provider::1220a8d2"} {
+		// Shared CANTON_<KEY>_PORT naming, not the old bespoke
+		// APP_PROVIDER_UI=http://... form.
+		"CANTON_APP_PROVIDER_UI_PORT=4445",
+		// Participant API ports a dApp needs — the old export hid
+		// these behind "internal admin gRPC ports stay hidden".
+		"CANTON_PARTICIPANT_LEDGER_APP_PROVIDER_PORT=3901",
+		"CANTON_PARTICIPANT_JSON_APP_PROVIDER_PORT=3975",
+		// Real on-ledger party id (CANTON_<ROLE>_PARTY), distinct
+		// from the credential's user name.
+		"CANTON_APP_PROVIDER_PARTY=app-provider::1220deadbeef",
+		// Scan UI surfaced explicitly with the scan.localhost vhost.
+		"CANTON_SCAN_UI_URL=http://scan.localhost:4480",
+	} {
 		if !strings.Contains(string(body), want) {
 			t.Errorf("env body missing %q\nbody:\n%s", want, body)
 		}
 	}
 }
 
-// TestAppConfig_JSONFormat — JSON tab. Frontend renders this as
-// pretty-printed JSON; the handler emits indented JSON via writeJSON.
+// TestAppConfig_EnvBodyIsSorted pins the deterministic ordering of the
+// env body. Map iteration is randomised in Go; without sorting the
+// body would differ between requests, breaking diffing/caching. We
+// fetch twice and require byte-identical output.
+func TestAppConfig_EnvBodyIsSorted(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedWithCredentials(t, "demo", "app-provider::1220a8d2")
+	srv := authMux(t)
+
+	read := func() string {
+		resp, err := http.Get(srv.URL + "/api/instances/demo/app-config")
+		if err != nil {
+			t.Fatalf("GET: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		b, _ := io.ReadAll(resp.Body)
+		return string(b)
+	}
+	if first, second := read(), read(); first != second {
+		t.Errorf("env body not stable across requests:\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+}
+
+// TestAppConfig_JSONFormat — JSON tab. The handler now emits the
+// shared apitypes.EnvExport (the same shape `dpm localnet env
+// --format=json` produces), so this asserts the EnvExport contract:
+// instance name, participant API ports, and the real party id all
+// present in Vars.
 func TestAppConfig_JSONFormat(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedWithCredentials(t, "demo", "app-provider::1220a8d2")
@@ -207,16 +263,55 @@ func TestAppConfig_JSONFormat(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
 		t.Errorf("Content-Type = %q, want application/json", ct)
 	}
-	var got appConfigPayload
+	var got apitypes.EnvExport
 	_ = json.NewDecoder(resp.Body).Decode(&got)
-	if got.Name != "demo" {
-		t.Errorf("Name = %q, want demo", got.Name)
+	if got.Instance != "demo" {
+		t.Errorf("Instance = %q, want demo", got.Instance)
 	}
-	if got.Endpoints["app_provider_ui"] == "" {
-		t.Errorf("app_provider_ui endpoint missing: %+v", got.Endpoints)
+	if got.SchemaVersion != apitypes.SchemaVersion {
+		t.Errorf("SchemaVersion = %d, want %d", got.SchemaVersion, apitypes.SchemaVersion)
 	}
-	if got.Parties["app-provider"] != "app-provider::1220a8d2" {
-		t.Errorf("party mismatch: %+v", got.Parties)
+	// Participant Ledger API port a dApp needs — the old UI export
+	// omitted it.
+	if got.Vars["CANTON_PARTICIPANT_LEDGER_APP_PROVIDER_PORT"] != "3901" {
+		t.Errorf("participant ledger port missing: %+v", got.Vars)
+	}
+	// Real on-ledger party id, NOT the credential user name.
+	if got.Vars["CANTON_APP_PROVIDER_PARTY"] != "app-provider::1220deadbeef" {
+		t.Errorf("party id mismatch: %q", got.Vars["CANTON_APP_PROVIDER_PARTY"])
+	}
+	// JWT redacted by default (no ?include_jwt).
+	if got.Vars["CANTON_APP_PROVIDER_JWT"] != jwtRedactionPlaceholder {
+		t.Errorf("JWT not redacted by default: %q", got.Vars["CANTON_APP_PROVIDER_JWT"])
+	}
+}
+
+// TestAppConfig_ParityWithCLIEnv pins the load-bearing invariant: the
+// Web UI app-config JSON and the CLI's collectEnv produce the SAME
+// apitypes.EnvExport for an instance. This is the test that would
+// have caught the original divergence (two independent
+// re-implementations with different shapes). We compare against the
+// shared builder both surfaces call.
+func TestAppConfig_ParityWithCLIEnv(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedWithCredentials(t, "demo", "app-provider::1220a8d2")
+	srv := authMux(t)
+
+	resp, _ := http.Get(srv.URL + "/api/instances/demo/app-config?format=json")
+	defer func() { _ = resp.Body.Close() }()
+	var fromUI apitypes.EnvExport
+	if err := json.NewDecoder(resp.Body).Decode(&fromUI); err != nil {
+		t.Fatalf("decode UI export: %v", err)
+	}
+
+	// Same builder, default-redacted — the CLI's collectEnv is a thin
+	// wrapper over this too.
+	fromShared, err := localnet.BuildEnvExport("demo", false)
+	if err != nil {
+		t.Fatalf("BuildEnvExport: %v", err)
+	}
+	if !reflect.DeepEqual(fromUI, fromShared) {
+		t.Errorf("UI app-config diverged from shared env builder:\nUI:     %+v\nshared: %+v", fromUI, fromShared)
 	}
 }
 
@@ -234,7 +329,13 @@ func TestAppConfig_YAMLFormat(t *testing.T) {
 		t.Errorf("Content-Type = %q, want application/yaml", ct)
 	}
 	body, _ := io.ReadAll(resp.Body)
-	for _, want := range []string{"name: demo", "splice_version: 0.6.4", "endpoints:", "parties:"} {
+	for _, want := range []string{
+		"instance: demo",
+		"schema_version: 1",
+		"vars:",
+		"  CANTON_APP_PROVIDER_UI_PORT: 4445",
+		"  CANTON_PARTICIPANT_LEDGER_APP_PROVIDER_PORT: 3901",
+	} {
 		if !strings.Contains(string(body), want) {
 			t.Errorf("YAML body missing %q\nbody:\n%s", want, body)
 		}
@@ -431,15 +532,19 @@ func TestErrorBody_AlignedWithFriendlyTaxonomy(t *testing.T) {
 	}
 }
 
-// TestJWTResponse_CarriesSchemaVersion + TestAppConfigPayload_CarriesSchemaVersion
+// TestJWTResponse_CarriesSchemaVersion + TestAppConfigExport_CarriesSchemaVersion
 // are reflective pins — reflective assertions rather than
 // reading-the-source so the schema-pin reflection test catches future
 // top-level types added to this package.
 func TestJWTResponse_CarriesSchemaVersion(t *testing.T) {
 	requireSchemaVersionField(t, reflect.TypeOf(jwtResponse{}), "jwtResponse")
 }
-func TestAppConfigPayload_CarriesSchemaVersion(t *testing.T) {
-	requireSchemaVersionField(t, reflect.TypeOf(appConfigPayload{}), "appConfigPayload")
+
+// The app-config endpoint emits the shared apitypes.EnvExport rather
+// than a handlers-local payload, so the version field lives on that
+// shared type now.
+func TestAppConfigExport_CarriesSchemaVersion(t *testing.T) {
+	requireSchemaVersionField(t, reflect.TypeOf(apitypes.EnvExport{}), "apitypes.EnvExport")
 }
 
 // requireSchemaVersionField is the shared assertion helper.

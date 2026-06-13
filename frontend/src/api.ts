@@ -276,14 +276,16 @@ export async function fetchAppConfigText(
   return resp.text();
 }
 
-// AppConfigPayload mirrors internal/ui/handlers/auth.go
-// appConfigPayload (the JSON shape).
+// AppConfigPayload mirrors the shared apitypes.EnvExport
+// (internal/api/types/env.go) the app-config handler now emits — the
+// SAME shape `dpm localnet env --format=json` produces. `vars` carries
+// the flat CANTON_<...> key/value set: endpoint ports (incl. the
+// participant Ledger/Admin/JSON APIs and scan UI URL), per-role
+// credentials, and the real on-ledger party ids.
 export interface AppConfigPayload {
   schema_version: number;
-  name: string;
-  splice_version: string;
-  endpoints: Record<string, string>;
-  parties: Record<string, string>;
+  instance: string;
+  vars: Record<string, string>;
 }
 
 export const fetchAppConfigJSON = (name: string) =>

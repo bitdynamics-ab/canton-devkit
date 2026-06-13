@@ -65,12 +65,12 @@ func TestHandlersSchemaPin_AllResponsesCarrySchemaVersion(t *testing.T) {
 // (matches TestVersion_MatchesTypesSchema): the
 // handlers.SchemaVersion constant must equal the values emitted
 // by each Response/Payload type. Reflective; covers jwtResponse
-// + appConfigPayload today, and any future Response/Payload
-// added in the package.
+// today (the app-config endpoint now emits the shared
+// apitypes.EnvExport, pinned by api/types' own schema test), and
+// any future Response/Payload added in the package.
 func TestHandlersSchemaPin_ConstMatchesTypes(t *testing.T) {
 	for _, v := range []any{
 		jwtResponse{SchemaVersion: SchemaVersion},
-		appConfigPayload{SchemaVersion: SchemaVersion},
 	} {
 		rv := reflect.ValueOf(v)
 		f := rv.FieldByName("SchemaVersion")
