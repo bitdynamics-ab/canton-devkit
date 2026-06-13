@@ -915,43 +915,7 @@ func handleRecreateInstance(hub *stream.Hub) http.HandlerFunc {
 			defer cancelJob()
 			defer hub.ClearBuffer(topic)
 			defer jobs.Unregister(name)
-
-			prog := progress.New(hub, name)
-
-			// Phase 1: down. RunDown takes the per-instance lock
-			// itself; we don't pre-acquire one here or we'd
-			// deadlock. Capture stderr so a down failure can be
-			// logged (the user will see the failure event via SSE
-			// progress; this is for the operator-side log only).
-			var downOut, downErr bytes.Buffer
-			downExit := localnet.RunDown(jobCtx, &downOut, &downErr,
-				&localnet.DownOptions{Name: name})
-			if downExit != localnet.ExitSuccess {
-				log.Printf("restart instance %q: down phase failed exit=%d err=%s",
-					name, downExit, downErr.String())
-				// Surface as a synthetic warning on the progress
-				// stream so the UI sees something even though
-				// RunDown writes its own stderr to buffers, not
-				// the hub.
-				prog.Warn("down phase failed during restart: " +
-					firstNonWarningLine(downErr.String()))
-				// Continue to up anyway — RunDown is idempotent and
-				// a partial-down state still lets RunUp try to
-				// reconcile.
-			}
-
-			// Phase 2: up. Reuses the recorded version + profiles
-			// so the restart doesn't silently upgrade or shed
-			// overlays. RunUp emits the full step-event sequence
-			// to `prog` the create flow uses.
-			upOpts := &localnet.UpOptions{
-				Name:     name,
-				Version:  recordedVersion,
-				Profiles: recordedProfiles,
-			}
-			exitCode := localnet.RunUp(jobCtx, prog, upOpts)
-			log.Printf("restart instance %q: down_exit=%d up_exit=%d",
-				name, downExit, exitCode)
+			recreateWork(jobCtx, hub, name, recordedVersion, recordedProfiles)
 		}()
 
 		writeJSON(w, http.StatusAccepted, upAcceptedResponse{
@@ -960,6 +924,53 @@ func handleRecreateInstance(hub *stream.Hub) http.HandlerFunc {
 			EventsURL:     "/api/instances/" + name + "/events",
 		})
 	}
+}
+
+// recreateWork runs the down→up cycle for a restart. It's a package
+// var, not an inline closure, so tests can substitute a deterministic
+// fake and assert the jobs.Register idempotency contract
+// (TestRestart_AlreadyInFlight409) without the detached goroutine
+// shelling out to a real `docker compose`. That shell-out outlived the
+// test, raced t.TempDir cleanup, and made the test flaky under the full
+// `./...` run on a docker host. Production wiring is realRecreateWork.
+var recreateWork = realRecreateWork
+
+// realRecreateWork is the production restart worker: RunDown then RunUp,
+// reusing the recorded version + profiles so a restart neither upgrades
+// nor sheds overlays.
+func realRecreateWork(ctx context.Context, hub *stream.Hub, name, version string, profiles []string) {
+	prog := progress.New(hub, name)
+
+	// Phase 1: down. RunDown takes the per-instance lock itself; we
+	// don't pre-acquire one here or we'd deadlock. Capture stderr so a
+	// down failure can be logged (the user sees the failure event via
+	// SSE progress; this is for the operator-side log only).
+	var downOut, downErr bytes.Buffer
+	downExit := localnet.RunDown(ctx, &downOut, &downErr,
+		&localnet.DownOptions{Name: name})
+	if downExit != localnet.ExitSuccess {
+		log.Printf("restart instance %q: down phase failed exit=%d err=%s",
+			name, downExit, downErr.String())
+		// Surface as a synthetic warning on the progress stream so the
+		// UI sees something even though RunDown writes its own stderr to
+		// buffers, not the hub.
+		prog.Warn("down phase failed during restart: " +
+			firstNonWarningLine(downErr.String()))
+		// Continue to up anyway — RunDown is idempotent and a
+		// partial-down state still lets RunUp try to reconcile.
+	}
+
+	// Phase 2: up. Reuses the recorded version + profiles so the restart
+	// doesn't silently upgrade or shed overlays. RunUp emits the full
+	// step-event sequence to prog that the create flow uses.
+	upOpts := &localnet.UpOptions{
+		Name:     name,
+		Version:  version,
+		Profiles: profiles,
+	}
+	exitCode := localnet.RunUp(ctx, prog, upOpts)
+	log.Printf("restart instance %q: down_exit=%d up_exit=%d",
+		name, downExit, exitCode)
 }
 
 // handleDownInstance: POST /api/instances/{name}/down.
