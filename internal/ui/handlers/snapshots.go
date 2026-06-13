@@ -116,7 +116,8 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid instance name", err)
 		return
 	}
-	if _, err := registry.Read(name); err != nil {
+	state, err := registry.Read(name)
+	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
 			writeErrorWithCode(w, http.StatusNotFound,
 				"INSTANCE_NOT_FOUND",
@@ -183,6 +184,15 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	// no-store: snapshots include credentials (JWTs in state.json).
 	// We don't want browsers or proxies caching them.
 	w.Header().Set("Cache-Control", "no-store")
+	// CLI↔UI parity: RunSnapshot prints a consistency caveat to stderr
+	// when the instance is running, which the CLI user sees but this
+	// HTTP path discards (out/errw go to io.Discard). Echo the SAME
+	// warning (shared wording via snapshot.RunningSnapshotWarning) in a
+	// response header so the Web UI can surface it too, rather than
+	// silently capturing a live, possibly-inconsistent instance.
+	if state.Status == registry.StatusRunning {
+		w.Header().Set("X-Snapshot-Warning", snapshot.RunningSnapshotWarning(name))
+	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.Copy(w, f)
 }

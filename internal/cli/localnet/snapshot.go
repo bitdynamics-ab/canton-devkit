@@ -29,14 +29,17 @@ compose project, plus the instance's registry.State, into a single
 unpacking anything.
 
 The instance does NOT need to be stopped. Volumes are read from
-ephemeral alpine containers — services keep using their own copy.
+ephemeral alpine containers that bind-mount the SAME volumes the
+services are using — there is no copy-on-write isolation, so a
+running instance is captured live.
 
-Consistency caveat: a snapshot of a RUNNING instance is
+Consistency caveat: a snapshot of a RUNNING instance is at best
 crash-consistent, not application-consistent — in-flight ledger
 transactions or unflushed database writes may be only partially
 captured, so a restored copy can need crash recovery. For a
-guaranteed-consistent capture, 'localnet pause --name X' (or 'down')
-first; the command warns when run against a running instance.`,
+guaranteed-consistent capture, freeze the instance first with
+'localnet pause --name X' (which holds state + ports while stopping
+writes); the command warns when run against a running instance.`,
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,

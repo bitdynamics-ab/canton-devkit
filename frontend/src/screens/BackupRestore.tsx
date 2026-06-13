@@ -67,6 +67,16 @@ export function BackupRestore({ instanceName }: Props) {
   }, [instanceName]);
 
   async function onDownload() {
+    // TODO(#issue): UI parity — when the instance is RUNNING the
+    // backend now emits an X-Snapshot-Warning header (shared wording
+    // with the CLI's stderr caveat, snapshot.RunningSnapshotWarning)
+    // because a live snapshot is only crash-consistent. downloadSnapshot
+    // uses a hidden-iframe form submit (so the browser owns the 100s-of-MB
+    // download), which can't read response headers — so this card can't
+    // surface the header directly. To reach full parity, thread the
+    // instance status into <BackupRestore> (Props currently only carries
+    // instanceName) and show the same caveat before/around the download
+    // button when status === "running".
     setDownloading(true);
     try {
       await downloadSnapshot(instanceName);

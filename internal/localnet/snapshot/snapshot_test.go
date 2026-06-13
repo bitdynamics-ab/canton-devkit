@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
@@ -25,9 +26,23 @@ type fakeArchiver struct {
 	mu      sync.Mutex
 	volumes map[string][]byte
 	listErr error
+	// labels records the (project, suffix) RestoreVolume was asked to
+	// stamp, keyed by volume name — so tests can assert the Compose
+	// labels are re-applied on restore (finding #10).
+	labels map[string]restoreLabels
+	// volStorageBytes / volStorageErr drive
+	// VolumeStorageAvailableBytes; zero/nil means "report a large,
+	// always-passing value" so disk-preflight tests opt in explicitly.
+	volStorageBytes uint64
+	volStorageErr   error
 }
 
-func (f *fakeArchiver) ListVolumes(_ context.Context, _ string) ([]string, error) {
+type restoreLabels struct {
+	project string
+	suffix  string
+}
+
+func (f *fakeArchiver) ListVolumes(_ context.Context, composeProject string) ([]string, error) {
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
@@ -35,6 +50,17 @@ func (f *fakeArchiver) ListVolumes(_ context.Context, _ string) ([]string, error
 	defer f.mu.Unlock()
 	out := make([]string, 0, len(f.volumes))
 	for k := range f.volumes {
+		// Mirror production's label filter: ListVolumes selects on
+		// com.docker.compose.project. If a volume has recorded labels
+		// (i.e. it was created via RestoreVolume), honor them so the
+		// finding-#10 round-trip (snapshot→restore→snapshot) is
+		// faithful — a restored volume missing the project label must
+		// NOT appear here. Volumes with no recorded labels (seeded
+		// directly into the map to model an already-up instance) are
+		// assumed to carry the queried project.
+		if lbl, ok := f.labels[k]; ok && lbl.project != composeProject {
+			continue
+		}
 		out = append(out, k)
 	}
 	sort.Strings(out)
@@ -52,7 +78,7 @@ func (f *fakeArchiver) ArchiveVolume(_ context.Context, volume string, w io.Writ
 	return err
 }
 
-func (f *fakeArchiver) RestoreVolume(_ context.Context, volume string, r io.Reader) error {
+func (f *fakeArchiver) RestoreVolume(_ context.Context, composeProject, volume string, r io.Reader) error {
 	body, err := io.ReadAll(r)
 	if err != nil {
 		return err
@@ -62,8 +88,27 @@ func (f *fakeArchiver) RestoreVolume(_ context.Context, volume string, r io.Read
 	if f.volumes == nil {
 		f.volumes = map[string][]byte{}
 	}
+	// Restore is a REPLACE: the production archiver wipes the volume
+	// before untar. Model that here by overwriting, not merging — a
+	// straight assignment already replaces any prior body.
 	f.volumes[volume] = body
+	if f.labels == nil {
+		f.labels = map[string]restoreLabels{}
+	}
+	f.labels[volume] = restoreLabels{project: composeProject, suffix: volumeSuffix(composeProject, volume)}
 	return nil
+}
+
+func (f *fakeArchiver) VolumeStorageAvailableBytes(_ context.Context) (uint64, error) {
+	if f.volStorageErr != nil {
+		return 0, f.volStorageErr
+	}
+	if f.volStorageBytes == 0 {
+		// Default: report a large value so disk preflight always
+		// passes unless a test deliberately constrains it.
+		return 1 << 50, nil // 1 PiB
+	}
+	return f.volStorageBytes, nil
 }
 
 func installFakeArchiver(t *testing.T, fa *fakeArchiver) {
@@ -770,4 +815,282 @@ func TestSnapshot_NoWarnWhenStopped(t *testing.T) {
 	if strings.Contains(errBuf.String(), "running instance") {
 		t.Errorf("did not expect a running-instance warning for a stopped instance: %q", errBuf.String())
 	}
+}
+
+// TestRestore_ReappliesComposeLabels is the regression for finding #10:
+// restored volumes must carry the com.docker.compose.project /
+// com.docker.compose.volume labels so ListVolumes (which filters on the
+// project label) can find them again. Without the labels every later
+// snapshot of the restored instance captures zero volumes.
+func TestRestore_ReappliesComposeLabels(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedSnapshotInstance(t, "demo")
+	fa := &fakeArchiver{volumes: map[string][]byte{
+		"canton-demo_postgres":   []byte("PG"),
+		"canton-demo_canton-vol": []byte("CANTON"),
+	}}
+	installFakeArchiver(t, fa)
+	dest := filepath.Join(t.TempDir(), "snap.tgz")
+	if code := RunSnapshot(context.Background(), io.Discard, io.Discard, "demo", dest); code != localnet.ExitSuccess {
+		t.Fatalf("snapshot failed: %d", code)
+	}
+
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	fa2 := &fakeArchiver{volumes: map[string][]byte{}}
+	installFakeArchiver(t, fa2)
+	var out, errBuf bytes.Buffer
+	if code := RunRestore(context.Background(), &out, &errBuf, "demo", dest, false); code != localnet.ExitSuccess {
+		t.Fatalf("restore code = %d; stderr=%q", code, errBuf.String())
+	}
+
+	// Every restored volume must have been stamped with the target
+	// project label, and the per-volume suffix label.
+	wantSuffix := map[string]string{
+		"canton-demo_postgres":   "postgres",
+		"canton-demo_canton-vol": "canton-vol",
+	}
+	for vol, suffix := range wantSuffix {
+		lbl, ok := fa2.labels[vol]
+		if !ok {
+			t.Errorf("restored volume %q recorded no labels", vol)
+			continue
+		}
+		if lbl.project != "canton-demo" {
+			t.Errorf("volume %q project label = %q, want canton-demo", vol, lbl.project)
+		}
+		if lbl.suffix != suffix {
+			t.Errorf("volume %q suffix label = %q, want %q", vol, lbl.suffix, suffix)
+		}
+	}
+}
+
+// TestSnapshot_RestoreSnapshot_SecondCaptureKeepsVolumes is the
+// round-trip regression for finding #10. The promised workflow is
+// snapshot -> restore -> work -> snapshot again. Before the fix the
+// SECOND snapshot found zero volumes (restored volumes lacked the
+// project label ListVolumes filters on) and silently wrote an empty
+// archive. Here the fake's ListVolumes honors the recorded labels, so
+// a regression (dropping the relabel) would make this fail.
+func TestSnapshot_RestoreSnapshot_SecondCaptureKeepsVolumes(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedSnapshotInstance(t, "demo")
+	fa := &fakeArchiver{volumes: map[string][]byte{
+		"canton-demo_postgres": []byte("PG-V1"),
+	}}
+	installFakeArchiver(t, fa)
+	first := filepath.Join(t.TempDir(), "first.tgz")
+	if code := RunSnapshot(context.Background(), io.Discard, io.Discard, "demo", first); code != localnet.ExitSuccess {
+		t.Fatalf("first snapshot failed: %d", code)
+	}
+
+	// Restore into a fresh registry + fresh archiver (a "new machine").
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	fa2 := &fakeArchiver{volumes: map[string][]byte{}}
+	installFakeArchiver(t, fa2)
+	var out, errBuf bytes.Buffer
+	if code := RunRestore(context.Background(), &out, &errBuf, "demo", first, false); code != localnet.ExitSuccess {
+		t.Fatalf("restore code = %d; stderr=%q", code, errBuf.String())
+	}
+
+	// Now snapshot the restored instance AGAIN. It must still see the
+	// volume (the relabel made it discoverable) and succeed.
+	out.Reset()
+	errBuf.Reset()
+	second := filepath.Join(t.TempDir(), "second.tgz")
+	if code := RunSnapshot(context.Background(), &out, &errBuf, "demo", second); code != localnet.ExitSuccess {
+		t.Fatalf("second snapshot code = %d; stderr=%q", code, errBuf.String())
+	}
+	// The second archive must contain the volume, not be empty.
+	meta := readHeaderOf(t, second)
+	if len(meta.Volumes) != 1 || meta.Volumes[0].Name != "canton-demo_postgres" {
+		t.Fatalf("second snapshot captured %d volume(s) %+v — expected the restored postgres volume; "+
+			"restored volume was not discoverable (lost its compose project label)",
+			len(meta.Volumes), meta.Volumes)
+	}
+}
+
+// TestSnapshot_RefusesEmptyVolumeList is the second half of finding
+// #10: an empty volume list must be a loud refusal, not a silent
+// 0-volume success archive.
+func TestSnapshot_RefusesEmptyVolumeList(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedSnapshotInstance(t, "demo")
+	installFakeArchiver(t, &fakeArchiver{volumes: map[string][]byte{}})
+
+	dest := filepath.Join(t.TempDir(), "snap.tgz")
+	var out, errBuf bytes.Buffer
+	code := RunSnapshot(context.Background(), &out, &errBuf, "demo", dest)
+	if code != localnet.ExitUserError {
+		t.Fatalf("empty-volume snapshot code = %d, want ExitUserError; stderr=%q", code, errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "No docker volumes") &&
+		!strings.Contains(errBuf.String(), "empty snapshot") {
+		t.Errorf("stderr should explain the empty-volume refusal, got %q", errBuf.String())
+	}
+	// And it must NOT have written an archive.
+	if _, err := os.Stat(dest); err == nil {
+		t.Errorf("empty-volume snapshot wrote an archive at %s — should refuse before writing", dest)
+	}
+}
+
+// TestRestore_RefusesWhenDockerStorageTooSmall is the regression for
+// finding #13: the disk preflight must measure DOCKER's volume storage
+// (VolumeStorageAvailableBytes), not the host filesystem holding the
+// archive. We give the archiver a tiny Docker-storage figure; the
+// restore must refuse even though the host temp dir (where the archive
+// lives) has plenty of room.
+func TestRestore_RefusesWhenDockerStorageTooSmall(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedSnapshotInstance(t, "demo")
+	// A volume big enough that 20% margin matters, then constrain
+	// Docker storage below it on restore.
+	body := bytes.Repeat([]byte("A"), 4096)
+	fa := &fakeArchiver{volumes: map[string][]byte{"canton-demo_postgres": body}}
+	installFakeArchiver(t, fa)
+	dest := filepath.Join(t.TempDir(), "snap.tgz")
+	if code := RunSnapshot(context.Background(), io.Discard, io.Discard, "demo", dest); code != localnet.ExitSuccess {
+		t.Fatalf("snapshot failed: %d", code)
+	}
+
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	// Report only 1 KiB of Docker volume storage — far below the
+	// ~4 KiB volume. The host fs holding `dest` is huge, so a host-fs
+	// gate would pass; only the Docker-storage gate refuses.
+	installFakeArchiver(t, &fakeArchiver{volumes: map[string][]byte{}, volStorageBytes: 1024})
+	var out, errBuf bytes.Buffer
+	code := RunRestore(context.Background(), &out, &errBuf, "demo", dest, false)
+	if code != localnet.ExitUserError {
+		t.Fatalf("restore code = %d, want ExitUserError (Docker storage too small); stderr=%q", code, errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "Docker's volume storage") {
+		t.Errorf("refusal should cite Docker's volume storage, got %q", errBuf.String())
+	}
+}
+
+// TestRestore_DockerStorageProbeFailureFallsBackToHost asserts the
+// graceful degradation path for finding #13: when the Docker probe
+// errors (old docker, missing image), the preflight falls back to the
+// host filesystem rather than blocking restore. With a huge host fs the
+// restore must still succeed.
+func TestRestore_DockerStorageProbeFailureFallsBackToHost(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedSnapshotInstance(t, "demo")
+	fa := &fakeArchiver{volumes: map[string][]byte{"canton-demo_postgres": []byte("x")}}
+	installFakeArchiver(t, fa)
+	dest := filepath.Join(t.TempDir(), "snap.tgz")
+	if code := RunSnapshot(context.Background(), io.Discard, io.Discard, "demo", dest); code != localnet.ExitSuccess {
+		t.Fatalf("snapshot failed: %d", code)
+	}
+
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	installFakeArchiver(t, &fakeArchiver{
+		volumes:       map[string][]byte{},
+		volStorageErr: errors.New("docker probe boom"),
+	})
+	var out, errBuf bytes.Buffer
+	if code := RunRestore(context.Background(), &out, &errBuf, "demo", dest, false); code != localnet.ExitSuccess {
+		t.Fatalf("restore should fall back to host statfs and succeed, code = %d; stderr=%q", code, errBuf.String())
+	}
+}
+
+// TestRestore_ReplacesStaleVolumeContents is the regression for finding
+// #11. Restore must be a true REPLACE, not a tar-merge onto stale
+// contents. The fake's RestoreVolume overwrites the body (mirroring the
+// production `find -delete && tar xf`), so a leftover key from a prior
+// restore must NOT survive into the new body.
+func TestRestore_ReplacesStaleVolumeContents(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedSnapshotInstance(t, "demo")
+	fa := &fakeArchiver{volumes: map[string][]byte{"canton-demo_postgres": []byte("SNAPSHOT-CONTENT")}}
+	installFakeArchiver(t, fa)
+	dest := filepath.Join(t.TempDir(), "snap.tgz")
+	if code := RunSnapshot(context.Background(), io.Discard, io.Discard, "demo", dest); code != localnet.ExitSuccess {
+		t.Fatalf("snapshot failed: %d", code)
+	}
+
+	// Restore over an archiver whose target volume ALREADY holds stale
+	// bytes (models a stopped-but-extant instance / failed bring-up).
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	stale := &fakeArchiver{volumes: map[string][]byte{
+		"canton-demo_postgres": []byte("STALE-PRE-EXISTING-WAL"),
+	}}
+	installFakeArchiver(t, stale)
+	var out, errBuf bytes.Buffer
+	if code := RunRestore(context.Background(), &out, &errBuf, "demo", dest, false); code != localnet.ExitSuccess {
+		t.Fatalf("restore code = %d; stderr=%q", code, errBuf.String())
+	}
+	got := stale.volumes["canton-demo_postgres"]
+	if string(got) != "SNAPSHOT-CONTENT" {
+		t.Errorf("restored volume body = %q, want exactly the snapshot content (stale bytes must be wiped, not merged)", got)
+	}
+}
+
+// TestVolumeSuffix unit-tests the Compose-volume-label derivation used
+// when re-stamping restored volumes (finding #10).
+func TestVolumeSuffix(t *testing.T) {
+	cases := []struct{ project, volume, want string }{
+		{"canton-demo", "canton-demo_postgres", "postgres"},
+		{"canton-demo", "canton-demo_domain-upgrade-dump", "domain-upgrade-dump"},
+		{"canton-demo", "foreign_volume", ""},        // no project prefix
+		{"canton-demo", "canton-demo", ""},           // prefix without "_<suffix>"
+		{"canton-demo2", "canton-demo_postgres", ""}, // adjacent project, exact prefix only
+	}
+	for _, c := range cases {
+		if got := volumeSuffix(c.project, c.volume); got != c.want {
+			t.Errorf("volumeSuffix(%q, %q) = %q, want %q", c.project, c.volume, got, c.want)
+		}
+	}
+}
+
+// TestRunningSnapshotWarning pins the shared running-instance caveat
+// wording (finding #12). Both surfaces consume this: the CLI prints it
+// to stderr, the Web UI handler echoes it in X-Snapshot-Warning. The
+// instance name must appear so the `pause` hint is copy-pasteable.
+func TestRunningSnapshotWarning(t *testing.T) {
+	got := RunningSnapshotWarning("pebble")
+	if !strings.Contains(got, "crash-consistent") {
+		t.Errorf("warning missing crash-consistency note: %q", got)
+	}
+	if !strings.Contains(got, "localnet pause --name pebble") {
+		t.Errorf("warning should embed a copy-pasteable pause hint, got %q", got)
+	}
+}
+
+// TestParseDfAvailableKB covers the df parser feeding finding #13's
+// Docker-storage probe.
+func TestParseDfAvailableKB(t *testing.T) {
+	const out = "Filesystem           1024-blocks      Used Available Capacity Mounted on\n" +
+		"overlay              61202244   12345678  45000000      22% /probe\n"
+	got, err := parseDfAvailableKB(out)
+	if err != nil {
+		t.Fatalf("parseDfAvailableKB: %v", err)
+	}
+	if want := uint64(45000000) * 1024; got != want {
+		t.Errorf("parseDfAvailableKB = %d, want %d", got, want)
+	}
+
+	if _, err := parseDfAvailableKB("garbage with no numbers"); err == nil {
+		t.Error("parseDfAvailableKB should error on unparseable output")
+	}
+}
+
+// readHeaderOf opens a written snapshot archive and returns its
+// snapshot.json header — used to assert volume counts post-capture.
+func readHeaderOf(t *testing.T, archivePath string) *types.Snapshot {
+	t.Helper()
+	f, err := os.Open(archivePath)
+	if err != nil {
+		t.Fatalf("open %s: %v", archivePath, err)
+	}
+	defer func() { _ = f.Close() }()
+	gzr, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatalf("gzip %s: %v", archivePath, err)
+	}
+	defer func() { _ = gzr.Close() }()
+	meta, err := readSnapshotHeader(tar.NewReader(gzr))
+	if err != nil {
+		t.Fatalf("read header: %v", err)
+	}
+	return meta
 }
