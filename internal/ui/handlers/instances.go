@@ -44,6 +44,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui/httpsec"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/progress"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 )
@@ -371,6 +372,7 @@ type errorBody struct {
 // here belong in the docs at devkit.dev/e/<CODE>.
 const (
 	ErrCodeInvalidRequest  = "INVALID_REQUEST"
+	ErrCodeForbidden       = "FORBIDDEN"
 	ErrCodeNotFound        = "NOT_FOUND"
 	ErrCodeInternal        = "INTERNAL"
 	ErrCodeRegistry        = "REGISTRY_READ_FAILED"
@@ -1691,6 +1693,18 @@ func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
 // goroutine's done event the client closes the EventSource;
 // idle connections beyond that survive on the heartbeat until
 // the user navigates away.
+//
+// # Origin gate (parity with the global /events handler)
+//
+// EventSource issues a GET, so this stream is exempt from the
+// router's state-changing CSRF middleware — but a tab on another
+// origin can still open EventSource("http://127.0.0.1:7777/api/
+// instances/x/events") and READ the bring-up progress (instance
+// name, Splice version, step status, RunUp error text). The global
+// /events handler (internal/ui/sse.go) hardens against exactly this;
+// we mirror the guard here so the two SSE surfaces are consistent.
+// Origin is absent on direct curl, so we only enforce when it is
+// present and only fail on mismatch.
 func handleInstanceEvents(hub *stream.Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
@@ -1699,6 +1713,19 @@ func handleInstanceEvents(hub *stream.Hub) http.HandlerFunc {
 				ErrCodeInvalidRequest,
 				"invalid instance name: "+err.Error())
 			return
+		}
+
+		// Mirror sse.go's Origin/Host check. Host-level rebinding is
+		// blocked by the router's withHostCheck; this catches the
+		// cross-origin EventSource read where Host is loopback but
+		// Origin is the attacker's site.
+		if origin := r.Header.Get("Origin"); origin != "" {
+			if err := httpsec.CheckOriginAgainstHost(
+				origin, r.Header.Get("Referer"), r.Host); err != nil {
+				writeErrorWithCode(w, http.StatusForbidden,
+					ErrCodeForbidden, "forbidden: "+err.Error())
+				return
+			}
 		}
 
 		flusher, ok := w.(http.Flusher)
