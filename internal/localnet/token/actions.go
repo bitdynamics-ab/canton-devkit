@@ -239,6 +239,38 @@ func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error
 	if opts.Role == "" {
 		opts.Role = "app-user"
 	}
+
+	// On-ledger (issuer-administered, splice-test-token-v2) instruments
+	// transfer by exercising the issuer's TokenRules contract — which IS
+	// the V2 TransferFactory (admin = issuer) — directly on the ledger.
+	// The off-ledger path below targets the LocalNet scan registry's
+	// Amulet factory (admin = DSO), which rejects an issuer-administered
+	// instrument with an admin-mismatch assertion. Mirrors the
+	// ref.Status=="on-ledger" branch RunMint / RunBurn already take.
+	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
+	if err != nil {
+		ref = registry.TokenRef{InstrumentID: opts.Instrument}
+	}
+	if ref.Status == "on-ledger" {
+		instructionID, err := runTransferOnLedgerFn(ctx, out, opts, ref)
+		if err != nil {
+			return err
+		}
+		emit(out, "transfer complete", map[string]any{
+			"transfer_instruction_id": instructionID,
+		})
+		return nil
+	}
+	return runTransferOffLedgerFn(ctx, out, opts)
+}
+
+// runTransferOffLedger is the off-ledger (Amulet / external-registry)
+// transfer flow: POST the transfer to the asset's scan registry for a
+// factory + choice context, exercise it on-ledger, then optionally chain
+// the receiver-side accept. Split out of RunTransfer so the on-ledger vs
+// off-ledger dispatch is a single readable branch (and so tests can pin
+// it via the runTransferOffLedgerFn seam).
+func runTransferOffLedger(ctx context.Context, out io.Writer, opts TransferOptions) error {
 	instructionID, err := runTransferLive(ctx, out, opts)
 	if err != nil {
 		return err
@@ -263,7 +295,7 @@ func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error
 			Insecure:              opts.Insecure,
 			RegistryURL:           opts.RegistryURL,
 		}
-		if err := runAcceptLive(ctx, out, acc); err != nil {
+		if err := RunAccept(ctx, out, acc); err != nil {
 			return fmt.Errorf("auto-accept transfer %s: %w", instructionID, err)
 		}
 		emit(out, "transfer accepted", map[string]any{
@@ -278,6 +310,12 @@ func RunAccept(ctx context.Context, out io.Writer, opts AcceptOptions) error {
 	if err := requireFields("transfer accept", opts.Instance, opts.TransferInstructionID); err != nil {
 		return err
 	}
+	// Resolve a --party alias to its full party id (as RunTransfer does
+	// for --from/--to). Both the on-ledger detection (which puts the
+	// receiver in an ACS party filter) and the off-ledger path need a
+	// real party id — an unresolved alias is not a valid filter key and
+	// would poison the lookup.
+	opts.Party = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Party)
 	if opts.Endpoint == "" {
 		emit(out, "transfer accept", map[string]any{
 			"transfer_instruction_id": opts.TransferInstructionID,
@@ -287,7 +325,14 @@ func RunAccept(ctx context.Context, out io.Writer, opts AcceptOptions) error {
 	if opts.Role == "" {
 		opts.Role = "app-user"
 	}
-	return runAcceptLive(ctx, out, opts)
+	// An issuer-administered test-token offer is accepted on-ledger
+	// (its TokenRules is the registry); only Amulet / external-registry
+	// instructions go through the off-ledger choice-context endpoint.
+	// runAcceptOnLedgerIfTestToken reports handled=false for the latter.
+	if handled, err := runAcceptOnLedgerFn(ctx, out, opts); handled || err != nil {
+		return err
+	}
+	return runAcceptOffLedgerFn(ctx, out, opts)
 }
 
 // RunBurn burns supply of an on-ledger test-token instrument by
