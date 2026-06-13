@@ -224,10 +224,37 @@ func reconcileSharedTargets() {
 			continue
 		}
 		name := strings.TrimSuffix(ent.Name(), ".json")
-		// Keep running/creating instances; drop absent or stopped ones.
-		if st, known := status[name]; !known || st == registry.StatusStopped {
+		st, known := status[name]
+		// Reap a target whose instance is gone from the index, or is in a
+		// state with no live :10013 to scrape. A failed or interrupted
+		// `down` persists StatusFailed/StatusPartial and returns BEFORE the
+		// deregister call (down.go), so without reaping these the dead
+		// host.docker.internal:<port> would be scraped forever and the
+		// refcount would stay pinned so the idle teardown never fires.
+		// Keep running/creating (live or imminently live) and paused (the
+		// containers exist and resume; the failing scrape while frozen is
+		// cosmetic) — and keep any unknown future status, since wrongly
+		// reaping a LIVE instance's target loses its metrics until the next
+		// up re-registers, the worse failure direction.
+		if !known || sharedTargetDeadStatus(st) {
 			_ = os.Remove(filepath.Join(sharedTargetsDir(), ent.Name()))
 		}
+	}
+}
+
+// sharedTargetDeadStatus reports whether an instance status means its
+// scrape target should be reaped (no live metrics endpoint): stopped or
+// mid-stop, or the failed/partial states a failed/interrupted teardown
+// leaves behind. Running/creating/paused (and any unrecognised status)
+// are kept — see reconcileSharedTargets for why the keep-on-unknown
+// default is the safe one.
+func sharedTargetDeadStatus(st registry.Status) bool {
+	switch st {
+	case registry.StatusStopped, registry.StatusStopping,
+		registry.StatusFailed, registry.StatusPartial:
+		return true
+	default:
+		return false
 	}
 }
 

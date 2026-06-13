@@ -24,53 +24,60 @@ func seedMetricsState(name string, cantonPort, splicePort int) *registry.State {
 	return s
 }
 
-// TestReconcileSharedTargets_DropsOrphanAndStopped pins the orphan-target
-// GC: a target file is kept only while its instance is present-and-not-
-// stopped in the registry index. A crash that leaves a target file behind
-// (no index entry) or a stopped instance must not keep scraping a dead
-// endpoint or pin the shared stack alive via an inflated refcount.
-func TestReconcileSharedTargets_DropsOrphanAndStopped(t *testing.T) {
+// TestReconcileSharedTargets_DropsOrphanAndDeadStatuses pins the
+// orphan-target GC: a target is kept only while its instance is present
+// in the registry index AND in a live (or imminently/temporarily live)
+// state — running, creating, paused. It is reaped when the instance is
+// absent (a crash that left the file behind) or in a dead state. The
+// failed/partial cases matter most: a failed or interrupted `down`
+// persists StatusFailed/StatusPartial and returns BEFORE deregistering,
+// so without reaping them the dead target would be scraped forever and
+// pin the refcount so the idle teardown never fires.
+func TestReconcileSharedTargets_DropsOrphanAndDeadStatuses(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 
-	// live: present in the registry index as running -> kept.
-	live := seedMetricsState("live", 30001, 30002)
-	live.Status = registry.StatusRunning
-	if err := registry.Write(live); err != nil {
-		t.Fatalf("write live: %v", err)
-	}
-	if err := RegisterInstanceTargets(live); err != nil {
-		t.Fatalf("register live: %v", err)
-	}
-
-	// stopped: present in the index but stopped -> dropped.
-	stopped := seedMetricsState("stopped", 30003, 30004)
-	stopped.Status = registry.StatusStopped
-	if err := registry.Write(stopped); err != nil {
-		t.Fatalf("write stopped: %v", err)
-	}
-	if err := RegisterInstanceTargets(stopped); err != nil {
-		t.Fatalf("register stopped: %v", err)
+	port := 30000
+	register := func(name string, st registry.Status, inIndex bool) {
+		port += 2
+		s := seedMetricsState(name, port-1, port)
+		if inIndex {
+			s.Status = st
+			if err := registry.Write(s); err != nil {
+				t.Fatalf("write %s: %v", name, err)
+			}
+		}
+		if err := RegisterInstanceTargets(s); err != nil {
+			t.Fatalf("register %s: %v", name, err)
+		}
 	}
 
-	// orphan: target file present but absent from the index (crash) -> dropped.
-	orphan := seedMetricsState("orphan", 30005, 30006)
-	if err := RegisterInstanceTargets(orphan); err != nil {
-		t.Fatalf("register orphan: %v", err)
+	keep := []registry.Status{registry.StatusRunning, registry.StatusCreating, registry.StatusPaused}
+	reap := []registry.Status{registry.StatusStopped, registry.StatusStopping, registry.StatusFailed, registry.StatusPartial}
+	for _, st := range keep {
+		register("keep-"+string(st), st, true)
 	}
+	for _, st := range reap {
+		register("reap-"+string(st), st, true)
+	}
+	register("orphan", "", false) // target file but no index entry
 
 	reconcileSharedTargets()
 
-	if !InstanceObservabilityEnabled("live") {
-		t.Error("live target was dropped; want kept (running in index)")
+	for _, st := range keep {
+		if !InstanceObservabilityEnabled("keep-" + string(st)) {
+			t.Errorf("status %q target was reaped; want kept", st)
+		}
 	}
-	if InstanceObservabilityEnabled("stopped") {
-		t.Error("stopped target was kept; want dropped (stopped in index)")
+	for _, st := range reap {
+		if InstanceObservabilityEnabled("reap-" + string(st)) {
+			t.Errorf("status %q target was kept; want reaped", st)
+		}
 	}
 	if InstanceObservabilityEnabled("orphan") {
-		t.Error("orphan target was kept; want dropped (absent from index)")
+		t.Error("orphan target was kept; want reaped (absent from index)")
 	}
-	if n := sharedTargetCount(); n != 1 {
-		t.Errorf("sharedTargetCount = %d, want 1 (live only)", n)
+	if n := sharedTargetCount(); n != len(keep) {
+		t.Errorf("sharedTargetCount = %d, want %d (kept statuses only)", n, len(keep))
 	}
 }
 
