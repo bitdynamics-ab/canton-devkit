@@ -56,19 +56,19 @@ fi
 cleanup() {
   [ "$KEEP" = 1 ] && { echo "(--keep: leaving instances running)"; return; }
   step "Tearing down"
-  run "$CDK" localnet down --name "$NAME"  || true
-  [ "$TWO_INSTANCE" = 1 ] && { run "$CDK" localnet down --name "$NAME2" || true; }
+  run "$CDK" localnet down "$NAME"  || true
+  [ "$TWO_INSTANCE" = 1 ] && { run "$CDK" localnet down "$NAME2" || true; }
 }
 trap cleanup EXIT
 
 # --- lifecycle tour -------------------------------------------------
 step "Bring up a LocalNet (waits for readiness)"
-UP_ARGS=(localnet up --name "$NAME")
-[ "$WITH_TOKENS" = 1 ] && UP_ARGS=(localnet up --name "$NAME" --version "$VERSION" --profile tokens-v2)
+UP_ARGS=(localnet up "$NAME")
+[ "$WITH_TOKENS" = 1 ] && UP_ARGS=(localnet up "$NAME" --version "$VERSION" --profile tokens-v2)
 run "$CDK" "${UP_ARGS[@]}"
 
 step "Health + endpoints"
-run "$CDK" localnet status --name "$NAME"
+run "$CDK" localnet status "$NAME"
 
 step "Doctor diagnostics"
 run "$CDK" localnet doctor --name "$NAME" || true
@@ -77,10 +77,10 @@ step "All managed instances"
 run "$CDK" localnet list
 
 step "Export app/test config (.env style)"
-run "$CDK" localnet env --name "$NAME" | head -20 || true
+run "$CDK" localnet env "$NAME" | head -20 || true
 
 step "Tail a few log lines"
-run "$CDK" localnet logs --name "$NAME" --tail 15 || true
+run "$CDK" localnet logs "$NAME" --tail 15 || true
 
 # --- optional: a second, isolated instance --------------------------
 if [ "$TWO_INSTANCE" = 1 ]; then
@@ -89,7 +89,7 @@ if [ "$TWO_INSTANCE" = 1 ]; then
   # deterministic and provably non-overlapping (the proposal's explicit
   # non-conflicting ports). --port-base 31000 → each service at 31000+N.
   step "Bring up a SECOND instance — explicit non-conflicting ports (--port-base)"
-  run "$CDK" localnet up --name "$NAME2" --port-base 31000
+  run "$CDK" localnet up "$NAME2" --port-base 31000
   run "$CDK" localnet list
 fi
 
@@ -98,7 +98,7 @@ if [ "$WITH_TOKENS" = 1 ]; then
   # The participant ledger gRPC port lives in the instance registry
   # (state.json). NOTE: Splice publishes it on an ephemeral host port that
   # Docker can reassign across a restart; if this resolves stale, re-run
-  # `localnet restart --name <i>` to re-capture, or pass the live port.
+  # `localnet restart <i>` to re-capture, or pass the live port.
   EP="$(python3 - "$NAME" <<'PY' 2>/dev/null || true
 import json, os, sys
 name = sys.argv[1]

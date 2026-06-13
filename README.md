@@ -32,7 +32,7 @@ A single-binary toolkit for spinning up, inspecting, and tearing down a complete
 <table align="center"><tr><td>
 
 ```sh
-❯ canton-devkit localnet up --name demo
+❯ canton-devkit localnet up demo
   ✓  Splice 0.6.4 cache hit
   ✓  Compose started · 12 containers
   ✓  Health checks · canton · splice · postgres
@@ -196,7 +196,7 @@ make frontend       # → bakes the Web UI into the binary (optional)
 
 ```sh
 dpm install package canton-devkit
-dpm localnet up --name demo
+dpm localnet up demo
 ```
 
 `dpm localnet …` and `canton-devkit localnet …` are the same binary; pick whichever your team uses.
@@ -210,7 +210,7 @@ dpm localnet up --name demo
 canton-devkit localnet doctor
 
 # Bring up a Canton network called "demo"
-canton-devkit localnet up --name demo
+canton-devkit localnet up demo
 
 # Inspect from the browser
 canton-devkit localnet ui
@@ -276,8 +276,8 @@ The CLI is organised under `localnet`:
 
 | Lifecycle | Inspect | Data | Diagnostics |
 |---|---|---|---|
-| `up` — start instance | `status` — health + ports | `snapshot` — tar volumes + state | `doctor` — host preflight |
-| `down` — stop containers | `list` — registered instances | `restore` — recreate from tar | `logs` — tail any container |
+| `up` (or `start`) — start instance | `status` — health + ports | `snapshot` — tar volumes + state | `doctor` — host preflight |
+| `down` (or `stop`) — stop containers | `list` — registered instances | `restore` — recreate from tar | `logs` — tail any container |
 | `restart` — down + up | `env` — shell exports | `refresh` — re-sync from docker | `metrics` — Prometheus scrape |
 | `clean` — wipe everything | `versions` — supported Splice tags | `dar upload`/`dar list` — Daml archives | `container <verb>` — per-container ops |
 | `ui` — launch Web UI | `contracts watch` — live ACS | `tx ls` / `tx replay` — ledger queries |  |
@@ -292,7 +292,7 @@ Defaults are tuned for "just works"; configuration is opt-in.
 
 | Flag / env | Default | Purpose |
 |---|---|---|
-| `--name <name>` | required | Instance label + Docker compose project prefix |
+| `<name>` or `--name <name>` | required | Instance label + Docker compose project prefix |
 | `--version <tag>` | `latest` | Splice version (see [`versions`](docs/versions.md)) |
 | `--profile observability` | off | Add Prometheus + Grafana to the compose stack |
 | `--port <n>` (ui) | `7777` | Web UI port |
@@ -388,7 +388,7 @@ Yes. Each instance has its own Docker compose project, network, port range, and 
 <details>
 <summary><b>Where are the JWTs? Are they secure?</b></summary>
 
-`canton-devkit localnet env --name <name> --include-jwt` prints them. By default they're redacted in any UI/CLI output (opt-in via the flag). The dev-secret warning is reprinted on every signing path. **Never reuse these tokens against MainNet** — they're for local dev only.
+`canton-devkit localnet env <name> --include-jwt` prints them. By default they're redacted in any UI/CLI output (opt-in via the flag). The dev-secret warning is reprinted on every signing path. **Never reuse these tokens against MainNet** — they're for local dev only.
 </details>
 
 <details>
@@ -396,8 +396,8 @@ Yes. Each instance has its own Docker compose project, network, port range, and 
 
 Another instance is using the default port range. Two ways to recover:
 
-1. **Stop the conflicting instance** — `localnet list` shows everything registered; `localnet down --name <conflicting>` frees the ports.
-2. **Run a fresh instance under a different name** — each `--name` gets its own port window allocated automatically. `localnet up --name demo-2` will pick the next free range.
+1. **Stop the conflicting instance** — `localnet list` shows everything registered; `localnet down <conflicting>` frees the ports.
+2. **Run a fresh instance under a different name** — each name gets its own port window allocated automatically. `localnet up demo-2` will pick the next free range.
 
 Use `localnet doctor` to see exactly which ports are in use before retrying.
 </details>
@@ -414,8 +414,8 @@ Yes, this works. The Splice container images published under `ghcr.io/digital-as
 ```yaml
 - name: Bring up Canton LocalNet
   run: |
-    canton-devkit localnet up --name ci --json > /tmp/instance.json
-    eval "$(canton-devkit localnet env --name ci --include-jwt)"
+    canton-devkit localnet up ci --json > /tmp/instance.json
+    eval "$(canton-devkit localnet env ci --include-jwt)"
 
 - name: Run integration tests
   run: npm test

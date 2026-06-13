@@ -134,9 +134,9 @@ docker info >/dev/null 2>&1 || {
 }
 
 # Best-effort pre-clean
-cli down --name e2e-test-default 2>/dev/null || true
-cli down --name e2e-named-test 2>/dev/null || true
-cli down --name e2e-version-test 2>/dev/null || true
+cli down e2e-test-default 2>/dev/null || true
+cli down e2e-named-test 2>/dev/null || true
+cli down e2e-version-test 2>/dev/null || true
 cli clean --name e2e-test-default --force 2>/dev/null || true
 cli clean --name e2e-named-test --force 2>/dev/null || true
 cli clean --name e2e-version-test --force 2>/dev/null || true
@@ -247,14 +247,14 @@ TEST_ID="M1-UP-001"
 echo "  Starting e2e-test-default (may take 3-5 minutes)..."
 (
   # Step 1: up exits 0
-  timed 600 "$CDK" localnet up --name e2e-test-default \
+  timed 600 "$CDK" localnet up e2e-test-default \
     || { echo "FAIL step 1: up exited $?" >&2; exit 1; }
 
   # Brief settle for registry state flush
   sleep 2
 
   # Step 2: status shows running
-  cli status --name e2e-test-default 2>&1 | grep -qiE "(healthy|ready|running)" \
+  cli status e2e-test-default 2>&1 | grep -qiE "(healthy|ready|running)" \
     || { echo "FAIL step 2: status missing healthy/ready/running" >&2; exit 1; }
 
   # Step 3: Docker containers belong to the compose project
@@ -275,13 +275,13 @@ fi
 TEST_ID="M1-STS-001"
 (
   # Step 1: status exits 0 and includes required info
-  OUTPUT=$(cli status --name e2e-test-default 2>&1) \
+  OUTPUT=$(cli status e2e-test-default 2>&1) \
     || { echo "FAIL step 1: status exited $?" >&2; exit 1; }
   echo "$OUTPUT" | grep -qiE "(healthy|running|ready)" \
     || { echo "FAIL step 1: status missing healthy/running/ready" >&2; exit 1; }
 
   # Step 2: status for non-existent instance fails
-  if cli status --name nonexistent-localnet-xyz >/dev/null 2>&1; then
+  if cli status nonexistent-localnet-xyz >/dev/null 2>&1; then
     echo "FAIL step 2: status for non-existent instance should fail" >&2; exit 1
   fi
 )
@@ -295,19 +295,19 @@ fi
 TEST_ID="M1-LOG-001"
 (
   # Step 1: full logs (non-empty)
-  LOG_OUTPUT=$("$CDK" localnet logs --name e2e-test-default --tail 50 2>&1) || true
+  LOG_OUTPUT=$("$CDK" localnet logs e2e-test-default --tail 50 2>&1) || true
   LINE_COUNT=$(echo "$LOG_OUTPUT" | wc -l | tr -d ' ')
   [ "$LINE_COUNT" -gt 1 ] \
     || { echo "FAIL step 1: full logs empty (got $LINE_COUNT lines, first line: '$(echo "$LOG_OUTPUT" | head -1)')" >&2; exit 1; }
 
   # Step 2: service-filtered logs (use "canton" — a known compose service)
-  SVC_OUTPUT=$("$CDK" localnet logs --name e2e-test-default --service canton --tail 20 2>&1) || true
+  SVC_OUTPUT=$("$CDK" localnet logs e2e-test-default --service canton --tail 20 2>&1) || true
   SVC_LINES=$(echo "$SVC_OUTPUT" | wc -l | tr -d ' ')
   [ "$SVC_LINES" -gt 1 ] \
     || { echo "FAIL step 2: service-filtered logs empty (got $SVC_LINES lines)" >&2; exit 1; }
 
   # Step 3: non-existent service should error or return empty
-  if "$CDK" localnet logs --name e2e-test-default --service nonexistent-service-xyz --tail 5 >/dev/null 2>&1; then
+  if "$CDK" localnet logs e2e-test-default --service nonexistent-service-xyz --tail 5 >/dev/null 2>&1; then
     true
   fi
 )
@@ -321,7 +321,7 @@ fi
 TEST_ID="M1-ENV-001"
 (
   # Step 1: env exits 0
-  OUTPUT=$(cli env --name e2e-test-default 2>&1) \
+  OUTPUT=$(cli env e2e-test-default 2>&1) \
     || { echo "FAIL step 1: env exited $?" >&2; exit 1; }
 
   # Step 2: KEY=value format (export KEY='value' or KEY="value")
@@ -343,20 +343,20 @@ TEST_ID="M1-RST-001"
 echo "  Restarting e2e-test-default (may take a few minutes)..."
 (
   # Step 1: full restart
-  timed 600 "$CDK" localnet restart --name e2e-test-default \
+  timed 600 "$CDK" localnet restart e2e-test-default \
     || { echo "FAIL step 1: full restart exited $?" >&2; exit 1; }
 
-  cli status --name e2e-test-default 2>&1 | grep -qiE "(healthy|ready|running)" \
+  cli status e2e-test-default 2>&1 | grep -qiE "(healthy|ready|running)" \
     || { echo "FAIL step 1: not healthy after full restart" >&2; exit 1; }
 
   # Step 2: single-service restart
-  timed 600 "$CDK" localnet restart --name e2e-test-default --service canton \
+  timed 600 "$CDK" localnet restart e2e-test-default --service canton \
     || { echo "FAIL step 2: single-service restart exited $?" >&2; exit 1; }
 
   # Canton service may need a moment to pass health checks after restart
   ok=false
   for i in 1 2 3 4 5; do
-    if cli status --name e2e-test-default 2>&1 | grep -qiE "(healthy|ready|running)"; then
+    if cli status e2e-test-default 2>&1 | grep -qiE "(healthy|ready|running)"; then
       ok=true; break
     fi
     sleep 5
@@ -374,7 +374,7 @@ TEST_ID="M1-SNP-001"
 echo "  Snapshot/restore cycle (may take a few minutes)..."
 (
   # Step 1: create snapshot
-  cli snapshot --name e2e-test-default --to "$SNAPSHOT_PATH" \
+  cli snapshot e2e-test-default --to "$SNAPSHOT_PATH" \
     || { echo "FAIL step 1: snapshot command failed" >&2; exit 1; }
   [ -f "$SNAPSHOT_PATH" ] && [ -s "$SNAPSHOT_PATH" ] \
     || { echo "FAIL step 1: snapshot file missing or empty" >&2; exit 1; }
@@ -386,13 +386,13 @@ echo "  Snapshot/restore cycle (may take a few minutes)..."
   docker compose -p "canton-e2e-test-default" down --volumes 2>/dev/null || true
 
   # Step 3: restore
-  cli restore --name e2e-test-default --from "$SNAPSHOT_PATH" \
+  cli restore e2e-test-default --from "$SNAPSHOT_PATH" \
     || { echo "FAIL step 3: restore command failed" >&2; exit 1; }
 
   # Step 4: bring up and verify it starts (post-restore may need extra time for re-sync)
-  timed 600 "$CDK" localnet up --name e2e-test-default || {
+  timed 600 "$CDK" localnet up e2e-test-default || {
     # Tolerate timeout if services are at least partially up
-    cli status --name e2e-test-default 2>&1 | grep -qiE "(partial|syncing|healthy|running)" \
+    cli status e2e-test-default 2>&1 | grep -qiE "(partial|syncing|healthy|running)" \
       || { echo "FAIL step 4: post-restore up failed and services not even partially up" >&2; exit 1; }
   }
 )
@@ -407,7 +407,7 @@ TEST_ID="M1-DWN-001"
 (
   # Ensure instance has running containers (may be in degraded state after restore)
   if ! docker ps --filter "label=com.docker.compose.project=canton-e2e-test-default" --format '{{.Names}}' | grep -qE "e2e-test-default"; then
-    timed 600 "$CDK" localnet up --name e2e-test-default \
+    timed 600 "$CDK" localnet up e2e-test-default \
       || { echo "FAIL: could not bring instance up for down test" >&2; exit 1; }
     sleep 2
   fi
@@ -416,7 +416,7 @@ TEST_ID="M1-DWN-001"
   NON_DEVKIT_BEFORE=$(docker ps --format '{{.Names}}' | grep -cv "e2e-test" || echo "0")
 
   # Step 1: down exits 0
-  cli down --name e2e-test-default \
+  cli down e2e-test-default \
     || { echo "FAIL step 1: down exited $?" >&2; exit 1; }
 
   # Allow containers to fully stop (compose down may return before
@@ -446,8 +446,8 @@ TEST_ID="M1-CLN-001"
 echo "  Clean test (up + clean --force cycle)..."
 (
   # Step 1: start an instance (reuse if already running)
-  cli status --name e2e-test-default 2>&1 | grep -qiE "(healthy|ready|running)" || \
-    timed 600 "$CDK" localnet up --name e2e-test-default \
+  cli status e2e-test-default 2>&1 | grep -qiE "(healthy|ready|running)" || \
+    timed 600 "$CDK" localnet up e2e-test-default \
     || { echo "FAIL step 1: could not bring instance up for clean test" >&2; exit 1; }
 
   # Step 2: clean --force on the running instance (tears down + removes volumes)
@@ -480,13 +480,13 @@ fi
 
 section "PHASE 3: Named instance & version tests"
 
-# ── M1-UP-002: LocalNet up with --name ──────────────────────────────
+# ── M1-UP-002: LocalNet up with name ────────────────────────────────
 TEST_ID="M1-UP-002"
 echo "  Starting e2e-named-test (may take 3-5 minutes)..."
 (
   # Step 1: up with explicit name
-  timed 600 "$CDK" localnet up --name e2e-named-test \
-    || { echo "FAIL step 1: up --name exited $?" >&2; exit 1; }
+  timed 600 "$CDK" localnet up e2e-named-test \
+    || { echo "FAIL step 1: up exited $?" >&2; exit 1; }
 
   sleep 2
 
@@ -495,13 +495,13 @@ echo "  Starting e2e-named-test (may take 3-5 minutes)..."
     || { echo "FAIL step 2: no containers with compose project label" >&2; exit 1; }
 
   # Step 3: status references the name
-  cli status --name e2e-named-test 2>&1 | grep -qiE "e2e-named-test" \
+  cli status e2e-named-test 2>&1 | grep -qiE "e2e-named-test" \
     || { echo "FAIL step 3: status output missing instance name" >&2; exit 1; }
 )
 if [ $? -eq 0 ]; then
-  pass "$TEST_ID: LocalNet up with --name"
+  pass "$TEST_ID: LocalNet up with name"
 else
-  fail "$TEST_ID: LocalNet up with --name" "named instance failed"
+  fail "$TEST_ID: LocalNet up with name" "named instance failed"
 fi
 
 # Tear down e2e-named-test before starting the next instance
@@ -513,17 +513,17 @@ TEST_ID="M1-UP-003"
 echo "  Starting e2e-version-test with --version $SPLICE_VERSION (may take 3-5 minutes)..."
 (
   # Step 1: up with explicit version
-  timed 600 "$CDK" localnet up --name e2e-version-test --version "$SPLICE_VERSION" \
+  timed 600 "$CDK" localnet up e2e-version-test --version "$SPLICE_VERSION" \
     || { echo "FAIL step 1: up --version exited $?" >&2; exit 1; }
 
   sleep 2
 
   # Step 2: status reflects the version
-  cli status --name e2e-version-test 2>&1 | grep -qE "$SPLICE_VERSION" \
+  cli status e2e-version-test 2>&1 | grep -qE "$SPLICE_VERSION" \
     || { echo "FAIL step 2: status missing version $SPLICE_VERSION" >&2; exit 1; }
 
   # Step 3: invalid version should fail
-  if "$CDK" localnet up --name e2e-bad-version --version "0.0.0-nonexistent" >/dev/null 2>&1; then
+  if "$CDK" localnet up e2e-bad-version --version "0.0.0-nonexistent" >/dev/null 2>&1; then
     cli clean --name e2e-bad-version --force 2>/dev/null || true
     echo "FAIL step 3: invalid version should have been rejected" >&2; exit 1
   fi

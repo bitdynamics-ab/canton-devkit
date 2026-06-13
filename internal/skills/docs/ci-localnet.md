@@ -20,11 +20,11 @@ pipeline", or "run integration tests in GitHub Actions/GitLab".
    runner's Docker host isn't ready.
 3. **Start** (blocks until healthy; no manual sleep):
    ```
-   canton-devkit localnet up --name ci --version <splice-tag>
+   canton-devkit localnet up ci --version <splice-tag>
    ```
 4. **Export + test**:
    ```
-   canton-devkit localnet env --name ci --format github-env >> "$GITHUB_ENV"
+   canton-devkit localnet env ci --format github-env >> "$GITHUB_ENV"
    canton-devkit localnet dar upload ./dist/app.dar --instance ci   # optional
    # run your tests against the exported endpoints
    ```

@@ -1,6 +1,7 @@
 package localnet
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -36,6 +37,7 @@ func TestUpProfileFlagParses(t *testing.T) {
 		want []string
 	}{
 		{"none", []string{"--name", "alpha"}, nil},
+		{"none (positional)", []string{"alpha"}, nil},
 		{"prometheus only", []string{"--name", "a", "--profile", "prometheus"}, []string{"prometheus"}},
 		{"grafana only", []string{"--name", "a", "--profile", "grafana"}, []string{"grafana"}},
 		{"both via repeat", []string{"--name", "a", "--profile", "prometheus", "--profile", "grafana"},
@@ -60,6 +62,36 @@ func TestUpProfileFlagParses(t *testing.T) {
 				t.Errorf("argv=%v → profiles=%v; want %v", tc.argv, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestUpAliasStart confirms that "start" is registered as an alias for "up".
+func TestUpAliasStart(t *testing.T) {
+	cmd := buildUp()
+	found := false
+	for _, a := range cmd.Aliases {
+		if a == "start" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected 'start' alias on `up`")
+	}
+}
+
+// TestUpRejectsPositionalAndFlag confirms that providing the name
+// both as a positional arg and --name is an error.
+func TestUpRejectsPositionalAndFlag(t *testing.T) {
+	cmd := buildUp()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"mynet", "--name", "mynet"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error when both positional and --name are provided")
+	}
+	if !strings.Contains(out.String(), "not both") {
+		t.Errorf("expected 'not both' error, got %q", out.String())
 	}
 }
 

@@ -26,7 +26,8 @@ func TestRestart_RejectsMalformedService(t *testing.T) {
 	}
 }
 
-// TestRestart_RequiresName confirms --name is mandatory.
+// TestRestart_RequiresName confirms the instance name is mandatory
+// (via either positional arg or --name flag).
 func TestRestart_RequiresName(t *testing.T) {
 	cmd := buildRestart()
 	var out, errb bytes.Buffer
@@ -34,6 +35,23 @@ func TestRestart_RequiresName(t *testing.T) {
 	cmd.SetErr(&errb)
 	cmd.SetArgs([]string{"--service", "canton"})
 	if err := cmd.Execute(); err == nil {
-		t.Fatal("expected error when --name is omitted")
+		t.Fatal("expected error when name is omitted")
+	}
+}
+
+// TestRestart_PositionalName confirms the instance name can be
+// passed as a positional argument.
+func TestRestart_PositionalName(t *testing.T) {
+	cmd := buildRestart()
+	var out, errb bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errb)
+	// "dev" will fail at ValidateName → RunRestart (no registry),
+	// but should NOT fail at "name required" — that's the assertion.
+	cmd.SetArgs([]string{"dev"})
+	err := cmd.Execute()
+	// We expect a runtime error (no registry), not a "name required" error.
+	if err != nil && strings.Contains(errb.String(), "required") {
+		t.Errorf("positional name was not resolved; stderr=%q", errb.String())
 	}
 }

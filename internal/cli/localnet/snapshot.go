@@ -20,7 +20,7 @@ import (
 func buildSnapshot() *cobra.Command {
 	var name, to string
 	cmd := &cobra.Command{
-		Use:   "snapshot",
+		Use:   "snapshot [name]",
 		Short: "Capture a LocalNet's database + registry state to a tarball",
 		Long: `Captures a logical PostgreSQL dump (pg_dumpall) of the named
 LocalNet's database, plus the instance's registry.State, into a single
@@ -39,10 +39,16 @@ writes to the database while the backup runs — Canton's documented rule
 for a single-step whole-cluster backup. With every database frozen at
 one instant, the cross-database ordering invariant holds automatically,
 so the snapshot is application-consistent, not merely crash-consistent.`,
-		Args:          cobra.NoArgs,
+		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resolved, err := resolveName(cmd, args)
+			if err != nil {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
+				return corelocalnet.AsExitError(corelocalnet.ExitUserError)
+			}
+			name = resolved
 			if err := corelocalnet.ValidateName(name); err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return corelocalnet.AsExitError(corelocalnet.ExitUserError)
@@ -55,9 +61,8 @@ so the snapshot is application-consistent, not merely crash-consistent.`,
 				snapshot.RunSnapshot(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), name, to))
 		},
 	}
-	cmd.Flags().StringVar(&name, "name", "", "Required. Instance to snapshot.")
+	cmd.Flags().StringVar(&name, "name", "", "Instance to snapshot. Can also be passed as a positional argument.")
 	cmd.Flags().StringVar(&to, "to", "", "Required. Destination archive path (.tgz).")
-	_ = cmd.MarkFlagRequired("name")
 	_ = cmd.MarkFlagRequired("to")
 	return cmd
 }
@@ -66,7 +71,7 @@ func buildRestore() *cobra.Command {
 	var name, from string
 	var force bool
 	cmd := &cobra.Command{
-		Use:   "restore",
+		Use:   "restore [name]",
 		Short: "Restore a LocalNet's database + registry state from a snapshot tarball",
 		Long: `Loads the database dump from the named snapshot archive back
 into the instance's Postgres AND re-registers the instance via the
@@ -78,14 +83,20 @@ If the snapshot's Splice version differs from an existing local
 instance's, restore refuses unless --force is set.
 
 The instance must NOT be running (a restore drops and recreates every
-database) — run 'localnet down --name X' first. If the instance does
+database) — run 'localnet down X' first. If the instance does
 not exist locally, it is registered from the embedded state.json. Either
-way the restore leaves it stopped; run 'localnet up --name X' to start
+way the restore leaves it stopped; run 'localnet up X' to start
 it on the restored database.`,
-		Args:          cobra.NoArgs,
+		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resolved, err := resolveName(cmd, args)
+			if err != nil {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
+				return corelocalnet.AsExitError(corelocalnet.ExitUserError)
+			}
+			name = resolved
 			if err := corelocalnet.ValidateName(name); err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return corelocalnet.AsExitError(corelocalnet.ExitUserError)
@@ -99,11 +110,10 @@ it on the restored database.`,
 					name, from, force))
 		},
 	}
-	cmd.Flags().StringVar(&name, "name", "", "Required. Instance to restore into.")
+	cmd.Flags().StringVar(&name, "name", "", "Instance to restore into. Can also be passed as a positional argument.")
 	cmd.Flags().StringVar(&from, "from", "", "Required. Source archive path (.tgz).")
 	cmd.Flags().BoolVar(&force, "force", false,
 		"Override Splice-version mismatch refusal. Use with care.")
-	_ = cmd.MarkFlagRequired("name")
 	_ = cmd.MarkFlagRequired("from")
 	return cmd
 }

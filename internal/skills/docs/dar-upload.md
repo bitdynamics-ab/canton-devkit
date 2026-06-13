@@ -16,7 +16,7 @@ The user asks to "upload my DAR", "deploy the package to LocalNet",
 
 1. **Confirm the instance is up**:
    ```
-   dpm localnet status --name dev
+   dpm localnet status dev
    ```
 
 2. **Upload a DAR** (vets it so it's usable):

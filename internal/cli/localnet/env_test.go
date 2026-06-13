@@ -109,6 +109,25 @@ func TestEnv_ShellOutputIsPosixQuoted(t *testing.T) {
 	}
 }
 
+// TestEnv_PositionalName confirms the instance name can be provided
+// as a positional argument instead of --name.
+func TestEnv_PositionalName(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedEnvInstance(t, "demo")
+
+	cmd := buildEnv()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"demo"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !strings.Contains(out.String(), "export CANTON_INSTANCE='demo'") {
+		t.Errorf("positional name did not resolve; output:\n%s", out.String())
+	}
+}
+
 func TestEnv_ShellQuotesNeutraliseInjection(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	s := registry.NewState("hostile", "0.6.4")

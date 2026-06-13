@@ -19,7 +19,7 @@ import (
 // Emits a block of exported KEY=value lines describing every endpoint and
 // credential of the instance, designed for the common shell idiom:
 //
-//	eval "$(dpm localnet env --name hubble)"
+//	eval "$(dpm localnet env hubble)"
 //
 // Four formats:
 //
@@ -37,7 +37,7 @@ func buildEnv() *cobra.Command {
 		includeJWT bool
 	)
 	cmd := &cobra.Command{
-		Use:   "env",
+		Use:   "env [name]",
 		Short: "Export LocalNet endpoints and credentials as env vars",
 		Long: `Prints an exported KEY=value block summarising the named LocalNet
 instance -- every host port from the Ports map (Ledger / JSON /
@@ -45,7 +45,7 @@ admin APIs per role, wallet UIs, scan UI, postgres) plus the
 user/audience for each captured credential and the real on-ledger
 party ids. Use with:
 
-  eval "$(dpm localnet env --name hubble)"
+  eval "$(dpm localnet env hubble)"
 
 Formats:
 
@@ -60,10 +60,16 @@ JWTs are REDACTED by default (CANTON_<ROLE>_JWT=<redacted>) so
 CI logs / shared terminals don't leak the dev-only signing
 secret. Pass --include-jwt to opt in before piping or sourcing
 raw token values.`,
-		Args:          cobra.NoArgs,
+		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resolved, err := resolveName(cmd, args)
+			if err != nil {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
+				return localnet.AsExitError(localnet.ExitUserError)
+			}
+			name = resolved
 			if err := localnet.ValidateName(name); err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
@@ -94,12 +100,11 @@ raw token values.`,
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "",
-		"Required. Identifier of the LocalNet instance to export.")
+		"Identifier of the LocalNet instance to export. Can also be passed as a positional argument.")
 	cmd.Flags().StringVar(&format, "format", "shell",
 		"Output format: shell | dotenv | github-env | json")
 	cmd.Flags().BoolVar(&includeJWT, "include-jwt", false,
 		"Emit raw CANTON_<ROLE>_JWT values. Default is <redacted>.")
-	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }
 
@@ -141,7 +146,7 @@ func writeEnvShell(w io.Writer, ex apitypes.EnvExport) error {
 	if _, err := fmt.Fprintln(w, "# Source these in your app or CI step:"); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "#   eval \"$(dpm localnet env --name %s)\"\n", shellQuote(ex.Instance)); err != nil {
+	if _, err := fmt.Fprintf(w, "#   eval \"$(dpm localnet env %s)\"\n", shellQuote(ex.Instance)); err != nil {
 		return err
 	}
 	for _, k := range sortedKeys(ex.Vars) {

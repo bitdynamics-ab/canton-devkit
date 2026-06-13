@@ -38,7 +38,7 @@ now() { date +%s; }
 START=$(now)
 elapsed() { echo $(( $(now) - START )); }
 
-cleanup() { "$CDK" localnet down --name "$NAME" >/dev/null 2>&1 || true; }
+cleanup() { "$CDK" localnet down "$NAME" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 # --- preflight ------------------------------------------------------
@@ -65,7 +65,7 @@ fi
 
 # --- step 3: up (the long pole) -------------------------------------
 info "bringing up '$NAME' (downloads on cache miss; this is the long pole)…"
-if "$CDK" localnet up --name "$NAME" >/tmp/validate-up.log 2>&1; then
+if "$CDK" localnet up "$NAME" >/tmp/validate-up.log 2>&1; then
   pass "up: instance running ($(elapsed)s)"
 else
   fail "up failed after $(elapsed)s — see /tmp/validate-up.log"
@@ -74,7 +74,7 @@ else
 fi
 
 # --- step 4: status -------------------------------------------------
-if "$CDK" localnet status --name "$NAME" >/dev/null 2>&1; then
+if "$CDK" localnet status "$NAME" >/dev/null 2>&1; then
   pass "status: healthy with endpoints ($(elapsed)s)"
 else
   fail "status did not report healthy"

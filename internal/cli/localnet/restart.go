@@ -10,16 +10,22 @@ import (
 func buildRestart() *cobra.Command {
 	opts := &localnet.RestartOptions{}
 	cmd := &cobra.Command{
-		Use:   "restart",
+		Use:   "restart [name]",
 		Short: "Restart a Canton LocalNet instance (or specific services) in place",
 		Long: `Bounce a running instance via 'docker compose restart' without
 removing containers, networks, or volumes. Re-runs the readiness wait
 and re-captures Canton's gRPC ports (which Docker re-assigns on
 restart). Use --service to restart only specific compose services.`,
-		Args:          cobra.NoArgs,
+		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name, err := resolveName(cmd, args)
+			if err != nil {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
+				return localnet.AsExitError(localnet.ExitUserError)
+			}
+			opts.Name = name
 			if err := localnet.ValidateName(opts.Name); err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
@@ -38,11 +44,10 @@ restart). Use --service to restart only specific compose services.`,
 				localnet.RunRestart(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), opts))
 		},
 	}
-	cmd.Flags().StringVar(&opts.Name, "name", "", "Required. Name of the instance to restart.")
+	cmd.Flags().StringVar(&opts.Name, "name", "", "Name of the instance to restart. Can also be passed as a positional argument.")
 	cmd.Flags().StringSliceVar(&opts.Services, "service", nil,
 		"Restart only these compose services (e.g. canton, splice). Repeat or comma-separate. Omit to restart all.")
 	cmd.Flags().BoolVar(&opts.SkipWait, "no-wait", false,
 		"Skip the post-restart readiness wait.")
-	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }
