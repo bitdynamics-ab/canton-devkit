@@ -46,9 +46,15 @@ The user asks to "watch contracts", "see transactions for a party",
    `tx ls` — list to find the offset, then replay to see the events.
 
 ## Guardrails
+- `--name` resolves the participant endpoint and per-role JWT from the
+  registry automatically (same as the Web UI) — no `--endpoint` /
+  `--token` needed. `--name` defaults to the only registered instance.
+  Use `--role sv|app-provider|app-user` to read from a different
+  participant (default: `app-user`).
 - Visibility is always projected through an explicit (participant,
   party) pair — there is no "global ledger" view; pick the party
-  whose perspective you need.
+  whose perspective you need. With no `--party`, the query projects
+  through the JWT's own act/read parties.
 - For single-contract / single-transaction lookups and CSV export, use
   `dpm daml-shell` (`contract <id>`, `transaction <id>`, `active … |
   csv`) — this tool deliberately doesn't duplicate those.
