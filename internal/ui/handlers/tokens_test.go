@@ -91,6 +91,58 @@ func TestTokens_CreateThenListAndDetail(t *testing.T) {
 	}
 }
 
+// TestTokens_HoldingsRegistryFallbackTagged pins #63 on the UI surface:
+// with no captured participant ledger port (instance down / pre-port-
+// capture), GET /holdings returns the registry pseudo-balance AND tags
+// both the response and every row with source="registry" so the
+// frontend can render the "not on-ledger" disclaimer instead of
+// presenting fabricated rows as real holdings.
+func TestTokens_HoldingsRegistryFallbackTagged(t *testing.T) {
+	seedForTokens(t, "demo") // seedForTokens records NO participant_ledger_* port
+	srv := tokensSrv(t)
+
+	create := `{"name":"Retail Token","symbol":"RTK","decimals":6,"initial_supply":"1000000","issuer":"alice::abc"}`
+	cr, err := http.Post(srv.URL+"/api/tokens?instance=demo", "application/json", strings.NewReader(create))
+	if err != nil {
+		t.Fatalf("POST create: %v", err)
+	}
+	_ = cr.Body.Close()
+
+	resp, err := http.Get(srv.URL + "/api/tokens/RTK/holdings?instance=demo")
+	if err != nil {
+		t.Fatalf("GET holdings: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("holdings status = %d, want 200", resp.StatusCode)
+	}
+	var got struct {
+		SchemaVersion int    `json:"schema_version"`
+		Source        string `json:"source"`
+		Holdings      []struct {
+			Party  string `json:"party"`
+			Amount string `json:"amount"`
+			Source string `json:"source"`
+		} `json:"holdings"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode holdings: %v", err)
+	}
+	_ = resp.Body.Close()
+	if got.Source != "registry" {
+		t.Errorf("response source = %q, want %q", got.Source, "registry")
+	}
+	if len(got.Holdings) != 1 {
+		t.Fatalf("holdings = %d, want 1", len(got.Holdings))
+	}
+	if got.Holdings[0].Source != "registry" {
+		t.Errorf("row source = %q, want %q", got.Holdings[0].Source, "registry")
+	}
+	// The issuer pseudo-balance carries the full initial supply.
+	if got.Holdings[0].Party != "alice::abc" || got.Holdings[0].Amount != "1000000" {
+		t.Errorf("issuer pseudo-balance drifted: %+v", got.Holdings[0])
+	}
+}
+
 // TestTokens_CreateDuplicateIsConflict pins the symbol-collision
 // mapping: ErrSymbolInUse → 409. The frontend uses this code to
 // surface a focused "pick a different symbol" message.

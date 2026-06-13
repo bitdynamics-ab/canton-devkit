@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -71,6 +72,32 @@ type LedgerConn struct {
 	// per-role audience the participant expects.
 	Instance string
 	Role     string // "sv" / "app-provider" / "app-user"
+}
+
+// ResolveLedgerEndpoint returns the role's participant ledger gRPC
+// endpoint (host:port) captured in the instance's registry state, or
+// "" when no such port was recorded (the instance pre-dates port
+// capture, or the role isn't hosted). Empty role defaults to
+// "app-user" — matching the CLI's --role default and the Web UI's
+// roleFromQuery.
+//
+// This is the single source of truth for "where do I dial this
+// instance's ledger?" — both the CLI (`token balance` auto-discovery)
+// and the Web UI handler call it, so the two surfaces resolve the
+// same participant from the same key (`participant_ledger_<role>`,
+// the convention pinned in internal/localnet/canton_ports.go).
+func ResolveLedgerEndpoint(instance, role string) string {
+	if role == "" {
+		role = string(splice.RoleAppUser)
+	}
+	state, err := registry.Read(instance)
+	if err != nil {
+		return ""
+	}
+	if port, ok := state.Ports["participant_ledger_"+role]; ok && port > 0 {
+		return "localhost:" + strconv.Itoa(port)
+	}
+	return ""
 }
 
 // dialLedger opens a ledger client against the given endpoint. Mirrors
