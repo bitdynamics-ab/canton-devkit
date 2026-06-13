@@ -81,6 +81,22 @@ export function Dashboard() {
 
       {!sel.loading && !sel.error && (
         <>
+          {sel.stale && (
+            <div
+              role="status"
+              style={{
+                background: `${W.dim}1A`,
+                border: `1px solid ${W.dim}`,
+                color: W.dim,
+                borderRadius: 8,
+                padding: "6px 12px",
+                marginBottom: 12,
+                fontSize: 12,
+              }}
+            >
+              Couldn’t refresh — showing last known state.
+            </div>
+          )}
           {sel.warning && (
             <div
               style={{

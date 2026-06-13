@@ -38,6 +38,11 @@ export interface InstanceSelection {
   selected: string | null;
   loading: boolean;
   error: string | null;
+  // stale is true when the most recent background refresh failed but
+  // we are still showing the last good instance list. Consumers can
+  // render a non-destructive "couldn't refresh" hint without tearing
+  // down the table (see the error vs. stale split below).
+  stale: boolean;
   select: (name: string) => void;
   refresh: () => void;
 }
@@ -53,10 +58,24 @@ export function InstanceSelectionProvider({ children }: { children: ReactNode })
     warning?: string;
     loading: boolean;
     error: string | null;
-  }>({ instances: [], loading: true, error: null });
+    stale: boolean;
+    // True once a fetch has resolved (success OR failure) at least
+    // once. Distinguishes the very first load (show the spinner,
+    // gate the table) from background refreshes (keep prior data).
+    loaded: boolean;
+  }>({ instances: [], loading: true, error: null, stale: false, loaded: false });
 
   const load = useCallback(() => {
-    setState((prev) => ({ ...prev, loading: true }));
+    // Only flip to a loading state on the FIRST fetch. Background
+    // refreshes (the 15s poll below) keep the last-good list on
+    // screen — otherwise the whole instance table + topbar switcher
+    // flash out every 15 s while the fetch is in flight, and an
+    // in-progress CreatingPanel the user is watching unmounts with
+    // it. `loaded` is read fresh from prev so the closure doesn't
+    // capture a stale value.
+    setState((prev) =>
+      prev.loaded ? prev : { ...prev, loading: true },
+    );
     fetchInstances()
       .then((r) =>
         setState({
@@ -64,13 +83,34 @@ export function InstanceSelectionProvider({ children }: { children: ReactNode })
           warning: r.warning,
           loading: false,
           error: null,
+          stale: false,
+          loaded: true,
         }),
       )
       .catch((e: unknown) =>
-        setState({
-          instances: [],
-          loading: false,
-          error: e instanceof ApiError ? e.message : "failed to load instances",
+        setState((prev) => {
+          const message =
+            e instanceof ApiError ? e.message : "failed to load instances";
+          // A transient registry-read hiccup (e.g. while a heavyweight
+          // `up` saturates the machine) must NOT erase the dashboard.
+          // If we already have a good list, keep it and just mark the
+          // data stale; only surface a hard error before the first
+          // successful load, when there is nothing else to show.
+          if (prev.loaded && prev.instances.length > 0) {
+            return {
+              ...prev,
+              loading: false,
+              error: null,
+              stale: true,
+            };
+          }
+          return {
+            instances: [],
+            loading: false,
+            error: message,
+            stale: false,
+            loaded: true,
+          };
         }),
       );
   }, []);
@@ -132,10 +172,11 @@ export function InstanceSelectionProvider({ children }: { children: ReactNode })
       selected,
       loading: state.loading,
       error: state.error,
+      stale: state.stale,
       select,
       refresh: load,
     }),
-    [state.instances, state.warning, state.loading, state.error, selected, select, load],
+    [state.instances, state.warning, state.loading, state.error, state.stale, selected, select, load],
   );
 
   return createElement(InstanceSelectionContext.Provider, { value }, children);
