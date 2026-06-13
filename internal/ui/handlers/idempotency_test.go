@@ -103,6 +103,45 @@ func TestIdempotency_TTLEviction(t *testing.T) {
 	}
 }
 
+// TestIdempotency_DoesNotCache5xx: a transient 5xx must not be cached
+// and replayed for the TTL. The first attempt fails (503), the second
+// request with the SAME key re-runs the handler (which now succeeds)
+// rather than replaying the stale failure.
+func TestIdempotency_DoesNotCache5xx(t *testing.T) {
+	var calls int32
+	h := newIdemStore().wrap(func(w http.ResponseWriter, _ *http.Request) {
+		// First call fails with a transient 503; second succeeds.
+		if atomic.AddInt32(&calls, 1) == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"code":"UNAVAILABLE"}`))
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	do := func() *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/api/tokens/RTK/mint", nil)
+		r.Header.Set("Idempotency-Key", "retry-after-blip")
+		rec := httptest.NewRecorder()
+		h(rec, r)
+		return rec
+	}
+
+	first := do()
+	if first.Code != http.StatusServiceUnavailable {
+		t.Fatalf("first attempt status = %d, want 503", first.Code)
+	}
+	second := do()
+	if calls != 2 {
+		t.Fatalf("handler ran %d times; a cached 5xx must not block the retry (want 2)", calls)
+	}
+	if second.Code != http.StatusNoContent {
+		t.Errorf("retry status = %d, want 204 (re-attempt, not a replayed 503)", second.Code)
+	}
+	if second.Header().Get("Idempotency-Replayed") == "true" {
+		t.Error("a 5xx must not be replayed")
+	}
+}
+
 func TestSanitize400_MasksPartyFingerprint(t *testing.T) {
 	cases := []struct{ in, wantContains, wantNotContains string }{
 		{"party alice::1220abcdef0123456789 not found", "alice::…", "1220abcdef0123456789"},

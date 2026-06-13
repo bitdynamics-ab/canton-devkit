@@ -225,10 +225,33 @@ func validateCreate(opts CreateOptions) error {
 	// Surface-level decimal validation — Daml-side accepts a
 	// fixed-precision decimal; here we just guard against obvious
 	// garbage so the user gets a friendly local error rather than a
-	// confusing on-ledger one.
+	// confusing on-ledger one. looksLikeDecimal already rejects a
+	// lone "." / digit-less input, signs, and exponents.
 	if !looksLikeDecimal(opts.InitialSupply) {
 		return fmt.Errorf("initial supply %q is not a valid decimal number",
 			opts.InitialSupply)
+	}
+	// An instrument with zero initial supply is almost certainly a
+	// typo; reject it here rather than persisting a token nobody can
+	// mint against by default.
+	if isZeroDecimal(opts.InitialSupply) {
+		return fmt.Errorf("initial supply %q must be greater than zero",
+			opts.InitialSupply)
+	}
+	// Daml's Numeric tops out at 38 significant digits and at most
+	// `Decimals` fractional digits. Enforce both locally so an
+	// oversized or over-precise supply fails with a clear message now
+	// instead of an opaque on-ledger rejection once submission wires up.
+	intDigits, fracDigits := countDecimalDigits(opts.InitialSupply)
+	if intDigits+fracDigits > damlNumericMaxDigits {
+		return fmt.Errorf(
+			"initial supply %q has %d significant digits, exceeding the %d-digit Numeric limit",
+			opts.InitialSupply, intDigits+fracDigits, damlNumericMaxDigits)
+	}
+	if fracDigits > opts.Decimals {
+		return fmt.Errorf(
+			"initial supply %q has %d fractional digits, exceeding the declared decimals=%d",
+			opts.InitialSupply, fracDigits, opts.Decimals)
 	}
 	if opts.Issuer == "" {
 		return errors.New("issuer party is required")
@@ -259,17 +282,21 @@ func validatePartyID(field, v string) error {
 
 // looksLikeDecimal accepts strings of the form `123`, `123.456`, or
 // `0.5`. Reject leading + / scientific notation / sign for parity
-// with Daml Decimal literal syntax.
+// with Daml Decimal literal syntax. A lone "." (or any input with no
+// digit at all) is rejected: it is not a number, renders as a bogus
+// "." amount in the UI holdings table, and breaks addDecimal's
+// big.Int parse downstream.
 func looksLikeDecimal(s string) bool {
 	if s == "" {
 		return false
 	}
 	sawDot := false
+	sawDigit := false
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		switch {
 		case c >= '0' && c <= '9':
-			// ok
+			sawDigit = true
 		case c == '.':
 			if sawDot {
 				return false
@@ -279,7 +306,24 @@ func looksLikeDecimal(s string) bool {
 			return false
 		}
 	}
-	return true
+	return sawDigit
+}
+
+// damlNumericMaxDigits is the maximum number of significant decimal
+// digits Daml's Numeric type can represent (38 total across the
+// integer and fractional parts). A supply that exceeds this passes a
+// naive digit-grammar check but fails on-ledger, so we reject it at
+// the local gate to give a friendly error instead of a confusing
+// submission failure later.
+const damlNumericMaxDigits = 38
+
+// countDecimalDigits returns the number of integer and fractional
+// digits in a looksLikeDecimal-valid string (the dot is not counted).
+// The two counts let validateCreate enforce both the total-precision
+// bound and the "fractional digits must fit within Decimals" rule.
+func countDecimalDigits(s string) (intDigits, fracDigits int) {
+	intPart, fracPart := splitDecimal(s)
+	return len(intPart), len(fracPart)
 }
 
 // newInstrumentID generates a 16-byte random InstrumentId.id string,

@@ -333,7 +333,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			"manually before relying on the dashboards.")
 	}
 	if hasObservabilityProfile {
-		overlay, err := MaterializeObservabilityOverlay(dataDir, projectDir)
+		overlay, err := MaterializeObservabilityOverlay(dataDir, projectDir, prog.Err())
 		if err != nil {
 			prog.FailStep(StepPersistState,
 				"Failed to extract observability overlay", err)
@@ -355,7 +355,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		}
 	}
 	if hasTokensV2Profile {
-		overlay, err := MaterializeTokensV2Overlay(dataDir)
+		overlay, err := MaterializeTokensV2Overlay(dataDir, prog.Err())
 		if err != nil {
 			prog.FailStep(StepPersistState,
 				"Failed to extract tokens-v2 overlay", err)

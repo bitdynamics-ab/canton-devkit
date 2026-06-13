@@ -2,10 +2,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   SCHEMA_VERSION,
+  acceptTransfer,
   apiFetch,
+  burnToken,
+  createToken,
+  faucetToken,
   fetchContractDetail,
   issueJwt,
+  mintToken,
   openContractsStream,
+  transferToken,
 } from "./api";
 
 // apiFetch is the single chokepoint for every backend call.
@@ -204,6 +210,58 @@ describe("fetchContractDetail", () => {
     await expect(
       fetchContractDetail("demo", "missing", "app-user"),
     ).rejects.toThrow(/not visible/);
+  });
+});
+
+// The server-side idempotency middleware is opt-in on the
+// Idempotency-Key header (internal/ui/handlers/idempotency.go). It was
+// dead code until the client started sending the header — these tests
+// pin that every value-moving token mutation now does, so a retry /
+// double-click can't mint/transfer/burn twice.
+describe("token mutations send an Idempotency-Key", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const headerOf = (init: RequestInit | undefined): string | undefined => {
+    const h = init?.headers as Record<string, string> | undefined;
+    return h?.["Idempotency-Key"];
+  };
+
+  it("attaches a fresh UUID Idempotency-Key to each mutating POST", async () => {
+    // Deterministic, monotonic UUIDs so we can assert uniqueness.
+    let n = 0;
+    vi.stubGlobal("crypto", {
+      ...globalThis.crypto,
+      randomUUID: () => `uuid-${++n}` as `${string}-${string}-${string}-${string}-${string}`,
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(new Response(JSON.stringify({}), { status: 200 })),
+      );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await createToken("demo", {
+      name: "Retail",
+      symbol: "RTK",
+      decimals: 6,
+      initial_supply: "1000",
+      issuer: "alice::abc",
+    });
+    await mintToken("demo", "RTK", "alice::abc", "10");
+    await transferToken("demo", "RTK", "alice::abc", "bob::def", "5");
+    await faucetToken("demo", "RTK", "alice::abc", "1");
+    await burnToken("demo", "RTK", "alice::abc", "1");
+    await acceptTransfer("demo", "ti-1");
+
+    expect(fetchSpy).toHaveBeenCalledTimes(6);
+    const keys = fetchSpy.mock.calls.map(([, init]) => headerOf(init));
+    for (const k of keys) {
+      expect(k).toMatch(/^uuid-\d+$/);
+    }
+    // Each submission gets its own key (no collisions across verbs).
+    expect(new Set(keys).size).toBe(6);
   });
 });
 

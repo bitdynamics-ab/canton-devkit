@@ -2,6 +2,7 @@ package localnet
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -31,7 +32,10 @@ import (
 // auto-creates an empty directory at projectDir/prometheus.yml and
 // the bind-mount fails on subsequent ups with "Are you trying to
 // mount a directory onto a file?".
-func MaterializeObservabilityOverlay(dataDir, projectDir string) (string, error) {
+//
+// warnw receives a one-line notice for every materialized file an
+// operator has edited away from the embedded baseline; it may be nil.
+func MaterializeObservabilityOverlay(dataDir, projectDir string, warnw io.Writer) (string, error) {
 	if dataDir == "" {
 		return "", fmt.Errorf("MaterializeObservabilityOverlay: empty dataDir")
 	}
@@ -42,14 +46,14 @@ func MaterializeObservabilityOverlay(dataDir, projectDir string) (string, error)
 	// Walk the embedded FS — entries live under "compose/" and
 	// "grafana/" at the FS root (see assets/assets.go).
 	//
-	// Yellow Y5: write-if-different. Previously this clobbered any
-	// hand-edited dashboard JSON on every `localnet up`, which is
-	// hostile to operators who tweak the Grafana panels for their
-	// workload. We now read each destination, hash both sides, and
-	// only rewrite when the bytes differ. A real config-management
-	// solution (per-instance overrides directory) is tracked in
-	// follow-up; this stops the silent stomp without that bigger
-	// change.
+	// Edit-preserving write. Operators who tweak a Grafana dashboard or
+	// the prometheus scrape config for their workload must keep those
+	// edits across a `localnet up`. We write a destination only when it
+	// is missing or still byte-identical to the embedded baseline; an
+	// edited file is left in place and reported on warnw. (The compose
+	// overlay itself is the one exception — see below — because its
+	// bind-mount paths are rewritten to per-instance absolutes and must
+	// track this dataDir.)
 	if err := fs.WalkDir(assets.FS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -68,10 +72,15 @@ func MaterializeObservabilityOverlay(dataDir, projectDir string) (string, error)
 		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 			return err
 		}
-		if existing, err := os.ReadFile(dest); err == nil && bytesEqual(existing, data) {
-			return nil
+		// The compose overlay is rewritten in place by
+		// rewriteObservabilityMounts below to point at per-instance
+		// absolute mount paths, so it can never match the embedded
+		// bytes and must always be refreshed from the baseline. All
+		// other files (dashboards, scrape config) are edit-preserving.
+		if filepath.ToSlash(path) == "compose/observability.yaml" {
+			return os.WriteFile(dest, data, 0o644)
 		}
-		return os.WriteFile(dest, data, 0o644)
+		return writePreservingEdits(dest, data, warnw)
 	}); err != nil {
 		return "", err
 	}
@@ -105,16 +114,45 @@ func MaterializeObservabilityOverlay(dataDir, projectDir string) (string, error)
 				return "", fmt.Errorf("clear stale prometheus.yml directory: %w", err)
 			}
 		}
-		// Yellow Y5: only rewrite when bytes differ — don't clobber
-		// hand edits silently.
-		if existing, err := os.ReadFile(promDst); err == nil && bytesEqual(existing, promSrc) {
-			// no-op
-		} else if err := os.WriteFile(promDst, promSrc, 0o644); err != nil {
+		// Edit-preserving: leave a hand-edited project-dir copy alone
+		// (warn on drift), only write when missing or unchanged.
+		if err := writePreservingEdits(promDst, promSrc, warnw); err != nil {
 			return "", fmt.Errorf("write prometheus.yml to project dir: %w", err)
 		}
 	}
 
 	return composeFile, nil
+}
+
+// writePreservingEdits writes data to dest only when dest is missing or
+// still byte-identical to data (the embedded baseline). When dest
+// already exists with different bytes — i.e. an operator has edited it
+// — it is left untouched and a one-line drift notice is written to
+// warnw (when non-nil). This is the shared primitive behind the
+// edit-preserving contract of both materialised overlays: an operator
+// who tweaks an overlay in place keeps that tweak across `localnet up`.
+//
+// A read error other than not-exist is treated as "write the baseline"
+// rather than failing the whole bring-up over an unreadable stale file.
+func writePreservingEdits(dest string, data []byte, warnw io.Writer) error {
+	existing, rerr := os.ReadFile(dest)
+	switch {
+	case rerr == nil && bytesEqual(existing, data):
+		// Already the canonical content — nothing to do.
+		return nil
+	case rerr == nil:
+		// Operator-edited: preserve it, but make the divergence visible.
+		if warnw != nil {
+			_, _ = fmt.Fprintf(warnw,
+				"preserving local edits to %s (differs from the bundled default; "+
+					"delete it to restore the default on the next `localnet up`)\n",
+				dest)
+		}
+		return nil
+	default:
+		// Missing (or unreadable) — install the baseline.
+		return os.WriteFile(dest, data, 0o644)
+	}
 }
 
 func rewriteObservabilityMounts(composeFile, root string) error {

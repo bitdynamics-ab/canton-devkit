@@ -2144,9 +2144,18 @@ func enableGrafana(ctx context.Context, state *registry.State) (string, int, err
 // host port. portInternal is the in-container port to look up via
 // `docker compose port <svc> <port>` after the up succeeds.
 func enableSidecar(ctx context.Context, state *registry.State, profile, service string, portInternal int) (string, int, error) {
-	overlay, err := localnet.MaterializeObservabilityOverlay(state.DataDir, state.ProjectDir)
+	// Capture any "preserving local edits" drift notices the overlay
+	// emits and surface them in the server log — the overlay now leaves
+	// operator-edited dashboards / scrape configs untouched, and an
+	// operator toggling a sidecar from the UI should still learn that
+	// their local copy diverges from the bundled default.
+	var overlayWarn bytes.Buffer
+	overlay, err := localnet.MaterializeObservabilityOverlay(state.DataDir, state.ProjectDir, &overlayWarn)
 	if err != nil {
 		return "", 0, fmt.Errorf("materialize overlay: %w", err)
+	}
+	if overlayWarn.Len() > 0 {
+		log.Printf("observability overlay for %q: %s", state.Name, strings.TrimSpace(overlayWarn.String()))
 	}
 	hasOverlay := false
 	for _, f := range state.ComposeFiles {
