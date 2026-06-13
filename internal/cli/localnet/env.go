@@ -22,11 +22,12 @@ import (
 //
 //	eval "$(dpm localnet env --name hubble)"
 //
-// Three formats:
+// Four formats:
 //
-//	shell (default) export KEY='value' with POSIX quoting
-//	dotenv KEY="value" with dotenv escaping
-//	json api/types.EnvExport for scripted consumers
+//	shell (default)  export KEY='value' with POSIX quoting
+//	dotenv           KEY="value" with dotenv escaping
+//	github-env       bare KEY=value for $GITHUB_ENV (>> in a workflow step)
+//	json             api/types.EnvExport for scripted consumers
 //
 // The Web UI handler reuses collectEnv() to emit the json variant.
 func buildEnv() *cobra.Command {
@@ -46,9 +47,12 @@ audience for each captured credential. Use with:
 
 Formats:
 
-  shell    POSIX single-quoted export KEY='value'  (default; eval-safe)
-  dotenv   double-quoted KEY="value" with $/\/" escapes (dotenv spec)
-  json     machine-readable shape; matches the Web UI handler
+  shell       POSIX single-quoted export KEY='value'  (default; eval-safe)
+  dotenv      double-quoted KEY="value" with $/\/" escapes (dotenv spec)
+  github-env  bare KEY=value lines for the GitHub Actions environment file:
+                dpm localnet env --name ci --format github-env >> "$GITHUB_ENV"
+              (shell/dotenv carry comments + quotes that $GITHUB_ENV rejects)
+  json        machine-readable shape; matches the Web UI handler
 
 JWTs are REDACTED by default (CANTON_<ROLE>_JWT=<redacted>) so
 CI logs / shared terminals don't leak the dev-only signing
@@ -76,11 +80,13 @@ raw token values.`,
 				return writeEnvShell(cmd.OutOrStdout(), ex)
 			case "dotenv":
 				return writeEnvDotenv(cmd.OutOrStdout(), ex)
+			case "github-env":
+				return writeEnvGithub(cmd.OutOrStdout(), ex)
 			case "json":
 				return writeEnvJSON(cmd.OutOrStdout(), ex)
 			default:
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-					"--format must be shell, dotenv, or json (got %q)\n", format)
+					"--format must be shell, dotenv, github-env, or json (got %q)\n", format)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
 		},
@@ -88,7 +94,7 @@ raw token values.`,
 	cmd.Flags().StringVar(&name, "name", "",
 		"Required. Identifier of the LocalNet instance to export.")
 	cmd.Flags().StringVar(&format, "format", "shell",
-		"Output format: shell | dotenv | json")
+		"Output format: shell | dotenv | github-env | json")
 	cmd.Flags().BoolVar(&includeJWT, "include-jwt", false,
 		"Emit raw CANTON_<ROLE>_JWT values. Default is <redacted>.")
 	_ = cmd.MarkFlagRequired("name")
@@ -229,6 +235,58 @@ func writeEnvDotenv(w io.Writer, ex apitypes.EnvExport) error {
 		}
 	}
 	return nil
+}
+
+// writeEnvGithub prints bare KEY=value lines for the GitHub Actions
+// environment file. A workflow step appends them with
+//
+//	dpm localnet env --name ci --format github-env >> "$GITHUB_ENV"
+//
+// and every subsequent step sees them as env vars. This is a distinct
+// format because the runner parses $GITHUB_ENV itself, NOT through a
+// shell: it rejects the `#` comment header writeEnvShell/writeEnvDotenv
+// emit ("Invalid format"), and any surrounding quotes (export KEY='v',
+// KEY="v") become literal characters in the value. So we emit no
+// header, no `export`, and no quoting -- the value is taken verbatim to
+// end of line.
+//
+// A value containing a newline (a hostile DataDir can) cannot use the
+// single-line form -- the runner would treat the second line as a new
+// KEY=value. GitHub documents a heredoc form for that case:
+//
+//	KEY<<delimiter
+//	<value, possibly multi-line>
+//	delimiter
+//
+// We pick a delimiter that does not occur in the value so it can't be
+// closed early (a documented injection vector for the multi-line form).
+func writeEnvGithub(w io.Writer, ex apitypes.EnvExport) error {
+	for _, k := range sortedKeys(ex.Vars) {
+		v := ex.Vars[k]
+		if !strings.ContainsAny(v, "\r\n") {
+			if _, err := fmt.Fprintf(w, "%s=%s\n", k, v); err != nil {
+				return err
+			}
+			continue
+		}
+		delim := githubEnvDelimiter(v)
+		if _, err := fmt.Fprintf(w, "%s<<%s\n%s\n%s\n", k, delim, v, delim); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// githubEnvDelimiter returns a heredoc delimiter guaranteed not to
+// appear as a line in value, so the GitHub Actions multi-line env
+// syntax (KEY<<delim ... delim) cannot be terminated early by hostile
+// content. Starts from a fixed token and widens until it's absent.
+func githubEnvDelimiter(value string) string {
+	delim := "CANTON_DEVKIT_EOF"
+	for strings.Contains(value, delim) {
+		delim += "_"
+	}
+	return delim
 }
 
 // shellQuote returns a POSIX-safe single-quoted form of s. The

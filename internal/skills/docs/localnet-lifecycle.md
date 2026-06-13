@@ -32,7 +32,7 @@ if the network is healthy", or "tear it down".
    ```
    dpm localnet status --name dev      # health, ports, endpoints
    dpm localnet list                   # all instances + state
-   dpm localnet logs canton --name dev # tail one service
+   dpm localnet logs --service canton --name dev # tail one service
    ```
 
 4. **Stop** (removes containers + volumes for that instance):

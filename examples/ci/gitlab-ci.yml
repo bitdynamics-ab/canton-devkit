@@ -46,7 +46,7 @@ localnet-tests:
     - set -a && . ./localnet.env && set +a
     - |
       if [ -f ./dist/my-app.dar ]; then
-        canton-devkit localnet dar upload ./dist/my-app.dar --name "${INSTANCE}"
+        canton-devkit localnet dar upload ./dist/my-app.dar --instance "${INSTANCE}"
       fi
     # Replace with your test runner (npm test / pytest / daml test).
     - echo "Run your integration tests here against the live LocalNet."
