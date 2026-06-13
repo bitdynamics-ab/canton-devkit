@@ -72,10 +72,20 @@ identifiers and is not designed for LAN-wide exposure.`,
 					"warning: serving the build-time placeholder frontend — run `make frontend` before `go build` to embed the real Vite bundle"))
 			}
 			hub := stream.New()
+			// Host-header allowlist (DNS-rebinding defence) is
+			// loopback-only by default. When the operator opts into a
+			// non-loopback bind, the configured --host is a legitimate
+			// Host value, so add it to the allowlist; otherwise a LAN
+			// client reaching the UI by its real IP would be 403'd by
+			// our own rebinding guard.
+			var routerOpts []ui.RouterOption
+			if allowNonLoopback {
+				routerOpts = append(routerOpts, ui.WithAllowedHosts(host))
+			}
 			srv := ui.New(ui.Config{
 				Host:             host,
 				Port:             port,
-				Router:           ui.NewRouter(assets, hub),
+				Router:           ui.NewRouter(assets, hub, routerOpts...),
 				AllowNonLoopback: allowNonLoopback,
 			})
 

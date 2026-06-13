@@ -30,7 +30,15 @@ import (
 // the current surface needs. Pulling chi for one router would add a
 // transitive dep for no functional gain; if middleware composition gets
 // hairy (rate limiting, auth, request logging) the swap is mechanical.
-func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
+//
+// Variadic opts keep the common two-arg call site (and every test)
+// unchanged while letting `dpm localnet ui --allow-non-loopback` widen
+// the Host allowlist — see RouterOption / WithAllowedHosts.
+func NewRouter(assets http.Handler, hub *stream.Hub, opts ...RouterOption) http.Handler {
+	var cfg routerConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	mux.HandleFunc("GET /api/version", handleVersion)
@@ -70,11 +78,50 @@ func NewRouter(assets http.Handler, hub *stream.Hub) http.Handler {
 	// Go 1.22's mux conflict rules.
 	mux.Handle("/", assets)
 	// Middleware chain (outer → inner): access log first so it
-	// wraps everything including 403s from CSRF and 404s from
-	// /api/typo. Common headers + Origin gate run per request
-	// inside the logged span. Feature telemetry sits innermost so it
-	// only records requests that reached a real handler.
-	return withAccessLog(withCommonHeaders(withOriginCheck(withFeatureTelemetry(mux))))
+	// wraps everything including 403s from CSRF/Host and 404s from
+	// /api/typo. The Host allowlist runs next — before the Origin
+	// gate — because it applies to EVERY method (GET reads leak
+	// party IDs too) and is the DNS-rebinding defence the Origin
+	// check can't provide. Common headers + Origin gate run per
+	// request inside the logged span. Feature telemetry sits
+	// innermost so it only records requests that reached a real
+	// handler.
+	return withAccessLog(
+		withHostCheck(cfg.allowedHosts,
+			withCommonHeaders(
+				withOriginCheck(
+					withFeatureTelemetry(mux)))))
+}
+
+// routerConfig accumulates NewRouter options.
+type routerConfig struct {
+	// allowedHosts are extra Host-header host-parts the Host
+	// allowlist accepts beyond the built-in loopback names. Populated
+	// from --allow-non-loopback's bind host; empty in the default
+	// (loopback-only) posture.
+	allowedHosts []string
+}
+
+// RouterOption configures NewRouter without breaking its two-arg
+// call site. See WithAllowedHosts.
+type RouterOption func(*routerConfig)
+
+// WithAllowedHosts widens the Host-header allowlist (withHostCheck) to
+// include the given hosts in addition to the built-in loopback names.
+//
+// Used only on the `dpm localnet ui --allow-non-loopback` path: when an
+// operator deliberately binds the UI to a LAN IP, requests whose Host
+// names that IP would otherwise be rejected as a rebinding attempt.
+// Empty / blank entries are ignored. In the default loopback-only
+// posture this option is not passed and the allowlist stays minimal.
+func WithAllowedHosts(hosts ...string) RouterOption {
+	return func(c *routerConfig) {
+		for _, h := range hosts {
+			if h != "" {
+				c.allowedHosts = append(c.allowedHosts, h)
+			}
+		}
+	}
 }
 
 // withFeatureTelemetry records which Web UI screens a `localnet ui`
