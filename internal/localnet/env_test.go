@@ -1,6 +1,8 @@
 package localnet
 
 import (
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -77,6 +79,79 @@ func TestBuildEnvExport_IncludesParticipantPorts(t *testing.T) {
 		if ex.Vars[k] != v {
 			t.Errorf("Vars[%q] = %q, want %q", k, ex.Vars[k], v)
 		}
+	}
+}
+
+// TestBuildEnvExport_AuthFileWrittenAndExported pins the #14 fix:
+// CANTON_AUTH_FILE must point at a file that actually exists. The
+// builder writes <DataDir>/auth.json (0600, real per-role creds) and
+// emits the var; a script doing `jq < $CANTON_AUTH_FILE` then works.
+func TestBuildEnvExport_AuthFileWrittenAndExported(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	dataDir := t.TempDir()
+	s := registry.NewState("demo", "0.6.4")
+	s.Status = registry.StatusRunning
+	s.DataDir = dataDir
+	s.Credentials = map[string]registry.Credential{
+		"app-provider": {Role: "app-provider", User: "ap-user", Audience: "aud", JWT: "eyJ.real.sig"},
+	}
+	if err := registry.Write(s); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	ex, err := BuildEnvExport("demo", false)
+	if err != nil {
+		t.Fatalf("BuildEnvExport: %v", err)
+	}
+	authPath := filepath.Join(dataDir, "auth.json")
+	if ex.Vars["CANTON_AUTH_FILE"] != authPath {
+		t.Fatalf("CANTON_AUTH_FILE = %q, want %q", ex.Vars["CANTON_AUTH_FILE"], authPath)
+	}
+	info, err := os.Stat(authPath)
+	if err != nil {
+		t.Fatalf("auth.json must exist (CANTON_AUTH_FILE pointed at a missing file): %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("auth.json perms = %o, want 600 (carries dev JWTs)", perm)
+	}
+	body, err := os.ReadFile(authPath)
+	if err != nil {
+		t.Fatalf("read auth.json: %v", err)
+	}
+	var got map[string]authFileEntry
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("auth.json is not valid JSON: %v\n%s", err, body)
+	}
+	if got["app-provider"].JWT != "eyJ.real.sig" {
+		t.Errorf("auth.json app-provider jwt = %q, want the real token", got["app-provider"].JWT)
+	}
+}
+
+// TestBuildEnvExport_AuthFileNotWrittenWhenDirMissing pins the edge: a
+// stale instance whose data dir is gone still gets the conventional
+// CANTON_AUTH_FILE path (it documents where the file lives), but the
+// builder must NOT MkdirAll a tree to write into — no file is created.
+func TestBuildEnvExport_AuthFileNotWrittenWhenDirMissing(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	s := registry.NewState("ghost", "0.6.4")
+	s.Status = registry.StatusRunning
+	s.DataDir = missing
+	s.Credentials = map[string]registry.Credential{
+		"app-user": {Role: "app-user", JWT: "x"},
+	}
+	if err := registry.Write(s); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	ex, err := BuildEnvExport("ghost", false)
+	if err != nil {
+		t.Fatalf("BuildEnvExport: %v", err)
+	}
+	if ex.Vars["CANTON_AUTH_FILE"] != filepath.Join(missing, "auth.json") {
+		t.Errorf("CANTON_AUTH_FILE = %q, want the conventional path", ex.Vars["CANTON_AUTH_FILE"])
+	}
+	if _, err := os.Stat(missing); !os.IsNotExist(err) {
+		t.Errorf("builder must not create the missing data dir; stat err = %v", err)
 	}
 }
 

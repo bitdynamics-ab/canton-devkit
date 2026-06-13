@@ -1,7 +1,9 @@
 package localnet
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -78,11 +80,17 @@ func BuildEnvExport(name string, includeJWT bool) (apitypes.EnvExport, error) {
 
 	out.Vars["CANTON_INSTANCE"] = name
 	out.Vars["CANTON_SPLICE_VERSION"] = state.SpliceVersion
-	// AuthFile points at the per-instance auth.json the user can load
-	// with `jq` (~/.canton-devkit/<name>/auth.json). filepath.Join (not
-	// "/" concat) so the path is correct on Windows and doesn't
-	// duplicate separators if state.DataDir has a trailing slash.
-	out.Vars["CANTON_AUTH_FILE"] = filepath.Join(state.DataDir, "auth.json")
+	// CANTON_AUTH_FILE points at the per-instance auth.json a user can
+	// load with `jq` (<DataDir>/auth.json). The path was emitted even
+	// though NOTHING ever wrote the file, so a script doing
+	// `jq < $CANTON_AUTH_FILE` hit ENOENT. writeAuthFile now
+	// materialises it (best-effort, 0600 — it carries the dev JWTs)
+	// whenever the data dir + credentials are present, so the path
+	// resolves for a healthy instance. The var is still always emitted
+	// (it documents the conventional location); the write is the fix.
+	authFile := filepath.Join(state.DataDir, "auth.json")
+	writeAuthFile(authFile, state.Credentials)
+	out.Vars["CANTON_AUTH_FILE"] = authFile
 
 	for logical, port := range state.Ports {
 		out.Vars[PortEnvKey(logical)] = fmt.Sprintf("%d", port)
@@ -158,4 +166,47 @@ func CredEnvKeyPrefix(role string) string {
 // two never drift.
 func normalizeEnvSegment(s string) string {
 	return strings.ReplaceAll(strings.ToUpper(s), "-", "_")
+}
+
+// authFileEntry is one role's credentials as written to auth.json. It
+// mirrors registry.Credential but is declared here so the on-disk
+// auth-file shape is owned by the env layer that emits CANTON_AUTH_FILE.
+type authFileEntry struct {
+	Role     string `json:"role"`
+	User     string `json:"user"`
+	Audience string `json:"audience"`
+	JWT      string `json:"jwt"`
+}
+
+// writeAuthFile materialises auth.json (a 0600 JSON object keyed by
+// role, so a script can `jq -r '."app-provider".jwt' "$CANTON_AUTH_FILE"`)
+// next to the instance's data dir. This is what makes CANTON_AUTH_FILE
+// resolve — previously nothing wrote it.
+//
+// Best-effort and idempotent: it is a no-op (leaving any existing file
+// untouched) when there are no credentials yet, the parent data dir
+// doesn't exist (a stale/half-removed instance — we never MkdirAll one),
+// or marshalling/writing fails. Callers always emit the path regardless;
+// a missing parent dir is an abnormal-instance edge, not the common
+// case this fixes. Safe to call on every env export — both the CLI
+// `env` command and the Web UI app-config handler do.
+func writeAuthFile(path string, creds map[string]registry.Credential) {
+	if len(creds) == 0 {
+		return
+	}
+	if _, err := os.Stat(path); err == nil {
+		return // already written
+	}
+	if info, err := os.Stat(filepath.Dir(path)); err != nil || !info.IsDir() {
+		return // data dir absent — don't create a tree for a stale instance
+	}
+	entries := make(map[string]authFileEntry, len(creds))
+	for role, c := range creds {
+		entries[role] = authFileEntry{Role: c.Role, User: c.User, Audience: c.Audience, JWT: c.JWT}
+	}
+	body, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(path, append(body, '\n'), 0o600)
 }
