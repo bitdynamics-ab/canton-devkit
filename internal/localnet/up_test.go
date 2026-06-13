@@ -198,6 +198,110 @@ func TestRunUp_HappyPath_FakeDriven(t *testing.T) {
 	}
 }
 
+// TestRunUp_RefusesAlreadyRunning guards the corruption fix: re-running
+// `up` against an instance that is already StatusRunning must refuse with
+// ExitUserError WITHOUT overwriting the live state. The pre-fix code
+// stamped Status=creating, then failed port allocation (the live ports
+// are still held) and returned without rollback, stranding the healthy
+// instance as a permanent `creating` zombie. Mirrors the Web UI's 409.
+func TestRunUp_RefusesAlreadyRunning(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+
+	const name = "already-up"
+	seeded := registry.NewState(name, "0.6.4")
+	seeded.Status = registry.StatusRunning
+	seeded.Ports = map[string]int{"app_user_ui": 12345}
+	if err := registry.Write(seeded); err != nil {
+		t.Fatalf("seed running instance: %v", err)
+	}
+
+	stub := &composeRunnerStub{}
+	var out, errBuf bytes.Buffer
+	code := RunUp(context.Background(),
+		&TextProgress{OutW: &out, ErrW: &errBuf},
+		&UpOptions{
+			Name:          name,
+			Version:       splice.LatestAlias,
+			SkipPreflight: true,
+			FetchFn: func(_ context.Context, _ splice.Version, _ string, _ io.Writer) (string, error) {
+				return t.TempDir(), nil
+			},
+			NewRunner: func(string, []string, []string, []string, string, io.Writer) composeOps {
+				return stub
+			},
+		})
+
+	if code != ExitUserError {
+		t.Fatalf("RunUp on a running instance = %d, want ExitUserError; stderr=%q", code, errBuf.String())
+	}
+	if stub.upCalls != 0 {
+		t.Errorf("compose Up called %d times, want 0 (must refuse before touching docker)", stub.upCalls)
+	}
+	s, err := registry.Read(name)
+	if err != nil {
+		t.Fatalf("registry.Read: %v", err)
+	}
+	if s.Status != registry.StatusRunning {
+		t.Errorf("Status = %q, want %q (guard must not overwrite live state)", s.Status, registry.StatusRunning)
+	}
+	if s.Ports["app_user_ui"] != 12345 {
+		t.Errorf("Ports[app_user_ui] = %d, want 12345 (live state was clobbered)", s.Ports["app_user_ui"])
+	}
+}
+
+// doneRecorder is a Progress that discards everything (via the embedded
+// NopProgress) except Done, which it counts. Used to pin that RunUp emits
+// the terminal `done` event on success — the signal the Web UI needs to
+// leave its "running" modal state.
+type doneRecorder struct {
+	NopProgress
+	doneCalls int
+}
+
+func (d *doneRecorder) Done(string) { d.doneCalls++ }
+
+// TestRunUp_EmitsDoneOnSuccess guards the Web UI hang fix: a successful
+// bring-up MUST call Progress.Done(). Without it, SSEProgress never
+// publishes the terminal marker and the create/resume/restart modal hangs
+// on "running" forever, never refreshing the dashboard.
+func TestRunUp_EmitsDoneOnSuccess(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+
+	projectDir := t.TempDir()
+	envDir := filepath.Join(projectDir, "env")
+	if err := os.MkdirAll(envDir, 0o755); err != nil {
+		t.Fatalf("mkdir env: %v", err)
+	}
+	for fname, body := range map[string]string{
+		"sv-auth-on.env":           "AUTH_SV_VALIDATOR_USER_NAME=sv-user\nAUTH_SV_AUDIENCE=sv-aud\n",
+		"app-provider-auth-on.env": "AUTH_APP_PROVIDER_VALIDATOR_USER_NAME=ap-user\nAUTH_APP_PROVIDER_AUDIENCE=ap-aud\n",
+		"app-user-auth-on.env":     "AUTH_APP_USER_VALIDATOR_USER_NAME=au-user\nAUTH_APP_USER_AUDIENCE=au-aud\n",
+	} {
+		if err := os.WriteFile(filepath.Join(envDir, fname), []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", fname, err)
+		}
+	}
+
+	rec := &doneRecorder{}
+	code := RunUp(context.Background(), rec, &UpOptions{
+		Name:          "done-evt",
+		Version:       splice.LatestAlias,
+		SkipPreflight: true,
+		FetchFn: func(_ context.Context, _ splice.Version, _ string, _ io.Writer) (string, error) {
+			return projectDir, nil
+		},
+		NewRunner: func(string, []string, []string, []string, string, io.Writer) composeOps {
+			return &composeRunnerStub{}
+		},
+	})
+	if code != ExitSuccess {
+		t.Fatalf("RunUp = %d, want ExitSuccess", code)
+	}
+	if rec.doneCalls != 1 {
+		t.Errorf("Progress.Done called %d times on success, want 1 (Web UI modal hangs without it)", rec.doneCalls)
+	}
+}
+
 func TestRunUp_AlphaVersionWarns(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 

@@ -991,7 +991,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
           fontWeight: 600,
         }}
       >
-        ✓ {banner.detail ?? "ready"}
+        ✓ {banner.detail || "ready"}
       </div>
     );
   }
