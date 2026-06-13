@@ -587,3 +587,48 @@ func buildTestTarball(t *testing.T, entries map[string]string) []byte {
 	}
 	return buf.Bytes()
 }
+
+// TestCacheHitIsValid pins cacheHitIsValid's branches — in particular the
+// uncurated trust-on-first-use cache-HIT path (wantContentSHA=="" with a
+// marker present), which had no coverage: every pre-seeded-cache Fetch
+// test passes a non-empty ContentSHA (the curated EqualFold branch), and
+// the only empty-ContentSHA Fetch is a cache MISS. That gap let the
+// uncurated hit behaviour drift untested.
+func TestCacheHitIsValid(t *testing.T) {
+	writeMarker := func(dir, sha string) {
+		if err := os.WriteFile(filepath.Join(dir, contentSHAMarker), []byte(sha+"\n"), 0o644); err != nil {
+			t.Fatalf("write marker: %v", err)
+		}
+	}
+
+	t.Run("uncurated hit with a marker is trusted (TOFU)", func(t *testing.T) {
+		dir := t.TempDir()
+		writeMarker(dir, "deadbeefcafef00d")
+		if !cacheHitIsValid(dir, "") {
+			t.Error("uncurated cache hit carrying a marker should be trusted")
+		}
+	})
+
+	t.Run("uncurated legacy cache without a marker is accepted", func(t *testing.T) {
+		if !cacheHitIsValid(t.TempDir(), "") {
+			t.Error("uncurated hit without a marker should be accepted (nothing to compare against)")
+		}
+	})
+
+	t.Run("curated requires an exact (case-insensitive) marker match", func(t *testing.T) {
+		dir := t.TempDir()
+		writeMarker(dir, "ABC123")
+		if !cacheHitIsValid(dir, "abc123") {
+			t.Error("curated hit with a matching marker should be valid (EqualFold)")
+		}
+		if cacheHitIsValid(dir, "0000ff") {
+			t.Error("curated hit with a divergent marker must be rejected (re-pin / tamper)")
+		}
+	})
+
+	t.Run("curated without a marker is rejected", func(t *testing.T) {
+		if cacheHitIsValid(t.TempDir(), "abc123") {
+			t.Error("curated hit without a marker must re-fetch to gain the marker")
+		}
+	})
+}
