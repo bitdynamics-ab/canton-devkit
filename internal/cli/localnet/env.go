@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -29,7 +28,8 @@ import (
 //	github-env       bare KEY=value for $GITHUB_ENV (>> in a workflow step)
 //	json             api/types.EnvExport for scripted consumers
 //
-// The Web UI handler reuses collectEnv() to emit the json variant.
+// The Web UI app-config handler reuses the same localnet.BuildEnvExport
+// builder, so both surfaces emit an identical apitypes.EnvExport.
 func buildEnv() *cobra.Command {
 	var (
 		name       string
@@ -40,8 +40,10 @@ func buildEnv() *cobra.Command {
 		Use:   "env",
 		Short: "Export LocalNet endpoints and credentials as env vars",
 		Long: `Prints an exported KEY=value block summarising the named LocalNet
-instance -- every host port from the Ports map plus the user/
-audience for each captured credential. Use with:
+instance -- every host port from the Ports map (Ledger / JSON /
+admin APIs per role, wallet UIs, scan UI, postgres) plus the
+user/audience for each captured credential and the real on-ledger
+party ids. Use with:
 
   eval "$(dpm localnet env --name hubble)"
 
@@ -101,89 +103,22 @@ raw token values.`,
 	return cmd
 }
 
-// jwtRedaction is the placeholder string that replaces a captured
-// JWT when --include-jwt is not set. Format chosen so a downstream
-// shell that expects a real token errors loudly ("Bearer
-// <redacted>" -> 401) instead of silently passing an empty header.
-const jwtRedaction = "<redacted>"
-
-// collectEnv builds the export from the registry. Two sources:
-//
-// 1. state.Ports map -> CANTON_<UPPER>_PORT for each logical name.
-// Hyphens in the logical name become underscores so a value like
-// "app-user-ui" produces CANTON_APP_USER_UI_PORT (matches what
-// scripts already expect -- no env name has hyphens).
-//
-// 2. state.Credentials map -> CANTON_<ROLE>_JWT and the user/audience
-// pair that signed it, so a downstream client can re-derive the
-// JWT if it later rotates.
-//
-// Plus a small set of stable convenience keys (CANTON_INSTANCE,
-// CANTON_SPLICE_VERSION, CANTON_AUTH_FILE) so shell scripts can
-// branch on them without re-reading state.json.
+// collectEnv builds the export from the registry via the shared
+// localnet.BuildEnvExport builder. The CLI keeps this thin wrapper so
+// the existing callsites + tests read unchanged; the actual shape
+// (ports incl. participant Ledger/Admin/JSON APIs + scan UI, per-role
+// credentials, real party ids) is produced by the same function the
+// Web UI app-config handler calls. See AGENTS.md "CLI ↔ Web UI
+// parity".
 func collectEnv(name string, includeJWT bool) (apitypes.EnvExport, error) {
-	state, err := registry.Read(name)
-	if err != nil {
-		return apitypes.EnvExport{}, err
-	}
-	out := apitypes.EnvExport{
-		SchemaVersion: apitypes.SchemaVersion,
-		Instance:      name,
-		Vars:          make(map[string]string, len(state.Ports)*2+len(state.Credentials)*3+3),
-	}
-
-	out.Vars["CANTON_INSTANCE"] = name
-	out.Vars["CANTON_SPLICE_VERSION"] = state.SpliceVersion
-	// AuthFile points at the per-instance auth.json the user can
-	// load with `jq` (~/.canton-devkit/<name>/auth.json).
-	// filepath.Join (not "/" concat) so the path is correct on
-	// Windows and doesn't duplicate separators if state.DataDir
-	// has a trailing slash.
-	out.Vars["CANTON_AUTH_FILE"] = filepath.Join(state.DataDir, "auth.json")
-
-	for logical, port := range state.Ports {
-		out.Vars[portEnvKey(logical)] = fmt.Sprintf("%d", port)
-	}
-	for role, cred := range state.Credentials {
-		base := credEnvKeyPrefix(role)
-		if includeJWT {
-			out.Vars[base+"_JWT"] = cred.JWT
-		} else {
-			// Default: emit a non-empty redaction placeholder so
-			// downstream tooling that asserts the variable is set
-			// keeps working, but the dev-only signing secret never
-			// hits stdout / CI logs / shared terminals.
-			out.Vars[base+"_JWT"] = jwtRedaction
-		}
-		if cred.User != "" {
-			out.Vars[base+"_USER"] = cred.User
-		}
-		if cred.Audience != "" {
-			out.Vars[base+"_AUDIENCE"] = cred.Audience
-		}
-	}
-	return out, nil
+	return localnet.BuildEnvExport(name, includeJWT)
 }
 
-// portEnvKey converts a logical port name ("app_user_ui" or
-// "app-provider-ui") into the canonical CANTON_<UPPER>_PORT env-var
-// key. Both underscore and hyphen are normalised because the state
-// file's Port keys vary across adapter versions.
+// portEnvKey converts a logical port name into the canonical
+// CANTON_<UPPER>_PORT env-var key. Delegates to the shared builder so
+// the CLI and UI normalise identically.
 func portEnvKey(logical string) string {
-	upper := strings.ToUpper(logical)
-	upper = strings.ReplaceAll(upper, "-", "_")
-	return "CANTON_" + upper + "_PORT"
-}
-
-// credEnvKeyPrefix turns a role label ("sv", "app-user") into the
-// shared prefix for that role's CANTON_ env vars. Mirrors
-// portEnvKey's normalisation rules so a downstream consumer sees a
-// consistent CANTON_APP_USER_* set whether the role is hyphenated
-// or underscored upstream.
-func credEnvKeyPrefix(role string) string {
-	upper := strings.ToUpper(role)
-	upper = strings.ReplaceAll(upper, "-", "_")
-	return "CANTON_" + upper
+	return localnet.PortEnvKey(logical)
 }
 
 // writeEnvShell prints export KEY='value' POSIX-single-quoted so the

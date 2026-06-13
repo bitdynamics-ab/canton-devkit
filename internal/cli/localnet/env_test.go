@@ -32,9 +32,12 @@ func seedEnvInstance(t *testing.T, name string) {
 	s.DataDir = "/test/" + name
 	s.Status = registry.StatusRunning
 	s.Ports = map[string]int{
-		"app_user_ui":     4485,
-		"app-provider-ui": 3485,
-		"postgres":        5432,
+		"app_user_ui":                 4485,
+		"app-provider-ui":             3485,
+		"sv_ui":                       4480,
+		"postgres":                    5432,
+		"participant_ledger_app-user": 2901,
+		"participant_json_app-user":   2975,
 	}
 	s.Credentials = map[string]registry.Credential{
 		"sv": {
@@ -48,6 +51,16 @@ func seedEnvInstance(t *testing.T, name string) {
 			User:     "au-user",
 			Audience: "au-aud",
 			JWT:      "eyJ.aut.sig",
+		},
+	}
+	// Real on-ledger party ids, keyed by the role alias. Distinct
+	// from the credential User (a ledger-api user name) — the env
+	// export must carry both without conflating them.
+	s.Parties = map[string]registry.PartyRef{
+		"app-user": {
+			Alias:   "app-user",
+			PartyID: "app-user::1220abc",
+			Role:    "app-user",
 		},
 	}
 	if err := registry.Write(s); err != nil {
@@ -78,10 +91,17 @@ func TestEnv_ShellOutputIsPosixQuoted(t *testing.T) {
 		"export CANTON_APP_USER_UI_PORT='4485'",
 		"export CANTON_APP_PROVIDER_UI_PORT='3485'",
 		"export CANTON_POSTGRES_PORT='5432'",
+		// Participant Ledger/JSON API ports a dApp dials directly.
+		"export CANTON_PARTICIPANT_LEDGER_APP_USER_PORT='2901'",
+		"export CANTON_PARTICIPANT_JSON_APP_USER_PORT='2975'",
+		// Scan UI surfaced explicitly with the scan.localhost vhost.
+		"export CANTON_SCAN_UI_URL='http://scan.localhost:4480'",
 		"export CANTON_SV_JWT='<redacted>'",
 		"export CANTON_SV_USER='sv-user'",
 		"export CANTON_SV_AUDIENCE='sv-aud'",
 		"export CANTON_APP_USER_JWT='<redacted>'",
+		// Real on-ledger party id, distinct from the user name.
+		"export CANTON_APP_USER_PARTY='app-user::1220abc'",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output missing %q\nfull:\n%s", want, out.String())

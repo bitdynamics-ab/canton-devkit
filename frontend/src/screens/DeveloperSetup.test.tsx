@@ -181,10 +181,11 @@ describe("DeveloperSetup — AppConfigPanel", () => {
         return new Response(
           JSON.stringify({
             schema_version: 1,
-            name: "demo",
-            splice_version: "0.4.12",
-            endpoints: { ledger: "localhost:5011" },
-            parties: { alice: "alice::abc" },
+            instance: "demo",
+            vars: {
+              CANTON_PARTICIPANT_LEDGER_APP_USER_PORT: "2901",
+              CANTON_APP_USER_PARTY: "alice::abc",
+            },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
@@ -215,11 +216,12 @@ describe("DeveloperSetup — AppConfigPanel", () => {
 
     // JSON body should render pretty-printed in the preview's
     // <pre>. Scope to the pre so we don't accidentally match
-    // any other rendering of the word.
+    // any other rendering of the word. The shared EnvExport shape
+    // nests everything under "vars".
     await waitFor(() => {
       const pre = appConfigCard.querySelector("pre");
-      expect(pre?.textContent).toContain('"endpoints"');
-      expect(pre?.textContent).toContain('"alice"');
+      expect(pre?.textContent).toContain('"vars"');
+      expect(pre?.textContent).toContain("alice::abc");
     });
   });
 });
