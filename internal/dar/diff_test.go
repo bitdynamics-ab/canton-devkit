@@ -125,8 +125,17 @@ func TestCompareSemverish(t *testing.T) {
 		{"0.1.5", "0.1.5", 0},
 		{"0.1.5", "0.1.8", -1},
 		{"0.1.8", "0.1.5", 1},
-		{"1.0.0", "1.0.0-snapshot.123", -1}, // release > pre-release
+		{"1.0.0", "1.0.0-snapshot.123", 1},  // release > pre-release
+		{"1.0.0-snapshot.123", "1.0.0", -1}, // pre-release < release (symmetric)
 		{"0.1.10", "0.1.9", 1},              // numeric, not lexicographic
+		// Two pre-releases: compared field-by-field, numeric < alphanumeric.
+		{"1.0.0-alpha", "1.0.0-beta", -1},
+		{"1.0.0-alpha.1", "1.0.0-alpha.2", -1},
+		{"1.0.0-alpha.1", "1.0.0-alpha.beta", -1}, // numeric id ranks below alphanumeric
+		// Real Splice snapshot promoted to its release tag.
+		{"3.3.0-snapshot.20250502.13767.0.v2fc6c7e2", "3.3.0", -1},
+		// Build metadata is ignored for precedence (semver §10).
+		{"1.0.0+build1", "1.0.0+build2", 0},
 	}
 	for _, c := range cases {
 		got := compareSemverish(c.a, c.b)
@@ -149,12 +158,37 @@ func TestVersionDelta(t *testing.T) {
 		{"0.1.5", "0.1.8", "bumped"},
 		{"0.1.8", "0.1.5", "downgraded"},
 		{"", "0.1.0", "incomparable"},
+		// Promoting a snapshot/pre-release build to its release version
+		// is an UPGRADE, not a downgrade — this is the canonical Daml
+		// SCU flow and was previously inverted.
+		{"1.0.0-snapshot", "1.0.0", "bumped"},
+		{"1.0.0", "1.0.0-snapshot", "downgraded"},
+		{"3.3.0-snapshot.20250502.13767.0", "3.3.0", "bumped"},
 	}
 	for _, c := range cases {
 		got := versionDelta(c.a, c.b)
 		if got != c.want {
 			t.Errorf("versionDelta(%q, %q) = %q, want %q", c.a, c.b, got, c.want)
 		}
+	}
+}
+
+// TestCompare_SnapshotToRelease_NotBlocked pins the end-to-end signal:
+// promoting a pre-release main package to its release version must NOT
+// surface a "block" SCU signal (the inverted comparison used to flag it
+// as a downgrade, the worst possible false positive for a triage tool).
+func TestCompare_SnapshotToRelease_NotBlocked(t *testing.T) {
+	a := infoFixture("a.dar", "splice-wallet", "1.0.0-snapshot.123", "id1", "2", "1")
+	b := infoFixture("b.dar", "splice-wallet", "1.0.0", "id2", "2", "1")
+	d := Compare(a, b)
+	if d.MainVersionDelta != "bumped" {
+		t.Errorf("delta = %q, want bumped", d.MainVersionDelta)
+	}
+	if hasSignal(d, "block", "downgraded") {
+		t.Error("snapshot→release wrongly flagged as a BLOCK downgrade")
+	}
+	if !hasSignal(d, "info", "bumped") {
+		t.Error("expected info signal for the version bump")
 	}
 }
 

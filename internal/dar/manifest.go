@@ -39,6 +39,16 @@ type Manifest struct {
 	Encryption string
 }
 
+// maxManifestLogicalLines bounds the number of logical (continuation-
+// joined) header lines parseManifest will accumulate. The 16 MiB
+// scanner buffer below only bounds a SINGLE token, so a hostile
+// MANIFEST.MF made of millions of short lines would otherwise grow the
+// `logical` slice without limit. A real DAR manifest has a handful of
+// headers (and one long wrapped Dalfs: list); 100k logical lines is
+// orders of magnitude above anything legitimate while still bounding
+// the slice.
+const maxManifestLogicalLines = 100_000
+
 // parseManifest reads a MANIFEST.MF stream and returns a Manifest.
 //
 // The Java manifest format uses RFC822 headers but with two twists:
@@ -62,6 +72,9 @@ func parseManifest(r io.Reader) (*Manifest, error) {
 		if strings.HasPrefix(line, " ") && len(logical) > 0 {
 			logical[len(logical)-1] += line[1:]
 			continue
+		}
+		if len(logical) >= maxManifestLogicalLines {
+			return nil, fmt.Errorf("manifest has more than %d header lines (possible malicious input)", maxManifestLogicalLines)
 		}
 		logical = append(logical, line)
 	}

@@ -153,45 +153,100 @@ func versionDelta(a, b string) string {
 // compareSemverish returns -1 / 0 / +1 comparing two semver-ish version
 // strings on a best-effort basis. Used only by versionDelta; not
 // exported because we don't claim full semver compliance.
+//
+// Pre-release ordering follows semver §11: the release part
+// (major.minor.patch…) is compared first, numerically per dotted
+// component; if those are equal, a version WITH a pre-release tail
+// (after the first '-') has LOWER precedence than one without — so
+// 1.0.0-snapshot < 1.0.0, and promoting a snapshot to its release is
+// a "bumped", not a false "downgraded". Build metadata (after '+') is
+// ignored for precedence, as the spec requires.
 func compareSemverish(a, b string) int {
-	aParts := strings.FieldsFunc(a, isVersionSep)
-	bParts := strings.FieldsFunc(b, isVersionSep)
-	for i := 0; i < len(aParts) || i < len(bParts); i++ {
-		var ap, bp string
-		if i < len(aParts) {
-			ap = aParts[i]
-		}
-		if i < len(bParts) {
-			bp = bParts[i]
-		}
-		// Try numeric compare for both sides.
-		if an, ok := atoi(ap); ok {
-			if bn, ok := atoi(bp); ok {
-				if an != bn {
-					if an < bn {
-						return -1
-					}
-					return 1
-				}
-				continue
-			}
-			// Numeric vs non-numeric: numeric ranks higher (no
-			// pre-release tag = release).
+	aRel, aPre := splitPreRelease(a)
+	bRel, bPre := splitPreRelease(b)
+
+	if c := compareDotted(aRel, bRel); c != 0 {
+		return c
+	}
+
+	// Release parts equal. Now the pre-release rule applies: no
+	// pre-release tail outranks any pre-release tail.
+	switch {
+	case aPre == "" && bPre == "":
+		return 0
+	case aPre == "":
+		return 1 // a is the release, b is a pre-release → a is higher
+	case bPre == "":
+		return -1
+	}
+	return compareDotted(aPre, bPre)
+}
+
+// splitPreRelease separates a semver-ish string into its release part
+// (before the first '-') and its pre-release part (between the first
+// '-' and the first '+'). Build metadata after '+' is dropped because
+// semver excludes it from precedence.
+func splitPreRelease(v string) (release, pre string) {
+	// Strip build metadata first so a '+' inside it can't be mistaken
+	// for a separator.
+	if plus := strings.IndexByte(v, '+'); plus >= 0 {
+		v = v[:plus]
+	}
+	if dash := strings.IndexByte(v, '-'); dash >= 0 {
+		return v[:dash], v[dash+1:]
+	}
+	return v, ""
+}
+
+// compareDotted compares two dot-separated identifier lists per the
+// semver field-by-field rule: numeric identifiers compare numerically
+// and rank LOWER than non-numeric ones; non-numeric identifiers compare
+// lexically (ASCII). When one side runs out of fields and all prior
+// fields were equal, the longer side has higher precedence.
+func compareDotted(a, b string) int {
+	aParts := strings.Split(a, ".")
+	bParts := strings.Split(b, ".")
+	n := len(aParts)
+	if len(bParts) > n {
+		n = len(bParts)
+	}
+	for i := 0; i < n; i++ {
+		// A missing field means that side is shorter; the side with
+		// more fields wins (all preceding fields were equal).
+		if i >= len(aParts) {
 			return -1
-		} else if _, ok := atoi(bp); ok {
+		}
+		if i >= len(bParts) {
 			return 1
 		}
-		if ap != bp {
-			if ap < bp {
-				return -1
+		ap, bp := aParts[i], bParts[i]
+		an, aNum := atoi(ap)
+		bn, bNum := atoi(bp)
+		switch {
+		case aNum && bNum:
+			if an != bn {
+				if an < bn {
+					return -1
+				}
+				return 1
 			}
+		case aNum:
+			// Numeric identifiers have lower precedence than
+			// non-numeric ones (semver §11).
+			return -1
+		case bNum:
 			return 1
+		default:
+			if ap != bp {
+				if ap < bp {
+					return -1
+				}
+				return 1
+			}
 		}
 	}
 	return 0
 }
-
-func isVersionSep(r rune) bool { return r == '.' || r == '-' || r == '+' }
 
 func atoi(s string) (int, bool) {
 	if s == "" {
