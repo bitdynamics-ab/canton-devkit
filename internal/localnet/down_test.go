@@ -159,6 +159,48 @@ func TestRunDown_HappyPathPreservesRegistry(t *testing.T) {
 	}
 }
 
+// TestRunDown_NeverRemovesVolumes is the regression guard for the
+// data-loss bug: `down` — and the Web UI Stop/Restart that route through
+// RunDown — must tear containers down WITHOUT removing volumes, otherwise
+// the ledger (Postgres) state is wiped while the UI promises it is
+// preserved. The stub captures the removeVolumes flag RunDown passes.
+func TestRunDown_NeverRemovesVolumes(t *testing.T) {
+	name := "down-keeps-volumes"
+	seedRunningInstance(t, name)
+
+	var capturedRemoveVolumes bool
+	var called bool
+	opts := &DownOptions{
+		Name: name,
+		NewRunner: func(string, []string, []string, []string, string, io.Writer) composeDowner {
+			return removeVolumesCapture(func(_ context.Context, removeVolumes bool) error {
+				called = true
+				capturedRemoveVolumes = removeVolumes
+				return nil
+			})
+		},
+	}
+
+	var out, errBuf bytes.Buffer
+	if code := RunDown(context.Background(), &out, &errBuf, opts); code != ExitSuccess {
+		t.Fatalf("RunDown = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
+	}
+	if !called {
+		t.Fatal("compose Stop was never invoked")
+	}
+	if capturedRemoveVolumes {
+		t.Error("RunDown passed removeVolumes=true — `down` must preserve ledger volumes (data-loss regression)")
+	}
+}
+
+// removeVolumesCapture adapts a func that sees the removeVolumes flag to
+// composeDowner, so TestRunDown_NeverRemovesVolumes can assert on it.
+type removeVolumesCapture func(context.Context, bool) error
+
+func (f removeVolumesCapture) Stop(ctx context.Context, removeVolumes bool) error {
+	return f(ctx, removeVolumes)
+}
+
 // seedRunningInstance writes a minimal `running` registry entry +
 // data dir for a synthetic instance so RunDown has something to tear
 // down. Uses t.TempDir for both the registry root and the data dir.
@@ -187,7 +229,8 @@ func seedRunningInstance(t *testing.T, name string) {
 }
 
 // downerFn adapts a function to composeDowner so tests can inline the
-// stub body without a struct.
+// stub body without a struct. The removeVolumes argument is ignored here;
+// TestRunDown_NeverRemovesVolumes captures it explicitly instead.
 type downerFn func(context.Context) error
 
-func (f downerFn) Down(ctx context.Context) error { return f(ctx) }
+func (f downerFn) Stop(ctx context.Context, _ bool) error { return f(ctx) }

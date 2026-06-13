@@ -195,7 +195,9 @@ func cleanOne(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOpt
 			LogWriter:    out,
 		}
 	}
-	if derr := runner.Down(ctx); derr != nil {
+	// removeVolumes=true: `clean` is the destructive verb — it reclaims
+	// the named ledger volumes (unlike `down`, which preserves them).
+	if derr := runner.Stop(ctx, true); derr != nil {
 		if running {
 			// We were asked to --force a running instance and the
 			// teardown failed — do NOT scrub state, or we'd orphan
