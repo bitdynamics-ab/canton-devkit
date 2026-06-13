@@ -1,6 +1,7 @@
 BINARY_NAME := canton-devkit
 VERSION ?= dev
-LDFLAGS := -s -w -X main.version=$(VERSION)
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null)
+LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)
 
 .PHONY: build clean docker-build lint test frontend frontend-install frontend-test ui
 
@@ -52,7 +53,7 @@ lint:
 	golangci-lint run
 
 docker-build:
-	docker build --build-arg VERSION=$(VERSION) -t $(BINARY_NAME):$(VERSION) .
+	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) -t $(BINARY_NAME):$(VERSION) .
 
 clean:
 	rm -rf bin dist

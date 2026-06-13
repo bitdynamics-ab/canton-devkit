@@ -60,10 +60,10 @@ func TestReuseOrAllocateUIPorts_FirstRunAllocatesEphemeral(t *testing.T) {
 	}
 }
 
-// TestReuseOrAllocateUIPorts_ReusesFreePriorPorts is the contract Zhe
-// asked for in PR #20 #5/#7: if the previous state has a port and
-// that port is currently free, hand the same number back so the
-// user's bookmarked URLs keep working across an up/down/up.
+// TestReuseOrAllocateUIPorts_ReusesFreePriorPorts is the stable-port
+// contract: if the previous state has a port and that port is
+// currently free, hand the same number back so the user's bookmarked
+// URLs keep working across an up/down/up.
 func TestReuseOrAllocateUIPorts_ReusesFreePriorPorts(t *testing.T) {
 	// Pick a real ephemeral port first so we know it's free.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -160,5 +160,107 @@ func TestUIPortEnvVars_StableContract(t *testing.T) {
 		if got[i] != ev {
 			t.Errorf("UIPortEnvVars[%d] = %q, want %q", i, got[i], ev)
 		}
+	}
+}
+
+// freeBase scans the dynamic/ephemeral range for a block of n consecutive
+// free 127.0.0.1 ports, so the determinism test doesn't flake when an
+// unrelated process (e.g. a leftover container) squats on a hardcoded base.
+func freeBase(t *testing.T, n int) int {
+	t.Helper()
+	for base := 49152; base+n <= 65535; base += 50 {
+		free := true
+		for i := 0; i < n; i++ {
+			ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", base+i))
+			if err != nil {
+				free = false
+				break
+			}
+			_ = ln.Close()
+		}
+		if free {
+			return base
+		}
+	}
+	t.Skip("no free consecutive port block available")
+	return 0
+}
+
+// TestDeriveUIPorts_DeterministicAndSequential pins the explicit-port
+// contract: ports are base, base+1, … in slice order, and identical for
+// identical inputs (the determinism --port-base exists to provide).
+func TestDeriveUIPorts_DeterministicAndSequential(t *testing.T) {
+	envVars := []string{"A", "B", "C"}
+	// freeBase only proves the block was free at scan time; a concurrent
+	// process could grab a port before DeriveUIPorts re-probes (TOCTOU).
+	// Treat that as a benign race: rescan and retry rather than flake.
+	const maxAttempts = 6
+	for attempt := 1; ; attempt++ {
+		base := freeBase(t, len(envVars))
+		got, err := DeriveUIPorts(envVars, base)
+		if err != nil {
+			var conflict *PortBaseConflict
+			if errors.As(err, &conflict) && attempt < maxAttempts {
+				continue // lost a port to another process — rescan
+			}
+			t.Fatalf("DeriveUIPorts: %v", err)
+		}
+		want := map[string]int{"A": base, "B": base + 1, "C": base + 2}
+		for k, v := range want {
+			if got[k] != v {
+				t.Errorf("port[%s] = %d, want %d", k, got[k], v)
+			}
+		}
+		// Determinism: re-deriving at the same base yields the identical
+		// mapping (base+i is a pure function of base).
+		got2, err := DeriveUIPorts(envVars, base)
+		if err != nil {
+			var conflict *PortBaseConflict
+			if errors.As(err, &conflict) && attempt < maxAttempts {
+				continue // race on the second derive — rescan the whole test
+			}
+			t.Fatalf("DeriveUIPorts (2nd): %v", err)
+		}
+		for k := range want {
+			if got2[k] != got[k] {
+				t.Errorf("non-deterministic for %s: %d vs %d", k, got2[k], got[k])
+			}
+		}
+		return
+	}
+}
+
+// TestDeriveUIPorts_RejectsBusyPort proves explicit mode surfaces a
+// *PortBaseConflict (naming the busy port) instead of silently falling
+// back — the fixed-required-port preflight.
+func TestDeriveUIPorts_RejectsBusyPort(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+	busy := ln.Addr().(*net.TCPAddr).Port
+	base := busy - 1 // so base+1 == busy is occupied
+	if base < MinPortBase {
+		t.Skipf("ephemeral port %d too low for this test", busy)
+	}
+	_, err = DeriveUIPorts([]string{"A", "B"}, base)
+	var conflict *PortBaseConflict
+	if !errors.As(err, &conflict) {
+		t.Fatalf("expected *PortBaseConflict, got %v", err)
+	}
+	if !errContains(err, fmt.Sprintf("%d", busy)) {
+		t.Errorf("conflict should name busy port %d, got %v", busy, err)
+	}
+}
+
+// TestDeriveUIPorts_RejectsOutOfRange guards the bounds: below MinPortBase
+// and a block that overflows 65535.
+func TestDeriveUIPorts_RejectsOutOfRange(t *testing.T) {
+	if _, err := DeriveUIPorts([]string{"A"}, 80); err == nil {
+		t.Error("expected range error for base 80 (< MinPortBase)")
+	}
+	if _, err := DeriveUIPorts([]string{"A", "B", "C"}, 65535); err == nil {
+		t.Error("expected range error when the block overflows 65535")
 	}
 }

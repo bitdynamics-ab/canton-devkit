@@ -1,5 +1,5 @@
 // Package assets owns the build-time-embedded resources shipped with
-// the canton-devkit binary — currently the BIT-134 Prometheus + Grafana
+// the canton-devkit binary — currently the Prometheus + Grafana
 // observability overlay (compose file, prometheus.yml, dashboard JSON,
 // provisioning configs).
 //

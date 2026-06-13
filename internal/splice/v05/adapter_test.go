@@ -27,7 +27,7 @@ func TestAdapterContract(t *testing.T) {
 	}
 	for _, key := range []string{
 		"LOCALNET_DIR", "LOCALNET_ENV_DIR", "IMAGE_TAG",
-		"DOCKER_NETWORK", "PARTY_HINT", "COMPOSE_PROFILES",
+		"DOCKER_NETWORK", "PARTY_HINT",
 	} {
 		if _, ok := env[key]; !ok {
 			t.Errorf("OverlayEnv missing %q", key)

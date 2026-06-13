@@ -1,4 +1,4 @@
-// BIT-187 — Web UI DAR Manager handlers.
+// Web UI DAR Manager handlers.
 //
 // Wraps the Canton Admin API (`internal/canton/admin`) so the
 // browser can list uploaded DAR packages without speaking gRPC
@@ -11,8 +11,8 @@
 //	GET /api/instances/{name}/dar?role=<app_user|app_provider|sv>
 //	  → 200 {schema_version, instance, role, dars: [{main, name, version, description}]}
 //	  → 503 PARTICIPANT_PORT_NOT_RECORDED if state.json lacks the
-//	    per-role admin port (instance brought up before BIT-190
-//	    landed; re-`up` to capture)
+//	    per-role admin port (instance brought up before per-role
+//	    port capture landed; re-`up` to capture)
 //
 // Role defaults to "app_user" since that's the common dev target.
 // Upload + diff endpoints are deferred to a follow-up — the MVP is
@@ -41,17 +41,35 @@ import (
 // generous ceiling — typical responses come back in <100 ms.
 const darRequestTimeout = 8 * time.Second
 
-// MountDAR installs the DAR endpoints on mux. Hub-independent
-// (pure gRPC calls, no SSE).
-func MountDAR(mux *http.ServeMux) {
+// MountDAR installs the DAR endpoints on mux. The hub is used only
+// by the dar-watch SSE bridge; the read endpoints are
+// pure gRPC. Passing nil disables the watch SSE surface.
+func MountDAR(mux *http.ServeMux, hub watchHub) {
 	mux.HandleFunc("GET /api/instances/{name}/dar", handleDARList)
 	mux.HandleFunc("POST /api/instances/{name}/dar", handleDARUpload)
+
+	// Package-tree inspect.
+	mux.HandleFunc("GET /api/instances/{name}/dar/{id}/inspect", handleDARInspect)
+	// Structural diff.
+	mux.HandleFunc("GET /api/instances/{name}/dar/diff", handleDARDiff)
+	// Per-participant vetting state + toggle.
+	mux.HandleFunc("GET /api/instances/{name}/dar/{id}/vetting", handleDARVettingList)
+	mux.HandleFunc("POST /api/instances/{name}/dar/{id}/vetting/{role}", handleDARVettingToggle)
+
+	// Hot-deploy indicator. The publish endpoint is
+	// the cross-process bridge: a `dpm localnet dar watch` process
+	// POSTs lifecycle events to it; the SSE subscriber tails them
+	// for the Web UI's "watching" badge.
+	if hub != nil {
+		mux.Handle("POST /api/dar/watch/publish", handleDARWatchPublish(hub))
+		mux.Handle("GET /api/dar/watch/events", handleDARWatchEvents(hub))
+	}
 }
 
 // darUploadMax is the hard ceiling on the multipart body for DAR
 // upload. Canton DARs are typically <10 MiB; 64 MiB covers even
 // vendored multi-module bundles without inviting "fill the disk"
-// attacks. Same shape as snapshot upload (BIT-184).
+// attacks. Same shape as snapshot upload.
 const darUploadMax = 64 << 20
 
 // validRole pins the per-role string to the literal set Splice
@@ -94,7 +112,7 @@ func handleDARList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Look up the per-role admin port that BIT-190 records into
+	// Look up the per-role admin port that records into
 	// state.json. Older instances brought up before that fix don't
 	// have the key — surface a clear 503 with the remediation
 	// rather than crashing or pretending the API is down.

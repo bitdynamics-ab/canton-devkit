@@ -13,14 +13,14 @@ import (
 // every Splice version the catalogue knows about plus every tag the
 // upstream repository currently exposes, with a status flag per row:
 //
-//   - supported      → DevKit catalogues it, upstream pin matches.
-//   - drifted        → DevKit catalogues it, upstream tag was force-
-//     moved to a different commit. Security signal.
-//   - available      → upstream has it; DevKit doesn't catalogue it
-//     yet. Run scripts/add-splice-version.sh to add.
-//   - catalogued-only → DevKit catalogues it; upstream no longer has
-//     it (tag was deleted). Investigate before
-//     removing.
+// - supported → DevKit catalogues it, upstream pin matches.
+// - drifted → DevKit catalogues it, upstream tag was force-
+// moved to a different commit. Security signal.
+// - available → upstream has it; DevKit doesn't catalogue it
+// yet. Run scripts/add-splice-version.sh to add.
+// - catalogued-only → DevKit catalogues it; upstream no longer has
+// it (tag was deleted). Investigate before
+// removing.
 //
 // Network is optional: if `--offline` is passed or the network call
 // fails, we render the catalogue alone and print a friendly note.
@@ -147,14 +147,14 @@ type cobraWriter interface {
 
 // localnet_validateFormat is the legacy lowercase name kept for
 // callers in this package that landed before PR-B promoted
-// ValidateFormat to its exported form (BIT-127 adoption).
+// ValidateFormat to its exported form .
 // Delegates to the public ValidateFormat — single source of truth.
 func localnet_validateFormat(got string, allowed ...string) error {
 	return ValidateFormat(got, allowed...)
 }
 
 // ValidateFormat checks that got is one of allowed. Exported so
-// the BIT-127 dar subcommands (internal/cli/localnet/dar) can
+// the dar subcommands (internal/cli/localnet/dar) can
 // share the same validation as the in-package versions/container/
 // refresh subcommands — keeps the error wording identical across
 // every CLI surface that takes a --format flag.

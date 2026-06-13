@@ -10,7 +10,7 @@ import (
 //	(1) a second POST /api/instances for a name that's already
 //	    being brought up returns 409 instead of racing the first
 //	    one to write conflicting state.
-//	(2) DELETE /api/instances/{name}/up (BIT-163e) can resolve the
+//	(2) DELETE /api/instances/{name}/up can resolve the
 //	    name to a context.CancelFunc and cancel the goroutine.
 //
 // Goroutine-safe. Lives at package scope (var jobs *jobRegistry)

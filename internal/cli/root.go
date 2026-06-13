@@ -11,7 +11,7 @@ func (a *App) buildRoot() *cobra.Command {
 	root := &cobra.Command{
 		Use:           appName,
 		Short:         "canton-devkit manages Canton LocalNet developer environments.",
-		Version:       a.version,
+		Version:       a.versionString(),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          cobra.ArbitraryArgs,
@@ -27,8 +27,9 @@ func (a *App) buildRoot() *cobra.Command {
 	root.SetErr(a.err)
 
 	root.AddCommand(a.buildVersionCmd())
+	root.AddCommand(buildTelemetryCmd()) // root-level: telemetry is tool-wide, not a LocalNet concern
 	ln := localnet.Build()
-	applyHelp(ln) // BIT-148: ScreenHelp template for `localnet --help`
+	applyHelp(ln) // custom boxed/sectioned template for `localnet --help`
 	root.AddCommand(ln)
 	return root
 }

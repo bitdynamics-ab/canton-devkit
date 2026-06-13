@@ -24,15 +24,15 @@ import (
 // SchemaVersion constant in internal/api/types for HTTP shapes.
 const contractsTxSchemaVersion = 1
 
-// buildContracts wires `dpm localnet contracts <verb>` — BIT-136's
-// CLI surface for the Daml LF v2 Ledger API. Reuses the
-// internal/canton/ledger client adopted from PR #66.
+// buildContracts wires `dpm localnet contracts <verb>` — the CLI
+// surface for the Daml LF v2 Ledger API, backed by the
+// internal/canton/ledger client.
 //
 // Sub-verbs:
 //
 //	watch — stream Active Contract Set changes (StateService.GetActiveContracts
 //	        + UpdateService.GetUpdates for ongoing deltas).
-//	ls    — paginated snapshot of the current ACS (StateService.GetActiveContracts).
+//	ls — paginated snapshot of the current ACS (StateService.GetActiveContracts).
 //
 // Both default to text output (term.Table); --format json emits a
 // stable JSON shape with schema_version suitable for jq / CI
@@ -40,14 +40,12 @@ const contractsTxSchemaVersion = 1
 //
 // Endpoint discovery: LocalNet's participant gRPC ports are
 // network-internal (not host-published) — pass --endpoint
-// host:port explicitly. A follow-up ticket will add a
-// `--participant` flag that auto-resolves from the registry once
-// participant-port exposure ships.
+// host:port explicitly.
 func buildContracts() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "contracts",
 		Short:         "Operate on the participant's Active Contract Set (ACS)",
-		Long:          "Subcommands wrap the Daml LF v2 Ledger API's StateService for ACS reads. Mirrors the Explorer ACS table in the future Web UI (the same internal/canton/ledger package backs both surfaces per AGENTS.md \"CLI ↔ Web UI parity\").",
+		Long:          "Subcommands wrap the Daml LF v2 Ledger API's StateService for ACS reads. The same internal/canton/ledger package backs both the CLI and the Web UI surfaces.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -175,6 +173,13 @@ func buildContractsWatch() *cobra.Command {
 
 // buildTx wires `dpm localnet tx <verb>` — transaction ops sister
 // command to `contracts`. Same ledger client, different lens.
+//
+// Sub-verbs:
+//
+//	ls     — bounded list of recent transactions (UpdateService.GetUpdates).
+//	replay — fetch a single transaction by --id or --offset and render its
+//	         events in tree shape (UpdateService.GetUpdateById /
+//	         GetUpdateByOffset).
 func buildTx() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "tx",
@@ -184,6 +189,7 @@ func buildTx() *cobra.Command {
 		SilenceErrors: true,
 	}
 	cmd.AddCommand(buildTxLs())
+	cmd.AddCommand(buildTxReplay())
 	return cmd
 }
 
@@ -255,9 +261,246 @@ func buildTxLs() *cobra.Command {
 	return cmd
 }
 
-// resolveOffsetWindow implements the BIT-136 review's --from /
-// --to / --limit precedence. Explicit --from and --to win; if
-// either is zero we substitute end/end-limit.
+// txReplayLedger is the narrow interface `tx replay` needs from the
+// ledger client. Mirrors the token package's LedgerClient seam: keeps
+// the production path on *ledger.Client while letting unit tests inject
+// a fake without dialing a real participant. Add methods only as new
+// orchestration paths come under test.
+type txReplayLedger interface {
+	UpdateById(ctx context.Context, req *lapiv2.GetUpdateByIdRequest) (*lapiv2.GetUpdateResponse, error)
+	UpdateByOffset(ctx context.Context, req *lapiv2.GetUpdateByOffsetRequest) (*lapiv2.GetUpdateResponse, error)
+}
+
+// dialTxReplayLedgerFn is the test seam buildTxReplay's RunE dials
+// through. Defaults to upcasting dialLedger's concrete *ledger.Client
+// to txReplayLedger. Tests reassign to return a fake.
+var dialTxReplayLedgerFn = func(ctx context.Context, instance, endpoint, token string) (txReplayLedger, func(), error) {
+	c, cleanup, err := dialLedger(ctx, instance, endpoint, token)
+	if err != nil {
+		return nil, cleanup, err
+	}
+	return c, cleanup, nil
+}
+
+func buildTxReplay() *cobra.Command {
+	var (
+		instance string
+		endpoint string
+		parties  []string
+		format   string
+		token    string
+		updateID string
+		offset   int64
+	)
+	cmd := &cobra.Command{
+		Use:   "replay",
+		Short: "Fetch and render a single transaction by id or offset",
+		Long: "Calls UpdateService.GetUpdateById (when --id is set) or " +
+			"GetUpdateByOffset (when --offset is set) and prints the " +
+			"transaction's events. Exactly one of --id or --offset is required. " +
+			"--party filters the EventFormat to a per-party visibility " +
+			"projection (same shape as tx ls / contracts watch).",
+		Args:          cobra.NoArgs,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := localnet.ValidateFormat(format, "text", "json"); err != nil {
+				return err
+			}
+			// Mutually exclusive: exactly one of --id / --offset.
+			haveID := strings.TrimSpace(updateID) != ""
+			haveOff := cmd.Flags().Changed("offset")
+			if !haveID && !haveOff {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "tx replay: one of --id or --offset is required")
+				return localnet.AsExitError(localnet.ExitUserError)
+			}
+			if haveID && haveOff {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "tx replay: --id and --offset are mutually exclusive")
+				return localnet.AsExitError(localnet.ExitUserError)
+			}
+			if haveOff && offset < 0 {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "tx replay: --offset must be >= 0")
+				return localnet.AsExitError(localnet.ExitUserError)
+			}
+			client, cleanup, err := dialTxReplayLedgerFn(cmd.Context(), instance, endpoint, token)
+			if err != nil {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
+				return localnet.AsExitError(localnet.ExitUserError)
+			}
+			defer cleanup()
+
+			// Replay uses the tree (LEDGER_EFFECTS) shape so users see
+			// exercised choices, not just the ACS-delta projection. The
+			// EventFormat carries the --party filter; nil templates means
+			// "no template restriction".
+			uf := &lapiv2.UpdateFormat{
+				IncludeTransactions: &lapiv2.TransactionFormat{
+					EventFormat:      buildEventFormat(parties, nil, true),
+					TransactionShape: lapiv2.TransactionShape_TRANSACTION_SHAPE_LEDGER_EFFECTS,
+				},
+			}
+			var (
+				resp *lapiv2.GetUpdateResponse
+				rerr error
+			)
+			if haveID {
+				resp, rerr = client.UpdateById(cmd.Context(), &lapiv2.GetUpdateByIdRequest{
+					UpdateId:     updateID,
+					UpdateFormat: uf,
+				})
+			} else {
+				resp, rerr = client.UpdateByOffset(cmd.Context(), &lapiv2.GetUpdateByOffsetRequest{
+					Offset:       offset,
+					UpdateFormat: uf,
+				})
+			}
+			if rerr != nil {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "tx replay failed:", rerr)
+				return localnet.AsExitError(localnet.ExitRuntimeFailure)
+			}
+			if resp == nil || resp.GetTransaction() == nil {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "tx replay: no transaction at the requested id/offset")
+				return localnet.AsExitError(localnet.ExitUserError)
+			}
+			return renderTxReplay(cmd.OutOrStdout(), instance, parties, format, resp.GetTransaction())
+		},
+	}
+	cmd.Flags().StringVar(&instance, "name", "", "Instance to read from")
+	cmd.Flags().StringVar(&endpoint, "endpoint", "", "Participant gRPC endpoint host:port (required)")
+	cmd.Flags().StringSliceVar(&parties, "party", nil, "Party ID filter (repeatable)")
+	cmd.Flags().StringVar(&format, "format", "text", "output format: text or json")
+	cmd.Flags().StringVar(&token, "token", "", "Bearer JWT")
+	cmd.Flags().StringVar(&updateID, "id", "", "Transaction (update) ID to fetch — mutually exclusive with --offset")
+	cmd.Flags().Int64Var(&offset, "offset", 0, "Ledger offset to fetch — mutually exclusive with --id")
+	return cmd
+}
+
+// txEventRow is the per-event JSON/text shape for `tx replay`. Mirrors
+// contractRow's shape contract so the CLI and the Web UI's
+// transaction-detail drawer share one projection.
+type txEventRow struct {
+	Kind          string   `json:"kind"` // "created" | "exercised" | "archived"
+	NodeID        int32    `json:"node_id"`
+	ContractID    string   `json:"contract_id"`
+	TemplateID    string   `json:"template_id,omitempty"`
+	Choice        string   `json:"choice,omitempty"`         // exercised only
+	ActingParties []string `json:"acting_parties,omitempty"` // exercised only
+	Consuming     bool     `json:"consuming,omitempty"`      // exercised only
+	Signatories   []string `json:"signatories,omitempty"`    // created only
+	Observers     []string `json:"observers,omitempty"`      // created only
+}
+
+func renderTxReplay(out io.Writer, instance string, parties []string, format string, txn *lapiv2.Transaction) error {
+	rows := make([]txEventRow, 0, len(txn.Events))
+	for _, ev := range txn.Events {
+		switch {
+		case ev.GetCreated() != nil:
+			ce := ev.GetCreated()
+			rows = append(rows, txEventRow{
+				Kind:        "created",
+				NodeID:      ce.NodeId,
+				ContractID:  ce.ContractId,
+				TemplateID:  identString(ce.TemplateId),
+				Signatories: ce.Signatories,
+				Observers:   ce.Observers,
+			})
+		case ev.GetExercised() != nil:
+			xe := ev.GetExercised()
+			rows = append(rows, txEventRow{
+				Kind:          "exercised",
+				NodeID:        xe.NodeId,
+				ContractID:    xe.ContractId,
+				TemplateID:    identString(xe.TemplateId),
+				Choice:        xe.Choice,
+				ActingParties: xe.ActingParties,
+				Consuming:     xe.Consuming,
+			})
+		case ev.GetArchived() != nil:
+			ae := ev.GetArchived()
+			rows = append(rows, txEventRow{
+				Kind:       "archived",
+				NodeID:     ae.NodeId,
+				ContractID: ae.ContractId,
+				TemplateID: identString(ae.TemplateId),
+			})
+		}
+	}
+	if format == "json" {
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		return enc.Encode(map[string]any{
+			"schema_version": contractsTxSchemaVersion,
+			"instance":       instance,
+			"parties":        parties,
+			"update_id":      txn.UpdateId,
+			"offset":         txn.Offset,
+			"workflow_id":    txn.WorkflowId,
+			"effective_at":   txn.EffectiveAt.AsTime(),
+			"event_count":    len(rows),
+			"events":         rows,
+		})
+	}
+	return renderTxReplayText(out, instance, parties, txn, rows)
+}
+
+func renderTxReplayText(out io.Writer, instance string, parties []string, txn *lapiv2.Transaction, rows []txEventRow) error {
+	if len(rows) == 0 {
+		_, _ = fmt.Fprintln(out, term.Dimc("no events in this transaction"))
+		return nil
+	}
+	cols := []term.Column{
+		{Label: "node", Width: 4},
+		{Label: "kind", Width: 9},
+		{Label: "contract id", Width: 24},
+		{Label: "template", Width: 0},
+		{Label: "detail", Width: 0},
+	}
+	body := make([][]string, 0, len(rows))
+	for _, r := range rows {
+		detail := ""
+		switch r.Kind {
+		case "exercised":
+			detail = r.Choice
+			if r.Consuming {
+				detail += " (consuming)"
+			}
+			if len(r.ActingParties) > 0 {
+				detail += " by " + strings.Join(r.ActingParties, ",")
+			}
+		case "created":
+			detail = strings.Join(r.Signatories, ",")
+		}
+		body = append(body, []string{
+			fmt.Sprintf("%d", r.NodeID),
+			r.Kind,
+			truncMiddle(r.ContractID, 24),
+			truncTail(r.TemplateID, 40),
+			truncTail(detail, 40),
+		})
+	}
+	header := "tx replay · " + instance
+	if len(parties) > 0 {
+		header += " · " + strings.Join(parties, ",")
+	}
+	right := fmt.Sprintf("%s @ offset %d · %d events",
+		truncTail(txn.UpdateId, 16), txn.Offset, len(rows))
+	tbl := term.Table(cols, body)
+	_, _ = fmt.Fprintln(out, term.Section(header, right, tbl, 0))
+	return nil
+}
+
+// identString stringifies a gRPC Identifier as pkg:Module:Entity (same
+// shape contractRow.TemplateID uses).
+func identString(id *lapiv2.Identifier) string {
+	if id == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s:%s:%s", id.PackageId, id.ModuleName, id.EntityName)
+}
+
+// resolveOffsetWindow implements the --from / --to / --limit
+// precedence. Explicit --from and --to win; if either is zero we
+// substitute end/end-limit.
 //
 // Returns (beginExclusive, endInclusive, error). When --from >
 // --to we fail loudly rather than silently producing an empty
@@ -291,7 +534,7 @@ func dialLedger(ctx context.Context, instance, endpoint, token string) (*ledger.
 			if _, err := registry.Read(instance); err == nil {
 				return nil, func() {}, fmt.Errorf(
 					"participant gRPC endpoint not yet exposed for instance %q — "+
-						"pass --endpoint host:port explicitly (see BIT-136 follow-up: participant-port exposure)",
+						"pass --endpoint host:port explicitly (host port not always exposed for v2 instances)",
 					instance)
 			}
 		}
@@ -315,10 +558,10 @@ func dialLedger(ctx context.Context, instance, endpoint, token string) (*ledger.
 }
 
 // contractRow is the per-contract JSON/text shape. Mirrors the
-// Web UI handler's projection (handlers/contracts.go) so CLI and
-// browser surfaces always see the same JSON shape — AGENTS.md
-// CLI↔UI parity rule. The field name is `template_id`, matching
-// Canton/Daml convention and the gRPC Identifier message.
+// Web UI handler's projection (handlers/contracts.go) so the CLI and
+// browser surfaces always emit the same JSON shape. The field name is
+// `template_id`, matching Canton/Daml convention and the gRPC
+// Identifier message.
 type contractRow struct {
 	ContractID  string   `json:"contract_id"`
 	TemplateID  string   `json:"template_id"`
@@ -375,7 +618,7 @@ func renderACSStream(
 
 // renderACSText delegates to term.Table so the column layout
 // matches the rest of the CLI surface (status, list, container
-// list). BIT-136 review fix.
+// list).
 func renderACSText(out io.Writer, instance string, parties []string, offset int64, rows []contractRow) error {
 	if len(rows) == 0 {
 		_, _ = fmt.Fprintln(out, term.Dimc("no active contracts"))

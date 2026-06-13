@@ -3,6 +3,7 @@ package localnet
 import (
 	"fmt"
 	"net"
+	"strings"
 )
 
 // AllocateUIPorts picks a free OS-assigned host port for each envVar
@@ -53,20 +54,20 @@ func lastByte(s string, b byte) int {
 // `down` can hand the user back the same URLs they bookmarked.
 //
 // The mapping is the inverse of the assignments in RunUp step 8
-// — keep them in sync. Zhe flagged in PR #20 #5/#7 that
-// re-up should not surprise the user with new ports.
+// — keep them in sync so a re-up doesn't surprise the user with
+// new ports.
 var UIPortEnvVarToStateKey = map[string]string{
 	"APP_USER_UI_PORT":     "app_user_ui",
 	"APP_PROVIDER_UI_PORT": "app_provider_ui",
 	"SV_UI_PORT":           "sv_ui",
 	"SWAGGER_UI_PORT":      "swagger_ui",
 	"DB_PORT":              "postgres",
-	// BIT-134 review v4: observability profile ports allocated
-	// alongside the rest so a re-up with --profile observability
-	// reuses the same Grafana / Prometheus URLs the user
-	// bookmarked. The compose overlay binds `${PROMETHEUS_HOST_PORT}
-	// :9090` / `${GRAFANA_HOST_PORT}:3000` so the chosen ephemeral
-	// host port is fed in via env (same as the existing UI vars).
+	// Observability profile ports are allocated alongside the rest so
+	// a re-up with --profile observability reuses the same Grafana /
+	// Prometheus URLs the user bookmarked. The compose overlay binds
+	// `${PROMETHEUS_HOST_PORT}:9090` / `${GRAFANA_HOST_PORT}:3000`, so
+	// the chosen ephemeral host port is fed in via env (same as the
+	// existing UI vars).
 	"PROMETHEUS_HOST_PORT": "prometheus_ui",
 	"GRAFANA_HOST_PORT":    "grafana_ui",
 }
@@ -80,18 +81,18 @@ var UIPortEnvVarToStateKey = map[string]string{
 // stable-URL contract this helper exists to enforce).
 var ErrPortBusy = fmt.Errorf("previously allocated host port is busy")
 
-// ReuseOrAllocateUIPorts implements the stable-port contract from
-// PR #20 #5/#7. Decision table:
+// ReuseOrAllocateUIPorts implements the stable-port contract.
+// Decision table:
 //
-//	prior state.Ports     | port still free | result
+//	prior state.Ports | port still free | result
 //	──────────────────────┼─────────────────┼─────────────────────────
-//	nil / missing key / 0 |       —         | allocate ephemeral
-//	non-zero              |      yes        | reuse the same port
-//	non-zero              |      no         | ErrPortBusy (no fallback)
+//	nil / missing key / 0 | — | allocate ephemeral
+//	non-zero | yes | reuse the same port
+//	non-zero | no | ErrPortBusy (no fallback)
 //
 // The "no fallback on busy" rule is deliberate: silently switching
-// ports would re-introduce exactly the bookmark-breakage the ticket
-// is about. We surface a clear error and let the user decide.
+// ports would re-introduce exactly the bookmark-breakage this helper
+// exists to prevent. We surface a clear error and let the user decide.
 //
 // `prior` may be nil on first-run; that case is equivalent to "every
 // key missing" and triggers full ephemeral allocation.
@@ -122,6 +123,55 @@ func ReuseOrAllocateUIPorts(envVars []string, prior map[string]int) (map[string]
 			return nil, fmt.Errorf("allocate port for %s: %w", ev, err)
 		}
 		out[ev] = p
+	}
+	return out, nil
+}
+
+// MinPortBase is the lowest --port-base we accept. Below 1024 needs root
+// on Unix and collides with well-known ports, so we reject it early.
+const MinPortBase = 1024
+
+// PortBaseConflict is returned by DeriveUIPorts when one or more of the
+// deterministic ports derived from --port-base is already bound. It lists
+// the busy `ENV=port` pairs so the user knows exactly what to free.
+// Unlike auto-allocation, explicit-port mode never falls back to a
+// different port — determinism across runs/machines/CI is the contract,
+// so a conflict is surfaced rather than silently worked around.
+type PortBaseConflict struct{ Busy []string }
+
+func (e *PortBaseConflict) Error() string {
+	return fmt.Sprintf("explicit ports already in use: %s", strings.Join(e.Busy, ", "))
+}
+
+// DeriveUIPorts assigns DETERMINISTIC host ports from `base`, one per
+// envVar in slice order (base, base+1, base+2, …). It is the
+// explicit-port counterpart to ReuseOrAllocateUIPorts: given the same
+// base and profile, a given service always lands on the same port —
+// across re-ups, across machines, across CI. This is the surface behind
+// `localnet up --port-base`.
+//
+// Every derived port must currently be free. If any is busy, it returns a
+// *PortBaseConflict listing them and the caller aborts — explicit mode
+// does NOT fall back to a different port (that would defeat the
+// determinism the flag exists to provide). This is also the "fixed
+// required-port preflight" the explicit-port mode promises: the check
+// happens up front, before compose runs.
+func DeriveUIPorts(envVars []string, base int) (map[string]int, error) {
+	if base < MinPortBase || base+len(envVars) > 65535 {
+		return nil, fmt.Errorf("port base %d out of range: must be %d..%d to fit %d consecutive ports",
+			base, MinPortBase, 65535-len(envVars), len(envVars))
+	}
+	out := make(map[string]int, len(envVars))
+	var busy []string
+	for i, ev := range envVars {
+		p := base + i
+		out[ev] = p
+		if !portIsFree(p) {
+			busy = append(busy, fmt.Sprintf("%s=%d", ev, p))
+		}
+	}
+	if len(busy) > 0 {
+		return nil, &PortBaseConflict{Busy: busy}
 	}
 	return out, nil
 }
@@ -158,10 +208,10 @@ func allocateOneEphemeral() (int, error) {
 
 // UIPortEnvVars enumerates the env-var names the Splice LocalNet compose
 // substitutes for host ports of non-canton services. Names are stable
-// across 0.5.x and 0.6.x (confirmed via the adapter design research).
+// across 0.5.x and 0.6.x.
 //
-// BIT-134 review v4 — the observability profile's PROMETHEUS_HOST_PORT
-// and GRAFANA_HOST_PORT come via ObservabilityPortEnvVars (separate
+// The observability profile's PROMETHEUS_HOST_PORT and
+// GRAFANA_HOST_PORT come via ObservabilityPortEnvVars (separate
 // helper) so they're conditionally appended only when the profile is
 // enabled. Keeping them out of the always-on list avoids a re-up
 // without `--profile observability` allocating two ephemeral ports
@@ -176,7 +226,7 @@ func UIPortEnvVars() []string {
 	}
 }
 
-// ObservabilityPortEnvVars enumerates the env-var names the BIT-134
+// ObservabilityPortEnvVars enumerates the env-var names the
 // observability overlay (assets/compose/observability.yaml)
 // substitutes for the Prometheus + Grafana host ports. Allocated
 // only when `--profile observability` is enabled; the same

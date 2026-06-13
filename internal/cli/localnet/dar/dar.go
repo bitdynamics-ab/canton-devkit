@@ -2,7 +2,7 @@
 // Subcommands here are thin adapters over internal/dar (which does the
 // real parsing). Keeping the wiring separate from the parser means the
 // parser is independently testable and reusable from the other dar
-// commands still to come (BIT-50/51/53/55).
+// commands still to come .
 package dar
 
 import (
@@ -13,10 +13,10 @@ import (
 // internal/cli/localnet/localnet.go.
 //
 // Subcommands currently implemented:
-//   - `info` (BIT-52, file variant) — inspect a local .dar
-//   - `diff` (BIT-54)               — compare two local .dars
+// - `info` — inspect a local .dar
+// - `diff` — compare two local .dars
 //
-// Subcommands still to come (BIT-50/51/53/55) get added here as their
+// Subcommands still to come get added here as their
 // PRs land. Each is its own file in this package.
 func Build() *cobra.Command {
 	cmd := &cobra.Command{

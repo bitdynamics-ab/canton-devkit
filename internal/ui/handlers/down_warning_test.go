@@ -2,7 +2,7 @@ package handlers
 
 import "testing"
 
-// TestFirstNonWarningLine_SkipsWarnings pins BIT-176: the user
+// TestFirstNonWarningLine_SkipsWarnings pins : the user
 // saw "Stop failed: Warning: could not reconstruct compose
 // context..." when the actual fatal cause was on a later line.
 // This test locks the warning-skip behavior so a future change to
@@ -14,7 +14,7 @@ func TestFirstNonWarningLine_SkipsWarnings(t *testing.T) {
 		want string
 	}{
 		{
-			name: "BIT-176 reproduction — Warning before fatal cause",
+			name: "reproduction — Warning before fatal cause",
 			in: "Warning: could not reconstruct compose context: resolve version \"0.4.12\" from state: tag is not in the curated DevKit catalogue\n" +
 				"docker compose down failed: project canton-demo has no compose file\n",
 			want: `docker compose down failed: project canton-demo has no compose file`,
@@ -52,9 +52,8 @@ func TestFirstNonWarningLine_SkipsWarnings(t *testing.T) {
 			want: "single line cause",
 		},
 		{
-			// BIT-176 review fix: docker-compose on Windows
-			// emits CRLF line endings; the \r must NOT defeat
-			// the prefix match.
+			// docker-compose on Windows emits CRLF line endings;
+			// the \r must NOT defeat the prefix match.
 			name: "CRLF line endings — \\r before \\n must not break the prefix match",
 			in:   "Warning: stale state\r\nthe real cause line\r\n",
 			want: "the real cause line",

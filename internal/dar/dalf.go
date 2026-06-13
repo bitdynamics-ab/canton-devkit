@@ -44,6 +44,12 @@ type PackageMeta struct {
 	// IsMain is true for the package the manifest's `Main-Dalf`
 	// points at; false for dependencies.
 	IsMain bool
+
+	// Contents is the deep Daml-LF view — modules, templates (+ their
+	// choices), interfaces, data types. Populated for LF2
+	// packages; nil for LF1 or unparseable archives. Surfaced by
+	// `dar info --deep`.
+	Contents *PackageContents `json:"contents,omitempty"`
 }
 
 // LFVersion returns the human-readable Daml-LF version like "2.1" or

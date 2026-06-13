@@ -12,14 +12,53 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
+	adminv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2/admin"
 )
+
+// LedgerClient is the narrow slice of *ledger.Client that the live-ACS
+// orchestration paths (runBalanceLive, scanWorkspace) actually use.
+// Exists because review feedback on PRs #86 (m3-integration) and #89
+// (token-views backend) flagged that those paths had no unit coverage
+// for their error branches (PermissionDenied, no-parties, stream-error)
+// — *ledger.Client is a concrete struct wrapping grpc.ClientConn, so
+// there was no seam to inject a fake without going through a real
+// participant.
+//
+// The interface is deliberately small: only the methods the two
+// orchestration paths invoke (directly or via the resolveReadableParties
+// helper chain). Widening to mirror the whole Client API would defeat
+// the point — Add methods here as new orchestration paths come under
+// test, not preemptively.
+type LedgerClient interface {
+	LedgerEnd(ctx context.Context) (ledger.LedgerEnd, error)
+	ActiveContracts(ctx context.Context, req ledger.ActiveContractsRequest) (<-chan ledger.StreamItem[*lapiv2.GetActiveContractsResponse], error)
+	ResolveActAndReadParties(ctx context.Context) ([]string, error)
+	ListKnownParties(ctx context.Context) (*adminv2.ListKnownPartiesResponse, error)
+	GrantUserActAndReadAs(ctx context.Context, userID string, parties []string) error
+}
+
+// dialLedgerFn is the test seam runBalanceLive and scanWorkspace dial
+// through. Defaults to upcasting dialLedger's concrete *ledger.Client
+// to LedgerClient; tests reassign it to return a fakeLedger.
+//
+// Kept as a package var rather than threaded through BalanceOptions so
+// the seam stays invisible to CLI / HTTP callers. The token package's
+// tests run sequentially, so the package-level mutation is safe.
+//
+// dialLedger itself keeps its concrete *ledger.Client return so the
+// other eight callers (instrument_v2, run_transfer, activity, plan,
+// party) — which need methods outside this narrow interface — compile
+// unchanged.
+var dialLedgerFn = func(ctx context.Context, conn LedgerConn) (LedgerClient, func(), error) {
+	return dialLedger(ctx, conn)
+}
 
 // LedgerConn captures everything a live ledger call needs: the gRPC
 // endpoint and the Bearer JWT the participant accepts.
 //
 // Resolved by the CLI / Web UI from --endpoint + --token (or via
 // state.Endpoints once the participant gRPC port surfacing follow-up
-// lands; tracked in BIT-136's "endpoint auto-discovery" item).
+// lands; tracked in "endpoint auto-discovery" item).
 type LedgerConn struct {
 	Endpoint string // host:port, e.g. "localhost:61169"
 	Token    string // Bearer JWT; empty allowed when the participant runs unauthenticated
@@ -41,16 +80,16 @@ type LedgerConn struct {
 // pulling cli/localnet into the import graph. Caller MUST defer the
 // returned cleanup.
 //
-// Token resolution order (the BIT-139 follow-up that drove this):
-//  1. conn.Token explicit (`--token` flag wins).
-//  2. registry.State.Credentials[Role] — populated by `localnet up`'s
-//     captureCredentials when the alpha boot is clean. The CLI mints
-//     against this via `localnet creds --role <role> --format raw`.
-//  3. splice.SignToken fallback — issues a fresh user-token from the
-//     project's env/<role>-auth-on.env files. Same shape as path #2;
-//     used when creds-capture races / fails (the V2 alpha is wobbly
-//     on cold boots and step (2) may be empty even after up succeeds).
-//  4. error pointing at `localnet creds --raw` for the user to override.
+// Token resolution order (the follow-up that drove this):
+// 1. conn.Token explicit (`--token` flag wins).
+// 2. registry.State.Credentials[Role] — populated by `localnet up`'s
+// captureCredentials when the alpha boot is clean. The CLI mints
+// against this via `localnet creds --role <role> --format raw`.
+// 3. splice.SignToken fallback — issues a fresh user-token from the
+// project's env/<role>-auth-on.env files. Same shape as path #2;
+// used when creds-capture races / fails (the V2 alpha is wobbly
+// on cold boots and step (2) may be empty even after up succeeds).
+// 4. error pointing at `localnet creds --raw` for the user to override.
 func dialLedger(ctx context.Context, conn LedgerConn) (*ledger.Client, func(), error) {
 	if conn.Endpoint == "" {
 		return nil, func() {}, fmt.Errorf("ledger endpoint is required (host:port)")
@@ -77,6 +116,16 @@ func dialLedger(ctx context.Context, conn LedgerConn) (*ledger.Client, func(), e
 	if err != nil {
 		return nil, func() {}, fmt.Errorf("dial ledger %s: %w", conn.Endpoint, err)
 	}
+	// V2-alpha gap: the Splice `-dev` boot does NOT auto-grant
+	// `ledger-api-user` CanActAs/CanReadAs on the local party (stable
+	// 0.6.4 does). Without grants, every ACS / submit returns
+	// PermissionDenied even though the JWT is accepted. Probe the
+	// user's rights and grant the local party set on first dial.
+	// Idempotent: subsequent dials see existing grants and short-circuit.
+	if err := ensureLocalPartyRights(ctx, client, conn.Role); err != nil {
+		_ = client.Close()
+		return nil, func() {}, err
+	}
 	return client, func() { _ = client.Close() }, nil
 }
 
@@ -101,6 +150,81 @@ func redactJWTs(err error) error {
 		return err // nothing matched — preserve the original error (and its wrapping)
 	}
 	return errors.New(masked)
+}
+
+// ensureLocalPartyRights inspects the JWT's user-rights and, if no
+// per-party Act/Read rights are present, grants them for the parties
+// hosted on this participant whose names match the role. A no-op when
+// the user already has Act/Read rights (stable Splice grants these at
+// boot; second-and-later dials see prior grants).
+func ensureLocalPartyRights(ctx context.Context, c LedgerClient, role string) error {
+	rights, err := c.ResolveActAndReadParties(ctx)
+	if err != nil {
+		return fmt.Errorf("probe user rights: %w", err)
+	}
+	if len(rights) > 0 {
+		return nil
+	}
+	parties, err := localPartiesForRole(ctx, c, role)
+	if err != nil {
+		return fmt.Errorf("discover local parties for role %q: %w", role, err)
+	}
+	if len(parties) == 0 {
+		return fmt.Errorf("no local parties found for role %q on this participant — "+
+			"V2 onboarding may not have completed; check `localnet status`", role)
+	}
+	if err := c.GrantUserActAndReadAs(ctx, exerciseUserID, parties); err != nil {
+		return fmt.Errorf("grant Act/Read rights for parties %v: %w", parties, err)
+	}
+	return nil
+}
+
+// localPartiesForRole returns the locally-hosted party IDs whose name
+// matches the role's expected prefix (e.g. role=app-user matches
+// `app_user_*`). IsLocal=true filters out cross-participant proxies —
+// only locally-hosted parties can be the subject of grants.
+func localPartiesForRole(ctx context.Context, c LedgerClient, role string) ([]string, error) {
+	resp, err := c.ListKnownParties(ctx)
+	if err != nil {
+		return nil, err
+	}
+	prefix := strings.ReplaceAll(role, "-", "_") + "_"
+	var out []string
+	for _, p := range resp.GetPartyDetails() {
+		if !p.GetIsLocal() {
+			continue
+		}
+		if strings.HasPrefix(p.GetParty(), prefix) {
+			out = append(out, p.GetParty())
+		}
+	}
+	return out, nil
+}
+
+// resolveReadableParties returns the parties a scan should cover. It
+// first widens the role's user with CanReadAs for every registered party
+// alias so the god-mode matrix / activity feed see ALL
+// aliased parties, not just the role's own — then re-resolves the
+// authoritative granted set via ResolveActAndReadParties.
+//
+// Granting before resolving is deliberate: ResolveActAndReadParties stays
+// the single source of truth for "what's safe to put in the ACS filter,"
+// so a party that couldn't be granted here (e.g. one hosted on another
+// participant) simply never enters the filter — querying an ungranted
+// party would otherwise PermissionDenied the entire stream. The grant is
+// best-effort; its failure doesn't fail the scan.
+func resolveReadableParties(ctx context.Context, c LedgerClient, instance, role string) ([]string, error) {
+	if extra := partiesFromState(instance); len(extra) > 0 {
+		_ = c.GrantUserActAndReadAs(ctx, exerciseUserID, extra)
+	}
+	parties, err := c.ResolveActAndReadParties(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve readable parties: %w", err)
+	}
+	if len(parties) == 0 {
+		parties, _ = localPartiesForRole(ctx, c, role)
+	}
+	return parties, nil
 }
 
 // resolveLedgerToken implements the four-step token resolution order
@@ -145,8 +269,8 @@ func resolveLedgerTokenRaw(conn LedgerConn) (string, error) {
 	inputs, err := splice.LoadCredentialInputs(state.ProjectDir)
 	if err != nil {
 		return "", fmt.Errorf(
-			"no captured credentials for role %q and could not load env files (%w). "+
-				"Run `canton-devkit localnet creds --name %s --role %s --format raw` "+
+			"no captured credentials for role %q and could not load env files (%w); "+
+				"run `canton-devkit localnet creds --name %s --role %s --format raw` "+
 				"to confirm token issuance, or pass --token explicitly",
 			role, err, conn.Instance, role)
 	}
@@ -160,8 +284,8 @@ func resolveLedgerTokenRaw(conn LedgerConn) (string, error) {
 		}
 	}
 	return "", fmt.Errorf(
-		"no captured credentials AND no env entry for role %q on instance %q. "+
-			"Run `canton-devkit localnet creds --name %s --role %s --format raw` "+
+		"no captured credentials AND no env entry for role %q on instance %q; "+
+			"run `canton-devkit localnet creds --name %s --role %s --format raw` "+
 			"to confirm what's available, or pass --token explicitly",
 		role, conn.Instance, conn.Instance, role)
 }
@@ -239,9 +363,12 @@ func parseInterfaceID(qual string) (pkg, module, entity string) {
 // downstream consumer asks for them.
 type holdingViewV2 struct {
 	Owner        string // view.account.owner (Optional Party)
+	Provider     string // view.account.provider (Optional Party) — "" when None
+	AccountID    string // view.account.id (Text)
 	InstrumentID string // view.instrumentId.id
 	Admin        string // view.instrumentId.admin (the V2 InstrumentId admin = the issuer party)
 	Amount       string // view.amount as a Decimal string (we don't round on the wire)
+	Locked       bool   // view.lock present (Some) — held by an active allocation/proposal
 }
 
 // extractHoldingViewV2 walks a participant InterfaceView Record and
@@ -269,8 +396,13 @@ func extractHoldingViewV2(view *lapiv2.InterfaceView) (holdingViewV2, bool) {
 				return out, false
 			}
 			for _, af := range rec.Fields {
-				if af.Label == "owner" {
+				switch af.Label {
+				case "owner":
 					out.Owner = optionalPartyOf(af.Value)
+				case "provider":
+					out.Provider = optionalPartyOf(af.Value)
+				case "id":
+					out.AccountID = textOf(af.Value)
 				}
 			}
 		case "instrumentId":
@@ -288,6 +420,12 @@ func extractHoldingViewV2(view *lapiv2.InterfaceView) (holdingViewV2, bool) {
 			}
 		case "amount":
 			out.Amount = numericOf(f.Value)
+		case "lock":
+			// Optional Lock — Some(...) means the holding is locked
+			// into an active allocation/proposal and can't be spent.
+			if o, ok := f.Value.Sum.(*lapiv2.Value_Optional); ok && o.Optional != nil && o.Optional.Value != nil {
+				out.Locked = true
+			}
 		}
 	}
 	if out.InstrumentID == "" || out.Amount == "" {

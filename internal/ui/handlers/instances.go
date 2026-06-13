@@ -3,24 +3,25 @@
 // Each file in this package owns one resource:
 //
 //	instances.go — registry-backed instance list + detail (this file)
-//	(future) jwt.go, appconfig.go — auth/credential surfaces (BIT-131 follow-on)
-//	(future) packages.go         — DAR list (depends on BIT-127 backend)
-//	(future) metrics.go          — Prometheus passthrough (depends on BIT-134)
-//	(future) logs.go             — last-N docker logs
-//	(future) acs.go, tx.go       — ledger views (depend on BIT-132 client)
+//	jwt.go, appconfig.go — auth/credential surfaces
+//	packages.go — DAR list
+//	metrics.go — Prometheus passthrough
+//	logs.go — last-N docker logs
+//	acs.go, tx.go — ledger views
 //
 // # Why "registry-backed" lands first
 //
 // The instance list and detail responses can be built from on-disk
 // registry state alone — no docker calls, no ledger client, no
 // JWT signer. That's the cheapest meaningful slice to land and review;
-// it also gives the M2 frontend something to consume on day one.
+// it also gives the frontend something to consume on day one.
 //
 // # Why detail delegates to localnet.CollectStatus
 //
 // The CLI status command and Web UI detail endpoint share
 // localnet.CollectStatus so JSON shape, Docker soft-fail handling,
-// endpoint projection, and JWT redaction do not drift.
+// endpoint projection, and JWT redaction do not drift. See AGENTS.md
+// "CLI ↔ Web UI parity".
 package handlers
 
 import (
@@ -70,7 +71,7 @@ const upBodyMax = 4 << 10 // 4 KiB
 //
 // This is NOT the HTTP request timeout — the POST returns 202
 // immediately; the goroutine runs on its own context, independent
-// of the request. Cancellation (BIT-163e) passes a CancelFunc
+// of the request. Cancellation passes a CancelFunc
 // into the goroutine's context that DELETE invokes.
 const upJobTimeout = 30 * time.Minute
 
@@ -100,6 +101,7 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("DELETE /api/instances/{name}", handleScrubInstance(hub))
 		mux.HandleFunc("POST /api/instances/{name}/down", handleDownInstance())
 		mux.HandleFunc("POST /api/instances/{name}/up", handleResumeInstance(hub))
+		mux.HandleFunc("POST /api/instances/{name}/recreate", handleRecreateInstance(hub))
 		mux.HandleFunc("POST /api/instances/{name}/observability", handleObservabilityToggle())
 	} else {
 		// Stub so a misconfigured deployment fails loudly
@@ -117,12 +119,59 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("DELETE /api/instances/{name}", stub)
 		mux.HandleFunc("POST /api/instances/{name}/down", stub)
 		mux.HandleFunc("POST /api/instances/{name}/up", stub)
+		mux.HandleFunc("POST /api/instances/{name}/recreate", stub)
 	}
 	// Container probe + log tail + restart are hub-independent
 	// (pure docker calls) — mount them for every deployment.
 	mux.HandleFunc("GET /api/instances/{name}/containers", handleInstanceContainers())
 	mux.HandleFunc("GET /api/instances/{name}/containers/{container}/logs", handleContainerLogs())
 	mux.HandleFunc("POST /api/instances/{name}/containers/{container}/restart", handleContainerRestart())
+	// Pause / resume — docker compose pause/unpause; hub-
+	// independent. CLI counterpart: `localnet pause` / `localnet resume`.
+	mux.HandleFunc("POST /api/instances/{name}/pause", handlePauseInstance(true))
+	mux.HandleFunc("POST /api/instances/{name}/resume", handlePauseInstance(false))
+}
+
+// handlePauseInstance: POST /api/instances/{name}/pause|resume.
+// Synchronous wrapper around localnet.RunPause / RunResume — both are
+// near-instant (a SIGSTOP/SIGCONT signal to the containers), so no async
+// job is needed. 204 on success; the run's stderr is surfaced on failure.
+func handlePauseInstance(pause bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if err := registry.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), downTimeout)
+		defer cancel()
+
+		var outBuf, errBuf bytes.Buffer
+		opts := &localnet.PauseOptions{Name: name}
+		var exit int
+		if pause {
+			exit = localnet.RunPause(ctx, &outBuf, &errBuf, opts)
+		} else {
+			exit = localnet.RunResume(ctx, &outBuf, &errBuf, opts)
+		}
+		if exit == localnet.ExitSuccess {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		status := http.StatusInternalServerError
+		switch exit {
+		case localnet.ExitUserError:
+			status = http.StatusBadRequest
+		case localnet.ExitTimeout:
+			status = http.StatusRequestTimeout
+		}
+		cause := firstNonWarningLine(errBuf.String())
+		if cause == "" {
+			cause = "operation failed with exit code " + uintToString(uint64(exit))
+		}
+		writeErrorWithCode(w, status, "PAUSE_FAILED", cause)
+	}
 }
 
 // handleList: GET /api/instances → types.ListResponse.
@@ -198,8 +247,8 @@ func handleDetail(w http.ResponseWriter, r *http.Request) {
 // internal/cli/localnet/list.go's formatPortRange — see the godoc
 // there for the allowlist rationale.
 //
-// TODO(BIT-146-merge): once list.go merges, this should be
-// extracted to a shared helper rather than duplicated.
+// future: extract to a shared helper rather than duplicating across the
+// CLI and handler surfaces.
 func formatPortRange(ports map[string]int) string {
 	if len(ports) == 0 {
 		return "—"
@@ -280,9 +329,8 @@ func joinComma(ss []string) string {
 // human-readability (browsers and `curl | jq` both prefer it);
 // the gzip middleware (future) will erase the size cost.
 //
-// Reviewer pin (PR #43 round-2 Cache-Control): every API JSON
-// response carries no-store. Without it, browsers and HTTP
-// proxies can cache responses that include credentials (the
+// Every API JSON response carries no-store. Without it, browsers and
+// HTTP proxies can cache responses that include credentials (the
 // JWT endpoint, app-config) or that change frequently (instance
 // list). The Vite bundle (handled in assets.go) opts INTO
 // hashed-file caching separately; this default applies only to
@@ -296,14 +344,12 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	_ = enc.Encode(body)
 }
 
-// errorBody is the canonical error response shape — aligned with
-// PR #36's FriendlyError taxonomy in internal/localnet/friendly_errors.go.
+// errorBody is the canonical error response shape — aligned with the
+// FriendlyError taxonomy in internal/localnet/friendly_errors.go.
 //
-// Reviewer pin (PR #43 #e): the previous shape was a free-form
-// {error, detail} pair. The CLI's friendly_errors carries
-// (Code, Summary, Remediation[]) and the frontend already knows
-// how to render that triple. Mirroring keeps one error taxonomy
-// across CLI and UI surfaces.
+// The CLI's friendly_errors carries (Code, Summary, Remediation[]) and
+// the frontend already knows how to render that triple. Mirroring keeps
+// one error taxonomy across CLI and UI surfaces.
 //
 // Fields:
 //   - Code: stable token scripts/frontends branch on (e.g.
@@ -335,11 +381,11 @@ const (
 
 // writeError emits a structured error.
 //
-// Reviewer pin (PR #43 round-2 5xx leak): the previous shape
-// included the raw cause string for 5xx errors. That leaked
-// filesystem paths (e.g. "read /home/user/.canton-devkit/...")
-// into the response body — visible to anyone on the loopback
-// AND to anyone who can screenshot a JS error. Now:
+// The cause string is never shipped to the client for 5xx errors:
+// including it would leak filesystem paths (e.g.
+// "read /home/user/.canton-devkit/...") into the response body — visible
+// to anyone on the loopback AND to anyone who can screenshot a JS error.
+// Instead:
 //   - 4xx: code + summary only (no cause)
 //   - 5xx: code + summary only AS WELL — the cause is LOGGED
 //     server-side via log.Default so the operator can diagnose,
@@ -365,11 +411,8 @@ func writeError(w http.ResponseWriter, status int, summary string, cause error) 
 
 // writeErrorWithCode is the variant used when the handler wants
 // to pin a specific stable code rather than the status-derived
-// default. Currently called from sibling handlers (snapshots,
-// metrics, …) that may not exist on every branch — keep as
-// exported-to-package even when no caller is in this file.
-//
-//nolint:unused // intentional package-public; consumed by sibling handlers
+// default. Used across this and sibling handlers (snapshots,
+// metrics, …).
 func writeErrorWithCode(w http.ResponseWriter, status int, code, summary string, remediation ...string) {
 	writeJSON(w, status, errorBody{
 		Code:        code,
@@ -397,7 +440,7 @@ func codeForStatus(status int) string {
 	}
 }
 
-// ── BIT-163d: async create-instance flow ──────────────────────────
+// ── async create-instance flow ────────────────────────────
 
 // upRequest is the body shape for POST /api/instances. Mirrors
 // `dpm localnet up` flags exactly so CLI and Web UI surface the
@@ -407,6 +450,7 @@ type upRequest struct {
 	Version        string   `json:"version,omitempty"`         // empty → "latest" server-side
 	AllowUncurated bool     `json:"allow_uncurated,omitempty"` // resolve unknown tags upstream
 	Profiles       []string `json:"profiles,omitempty"`        // docker-compose profiles; e.g. ["observability"]
+	PortBase       int      `json:"port_base,omitempty"`       // >0 → deterministic ports from this base (CLI --port-base parity)
 }
 
 // allowedProfiles caps what the HTTP surface will accept. Mirrors
@@ -414,7 +458,9 @@ type upRequest struct {
 // string can't ride through. Keep in sync with internal/localnet's
 // known profile constants.
 var allowedProfiles = map[string]bool{
-	localnet.ObservabilityProfileName: true,
+	localnet.ObservabilityProfileName: true, // legacy umbrella; expands to prometheus + grafana
+	localnet.PrometheusProfileName:    true,
+	localnet.GrafanaProfileName:       true,
 	localnet.TokensV2ProfileName:      true,
 }
 
@@ -442,7 +488,7 @@ type upAcceptedResponse struct {
 //
 //  4. hub.EnableBuffering(topic, 128)
 //  5. context.WithCancel — cancel stored in jobs registry for
-//     the future DELETE handler (BIT-163e); context.WithTimeout
+//     the future DELETE handler; context.WithTimeout
 //     wraps that with the 10-minute job ceiling
 //  6. spawn goroutine → RunUp(ctx, SSEProgress, opts)
 //  7. return 202 with {instance, events_url}
@@ -574,11 +620,38 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 			}
 		}
 
+		// port_base, when supplied, must fit a usable block (0 = auto).
+		// Validate the FULL range up front with a 400 — both too-low and
+		// too-high — rather than letting a bad value fail later inside
+		// DeriveUIPorts. The upper bound mirrors up.go's effective
+		// env-var block (the observability profile adds two ports), so
+		// the gate matches exactly what RunUp will try to allocate.
+		if req.PortBase != 0 {
+			nPorts := len(localnet.UIPortEnvVars())
+			for _, p := range req.Profiles {
+				if p == localnet.ObservabilityProfileName {
+					nPorts += len(localnet.ObservabilityPortEnvVars())
+				}
+			}
+			maxBase := 65535 - nPorts
+			if req.PortBase < localnet.MinPortBase || req.PortBase > maxBase {
+				cancelJob()
+				hub.ClearBuffer(topic)
+				jobs.Unregister(req.Name)
+				writeErrorWithCode(w, http.StatusBadRequest,
+					ErrCodeInvalidRequest,
+					fmt.Sprintf("port_base %d is out of range", req.PortBase),
+					fmt.Sprintf("use 0 (auto) or a base in %d..%d", localnet.MinPortBase, maxBase))
+				return
+			}
+		}
+
 		opts := &localnet.UpOptions{
 			Name:           req.Name,
 			Version:        req.Version,
 			AllowUncurated: req.AllowUncurated,
 			Profiles:       req.Profiles,
+			PortBase:       req.PortBase,
 		}
 
 		go func() {
@@ -607,10 +680,8 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 const downTimeout = 3 * time.Minute
 
 // downRequest is the body shape (currently empty; reserved for
-// future --keep-data flag once the frontend has a UI for it).
-type downRequest struct {
-	KeepData bool `json:"keep_data,omitempty"`
-}
+// future per-instance down options).
+type downRequest struct{}
 
 // handleResumeInstance: POST /api/instances/{name}/up.
 //
@@ -640,14 +711,14 @@ func handleResumeInstance(hub *stream.Hub) http.HandlerFunc {
 				"invalid instance name: "+err.Error())
 			return
 		}
-		// Yellow Y8 — invert read-then-acquire order. The original
-		// code read state, decided to proceed, then registered the
-		// job. Between those two points a concurrent /up could
-		// register first, get the lock, and flip the instance to
-		// running — leaving us racing to start a duplicate. Now:
-		// reserve the job slot FIRST, then read state, recheck
-		// status. If anything changed after we won the slot we
-		// release and surface the right 409.
+		// Invert read-then-acquire order to close a TOCTOU race.
+		// Reading state, deciding to proceed, then registering the
+		// job leaves a window where a concurrent /up could register
+		// first, get the lock, and flip the instance to running —
+		// leaving us racing to start a duplicate. Instead: reserve
+		// the job slot FIRST, then read state, recheck status. If
+		// anything changed after we won the slot we release and
+		// surface the right 409.
 		jobCtx, cancelJob := context.WithTimeout(context.Background(), upJobTimeout)
 		if !jobs.Register(name, cancelJob) {
 			cancelJob()
@@ -710,6 +781,187 @@ func handleResumeInstance(hub *stream.Hub) http.HandlerFunc {
 	}
 }
 
+// profilesFromComposeFiles infers the docker-compose profile set
+// the instance was originally created with by inspecting its
+// recorded ComposeFiles. The observability and tokens-v2 overlays
+// each ship a distinctive filename; presence of the overlay path
+// in state.ComposeFiles is a reliable signal the corresponding
+// profile is in effect.
+//
+// Used by the restart flow so a down → up cycle re-enables the
+// same `--profile <name>` flags the original `localnet up` was
+// invoked with. Without this, restarting an instance that was
+// created with `--profile observability` would silently lose its
+// Prometheus + Grafana sidecars.
+func profilesFromComposeFiles(files []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, f := range files {
+		// Match by basename so changes to the overlay's parent
+		// dir layout don't break detection.
+		base := f
+		if i := strings.LastIndexByte(f, '/'); i >= 0 {
+			base = f[i+1:]
+		}
+		switch base {
+		case "observability.yaml":
+			if !seen[localnet.ObservabilityProfileName] {
+				out = append(out, localnet.ObservabilityProfileName)
+				seen[localnet.ObservabilityProfileName] = true
+			}
+		case "tokens-v2.yaml":
+			if !seen[localnet.TokensV2ProfileName] {
+				out = append(out, localnet.TokensV2ProfileName)
+				seen[localnet.TokensV2ProfileName] = true
+			}
+		}
+	}
+	return out
+}
+
+// handleRecreateInstance: POST /api/instances/{name}/recreate.
+//
+// Full down → up cycle for an existing instance, reusing the
+// recorded SpliceVersion + inferred profile set. The UI surfaces
+// this as a single "Restart" button so users don't have to
+// manually compose a Stop followed by a Start.
+//
+// Verb semantics:
+//
+//   - 404 — name not in the registry
+//   - 400 — invalid name (DNS-label validation)
+//   - 409 INSTANCE_CREATING — a bring-up / down / restart goroutine
+//     is already in flight for this name (jobs.Register loses the
+//     race); caller should subscribe to the existing events stream
+//   - 202 — kicked off; events stream at /api/instances/{name}/events
+//
+// Concurrency model:
+//
+// The handler reserves the per-name slot in `jobs` BEFORE doing
+// any state read (same ordering as handleResumeInstance —
+// inverting read-then-acquire avoids a window where a concurrent
+// /up/restart could win the lock between our read and our spawn).
+// Once registered, the goroutine runs RunDown then RunUp serially;
+// each of those takes the per-instance `registry.Lock` internally,
+// so the restart never bypasses the lock pattern the down/up
+// handlers depend on.
+//
+// Idempotency: a second POST while the first is running loses the
+// jobs.Register race and gets 409 INSTANCE_CREATING — it does NOT
+// double-execute the down/up cycle.
+//
+// What the restart preserves:
+//
+//   - SpliceVersion (read from state.json before the down call)
+//   - Profiles (derived from ComposeFiles via profilesFromComposeFiles)
+//   - Overlay env, credentials, DSO state, ports — all preserved
+//     because RunDown leaves them on disk and RunUp re-reads them
+//
+// What it does NOT do: regenerate credentials, recreate the
+// registry entry, allocate new ports, or upgrade the Splice version.
+func handleRecreateInstance(hub *stream.Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if err := localnet.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+
+		// Reserve the job slot first (same ordering as resume).
+		// Outer context is detached so the goroutine survives the
+		// HTTP response cycle; the timeout combines down (3min) +
+		// up (30min) with some slack.
+		jobCtx, cancelJob := context.WithTimeout(context.Background(),
+			upJobTimeout+downTimeout)
+		if !jobs.Register(name, cancelJob) {
+			cancelJob()
+			writeErrorWithCode(w, http.StatusConflict,
+				"INSTANCE_CREATING",
+				"instance "+name+" is already being created or restarted",
+				"open /api/instances/"+name+"/events to watch the existing run")
+			return
+		}
+
+		// Read state AFTER claiming the job slot. If the name isn't
+		// registered or read fails, release the slot before we
+		// surface the error.
+		prior, err := registry.Read(name)
+		if err != nil {
+			jobs.Unregister(name)
+			cancelJob()
+			if errors.Is(err, registry.ErrNotFound) {
+				writeErrorWithCode(w, http.StatusNotFound,
+					ErrCodeNotFound,
+					"instance "+name+" not registered",
+					"create it first via POST /api/instances")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "read state", err)
+			return
+		}
+
+		topic := progress.TopicFor(name)
+		hub.EnableBuffering(topic, progressBufferCap)
+
+		// Capture identity values BEFORE the goroutine spawns so we
+		// don't race the goroutine reading `prior` after the HTTP
+		// response has already returned.
+		recordedVersion := prior.SpliceVersion
+		recordedProfiles := profilesFromComposeFiles(prior.ComposeFiles)
+
+		go func() {
+			defer cancelJob()
+			defer hub.ClearBuffer(topic)
+			defer jobs.Unregister(name)
+
+			prog := progress.New(hub, name)
+
+			// Phase 1: down. RunDown takes the per-instance lock
+			// itself; we don't pre-acquire one here or we'd
+			// deadlock. Capture stderr so a down failure can be
+			// logged (the user will see the failure event via SSE
+			// progress; this is for the operator-side log only).
+			var downOut, downErr bytes.Buffer
+			downExit := localnet.RunDown(jobCtx, &downOut, &downErr,
+				&localnet.DownOptions{Name: name})
+			if downExit != localnet.ExitSuccess {
+				log.Printf("restart instance %q: down phase failed exit=%d err=%s",
+					name, downExit, downErr.String())
+				// Surface as a synthetic warning on the progress
+				// stream so the UI sees something even though
+				// RunDown writes its own stderr to buffers, not
+				// the hub.
+				prog.Warn("down phase failed during restart: " +
+					firstNonWarningLine(downErr.String()))
+				// Continue to up anyway — RunDown is idempotent and
+				// a partial-down state still lets RunUp try to
+				// reconcile.
+			}
+
+			// Phase 2: up. Reuses the recorded version + profiles
+			// so the restart doesn't silently upgrade or shed
+			// overlays. RunUp emits the full step-event sequence
+			// to `prog` the create flow uses.
+			upOpts := &localnet.UpOptions{
+				Name:     name,
+				Version:  recordedVersion,
+				Profiles: recordedProfiles,
+			}
+			exitCode := localnet.RunUp(jobCtx, prog, upOpts)
+			log.Printf("restart instance %q: down_exit=%d up_exit=%d",
+				name, downExit, exitCode)
+		}()
+
+		writeJSON(w, http.StatusAccepted, upAcceptedResponse{
+			SchemaVersion: types.SchemaVersion,
+			Instance:      name,
+			EventsURL:     "/api/instances/" + name + "/events",
+		})
+	}
+}
+
 // handleDownInstance: POST /api/instances/{name}/down.
 //
 // Synchronous wrapper around localnet.RunDown. Down is fast
@@ -719,8 +971,7 @@ func handleResumeInstance(hub *stream.Hub) http.HandlerFunc {
 // full SSE choreography.)
 //
 // Returns 204 on success, 5xx with the captured output on
-// failure. Body is application/json; an empty body or
-// {"keep_data": true} are both valid.
+// failure. Body is application/json; an empty body is valid.
 //
 // Refuses on `creating` (409) — a goroutine is mid-up; the
 // caller should DELETE /up to cancel first, then this endpoint
@@ -744,7 +995,7 @@ func handleDownInstance() http.HandlerFunc {
 			writeErrorWithCode(w, http.StatusBadRequest,
 				ErrCodeInvalidRequest,
 				"invalid request body",
-				"the body should be empty or {\"keep_data\": bool}")
+				"the body should be empty or {}")
 			return
 		}
 
@@ -763,8 +1014,7 @@ func handleDownInstance() http.HandlerFunc {
 		// success path discards them — 204 has no body.
 		var outBuf, errBuf bytes.Buffer
 		exit := localnet.RunDown(ctx, &outBuf, &errBuf, &localnet.DownOptions{
-			Name:     name,
-			KeepData: req.KeepData,
+			Name: name,
 		})
 
 		if exit == localnet.ExitSuccess {
@@ -788,7 +1038,7 @@ func handleDownInstance() http.HandlerFunc {
 			cause = "down failed with exit code " + uintToString(uint64(exit))
 		}
 		log.Printf("down instance %q: exit=%d err=%s", name, exit, cause)
-		// BIT-176: RunDown writes multiple lines to errw — `Warning:`
+		// RunDown writes multiple lines to errw — `Warning:`
 		// notices about non-fatal side issues (e.g. "could not
 		// reconstruct compose context") followed by the actual
 		// fatal cause. The plain `firstLine` helper grabbed the
@@ -838,7 +1088,7 @@ func firstLine(s string) string {
 // lines for non-fatal side issues (orphan-registry cleanup, state
 // persistence, compose-context reconstruction) before the actual
 // fatal cause, so a naive firstLine would surface a Warning as
-// the failure summary — see BIT-176.
+// the failure summary.
 //
 // Match is on a small fixed set of case variants (Warning, warning,
 // WARNING, WARN, warn, Warn) rather than truly case-insensitive
@@ -1345,7 +1595,7 @@ func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
 			return
 		}
 
-		// Yellow Y9 — acquire the per-instance flock so the read +
+		// Acquire the per-instance flock so the read +
 		// status check + index/state delete is a true CAS. Without
 		// this a concurrent POST /api/instances or POST /up that
 		// races the goroutine-Active probe above could re-register
@@ -1406,7 +1656,7 @@ func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
 			writeErrorWithCode(w, http.StatusConflict,
 				"INSTANCE_RUNNING",
 				"instance "+name+" is running — stop it first",
-				"run `dpm localnet down --name "+name+"` from a terminal (the Web UI's down endpoint is BIT-173)")
+				"run `dpm localnet down --name "+name+"` from a terminal")
 			return
 		}
 
@@ -1562,7 +1812,7 @@ func splitLines(s string) []string {
 	return out
 }
 
-// ── BIT-163e: cancel an in-flight create-instance goroutine ───────
+// ── cancel an in-flight create-instance goroutine ─────────
 
 // handleCancelUp: DELETE /api/instances/{name}/up.
 //
@@ -1638,8 +1888,38 @@ const observabilityToggleTimeout = 90 * time.Second
 
 // observabilityToggleRequest is the body for
 // POST /api/instances/{name}/observability.
+//
+// Per-component flags (`prometheus` / `grafana`) are the canonical
+// form so users can flip the two sidecars independently. The legacy
+// `enabled` flag is retained as a compatibility synonym: when
+// present (non-nil), it sets BOTH components to the same value so
+// clients that haven't been updated keep working. Per-component
+// flags win over `enabled` when both are sent in the same body.
 type observabilityToggleRequest struct {
-	Enabled bool `json:"enabled"`
+	Prometheus *bool `json:"prometheus,omitempty"`
+	Grafana    *bool `json:"grafana,omitempty"`
+	Enabled    *bool `json:"enabled,omitempty"`
+}
+
+// resolveTargets folds the three optional fields into the
+// (prometheus, grafana) target booleans. Returns the resolved
+// targets plus a flag indicating whether any field was set. The
+// per-component flags take precedence over `enabled`.
+func (r observabilityToggleRequest) resolveTargets() (prom, graf bool, ok bool) {
+	if r.Enabled != nil {
+		prom = *r.Enabled
+		graf = *r.Enabled
+		ok = true
+	}
+	if r.Prometheus != nil {
+		prom = *r.Prometheus
+		ok = true
+	}
+	if r.Grafana != nil {
+		graf = *r.Grafana
+		ok = true
+	}
+	return
 }
 
 // handleObservabilityToggle: POST /api/instances/{name}/observability.
@@ -1685,7 +1965,16 @@ func handleObservabilityToggle() http.HandlerFunc {
 			writeErrorWithCode(w, http.StatusBadRequest,
 				ErrCodeInvalidRequest,
 				"invalid request body",
-				`expected {"enabled": true|false}`)
+				`expected {"prometheus": true|false, "grafana": true|false} `+
+					`(legacy {"enabled": true|false} also accepted)`)
+			return
+		}
+		wantProm, wantGraf, ok := req.resolveTargets()
+		if !ok {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				"request body must set at least one of "+
+					`"prometheus", "grafana", or "enabled"`)
 			return
 		}
 
@@ -1724,63 +2013,141 @@ func handleObservabilityToggle() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), observabilityToggleTimeout)
 		defer cancel()
 
-		if req.Enabled {
-			out, port, err := enableObservability(ctx, state)
+		// Determine the current per-component state from the persisted
+		// port map — a port present means the sidecar is up.
+		_, promOn := state.Ports["prometheus_ui"]
+		_, grafOn := state.Ports["grafana_ui"]
+
+		// Warning (not rejection) for Grafana-without-Prometheus: a
+		// user may legitimately point Grafana at an external scrape
+		// source. Surface it in the response so the UI can render the
+		// banner; don't block the request.
+		var warning string
+		if wantGraf && !wantProm {
+			warning = "Grafana enabled without Prometheus — dashboards " +
+				"will have no bundled data source. Enable Prometheus or " +
+				"configure an external scrape source manually."
+		}
+
+		var promPort int
+		if wantProm && !promOn {
+			out, port, err := enablePrometheus(ctx, state)
 			if err != nil {
-				log.Printf("observability enable %q failed: %s\noutput:\n%s", name, err, out)
+				log.Printf("prometheus enable %q failed: %s\noutput:\n%s", name, err, out)
 				writeErrorWithCode(w, http.StatusBadGateway,
 					"OBSERVABILITY_TOGGLE_FAIL",
-					"failed to enable observability: "+truncateForUser(err.Error()),
+					"failed to enable prometheus: "+truncateForUser(err.Error()),
 					"check `docker compose -p "+state.ComposeProject+" ps` and `docker logs "+state.ComposeProject+"-prometheus`")
 				return
 			}
-			state.Ports["prometheus_ui"] = port
-			if err := registry.Write(state); err != nil {
-				writeError(w, http.StatusInternalServerError, "persist port", err)
+			promPort = port
+		} else if !wantProm && promOn {
+			if out, err := disableService(ctx, state, "prometheus"); err != nil {
+				log.Printf("prometheus disable %q failed: %s\noutput:\n%s", name, err, out)
+				writeErrorWithCode(w, http.StatusBadGateway,
+					"OBSERVABILITY_TOGGLE_FAIL",
+					"failed to disable prometheus: "+truncateForUser(err.Error()))
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]any{
-				"schema_version": types.SchemaVersion,
-				"instance":       name,
-				"enabled":        true,
-				"prometheus_ui":  port,
-			})
+		}
+
+		var grafPort int
+		if wantGraf && !grafOn {
+			out, port, err := enableGrafana(ctx, state)
+			if err != nil {
+				log.Printf("grafana enable %q failed: %s\noutput:\n%s", name, err, out)
+				writeErrorWithCode(w, http.StatusBadGateway,
+					"OBSERVABILITY_TOGGLE_FAIL",
+					"failed to enable grafana: "+truncateForUser(err.Error()),
+					"check `docker compose -p "+state.ComposeProject+" ps` and `docker logs "+state.ComposeProject+"-grafana`")
+				return
+			}
+			grafPort = port
+		} else if !wantGraf && grafOn {
+			if out, err := disableService(ctx, state, "grafana"); err != nil {
+				log.Printf("grafana disable %q failed: %s\noutput:\n%s", name, err, out)
+				writeErrorWithCode(w, http.StatusBadGateway,
+					"OBSERVABILITY_TOGGLE_FAIL",
+					"failed to disable grafana: "+truncateForUser(err.Error()))
+				return
+			}
+		}
+
+		// Re-read state under lock before persisting to avoid clobbering
+		// concurrent writers. We hold the per-instance
+		// lock for the whole handler, so the on-disk file can only have
+		// drifted via a writer that ran AND released between our earlier
+		// Read and now — defensive but cheap.
+		fresh, err := registry.Read(name)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "re-read state", err)
+			return
+		}
+		state = fresh
+
+		if wantProm {
+			if promPort != 0 {
+				state.Ports["prometheus_ui"] = promPort
+			}
+		} else {
+			delete(state.Ports, "prometheus_ui")
+		}
+		if wantGraf {
+			if grafPort != 0 {
+				state.Ports["grafana_ui"] = grafPort
+			}
+		} else {
+			delete(state.Ports, "grafana_ui")
+		}
+		if err := registry.Write(state); err != nil {
+			writeError(w, http.StatusInternalServerError, "persist toggle", err)
 			return
 		}
 
-		// Disable path.
-		out, err := disableObservability(ctx, state)
-		if err != nil {
-			log.Printf("observability disable %q failed: %s\noutput:\n%s", name, err, out)
-			writeErrorWithCode(w, http.StatusBadGateway,
-				"OBSERVABILITY_TOGGLE_FAIL",
-				"failed to disable observability: "+truncateForUser(err.Error()))
-			return
-		}
-		delete(state.Ports, "prometheus_ui")
-		if err := registry.Write(state); err != nil {
-			writeError(w, http.StatusInternalServerError, "persist port removal", err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
+		resp := map[string]any{
 			"schema_version": types.SchemaVersion,
 			"instance":       name,
-			"enabled":        false,
-		})
+			"prometheus":     wantProm,
+			"grafana":        wantGraf,
+			// `enabled` retained for legacy clients: true iff BOTH are on.
+			"enabled": wantProm && wantGraf,
+		}
+		if p, ok := state.Ports["prometheus_ui"]; ok {
+			resp["prometheus_ui"] = p
+		}
+		if p, ok := state.Ports["grafana_ui"]; ok {
+			resp["grafana_ui"] = p
+		}
+		if warning != "" {
+			resp["warning"] = warning
+		}
+		writeJSON(w, http.StatusOK, resp)
 	}
 }
 
-// enableObservability runs the docker-compose subcommands that
-// materialize the overlay and bring up prometheus + grafana for
-// a running instance. Returns the captured combined output (for
-// the 502 path) and the discovered host port for prometheus_ui.
-func enableObservability(ctx context.Context, state *registry.State) (string, int, error) {
+// enablePrometheus brings up only the prometheus sidecar via the
+// per-component compose profile. Thin wrapper over enableSidecar so
+// the caller's branching stays readable.
+func enablePrometheus(ctx context.Context, state *registry.State) (string, int, error) {
+	return enableSidecar(ctx, state, localnet.PrometheusProfileName, "prometheus", 9090)
+}
+
+// enableGrafana brings up only the grafana sidecar.
+func enableGrafana(ctx context.Context, state *registry.State) (string, int, error) {
+	return enableSidecar(ctx, state, localnet.GrafanaProfileName, "grafana", 3000)
+}
+
+// enableSidecar runs the docker-compose subcommands that materialize
+// the observability overlay and bring up a single named sidecar
+// service under the matching per-component profile. Returns the
+// captured combined output (for the 502 path) and the discovered
+// host port. portInternal is the in-container port to look up via
+// `docker compose port <svc> <port>` after the up succeeds.
+func enableSidecar(ctx context.Context, state *registry.State, profile, service string, portInternal int) (string, int, error) {
 	overlay, err := localnet.MaterializeObservabilityOverlay(state.DataDir, state.ProjectDir)
 	if err != nil {
 		return "", 0, fmt.Errorf("materialize overlay: %w", err)
 	}
-	// Ensure the overlay is reflected in state.ComposeFiles so a
-	// later resume (POST /up) sees the overlay too.
 	hasOverlay := false
 	for _, f := range state.ComposeFiles {
 		if f == overlay {
@@ -1792,23 +2159,24 @@ func enableObservability(ctx context.Context, state *registry.State) (string, in
 		state.ComposeFiles = append(state.ComposeFiles, overlay)
 	}
 
-	// Reconstruct the FULL compose env the same way RunUp does. The
-	// Splice base compose requires PARTY_HINT / LOCALNET_DIR /
-	// IMAGE_TAG / COMPOSE_PROFILES / ... — all supplied by the
-	// adapter's OverlayEnv + the --env-file flags. Without them
-	// docker compose aborts during interpolation ("required variable
-	// PARTY_HINT is missing a value") before prometheus/grafana can
-	// start. Reuse the instance's already-published UI host ports;
-	// let docker auto-assign the observability ports (PROMETHEUS/
-	// GRAFANA_HOST_PORT=0) — prometheus_ui is discovered below.
+	// Reuse the instance's already-published UI host ports; let docker
+	// auto-assign the observability ports (HOST_PORT=0) — the freshly
+	// allocated port is discovered below via `docker compose port`.
 	uiOverrides := map[string]int{
 		"APP_USER_UI_PORT":     state.Ports["app_user_ui"],
 		"APP_PROVIDER_UI_PORT": state.Ports["app_provider_ui"],
 		"SV_UI_PORT":           state.Ports["sv_ui"],
 		"SWAGGER_UI_PORT":      state.Ports["swagger_ui"],
 		"DB_PORT":              state.Ports["postgres"],
-		"PROMETHEUS_HOST_PORT": 0,
-		"GRAFANA_HOST_PORT":    0,
+		"PROMETHEUS_HOST_PORT": existingOrZero(state.Ports, "prometheus_ui"),
+		"GRAFANA_HOST_PORT":    existingOrZero(state.Ports, "grafana_ui"),
+	}
+	// Force a fresh allocation for the service we're enabling.
+	switch service {
+	case "prometheus":
+		uiOverrides["PROMETHEUS_HOST_PORT"] = 0
+	case "grafana":
+		uiOverrides["GRAFANA_HOST_PORT"] = 0
 	}
 	cenv, err := localnet.ComposeEnvForInstance(state, uiOverrides)
 	if err != nil {
@@ -1822,52 +2190,60 @@ func enableObservability(ctx context.Context, state *registry.State) (string, in
 	for _, f := range state.ComposeFiles {
 		args = append(args, "-f", f)
 	}
-	args = append(args, "--profile", localnet.ObservabilityProfileName,
-		"up", "-d", "prometheus", "grafana")
+	args = append(args, "--profile", profile, "up", "-d", service)
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Dir = state.ProjectDir
-	// Full env (os.Environ() + adapter OverlayEnv). The env-file
-	// paths above are relative to ProjectDir, which is cmd.Dir.
 	cmd.Env = cenv.Env
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(out), 0, fmt.Errorf("docker compose up: %w", err)
 	}
 
-	// Discover the freshly-assigned host port for prometheus's
-	// container-internal 9090.
 	portCmd := exec.CommandContext(ctx, "docker", "compose",
-		"-p", state.ComposeProject, "port", "prometheus", "9090")
+		"-p", state.ComposeProject, "port", service, fmt.Sprintf("%d", portInternal))
 	portCmd.Dir = state.ProjectDir
 	rawPort, perr := portCmd.CombinedOutput()
 	if perr != nil {
-		return string(out) + "\n" + string(rawPort), 0, fmt.Errorf("discover prometheus host port: %w", perr)
+		return string(out) + "\n" + string(rawPort), 0,
+			fmt.Errorf("discover %s host port: %w", service, perr)
 	}
 	port := parseHostPort(string(rawPort))
 	if port == 0 {
 		return string(out) + "\n" + string(rawPort), 0,
-			fmt.Errorf("could not parse prometheus host port from %q", string(rawPort))
+			fmt.Errorf("could not parse %s host port from %q", service, string(rawPort))
 	}
 	return string(out), port, nil
 }
 
-// disableObservability stops + removes the prometheus and grafana
-// containers without touching anything else. We deliberately do
+// existingOrZero returns the int at key or 0 if absent. Used to keep
+// the still-running sidecar's port stable when we're toggling its
+// neighbor — Docker reuses the existing container when it sees the
+// same env values, so passing 0 for an already-up service would
+// cause a needless restart.
+func existingOrZero(m map[string]int, key string) int {
+	if v, ok := m[key]; ok {
+		return v
+	}
+	return 0
+}
+
+// disableService stops + removes a single named sidecar (prometheus
+// or grafana) without touching anything else. We deliberately do
 // NOT mutate state.ComposeFiles — keeping the overlay in the list
 // makes a future re-enable a no-op materialize + spin-up.
-func disableObservability(ctx context.Context, state *registry.State) (string, error) {
+func disableService(ctx context.Context, state *registry.State, service string) (string, error) {
 	stopCmd := exec.CommandContext(ctx, "docker", "compose",
-		"-p", state.ComposeProject, "stop", "prometheus", "grafana")
+		"-p", state.ComposeProject, "stop", service)
 	stopCmd.Dir = state.ProjectDir
 	if out, err := stopCmd.CombinedOutput(); err != nil {
-		return string(out), fmt.Errorf("docker compose stop: %w", err)
+		return string(out), fmt.Errorf("docker compose stop %s: %w", service, err)
 	}
 	rmCmd := exec.CommandContext(ctx, "docker", "compose",
-		"-p", state.ComposeProject, "rm", "-f", "prometheus", "grafana")
+		"-p", state.ComposeProject, "rm", "-f", service)
 	rmCmd.Dir = state.ProjectDir
 	if out, err := rmCmd.CombinedOutput(); err != nil {
-		return string(out), fmt.Errorf("docker compose rm: %w", err)
+		return string(out), fmt.Errorf("docker compose rm %s: %w", service, err)
 	}
 	return "", nil
 }

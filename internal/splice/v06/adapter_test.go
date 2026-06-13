@@ -32,7 +32,7 @@ func TestAdapterContract(t *testing.T) {
 	})
 	for _, key := range []string{
 		"LOCALNET_DIR", "LOCALNET_ENV_DIR", "IMAGE_TAG",
-		"DOCKER_NETWORK", "PARTY_HINT", "COMPOSE_PROFILES",
+		"DOCKER_NETWORK", "PARTY_HINT",
 		"ALPHA_PROTOCOL_VERSION_ENV", // 0.6.x specific
 	} {
 		if _, ok := env[key]; !ok {
@@ -69,7 +69,6 @@ func TestOverlayEnv_FullValueSurface(t *testing.T) {
 		"IMAGE_TAG":                  "0.6.4",
 		"DOCKER_NETWORK":             "alice",
 		"PARTY_HINT":                 "alice-localparty-1",
-		"COMPOSE_PROFILES":           "sv,app-provider,app-user,swagger-ui",
 		"ALPHA_PROTOCOL_VERSION_ENV": filepath.Join("/tmp/cache/splice-0.6.4", "env", "alpha-protocol-version.env"),
 	}
 	for k, want := range wantExact {
@@ -92,7 +91,7 @@ func TestOverlayEnv_FullValueSurface(t *testing.T) {
 	}
 }
 
-// TestOverlayEnv_ImageRepoOverride pins the BIT-210 contract: when a
+// TestOverlayEnv_ImageRepoOverride pins: when a
 // catalogue entry sets ImageRepo (e.g. the Token Standard V2 alpha
 // snapshot), the adapter emits IMAGE_REPO so `docker compose pull`
 // hits the alpha `-dev` registry instead of the stable one.
@@ -131,7 +130,7 @@ func TestOverlayEnv_ImageRepoOverride(t *testing.T) {
 	}
 }
 
-// TestOverlayEnv_ImageTagOverride pins the BIT-210 follow-up: when a
+// TestOverlayEnv_ImageTagOverride pins: when a
 // catalogue entry sets Version.ImageTag (e.g. the V2 alpha snapshot,
 // whose ghcr tag is `0.6.5-snapshot...` while its catalogue Tag is the
 // friendly `token-standard-v2`), the adapter emits IMAGE_TAG using

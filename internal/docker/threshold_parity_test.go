@@ -12,14 +12,13 @@ import (
 	"testing"
 )
 
-// TestThresholdParity_DoctorMatchesUp pins the PR #39 follow-up
-// regression: the `doctor && up` shell-gating contract requires
-// BOTH surfaces to use the same Min* threshold numbers. The
-// original PR #39 fix introduced an 8-GiB doctor vs 4-GiB up
-// drift; reviewer flagged it as breaking the gate. We now share
-// DefaultMin*Bytes constants in this package, and this test
-// enforces that nobody re-introduces the drift by hand-rolling
-// literals on either site.
+// TestThresholdParity_DoctorMatchesUp pins the regression: the
+// `doctor && up` shell-gating contract requires BOTH surfaces to
+// use the same Min* threshold numbers. An earlier fix introduced
+// an 8-GiB doctor vs 4-GiB up drift that broke the gate. The
+// DefaultMin*Bytes constants in this package are shared by both
+// sites, and this test enforces that nobody re-introduces the
+// drift by hand-rolling literals on either site.
 //
 // Strategy: parse up.go and localnet/doctor.go for the docker.Options
 // struct literals they pass to RunPreflight; any MinMemoryBytes / MinDiskBytes
@@ -43,7 +42,7 @@ func TestThresholdParity_DoctorMatchesUp(t *testing.T) {
 		"MinDiskBytes":   "DefaultMinDiskBytes",
 	}
 
-	// BIT-181: up.go uses splice.MinMemoryFor(version) /
+	// up.go uses splice.MinMemoryFor(version) /
 	// splice.RecommendedMemoryFor(version) instead of the literal
 	// docker.DefaultMin*Bytes. Allowed by the parity contract because
 	// the splice helpers are invariant-pinned to be >= DefaultMin*Bytes
@@ -93,7 +92,7 @@ func TestThresholdParity_DoctorMatchesUp(t *testing.T) {
 				if usesAllowedSelector(kv.Value, wantSel) {
 					return true
 				}
-				// BIT-181: also allow a call to one of the
+				// also allow a call to one of the
 				// splice.{Min,Recommended}MemoryFor helpers.
 				if call, ok := kv.Value.(*ast.CallExpr); ok {
 					if sel, ok := call.Fun.(*ast.SelectorExpr); ok {

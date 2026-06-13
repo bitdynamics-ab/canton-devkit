@@ -32,7 +32,13 @@ TransferFactory response indicates the sender pre-approved them.`,
 		opts.To, _ = cmd.Flags().GetString("to")
 		opts.Amount, _ = cmd.Flags().GetString("amount")
 		opts.NoWait, _ = cmd.Flags().GetBool("no-wait")
+		opts.AutoAccept, _ = cmd.Flags().GetBool("auto-accept")
 		opts.Reason, _ = cmd.Flags().GetString("reason")
+		opts.Endpoint, _ = cmd.Flags().GetString("endpoint")
+		opts.Token, _ = cmd.Flags().GetString("token")
+		opts.Role, _ = cmd.Flags().GetString("role")
+		opts.Insecure, _ = cmd.Flags().GetBool("insecure")
+		opts.RegistryURL, _ = cmd.Flags().GetString("registry-url")
 		err := token.RunTransfer(cmd.Context(), cmd.OutOrStdout(), opts)
 		if errors.Is(err, token.ErrNeedsV2LocalNet) {
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
@@ -46,7 +52,13 @@ TransferFactory response indicates the sender pre-approved them.`,
 	parent.Flags().String("to", "", "Receiver party id. Required.")
 	parent.Flags().String("amount", "", "Decimal amount. Required.")
 	parent.Flags().Bool("no-wait", false, "Return the TransferInstruction id without waiting for the receiver to accept.")
+	parent.Flags().Bool("auto-accept", false, "Chain the receiver-side accept onto the transfer (LocalNet: you own the receiver, so settle in one step).")
 	parent.Flags().String("reason", "", "Optional human-readable reason recorded on the TransferInstruction.")
+	parent.Flags().String("endpoint", "", "Participant gRPC endpoint (host:port). When set, run the live V2 transfer; otherwise print the not-wired remediation.")
+	parent.Flags().String("token", "", "Bearer JWT. Empty auto-issues a per-role token via the creds machinery.")
+	parent.Flags().String("role", "app-user", "Role whose JWT authenticates the submit (sv / app-provider / app-user).")
+	parent.Flags().Bool("insecure", true, "Use plaintext gRPC (LocalNet default).")
+	parent.Flags().String("registry-url", "", "Token registry base URL. Empty auto-derives the LocalNet scan registry from the instance's SV UI port.")
 	_ = parent.MarkFlagRequired("instance")
 	// Don't mark every flag required at the parent — `transfer accept`
 	// shares the parent but only uses --instance + --id.
@@ -76,6 +88,12 @@ twice is rejected by the underlying Daml choice.`,
 	}
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")
 	cmd.Flags().StringVar(&opts.TransferInstructionID, "id", "", "TransferInstruction contract id. Required.")
+	cmd.Flags().StringVar(&opts.Party, "party", "", "Receiver party acting on the instruction. Defaults to the JWT's first granted party (set explicitly on multi-party participants).")
+	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). When set, run the live accept; otherwise print the not-wired remediation.")
+	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the submit.")
+	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
+	cmd.Flags().StringVar(&opts.RegistryURL, "registry-url", "", "Token registry base URL. Empty auto-derives from the instance's SV UI port.")
 	_ = cmd.MarkFlagRequired("instance")
 	_ = cmd.MarkFlagRequired("id")
 	return cmd

@@ -30,7 +30,7 @@
       "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "sum(rate(canton_participant_transactions_total{instance=~\"$instance\"}[5m]))",
+          "expr": "sum(rate(daml_participant_api_indexer_updates{instance=~\"$instance\"}[5m])) or vector(0)",
           "legendFormat": "tx/s"
         }
       ]
@@ -48,12 +48,12 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Mediator Approval Latency (p95)",
+      "title": "Sequencer Submission Latency (p95)",
       "datasource": "Prometheus",
       "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(canton_mediator_approval_duration_bucket{instance=~\"$instance\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
           "legendFormat": "p95"
         }
       ]
@@ -61,11 +61,11 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "Postgres Conn Count",
+      "title": "DB Connections (in use)",
       "datasource": "Prometheus",
       "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
       "targets": [
-        { "expr": "sum(pg_stat_activity_count{instance=~\"$instance\"})" }
+        { "expr": "sum(db_client_connections_usage{state=\"used\", instance=~\"$instance\"})" }
       ]
     },
     {
@@ -76,8 +76,8 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
       "targets": [
         {
-          "expr": "rate(canton_participant_transactions_total{instance=~\"$instance\"}[1m])",
-          "legendFormat": "{{participant}}"
+          "expr": "rate(daml_participant_api_indexer_updates{instance=~\"$instance\"}[1m]) or vector(0)",
+          "legendFormat": "{{component}}"
         }
       ]
     },
@@ -89,7 +89,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
       "targets": [
         {
-          "expr": "jvm_memory_used_bytes{area=\"heap\", instance=~\"$instance\"}",
+          "expr": "jvm_memory_used_bytes{jvm_memory_type=\"heap\", instance=~\"$instance\"}",
           "legendFormat": "{{component}}"
         }
       ]
@@ -97,30 +97,69 @@
     {
       "id": 12,
       "type": "timeseries",
-      "title": "Sequencer Message Rate",
+      "title": "Sequencer Block Event Rate",
       "datasource": "Prometheus",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
       "targets": [
         {
-          "expr": "rate(canton_sequencer_messages_total{instance=~\"$instance\"}[1m])",
-          "legendFormat": "{{sequencer}}"
+          "expr": "rate(daml_sequencer_block_events_total{instance=~\"$instance\"}[1m])",
+          "legendFormat": "{{component}}"
         }
       ]
     },
     {
       "id": 13,
       "type": "timeseries",
-      "title": "Transaction Processing Latency",
+      "title": "Submission Sequencing Latency",
       "datasource": "Prometheus",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(canton_participant_transaction_duration_bucket{instance=~\"$instance\"}[5m])) by (le, participant))",
-          "legendFormat": "p50 {{participant}}"
+          "expr": "histogram_quantile(0.50, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, component))",
+          "legendFormat": "p50 {{component}}"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(canton_participant_transaction_duration_bucket{instance=~\"$instance\"}[5m])) by (le, participant))",
-          "legendFormat": "p95 {{participant}}"
+          "expr": "histogram_quantile(0.95, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, component))",
+          "legendFormat": "p95 {{component}}"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "ACS Lookup Buffer Length",
+      "description": "ACS-related index lookup buffer length across participants. Stock Splice 0.6.4 does not expose total active-contract cardinality as a Prometheus metric; use the Web UI Explorer / JSON API ACS lookup for exact active contract counts.",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "expr": "sum(daml_participant_api_index_db_active_contract_lookup_batch_buffer_length{instance=~\"$instance\"})",
+          "legendFormat": "ACS lookup buffer"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "bargauge",
+      "title": "Top 10 gRPC Methods by Throughput (ops/s, 5m)",
+      "description": "Command/API throughput by live gRPC method. Stock Splice 0.6.4 does not expose template-grain submission counters, so this panel uses the audited `daml_grpc_server_handled_total` method label instead of a non-existent template metric.",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (grpc_method_name) (rate(daml_grpc_server_handled_total{instance=~\"$instance\"}[5m])))",
+          "legendFormat": "{{grpc_method_name}}"
         }
       ]
     }

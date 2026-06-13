@@ -61,7 +61,7 @@ canonical name in code and docs.
 
 ### The alpha channel
 
-DevKit's first alpha entry is the **Token Standard V2** snapshot pointed at by [`token-standard-v2-upcoming`](https://github.com/canton-network/splice/tree/token-standard-v2-upcoming). V2 publishes images to a separate `-dev` ghcr registry (hence the `image_repo` override) and runs only on Canton's *alpha* protocol version (initial protocol 35, alpha-version-support flags). The Canton config side of that requirement is delivered by a separate `--profile tokens-v2` overlay (BIT-211); selecting the alpha catalogue entry without the profile is supported but will not bring up a healthy stack.
+DevKit's first alpha entry is the **Token Standard V2** snapshot pointed at by [`token-standard-v2-upcoming`](https://github.com/canton-network/splice/tree/token-standard-v2-upcoming). V2 publishes images to a separate `-dev` ghcr registry (hence the `image_repo` override) and runs only on Canton's *alpha* protocol version (initial protocol 35, alpha-version-support flags). The Canton config side of that requirement is delivered by a separate `--profile tokens-v2` overlay; selecting the alpha catalogue entry without the profile is supported but will not bring up a healthy stack.
 
 **Stability caveat:** the upstream V2 DevNet [is reset and upgraded on a weekly cadence](https://github.com/canton-network/splice/blob/token-standard-v2-upcoming/token-standard/TOKEN_STANDARD_V2_DEVNET.md), so the V2 entry's `commit` will rotate more often than a stable release. Refresh via `scripts/add-splice-version.sh` (modify the script to pass `--ref token-standard-v2-upcoming` for branch-tracking).
 
@@ -104,7 +104,7 @@ A reviewer then:
   merging.
 - Commits + pushes.
 
-## Two-layer resolution (PR #20 #2)
+## Two-layer resolution
 
 DevKit now exposes the catalogue as the *default* tier of a two-layer
 version model — the curated path stays audited, and an explicit

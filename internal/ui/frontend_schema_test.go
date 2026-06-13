@@ -12,8 +12,7 @@ import (
 )
 
 // TestFrontend_SchemaVersionMatchesTypes is the cross-language
-// parity pin (PR #44 schema-pin pattern, extended to TypeScript):
-// the SCHEMA_VERSION constant in frontend/src/api.ts MUST equal
+// parity pin: the SCHEMA_VERSION constant in frontend/src/api.ts MUST equal
 // types.SchemaVersion. Without this, the frontend's bootstrap
 // handshake reports a v1 client against a v2 server (or vice
 // versa) and the App refuses to render — but only at runtime,
@@ -53,7 +52,7 @@ func TestFrontend_SchemaVersionMatchesTypes(t *testing.T) {
 	}
 }
 
-// TestFrontend_DistContainsRealBuildOrPlaceholder is the
+// TestFrontend_DistContainsRealBuildOrPlaceholder pins the invariant —
 // release-mode sanity check: at test time, dist/index.html must
 // either carry the placeholder sentinel (dev / not-yet-built
 // state) OR be the real Vite bundle (post-`make frontend`). A

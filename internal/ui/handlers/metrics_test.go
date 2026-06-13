@@ -1,15 +1,19 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// TestMetrics_RejectsMissingQuery pins the BIT-134 input
+// TestMetrics_RejectsMissingQuery pins the input
 // validation: ?query is required. Without it the handler returns
 // 400 with the structured INVALID_REQUEST code so the frontend
 // can show a friendly prompt rather than a generic 5xx.
@@ -108,7 +112,7 @@ func TestMetricsSummary_RejectsInvalidInstanceName(t *testing.T) {
 func TestMetrics_PromQLAllowlistAccepts_HappyPath(t *testing.T) {
 	goodQueries := []string{
 		"up",
-		"rate(canton_participant_transactions_total[5m])",
+		"rate(daml_participant_api_indexer_updates[5m])",
 		`up{instance="demo"}`,
 		"sum(jvm_memory_used_bytes{area=\"heap\"})",
 		"histogram_quantile(0.95, sum(rate(x_bucket[5m])) by (le))",
@@ -145,5 +149,82 @@ func TestMetricsSummary_ResponseShapeStable(t *testing.T) {
 	}
 	if _, ok := body["code"]; !ok {
 		t.Error("error response missing structured code")
+	}
+}
+
+// TestGrafanaURLForState mirrors the CLI's grafanaURLFor: only emit
+// a deep link when state.Ports["grafana_ui"] is populated. Pins the
+// CLI ↔ Web UI parity contract on the dashboard discoverability
+// surface so the two sides can't drift on the link shape.
+func TestGrafanaURLForState(t *testing.T) {
+	if got := grafanaURLForState(nil); got != "" {
+		t.Errorf("nil state should yield empty url; got %q", got)
+	}
+	off := &registry.State{Ports: map[string]int{}}
+	if got := grafanaURLForState(off); got != "" {
+		t.Errorf("obs-off should yield empty url; got %q", got)
+	}
+	on := &registry.State{Ports: map[string]int{"grafana_ui": 3001}}
+	want := "http://localhost:3001/d/canton-localnet-v1"
+	if got := grafanaURLForState(on); got != want {
+		t.Errorf("grafanaURLForState = %q, want %q", got, want)
+	}
+}
+
+// TestSecondsToMs preserves nil-vs-zero distinction (matches the
+// CLI's scaleSeconds): a missing scrape stays missing, not 0 ms.
+func TestSecondsToMs(t *testing.T) {
+	if got := secondsToMs(nil); got != nil {
+		t.Errorf("nil input should yield nil; got %v", *got)
+	}
+	v := 0.045
+	got := secondsToMs(&v)
+	if got == nil || *got < 44.9 || *got > 45.1 {
+		t.Errorf("0.045s -> %v, want ~45ms", got)
+	}
+}
+
+func TestSingleScalar_DecodesPrometheusVectorObject(t *testing.T) {
+	oldProxy := proxyPrometheusFn
+	proxyPrometheusFn = func(context.Context, string, string) ([]byte, error) {
+		return []byte(`{"status":"success","data":{"resultType":"vector","result":[{"metric":{"job":"canton"},"value":[1780912963.012,"0.2605"]}]}}`), nil
+	}
+	t.Cleanup(func() { proxyPrometheusFn = oldProxy })
+
+	got, err := singleScalar(context.Background(), "canton-demo", "up")
+	if err != nil {
+		t.Fatalf("singleScalar: %v", err)
+	}
+	if got == nil || *got < 0.2604 || *got > 0.2606 {
+		t.Fatalf("singleScalar = %v, want 0.2605", got)
+	}
+}
+
+func TestSingleScalar_TreatsNaNAsMissingSample(t *testing.T) {
+	oldProxy := proxyPrometheusFn
+	proxyPrometheusFn = func(context.Context, string, string) ([]byte, error) {
+		return []byte(`{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1780912963.012,"NaN"]}]}}`), nil
+	}
+	t.Cleanup(func() { proxyPrometheusFn = oldProxy })
+
+	got, err := singleScalar(context.Background(), "canton-demo", "up")
+	if err != nil {
+		t.Fatalf("singleScalar: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("singleScalar NaN = %v, want nil", *got)
+	}
+}
+
+func TestSingleScalar_PropagatesProxyError(t *testing.T) {
+	oldProxy := proxyPrometheusFn
+	want := errors.New("proxy failed")
+	proxyPrometheusFn = func(context.Context, string, string) ([]byte, error) {
+		return nil, want
+	}
+	t.Cleanup(func() { proxyPrometheusFn = oldProxy })
+
+	if _, err := singleScalar(context.Background(), "canton-demo", "up"); !errors.Is(err, want) {
+		t.Fatalf("singleScalar error = %v, want %v", err, want)
 	}
 }

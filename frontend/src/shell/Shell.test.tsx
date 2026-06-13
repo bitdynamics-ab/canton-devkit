@@ -152,6 +152,46 @@ describe("Shell — CommandPalette hotkey", () => {
   });
 });
 
+describe("Shell — sidebar nav preserves ?instance=", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // The bug: clicking a sidebar tab on a per-instance route used to
+  // drop the ?instance= query, bouncing the user to "No instance
+  // selected" on every nav. Pin the fix: sidebar links for
+  // instance-scoped routes must thread the current instance.
+  it("threads ?instance= into instance-scoped routes (Explorer, Wallet, DAR, Metrics, Tokens)", async () => {
+    renderShell("/wallet?instance=demo");
+    await waitFor(() => expect(screen.getByText("demo")).toBeInTheDocument());
+
+    for (const label of ["Explorer", "DAR Manager", "Metrics", "Tokens", "Wallet"]) {
+      const link = screen.getByRole("link", { name: label });
+      const href = link.getAttribute("href") || "";
+      expect(href, `${label} dropped the instance param`).toContain("instance=demo");
+    }
+  });
+
+  it("leaves instance-INDEPENDENT routes (Overview, Agent Skills) without ?instance=", async () => {
+    renderShell("/wallet?instance=demo");
+    await waitFor(() => expect(screen.getByText("demo")).toBeInTheDocument());
+
+    for (const label of ["Overview", "Agent Skills"]) {
+      const link = screen.getByRole("link", { name: label });
+      const href = link.getAttribute("href") || "";
+      expect(href, `${label} should not carry instance param`).not.toContain("instance=");
+    }
+  });
+
+  it("omits ?instance= entirely when no instance is in URL", async () => {
+    renderShell("/");
+    // No auto-pick assertion needed — just verify the link is bare.
+    await waitFor(() =>
+      expect(screen.getByRole("link", { name: "Explorer" })).toBeInTheDocument(),
+    );
+    const href = screen.getByRole("link", { name: "Explorer" }).getAttribute("href") || "";
+    expect(href).not.toContain("instance=");
+  });
+});
+
 describe("Shell — SkipLink", () => {
   afterEach(() => vi.unstubAllGlobals());
 

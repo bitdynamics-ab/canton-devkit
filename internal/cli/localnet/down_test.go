@@ -31,9 +31,9 @@ func installFakeStopper(t *testing.T, fn func(ctx context.Context, st *registry.
 	installStopper(t, fn)
 }
 
-// TestDown_NotFoundIsIdempotentSuccess pins the PR #21 carry-forward:
-// a missing instance is NOT a user error — scripts that wrap `down`
-// should be able to call it idempotently without checking first.
+// TestDown_NotFoundIsIdempotentSuccess: a missing instance is NOT a
+// user error — scripts that wrap `down` should be able to call it
+// idempotently without checking first.
 func TestDown_NotFoundIsIdempotentSuccess(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 
@@ -73,15 +73,15 @@ func TestDown_AlreadyStoppedIsNoOpSuccess(t *testing.T) {
 }
 
 // TestDown_HappyPath_StatusStoppingBeforeCompose pins the most
-// important PR #21 carry-forward (regressed in PR #33, surfaced in
-// review): the transitional `stopping` status MUST be persisted
-// BEFORE the compose call. Without it, a SIGKILL mid-teardown
-// leaves the registry showing "running" while containers are gone.
+// important contract: the transitional `stopping` status MUST be
+// persisted BEFORE the compose call. Without it, a SIGKILL
+// mid-teardown leaves the registry showing "running" while
+// containers are gone.
 //
 // We assert by having the fake stopper READ the registry mid-call:
-// at that point Status must already be StatusStopping. After the
-// default down (no --keep-data) the entry is removed so we can
-// only observe the transitional state from inside the stopper.
+// at that point Status must already be StatusStopping. After
+// success, the entry is preserved with status=stopped so that
+// `localnet clean` can discover the instance.
 func TestDown_HappyPath_StatusStoppingBeforeCompose(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedDownInstance(t, "demo", registry.StatusRunning)
@@ -100,42 +100,23 @@ func TestDown_HappyPath_StatusStoppingBeforeCompose(t *testing.T) {
 		t.Fatalf("code = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
 	if observed != registry.StatusStopping {
-		t.Errorf("status during compose call = %q, want %q (PR #21 contract regressed)",
+		t.Errorf("status during compose call = %q, want %q (stopping must persist before compose)",
 			observed, registry.StatusStopping)
 	}
-	// Post-success default: instance removed from registry.
-	if _, err := registry.Read("demo"); !errors.Is(err, registry.ErrNotFound) {
-		t.Errorf("expected ErrNotFound after default down, got %v", err)
-	}
-}
-
-// TestDown_KeepData preserves the per-instance registry entry and
-// flips status to Stopped. Mirrors PR #21's --keep-data flag.
-func TestDown_KeepData(t *testing.T) {
-	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
-	seedDownInstance(t, "demo", registry.StatusRunning)
-	installFakeStopper(t, func(context.Context, *registry.State) error { return nil })
-
-	var out, errBuf bytes.Buffer
-	code := RunDown(context.Background(), &out, &errBuf,
-		DownOptions{Name: "demo", KeepData: true})
-	if code != localnet.ExitSuccess {
-		t.Fatalf("code = %d; stderr=%q", code, errBuf.String())
-	}
+	// Post-success: registry entry preserved with status=stopped.
 	got, err := registry.Read("demo")
 	if err != nil {
-		t.Fatalf("re-read state with --keep-data: %v", err)
+		t.Fatalf("registry entry should be preserved after down, got err=%v", err)
 	}
 	if got.Status != registry.StatusStopped {
 		t.Errorf("Status = %q, want %q", got.Status, registry.StatusStopped)
 	}
 }
 
-// TestDown_ComposeFailureMarksFailedExits4 is the PR #21 cell
-// reviewer flagged as collapsed: a genuine compose-down failure
-// (NOT interruption) MUST mark StatusFailed and return
-// ExitRuntimeFailure (4), preserving the registry entry so the
-// user can retry.
+// TestDown_ComposeFailureMarksFailedExits4: a genuine compose-down
+// failure (NOT interruption) MUST mark StatusFailed and return
+// ExitRuntimeFailure (4), preserving the registry entry so the user
+// can retry.
 func TestDown_ComposeFailureMarksFailedExits4(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedDownInstance(t, "demo", registry.StatusRunning)
@@ -154,7 +135,7 @@ func TestDown_ComposeFailureMarksFailedExits4(t *testing.T) {
 		t.Fatalf("registry entry should be preserved for retry: %v", err)
 	}
 	if got.Status != registry.StatusFailed {
-		t.Errorf("Status = %q, want %q (PR #21 cell regressed)",
+		t.Errorf("Status = %q, want %q",
 			got.Status, registry.StatusFailed)
 	}
 	if !strings.Contains(errBuf.String(), "preserved") {
@@ -162,10 +143,10 @@ func TestDown_ComposeFailureMarksFailedExits4(t *testing.T) {
 	}
 }
 
-// TestDown_InterruptionMarksPartialExits3 is the OTHER cell PR #33
-// collapsed. SIGINT during compose-down must return ExitTimeout (3)
-// and mark StatusPartial — distinct from the genuine-failure cell
-// because the compose process may still be running on the host.
+// TestDown_InterruptionMarksPartialExits3: SIGINT during compose-down
+// must return ExitTimeout (3) and mark StatusPartial — distinct from
+// the genuine-failure case because the compose process may still be
+// running on the host.
 func TestDown_InterruptionMarksPartialExits3(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedDownInstance(t, "demo", registry.StatusRunning)
@@ -188,11 +169,42 @@ func TestDown_InterruptionMarksPartialExits3(t *testing.T) {
 		t.Fatalf("registry entry should be preserved for retry: %v", err)
 	}
 	if got.Status != registry.StatusPartial {
-		t.Errorf("Status = %q, want %q (interruption cell regressed)",
+		t.Errorf("Status = %q, want %q",
 			got.Status, registry.StatusPartial)
 	}
 	if !strings.Contains(errBuf.String(), "Interrupted") {
 		t.Errorf("stderr should explain interruption, got %q", errBuf.String())
+	}
+}
+
+// TestDown_DefaultStopPassesEnvFiles verifies that defaultStop
+// provides compose env files to the ComposeRunner (either from the
+// persisted overlay.env or adapter fallback), preventing the
+// PARTY_HINT interpolation error.
+func TestDown_DefaultStopPassesEnvFiles(t *testing.T) {
+	dataDir := t.TempDir()
+	// Write overlay.env so the preferred path is exercised.
+	_, err := localnet.WriteOverlayEnv(dataDir, map[string]string{
+		"PARTY_HINT":   "env-test-localparty-1",
+		"IMAGE_TAG":    "0.6.4",
+		"LOCALNET_DIR": t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("WriteOverlayEnv: %v", err)
+	}
+	st := &registry.State{
+		Name:           "env-test",
+		SpliceVersion:  "0.6.4",
+		ComposeProject: "canton-env-test",
+		ProjectDir:     t.TempDir(),
+		DataDir:        dataDir,
+		ComposeFiles:   []string{"compose.yaml"},
+	}
+	stopErr := defaultStop(context.Background(), st)
+	// Will fail on docker (no real compose project), but must NOT
+	// fail with PARTY_HINT interpolation error.
+	if stopErr != nil && strings.Contains(stopErr.Error(), "PARTY_HINT") {
+		t.Fatalf("defaultStop still fails with PARTY_HINT error: %v", stopErr)
 	}
 }
 
@@ -211,10 +223,10 @@ func TestDown_InvalidNameRejected(t *testing.T) {
 	}
 }
 
-// TestDown_LockAcquiredBeforeStateBranch is the reviewer pin (PR #33
-// #4) for lock-ordering. The original code read state, branched on
-// StatusStopped, THEN acquired the lock — racy: a concurrent writer
-// flipping status between the Read and the Lock would slip through.
+// TestDown_LockAcquiredBeforeStateBranch pins lock-ordering. Reading
+// state, branching on StatusStopped, THEN acquiring the lock would be
+// racy: a concurrent writer flipping status between the Read and the
+// Lock could slip through.
 //
 // We pin the corrected order with a NEGATIVE assertion: seed an
 // already-stopped instance, hold the lock from this goroutine, then

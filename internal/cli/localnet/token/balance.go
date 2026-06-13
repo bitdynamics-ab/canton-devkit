@@ -34,11 +34,16 @@ With --party, filter to a single party; with --instrument, filter to a
 single instrument (by symbol or raw id).`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			rows, err := token.RunBalance(cmd.Context(), nil, opts)
+			rows, truncated, err := token.RunBalance(cmd.Context(), nil, opts)
 			if err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
+			if truncated {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+					"warning: result truncated after %d holdings; refine --party or --instrument to see the rest\n",
+					10_000)
+			}
 			if format == "json" {
 				enc := json.NewEncoder(out)
 				enc.SetIndent("", "  ")

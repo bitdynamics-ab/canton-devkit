@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/bitdynamics-ab/canton-devkit/assets"
 )
@@ -78,6 +79,9 @@ func MaterializeObservabilityOverlay(dataDir, projectDir string) (string, error)
 	if _, err := os.Stat(composeFile); err != nil {
 		return "", fmt.Errorf("observability overlay missing after extract: %w", err)
 	}
+	if err := rewriteObservabilityMounts(composeFile, root); err != nil {
+		return "", err
+	}
 
 	// Drop prometheus.yml into projectDir so Docker's relative
 	// volume-mount resolution finds it. The overlay's bind mount
@@ -113,6 +117,29 @@ func MaterializeObservabilityOverlay(dataDir, projectDir string) (string, error)
 	return composeFile, nil
 }
 
+func rewriteObservabilityMounts(composeFile, root string) error {
+	body, err := os.ReadFile(composeFile)
+	if err != nil {
+		return fmt.Errorf("read observability overlay: %w", err)
+	}
+	s := string(body)
+	replacements := map[string]string{
+		"./prometheus.yml":        filepath.Join(root, "compose", "prometheus.yml"),
+		"../grafana/provisioning": filepath.Join(root, "grafana", "provisioning"),
+		"../grafana/dashboards":   filepath.Join(root, "grafana", "dashboards"),
+	}
+	for from, to := range replacements {
+		s = strings.ReplaceAll(s, from, filepath.ToSlash(to))
+	}
+	if string(body) == s {
+		return nil
+	}
+	if err := os.WriteFile(composeFile, []byte(s), 0o644); err != nil {
+		return fmt.Errorf("rewrite observability overlay mounts: %w", err)
+	}
+	return nil
+}
+
 // bytesEqual is a tiny shim so we don't have to import bytes for
 // one call. Equivalent to bytes.Equal but lets us keep the import
 // list focused on filesystem APIs.
@@ -128,8 +155,43 @@ func bytesEqual(a, b []byte) bool {
 	return true
 }
 
-// ObservabilityProfileName is the docker compose profile name
-// scoping the Prometheus + Grafana services. The compose overlay
-// declares `profiles: ["observability"]` on each service so they
-// stay off unless this profile is activated.
+// ObservabilityProfileName is the legacy umbrella docker compose
+// profile that activates BOTH Prometheus and Grafana together. Kept
+// for backward compatibility (existing scripts, docs, registry
+// entries). Prefer the per-component profiles PrometheusProfileName
+// / GrafanaProfileName for new code so users can enable each side
+// independently.
 const ObservabilityProfileName = "observability"
+
+// PrometheusProfileName activates only the Prometheus service in the
+// observability overlay. Use alongside GrafanaProfileName to mirror
+// the legacy umbrella, or alone for metrics-scrape-only setups.
+const PrometheusProfileName = "prometheus"
+
+// GrafanaProfileName activates only the Grafana service. Pointed at
+// the bundled Prometheus by default; in a Grafana-only setup the
+// user is expected to wire it to an external scrape source — the
+// API + UI surface a warning when grafana is enabled without
+// prometheus.
+const GrafanaProfileName = "grafana"
+
+// ExpandObservabilityProfiles returns the de-duplicated set of
+// per-component profiles equivalent to the input list. Legacy
+// "observability" expands to ["prometheus", "grafana"]; the
+// per-component names pass through. Used by both the CLI bring-up
+// path and the HTTP toggle so a single source-of-truth governs the
+// "which sidecars start?" decision.
+func ExpandObservabilityProfiles(profiles []string) (prometheus, grafana bool) {
+	for _, p := range profiles {
+		switch p {
+		case ObservabilityProfileName:
+			prometheus = true
+			grafana = true
+		case PrometheusProfileName:
+			prometheus = true
+		case GrafanaProfileName:
+			grafana = true
+		}
+	}
+	return
+}

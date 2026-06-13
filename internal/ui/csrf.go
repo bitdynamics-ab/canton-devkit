@@ -12,7 +12,7 @@ import (
 //
 // # Why we need this on a loopback server
 //
-// Reviewer pin (PR #41 #b): "loopback-only" is NOT a CSRF defence.
+// "loopback-only" is NOT a CSRF defence.
 // A browser running on the same machine — visiting any unrelated
 // website — can issue a POST to http://127.0.0.1:7777/api/instances/
 // demo/jwt and the request reaches the loopback server unless we
@@ -37,7 +37,7 @@ import (
 // EventSource (the browser SSE client) only sends GET, so SSE is
 // covered by the GET-exempt rule. If a future handler issues
 // credentials via GET (don't), this middleware won't gate it —
-// that's an anti-pattern flagged in the handler's review.
+// that would be an anti-pattern.
 func withOriginCheck(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isStateChanging(r.Method) {

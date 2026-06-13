@@ -1,7 +1,7 @@
 package token
 
 // V2 Token Standard interface IDs + asset-specific choice names used
-// when the live ledger wiring lands on top of BIT-139.
+// when the live ledger wiring lands on top of .
 //
 // These constants are the single source of truth for *every* exercise
 // the token CLI / Web UI submits. They mirror the upstream Splice
@@ -11,16 +11,16 @@ package token
 // V1 vs V2 — what each verb actually uses
 // --------------------------------------
 //
-//	balance        → ACS query filtered by HoldingInterfaceV2.
+//	balance → ACS query filtered by HoldingInterfaceV2.
 //	                 (V2 holdings implement BOTH V1 and V2 Holding
 //	                 interfaces; querying V2 is the V2-native path
 //	                 and gives us HoldingViewV2 directly — no downcast.)
 //
-//	create         → asset-specific: TokenRules.create on the issuer
+//	create → asset-specific: TokenRules.create on the issuer
 //	                 party for splice-test-token-v2. No standard
 //	                 "instrument create" interface exists in V2.
 //
-//	mint           → asset-specific: TokenRules_OfferMint choice on the
+//	mint → asset-specific: TokenRules_OfferMint choice on the
 //	                 issuer's TokenRules contract. The test token does
 //	                 NOT implement BurnMintFactoryV1 — and V2 has no
 //	                 burn-mint package at all — so mint here is purely
@@ -28,7 +28,7 @@ package token
 //	                 choose to expose mint through their own choice or
 //	                 by implementing BurnMintFactoryV1.
 //
-//	transfer       → TransferFactoryInterface (V2). Off-ledger flow:
+//	transfer → TransferFactoryInterface (V2). Off-ledger flow:
 //	                 registry POST /transfer-factory → exercise the
 //	                 returned factory choice on the ledger with the
 //	                 disclosed contracts the registry handed back.
@@ -39,7 +39,7 @@ package token
 //	                 /choice-contexts/accept → exercise on the ledger.
 //	                 (See internal/canton/registry.GetAcceptChoiceContext.)
 //
-//	burn           → no generic V2 burn interface; splice-test-token-v2
+//	burn → no generic V2 burn interface; splice-test-token-v2
 //	                 does not implement BurnMintFactoryV1 either, so a
 //	                 burn against the test token has no path. Real
 //	                 tokens that want burn typically implement
@@ -97,10 +97,25 @@ const (
 	// admin; so it's a single-signer submit-and-wait.
 	//
 	// Arguments (verified against TestTokenV2.daml):
-	//   receiver       : V2.Account            — { owner?, provider?, id }
-	//   amount         : Decimal
-	//   instrumentId   : V2.InstrumentId       — { admin, id }
-	//   offeredAt      : Time
-	//   receiverConfig : AccountConfig         — account-level auth rules
+	// receiver : V2.Account — { owner?, provider?, id }
+	// amount : Decimal
+	// instrumentId : V2.InstrumentId — { admin, id }
+	// offeredAt : Time
+	// receiverConfig : AccountConfig — account-level auth rules
 	TestTokenV2OfferMintChoice = "TokenRules_OfferMint"
+
+	// TestTokenV2RulesTemplateID is the package-name-qualified template
+	// id for create/exercise against the bundled splice-test-token-v2
+	// TokenRules. The `#package-name` form lets Canton resolve to
+	// whichever vetted package satisfies the name, surviving the V2
+	// alpha's weekly snapshot rotation.
+	TestTokenV2RulesTemplateID = "#splice-test-token-v2:Splice.Testing.Tokens.TestTokenV2:TokenRules"
+
+	// TestTokenV2HoldingTemplateID is the Token (holding) template —
+	// the UTXO unit. Its signatory is the account parties + the
+	// instrument admin, so the built-in Archive choice is authorizable
+	// by those parties together (all operator-controlled on LocalNet).
+	// This is the "archive path" burn : archive a holder's
+	// holdings to remove them from circulation.
+	TestTokenV2HoldingTemplateID = "#splice-test-token-v2:Splice.Testing.Tokens.TestTokenV2.Holding:Token"
 )

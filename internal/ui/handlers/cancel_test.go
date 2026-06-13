@@ -75,7 +75,7 @@ func TestCancelUp_NoHubReturns503(t *testing.T) {
 	}
 }
 
-// TestCancelUp_HappyPath_204AndCancelledEventEmitted is the
+// TestCancelUp_HappyPath_204AndCancelledEventEmitted pins the invariant —
 // end-to-end pin: spawn a create job, DELETE it, verify
 //
 //	(a) the response is 204

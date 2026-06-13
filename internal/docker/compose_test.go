@@ -347,8 +347,8 @@ func TestWaitForHealthyReturnsOnFatal(t *testing.T) {
 }
 
 // TestWaitForHealthyRecoversFromTransientUnhealthy proves the
-// behaviour Zhe asked for on PR #20: an unhealthy snapshot must not
-// terminate the poller. Splice routinely reports unhealthy during
+// behaviour: an unhealthy snapshot must not terminate the poller.
+// Splice routinely reports unhealthy during
 // onboarding, then settles to healthy. We script two ps calls in
 // sequence: the first returns unhealthy, the second healthy. The
 // poller must keep going past the first and succeed on the second.
@@ -552,6 +552,89 @@ func indexOf(s []string, v string) int {
 		}
 	}
 	return -1
+}
+
+// TestAllBlockersAreSpliceStarting locks in the narrow gate for the
+// out-of-band readyz fallback: it fires ONLY when every non-ready
+// service is a `*-splice`-named container in running/starting state.
+// The V2 alpha's `-dev` splice image ships a broken in-container
+// HEALTHCHECK probe so docker stays at `starting` forever; the
+// fallback lets WaitForHealthy probe `/api/validator/readyz` from
+// outside and proceed when the validator actually responds.
+//
+// The gate has to be narrow: any other non-ready service (canton,
+// postgres, nginx, wallet) must keep the fallback OFF so a real
+// failure elsewhere doesn't get masked.
+func TestAllBlockersAreSpliceStarting(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want bool
+	}{
+		{
+			name: "all_healthy_no_blockers",
+			raw:  "v2-canton\trunning\thealthy\nv2-splice\trunning\thealthy\n",
+			want: false, // no blockers at all — caller already accepted; this returns false
+		},
+		{
+			name: "only_splice_starting_fires",
+			raw:  "v2-canton\trunning\thealthy\nv2-postgres\trunning\thealthy\nv2-splice\trunning\tstarting\n",
+			want: true,
+		},
+		{
+			name: "splice_starting_plus_other_starting_does_not_fire",
+			raw:  "v2-canton\trunning\thealthy\nv2-nginx\trunning\tstarting\nv2-splice\trunning\tstarting\n",
+			want: false,
+		},
+		{
+			name: "splice_unhealthy_does_not_fire",
+			raw:  "v2-canton\trunning\thealthy\nv2-splice\trunning\tunhealthy\n",
+			want: false,
+		},
+		{
+			name: "non_splice_starting_does_not_fire",
+			raw:  "v2-canton\trunning\tstarting\nv2-splice\trunning\thealthy\n",
+			want: false,
+		},
+		{
+			name: "empty_input_does_not_fire",
+			raw:  "",
+			want: false,
+		},
+	}
+	c := &ComposeRunner{}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := c.allBlockersAreSpliceStarting([]byte(tc.raw))
+			if got != tc.want {
+				t.Fatalf("got %v, want %v\nraw=%q", got, tc.want, tc.raw)
+			}
+		})
+	}
+}
+
+// TestSpliceContainerName covers the tiny helper that finds the
+// `*-splice` container name in a ps snapshot — the input to the
+// `docker exec` probe.
+func TestSpliceContainerName(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "finds_first_splice", raw: "v2-canton\trunning\thealthy\nv2-splice\trunning\tstarting\n", want: "v2-splice"},
+		{name: "different_project_prefix", raw: "obs-canton\trunning\thealthy\nobs-splice\trunning\tstarting\n", want: "obs-splice"},
+		{name: "no_splice_returns_empty", raw: "canton\trunning\thealthy\n", want: ""},
+		{name: "empty_input_returns_empty", raw: "", want: ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := spliceContainerName([]byte(tc.raw))
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
 }
 
 func sortKeys(m map[string]string) []string {

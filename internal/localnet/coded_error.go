@@ -9,10 +9,6 @@ import "errors"
 // "Docker isn't running", "port already in use", "host below
 // memory floor" — rather than scraping freeform error text.
 //
-// BIT-172: replaces the previous "frontend regex-matches the
-// stderr line" approach which is fragile (any wording change
-// breaks the renderer's switch).
-//
 // Codes are stable strings — once added, they must keep the same
 // meaning across versions. Adding a new code is non-breaking;
 // renaming or repurposing one is breaking. Each code is paired
@@ -96,7 +92,7 @@ const (
 	// ErrCodeCantonOOM: wait_healthy failed and the canton
 	// container's recent logs contain the JVM "-Xmx exceeds half
 	// of the container's total memory" warning that precedes a
-	// Linux OOM-kill. BIT-174 — covers the case where preflight
+	// Linux OOM-kill. Covers the case where preflight
 	// passed but the user later squeezed Docker's memory, or where
 	// the cluster's actual heap consumption exceeds the catalogue
 	// estimate. Remediation: raise Docker memory or pick a lighter

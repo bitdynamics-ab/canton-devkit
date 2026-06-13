@@ -67,10 +67,9 @@ func ShouldColor(w io.Writer) bool {
 // so callers that want STRUCTURE (e.g. boxed FriendlyError output)
 // but not COLOR — the "TTY but NO_COLOR=1" case — can gate on
 // IsTerminal while the per-token Brandc/Errc/etc. still respect
-// ShouldColor for the ANSI sequences themselves. Reviewer pin on
-// PR #36 #3: the original code conflated the two and turned the
-// Box off whenever color was off, which hid useful structure
-// from CI logs that captured a TTY without color.
+// ShouldColor for the ANSI sequences themselves. Conflating the two
+// would turn the Box off whenever color was off, which hides useful
+// structure from CI logs that captured a TTY without color.
 func IsTerminal(w io.Writer) bool {
 	f, ok := w.(*os.File)
 	if !ok {

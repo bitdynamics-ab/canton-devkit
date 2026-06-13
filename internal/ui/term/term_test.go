@@ -90,7 +90,7 @@ func TestBox_RendersLeftAccentAndBody(t *testing.T) {
 	if !strings.Contains(got, "ready.") {
 		t.Errorf("body missing: %q", got)
 	}
-	// Structural assertion via BoxLeftBorderRune (PR #31 #9).
+	// Structural assertion via BoxLeftBorderRune .
 	if !strings.ContainsRune(got, BoxLeftBorderRune) {
 		t.Errorf("expected left border (rune=%q), got %q", BoxLeftBorderRune, got)
 	}
@@ -151,7 +151,7 @@ func TestShouldColor_AppOverride(t *testing.T) {
 // TestShouldColor_NonFileWriter pins the gate behaviour for an
 // io.Writer that isn't *os.File (e.g. bytes.Buffer used in tests
 // or io.Discard). MUST return false — anything else risks ANSI
-// codes leaking into captured output. Reviewer pin on PR #31 #4.
+// codes leaking into captured output.
 func TestShouldColor_NonFileWriter(t *testing.T) {
 	_ = os.Unsetenv("NO_COLOR")
 	_ = os.Unsetenv("CANTON_DEVKIT_NO_COLOR")
@@ -161,7 +161,7 @@ func TestShouldColor_NonFileWriter(t *testing.T) {
 	}
 }
 
-// ── Spinner contract (PR #31 #4 + #8) ──────────────────────────
+// ── Spinner contract ──────────────────────────
 
 // TestSpinner_UpdateAdvancesFrameOnTick pins the rotation:
 // sending a SpinnerTickMsg must increment the frame counter on
@@ -204,8 +204,7 @@ func TestSpinner_UpdateIgnoresUnknownMsg(t *testing.T) {
 
 // TestSpinner_ReassignmentContract pins the value-receiver
 // contract from the godoc Example block. Without re-assignment,
-// the caller's spinner instance does NOT advance. Reviewer pin
-// on PR #31 #8.
+// the caller's spinner instance does NOT advance.
 func TestSpinner_ReassignmentContract(t *testing.T) {
 	s := Spinner{Label: "x"}
 	// Drop the return values twice — simulates a careless
@@ -222,7 +221,7 @@ func TestSpinner_ReassignmentContract(t *testing.T) {
 	}
 }
 
-// ── Prompt defaults (PR #31 #4) ────────────────────────────────
+// ── Prompt defaults ────────────────────────────────
 
 // TestPrompt_DefaultsWhenFieldsEmpty pins the L83-92 default
 // substitution contract — empty user/host/dir must be replaced
@@ -237,7 +236,7 @@ func TestPrompt_DefaultsWhenFieldsEmpty(t *testing.T) {
 	}
 }
 
-// ── KV rune-count (PR #31 #6) ──────────────────────────────────
+// ── KV rune-count ──────────────────────────────────
 
 // TestKV_MultiByteKeyAlignment pins the rune-count fix: "日本"
 // (6 bytes / 2 runes) and "abcd" (4 runes) must align in the
@@ -279,7 +278,7 @@ func utf8RuneIndexOfSubstring(s, sub string) int {
 	return runeIdx
 }
 
-// ── Section width arg (PR #31 #7) ──────────────────────────────
+// ── Section width arg ──────────────────────────────
 
 // TestSection_SeparatorMatchesWidthArg pins the separator-length
 // contract: width=N produces exactly N "─" runes in the separator
@@ -301,7 +300,7 @@ func TestSection_SeparatorMatchesWidthArg(t *testing.T) {
 	}
 }
 
-// ── Box border structural assertion (PR #31 #9) ────────────────
+// ── Box border structural assertion ────────────────
 
 // TestBox_LeftBorderUsesExportedRune asserts presence
 // structurally via BoxLeftBorderRune rather than the literal

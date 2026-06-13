@@ -13,11 +13,10 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// TestRunDown_PersistsStoppingBeforeCompose locks in the contract Zhe
-// asked for on PR #21: RunDown must persist Status=stopping BEFORE
-// calling `docker compose down`, otherwise a crash mid-teardown
-// leaves the registry reporting `running` while the host is in an
-// indeterminate state.
+// TestRunDown_PersistsStoppingBeforeCompose locks in the contract:
+// RunDown must persist Status=stopping BEFORE calling `docker compose
+// down`, otherwise a crash mid-teardown leaves the registry reporting
+// `running` while the host is in an indeterminate state.
 //
 // The test injects a downer stub that, when invoked, reads the
 // on-disk state.json and records what Status it observes. If RunDown
@@ -53,12 +52,11 @@ func TestRunDown_PersistsStoppingBeforeCompose(t *testing.T) {
 	}
 }
 
-// TestRunDown_PreservesStateOnComposeFailure covers Zhe's other PR #21
-// ask: a `docker compose down` failure must NOT silently fall through
-// to registry.Delete. The state must stay on disk with Status=failed
-// and the command must exit non-zero so the user can retry cleanup
-// instead of losing the metadata while resources are potentially
-// still running.
+// TestRunDown_PreservesStateOnComposeFailure: a `docker compose down`
+// failure must NOT silently fall through to registry.Delete. The state
+// must stay on disk with Status=failed and the command must exit
+// non-zero so the user can retry cleanup instead of losing the metadata
+// while resources are potentially still running.
 func TestRunDown_PreservesStateOnComposeFailure(t *testing.T) {
 	name := "compose-fails"
 	seedRunningInstance(t, name)
@@ -78,9 +76,9 @@ func TestRunDown_PreservesStateOnComposeFailure(t *testing.T) {
 		t.Fatalf("RunDown = %d, want ExitRuntimeFailure; stderr=%q", code, errBuf.String())
 	}
 
-	// Registry entry MUST still exist with Status=failed; the prior
+	// Registry entry MUST still exist with Status=failed; a prior
 	// implementation deleted it after the warning and returned 0,
-	// which is the exact bug Zhe flagged.
+	// which is the bug this guards against.
 	s, err := registry.Read(name)
 	if err != nil {
 		t.Fatalf("registry.Read after compose failure: %v (state was deleted — regression)", err)
@@ -133,11 +131,11 @@ func TestRunDown_InterruptionExitsTimeout(t *testing.T) {
 	}
 }
 
-// TestRunDown_HappyPathDeletesRegistry is the success counterpart —
-// when compose down returns nil, the data dir / registry entry are
-// removed as the user expects. Lock-in for the existing contract so
-// the new error-path changes don't regress it.
-func TestRunDown_HappyPathDeletesRegistry(t *testing.T) {
+// TestRunDown_HappyPathPreservesRegistry is the success counterpart —
+// when compose down returns nil, the registry entry is preserved with
+// status=stopped so that a subsequent `localnet clean` can discover
+// the compose project and remove Docker volumes.
+func TestRunDown_HappyPathPreservesRegistry(t *testing.T) {
 	name := "down-happy"
 	seedRunningInstance(t, name)
 
@@ -152,8 +150,12 @@ func TestRunDown_HappyPathDeletesRegistry(t *testing.T) {
 	if code := RunDown(context.Background(), &out, &errBuf, opts); code != ExitSuccess {
 		t.Fatalf("RunDown = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
-	if _, err := registry.Read(name); err != registry.ErrNotFound {
-		t.Errorf("registry entry should be gone after happy down, got err=%v", err)
+	s, err := registry.Read(name)
+	if err != nil {
+		t.Fatalf("registry entry should be preserved after down, got err=%v", err)
+	}
+	if s.Status != registry.StatusStopped {
+		t.Errorf("Status = %q, want %q", s.Status, registry.StatusStopped)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	adminproto "github.com/bitdynamics-ab/canton-devkit/internal/canton/admin/proto"
 	cdkdar "github.com/bitdynamics-ab/canton-devkit/internal/dar"
@@ -16,24 +17,25 @@ import (
 // buildInfo wires `dar info`. The command auto-routes on the single
 // positional argument:
 //
-//   - if the arg looks like a 64-hex package ID, we query the
-//     participant's Admin API (PackageService.GetPackageContents +
-//     GetPackageReferences) to surface module names, language version,
-//     and which DARs reference the package.
-//   - otherwise, the arg is treated as a path to a local .dar file
-//     and we use the offline parser (`internal/dar`).
+// - if the arg looks like a 64-hex package ID, we query the
+// participant's Admin API (PackageService.GetPackageContents +
+// GetPackageReferences) to surface module names, language version,
+// and which DARs reference the package.
+// - otherwise, the arg is treated as a path to a local .dar file
+// and we use the offline parser (`internal/dar`).
 //
 // This matches the proposal's signature `dar info <package-id|package-name>`
 // while keeping the offline file path useful for CI / on-disk
 // validation flows.
 //
-// Deep template/choice/field/interface inspection (modules → choices
-// with field types) is still future work (BIT-115) — both code paths
-// surface what their underlying API actually returns today.
+// Deep template/choice/interface inspection from local DARs // is available on the offline path via --deep, which parses Daml-LF
+// directly. The participant path still surfaces only what Canton's
+// Admin API returns (module names).
 func buildInfo() *cobra.Command {
 	var (
 		format  string
 		verbose bool
+		deep    bool
 		conn    connectFlags
 	)
 	cmd := &cobra.Command{
@@ -60,8 +62,10 @@ Participant-query path output:
   - language version (Daml-LF) and is_utility_package flag
   - DARs that reference the package (from GetPackageReferences)
 
-Deep template/choice/field/interface inspection from local DARs is
-tracked in BIT-115; that work will plug into the offline path here.
+Deep inspection (--deep, offline path): parses the Daml-LF directly to
+list each module's templates (with their choices), interfaces (choices +
+methods), and data types. JSON output always carries this under each
+package's "contents".
 
 Exit codes:
   0  Success
@@ -81,7 +85,7 @@ Exit codes:
 			// doesn't match the 64-hex package-id shape, treat as file.
 			// Otherwise treat as a package id and query the participant.
 			if _, err := os.Stat(arg); err == nil {
-				return runInfoFile(cmd.OutOrStdout(), cmd.ErrOrStderr(), arg, format, verbose)
+				return runInfoFile(cmd.OutOrStdout(), cmd.ErrOrStderr(), arg, format, verbose, deep)
 			}
 			if !looksLikePackageID(arg) {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
@@ -95,6 +99,8 @@ Exit codes:
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json.")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false,
 		"Offline path: show every dependency. Participant path: include every referenced DAR.")
+	cmd.Flags().BoolVar(&deep, "deep", false,
+		"Offline path: parse Daml-LF and list the main package's modules → templates (+ choices), interfaces, and data types.")
 	conn.register(cmd)
 	return cmd
 }
@@ -117,7 +123,7 @@ func looksLikePackageID(s string) bool {
 
 // --- offline file path -----------------------------------------------
 
-func runInfoFile(out, errw io.Writer, path, format string, verbose bool) error {
+func runInfoFile(out, errw io.Writer, path, format string, verbose, deep bool) error {
 	info, err := cdkdar.Open(path)
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "dar info: %s\n", err)
@@ -127,6 +133,9 @@ func runInfoFile(out, errw io.Writer, path, format string, verbose bool) error {
 		printInfoJSON(out, info)
 	} else {
 		printInfoText(out, info, verbose)
+		if deep {
+			printDeep(out, info.MainPackage())
+		}
 	}
 	return nil
 }
@@ -323,6 +332,42 @@ func orDashS(s string) string {
 // truncate returns s clipped to width with an ellipsis when shortened.
 // Used by the offline-path text renderer (dependency table) and by
 // list.go's row printer.
+// printDeep renders the Daml-LF deep view for one package:
+// each module's templates (+ choices), interfaces (+ choices/methods),
+// and data types. No-op when the package couldn't be deep-parsed (LF1).
+func printDeep(out io.Writer, p *cdkdar.PackageMeta) {
+	if p == nil || p.Contents == nil {
+		_, _ = fmt.Fprintln(out, "\nDeep inspection: unavailable (LF1 or unparseable package)")
+		return
+	}
+	_, _ = fmt.Fprintf(out, "\nDeep inspection (%s):\n", p.Name)
+	for _, m := range p.Contents.Modules {
+		nt, ni, nd := len(m.Templates), len(m.Interfaces), len(m.DataTypes)
+		if nt == 0 && ni == 0 && nd == 0 {
+			continue
+		}
+		_, _ = fmt.Fprintf(out, "  module %s\n", m.Name)
+		for _, t := range m.Templates {
+			_, _ = fmt.Fprintf(out, "    template %s\n", t.Name)
+			for _, c := range t.Choices {
+				_, _ = fmt.Fprintf(out, "      choice %s\n", c)
+			}
+		}
+		for _, i := range m.Interfaces {
+			_, _ = fmt.Fprintf(out, "    interface %s\n", i.Name)
+			for _, mth := range i.Methods {
+				_, _ = fmt.Fprintf(out, "      method %s\n", mth)
+			}
+			for _, c := range i.Choices {
+				_, _ = fmt.Fprintf(out, "      choice %s\n", c)
+			}
+		}
+		if nd > 0 {
+			_, _ = fmt.Fprintf(out, "    data types: %s\n", strings.Join(m.DataTypes, ", "))
+		}
+	}
+}
+
 func truncate(s string, width int) string {
 	if len(s) <= width {
 		return s

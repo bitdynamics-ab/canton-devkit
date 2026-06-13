@@ -11,18 +11,14 @@ import (
 	"testing"
 )
 
-// TestHandlersSchemaPin_AllResponsesCarrySchemaVersion is the
-// reviewer pin (PR #43 round-2 #3, applying the pattern from
-// PR #44's skill-vs-CLI lint): scan the handlers package source
-// for every top-level struct used as a JSON response, and assert
-// each carries a SchemaVersion field with the canonical
-// json:"schema_version" tag.
-//
-// The reviewer flagged that api/types/schema_pin_test.go doesn't
-// reach types in this package — they "escape" the central
-// reflection check. Fixing the gap properly means a lint that
-// fires every CI run, so a new response shape added next month
-// can't ship without the SchemaVersion field.
+// TestHandlersSchemaPin_AllResponsesCarrySchemaVersion scans the
+// handlers package source for every top-level struct used as a
+// JSON response and asserts each carries a SchemaVersion field
+// with the canonical json:"schema_version" tag. The central
+// reflection check in api/types/schema_pin_test.go doesn't reach
+// types declared in this package, so a lint that fires every CI
+// run prevents a new response shape from shipping without the
+// SchemaVersion field.
 //
 // Detection heuristic: any struct whose name ends in "Response"
 // OR "Payload" is treated as a top-level JSON response. New
@@ -66,7 +62,7 @@ func TestHandlersSchemaPin_AllResponsesCarrySchemaVersion(t *testing.T) {
 }
 
 // TestHandlersSchemaPin_ConstMatchesTypes is the parallel pin
-// (matches PR #41's TestVersion_MatchesTypesSchema): the
+// (matches TestVersion_MatchesTypesSchema): the
 // handlers.SchemaVersion constant must equal the values emitted
 // by each Response/Payload type. Reflective; covers jwtResponse
 // + appConfigPayload today, and any future Response/Payload

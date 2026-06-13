@@ -150,3 +150,59 @@ type fakeAddr string
 
 func (a fakeAddr) Network() string { return "tcp" }
 func (a fakeAddr) String() string  { return string(a) }
+
+// TestCollectDoctor_FixedPortBaseReplacesEphemeral verifies that with
+// PortBase set, doctor checks the FIXED port block (and not the ephemeral
+// probe) — and passes when the block is free.
+func TestCollectDoctor_FixedPortBaseReplacesEphemeral(t *testing.T) {
+	rep, err := CollectDoctor(context.Background(), DoctorOptions{
+		GOOS:       "linux",
+		GOARCH:     "amd64",
+		PortBase:   20000,
+		ListenFunc: fakeListenOK,
+		Prober: func(context.Context, docker.Options) *docker.Report {
+			return &docker.Report{Results: []docker.CheckResult{{Name: "Docker CLI", Status: docker.StatusOK}}}
+		},
+	})
+	if err != nil {
+		t.Fatalf("CollectDoctor: %v", err)
+	}
+	fixed := findPreflightCheck(t, rep, "Fixed ports (--port-base)")
+	if fixed.Result != "pass" {
+		t.Errorf("fixed-port check = %q, want pass", fixed.Result)
+	}
+	// The ephemeral check must NOT be present in fixed mode.
+	for _, sec := range rep.Sections {
+		for _, c := range sec.Checks {
+			if c.Label == "Ephemeral loopback ports" {
+				t.Error("ephemeral check should be replaced by fixed-port check when --port-base is set")
+			}
+		}
+	}
+}
+
+// TestCollectDoctor_FixedPortBaseBusyFails verifies a busy fixed block is
+// a hard FAIL (doctor exits 2) — matching what `up --port-base` would do.
+func TestCollectDoctor_FixedPortBaseBusyFails(t *testing.T) {
+	rep, err := CollectDoctor(context.Background(), DoctorOptions{
+		GOOS:     "linux",
+		GOARCH:   "amd64",
+		PortBase: 20000,
+		ListenFunc: func(string, string) (net.Listener, error) {
+			return nil, errors.New("bind: address already in use")
+		},
+		Prober: func(context.Context, docker.Options) *docker.Report {
+			return &docker.Report{Results: []docker.CheckResult{{Name: "Docker CLI", Status: docker.StatusOK}}}
+		},
+	})
+	if err != nil {
+		t.Fatalf("CollectDoctor: %v", err)
+	}
+	fixed := findPreflightCheck(t, rep, "Fixed ports (--port-base)")
+	if fixed.Result != "fail" {
+		t.Errorf("busy fixed-port check = %q, want fail", fixed.Result)
+	}
+	if rep.OK {
+		t.Error("rep.OK = true, want false when fixed ports are busy")
+	}
+}

@@ -72,9 +72,9 @@ func (c *Client) UploadDarFile(ctx context.Context, req *adminv2.UploadDarFileRe
 
 // ListMyUserRights returns the party-rights and admin claims attached
 // to the JWT's claimed user (the empty UserId asks the participant
-// to use the token's own user). Wired for BIT-191 so the Web UI
-// Explorer can resolve a Splice LocalNet user-id token to the
-// concrete party set it can read.
+// to use the token's own user). Lets the Web UI Explorer resolve
+// a Splice LocalNet user-id token to the concrete party set it
+// can read.
 //
 // Each Right is a oneof — typical entries:
 //
@@ -124,6 +124,41 @@ func (c *Client) ResolveActAndReadParties(ctx context.Context) ([]string, error)
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+// GrantUserActAndReadAs grants the calling JWT's user CanActAs +
+// CanReadAs for every supplied party. Idempotent: Canton's grant API
+// returns the resulting full rights list and tolerates re-grants of
+// already-held rights, so calling this multiple times is safe.
+//
+// Why this exists: the Splice V2 alpha boot doesn't auto-grant the
+// `ledger-api-user` user any party rights on the per-role participants
+// (stable Splice 0.6.4 does). Without these grants the JWT is accepted
+// but every ACS / submit RPC returns PermissionDenied. The token CLI
+// auto-grants the local party before its first ledger call so V2 boots
+// behave like stable Splice boots from the caller's perspective.
+//
+// userId="" asks the participant to apply the grant to the JWT's own
+// user — same shape as ListMyUserRights.
+func (c *Client) GrantUserActAndReadAs(ctx context.Context, userID string, parties []string) error {
+	if len(parties) == 0 {
+		return nil
+	}
+	rights := make([]*adminv2.Right, 0, len(parties)*2)
+	for _, p := range parties {
+		rights = append(rights,
+			&adminv2.Right{Kind: &adminv2.Right_CanActAs_{CanActAs: &adminv2.Right_CanActAs{Party: p}}},
+			&adminv2.Right{Kind: &adminv2.Right_CanReadAs_{CanReadAs: &adminv2.Right_CanReadAs{Party: p}}},
+		)
+	}
+	_, err := c.userMgmt.GrantUserRights(ctx, &adminv2.GrantUserRightsRequest{
+		UserId: userID,
+		Rights: rights,
+	})
+	if err != nil {
+		return fmt.Errorf("ledger.GrantUserActAndReadAs: %w", err)
+	}
+	return nil
 }
 
 // ListKnownPackages enumerates packages from the admin perspective — same

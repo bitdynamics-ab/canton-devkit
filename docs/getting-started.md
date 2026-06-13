@@ -77,28 +77,23 @@ Download the binary for your platform from the
 [Releases page](https://github.com/bitdynamics-ab/canton-devkit/releases),
 verify its checksum, mark it executable, and put it on your `PATH`.
 
-Release assets are named `canton-devkit_<os>_<arch>` (with `.exe` on
-Windows). GitHub exposes each asset checksum through the release API as
-an asset `digest` field. The macOS and Linux examples use `jq` to read
-that value from the API response.
+Release assets are versioned archives named
+`canton-devkit_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) — each
+contains the `canton-devkit` binary plus `LICENSE` and `README.md`. Every
+release also publishes a single `SHA256SUMS` file covering all archives;
+the examples below verify against it.
 
 ### macOS (Apple Silicon)
 
 ```bash
-VERSION=v0.2.0   # replace with the latest release tag
-ASSET=canton-devkit_darwin_arm64
-curl -fL -o canton-devkit \
-  "https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}/${ASSET}"
-# verify (optional but recommended)
-EXPECTED_SHA256="$(
-  curl -fsSL "https://api.github.com/repos/bitdynamics-ab/canton-devkit/releases/tags/${VERSION}" |
-    jq -r --arg asset "$ASSET" '.assets[] | select(.name == $asset) | .digest | sub("^sha256:"; "")'
-)"
-ACTUAL_SHA256="$(shasum -a 256 canton-devkit | cut -d ' ' -f 1)"
-test "$ACTUAL_SHA256" = "$EXPECTED_SHA256" || {
-  printf "checksum mismatch\nexpected: %s\nactual:   %s\n" "$EXPECTED_SHA256" "$ACTUAL_SHA256"
-  exit 1
-}
+VERSION=v0.7   # replace with the latest release tag
+ASSET="canton-devkit_${VERSION}_darwin_arm64.tar.gz"
+base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}"
+curl -fLO "${base}/${ASSET}"
+curl -fLO "${base}/SHA256SUMS"
+# verify against the release checksums (recommended)
+grep " ${ASSET}\$" SHA256SUMS | shasum -a 256 -c - || { echo "checksum mismatch"; exit 1; }
+tar -xzf "${ASSET}"             # → canton-devkit, LICENSE, README.md
 chmod +x canton-devkit
 sudo mv canton-devkit /usr/local/bin/
 # Gatekeeper: first run may need this once
@@ -109,15 +104,13 @@ canton-devkit version
 ### Linux (amd64)
 
 ```bash
-VERSION=v0.2.0
-ASSET=canton-devkit_linux_amd64
-curl -fL -o canton-devkit \
-  "https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}/${ASSET}"
-EXPECTED_SHA256="$(
-  curl -fsSL "https://api.github.com/repos/bitdynamics-ab/canton-devkit/releases/tags/${VERSION}" |
-    jq -r --arg asset "$ASSET" '.assets[] | select(.name == $asset) | .digest | sub("^sha256:"; "")'
-)"
-printf "%s  canton-devkit\n" "$EXPECTED_SHA256" | sha256sum -c -
+VERSION=v0.7
+ASSET="canton-devkit_${VERSION}_linux_amd64.tar.gz"
+base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}"
+curl -fLO "${base}/${ASSET}"
+curl -fLO "${base}/SHA256SUMS"
+grep " ${ASSET}\$" SHA256SUMS | sha256sum -c - || { echo "checksum mismatch"; exit 1; }
+tar -xzf "${ASSET}"             # → canton-devkit, LICENSE, README.md
 chmod +x canton-devkit
 sudo mv canton-devkit /usr/local/bin/
 canton-devkit version
@@ -126,17 +119,18 @@ canton-devkit version
 ### Windows (amd64, PowerShell)
 
 ```powershell
-$Version = "v0.2.0"
-$Asset = "canton-devkit_windows_amd64.exe"
+$Version = "v0.7"
+$Asset = "canton-devkit_${Version}_windows_amd64.zip"
 $base = "https://github.com/bitdynamics-ab/canton-devkit/releases/download/$Version"
-Invoke-WebRequest -Uri "$base/$Asset" -OutFile canton-devkit.exe
-# verify
-$release = Invoke-RestMethod -Uri "https://api.github.com/repos/bitdynamics-ab/canton-devkit/releases/tags/$Version"
-$expected = ($release.assets | Where-Object { $_.name -eq $Asset }).digest -replace "^sha256:", ""
-$actual = (Get-FileHash canton-devkit.exe -Algorithm SHA256).Hash.ToLower()
+Invoke-WebRequest -Uri "$base/$Asset" -OutFile $Asset
+Invoke-WebRequest -Uri "$base/SHA256SUMS" -OutFile SHA256SUMS
+# verify against the release checksums
+$expected = ((Get-Content SHA256SUMS | Select-String -SimpleMatch $Asset) -split '\s+')[0]
+$actual = (Get-FileHash $Asset -Algorithm SHA256).Hash.ToLower()
 if ($expected -ne $actual) { throw "checksum mismatch" }
+Expand-Archive -Path $Asset -DestinationPath canton-devkit-dist -Force
 # put it somewhere on PATH, e.g. a tools dir you've added to PATH
-Move-Item canton-devkit.exe "$env:USERPROFILE\bin\canton-devkit.exe"
+Move-Item canton-devkit-dist\canton-devkit.exe "$env:USERPROFILE\bin\canton-devkit.exe"
 canton-devkit version
 ```
 
@@ -200,6 +194,30 @@ canton-devkit localnet list           # both instances + their state
 
 Each named instance gets its own deterministic compose project,
 network, and host ports, so they don't collide.
+
+#### Explicit, deterministic ports (`--port-base`)
+
+By default DevKit **auto-allocates** host ports — the simplest path, and
+it never conflicts because the kernel hands out free ports. When you need
+a **fixed, predictable** port map instead — reproducible CI layouts, or
+multiple instances at known offsets — pin a base:
+
+```bash
+canton-devkit localnet up --name alpha --port-base 20000   # services at 20000+N
+canton-devkit localnet up --name beta  --port-base 30000   # services at 30000+N
+```
+
+Each service lands on `base + N`, identically across runs and machines.
+Every derived port must be free or `up` fails fast (no silent fallback) —
+so the layout you asked for is the layout you get. Pre-flight a base
+before bringing anything up:
+
+```bash
+canton-devkit localnet doctor --port-base 20000   # are 20000..20000+services free?
+```
+
+The same control is available in the Web UI's **New instance** dialog
+under *Advanced → Fixed port base*.
 
 ---
 

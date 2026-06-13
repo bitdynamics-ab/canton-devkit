@@ -17,7 +17,7 @@ import (
 // of an upward api/types import. A parity test in
 // handlers_schema_test.go asserts the two stay equal.
 //
-// Reviewer pin (PR #43 #c): every top-level response in this
+// every top-level response in this
 // package now carries this version (jwtResponse, appConfigPayload).
 const SchemaVersion = 1
 
@@ -39,7 +39,7 @@ const SchemaVersion = 1
 //
 // JWTs returned here are dev-only (HS256 with a hardcoded shared
 // secret — see internal/splice/jwt.go). The UI is loopback-only at
-// the server layer (BIT-129), so the JWT never crosses the network.
+// the server layer, so the JWT never crosses the network.
 // The "warning: shared dev secret" string already lives in the
 // splice package; the frontend renders it on the Developer Setup
 // card.
@@ -68,14 +68,13 @@ type jwtRequest struct {
 // jwtResponse is what the dashboard renders into the monospace token
 // preview.
 //
-// Reviewer pin (PR #43 #c): SchemaVersion is the schema-pin reflection
+// SchemaVersion is the schema-pin reflection
 // test's anchor — every top-level response carries it so a frontend
 // bundled for v1 refuses a v2 backend cleanly. Mirrors the patterns
 // in api/types/{Instance,ListResponse,PreflightReport,Snapshot}.
 //
-// Reviewer pin (PR #43 #a): Token is REDACTED by default — the raw
-// JWT only returns when ?include_jwt=true is set. Mirrors PR #38's
-// `--include-jwt` convention. Default-redacted keeps CI logs,
+// Token is REDACTED by default — the raw
+// JWT only returns when ?include_jwt=true is set. Mirrors the existing // `--include-jwt` convention. Default-redacted keeps CI logs,
 // screenshot-shares, and "look at the response" demos from leaking
 // a usable signing token.
 type jwtResponse struct {
@@ -98,7 +97,7 @@ const jwtRedactionPlaceholder = "<redacted>"
 // payload is at most a few hundred bytes (role + ttl + audience);
 // 4 KiB is generous and catches the regression class where a bug
 // (or malicious client) sends an unbounded body and exhausts memory.
-// Reviewer pin (PR #43 #d).
+// .
 const maxAuthBodyBytes = 4 * 1024
 
 // handleIssueJWT signs a fresh JWT for the given instance + role.
@@ -122,7 +121,7 @@ func handleIssueJWT(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req jwtRequest
-	// Reviewer pin (PR #43 #d): cap the body. http.MaxBytesReader
+	// cap the body. http.MaxBytesReader
 	// returns a 413 error on Read once the cap is exceeded, which
 	// json.Decoder surfaces as a decode error we treat as 400.
 	r.Body = http.MaxBytesReader(w, r.Body, maxAuthBodyBytes)
@@ -164,8 +163,7 @@ func handleIssueJWT(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Reviewer pin (PR #43 #a): default-redact. Mirrors PR #38's
-	// --include-jwt convention. The dashboard MUST pass
+	// default-redact. Mirrors the existing // --include-jwt convention. The dashboard MUST pass
 	// ?include_jwt=true on the fetch when it actually wants to
 	// render the token; default-redacted keeps screenshot shares
 	// and logs from leaking a usable signer.
@@ -175,7 +173,7 @@ func handleIssueJWT(w http.ResponseWriter, r *http.Request) {
 		respToken = token
 	}
 
-	// Reviewer pin (PR #43 #f): audit log. JWT issuance is a
+	// audit log. JWT issuance is a
 	// security-relevant event — every issue gets a stderr line
 	// with the role, party, audience, and whether the raw token
 	// was returned. Routes through log.Default so callers can
@@ -190,7 +188,7 @@ func handleIssueJWT(w http.ResponseWriter, r *http.Request) {
 		Audience:      audience,
 		Role:          string(role),
 		WarningDev:    splice.DevSecretWarning,
-		ExpiresInSec:  req.TTLSeconds, // TODO(BIT-141): plumb into SignToken
+		ExpiresInSec:  req.TTLSeconds, // TODO: plumb into SignToken
 	})
 }
 
@@ -283,7 +281,7 @@ func handleAppConfig(w http.ResponseWriter, r *http.Request) {
 // appConfigPayload is the canonical shape across all output
 // formats. Renderers project it into env / json / yaml.
 //
-// Reviewer pin (PR #43 #c): SchemaVersion. Same rationale as
+// SchemaVersion. Same rationale as
 // jwtResponse — every top-level response carries it so the
 // frontend can validate the handshake. The env/yaml renderers
 // skip it (the formats are line-oriented, not structured), but

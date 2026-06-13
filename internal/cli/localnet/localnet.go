@@ -25,11 +25,11 @@ func Build() *cobra.Command {
 	localnet.AddCommand(buildUp())
 	localnet.AddCommand(buildDown())
 	localnet.AddCommand(buildRestart())
+	localnet.AddCommand(buildPause())
+	localnet.AddCommand(buildResume())
 	localnet.AddCommand(buildClean())
 
-	// Inspection — real implementations landed on main via
-	// BIT-111/112 (status, list), BIT-109/113 (creds, logs),
-	// BIT-31 (doctor), BIT-125 (env).
+	// Inspection.
 	localnet.AddCommand(buildStatus())
 	localnet.AddCommand(buildList())
 	localnet.AddCommand(buildEnv())
@@ -37,16 +37,14 @@ func Build() *cobra.Command {
 	localnet.AddCommand(buildLogs())
 	localnet.AddCommand(buildCreds())
 
-	// BIT-147 — snapshot/restore. Source-copied from
-	// srikanth/bit-147-p1-10; BIT-184 wires UI parity on top.
 	localnet.AddCommand(buildSnapshot())
 	localnet.AddCommand(buildRestore())
 
 	localnet.AddCommand(buildVersions())
 	localnet.AddCommand(buildUI())
 
-	// BIT-135 — AI-agent skill docs. Same embedded docs back the
-	// Web UI Agent Skills screen (BIT-189).
+	// AI-agent skill docs. The same embedded docs back the
+	// Web UI Agent Skills screen.
 	localnet.AddCommand(buildSkills())
 
 	// CLI ↔ Web UI parity (see AGENTS.md): every per-container
@@ -56,19 +54,17 @@ func Build() *cobra.Command {
 	localnet.AddCommand(buildRefresh())
 	localnet.AddCommand(buildMetrics())
 
-	// BIT-136: contracts/tx CLI — uses internal/canton/ledger
-	// from PR #66. Endpoint discovery (auto-resolving the
-	// participant gRPC port from registry state) is a follow-up;
+	// contracts/tx CLI. Endpoint discovery (auto-resolving the
+	// participant gRPC port from registry state) is not yet done;
 	// callers pass --endpoint host:port for now.
 	localnet.AddCommand(buildContracts())
 	localnet.AddCommand(buildTx())
 
-	// BIT-127: DAR admin commands (upload/list/download/info/diff/
-	// remove/build-upload/watch/connect) — adopted from the
-	// `srikanth/bit-track-b-dar-admin` branch.
+	// DAR admin commands (upload/list/download/info/diff/
+	// remove/build-upload/watch/connect).
 	localnet.AddCommand(dar.Build())
 
-	// BIT-138/139: Token Standard V2 commands (create wizard +
+	// Token Standard V2 commands (create wizard +
 	// mint/transfer/burn/balance). Mirrors dar.Build()'s pattern —
 	// the token subpackage owns its own command tree.
 	localnet.AddCommand(token.Build())

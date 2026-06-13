@@ -15,22 +15,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildEnv wires `dpm localnet env --name <inst>` -- BIT-125.
+// buildEnv wires `dpm localnet env --name <inst>`.
 //
 // Emits a block of exported KEY=value lines describing every endpoint and
 // credential of the instance, designed for the common shell idiom:
 //
 //	eval "$(dpm localnet env --name hubble)"
 //
-// Output style matches docs/design/mockups/screens-tokens-help.jsx
-// (ScreenEnv). Three formats:
+// Three formats:
 //
-//	shell  (default)  export KEY='value' with POSIX quoting
-//	dotenv            KEY="value" with dotenv escaping
-//	json              api/types.EnvExport for scripted consumers
+//	shell (default) export KEY='value' with POSIX quoting
+//	dotenv KEY="value" with dotenv escaping
+//	json api/types.EnvExport for scripted consumers
 //
-// The Web UI handler (BIT-131 GET /api/instances/:name/env) will
-// later call collectEnv() directly and emit the json variant.
+// The Web UI handler reuses collectEnv() to emit the json variant.
 func buildEnv() *cobra.Command {
 	var (
 		name       string
@@ -105,14 +103,14 @@ const jwtRedaction = "<redacted>"
 
 // collectEnv builds the export from the registry. Two sources:
 //
-//  1. state.Ports map -> CANTON_<UPPER>_PORT for each logical name.
-//     Hyphens in the logical name become underscores so a value like
-//     "app-user-ui" produces CANTON_APP_USER_UI_PORT (matches what
-//     scripts already expect -- no env name has hyphens).
+// 1. state.Ports map -> CANTON_<UPPER>_PORT for each logical name.
+// Hyphens in the logical name become underscores so a value like
+// "app-user-ui" produces CANTON_APP_USER_UI_PORT (matches what
+// scripts already expect -- no env name has hyphens).
 //
-//  2. state.Credentials map -> CANTON_<ROLE>_JWT and the user/audience
-//     pair that signed it, so a downstream client can re-derive the
-//     JWT if it later rotates.
+// 2. state.Credentials map -> CANTON_<ROLE>_JWT and the user/audience
+// pair that signed it, so a downstream client can re-derive the
+// JWT if it later rotates.
 //
 // Plus a small set of stable convenience keys (CANTON_INSTANCE,
 // CANTON_SPLICE_VERSION, CANTON_AUTH_FILE) so shell scripts can
@@ -131,11 +129,10 @@ func collectEnv(name string, includeJWT bool) (apitypes.EnvExport, error) {
 	out.Vars["CANTON_INSTANCE"] = name
 	out.Vars["CANTON_SPLICE_VERSION"] = state.SpliceVersion
 	// AuthFile points at the per-instance auth.json the user can
-	// load with `jq` -- matches the path-shape used by the mockup's
-	// ScreenEnv (~/.canton-devkit/<name>/auth.json).
+	// load with `jq` (~/.canton-devkit/<name>/auth.json).
 	// filepath.Join (not "/" concat) so the path is correct on
 	// Windows and doesn't duplicate separators if state.DataDir
-	// has a trailing slash. Reviewer pin on PR #34.
+	// has a trailing slash.
 	out.Vars["CANTON_AUTH_FILE"] = filepath.Join(state.DataDir, "auth.json")
 
 	for logical, port := range state.Ports {

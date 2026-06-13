@@ -1,5 +1,5 @@
 // Package stream implements the SSE (Server-Sent Events) broadcaster that
-// powers the M2 Web UI's live-update channel at /events.
+// powers the Web UI's live-update channel at /events.
 //
 // # The slow-client problem
 //
@@ -42,11 +42,11 @@ import (
 // optional and appears as the SSE `id:` line for client-side
 // last-event tracking.
 //
-// SchemaVersion mirrors internal/api/types.SchemaVersion. Reviewer pin
-// (PR #42 #d): every wire-level message the Web UI consumes needs a
-// schema-version field so a frontend bundled for v1 can refuse to
-// decode a v2 event with a clear error rather than silently mis-
-// interpreting fields. The router.handleVersion endpoint surfaces the
+// SchemaVersion mirrors internal/api/types.SchemaVersion. Every
+// wire-level message the Web UI consumes needs a schema-version field so
+// a frontend bundled for v1 can refuse to decode a v2 event with a clear
+// error rather than silently mis-interpreting fields. The
+// router.handleVersion endpoint surfaces the
 // same number; the event-level field lets a long-running EventSource
 // detect a server upgrade mid-session.
 type Event struct {
@@ -79,9 +79,9 @@ type Hub struct {
 	subs   map[*subscription]struct{}
 	bufLen int
 
-	// Per-topic event buffers for the replay-on-subscribe contract
-	// (BIT-163c). Populated only for topics the caller has opted
-	// in via EnableBuffering — the global topic firehose is NOT
+	// Per-topic event buffers for the replay-on-subscribe contract.
+	// Populated only for topics the caller has opted in via
+	// EnableBuffering — the global topic firehose is NOT
 	// buffered, because the only consumer that needs replay today
 	// is the per-instance create-flow SSE stream:
 	//
@@ -161,19 +161,17 @@ func (b *topicBuffer) snapshot() []Event {
 // One per active /events HTTP request.
 //
 // mu serialises BOTH close(ch) (in cancel) AND the deliverTo body
-// per subscription. Reviewer pin (PR #42 round-2 #1 / round-1 #a):
-// the round-1 fix used an RWMutex that allowed multiple concurrent
-// deliverTo calls; under load that lets two publishers both drain
-// from the same channel, double-counting drops and racing the
-// retry. A single Mutex per subscription serialises sends to one
-// subscriber — many subscribers still proceed in parallel because
-// the Mutex is per-subscription, not per-hub. The hub-level RWMutex
-// (h.mu) keeps the SET of subscribers safe for concurrent iteration.
+// per subscription. A plain Mutex (not RWMutex) is deliberate: allowing
+// concurrent deliverTo calls would let two publishers both drain from
+// the same channel, double-counting drops and racing the retry. A single
+// Mutex per subscription serialises sends to one subscriber — many
+// subscribers still proceed in parallel because the Mutex is
+// per-subscription, not per-hub. The hub-level RWMutex (h.mu) keeps the
+// SET of subscribers safe for concurrent iteration.
 //
 // The cost (one publisher per subscriber at a time) is tiny: each
 // deliverTo is a non-blocking channel op + at most one drain + one
-// send. Microseconds. Net effect of the change: zero throughput
-// impact, correct drop accounting under concurrent publish load.
+// send.
 type subscription struct {
 	topics map[string]struct{} // empty = subscribe-all
 	ch     chan Event
@@ -183,7 +181,7 @@ type subscription struct {
 	// subscriber. When non-zero the next successful send is preceded
 	// by a synthetic "dropped" event so the client can react.
 	// Read+reset via Swap(0) under mu so concurrent increments
-	// inside deliverTo are safe (PR #42 #b).
+	// inside deliverTo are safe.
 	droppedSinceWarn atomic.Uint64
 }
 
@@ -442,16 +440,14 @@ func (h *Hub) SubscribeWithReplay(topics ...string) (<-chan Event, func()) {
 // Tries a non-blocking send; if the buffer is full, drains the
 // oldest event, increments droppedSinceWarn, and retries.
 //
-// Holds s.closeMu for read for the entire duration so the cancel
-// path can't close(s.ch) between our fullness check and the send.
-// Reviewer pin (PR #42 #a). If the subscription was already
-// closed by the time we acquire the lock, the function is a no-op
+// Holds s.mu for the entire duration so the cancel path can't close(s.ch)
+// between our fullness check and the send. If the subscription was
+// already closed by the time we acquire the lock, the function is a no-op
 // — the event simply doesn't reach the dead subscriber.
 //
-// Drop accounting uses Swap(0) (PR #42 #b): the previous Load +
-// Store pair was racy — a concurrent Publish could increment
-// droppedSinceWarn between our Load and Store, losing the
-// increment. Swap is atomic.
+// Drop accounting uses Swap(0): a Load + Store pair would be racy — a
+// concurrent Publish could increment droppedSinceWarn between the Load
+// and Store, losing the increment. Swap is atomic.
 func (h *Hub) deliverTo(s *subscription, e Event) {
 	// Serialise deliveries to THIS subscriber. Multiple publishers
 	// may call deliverTo concurrently; without the lock, two
@@ -542,12 +538,10 @@ func (h *Hub) Stats() Stats {
 // the hub's set is cleared, and subsequent Publish calls become
 // no-ops returning 0. Idempotent — calling Close twice is safe.
 //
-// Reviewer pin (PR #42 round-2 #3): the original hub had no
-// way to mass-disconnect subscribers — `dpm localnet ui` SIGINT
-// shut down the HTTP server but the hub's goroutines (held by
-// in-flight EventSource connections) leaked their subscriptions
-// until the connection itself died. Hub.Close + an explicit
-// call from ui.go's shutdown path closes the loop.
+// Without a mass-disconnect, `dpm localnet ui` SIGINT would shut down the
+// HTTP server but leave the hub's subscriptions (held by in-flight
+// EventSource connections) leaked until each connection itself died.
+// Hub.Close, called from ui.go's shutdown path, closes the loop.
 func (h *Hub) Close() {
 	h.mu.Lock()
 	subs := make([]*subscription, 0, len(h.subs))
@@ -571,10 +565,9 @@ func (h *Hub) Close() {
 // Tests use this instead of time.Sleep to deterministically
 // wait for an SSE handler to register its subscription.
 //
-// Reviewer pin (PR #42 round-2 #6): time.Sleep in tests is the
-// classic flakiness vector — 50ms works locally, fails on a
-// slow CI runner. A predicate-based wait converts "sleep enough"
-// into "wait until the actual condition holds."
+// time.Sleep in tests is the classic flakiness vector — 50ms works
+// locally, fails on a slow CI runner. A predicate-based wait converts
+// "sleep enough" into "wait until the actual condition holds."
 func (h *Hub) WaitForSubscribers(ctx context.Context, n int) bool {
 	tick := time.NewTicker(time.Millisecond)
 	defer tick.Stop()

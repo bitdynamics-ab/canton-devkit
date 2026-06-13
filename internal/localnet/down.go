@@ -22,13 +22,11 @@ type composeDowner interface {
 // DownOptions captures `localnet down` flags. Cobra binds directly.
 type DownOptions struct {
 	Name      string
-	KeepData  bool
 	KeepCache bool // documented, currently informational (cache is shared across instances)
 
-	// NewRunner is a test-only seam (PR #21 Zhe review). When nil,
-	// RunDown constructs the real *docker.ComposeRunner. Tests inject a
-	// stub to assert the compose-failure / interruption decision table
-	// without docker.
+	// NewRunner is a test-only seam. When nil, RunDown constructs the
+	// real *docker.ComposeRunner. Tests inject a stub to assert the
+	// compose-failure / interruption decision table without docker.
 	NewRunner func(projectName string, composeFiles, envFiles, env []string, workDir string, logw io.Writer) composeDowner
 }
 
@@ -40,8 +38,8 @@ type DownOptions struct {
 //  2. Load state.json. If missing, exit 0 with a hint.
 //  3. Run `docker compose down --volumes --remove-orphans` with the
 //     compose files recorded in state (no --env-file needed).
-//  4. Remove the per-instance data dir (unless --keep-data).
-//  5. Remove the entry from the registry index.
+//  4. Set status=stopped and persist the registry entry so that a
+//     subsequent `localnet clean` can discover the instance.
 func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptions) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -73,12 +71,11 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 	_, _ = fmt.Fprintf(out, "Stopping Canton LocalNet %q (Splice %s)...\n",
 		state.Name, state.SpliceVersion)
 
-	// Persist the transitional `stopping` state BEFORE invoking compose
-	// (Zhe review, PR #21). If we crashed or were SIGKILLed mid-
-	// teardown without this, `localnet status` would keep reporting
-	// `running` even though containers are partially down. Failure to
-	// write the transitional state is non-fatal — the worst case
-	// reverts to the pre-fix behaviour.
+	// Persist the transitional `stopping` state BEFORE invoking compose.
+	// If we crashed or were SIGKILLed mid-teardown without this,
+	// `localnet status` would keep reporting `running` even though
+	// containers are partially down. Failure to write the transitional
+	// state is non-fatal.
 	state.Status = registry.StatusStopping
 	if err := registry.Write(state); err != nil {
 		_, _ = fmt.Fprintf(errw, "Warning: could not persist stopping state: %s\n", err)
@@ -105,12 +102,12 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 		}
 	}
 	if err := runner.Down(ctx); err != nil {
-		// Zhe review (PR #21): a compose-down failure must NOT silently
-		// fall through to registry.Delete — doing so would scrub the
-		// retry metadata while containers / volumes may still be
-		// running. Preserve state as Failed, leave the data dir +
-		// registry entry intact so the user can retry, and exit
-		// non-zero so scripts see the failure.
+		// A compose-down failure must NOT silently fall through to
+		// registry.Delete — doing so would scrub the retry metadata
+		// while containers / volumes may still be running. Preserve
+		// state as Failed, leave the data dir + registry entry intact
+		// so the user can retry, and exit non-zero so scripts see the
+		// failure.
 		//
 		// Interruption (Ctrl-C / SIGTERM) is a separate cell:
 		// ExitTimeout rather than ExitRuntimeFailure, since the
@@ -132,17 +129,9 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 		return ExitRuntimeFailure
 	}
 
-	if !opts.KeepData {
-		if err := registry.Delete(state.Name); err != nil {
-			_, _ = fmt.Fprintf(errw, "Warning: could not remove instance dir: %s\n", err)
-			return ExitRuntimeFailure
-		}
-	} else {
-		state.Status = registry.StatusStopped
-		if err := registry.Write(state); err != nil {
-			_, _ = fmt.Fprintf(errw, "Warning: state update failed: %s\n", err)
-		}
-		_, _ = fmt.Fprintf(out, "Kept instance data at %s\n", state.DataDir)
+	state.Status = registry.StatusStopped
+	if err := registry.Write(state); err != nil {
+		_, _ = fmt.Fprintf(errw, "Warning: state update failed: %s\n", err)
 	}
 
 	_, _ = fmt.Fprintf(out, "Canton LocalNet %q stopped.\n", state.Name)

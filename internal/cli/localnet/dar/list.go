@@ -12,12 +12,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// BIT-51: dar list — list uploaded DARs / packages on a participant.
+// dar list — list uploaded DARs / packages on a participant.
 //
 // The Canton Admin API exposes two related views:
 //
-//	ListDars        → uploaded archives (.dar files), addressed by main_package_id
-//	ListPackages    → individual .dalf packages inside DARs
+//	ListDars → uploaded archives (.dar files), addressed by main_package_id
+//	ListPackages → individual .dalf packages inside DARs
 //
 // `dar list` defaults to ListDars (one row per uploaded DAR — the usual
 // "what have I deployed?" question). Pass --packages to switch to the

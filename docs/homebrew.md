@@ -73,7 +73,7 @@ tree is reachable.
 
 - **Windows** — Homebrew doesn't target Windows. Use the standalone
   artifact from the [public builds release page](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases).
-- **Linux ARM** — not in the release matrix. Could be added in BIT-19's
+- **Linux ARM** — not in the release matrix. Could be added in a
   follow-up if there's demand.
 - **macOS Intel** — same; the project's compatibility matrix is
   Apple Silicon only.

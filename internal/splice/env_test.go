@@ -77,7 +77,7 @@ func TestExpandSelfReference(t *testing.T) {
 }
 
 // TestExpandRealSpliceForm verifies the exact pattern that appears in
-// upstream Splice env files (per BIT-30 review feedback):
+// upstream Splice env files:
 //
 //	LOCALNET_ENV_DIR=${LOCALNET_ENV_DIR:-$LOCALNET_DIR/env}
 func TestExpandRealSpliceForm(t *testing.T) {

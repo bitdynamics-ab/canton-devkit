@@ -8,27 +8,27 @@ import (
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
+	"github.com/bitdynamics-ab/canton-devkit/internal/telemetry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 	"github.com/spf13/cobra"
 )
 
-// BIT-123 — `dpm localnet doctor`.
+// `dpm localnet doctor`.
 //
-// Renders the System / Resources / Network sections from
-// docs/design/mockups/screens-lifecycle.jsx (ScreenDoctor) by
-// translating docker.RunPreflight output. The same Report is also
-// surfaced as types.PreflightReport via --format=json so the Web
-// UI (BIT-131 GET /api/doctor) can call CollectDoctor and render
-// the same data.
+// Renders the System / Resources / Network sections by translating
+// docker.RunPreflight output. The same Report is also surfaced as
+// types.PreflightReport via --format=json so the Web UI can call
+// CollectDoctor and render the same data.
 //
-// The check set lives in internal/localnet.CollectDoctor; this file is only the
-// CLI surface — flags + rendering + JSON.
+// The check set lives in internal/localnet.CollectDoctor; this file
+// is only the CLI surface — flags + rendering + JSON.
 
 var doctorCollectFn = localnet.CollectDoctor
 
 func buildDoctor() *cobra.Command {
 	var format string
 	var version string
+	var portBase int
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check host readiness for LocalNet (docker, resources, network)",
@@ -51,7 +51,7 @@ ExitPreflightFail semantics).`,
 					"--format must be table or json (got %q)\n", format)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
-			rep, err := doctorCollectFn(cmd.Context(), localnet.DoctorOptions{Version: version})
+			rep, err := doctorCollectFn(cmd.Context(), localnet.DoctorOptions{Version: version, PortBase: portBase})
 			if err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s\n", err)
 				return localnet.AsExitError(localnet.ExitUserError)
@@ -68,6 +68,15 @@ ExitPreflightFail semantics).`,
 				}
 			}
 			if !rep.OK {
+				// Anonymous telemetry (no-op unless enabled): which checks
+				// failed, by stable slug. Only the check id is recorded.
+				for _, sec := range rep.Sections {
+					for _, ch := range sec.Checks {
+						if ch.Result == "fail" {
+							telemetry.Inc("dpm/doctor_fail", telemetry.Slug(ch.Label))
+						}
+					}
+				}
 				return localnet.AsExitError(localnet.ExitPreflightFail)
 			}
 			return nil
@@ -75,24 +84,22 @@ ExitPreflightFail semantics).`,
 	}
 	cmd.Flags().StringVar(&format, "format", "table", "Output format: table | json")
 	cmd.Flags().StringVar(&version, "version", "latest", "Splice version used for memory thresholds")
+	cmd.Flags().IntVar(&portBase, "port-base", 0,
+		"Check the FIXED host-port block `up --port-base <N>` would claim (N..N+services) instead of ephemeral-port availability. Use to pre-flight a deterministic-port layout.")
 	return cmd
 }
 
-// writeDoctorTable renders ScreenDoctor: one Section per category
-// with Step rows for each check + a colored summary Box.
+// writeDoctorTable renders one Section per category with Step rows
+// for each check + a colored summary Box.
 func writeDoctorTable(w io.Writer, rep types.PreflightReport) {
 	_, _ = fmt.Fprintln(w, term.Dimc("Checking host readiness for Canton LocalNet…"))
 	_, _ = fmt.Fprintln(w)
 
-	// Reviewer pin (PR #39 #4): the original renderer emitted a
-	// loose stack of Step rows per section. Sections with one
-	// check looked indistinguishable from prose, and the columns
-	// (status glyph / label / detail) didn't align across sections
-	// because Step is whitespace-padded, not column-aligned. We
-	// now render each section as its own term.Table with a fixed
-	// column layout (status · check · detail) so the eye can
-	// scan vertically. Section headers stay so users can tell
-	// System checks from Resources checks at a glance.
+	// Each section renders as its own term.Table with a fixed column
+	// layout (status · check · detail) so the columns align across
+	// rows and the eye can scan vertically — a loose stack of
+	// whitespace-padded Step rows doesn't align. Section headers let
+	// users tell System checks from Resources checks at a glance.
 	for _, sec := range rep.Sections {
 		rows := make([][]string, 0, len(sec.Checks))
 		for _, c := range sec.Checks {
@@ -113,16 +120,13 @@ func writeDoctorTable(w io.Writer, rep types.PreflightReport) {
 
 	// Per-section remediation block on failure/warning checks.
 	// We surface remediation as a friendly Box at the END so the
-	// scan-table-then-act flow matches the JSX mockup.
+	// scan-table-then-act flow reads top to bottom.
 	//
-	// Reviewer pin (PR #39 #4 round-4): the previous shape
-	// flattened multi-step remediations by joining them with " · "
-	// into one line per check — so a three-step recovery (e.g.
-	// "free port, retry up, run doctor") rendered as a single
-	// dense Step row that visually fused unrelated actions. We now
-	// keep each remediation step on its own row under the check
-	// label, like a sub-list. Each (label, [steps]) pair becomes
-	// one labelled header + N indented step rows.
+	// Each remediation step renders on its own row under the check
+	// label, like a sub-list — joining multi-step remediations with
+	// " · " into one line visually fuses unrelated actions (e.g.
+	// "free port, retry up, run doctor"). Each (label, [steps]) pair
+	// becomes one labelled header + N indented step rows.
 	type remediationBlock struct {
 		label string
 		steps []string

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -18,7 +19,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// MountMetrics wires BIT-134's Web UI face: a per-instance
+// MountMetrics wires 's Web UI face: a per-instance
 // Prometheus passthrough so the future Metrics screen can render
 // live charts without the browser scraping Prometheus directly
 // (avoids CORS + lets the handler enforce auth/JWT once that
@@ -272,8 +273,8 @@ func handleMetricsSummary() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), metricsTimeout)
 		defer cancel()
 
-		// BIT-134 review v4: queries come from the shared
-		// metricsq package so CLI + handler can't drift.
+		// Queries come from the shared metricsq package so CLI
+		// + handler can't drift.
 		out := map[string]*float64{}
 		type res struct {
 			k metricsq.Headline
@@ -306,12 +307,55 @@ func handleMetricsSummary() http.HandlerFunc {
 				return
 			}
 		}
+		// Build the latency block in milliseconds — same scaling
+		// as the CLI's `--format json` shape so the two surfaces
+		// stay byte-identical for the curated panels.
+		latency := map[string]*float64{
+			"p50_ms": secondsToMs(out[string(metricsq.HeadlineMediatorP50)]),
+			"p95_ms": secondsToMs(out[string(metricsq.HeadlineMediatorP95)]),
+			"p99_ms": secondsToMs(out[string(metricsq.HeadlineMediatorP99)]),
+		}
+		dashboards := map[string]string{
+			"grafana_url": grafanaURLForState(state),
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"schema_version": 1,
 			"instance":       name,
 			"metrics":        out,
+			"latency":        latency,
+			"dashboards":     dashboards,
 		})
 	}
+}
+
+// grafanaDashboardUID pins the bundled Canton LocalNet dashboard UID.
+// Mirrors the CLI's constant so both surfaces deep-link to the same
+// view. See assets/grafana/dashboards/canton-localnet.json.
+const grafanaDashboardUID = "canton-localnet-v1"
+
+// grafanaURLForState returns the Web UI deep link to the bundled
+// dashboard when observability is on for the instance, or "" so the
+// frontend can render a "enable observability profile" CTA.
+func grafanaURLForState(state *registry.State) string {
+	if state == nil {
+		return ""
+	}
+	port, ok := state.Ports["grafana_ui"]
+	if !ok || port == 0 {
+		return ""
+	}
+	return fmt.Sprintf("http://localhost:%d/d/%s", port, grafanaDashboardUID)
+}
+
+// secondsToMs converts a seconds-valued Prometheus scalar into the
+// milliseconds the frontend expects for latency cards. nil-safe so
+// "no samples yet" stays distinguishable from "0 ms".
+func secondsToMs(v *float64) *float64 {
+	if v == nil {
+		return nil
+	}
+	ms := *v * 1000
+	return &ms
 }
 
 // proxyPrometheus does the actual HTTP call against the
@@ -364,7 +408,7 @@ func proxyPrometheus(ctx context.Context, project, path string) ([]byte, error) 
 // discoverPrometheus resolves the per-instance Prometheus address.
 // 9090 is the CONTAINER-internal port; the host port is whatever
 // Docker ephemerally assigned, captured into state.Ports["prometheus_ui"]
-// during `localnet up` (PR #20 stable-ports contract).
+// during `localnet up` .
 //
 // Yellow Y6+Y7: project→state reverse lookup goes through the
 // authoritative registry index (instead of brittle "canton-<name>"
@@ -449,8 +493,10 @@ func storePromCache(project, host string, port int, err error) {
 
 var errPrometheusNotRunning = errors.New("prometheus container not present in compose project")
 
+var proxyPrometheusFn = proxyPrometheus
+
 func singleScalar(ctx context.Context, project, query string) (*float64, error) {
-	body, err := proxyPrometheus(ctx, project,
+	body, err := proxyPrometheusFn(ctx, project,
 		"/api/v1/query?"+url.Values{"query": {query}}.Encode())
 	if err != nil {
 		return nil, err
@@ -458,7 +504,9 @@ func singleScalar(ctx context.Context, project, query string) (*float64, error) 
 	var parsed struct {
 		Status string `json:"status"`
 		Data   struct {
-			Result [][]any `json:"result"`
+			Result []struct {
+				Value []any `json:"value"`
+			} `json:"result"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
@@ -467,7 +515,7 @@ func singleScalar(ctx context.Context, project, query string) (*float64, error) 
 	if parsed.Status != "success" || len(parsed.Data.Result) == 0 {
 		return nil, nil
 	}
-	entry := parsed.Data.Result[0]
+	entry := parsed.Data.Result[0].Value
 	if len(entry) < 2 {
 		return nil, nil
 	}
@@ -478,6 +526,9 @@ func singleScalar(ctx context.Context, project, query string) (*float64, error) 
 	v, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return nil, err
+	}
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return nil, nil
 	}
 	return &v, nil
 }

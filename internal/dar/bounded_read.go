@@ -11,7 +11,7 @@ import (
 // DARs are 100 KB - 50 MiB (sdk-config + dependencies); 512 MiB is
 // 10× headroom above the largest reasonable real-world DAR while
 // still small enough to protect against the OOM-on-read class of
-// bug PR #37 closed for Zip Slip (BIT-127 review feedback).
+// bug closed for Zip Slip.
 //
 // Exceeding this returns ErrDARTooLarge — caller surfaces it to
 // the user with a friendly remediation pointing at the file size.

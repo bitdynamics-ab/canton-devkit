@@ -13,8 +13,7 @@ import (
 	"testing"
 )
 
-// TestServer_RejectsNonLoopbackBindByDefault is the reviewer pin
-// (PR #41 #a): the previous shape merely "strongly discouraged"
+// TestServer_RejectsNonLoopbackBindByDefault pins: the previous shape merely "strongly discouraged"
 // non-loopback in the CLI help text, then bound anyway. With this
 // fix, Listen() refuses any Host whose IP isn't loopback unless
 // AllowNonLoopback is explicitly true.
@@ -35,7 +34,7 @@ func TestServer_RejectsNonLoopbackBindByDefault(t *testing.T) {
 	}
 }
 
-// TestServer_AllowsNonLoopbackWhenExplicitlyOptedIn is the
+// TestServer_AllowsNonLoopbackWhenExplicitlyOptedIn pins the invariant —
 // symmetric pin: an operator who genuinely wants LAN binding
 // (firewall in front, SSH tunnel exposure) can opt in via the
 // AllowNonLoopback flag. Listen() must succeed in that case.
@@ -58,7 +57,7 @@ func TestServer_AllowsNonLoopbackWhenExplicitlyOptedIn(t *testing.T) {
 	}
 }
 
-// TestCSRF_RejectsCrossOriginPost is the reviewer pin (PR #41 #b):
+// TestCSRF_RejectsCrossOriginPost pins the invariant —
 // a POST whose Origin header doesn't match the request's Host
 // header must be rejected with 403. The threat model: a browser
 // tab on another origin issues fetch() at our loopback API.
@@ -146,8 +145,8 @@ func TestCSRF_GETIsExempt(t *testing.T) {
 	}
 }
 
-// TestSPA_DoesNotMaskAPITypos is the reviewer pin (PR #41 #c):
-// the previous SPA fallback served index.html with 200 for ANY
+// TestSPA_DoesNotMaskAPITypos pins the invariant —
+// previous SPA fallback served index.html with 200 for ANY
 // path that didn't match an embedded file — including /api/typo
 // where the frontend genuinely had a routing bug. The fix routes
 // /api/* and /events/* through an explicit JSON 404 so a
@@ -225,8 +224,8 @@ func TestCSRF_HostsMatch(t *testing.T) {
 	}
 }
 
-// TestAssets_RejectsPathTraversal is the reviewer pin (PR #41 round-2 #2):
-// the SPA fallback used to swallow any unmatched path as the index;
+// TestAssets_RejectsPathTraversal pins the invariant —
+// SPA fallback used to swallow any unmatched path as the index;
 // a URL whose Path contains a traversal segment must instead get a
 // defensive 400. We exercise the asset handler directly (bypassing
 // the stdlib http.ServeMux that normalizes paths before they reach
@@ -282,8 +281,8 @@ func mustParseURL(s string) *url.URL {
 	return u
 }
 
-// TestAssets_PlaceholderSentinel is the reviewer pin (PR #41 round-2 #5):
-// the embedded dist/index.html carries a sentinel string so
+// TestAssets_PlaceholderSentinel pins the invariant —
+// embedded dist/index.html carries a sentinel string so
 // IsPlaceholderBundle can detect a release binary that forgot
 // `make frontend`. Without this guard, a stage promotion serves
 // the dev placeholder to real users silently.
@@ -300,8 +299,7 @@ func TestAssets_PlaceholderSentinel(t *testing.T) {
 	}
 }
 
-// TestRouter_AccessLogEmittedPerRequest is the reviewer pin
-// (PR #41 round-2 #3): every request goes through withAccessLog
+// TestRouter_AccessLogEmittedPerRequest pins: every request goes through withAccessLog
 // and produces a stable parseable log line. Catches the
 // regression class where someone removes the middleware or
 // breaks the format.
@@ -336,8 +334,7 @@ func TestRouter_AccessLogEmittedPerRequest(t *testing.T) {
 	}
 }
 
-// TestCSRF_JWTEndpointProtectedEndToEnd is the reviewer pin
-// (PR #43 cross-PR round-2): the /api/instances/{name}/jwt
+// TestCSRF_JWTEndpointProtectedEndToEnd pins: the /api/instances/{name}/jwt
 // route is credential-issuing and MUST go through the CSRF
 // middleware from withOriginCheck (#41). The handler-package
 // unit tests use a bare ServeMux that bypasses the middleware;

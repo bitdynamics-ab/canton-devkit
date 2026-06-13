@@ -8,9 +8,9 @@
 //     match what this bundle was built against, the UI refuses
 //     to render and tells the user to restart `dpm localnet ui`.
 //
-//  2. Error envelope shape mirrors PR #36 / handlers/errorBody:
-//     { code, error, detail?, remediation? }. We surface `error`
-//     as a toast and `remediation` as a follow-up action.
+//  2. Error envelope shape: { code, error, detail?, remediation? }.
+//     We surface `error` as a toast and `remediation` as a
+//     follow-up action.
 //
 // All API calls go through `apiFetch` so the schema check, error
 // envelope, and credentials posture stay in one place.
@@ -87,8 +87,7 @@ export interface ListResponse {
 }
 
 // Instance mirrors internal/api/types.Instance (subset; full shape
-// has Services/Endpoints/Parties/Credentials once the live probe
-// lands — added per-screen as those land).
+// has Services/Endpoints/Parties/Credentials from the live probe).
 export interface Endpoint {
   label: string;
   url: string;
@@ -109,7 +108,7 @@ export interface Instance {
   project_dir: string;
   data_dir: string;
   live_probe_failed?: boolean;
-  /** Per-role wallet UI endpoints; populated by detail handler post-BIT-192. */
+  /** Per-role wallet UI endpoints; populated by the detail handler. */
   endpoints?: Endpoint[];
 }
 
@@ -292,13 +291,13 @@ export const fetchAppConfigJSON = (name: string) =>
     `/api/instances/${encodeURIComponent(name)}/app-config?format=json`,
   );
 
-// ── BIT-163d/e/f: create-instance flow ────────────────────────────
+// ── create-instance flow ──────────────────────────────────
 
 // SpliceVersionEntry mirrors internal/ui/handlers/splice_versions.go
 // SpliceVersionEntry. Status taxonomy matches the version picker
-// badges in webui-create.jsx (latest / supported / available /
-// drifted / catalogued-only). Today the backend only emits
-// latest+supported; the rest are reserved for the upstream check.
+// badges (latest / supported / available / drifted /
+// catalogued-only). Today the backend only emits latest+supported;
+// the rest are reserved for the upstream check.
 export interface SpliceVersionEntry {
   tag: string;
   status: "latest" | "supported" | "available" | "drifted" | "catalogued-only";
@@ -327,6 +326,9 @@ export interface CreateInstanceRequest {
   version?: string;
   allow_uncurated?: boolean;
   profiles?: string[];
+  // port_base > 0 pins deterministic host ports from this base
+  // (`dpm localnet up --port-base`). Omit / 0 → auto-allocate.
+  port_base?: number;
 }
 
 // CreateInstanceAcceptedResponse is what POST /api/instances
@@ -374,7 +376,7 @@ export interface PreflightReport {
   ok: boolean;
   sections: PreflightSection[];
   summary?: string;
-  // BIT-172 — stable machine-readable code populated when ok=false.
+  // stable machine-readable code populated when ok=false.
   // Values: PORTS_IN_USE | DOCKER_DOWN | DOCKER_NOT_INSTALLED |
   // COMPOSE_V1_OR_MISSING | DOCKER_MEMORY_LOW | DISK_LOW |
   // PREFLIGHT_FAILED. Frontend switches on this for targeted
@@ -433,15 +435,15 @@ export const fetchPreflight = (version: string) =>
   );
 
 // stopInstance invokes POST /api/instances/{name}/down — runs
-// `docker compose down` against the named instance and removes
-// per-instance data unless { keep_data: true }. Synchronous on the
-// wire (down is fast, ~10-30s on the happy path); the call blocks
-// until the server returns 204 or 5xx.
+// `docker compose down` against the named instance, preserving
+// Docker volumes and the registry entry (status=stopped).
+// Synchronous on the wire (down is fast, ~10-30s on the happy
+// path); the call blocks until the server returns 204 or 5xx.
 //
 // On failure, the server's error envelope includes a one-line
 // summary the modal shows to the user; the full output goes to
 // the server log.
-// BIT-184 — snapshot / restore.
+// snapshot / restore.
 //
 // downloadSnapshot triggers POST /api/instances/:name/snapshot and
 // hands the gzipped tar to the browser via an <a download> click. We
@@ -573,7 +575,37 @@ export async function resumeInstance(name: string): Promise<ResumeAcceptedRespon
   return (await resp.json()) as ResumeAcceptedResponse;
 }
 
-// BIT-188 — Metrics summary.
+// recreateInstance invokes POST /api/instances/{name}/recreate — a
+// single-click "Restart" path that the backend implements as a
+// serial down → up cycle. The backend reuses the instance's recorded
+// SpliceVersion and infers the original profile set from the
+// compose-files on disk, so a restart does not silently upgrade,
+// regenerate credentials, or shed observability sidecars.
+//
+// Same async shape as resumeInstance: 202 with an events_url the UI
+// hands to the existing progress modal. 404 if the name isn't in
+// the registry; 409 INSTANCE_CREATING if a down/up/restart job is
+// already in flight for the same name (the second click is a no-op
+// by design — the original cycle continues uninterrupted).
+export async function recreateInstance(name: string): Promise<ResumeAcceptedResponse> {
+  const resp = await fetch(
+    `/api/instances/${encodeURIComponent(name)}/recreate`,
+    { method: "POST" },
+  );
+  if (!resp.ok) {
+    const text = await resp.text();
+    let body: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try {
+      body = JSON.parse(text);
+    } catch {
+      /* non-JSON; keep default */
+    }
+    throw new ApiError(resp.status, body);
+  }
+  return (await resp.json()) as ResumeAcceptedResponse;
+}
+
+// Metrics summary.
 //
 // The four curated headline numbers the CLI's
 // `dpm localnet metrics --format json` also returns. Naming
@@ -584,9 +616,27 @@ export interface MetricsSummary {
   instance: string;
   metrics: {
     ledger_tps_5m?: number;
+    mediator_p50_seconds?: number;
     mediator_p95_seconds?: number;
+    mediator_p99_seconds?: number;
     jvm_heap_used_bytes?: number;
     postgres_conn_count?: number;
+  };
+  // latency mirrors the CLI's `--format json` block: mediator
+  // approval-duration percentiles in milliseconds. Nullable per
+  // field so an empty Prometheus stays distinguishable from a
+  // true 0 ms (matters during cold-start).
+  latency?: {
+    p50_ms?: number | null;
+    p95_ms?: number | null;
+    p99_ms?: number | null;
+  };
+  // dashboards.grafana_url is the deep link to the bundled
+  // canton-localnet dashboard when the observability profile is
+  // running, "" otherwise — the frontend renders a "raise
+  // observability" CTA when empty.
+  dashboards?: {
+    grafana_url?: string;
   };
 }
 
@@ -594,11 +644,11 @@ export interface MetricsSummary {
 // caller MUST handle ApiError with body.code === "OBSERVABILITY_PROFILE_OFF"
 // to render the "raise observability" empty state — that's not
 // a hard failure, just a missing profile.
-// BIT-187 — DAR Manager.
+// DAR Manager.
 //
 // The Web UI lists DARs uploaded to a participant. Role defaults
 // to app-user (the common dev target). The backend reads the
-// per-role admin port from state.json (BIT-190) so the browser
+// per-role admin port from state.json so the browser
 // doesn't need to know about gRPC.
 export type Role = "app-user" | "app-provider" | "sv";
 
@@ -638,7 +688,7 @@ export interface DARUploadResponse {
 
 // uploadDARs posts a multipart body with one or more .dar files
 // to /api/instances/:name/dar. Uses XMLHttpRequest for upload
-// progress (the same pattern as BIT-184's BackupRestore).
+// progress (the same pattern as BackupRestore).
 //
 // `roles` is the set of target participants — the backend dials
 // each in parallel and returns a per-role success/error envelope.
@@ -697,7 +747,194 @@ export function uploadDARs(
   });
 }
 
-// BIT-186 — Explorer ACS snapshot.
+// DAR package-tree inspect.
+//
+// The inspect endpoint returns the deep Daml-LF structure of every
+// .dalf inside the DAR: modules, templates (+ choices), interfaces
+// (+ choices + methods), data types. The frontend renders this as
+// a tree in DARPackageTree.tsx.
+export interface DARTemplateContents {
+  name: string;
+  choices?: string[];
+}
+export interface DARIfaceContents {
+  name: string;
+  choices?: string[];
+  methods?: string[];
+}
+export interface DARModuleContents {
+  name: string;
+  templates?: DARTemplateContents[];
+  interfaces?: DARIfaceContents[];
+  data_types?: string[];
+}
+export interface DARPackageInspect {
+  package_id: string;
+  name: string;
+  version: string;
+  lf_version: string;
+  size_bytes: number;
+  is_main: boolean;
+  contents?: { modules: DARModuleContents[] };
+}
+export interface DARInspectResponse {
+  schema_version: number;
+  instance: string;
+  role: Role;
+  main: string;
+  name?: string;
+  version?: string;
+  sha256: string;
+  packages: DARPackageInspect[];
+}
+
+export const fetchDARInspect = (
+  instance: string,
+  mainID: string,
+  role: Role = "app-user",
+) =>
+  apiFetch<DARInspectResponse>(
+    `/api/instances/${encodeURIComponent(instance)}/dar/${encodeURIComponent(mainID)}/inspect?role=${role}`,
+  );
+
+// Structural diff between two DARs (by main package id).
+export interface DARDiffTemplateAdded {
+  module: string;
+  name: string;
+  choices?: string[];
+}
+export interface DARDiffTemplateChanged {
+  module: string;
+  name: string;
+  choices_added: string[];
+  choices_removed: string[];
+}
+export interface DARDiffIfaceAdded {
+  module: string;
+  name: string;
+  choices?: string[];
+  methods?: string[];
+}
+export interface DARDiffIfaceChanged {
+  module: string;
+  name: string;
+  choices_added: string[];
+  choices_removed: string[];
+  methods_added: string[];
+  methods_removed: string[];
+}
+export interface DARDiffSide {
+  main: string;
+  name: string;
+  version: string;
+}
+export interface DARDiffResponse {
+  schema_version: number;
+  instance: string;
+  role: Role;
+  a?: DARDiffSide;
+  b?: DARDiffSide;
+  modules_added: string[];
+  modules_removed: string[];
+  templates_added: DARDiffTemplateAdded[];
+  templates_removed: DARDiffTemplateAdded[];
+  templates_changed: DARDiffTemplateChanged[];
+  interfaces_added: DARDiffIfaceAdded[];
+  interfaces_removed: DARDiffIfaceAdded[];
+  interfaces_changed: DARDiffIfaceChanged[];
+}
+
+export const fetchDARDiff = (
+  instance: string,
+  a: string,
+  b: string,
+  role: Role = "app-user",
+) =>
+  apiFetch<DARDiffResponse>(
+    `/api/instances/${encodeURIComponent(instance)}/dar/diff?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&role=${role}`,
+  );
+
+// Per-participant vetting state + toggle.
+export interface DARVettingRow {
+  role: Role;
+  vetted: boolean;
+  error?: string;
+}
+export interface DARVettingResponse {
+  schema_version: number;
+  instance: string;
+  main: string;
+  participants: DARVettingRow[];
+}
+
+export const fetchDARVetting = (instance: string, mainID: string) =>
+  apiFetch<DARVettingResponse>(
+    `/api/instances/${encodeURIComponent(instance)}/dar/${encodeURIComponent(mainID)}/vetting`,
+  );
+
+export interface DARVettingToggleResponse {
+  schema_version: number;
+  instance: string;
+  main: string;
+  role: Role;
+  vetted: boolean;
+}
+
+export const setDARVetting = (
+  instance: string,
+  mainID: string,
+  role: Role,
+  vetted: boolean,
+) =>
+  apiFetch<DARVettingToggleResponse>(
+    `/api/instances/${encodeURIComponent(instance)}/dar/${encodeURIComponent(mainID)}/vetting/${role}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ vetted }),
+    },
+  );
+
+// Hot-deploy watch indicator. SSE; not a fetch.
+export interface DARWatchEvent {
+  instance: string;
+  dar_id?: string;
+  event:
+    | "rebuild_started"
+    | "rebuild_finished"
+    | "upload_finished"
+    | "watch_started"
+    | "watch_stopped";
+  at: number;
+  detail?: string;
+}
+
+// subscribeDARWatch opens an EventSource on the watch SSE endpoint.
+// The caller is responsible for closing the returned EventSource
+// (typically on component unmount).
+export function subscribeDARWatch(
+  instance: string,
+  darID: string,
+  onEvent: (ev: DARWatchEvent) => void,
+): EventSource {
+  const url =
+    `/api/dar/watch/events?instance=${encodeURIComponent(instance)}` +
+    (darID ? `&dar=${encodeURIComponent(darID)}` : "");
+  const es = new EventSource(url);
+  es.addEventListener("message", (e) => {
+    try {
+      const ev = JSON.parse(e.data) as DARWatchEvent;
+      onEvent(ev);
+    } catch {
+      // Drop malformed payloads silently — the backend pins the
+      // event-enum on the publish side, so a parse failure here
+      // would indicate a wire-format change worth surfacing in
+      // the network tab, not the UI.
+    }
+  });
+  return es;
+}
+
+// Explorer ACS snapshot.
 export interface ContractRow {
   contract_id: string;
   template_id: string;
@@ -725,7 +962,85 @@ export const fetchContracts = (
     `/api/instances/${encodeURIComponent(name)}/contracts?role=${role}&limit=${limit}`,
   );
 
-// BIT-186 follow-up — Transactions + Timeline.
+// Contract-detail drawer payload. Returned by
+// GET /api/instances/{name}/contracts/{contract_id}; backed by
+// EventQueryService.GetEventsByContractId on the participant.
+export interface ContractDetail {
+  contract_id: string;
+  template_id?: string;
+  package_name?: string;
+  payload?: Record<string, unknown>;
+  signatories: string[];
+  observers: string[];
+  created_at?: string;
+  created_offset?: number;
+  created_update_id?: string;
+  archived: boolean;
+  archived_at?: string;
+  archived_offset?: number;
+  archived_update_id?: string;
+}
+
+export interface ContractDetailResponse {
+  schema_version: number;
+  instance: string;
+  role: Role;
+  contract: ContractDetail;
+}
+
+export const fetchContractDetail = (
+  name: string,
+  contractId: string,
+  role: Role = "app-user",
+) =>
+  apiFetch<ContractDetailResponse>(
+    `/api/instances/${encodeURIComponent(name)}/contracts/${encodeURIComponent(contractId)}?role=${role}`,
+  );
+
+// Explorer live SSE stream events. The /contracts/stream
+// endpoint emits one frame per ACS delta. Backend caps subscriptions
+// at 10k events then flushes a final `truncated` payload — the
+// frontend treats that as a signal to fall back to snapshot
+// reconciliation.
+export interface ContractStreamEvent {
+  event: "created" | "archived" | "truncated";
+  contract_id?: string;
+  template?: string;
+  signatories?: string[];
+  observers?: string[];
+  offset?: number;
+  at?: number;
+  update_id?: string;
+  reason?: string;
+}
+
+// openContractsStream is a thin EventSource wrapper. The caller is
+// responsible for closing the returned source on unmount; the
+// backend cancels its upstream gRPC subscription via context as
+// soon as the HTTP request goroutine returns.
+//
+// `since` is the offset the stream should resume FROM (exclusive).
+// Callers should pass the `ledger_end` returned by the snapshot
+// endpoint so the snapshot→stream handoff is a single atomic offset
+// boundary — any create/archive between the snapshot and the
+// stream's open would otherwise be missed until the periodic
+// reconciliation refresh. Omit to begin from the live ledger end
+// (strict-tail semantics — direct curl, smoke tests).
+export function openContractsStream(
+  name: string,
+  role: Role = "app-user",
+  since?: number,
+): EventSource {
+  const sinceParam =
+    typeof since === "number" && Number.isFinite(since) && since >= 0
+      ? `&since=${since}`
+      : "";
+  return new EventSource(
+    `/api/instances/${encodeURIComponent(name)}/contracts/stream?role=${role}${sinceParam}`,
+  );
+}
+
+// Transactions + Timeline.
 //
 // Each row in `transactions` represents one Canton update:
 // transaction / reassignment / topology event. The frontend
@@ -804,14 +1119,38 @@ export const fetchMetricsRange = (
   );
 };
 
-export async function stopInstance(name: string, keepData = false): Promise<void> {
+export async function stopInstance(name: string): Promise<void> {
   const resp = await fetch(
     `/api/instances/${encodeURIComponent(name)}/down`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ keep_data: keepData }),
-    },
+    { method: "POST" },
+  );
+  if (!resp.ok) {
+    const text = await resp.text();
+    let body: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try {
+      body = JSON.parse(text);
+    } catch {
+      /* non-JSON; keep default */
+    }
+    throw new ApiError(resp.status, body);
+  }
+}
+
+// pauseInstance / resumeInstance invoke POST /api/instances/{name}/pause
+// | /resume — docker compose pause/unpause. Near-instant; 204
+// on success. Pause is valid only when running, resume only when paused.
+export async function pauseInstance(name: string): Promise<void> {
+  await postInstanceAction(name, "pause");
+}
+
+export async function unpauseInstance(name: string): Promise<void> {
+  await postInstanceAction(name, "resume");
+}
+
+async function postInstanceAction(name: string, action: string): Promise<void> {
+  const resp = await fetch(
+    `/api/instances/${encodeURIComponent(name)}/${action}`,
+    { method: "POST" },
   );
   if (!resp.ok) {
     const text = await resp.text();
@@ -940,7 +1279,7 @@ interface StepFailedEvent {
   step: StepName;
   summary?: string;
   cause?: string;
-  // BIT-172 — stable machine-readable code, populated when the
+  // stable machine-readable code, populated when the
   // server recognized the failure mode (PORTS_IN_USE,
   // DOCKER_DOWN, DOCKER_MEMORY_LOW, etc.). useCreateProgress
   // surfaces this in the banner so the modal can render targeted
@@ -974,7 +1313,7 @@ interface ApiErrorBody {
   remediation?: string[];
 }
 
-// ── Agent Skills (BIT-189) ─────────────────────────────────────────
+// ── Agent Skills ─────────────────────────────────────────
 // Mirrors internal/skills.Skill + the /api/skills handler. The same
 // embedded docs back the CLI `localnet skills` command.
 export interface Skill {
@@ -1014,7 +1353,7 @@ export const installSkills = (target: "claude" | "codex", force = false) =>
   });
 
 // -------------------------------------------------------------------
-// BIT-140 Tokens — Web UI client for /api/tokens.
+// Tokens — Web UI client for /api/tokens.
 //
 // Mirrors registry.TokenRef + the request shapes the backend handlers
 // expect. Every action is instance-scoped (`?instance=`); error mapping
@@ -1049,21 +1388,255 @@ export interface TokenHoldingsResponse {
   holdings: TokenHolding[];
 }
 
-export const fetchTokens = (instance: string) =>
-  apiFetch<TokensListResponse>(
-    `/api/tokens?instance=${encodeURIComponent(instance)}`,
-  );
+// DEFAULT_ROLE matches the backend default in roleFromQuery — keep the
+// two in sync so the live-ledger endpoint discovery and JWT minting
+// pick the same participant for unrestricted UI calls.
+const DEFAULT_ROLE = "app-user";
+
+// tokenQuery builds `?instance=...&role=...` (role omitted when it
+// would just repeat the default). Centralised so every token endpoint
+// forwards the role the same way the backend's handleTokenMint /
+// handleTokenTransfer already expect.
+function tokenQuery(instance: string, role?: string): string {
+  const params = new URLSearchParams({ instance });
+  if (role && role !== DEFAULT_ROLE) params.set("role", role);
+  return params.toString();
+}
+
+export const fetchTokens = (instance: string, role?: string) =>
+  apiFetch<TokensListResponse>(`/api/tokens?${tokenQuery(instance, role)}`);
 
 export const fetchHoldings = (
   instance: string,
   symbol: string,
   party?: string,
+  role?: string,
 ) => {
   const params = new URLSearchParams({ instance });
   if (party) params.set("party", party);
+  if (role && role !== DEFAULT_ROLE) params.set("role", role);
   return apiFetch<TokenHoldingsResponse>(
     `/api/tokens/${encodeURIComponent(symbol)}/holdings?${params}`,
   );
+};
+
+// token workspace — ACS-derived lenses (instrument discovery,
+// balance matrix, per-holding UTXO rows). These hit the live ledger;
+// when no endpoint is recorded the backend falls back to the recorded
+// token list (so `instruments` may be absent — callers handle both).
+
+// InstrumentRef is an on-chain-discovered instrument (workspace.go).
+export interface InstrumentRef {
+  admin: string;
+  instrument_id: string;
+  name?: string;
+  symbol?: string;
+  decimals?: number;
+  standard?: string; // "Splice Amulet" | "CIP-0112 v2"
+  on_ledger: boolean;
+}
+
+// HoldingContract is one HoldingV2 UTXO. A balance = sum of these.
+export interface HoldingContract {
+  contract_id: string;
+  party: string;
+  admin: string;
+  instrument_id: string;
+  amount: string;
+  locked: boolean;
+}
+
+export interface MatrixCell {
+  party: string;
+  instrument_id: string;
+  amount: string;
+}
+
+export interface BalanceMatrix {
+  parties: string[];
+  instruments: InstrumentRef[];
+  cells: MatrixCell[];
+  totals: MatrixCell[];
+}
+
+interface InstrumentsResponse {
+  schema_version: number;
+  instruments?: InstrumentRef[];
+  tokens?: TokenRef[]; // fallback shape when no live endpoint
+}
+
+interface MatrixResponse {
+  schema_version: number;
+  matrix: BalanceMatrix;
+}
+
+// PartyRef — one registered party alias → its on-ledger party id.
+// The workspace's god-mode party registry.
+export interface PartyRef {
+  alias: string;
+  party_id: string;
+  role: string;
+  is_local?: boolean;
+  created_at: string;
+}
+
+interface PartiesResponse {
+  schema_version: number;
+  parties: PartyRef[];
+}
+
+// fetchParties lists the instance's registered party aliases (seeding the
+// role parties when a live endpoint is available).
+export const fetchParties = (instance: string, role = "app-user") =>
+  apiFetch<PartiesResponse>(
+    `/api/parties?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
+  ).then((r) => r.parties);
+
+// createParty allocates a party under an alias and grants the role's user
+// act/read-as for it.
+export const createParty = (instance: string, alias: string, role = "app-user") =>
+  apiFetch<PartyRef>(`/api/parties?instance=${encodeURIComponent(instance)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ alias, role }),
+  });
+
+// removeParty forgets an alias (the on-ledger party persists).
+export const removeParty = (instance: string, alias: string) =>
+  apiFetchVoid(
+    `/api/parties/${encodeURIComponent(alias)}?instance=${encodeURIComponent(instance)}`,
+    { method: "DELETE" },
+  );
+
+// AliasMap is partyID → alias, built from fetchParties for client-side
+// labelling of party ids in the matrix / holdings / activity views.
+export type AliasMap = Record<string, string>;
+
+export const aliasMapFrom = (parties: PartyRef[]): AliasMap => {
+  const m: AliasMap = {};
+  for (const p of parties) if (p.party_id) m[p.party_id] = p.alias;
+  return m;
+};
+
+interface HoldingContractsResponse {
+  schema_version: number;
+  contracts: HoldingContract[];
+}
+
+// fetchInstruments returns ACS-discovered instruments. Falls back to the
+// recorded TokenRef list (mapped into InstrumentRef shape) when the
+// backend couldn't reach the ledger.
+export async function fetchInstruments(
+  instance: string,
+  role = "app-user",
+): Promise<InstrumentRef[]> {
+  const r = await apiFetch<InstrumentsResponse>(
+    `/api/tokens?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
+  );
+  if (r.instruments) return r.instruments;
+  return (r.tokens ?? []).map((t) => ({
+    admin: t.issuer_party,
+    instrument_id: t.instrument_id,
+    name: t.name,
+    symbol: t.symbol,
+    decimals: t.decimals,
+    standard: t.symbol === "Amulet" ? "Splice Amulet" : "CIP-0112 v2",
+    on_ledger: t.status === "on-ledger",
+  }));
+}
+
+export const fetchMatrix = (instance: string, role = "app-user") =>
+  apiFetch<MatrixResponse>(
+    `/api/tokens/matrix?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
+  ).then((r) => r.matrix);
+
+// HolderRow / InstrumentSummary — the instrument-first KPI view.
+// Supply + holder/contract counts + per-holder distribution,
+// derived from one ACS scan (workspace.go).
+export interface HolderRow {
+  party: string;
+  balance: string;
+  contract_count: number;
+  pct_of_supply: string;
+}
+
+export interface InstrumentSummary {
+  instrument_id: string;
+  admin: string;
+  total_supply: string;
+  holder_count: number;
+  contract_count: number;
+  holders: HolderRow[];
+}
+
+interface InstrumentSummaryResponse {
+  schema_version: number;
+  summary: InstrumentSummary;
+}
+
+export const fetchInstrumentSummary = (
+  instance: string,
+  symbol: string,
+  role = "app-user",
+) =>
+  apiFetch<InstrumentSummaryResponse>(
+    `/api/tokens/${encodeURIComponent(symbol)}/summary?instance=${encodeURIComponent(
+      instance,
+    )}&role=${encodeURIComponent(role)}`,
+  ).then((r) => r.summary);
+
+// PartyDelta / ActivityEvent — the instrument activity feed
+// (Activity tab). Each event is one ledger transaction netted into
+// senders/receivers + a kind (mint | burn | transfer), reconstructed
+// from HoldingV2 create/archive events (no off-ledger registry).
+export interface PartyDelta {
+  party: string;
+  amount: string;
+}
+
+export interface ActivityEvent {
+  offset: number;
+  update_id: string;
+  record_time: string;
+  instrument_id: string;
+  kind: "mint" | "burn" | "transfer";
+  amount: string;
+  senders?: PartyDelta[];
+  receivers?: PartyDelta[];
+}
+
+interface ActivityResponse {
+  schema_version: number;
+  events: ActivityEvent[];
+}
+
+export const fetchActivity = (
+  instance: string,
+  symbol: string,
+  role = "app-user",
+  limit = 50,
+) =>
+  apiFetch<ActivityResponse>(
+    `/api/tokens/${encodeURIComponent(symbol)}/activity?instance=${encodeURIComponent(
+      instance,
+    )}&role=${encodeURIComponent(role)}&limit=${limit}`,
+  ).then((r) => r.events);
+
+export const fetchHoldingContracts = (
+  instance: string,
+  symbol: string,
+  party: string,
+  role = "app-user",
+) => {
+  const params = new URLSearchParams({
+    instance,
+    role,
+    party,
+    expand: "contracts",
+  });
+  return apiFetch<HoldingContractsResponse>(
+    `/api/tokens/${encodeURIComponent(symbol)}/holdings?${params}`,
+  ).then((r) => r.contracts);
 };
 
 export interface TokenCreateInput {
@@ -1074,9 +1647,13 @@ export interface TokenCreateInput {
   issuer: string;
 }
 
-export const createToken = (instance: string, body: TokenCreateInput) =>
+export const createToken = (
+  instance: string,
+  body: TokenCreateInput,
+  role?: string,
+) =>
   apiFetch<TokenRef>(
-    `/api/tokens?instance=${encodeURIComponent(instance)}`,
+    `/api/tokens?${tokenQuery(instance, role)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1089,9 +1666,10 @@ export const mintToken = (
   symbol: string,
   to: string,
   amount: string,
+  role?: string,
 ): Promise<void> =>
   apiFetchVoid(
-    `/api/tokens/${encodeURIComponent(symbol)}/mint?instance=${encodeURIComponent(instance)}`,
+    `/api/tokens/${encodeURIComponent(symbol)}/mint?${tokenQuery(instance, role)}`,
     { to, amount },
   );
 
@@ -1102,29 +1680,85 @@ export const transferToken = (
   to: string,
   amount: string,
   reason?: string,
+  role?: string,
+  autoAccept?: boolean,
 ): Promise<void> =>
   apiFetchVoid(
-    `/api/tokens/${encodeURIComponent(symbol)}/transfer?instance=${encodeURIComponent(instance)}`,
-    { from, to, amount, reason: reason ?? "" },
+    `/api/tokens/${encodeURIComponent(symbol)}/transfer?${tokenQuery(instance, role)}`,
+    { from, to, amount, reason: reason ?? "", auto_accept: !!autoAccept },
   );
+
+// faucetToken funds a party from a well-known source,
+// auto-accepted. Empty source defaults to the role's funded party.
+export const faucetToken = (
+  instance: string,
+  symbol: string,
+  to: string,
+  amount: string,
+  source?: string,
+  role?: string,
+): Promise<void> =>
+  apiFetchVoid(
+    `/api/tokens/${encodeURIComponent(symbol)}/faucet?${tokenQuery(instance, role)}`,
+    { to, amount, source: source ?? "" },
+  );
+
+// TransferPlan — dry-run coin selection. Which Holding
+// contracts a transfer would consume, the change, and whether the
+// sender can cover it. Read-only; no ledger mutation.
+export interface TransferPlan {
+  instrument: string;
+  from: string;
+  amount: string;
+  inputs: { contract_id: string; amount: string }[];
+  total_input: string;
+  change: string;
+  sufficient: boolean;
+  shortfall?: string;
+}
+
+export async function planTransfer(
+  instance: string,
+  symbol: string,
+  from: string,
+  amount: string,
+  role = "app-user",
+): Promise<TransferPlan> {
+  const params = new URLSearchParams({ instance, role, plan: "1" });
+  const resp = await fetch(
+    `/api/tokens/${encodeURIComponent(symbol)}/transfer?${params}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: window.location.origin },
+      body: JSON.stringify({ from, to: from, amount }),
+    },
+  );
+  if (!resp.ok) {
+    throw new ApiError(resp.status, { code: "PLAN_FAILED", error: "could not compute transfer plan" });
+  }
+  const body = (await resp.json()) as { plan: TransferPlan };
+  return body.plan;
+}
 
 export const burnToken = (
   instance: string,
   symbol: string,
   from: string,
   amount: string,
+  role?: string,
 ): Promise<void> =>
   apiFetchVoid(
-    `/api/tokens/${encodeURIComponent(symbol)}/burn?instance=${encodeURIComponent(instance)}`,
+    `/api/tokens/${encodeURIComponent(symbol)}/burn?${tokenQuery(instance, role)}`,
     { from, amount },
   );
 
 export const acceptTransfer = (
   instance: string,
   transferInstructionID: string,
+  role?: string,
 ): Promise<void> =>
   apiFetchVoid(
-    `/api/tokens/transfers/${encodeURIComponent(transferInstructionID)}/accept?instance=${encodeURIComponent(instance)}`,
+    `/api/tokens/transfers/${encodeURIComponent(transferInstructionID)}/accept?${tokenQuery(instance, role)}`,
     {},
   );
 

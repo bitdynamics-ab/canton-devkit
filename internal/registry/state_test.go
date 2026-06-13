@@ -86,8 +86,8 @@ func TestStatePerms(t *testing.T) {
 // either absent (first write) or contains the prior payload
 // (subsequent write) — never half-written.
 //
-// (Replaces the older "drop a leftover and rewrite" test that didn't
-// actually simulate a crash. See PR #24 review + BIT-118.)
+// (Replaces an older "drop a leftover and rewrite" test that didn't
+// actually simulate a crash.)
 func TestAtomicWriteSurvivesPanicBeforeRename(t *testing.T) {
 	useTmpRoot(t)
 
@@ -308,13 +308,13 @@ func TestConcurrentWritesDifferentInstancesAllSucceed(t *testing.T) {
 	}
 }
 
-// --- Path-traversal hardening (Zhe review, PR #24) -----------------------
+// --- Path-traversal hardening -----------------------
 
 // TestValidateName_RejectsUnsafeNames covers every category of input
 // that could let a `--name` value escape the registry root or break
 // downstream tooling. Each case must fail with ErrInvalidName.
 //
-// This is the primary defense against the bug Zhe flagged: a Delete
+// This is the primary defense against the path-traversal bug: a Delete
 // with --name=../x would have caused os.RemoveAll to target a path
 // outside ~/.canton-devkit/localnet/.
 func TestValidateName_RejectsUnsafeNames(t *testing.T) {
@@ -340,7 +340,7 @@ func TestValidateName_RejectsUnsafeNames(t *testing.T) {
 		{"a;b", "shell metachar"},
 		{"a$b", "shell metachar"},
 		{`a"b`, "shell metachar"},
-		// DNS-label policy (PR #20 #6): uppercase, underscore, trailing
+		// DNS-label policy: uppercase, underscore, trailing
 		// hyphen all rejected so the name is safe to embed as a
 		// hostname in the future {service}.{instance}.localhost model.
 		{"MyStack", "uppercase rejected (not DNS-label)"},

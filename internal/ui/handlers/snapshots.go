@@ -1,4 +1,4 @@
-// BIT-184 — Web UI parity for `localnet snapshot` / `localnet restore`.
+// Web UI parity for `localnet snapshot` / `localnet restore`.
 //
 // Two endpoints mounted at /api/instances/:name/snapshot (download)
 // and /api/instances/restore (upload). Both delegate to the same

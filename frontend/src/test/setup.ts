@@ -50,6 +50,42 @@ if (!navigator.clipboard) {
   });
 }
 
+// jsdom also omits EventSource. Several screens subscribe to SSE
+// progress or watch streams on mount, and the default "undefined"
+// primitive turns otherwise-passing tests into unhandled runtime
+// errors. Keep the shim intentionally small; tests that care about
+// streamed data can still replace it with a richer fake.
+if (!globalThis.EventSource) {
+  class FakeEventSource {
+    url: string;
+    readyState = 0;
+    withCredentials = false;
+    onopen: ((event: Event) => void) | null = null;
+    onmessage: ((event: MessageEvent<string>) => void) | null = null;
+    onerror: ((event: Event) => void) | null = null;
+
+    constructor(url: string | URL) {
+      this.url = String(url);
+    }
+
+    close() {
+      this.readyState = 2;
+    }
+
+    addEventListener() {}
+    removeEventListener() {}
+    dispatchEvent() {
+      return true;
+    }
+  }
+
+  Object.defineProperty(globalThis, "EventSource", {
+    writable: true,
+    configurable: true,
+    value: FakeEventSource,
+  });
+}
+
 // Each test must start with a clean DOM. Without this, components
 // from a previous test leak forwards (RTL renders into document.body
 // and never tears down automatically).

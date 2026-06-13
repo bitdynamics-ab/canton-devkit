@@ -7,7 +7,7 @@ import (
 )
 
 // styledProgress builds a TextProgress with the tty flag forced
-// on, so the BIT-122 styled rendering branches fire. Tests below
+// on, so the styled rendering branches fire. Tests below
 // then assert on the structural markers (Section underline, brand
 // glyphs in the Done box) without depending on the exact lipgloss
 // ANSI sequences.
@@ -20,7 +20,7 @@ func styledProgress(out, err *bytes.Buffer) *TextProgress {
 }
 
 // TestTextProgress_StartStep_Styled_RendersSection pins the
-// BIT-122 expectation: visible-step StartStep emits a Section
+// expectation: visible-step StartStep emits a Section
 // header (matching `┌─ preflight ────…` from ScreenUp). We assert
 // on the structural marker (the `─` separator and the label),
 // not the full ANSI byte sequence — the latter is owned by
@@ -104,7 +104,7 @@ func TestTextProgress_Done_Styled_EmptyDetailNoop(t *testing.T) {
 // guard: callers that build TextProgress with the literal struct
 // (or via NewTextProgress against a bytes.Buffer) MUST get the
 // historical plain output. This is what keeps every existing
-// golden test from breaking under BIT-122.
+// golden test from breaking under .
 //
 // Cheap belt-and-braces — the plain output is also exercised by
 // the bulk of progress_test.go.

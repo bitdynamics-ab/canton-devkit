@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AgentSkillsScreen } from "./AgentSkillsScreen";
 
-// AgentSkillsScreen (BIT-189) tests — render the skill catalogue,
+// AgentSkillsScreen tests — render the skill catalogue,
 // preview a skill, and post a one-click install with the right body.
 // The screen fetches /api/skills directly (no InstanceSelection
 // provider needed), so we just stub fetch.

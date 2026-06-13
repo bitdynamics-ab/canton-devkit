@@ -7,8 +7,7 @@ import (
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
 
-// TestBuildEventFormat_PartyHandling pins the BIT-136 review fix:
-// `--party` is no longer silent. Empty parties → FiltersForAnyParty
+// TestBuildEventFormat_PartyHandling pins the // `--party` is no longer silent. Empty parties → FiltersForAnyParty
 // (wildcard); non-empty → FiltersByParty with one entry per party.
 func TestBuildEventFormat_PartyHandling(t *testing.T) {
 	t.Run("no parties + no templates → wildcard (nil FiltersForAnyParty is the wildcard shape)", func(t *testing.T) {
@@ -160,7 +159,7 @@ func TestBuildTemplateFilters_ParseShapes(t *testing.T) {
 
 // TestBuildUpdateFormat_HasACSDeltaShape pins that `tx ls` and
 // `contracts watch` request the flat ACS-delta transaction shape
-// (per BIT-136 proposal line — those commands' use case is the
+// (per proposal line — those commands' use case is the
 // ACS table, not the tree-shaped replay view).
 func TestBuildUpdateFormat_HasACSDeltaShape(t *testing.T) {
 	uf := buildUpdateFormat(nil, nil, true)
@@ -175,7 +174,7 @@ func TestBuildUpdateFormat_HasACSDeltaShape(t *testing.T) {
 }
 
 // TestResolveOffsetWindow pins the --from/--to/--limit precedence
-// that BIT-136 review flagged as missing.
+// that flagged as missing.
 func TestResolveOffsetWindow(t *testing.T) {
 	cases := []struct {
 		name                             string

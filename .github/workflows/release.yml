@@ -46,12 +46,42 @@ jobs:
           # Go-compiling job now — the dpm-component job consumes the
           # binaries this job uploads, so the toolchain runs exactly once.
 
+      - name: Set up Node
+        # actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build Web UI bundle
+        # Produce the Vite production bundle into internal/ui/dist/ BEFORE
+        # `go build`, so //go:embed all:dist embeds a working Web UI. Without
+        # this the binaries ship only the committed index.html (which points
+        # at gitignored, unbuilt /assets/*.js) → `localnet ui` is a blank
+        # page. (vite build.outDir = ../internal/ui/dist.)
+        run: |
+          set -euo pipefail
+          cd frontend
+          npm ci
+          npm run build
+          test -d ../internal/ui/dist/assets   # fail loudly if the bundle is missing
+
       - name: Set release metadata
         id: meta
         run: |
           short_sha="${GITHUB_SHA::7}"
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             version="${GITHUB_REF_NAME}"
+            # Reject a non-semver tag (e.g. v0.7) up front, before any
+            # release or asset is created — the DPM-component job would
+            # fail on it later anyway (invalid OCI semver). Keep the two
+            # jobs' tag contract identical.
+            semver_re='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+            if [[ ! "${version#v}" =~ $semver_re ]]; then
+              echo "::error::Release tag '${version}' is not full semver. Tag a MAJOR.MINOR.PATCH release, e.g. v0.7.1 (not v0.7)." >&2
+              exit 1
+            fi
           else
             version="main-${short_sha}"
           fi
@@ -60,9 +90,21 @@ jobs:
       - name: Build release binaries + tarballs + checksums
         env:
           VERSION: ${{ steps.meta.outputs.version }}
+          # Short commit SHA, baked into release binaries so `version`
+          # reports `<version> (<commit>)`. -trimpath strips VCS stamping,
+          # so the binary can't recover this from debug.ReadBuildInfo() —
+          # inject it explicitly.
+          COMMIT: ${{ github.sha }}
+          # Telemetry collector URL, baked into release binaries. Set the
+          # repo variable TELEMETRY_ENDPOINT to enable sending; when unset
+          # it stays empty and events are spooled locally only.
+          TELEMETRY_ENDPOINT: ${{ vars.TELEMETRY_ENDPOINT }}
         run: |
           set -euo pipefail
           mkdir -p dist component-bin
+          short_commit="${COMMIT::7}"
+          tel_pkg="github.com/bitdynamics-ab/canton-devkit/internal/telemetry"
+          # Tag builds are the stable release channel.
           # Iterate the target matrix as a real array so each element is
           # quoted (tidier than relying on unquoted word-splitting).
           read -ra targets <<< "${RELEASE_TARGETS}"
@@ -82,7 +124,7 @@ jobs:
             mkdir -p "${bindir}"
             GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build \
               -trimpath \
-              -ldflags "-s -w -X main.version=${VERSION}" \
+              -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${short_commit} -X main.channel=stable -X ${tel_pkg}.endpoint=${TELEMETRY_ENDPOINT}" \
               -o "${bindir}/${binary_name}" ./cmd/canton-devkit
 
             # Stage the standalone archive: binary + LICENSE + README for
@@ -133,6 +175,7 @@ jobs:
         # softprops/action-gh-release@v3
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
         with:
+          generate_release_notes: true
           files: dist/*
 
       - name: Publish to public builds repo
@@ -141,10 +184,15 @@ jobs:
           GH_TOKEN: ${{ secrets.BUILDS_REPO_TOKEN }}
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
+          # Fetch release notes from the primary release just created above.
+          # Use GITHUB_TOKEN (not BUILDS_REPO_TOKEN) to read from this repo.
+          notes=$(GH_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
+            gh release view "${VERSION}" --repo "${GITHUB_REPOSITORY}" --json body --jq '.body')
+
           gh release create "${VERSION}" \
             --repo bitdynamics-ab/homebrew-canton-devkit \
             --title "${VERSION}" \
-            --notes "canton-devkit release ${VERSION}" \
+            --notes "${notes}" \
             dist/*
 
       - name: Update Homebrew formula in public builds repo
@@ -153,10 +201,9 @@ jobs:
           GH_TOKEN: ${{ secrets.BUILDS_REPO_TOKEN }}
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          # SHA256SUMS lives at dist/SHA256SUMS now (PR #27 / BIT-19
-          # consolidated tarballs into dist/ directly and renamed the
-          # checksum file to GNU sha256sum format). Filenames stay the
-          # same so the regex anchors still match.
+          # SHA256SUMS lives at dist/SHA256SUMS — tarballs land directly
+          # in dist/ and the checksum file uses GNU sha256sum format.
+          # Filenames stay the same so the regex anchors still match.
           sha_darwin=$(grep "_${VERSION}_darwin_arm64.tar.gz$" dist/SHA256SUMS | awk '{print $1}')
           sha_linux=$(grep "_${VERSION}_linux_amd64.tar.gz$" dist/SHA256SUMS | awk '{print $1}')
           version_num="${VERSION#v}"
@@ -213,9 +260,18 @@ jobs:
         run: |
           short_sha="${GITHUB_SHA::7}"
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            # DPM expects a semver-shaped version string for the OCI
-            # tag — strip the `v` prefix.
+            # DPM expects a full MAJOR.MINOR.PATCH semver string for the OCI
+            # tag — strip the `v` prefix. A 2-part tag like `v0.7` strips to
+            # `0.7`, which DPM's `publish component` rejects as invalid
+            # semver (this is exactly what broke the v0.7 release). Fail
+            # FAST here with an actionable message rather than letting the
+            # cryptic dpm usage dump surface three steps later.
             version="${GITHUB_REF_NAME#v}"
+            semver_re='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+            if [[ ! "${version}" =~ $semver_re ]]; then
+              echo "::error::Release tag '${GITHUB_REF_NAME}' is not full semver. Tag a MAJOR.MINOR.PATCH release, e.g. v0.7.1 (not v0.7)." >&2
+              exit 1
+            fi
             push="true"
           else
             version="0.0.0-${short_sha}"

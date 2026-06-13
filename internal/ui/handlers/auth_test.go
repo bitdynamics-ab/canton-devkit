@@ -18,13 +18,9 @@ import (
 // authMux returns a test server with both instances and auth
 // handlers mounted — auth depends on the instance existing.
 //
-// Reviewer pin (PR #43 cross-PR R2): the previous shape used a
-// bare http.ServeMux without going through the production
-// NewRouter middleware chain (CSRF, common headers, access log).
-// Tests passed but didn't prove the JWT endpoint was CSRF-protected
-// end-to-end. The variant routedAuthMux returns the FULL pipeline;
-// authMux is retained for tests that want to bypass middleware
-// (Origin checks, etc.) to assert handler logic in isolation.
+// This uses a bare http.ServeMux, bypassing the production NewRouter
+// middleware chain (CSRF, common headers, access log) so tests can
+// assert handler logic in isolation.
 func authMux(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -260,11 +256,10 @@ func TestAppConfig_UnknownFormatReturns400(t *testing.T) {
 	}
 }
 
-// TestJWT_RedactedByDefault is the reviewer pin (PR #43 #a): when
-// ?include_jwt=true is NOT passed, Token in the response must be
-// the redaction placeholder, NOT the real JWT. Default-redact
-// keeps CI logs, screenshot-shares, and "look at the response"
-// demos from leaking a usable signing token. Mirrors PR #38's
+// TestJWT_RedactedByDefault: when ?include_jwt=true is NOT passed, Token
+// in the response must be the redaction placeholder, NOT the real JWT.
+// Default-redact keeps CI logs, screenshot-shares, and "look at the
+// response" demos from leaking a usable signing token. Mirrors the
 // --include-jwt convention on the CLI side.
 func TestJWT_RedactedByDefault(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
@@ -293,10 +288,9 @@ func TestJWT_RedactedByDefault(t *testing.T) {
 	}
 }
 
-// TestJWT_BodyCapEnforced is the reviewer pin (PR #43 #d): the
-// handler must refuse unbounded request bodies. We send a body
-// over maxAuthBodyBytes and expect a 4xx — without the
-// http.MaxBytesReader wrapper, json.Decoder happily reads
+// TestJWT_BodyCapEnforced: the handler must refuse unbounded request
+// bodies. We send a body over maxAuthBodyBytes and expect a 4xx —
+// without the http.MaxBytesReader wrapper, json.Decoder happily reads
 // gigabytes into memory.
 func TestJWT_BodyCapEnforced(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
@@ -325,8 +319,8 @@ func TestJWT_BodyCapEnforced(t *testing.T) {
 	}
 }
 
-// TestJWT_AuditLogEmittedOnIssue is the reviewer pin (PR #43 #f):
-// every JWT issuance must emit a stable audit line. Catches the
+// TestJWT_AuditLogEmittedOnIssue pins the invariant that every JWT
+// issuance must emit a stable audit line. Catches the
 // regression class where the audit logging is removed or silently
 // stops firing — security ops loses visibility.
 //
@@ -398,11 +392,10 @@ func TestJWT_AuditLogNotesRedactedByDefault(t *testing.T) {
 	}
 }
 
-// TestErrorBody_AlignedWithFriendlyTaxonomy is the reviewer pin
-// (PR #43 #e): error responses must carry the (Code, Error,
-// Detail, Remediation) shape that mirrors PR #36's FriendlyError
-// taxonomy. Catches drift where someone adds an error path that
-// emits a different envelope.
+// TestErrorBody_AlignedWithFriendlyTaxonomy pins that error responses
+// must carry the (Code, Error, Detail, Remediation) shape that mirrors
+// the FriendlyError taxonomy. Catches drift where someone adds an error
+// path that emits a different envelope.
 //
 // Exercised via the 400 path (unknown role) — guaranteed to fire
 // a writeError call.
@@ -432,16 +425,16 @@ func TestErrorBody_AlignedWithFriendlyTaxonomy(t *testing.T) {
 		t.Error("Error empty — toast has nothing to show")
 	}
 	// 400 must NOT echo a cause Detail (validation errors echo
-	// attacker-controlled strings; reviewer pin).
+	// attacker-controlled strings).
 	if got.Detail != "" {
 		t.Errorf("4xx Detail = %q, want empty (attacker-controlled echo risk)", got.Detail)
 	}
 }
 
 // TestJWTResponse_CarriesSchemaVersion + TestAppConfigPayload_CarriesSchemaVersion
-// are the reflective pins for PR #43 #c. Reflective assertions
-// rather than reading-the-source so the schema-pin reflection
-// test catches future top-level types added to this package.
+// are reflective pins — reflective assertions rather than
+// reading-the-source so the schema-pin reflection test catches future
+// top-level types added to this package.
 func TestJWTResponse_CarriesSchemaVersion(t *testing.T) {
 	requireSchemaVersionField(t, reflect.TypeOf(jwtResponse{}), "jwtResponse")
 }
@@ -465,11 +458,9 @@ func requireSchemaVersionField(t *testing.T, rt reflect.Type, name string) {
 	}
 }
 
-// TestAuth_CacheControlNoStore is the reviewer pin (PR #43 round-2
-// Cache-Control): every API JSON response carries no-store. The
-// previous shape relied on the absence of Cache-Control header,
-// which left browsers and proxies free to cache credentials.
-// Catches: someone disables the header in writeJSON.
+// TestAuth_CacheControlNoStore pins that every API JSON response carries
+// no-store. Without the header, browsers and proxies are free to cache
+// credentials. Catches: someone disables the header in writeJSON.
 func TestAuth_CacheControlNoStore(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedWithCredentials(t, "demo", "app-provider::p")
@@ -500,9 +491,8 @@ func TestAuth_CacheControlNoStore(t *testing.T) {
 	}
 }
 
-// TestWriteError_5xxDoesNotLeakCausePath is the reviewer pin
-// (PR #43 round-2 5xx leak): the 5xx response body must NOT
-// include the cause string. The cause typically carries
+// TestWriteError_5xxDoesNotLeakCausePath pins that the 5xx response body
+// must NOT include the cause string. The cause typically carries
 // filesystem paths or other internal detail; it stays in the
 // server-side log (TestWriteError_5xxLogsCauseServerSide pins
 // the other half).

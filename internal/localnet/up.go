@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
+	"github.com/bitdynamics-ab/canton-devkit/internal/telemetry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 )
 
@@ -72,7 +72,7 @@ type UpOptions struct {
 	Version string // "" or "latest" → splice.LatestAlias
 
 	// AllowUncurated opts the user into layer 2 of the two-layer
-	// version model (PR #20 #2): if --version is not in the curated
+	// version model: if --version is not in the curated
 	// catalogue, RunUp consults the upstream Splice GitHub repo to
 	// resolve a commit SHA, prints a one-line "uncurated" warning, and
 	// proceeds. Without this flag, an uncurated --version fails fast
@@ -81,18 +81,27 @@ type UpOptions struct {
 	AllowUncurated bool
 
 	// Profiles is the docker compose profile set to enable on this
-	// bring-up. BIT-134: `--profile observability` adds Prometheus
-	// + Grafana via the assets/compose/observability.yaml overlay.
+	// bring-up. `--profile observability` adds Prometheus +
+	// Grafana via the assets/compose/observability.yaml overlay.
 	// Empty (default) means "no opt-in profiles" — same behavior
 	// as before this field existed.
 	Profiles []string
+
+	// PortBase, when > 0, switches host-port assignment from automatic
+	// (ephemeral, stable-reuse) to DETERMINISTIC: each service is pinned
+	// to PortBase+N (see DeriveUIPorts). Used for reproducible
+	// multi-instance / CI layouts where a fixed, predictable port map
+	// matters. Every derived port must be free, or RunUp fails with a
+	// PortBaseConflict (no silent fallback). 0 (default) keeps the
+	// auto-allocation behavior.
+	PortBase int
 
 	// SkipPreflight bypasses the docker.RunPreflight call. This is a
 	// test-only knob — unit tests for the `up` orchestration can't run
 	// Docker checks in CI. Not exposed as a CLI flag.
 	SkipPreflight bool
 
-	// Test-only seams (PR #20 #9). When nil, RunUp uses the real
+	// Test-only seams. When nil, RunUp uses the real
 	// splice.Fetch and *docker.ComposeRunner. The fake-driven happy-
 	// path test in up_test.go injects no-op stubs so we can prove the
 	// orchestration sequence without docker / network.
@@ -110,11 +119,10 @@ type UpOptions struct {
 
 // ValidateName returns an error if the supplied --name is empty or
 // fails the DNS-label rule. Thin wrapper over registry.ValidateName
-// — Zhe flagged in PR #20 that CLI and registry validation must
-// share a single rule (otherwise we maintain two policies that
-// drift). The empty-string check is hoisted here so the CLI error
-// message can mention `--name` rather than the generic
-// ErrInvalidName phrasing.
+// so CLI and registry validation share a single rule (otherwise we
+// maintain two policies that drift). The empty-string check is
+// hoisted here so the CLI error message can mention `--name` rather
+// than the generic ErrInvalidName phrasing.
 func ValidateName(name string) error {
 	if name == "" {
 		return fmt.Errorf("--name is required")
@@ -129,8 +137,8 @@ func ValidateName(name string) error {
 // (StepResolveVersion through StepCaptureJWTs in progress.go) matches
 // the eight phases the webui-create.jsx mockup renders; each phase
 // calls into the `prog` Progress interface so the CLI's TextProgress
-// emits today's terminal lines while the Web UI's SSEProgress
-// (BIT-163c) ships typed step events to the browser.
+// emits today's terminal lines while the Web UI's SSEProgress impl
+// ships typed step events to the browser.
 //
 //  1. Resolve --version against the curated list + look up the per-major
 //     adapter for that Splice tag.
@@ -167,7 +175,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 
 	// 1. Resolve version + adapter. Layer-1 (curated) is the default;
 	// AllowUncurated opts into layer-2 (upstream resolution) — see
-	// PR #20 #2 / internal/splice/resolver.go.
+	// internal/splice/resolver.go.
 	prog.StartStep(StepResolveVersion, "")
 	version, fromUpstream, err := splice.ResolveOrUpstream(ctx, opts.Version, opts.AllowUncurated)
 	if err != nil {
@@ -237,10 +245,15 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			MinMemoryBytes:         splice.MinMemoryFor(version),
 			RecommendedMemoryBytes: splice.RecommendedMemoryFor(version),
 		})
+		// Anonymous telemetry (no-op unless enabled): the docker engine
+		// flavor + compose-version bucket discovered by preflight. No host,
+		// path, or version string is recorded — only the allow-listed bucket.
+		telemetry.Inc("dpm/docker_engine", telemetry.NormEngine(report.DockerEngine))
+		telemetry.Inc("dpm/compose_version_bucket", telemetry.ComposeBucket(report.ComposeVersion))
 		report.Write(prog.Out())
 		if !report.OK() {
-			// BIT-172: stamp the most-specific code we can infer
-			// from the failed checks so the UI can render a
+			// Stamp the most-specific code we can infer from the
+			// failed checks so the UI can render a
 			// targeted remediation panel (Docker not running vs
 			// memory too low vs disk full, etc.) instead of a
 			// generic "preflight failed" wall of text.
@@ -252,9 +265,8 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		prog.FinishStep(StepPreflight, "")
 	}
 
-	// 4. Fetch + verify compose project. FetchFn is a test seam
-	// (PR #20 #9); in production it's nil and we call splice.Fetch
-	// directly.
+	// 4. Fetch + verify compose project. FetchFn is a test seam;
+	// in production it's nil and we call splice.Fetch directly.
 	prog.StartStep(StepFetchSplice, "")
 	cacheRoot := splice.CacheRoot()
 	fetch := opts.FetchFn
@@ -289,16 +301,36 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	composeFiles := append([]string(nil), adapter.ComposeFiles()...)
 	composeFiles = append(composeFiles, overlayPath) // absolute path; not relative to projectDir
 
-	// BIT-134: observability profile materializes the embedded
-	// Prometheus + Grafana overlay and appends its compose file.
-	// Profile activation gates the actual service-start (services
-	// in the overlay are scoped under `profiles: [observability]`).
-	hasObservabilityProfile := false
-	for _, p := range opts.Profiles {
-		if p == ObservabilityProfileName {
-			hasObservabilityProfile = true
-			break
-		}
+	// Force all published ports to bind to 127.0.0.1 (loopback only).
+	// The upstream Splice compose.yaml binds ports without a host IP,
+	// so Docker defaults to 0.0.0.0 — exposing unauthenticated gRPC,
+	// database, and HTTP endpoints to the local network. This overlay
+	// uses Compose's !override tag (v2.24.0+) to replace the port
+	// lists with 127.0.0.1-prefixed bindings.
+	loopbackPath, err := WriteLoopbackPortsOverlay(dataDir)
+	if err != nil {
+		prog.FailStep(StepPersistState, "Failed to write loopback-ports overlay", err)
+		return ExitRuntimeFailure
+	}
+	composeFiles = append(composeFiles, loopbackPath)
+
+	// Observability profile(s) materialize the embedded Prometheus +
+	// Grafana overlay and append its compose file. Per-component
+	// profiles (`prometheus`, `grafana`) and the legacy umbrella
+	// (`observability` = both) all funnel through
+	// ExpandObservabilityProfiles so the rest of the bring-up logic
+	// only deals with two booleans.
+	wantPrometheus, wantGrafana := ExpandObservabilityProfiles(opts.Profiles)
+	hasObservabilityProfile := wantPrometheus || wantGrafana
+	if wantGrafana && !wantPrometheus {
+		// Grafana without a bundled Prometheus is valid (user may
+		// point it at an external scrape source) but is a common
+		// mistake — surface a warning so an empty dashboard is
+		// expected rather than mysterious.
+		prog.Warn("--profile grafana enabled without --profile prometheus: " +
+			"Grafana will start with no bundled data source. Add " +
+			"--profile prometheus, or configure an external Prometheus " +
+			"manually before relying on the dashboards.")
 	}
 	if hasObservabilityProfile {
 		overlay, err := MaterializeObservabilityOverlay(dataDir, projectDir)
@@ -310,7 +342,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		composeFiles = append(composeFiles, overlay)
 	}
 
-	// BIT-211: tokens-v2 profile materializes the alpha-protocol
+	// tokens-v2 profile materializes the alpha-protocol
 	// Canton config overlay. Required when running the Token Standard
 	// V2 snapshot (alpha catalogue entry); a stable Splice version
 	// with this profile on is harmless — it just injects an env that
@@ -343,7 +375,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			version.Tag, TokensV2ProfileName, TokensV2ProfileName))
 	}
 
-	// PR #20 #5/#7: read any pre-existing state so we can reuse the
+	// Read any pre-existing state so we can reuse the
 	// previously assigned UI host ports — stable URLs across an
 	// up/down/up cycle is the whole point of persisting them. If no
 	// prior state exists (first run, or it was deleted), priorPorts
@@ -375,25 +407,38 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	//
 	// On first run priorPorts is nil → all ports allocated ephemerally.
 	// On re-up after a clean `down`, ReuseOrAllocateUIPorts hands back
-	// the same ports the user previously had (PR #20 #5/#7 stable-URL
-	// contract) unless one is busy, in which case we surface
-	// ErrPortBusy as a user error and stop — silently picking a new
-	// port would defeat the contract.
-	// BIT-134 review v4: when --profile observability is on,
-	// allocate Prometheus + Grafana host ports alongside the
-	// rest so they go through the stable-reuse contract too.
+	// the same ports the user previously had (stable-URL contract)
+	// unless one is busy, in which case we surface ErrPortBusy as
+	// a user error and stop — silently picking a new port would
+	// defeat the contract.
+	//
+	// When --profile observability is on, allocate Prometheus +
+	// Grafana host ports alongside the rest so they go through the
+	// stable-reuse contract too.
 	portEnvVars := UIPortEnvVars()
-	if hasObservabilityProfile {
-		portEnvVars = append(portEnvVars, ObservabilityPortEnvVars()...)
+	if wantPrometheus {
+		portEnvVars = append(portEnvVars, "PROMETHEUS_HOST_PORT")
 	}
-	uiOverrides, err := ReuseOrAllocateUIPorts(portEnvVars, priorPorts)
+	if wantGrafana {
+		portEnvVars = append(portEnvVars, "GRAFANA_HOST_PORT")
+	}
+	// Explicit-port mode (--port-base) pins deterministic ports and
+	// fails on any conflict; default mode auto-allocates with stable
+	// reuse across re-ups.
+	var uiOverrides map[string]int
+	if opts.PortBase > 0 {
+		uiOverrides, err = DeriveUIPorts(portEnvVars, opts.PortBase)
+	} else {
+		uiOverrides, err = ReuseOrAllocateUIPorts(portEnvVars, priorPorts)
+	}
 	if err != nil {
-		if errors.Is(err, ErrPortBusy) {
-			// BIT-172: stamp PORTS_IN_USE so the frontend can
+		var conflict *PortBaseConflict
+		if errors.Is(err, ErrPortBusy) || errors.As(err, &conflict) {
+			// Stamp PORTS_IN_USE so the frontend can
 			// render the "free the port" remediation panel
 			// instead of the generic failure dialog.
 			prog.FailStep(StepPersistState,
-				fmt.Sprintf("%s\nFree the conflicting process (lsof -i :<port>) or tear down the "+
+				fmt.Sprintf("%s\nFree the conflicting process (lsof -i :<port>), pick a different --port-base, or tear down the "+
 					"other instance and re-run `localnet up --name %s`.", err, opts.Name),
 				WithCode(err, ErrCodePortsInUse))
 			return ExitPreflightFail
@@ -406,13 +451,15 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	state.Ports["sv_ui"] = uiOverrides["SV_UI_PORT"]
 	state.Ports["swagger_ui"] = uiOverrides["SWAGGER_UI_PORT"]
 	state.Ports["postgres"] = uiOverrides["DB_PORT"]
-	if hasObservabilityProfile {
+	if wantPrometheus {
 		state.Ports["prometheus_ui"] = uiOverrides["PROMETHEUS_HOST_PORT"]
+	}
+	if wantGrafana {
 		state.Ports["grafana_ui"] = uiOverrides["GRAFANA_HOST_PORT"]
 	}
 	prog.FinishStep(StepPersistState, "")
 
-	// 6. Starting services. Build the compose process env and run
+	// 6. Starting services. Build the compose env files and run
 	// `up -d --wait`. Ephemeral is always true: canton participant
 	// ports get TEST_PORT="" and UI/postgres ports come from
 	// uiOverrides.
@@ -423,20 +470,32 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		Ephemeral:       true,
 		UIPortOverrides: uiOverrides,
 	}
-	env := append(os.Environ(), mapToEnv(adapter.OverlayEnv(params))...)
+	overlayVars := adapter.OverlayEnv(params)
 
-	// NewRunner is a test seam (PR #20 #9). Production: build the
+	// Persist the overlay env to a .env file so downstream commands
+	// (down, logs, pause, restart, clean) replay the exact same
+	// compose environment via --env-file — no adapter re-derivation
+	// needed. The file is written to DataDir alongside state.json.
+	overlayEnvPath, err := WriteOverlayEnv(dataDir, overlayVars)
+	if err != nil {
+		prog.FailStep(StepPersistState, "Failed to write overlay env", err)
+		return ExitRuntimeFailure
+	}
+
+	// Env files: adapter base files + the generated overlay (last wins).
+	envFiles := append(adapter.EnvFiles(), overlayEnvPath)
+
+	// NewRunner is a test seam. Production: build the
 	// real *docker.ComposeRunner (which satisfies composeOps
 	// implicitly).
 	var runner composeOps
 	if opts.NewRunner != nil {
-		runner = opts.NewRunner(state.ComposeProject, composeFiles, adapter.EnvFiles(), env, projectDir, prog.Out())
+		runner = opts.NewRunner(state.ComposeProject, composeFiles, envFiles, nil, projectDir, prog.Out())
 	} else {
 		runner = &docker.ComposeRunner{
 			ProjectName:  state.ComposeProject,
 			ComposeFiles: composeFiles,
-			EnvFiles:     adapter.EnvFiles(),
-			Env:          env,
+			EnvFiles:     envFiles,
 			WorkDir:      projectDir,
 			LogWriter:    prog.Out(),
 			// docker compose v5 treats CLI --profile as REPLACING (not
@@ -471,7 +530,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			prog.FailStep(StepWaitHealthy, "Timed out waiting for services", nil)
 			return ExitTimeout
 		}
-		// BIT-174: try to diagnose the failure by inspecting the
+		// Try to diagnose the failure by inspecting the
 		// unhealthy containers' recent logs. Most common cause on
 		// first-run with default Docker memory: canton JVM OOM-loop
 		// — its logs include "exceeds half of the container's
@@ -491,7 +550,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	}
 	prog.FinishStep(StepWaitHealthy, "")
 
-	// 8. Capture Canton participant ports (BIT-190). The Canton
+	// 8. Capture Canton participant ports. The Canton
 	// container exposes Ledger/Admin/JSON APIs per party role on
 	// Docker-ephemeral host ports — we ask docker what they ended
 	// up as and persist them so the Web UI (Explorer, DAR Manager,
@@ -565,14 +624,6 @@ func markFailed(state *registry.State, errw io.Writer) {
 	}
 }
 
-func mapToEnv(m map[string]string) []string {
-	out := make([]string, 0, len(m))
-	for k, v := range m {
-		out = append(out, k+"="+v)
-	}
-	return out
-}
-
 // renderWelcome composes the post-ready welcome screen using the term
 // package's WelcomeScreen primitive (see internal/ui/term/welcome.go).
 //
@@ -620,7 +671,7 @@ func renderWelcome(out io.Writer, name, spliceVersion string, state *registry.St
 
 // diagnoseUnhealthy inspects the project's containers for the
 // known failure patterns we can give targeted remediation for.
-// Called from RunUp's wait_healthy fail path — BIT-174.
+// Called from RunUp's wait_healthy fail path.
 //
 // Returns "" when no recognized pattern matches; caller falls
 // back to ErrCodeContainerUnhealthy. Best-effort — if the docker
@@ -685,8 +736,8 @@ func diagnoseUnhealthy(ctx context.Context, project string) string {
 }
 
 // PreflightCodeFromReport (exported variant of the same logic
-// used by RunUp internally) extracts the most specific BIT-172
-// error code from a failed docker.Report. Priority order matches
+// used by RunUp internally) extracts the most specific error code
+// from a failed docker.Report. Priority order matches
 // "what's the most actionable diagnosis the user can fix first":
 //
 //	Docker CLI missing       → ErrCodeDockerNotInstalled (install Docker)
@@ -697,9 +748,9 @@ func diagnoseUnhealthy(ctx context.Context, project string) string {
 //	anything else            → ErrCodePreflightFailed   (catch-all)
 //
 // Exported so internal/ui/handlers/preflight.go can call it for
-// the HTTP-422 response — single source of truth (BIT-172 review
-// fix). The lowercase wrapper below preserves the local callsite
-// for compatibility within this file.
+// the HTTP-422 response — single source of truth. The lowercase
+// wrapper below preserves the local callsite for compatibility
+// within this file.
 func PreflightCodeFromReport(r *docker.Report) string {
 	// Walk in priority order — the first FAIL we hit wins.
 	for _, c := range r.Results {

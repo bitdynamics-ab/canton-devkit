@@ -25,9 +25,8 @@ func TestReadDARFile_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestReadDARFile_RejectsOversize pins the BIT-127 review fix:
-// a file over MaxDARBytes must be refused BEFORE the buffer
-// allocation. We test the refusal via a stub MaxDARBytes override
+// TestReadDARFile_RejectsOversize pins: a file over MaxDARBytes
+// must be refused BEFORE the buffer allocation. We test the refusal via a stub MaxDARBytes override
 // (the real cap is 512 MiB which would be slow + flaky to materialize
 // in a unit test).
 //

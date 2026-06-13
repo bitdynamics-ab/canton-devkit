@@ -1,0 +1,54 @@
+# Production override for the telemetry stack. Layer it on top of the base
+# docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Differences from the local/dev base:
+#   - Every published port binds to 127.0.0.1 only, so the stack is reachable
+#     solely through the host's reverse proxy (nginx terminates TLS and
+#     forwards to the collector). Nothing is exposed on a public interface.
+#   - Postgres is NOT published to the host at all (it is reachable only on the
+#     compose network by the collector and Metabase).
+#   - The in-process rate limiter is configured for an nginx front: per-IP keying
+#     reads X-Forwarded-For (nginx sets the real client IP there).
+#   - The collector's host port is taken from COLLECTOR_PORT (default 8090) so it
+#     can sit alongside other services on a shared host without clashing.
+#
+# This is a PRODUCTION service. It happens to be co-located on the Canton
+# TestNet host to reuse hardware, but it is operated as production: it restarts
+# on failure, binds to loopback, rate-limits, and is fronted by TLS. See
+# DEPLOY.md and the canton-infra repo's telemetry/ directory for the nginx +
+# certbot glue and the deployment runbook (task 024).
+
+# Compose merges list fields (like `ports`) by APPENDING, so each override
+# below uses the `!override` tag to REPLACE the dev base's published ports —
+# otherwise the public 0.0.0.0 bindings from docker-compose.yml would survive
+# alongside the loopback ones, defeating the isolation.
+
+services:
+  postgres:
+    # Drop the dev port publish entirely — Postgres stays on the compose
+    # network, never on the host.
+    ports: !reset []
+
+  collector:
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/telemetry?sslmode=disable
+      LISTEN_ADDR: ":8080"
+      INGEST_TOKEN: ${INGEST_TOKEN:-}
+      # In-process rate limiting (defense-in-depth behind the nginx edge).
+      RATE_PER_IP_PER_MIN: ${RATE_PER_IP_PER_MIN:-30}
+      RATE_BURST: ${RATE_BURST:-15}
+      RATE_GLOBAL_PER_SEC: ${RATE_GLOBAL_PER_SEC:-50}
+      # nginx sets the real client IP in X-Forwarded-For; the limiter keys
+      # per-IP off the last hop, which the client cannot forge.
+      TRUSTED_IP_HEADER: ${TRUSTED_IP_HEADER:-X-Forwarded-For}
+    ports: !override
+      # Loopback only — the host nginx vhost proxies to this.
+      - "127.0.0.1:${COLLECTOR_PORT:-8090}:8080"
+
+  metabase:
+    ports: !override
+      # Loopback only — reach it via SSH tunnel
+      # (ssh -L 3000:127.0.0.1:3000 <host>).
+      - "127.0.0.1:3000:3000"

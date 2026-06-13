@@ -47,9 +47,9 @@ func TestFriendlyError_ErrorIsMachineReadable(t *testing.T) {
 	}
 }
 
-// TestFriendlyError_DoesNotLeakCauseByDefault is the reviewer pin
-// (PR #36 #4): a FriendlyError constructed with a cause but
-// WITHOUT IncludeCause=true must NOT include the cause string in
+// TestFriendlyError_DoesNotLeakCauseByDefault pins the contract:
+// a FriendlyError constructed with a cause but WITHOUT
+// IncludeCause=true must NOT include the cause string in
 // Error(). The cause often carries paths, ports, hostnames, or
 // bind addresses that we deliberately replaced with a curated
 // summary; leaking them through Error() defeats that curation.
@@ -81,8 +81,8 @@ func TestFriendlyError_DoesNotLeakCauseByDefault(t *testing.T) {
 	}
 }
 
-// TestFriendlyExit_BoxRendersOnTTYWithoutColor is the reviewer pin
-// (PR #36 #3): the Box gate was previously term.ShouldColor, which
+// TestFriendlyExit_BoxRendersOnTTYWithoutColor pins the no-color
+// contract: the Box gate was previously term.ShouldColor, which
 // suppressed the structural box whenever NO_COLOR was set even on
 // a real TTY. The new gate is term.IsTerminal, so structure
 // survives no-color setups. We can't simulate a TTY with a
@@ -104,7 +104,7 @@ func TestFriendlyExit_BoxRendersOnTTYWithoutColor(t *testing.T) {
 	// is still false — this proves the gate is genuinely on
 	// IsTerminal (not on writer-type alone). We assert the negative
 	// here; the positive (real TTY) is tested by manual smoke in
-	// the BIT-126 acceptance run because Go has no portable way to
+	// the acceptance run because Go has no portable way to
 	// open a PTY in unit tests without cgo.
 	r, w, err2 := osPipe()
 	if err2 != nil {
@@ -245,7 +245,7 @@ func TestFriendlyExit_NilErrorReturnsZero(t *testing.T) {
 	}
 }
 
-// TestFriendlyExit_PreservesExitCodeError is the BIT-126 review pin:
+// TestFriendlyExit_PreservesExitCodeError pins the exit-code contract:
 // if the upstream orchestrator already returned an ExitCodeError
 // (e.g. localnet.AsExitError(ExitPreflightFail)), FriendlyExit MUST
 // surface that code and ignore `fallback`. Without this, every CLI

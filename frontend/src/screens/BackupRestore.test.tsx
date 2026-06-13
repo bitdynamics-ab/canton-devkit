@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BackupRestore } from "./BackupRestore";
 
-// BackupRestore — BIT-184 UI parity for `localnet snapshot` /
+// BackupRestore — UI parity for `localnet snapshot` /
 // `localnet restore`. These tests pin three contracts:
 //
 //   1. Download dispatches a POST form (not a GET nav), so the

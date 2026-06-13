@@ -93,6 +93,21 @@ func parseMajor(version string) (int, error) {
 	return strconv.Atoi(v)
 }
 
+// memoryTolerance is the margin we allow below the stated minimum
+// before failing the check. Docker Desktop's Linux VM kernel reserves
+// a small amount of the configured memory, so MemTotal is always
+// slightly less than what the user set. 100 MB matches Docker
+// Desktop's smallest slider increment (0.1 GB) — a user who sets
+// exactly the required amount should never be failed by overhead
+// alone.
+const memoryTolerance uint64 = 100_000_000 // 100 MB
+
+// checkDockerMemory verifies the Docker daemon has enough memory.
+// This check exists primarily for macOS (and Windows), where Docker
+// Desktop runs containers inside a Linux VM with a user-configured
+// memory cap. On native Linux the daemon sees all host RAM and this
+// check is rarely the bottleneck. Thresholds use decimal GB to match
+// the unit Docker Desktop's Preferences → Resources → Memory uses.
 func checkDockerMemory(ctx context.Context, minBytes, recommendedBytes uint64) CheckResult {
 	if minBytes == 0 {
 		return CheckResult{Name: "Docker memory", Status: StatusSkipped, Detail: "no minimum set"}
@@ -119,7 +134,7 @@ func checkDockerMemory(ctx context.Context, minBytes, recommendedBytes uint64) C
 			Remediation: remediationMemoryUnknown(),
 		}
 	}
-	if mem < minBytes {
+	if mem+memoryTolerance < minBytes {
 		return CheckResult{
 			Name:        "Docker memory",
 			Status:      StatusFail,
@@ -127,7 +142,7 @@ func checkDockerMemory(ctx context.Context, minBytes, recommendedBytes uint64) C
 			Remediation: remediationMemoryLow(),
 		}
 	}
-	if recommendedBytes > minBytes && mem < recommendedBytes {
+	if recommendedBytes > minBytes && mem+memoryTolerance < recommendedBytes {
 		return CheckResult{
 			Name:        "Docker memory",
 			Status:      StatusWarn,
@@ -189,15 +204,21 @@ func firstLine(s string) string {
 	return s
 }
 
+// humanBytes formats a byte count as a human-readable string using
+// decimal SI units (1 GB = 10^9 bytes). We use decimal rather than
+// binary units because the primary audience is macOS users running
+// Docker Desktop, which is the only platform where memory limits
+// must be configured explicitly — and its UI displays memory in
+// decimal GB.
 func humanBytes(n uint64) string {
 	const (
-		KB = 1024
-		MB = 1024 * KB
-		GB = 1024 * MB
+		KB = 1_000
+		MB = 1_000 * KB
+		GB = 1_000 * MB
 	)
 	switch {
 	case n >= GB:
-		return fmt.Sprintf("%.1f GB", float64(n)/float64(GB))
+		return fmt.Sprintf("%.2f GB", float64(n)/float64(GB))
 	case n >= MB:
 		return fmt.Sprintf("%.0f MB", float64(n)/float64(MB))
 	case n >= KB:

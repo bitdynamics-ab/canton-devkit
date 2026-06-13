@@ -18,9 +18,13 @@ func buildBurn() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "burn",
 		Short: "Burn a holding of a V2 instrument",
-		Long: `Burn --amount from --from's holding of --instrument. V2 reuses the V1
-BurnMint choice for the burn side; this command wraps the same flow
-the upstream Splice CLI uses.
+		Long: `Burn --amount from --from's holding of --instrument.
+
+The splice-test-token-v2 example has no protocol-level standalone burn,
+so burn archives the holder's Holding contracts directly (their signatory
+is the account parties + admin, all operator-controlled on LocalNet) and
+returns any change. Supply = sum of holdings, so this removes the burned
+amount from circulation. --from accepts an alias.
 
 Burning is IRREVERSIBLE — the holding is consumed and the supply is
 reduced. The command asks for confirmation before proceeding; pass --yes
@@ -56,6 +60,10 @@ to skip the prompt (required when running non-interactively / in CI).`,
 	cmd.Flags().StringVar(&opts.Amount, "amount", "", "Decimal amount to burn. Required.")
 	cmd.Flags().BoolVarP(&assumeYes, "yes", "y", false,
 		"Skip the irreversible-burn confirmation prompt (required for non-interactive / CI use)")
+	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Required for the live burn (on-ledger test-token instruments).")
+	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the burn.")
+	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	_ = cmd.MarkFlagRequired("instance")
 	_ = cmd.MarkFlagRequired("instrument")
 	_ = cmd.MarkFlagRequired("from")

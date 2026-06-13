@@ -14,9 +14,7 @@ func buildUp() *cobra.Command {
 	opts := &localnet.UpOptions{}
 	// Source paths dynamically so the help text reflects whatever
 	// CANTON_DEVKIT_REGISTRY override the user has active at help time,
-	// and never goes stale when the on-disk layout changes (e.g. the
-	// ~/.canton → ~/.canton-devkit rename that prompted Zhe's catch on
-	// PR #20).
+	// and never goes stale when the on-disk layout changes.
 	cacheRoot := splice.CacheRoot()
 	instanceRoot := registry.Root()
 	cmd := &cobra.Command{
@@ -50,19 +48,17 @@ Supported Splice versions: %s
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
 			// TextProgress wraps the Cobra writers so RunUp's typed
-			// step events (BIT-163a/b) render as today's terminal
-			// lines for CLI users. The Web UI's POST handler
-			// (BIT-165) will pass an SSEProgress impl instead so
-			// browsers see the full typed event stream.
+			// step events render as terminal lines for CLI users.
+			// The Web UI's POST handler passes an SSEProgress impl
+			// instead so browsers see the full typed event stream.
 			//
 			// NewTextProgress auto-detects whether the writer is a
-			// TTY and switches between the BIT-122 mockup-styled
-			// rendering (Section headers, brand-accented Box for
-			// the success marker) and the historical plain text
-			// (pipes, CI, golden-byte tests). The literal struct
-			// form is kept for backward compatibility — tests
-			// that constructed TextProgress directly still get
-			// the plain bytes they assert on.
+			// TTY and switches between the styled rendering (Section
+			// headers, brand-accented Box for the success marker)
+			// and plain text (pipes, CI, golden-byte tests). The
+			// literal struct form is kept for backward
+			// compatibility — tests that constructed TextProgress
+			// directly still get the plain bytes they assert on.
 			prog := localnet.NewTextProgress(
 				cmd.OutOrStdout(), cmd.ErrOrStderr())
 			return localnet.AsExitError(
@@ -80,10 +76,16 @@ Supported Splice versions: %s
 			"DevKit — use for prereleases / alphas at your own risk.")
 	cmd.Flags().StringSliceVar(&opts.Profiles, "profile", nil,
 		"Docker compose profiles to enable. "+
-			"`--profile observability` adds Prometheus + Grafana via the "+
-			"BIT-134 overlay (extra ~600 MiB RAM); host ports allocated and "+
-			"persisted alongside the regular UI ports so re-up preserves "+
-			"bookmarked URLs. Repeatable for multiple profiles.")
+			"`--profile prometheus` and `--profile grafana` can be enabled "+
+			"independently to control each observability sidecar separately; "+
+			"`--profile observability` (legacy umbrella) activates both at once. "+
+			"Each adds ~250-350 MiB; host ports are allocated and persisted so "+
+			"re-up preserves bookmarked URLs. Repeatable for multiple profiles.")
+	cmd.Flags().IntVar(&opts.PortBase, "port-base", 0,
+		"Pin host ports deterministically from this base instead of auto-allocating "+
+			"(e.g. --port-base 20000 → each service gets base+N). Use for reproducible "+
+			"multi-instance or CI layouts; every derived port must be free or `up` fails "+
+			"fast (no silent fallback). 0 (default) = auto-allocate with stable reuse.")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }

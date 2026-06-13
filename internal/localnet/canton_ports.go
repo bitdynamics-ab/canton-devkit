@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// BIT-190 — record the participant gRPC + JSON API ports the Canton
+// Record the participant gRPC + JSON API ports the Canton
 // container exposes, so the Web UI can talk to them without a manual
 // `--admin-host=localhost:<port>` flag (the CLI's only escape hatch
 // today; see internal/cli/localnet/dar/connect.go ~L88 for the

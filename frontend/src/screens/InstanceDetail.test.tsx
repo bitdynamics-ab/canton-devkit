@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { InstanceDetail } from "./InstanceDetail";
 
 // InstanceDetail tests — surfaces every field the /api/instances/:name
@@ -114,6 +114,69 @@ describe("InstanceDetail", () => {
     render(<InstanceDetail name="ghost" />);
     await waitFor(() => {
       expect(screen.getByText(/instance ghost not found/i)).toBeInTheDocument();
+    });
+  });
+
+  it("posts to /recreate and fires onChanged when the Recreate button is clicked", async () => {
+    // The restart button is offered on running / paused / failed /
+    // partial. The click invokes recreateInstance which POSTs to the
+    // backend; on the 202 response the detail card refetches and
+    // bubbles onChanged so the dashboard's row updates.
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === "string" && url.endsWith("/recreate")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              schema_version: 1,
+              instance: "demo",
+              events_url: "/api/instances/demo/events",
+            }),
+            { status: 202, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            schema_version: 1,
+            name: "demo",
+            splice_version: "0.4.12",
+            status: "running",
+            created_at: "2026-05-25T10:00:00Z",
+            compose_project: "cdk-demo",
+            docker_network: "cdk-demo_default",
+            container_prefix: "cdk-demo",
+            project_dir: "/x",
+            data_dir: "/x/data",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
+
+    const onChanged = vi.fn();
+    render(
+      <InstanceDetail name="demo" statusHint="running" onChanged={onChanged} />,
+    );
+
+    // Wait for the Recreate button to appear (the action-button
+    // bar renders once statusHint resolves).
+    const restartBtn = await screen.findByRole("button", { name: /recreate/i });
+    fireEvent.click(restartBtn);
+
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls.map((c) => c[0]);
+      expect(
+        calls.some(
+          (u: string) =>
+            typeof u === "string" && u.endsWith("/api/instances/demo/recreate"),
+        ),
+      ).toBe(true);
+    });
+    await waitFor(() => {
+      expect(onChanged).toHaveBeenCalled();
     });
   });
 

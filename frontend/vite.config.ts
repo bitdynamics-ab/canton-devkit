@@ -21,7 +21,7 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: true,
     // Produce a manifest so the future asset-fingerprint test
-    // (BIT-141 follow-up) can verify hashed filenames land
+    // can verify hashed filenames land
     // where index.html references them.
     manifest: true,
   },

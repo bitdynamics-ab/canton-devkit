@@ -43,8 +43,8 @@ type ComposeRunner struct {
 	// Profiles, when non-empty, becomes one or more `--profile P`
 	// args on every compose invocation. Compose services scoped
 	// under a profile via `profiles: [P]` are skipped unless that
-	// profile is enabled — used by BIT-134's `observability`
-	// overlay to opt users into the Prometheus + Grafana stack
+	// profile is enabled — used by the `observability` overlay
+	// to opt users into the Prometheus + Grafana stack
 	// without forcing the extra ~600 MiB on the default path.
 	Profiles []string
 
@@ -148,12 +148,98 @@ func (c *ComposeRunner) WaitForHealthy(ctx context.Context) error {
 			return nil
 		}
 
+		// Out-of-band readyz fallback for the V2 alpha track: the
+		// upstream `-dev` splice image's in-container HEALTHCHECK
+		// probe is broken (the probe URL resolves to a non-existent
+		// path inside the container and never returns 0), so the
+		// docker-reported health stays `starting` forever even after
+		// the validator's external `/api/validator/readyz` returns 200.
+		// When the only non-ready service(s) are splice-shaped and in
+		// running/starting, probe the validator's readyz endpoint via
+		// `docker exec` and treat a 200 as ready. Stable splice
+		// (0.6.4) is unaffected — its healthcheck works, so the
+		// snapshot flips healthy before this fallback runs.
+		if c.allBlockersAreSpliceStarting(lastSnapshot) && c.spliceReadyzOK(ctx, lastSnapshot) {
+			return nil
+		}
+
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("timed out waiting for services to become healthy.\nLast `docker compose ps` snapshot:\n%s", formatHealthSnapshot(lastSnapshot))
 		case <-time.After(readinessPollWait):
 		}
 	}
+}
+
+// allBlockersAreSpliceStarting returns true iff every non-ready service
+// in the snapshot is a `*-splice`-named container in state=running and
+// health=starting. The narrow gate keeps the readyz fallback from
+// masking real failures in other services (canton, postgres, nginx).
+func (c *ComposeRunner) allBlockersAreSpliceStarting(raw []byte) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
+	sawSplice := false
+	for scanner.Scan() {
+		line := strings.TrimRight(scanner.Text(), "\r")
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) != 3 {
+			return false
+		}
+		name, state, health := parts[0], parts[1], strings.TrimSpace(parts[2])
+		// Ready-bucket entries don't block — skip.
+		if state == "running" && (health == "healthy" || health == "") {
+			continue
+		}
+		// Anything else must be splice/running/starting.
+		if state != "running" || health != "starting" || !strings.HasSuffix(name, "-splice") {
+			return false
+		}
+		sawSplice = true
+	}
+	return sawSplice
+}
+
+// spliceReadyzOK execs into the splice container and probes
+// `http://localhost:2903/api/validator/readyz`. 200 → ready.
+// Best-effort: any error (curl missing, network, non-200) → false,
+// which simply means "keep polling" — same outcome as before.
+func (c *ComposeRunner) spliceReadyzOK(ctx context.Context, raw []byte) bool {
+	name := spliceContainerName(raw)
+	if name == "" {
+		return false
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	// curl is present in the splice image (verified against the
+	// 0.6.5-snapshot `-dev` image). -sf keeps stdout empty and
+	// returns non-zero on HTTP errors, so a successful exit means 200.
+	cmd := c.command(probeCtx,
+		"exec", name,
+		"curl", "-sf", "-o", "/dev/null",
+		"http://localhost:2903/api/validator/readyz")
+	return cmd.Run() == nil
+}
+
+// spliceContainerName extracts the first `*-splice` container name from
+// the snapshot. Returns "" when none present.
+func spliceContainerName(raw []byte) string {
+	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
+	for scanner.Scan() {
+		line := strings.TrimRight(scanner.Text(), "\r")
+		parts := strings.Split(line, "\t")
+		if len(parts) != 3 {
+			continue
+		}
+		if strings.HasSuffix(parts[0], "-splice") {
+			return parts[0]
+		}
+	}
+	return ""
 }
 
 // formatHealthSnapshot turns the raw tab-separated `docker compose ps`
@@ -373,7 +459,7 @@ func (c *ComposeRunner) DiscoverPort(ctx context.Context, service string, contai
 // equivalent to the previous Down() semantics and what `localnet
 // clean` will use. When false it preserves volumes so a follow-up
 // `localnet up` against the same --name can resume from existing
-// state; this is what `localnet down` (BIT-124) wants.
+// state; this is what `localnet down` wants.
 //
 // --remove-orphans is always set because forgetting it leaves
 // dangling containers when a later compose project rename happens
@@ -384,7 +470,16 @@ func (c *ComposeRunner) Stop(ctx context.Context, removeVolumes bool) error {
 	if removeVolumes {
 		args = append(args, "--volumes")
 	}
-	return c.command(ctx, args...).Run()
+	// CombinedOutput so a failure surfaces the real docker error instead
+	// of a bare "exit status 1" (the message users actually see otherwise).
+	out, err := c.command(ctx, args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("docker compose down failed: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	if c.LogWriter != nil {
+		_, _ = c.LogWriter.Write(out)
+	}
+	return nil
 }
 
 // Down is the destructive variant — kept as a thin wrapper over
@@ -392,6 +487,70 @@ func (c *ComposeRunner) Stop(ctx context.Context, removeVolumes bool) error {
 // should call Stop directly with the explicit removeVolumes choice.
 func (c *ComposeRunner) Down(ctx context.Context) error {
 	return c.Stop(ctx, true)
+}
+
+// forceCommand builds a docker invocation that inherits the FULL process
+// environment (PATH for the compose plugin, etc.) and does not pin Dir or
+// Env to the cached project. Force teardown must not depend on the
+// project's recorded env/working-dir — which may be exactly what's broken.
+func (c *ComposeRunner) forceCommand(ctx context.Context, args ...string) *exec.Cmd {
+	if c.commandFn != nil {
+		return c.commandFn(ctx, "docker", args...)
+	}
+	return exec.CommandContext(ctx, "docker", args...)
+}
+
+// ForceStop tears the project down by PROJECT LABEL only — it deliberately
+// omits the -f compose files and --env-file. A normal, file-driven
+// `docker compose down` parses+interpolates those files first and errors
+// out (before removing anything) when the env is incomplete or a
+// container is unhealthy/OOM-restarting; the label-only form sidesteps
+// that, which is the whole point of `down --force`. `--timeout 10`
+// SIGKILLs containers that won't stop gracefully. The full docker output
+// is captured and returned on failure (no bare "exit status 1").
+func (c *ComposeRunner) ForceStop(ctx context.Context, removeVolumes bool) error {
+	args := []string{"compose", "-p", c.ProjectName, "down", "--remove-orphans", "--timeout", "10"}
+	if removeVolumes {
+		args = append(args, "--volumes")
+	}
+	out, err := c.forceCommand(ctx, args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("docker compose down (force) failed: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	if c.LogWriter != nil {
+		_, _ = c.LogWriter.Write(out)
+	}
+	return nil
+}
+
+// Pause runs `docker compose pause` — SIGSTOPs every container in the
+// project so they hold their in-memory state and stop consuming CPU
+// without losing it. Cheap to reverse with Unpause. Unlike Stop it keeps
+// the processes alive (no boot cost on resume) and unlike Restart it
+// doesn't bounce them. Published host ports stay bound.
+func (c *ComposeRunner) Pause(ctx context.Context) error {
+	args := append(c.composeBase(), "pause")
+	cmd := c.command(ctx, args...)
+	cmd.Stdout = c.LogWriter
+	cmd.Stderr = c.LogWriter
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("docker compose pause failed: %w", err)
+	}
+	return nil
+}
+
+// Unpause runs `docker compose unpause` — SIGCONTs the paused containers,
+// resuming them exactly where Pause froze them. No readiness wait is
+// needed (the apps never stopped), and ports are unchanged.
+func (c *ComposeRunner) Unpause(ctx context.Context) error {
+	args := append(c.composeBase(), "unpause")
+	cmd := c.command(ctx, args...)
+	cmd.Stdout = c.LogWriter
+	cmd.Stderr = c.LogWriter
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("docker compose unpause failed: %w", err)
+	}
+	return nil
 }
 
 // Restart runs `docker compose restart [services...]`. With no

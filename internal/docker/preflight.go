@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -13,19 +14,17 @@ const preflightCheckTimeout = 10 * time.Second
 // DefaultMinDiskBytes / DefaultMinMemoryBytes are the shared
 // resource thresholds used by BOTH `localnet up` preflight and
 // `localnet doctor`. They MUST be equal across the two surfaces —
-// the `doctor && up` shell-gating contract (PR #39 review:
-// "doctor must not fail on a host where `up` would pass") relies
-// on it. A regression where one site drifted was caught in the
-// PR #39 follow-up review; TestThresholdParity_DoctorMatchesUp
-// pins the equality.
+// the `doctor && up` shell-gating contract ("doctor must not fail
+// on a host where `up` would pass") relies on it.
+// TestThresholdParity_DoctorMatchesUp pins the equality.
 //
 // Values chosen to match the current `up` defaults (the
 // historical authority — `up` shipped these before `doctor`
 // existed). If the proposal requires a bump, edit ONCE here and
 // the gate stays consistent.
 const (
-	DefaultMinDiskBytes   uint64 = 10 * 1024 * 1024 * 1024 // 10 GiB
-	DefaultMinMemoryBytes uint64 = 4 * 1024 * 1024 * 1024  // 4 GiB
+	DefaultMinDiskBytes   uint64 = 10_000_000_000 // 10 GB
+	DefaultMinMemoryBytes uint64 = 4_000_000_000  // 4 GB
 )
 
 // Status describes the outcome of a single preflight check.
@@ -65,6 +64,10 @@ type Report struct {
 	Results        []CheckResult
 	DockerVersion  string
 	ComposeVersion string
+	// DockerEngine is the detected engine flavor (docker / colima /
+	// orbstack / podman / other / ""), used for anonymous telemetry. Best
+	// effort; empty when the daemon is down or undetectable.
+	DockerEngine string
 }
 
 // OK reports whether every check passed or was skipped.
@@ -108,7 +111,7 @@ func (r *Report) Write(w io.Writer) {
 //
 // We deliberately do NOT preflight TCP ports: DevKit allocates host ports
 // for the user (ephemerally via net.Listen(":0")) so port availability is
-// never a precondition of `localnet up`. See BIT-30 discussion.
+// never a precondition of `localnet up`.
 type Options struct {
 	// DataDir is the path whose filesystem is checked for free space.
 	DataDir string
@@ -152,12 +155,41 @@ func RunPreflight(ctx context.Context, opts Options) *Report {
 
 	if daemonResult.Status == StatusOK {
 		report.Results = append(report.Results, checkDockerMemory(ctx, opts.MinMemoryBytes, opts.RecommendedMemoryBytes))
+		report.DockerEngine = detectDockerEngine(ctx)
 	} else {
 		report.Results = append(report.Results, skip("Docker memory", "daemon unavailable"))
 	}
 
 	report.Results = append(report.Results, runHostChecks(opts)...)
 	return report
+}
+
+// detectDockerEngine identifies the engine flavor from the active docker
+// context's endpoint socket — colima / orbstack / podman have recognizable
+// socket paths; otherwise plain docker. Returns "" on any failure. Used
+// only for anonymous telemetry (no host/path is ever recorded — just the
+// flavor string).
+func detectDockerEngine(ctx context.Context) string {
+	ctx, cancel := context.WithTimeout(ctx, preflightCheckTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "docker", "context", "inspect",
+		"--format", "{{.Endpoints.docker.Host}}").CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(strings.TrimSpace(string(out)))
+	switch {
+	case strings.Contains(host, "colima"):
+		return "colima"
+	case strings.Contains(host, "orbstack"):
+		return "orbstack"
+	case strings.Contains(host, "podman"):
+		return "podman"
+	case strings.Contains(host, "docker.sock") || strings.HasPrefix(host, "tcp:") || strings.HasPrefix(host, "npipe:"):
+		return "docker"
+	default:
+		return "other"
+	}
 }
 
 func runHostChecks(opts Options) []CheckResult {

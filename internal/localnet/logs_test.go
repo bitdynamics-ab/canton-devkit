@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -13,7 +13,24 @@ import (
 )
 
 func TestRunLogs_ConstructsDockerComposeLogsCommand(t *testing.T) {
-	projectDir := seedLogsInstance(t, "logs-command")
+	seedLogsInstance(t, "logs-command")
+
+	var unfilteredArgs []string
+	var unfilteredOut, unfilteredErr bytes.Buffer
+	unfilteredCode := RunLogs(context.Background(), &unfilteredOut, &unfilteredErr, &LogsOptions{
+		Name: "logs-command",
+		Tail: "50",
+		RunFn: func(_ context.Context, args []string, _ string, _ []string, _ io.Writer, _ io.Writer) error {
+			unfilteredArgs = append([]string(nil), args...)
+			return nil
+		},
+	})
+	if unfilteredCode != ExitSuccess {
+		t.Fatalf("RunLogs unfiltered = %d, want ExitSuccess; stderr=%q", unfilteredCode, unfilteredErr.String())
+	}
+	if want := []string{"compose", "-p", "canton-logs-command", "logs", "--tail", "50"}; !slices.Equal(unfilteredArgs, want) {
+		t.Fatalf("unfiltered args = %v, want %v", unfilteredArgs, want)
+	}
 
 	var gotArgs []string
 	var gotDir string
@@ -35,25 +52,36 @@ func TestRunLogs_ConstructsDockerComposeLogsCommand(t *testing.T) {
 	if code != ExitSuccess {
 		t.Fatalf("RunLogs = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
+	if want := []string{"compose", "-p", "canton-logs-command", "logs", "--follow", "--tail", "all", "--since", "10m", "canton", "splice"}; !slices.Equal(gotArgs, want) {
+		t.Fatalf("filtered args = %v, want %v", gotArgs, want)
+	}
 
-	wantArgs := []string{
-		"compose", "-p", "canton-logs-command",
-		"-f", "compose.yaml",
-		"-f", "/tmp/logs-command-overlay.yaml",
-		"--env-file", "compose.env",
-		"--env-file", "env/common.env",
-		"logs", "--follow", "--tail", "all", "--since", "10m", "canton", "splice",
-	}
-	if !reflect.DeepEqual(gotArgs, wantArgs) {
-		t.Fatalf("args = %#v\nwant %#v", gotArgs, wantArgs)
-	}
-	if gotDir != projectDir {
-		t.Fatalf("dir = %q, want %q", gotDir, projectDir)
-	}
-	for _, want := range []string{"LOCALNET_DIR=" + projectDir, "IMAGE_TAG=0.6.4", "DOCKER_NETWORK=logs-command"} {
-		if !containsEnv(gotEnv, want) {
-			t.Fatalf("env missing %q in %#v", want, gotEnv)
+	argsStr := strings.Join(gotArgs, " ")
+	for _, want := range []string{
+		"compose -p canton-logs-command logs",
+		"logs --follow --tail all --since 10m canton splice",
+	} {
+		if !strings.Contains(argsStr, want) {
+			t.Fatalf("args missing %q in %v", want, gotArgs)
 		}
+	}
+	for _, forbidden := range []string{"-f", "--env-file"} {
+		for _, arg := range gotArgs {
+			if arg == forbidden {
+				t.Fatalf("args should not contain %q in %v", forbidden, gotArgs)
+			}
+		}
+	}
+	for _, arg := range gotArgs {
+		if strings.Contains(arg, "overlay.env") {
+			t.Fatalf("args should not contain overlay.env in %v", gotArgs)
+		}
+	}
+	if gotDir != "" {
+		t.Fatalf("dir = %q, want empty project-label lookup", gotDir)
+	}
+	if gotEnv != nil {
+		t.Fatalf("env should be nil, got %d entries", len(gotEnv))
 	}
 }
 
@@ -100,14 +128,16 @@ func seedLogsInstance(t *testing.T, name string) string {
 	if err := registry.Write(state); err != nil {
 		t.Fatalf("registry.Write: %v", err)
 	}
-	return projectDir
-}
 
-func containsEnv(env []string, want string) bool {
-	for _, item := range env {
-		if item == want {
-			return true
-		}
+	// Write overlay.env so downstream commands can resolve env files.
+	if _, err := WriteOverlayEnv(state.DataDir, map[string]string{
+		"LOCALNET_DIR":   projectDir,
+		"IMAGE_TAG":      "0.6.4",
+		"DOCKER_NETWORK": name,
+		"PARTY_HINT":     name + "-localparty-1",
+	}); err != nil {
+		t.Fatalf("WriteOverlayEnv: %v", err)
 	}
-	return false
+
+	return projectDir
 }

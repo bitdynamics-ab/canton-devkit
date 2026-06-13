@@ -21,8 +21,23 @@ import (
 var ErrNeedsV2LocalNet = errors.New(
 	"V2 ledger action not yet wired: bring up a V2 LocalNet first via " +
 		"`localnet up --version token-standard-v2 --profile tokens-v2`, " +
-		"then re-run; the V2 instrument-creation + transfer submission " +
-		"lands incrementally on top of this PR")
+		"then re-run")
+
+// ErrUnsupportedOnInstrument signals that the asset implementing the
+// instrument doesn't expose a standard mint or burn choice. Amulet is
+// the most common case — it doesn't implement BurnMintFactoryV1, and
+// the V2 Token Standard has no generic mint/burn interface. Real
+// tokens that want these operations either implement BurnMintFactoryV1
+// or expose asset-specific choices on the issuer's TokenRules contract.
+// CLI maps to ExitUserError; HTTP handler maps to 422 Unprocessable
+// Entity so the UI can render "this instrument doesn't support that
+// operation — use the asset's wallet UI" instead of a wiring error.
+var ErrUnsupportedOnInstrument = errors.New(
+	"this instrument doesn't implement the V2 standard's mint/burn surface " +
+		"(Amulet has no BurnMintFactoryV1, and V2 defines no generic mint/burn). " +
+		"Use the asset's own wallet UI for issuance changes, or create a " +
+		"splice-test-token-v2 instrument via `localnet token create` for a token " +
+		"that implements asset-specific mint via TokenRules_OfferMint")
 
 // MintOptions / TransferOptions / BurnOptions / BalanceOptions are
 // the input shapes for each action. Lifted into the orchestration
@@ -33,6 +48,15 @@ type MintOptions struct {
 	Instrument string // symbol OR raw instrument id; symbol resolves via ResolveBySymbol
 	To         string // recipient party
 	Amount     string // decimal string
+
+	// Endpoint, when set, runs the live asset-specific mint
+	// (TokenRules_OfferMint) for a splice-test-token-v2 instrument the
+	// issuer created on-ledger. Empty Endpoint, or an instrument with
+	// no asset-specific mint path (e.g. Amulet), yields
+	// ErrUnsupportedOnInstrument.
+	Endpoint string
+	Role     string
+	Insecure bool
 }
 type TransferOptions struct {
 	Instance   string
@@ -42,16 +66,57 @@ type TransferOptions struct {
 	Amount     string
 	NoWait     bool // if true, return the TransferInstruction id without waiting for accept
 	Reason     string
+
+	// AutoAccept chains the receiver-side accept onto the
+	// transfer when the receiver is locally controlled — the common
+	// LocalNet case where you own both parties. The transfer produces a
+	// pending TransferInstruction; with AutoAccept the same flow then
+	// exercises Accept as the receiver, so a transfer lands in one step.
+	// Ignored when NoWait is set (the two are contradictory).
+	AutoAccept bool
+
+	// Live-submit fields. When Endpoint is set, RunTransfer performs
+	// the full V2 flow: ACS query → POST /transfer-factory → ledger
+	// exercise. Empty Endpoint surfaces the legacy ErrNeedsV2LocalNet
+	// stub for callers that haven't been updated to provide one.
+	Endpoint    string
+	Token       string
+	Role        string
+	Insecure    bool
+	RegistryURL string // off-ledger token registry base URL (asset-specific)
 }
 type AcceptOptions struct {
 	Instance              string
 	TransferInstructionID string
+
+	// Party is the receiver acting on the instruction. Optional —
+	// empty falls back to the first Act-As party granted to the JWT
+	// (correct for single-party participants). Set explicitly when the
+	// participant hosts several parties and the receiver isn't the
+	// alphabetically-first one.
+	Party string
+
+	// Same live-submit envelope as TransferOptions.
+	Endpoint    string
+	Token       string
+	Role        string
+	Insecure    bool
+	RegistryURL string
 }
 type BurnOptions struct {
 	Instance   string
 	Instrument string
 	From       string // party whose holding is burned
 	Amount     string
+
+	// Endpoint, when set, runs the live burn for an on-ledger
+	// test-token instrument: a transfer of the holder's tokens to the
+	// instrument's special burn account. Amulet / registry-only
+	// instruments yield ErrUnsupportedOnInstrument.
+	Endpoint string
+	Token    string
+	Role     string
+	Insecure bool
 }
 type BalanceOptions struct {
 	Instance   string
@@ -73,7 +138,20 @@ type BalanceOptions struct {
 	Token    string
 	Role     string
 	Insecure bool
+
+	// Limit caps result counts on paged read paths (e.g. the activity
+	// feed). Zero means the caller's default applies.
+	Limit int
 }
+
+// maxHoldingsScan caps how many ACS contracts runBalanceLive will
+// consume before declaring the result truncated. A real wallet
+// rarely holds more than a few thousand contracts; the cap is a
+// belt-and-braces guard against a runaway ledger pumping us into
+// OOM (the gRPC stream is otherwise unbounded). When the cap fires
+// the caller gets truncated=true so the UI can show "showing N of
+// many" rather than silently misreporting the balance.
+const maxHoldingsScan = 10_000
 
 // BalanceRow is one row of the balance response — instrument + party
 // + summed amount across the participant's visible ACS holdings.
@@ -95,10 +173,17 @@ type BalanceRow struct {
 // registry so unit-level wiring tests cover the flow. Callers that
 // only want validation can pass a nil writer.
 
+// RunMint always returns ErrUnsupportedOnInstrument for the V2 alpha:
+// Amulet (the only seeded instrument) doesn't implement BurnMintFactoryV1
+// and there's no generic V2 mint interface. The asset-specific
+// TokenRules_OfferMint choice on splice-test-token-v2 is a future
+// follow-up gated on the test-token DAR being uploaded + an instrument
+// being created via the wizard.
 func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	if err := requireFields("mint", opts.Instance, opts.Instrument, opts.To, opts.Amount); err != nil {
 		return err
 	}
+	opts.To = ResolveAlias(aliasMapForInstance(opts.Instance), opts.To)
 	if err := validatePartyID("--to", opts.To); err != nil {
 		return err
 	}
@@ -107,18 +192,35 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	}
 	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
 	if err != nil {
-		return err
+		ref = registry.TokenRef{InstrumentID: opts.Instrument}
+	}
+	// Live mint path: only for instruments created on-ledger via the
+	// test-token (status "on-ledger"). Amulet and registry-only
+	// instruments have no asset-specific mint, so they keep returning
+	// ErrUnsupportedOnInstrument.
+	if opts.Endpoint != "" && ref.Status == "on-ledger" {
+		if opts.Role == "" {
+			opts.Role = "app-user"
+		}
+		return runMintLive(ctx, out, opts, ref)
 	}
 	emit(out, "mint", map[string]any{
 		"instrument": ref, "to": opts.To, "amount": opts.Amount,
 	})
-	return ErrNeedsV2LocalNet
+	return ErrUnsupportedOnInstrument
 }
 
+// RunTransfer dispatches: if opts.Endpoint is set, run the live V2
+// transfer flow (ACS → registry → exercise). Otherwise surface
+// ErrNeedsV2LocalNet so callers that haven't been updated to thread
+// through the endpoint get a clear remediation.
 func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error {
 	if err := requireFields("transfer", opts.Instance, opts.Instrument, opts.From, opts.To, opts.Amount); err != nil {
 		return err
 	}
+	aliases := aliasMapForInstance(opts.Instance)
+	opts.From = ResolveAlias(aliases, opts.From)
+	opts.To = ResolveAlias(aliases, opts.To)
 	if err := validatePartyID("--from", opts.From); err != nil {
 		return err
 	}
@@ -128,31 +230,75 @@ func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error
 	if err := validateAmount("transfer", opts.Amount); err != nil {
 		return err
 	}
-	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
+	if opts.Endpoint == "" {
+		emit(out, "transfer", map[string]any{
+			"from": opts.From, "to": opts.To, "amount": opts.Amount,
+		})
+		return ErrNeedsV2LocalNet
+	}
+	if opts.Role == "" {
+		opts.Role = "app-user"
+	}
+	instructionID, err := runTransferLive(ctx, out, opts)
 	if err != nil {
 		return err
 	}
-	emit(out, "transfer", map[string]any{
-		"instrument": ref, "from": opts.From, "to": opts.To,
-		"amount": opts.Amount, "no_wait": opts.NoWait, "reason": opts.Reason,
+	emit(out, "transfer complete", map[string]any{
+		"transfer_instruction_id": instructionID,
 	})
-	return ErrNeedsV2LocalNet
+
+	// Auto-accept chains the receiver-side accept: on LocalNet you own
+	// the receiver, so the two-step offer→accept is just
+	// ceremony. NoWait opts out (the caller wants the instruction id to
+	// hand off). An empty instructionID means the transfer already
+	// settled (e.g. self-transfer) — nothing to accept.
+	if opts.AutoAccept && !opts.NoWait && instructionID != "" {
+		acc := AcceptOptions{
+			Instance:              opts.Instance,
+			TransferInstructionID: instructionID,
+			Party:                 opts.To,
+			Endpoint:              opts.Endpoint,
+			Token:                 opts.Token,
+			Role:                  opts.Role,
+			Insecure:              opts.Insecure,
+			RegistryURL:           opts.RegistryURL,
+		}
+		if err := runAcceptLive(ctx, out, acc); err != nil {
+			return fmt.Errorf("auto-accept transfer %s: %w", instructionID, err)
+		}
+		emit(out, "transfer accepted", map[string]any{
+			"transfer_instruction_id": instructionID,
+			"receiver":                opts.To,
+		})
+	}
+	return nil
 }
 
 func RunAccept(ctx context.Context, out io.Writer, opts AcceptOptions) error {
 	if err := requireFields("transfer accept", opts.Instance, opts.TransferInstructionID); err != nil {
 		return err
 	}
-	emit(out, "transfer accept", map[string]any{
-		"transfer_instruction_id": opts.TransferInstructionID,
-	})
-	return ErrNeedsV2LocalNet
+	if opts.Endpoint == "" {
+		emit(out, "transfer accept", map[string]any{
+			"transfer_instruction_id": opts.TransferInstructionID,
+		})
+		return ErrNeedsV2LocalNet
+	}
+	if opts.Role == "" {
+		opts.Role = "app-user"
+	}
+	return runAcceptLive(ctx, out, opts)
 }
 
+// RunBurn burns supply of an on-ledger test-token instrument by
+// transferring the holder's tokens to the instrument's special burn
+// account. Amulet / registry-only instruments have no such path and
+// yield ErrUnsupportedOnInstrument.
 func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 	if err := requireFields("burn", opts.Instance, opts.Instrument, opts.From, opts.Amount); err != nil {
 		return err
 	}
+	opts.From = ResolveAlias(aliasMapForInstance(opts.Instance), opts.From)
 	if err := validatePartyID("--from", opts.From); err != nil {
 		return err
 	}
@@ -161,12 +307,18 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 	}
 	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
 	if err != nil {
-		return err
+		ref = registry.TokenRef{InstrumentID: opts.Instrument}
+	}
+	if opts.Endpoint != "" && ref.Status == "on-ledger" {
+		if opts.Role == "" {
+			opts.Role = "app-user"
+		}
+		return runBurnLive(ctx, out, opts, ref)
 	}
 	emit(out, "burn", map[string]any{
 		"instrument": ref, "from": opts.From, "amount": opts.Amount,
 	})
-	return ErrNeedsV2LocalNet
+	return ErrUnsupportedOnInstrument
 }
 
 // RunBalance is the one action that's fully functional today: it
@@ -174,7 +326,7 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 // pseudo-balances (Amount = InitialSupply when --party matches the
 // issuer; otherwise zero). Callers that want the live ACS-derived
 // balance need a running V2 LocalNet + the future ledger ACS query —
-// that's the BIT-139 follow-up.
+// that's the follow-up.
 //
 // When that follow-up lands, the ACS query uses HoldingInterfaceV2
 // (see v2_surface.go for the qualified interface id and why V2 rather
@@ -185,10 +337,11 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 // Returning *something* here makes the Web UI's holdings table render
 // right away on whatever instance the user is browsing, and gives a
 // deterministic surface for tests.
-func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]BalanceRow, error) {
+func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]BalanceRow, bool, error) {
 	if opts.Instance == "" {
-		return nil, errors.New("instance is required")
+		return nil, false, errors.New("instance is required")
 	}
+	opts.Party = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Party)
 	// Live-ACS path takes precedence when the caller has dialed a
 	// participant. Symbol/admin pairs are joined back to the local
 	// state.Tokens registry so the rendered rows can still carry
@@ -198,7 +351,7 @@ func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]Bala
 	}
 	state, err := registry.Read(opts.Instance)
 	if err != nil {
-		return nil, fmt.Errorf("read instance state: %w", err)
+		return nil, false, fmt.Errorf("read instance state: %w", err)
 	}
 	rows := make([]BalanceRow, 0, len(state.Tokens))
 	for _, t := range state.Tokens {
@@ -220,7 +373,7 @@ func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]Bala
 			Amount:           amount,
 		})
 	}
-	return rows, nil
+	return rows, false, nil
 }
 
 // runBalanceLive is the V2-native ACS path: stream every contract
@@ -239,10 +392,15 @@ func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]Bala
 // V2). Adding them in Go without losing precision means using a big-
 // decimal-style approach: split on '.', align scale, add as big.Ints.
 // The helper addDecimal does that.
-func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, error) {
+func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, bool, error) {
+	// Cancelling on every return path tears down the gRPC stream
+	// pump goroutine so an early break (cap, decode error) doesn't
+	// leak it for the lifetime of the request context.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	state, err := registry.Read(opts.Instance)
 	if err != nil {
-		return nil, fmt.Errorf("read instance state: %w", err)
+		return nil, false, fmt.Errorf("read instance state: %w", err)
 	}
 	// Resolve the optional --instrument filter once into the form we
 	// match against streamed views. The user can pass a symbol or a
@@ -264,20 +422,40 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, err
 		Instance: opts.Instance,
 		Role:     opts.Role,
 	}
-	client, cleanup, err := dialLedger(ctx, conn)
+	client, cleanup, err := dialLedgerFn(ctx, conn)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer cleanup()
 
 	end, err := client.LedgerEnd(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("ledger end: %w", err)
+		return nil, false, fmt.Errorf("ledger end: %w", err)
 	}
 
 	var parties []string
 	if opts.Party != "" {
 		parties = []string{opts.Party}
+	} else {
+		// Canton's wildcard ("FiltersForAnyParty") path requires the
+		// JWT to carry the super-reader / ParticipantAdmin claim. The
+		// per-role user-tokens we mint only carry CanActAs/CanReadAs
+		// on the local parties — so a wildcard query is rejected even
+		// after the grant. Enumerate the role's local parties via
+		// PartyManagement and submit them in FiltersByParty so Canton
+		// gates per-party instead.
+		discovered, err := localPartiesForRole(ctx, client, opts.Role)
+		if err != nil {
+			return nil, false, fmt.Errorf("discover local parties for role %q: %w", opts.Role, err)
+		}
+		parties = discovered
+	}
+	if len(parties) == 0 {
+		// No parties means an empty FiltersByParty, which Canton
+		// rejects. Return an empty balance set — the participant has
+		// no parties hosted (or none matching the role prefix) so
+		// there are no holdings to report.
+		return nil, false, nil
 	}
 	req := ledger.ActiveContractsRequest{
 		ActiveAtOffset: end.Offset,
@@ -285,15 +463,24 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, err
 	}
 	stream, err := client.ActiveContracts(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("ACS query: %w", err)
+		return nil, false, fmt.Errorf("ACS query: %w", err)
 	}
 
 	type bucketKey struct{ admin, id, party string }
 	bucket := map[bucketKey]string{}
 
+	var scanned int
+	var truncated bool
 	for item := range stream {
 		if item.Err != nil {
-			return nil, fmt.Errorf("ACS stream: %w", item.Err)
+			return nil, false, fmt.Errorf("ACS stream: %w", item.Err)
+		}
+		scanned++
+		if scanned > maxHoldingsScan {
+			// Bail out and tell the caller we stopped early. cancel()
+			// (deferred above) tears down the upstream pump.
+			truncated = true
+			break
 		}
 		// ContractEntry is a oneof — only the ActiveContract branch
 		// carries the CreatedEvent we need. IncompleteAssigned /
@@ -318,7 +505,7 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, err
 			k := bucketKey{admin: hv.Admin, id: hv.InstrumentID, party: hv.Owner}
 			sum, err := addDecimal(bucket[k], hv.Amount)
 			if err != nil {
-				return nil, fmt.Errorf("sum holding amounts: %w", err)
+				return nil, false, fmt.Errorf("sum holding amounts: %w", err)
 			}
 			bucket[k] = sum
 		}
@@ -338,7 +525,7 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, err
 			Amount:           amount,
 		})
 	}
-	return rows, nil
+	return rows, truncated, nil
 }
 
 // addDecimal returns a + b for two Daml Decimal strings (e.g. "1.5",
@@ -453,10 +640,8 @@ func isZeroDecimal(s string) bool {
 	return true
 }
 
-// validatePartyID + partyIDPattern live in token.go (added by the
-// create-wizard PR #82, which merged to main first). The mint/transfer/
-// burn actions in this file reuse it; the duplicate copy that used to
-// live here was removed on merge to avoid a redeclaration.
+// validatePartyID + partyIDPattern live in token.go. The
+// mint/transfer/burn actions in this file reuse them.
 
 // emit writes a human-readable "going to run X with Y" line on the
 // caller's writer before the action returns ErrNeedsV2LocalNet, so
@@ -466,7 +651,10 @@ func emit(out io.Writer, verb string, payload map[string]any) {
 	if out == nil {
 		return
 	}
-	_, _ = fmt.Fprintf(out, "Planned %s: ", verb)
+	// "<verb>: {json}" reads naturally for both pre-submit ("transfer:")
+	// and result ("burn complete:") verbs — the older "Planned %s" prefix
+	// mislabelled completions as "Planned mint complete".
+	_, _ = fmt.Fprintf(out, "%s: ", verb)
 	enc := json.NewEncoder(out)
 	_ = enc.Encode(payload) // includes trailing newline
 }

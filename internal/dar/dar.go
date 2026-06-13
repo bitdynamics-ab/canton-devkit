@@ -41,6 +41,6 @@
 //   - SDK version (from MANIFEST.MF's `Sdk-Version`)
 //
 // That set is enough for `dar info`, `dar diff` (with SCU-relevant
-// signals at the package-level), and the dependency surfaces the
-// remaining DAR-tooling tickets (BIT-50/51/53/55) will need.
+// signals at the package level), and the dependency surfaces that
+// future DAR tooling will need.
 package dar

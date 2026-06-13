@@ -107,10 +107,9 @@ func seedSnapshotInstance(t *testing.T, name string) {
 	}
 }
 
-// TestSnapshot_RoundTripsRegistryAndVolumes is the full happy path.
-// Reviewer flagged that the original cut didn't capture state, so
-// this test explicitly asserts the registry IS re-populated after
-// restoring into a fresh registry root with no prior instance.
+// TestSnapshot_RoundTripsRegistryAndVolumes is the full happy path. It
+// explicitly asserts the registry IS re-populated after restoring into
+// a fresh registry root with no prior instance.
 func TestSnapshot_RoundTripsRegistryAndVolumes(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedSnapshotInstance(t, "demo")
@@ -164,10 +163,9 @@ func TestSnapshot_RoundTripsRegistryAndVolumes(t *testing.T) {
 	if got.Status != registry.StatusStopped {
 		t.Errorf("restored Status = %q, want stopped", got.Status)
 	}
-	// Yellow Y11: assert EVERY port + credential round-trips
-	// byte-for-byte, not just one. Previously only one port and
-	// one credential were checked, so a serializer regression that
-	// silently dropped half the map would have passed.
+	// Assert EVERY port + credential round-trips byte-for-byte, not
+	// just one — so a serializer regression that silently dropped half
+	// the map can't pass.
 	wantPorts := map[string]int{
 		"app_user_ui":                 4485,
 		"app_provider_ui":             4486,
@@ -202,7 +200,7 @@ func TestSnapshot_RoundTripsRegistryAndVolumes(t *testing.T) {
 }
 
 // TestRestore_RejectsZipSlip is the security regression for the
-// reviewer-flagged Zip Slip vulnerability. A malicious archive
+// Zip Slip vulnerability. A malicious archive
 // with `volumes/../../escape.tar` MUST be skipped (not restored
 // to a path outside the volumes/ namespace).
 func TestRestore_RejectsZipSlip(t *testing.T) {
@@ -327,8 +325,7 @@ func TestCappedWriter_EnforcesCeiling(t *testing.T) {
 }
 
 // TestValidateArchivePath covers every cell of the Zip Slip
-// safety table. The reviewer flagged this as missing direct
-// coverage.
+// safety table.
 func TestValidateArchivePath(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -385,7 +382,7 @@ func TestValidateVolumeName(t *testing.T) {
 	}
 }
 
-// TestSnapshot_NotFoundIsUserError is unchanged from the first cut.
+// TestSnapshot_NotFoundIsUserError asserts a missing instance is a user error.
 func TestSnapshot_NotFoundIsUserError(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	installFakeArchiver(t, &fakeArchiver{})
@@ -541,14 +538,13 @@ func tamper(t *testing.T, archivePath, vol string, body []byte) {
 	}
 }
 
-// TestRestore_SurfaceRegistryReadErrors is the reviewer pin (PR #37
-// #6) for the dropped-error half of the TOCTOU fix. The original
-// `existing, _ := registry.Read(name)` swallowed every error
-// including permission denied and corrupt JSON, then proceeded as
-// if there were no existing instance. We assert the new behaviour
-// by seeding a CORRUPT state.json for the target name: restore must
-// now fail with ExitRuntimeFailure (read error surfaced) instead
-// of silently overwriting.
+// TestRestore_SurfaceRegistryReadErrors covers the dropped-error half
+// of the TOCTOU fix. A bare `existing, _ := registry.Read(name)` would
+// swallow every error including permission denied and corrupt JSON,
+// then proceed as if there were no existing instance. We assert the
+// behaviour by seeding a CORRUPT state.json for the target name:
+// restore must fail with ExitRuntimeFailure (read error surfaced)
+// instead of silently overwriting.
 func TestRestore_SurfaceRegistryReadErrors(t *testing.T) {
 	regRoot := t.TempDir()
 	t.Setenv("CANTON_DEVKIT_REGISTRY", regRoot)
@@ -573,7 +569,7 @@ func TestRestore_SurfaceRegistryReadErrors(t *testing.T) {
 	var out, errBuf bytes.Buffer
 	code := RunRestore(context.Background(), &out, &errBuf, "demo", dest, false)
 	if code == localnet.ExitSuccess {
-		t.Fatalf("RunRestore returned ExitSuccess despite corrupt registry state — read error was swallowed (PR #37 #6 regression). stderr=%q", errBuf.String())
+		t.Fatalf("RunRestore returned ExitSuccess despite corrupt registry state — read error was swallowed. stderr=%q", errBuf.String())
 	}
 	if code != localnet.ExitRuntimeFailure {
 		t.Fatalf("RunRestore returned %d, want ExitRuntimeFailure; stderr=%q", code, errBuf.String())
@@ -583,8 +579,8 @@ func TestRestore_SurfaceRegistryReadErrors(t *testing.T) {
 	}
 }
 
-// TestRestore_WarnsOnNameMismatch is the reviewer pin (PR #37 #7b):
-// when --name differs from the snapshot's embedded original name,
+// TestRestore_WarnsOnNameMismatch: when --name differs from the
+// snapshot's embedded original name,
 // restore must surface a warning. The restore still proceeds —
 // renaming on restore is a supported workflow — but a stderr line
 // must mention BOTH names so the user understands embedded log
@@ -635,7 +631,7 @@ func TestAvailableDiskBytes_NonZero(t *testing.T) {
 	}
 }
 
-// TestRewriteVolumeForTarget is the unit test for the BIT-185 helper.
+// TestRewriteVolumeForTarget is the unit test for the helper.
 // Pure-function table test; the integration test for the rename
 // behaviour is TestRestore_CrossNameRewritesVolumes below.
 func TestRewriteVolumeForTarget(t *testing.T) {
@@ -660,9 +656,10 @@ func TestRewriteVolumeForTarget(t *testing.T) {
 	}
 }
 
-// TestRestore_CrossNameRewritesVolumes is the integration test for
-// BIT-185. Snapshot of "demo" (compose project "canton-demo") with
-// two volumes, then restore --name demo-clone into a fresh registry.
+// TestRestore_CrossNameRewritesVolumes is the integration test for the
+// cross-name volume rewrite. Snapshot of "demo" (compose project
+// "canton-demo") with two volumes, then restore --name demo-clone into
+// a fresh registry.
 // The restored docker volumes MUST land under "canton-demo-clone_*",
 // not the original "canton-demo_*", or the cloned instance would
 // share storage with the source and fail to `up` while it's running.
@@ -735,4 +732,42 @@ func keysOf(m map[string][]byte) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// TestSnapshot_WarnsWhenRunning asserts the consistency caveat is
+// surfaced when snapshotting a running instance, and NOT when stopped.
+func TestSnapshot_WarnsWhenRunning(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedSnapshotInstance(t, "demo")
+	// seed is stopped; flip to running.
+	s, _ := registry.Read("demo")
+	s.Status = registry.StatusRunning
+	if err := registry.Write(s); err != nil {
+		t.Fatal(err)
+	}
+	installFakeArchiver(t, &fakeArchiver{volumes: map[string][]byte{"canton-demo_pg": []byte("x")}})
+
+	var out, errBuf bytes.Buffer
+	if code := RunSnapshot(context.Background(), &out, &errBuf, "demo",
+		filepath.Join(t.TempDir(), "snap.tgz")); code != localnet.ExitSuccess {
+		t.Fatalf("snapshot code = %d; stderr=%q", code, errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "running instance") {
+		t.Errorf("expected a running-instance consistency warning, got: %q", errBuf.String())
+	}
+}
+
+func TestSnapshot_NoWarnWhenStopped(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedSnapshotInstance(t, "demo") // stopped
+	installFakeArchiver(t, &fakeArchiver{volumes: map[string][]byte{"canton-demo_pg": []byte("x")}})
+
+	var out, errBuf bytes.Buffer
+	if code := RunSnapshot(context.Background(), &out, &errBuf, "demo",
+		filepath.Join(t.TempDir(), "snap.tgz")); code != localnet.ExitSuccess {
+		t.Fatalf("snapshot code = %d; stderr=%q", code, errBuf.String())
+	}
+	if strings.Contains(errBuf.String(), "running instance") {
+		t.Errorf("did not expect a running-instance warning for a stopped instance: %q", errBuf.String())
+	}
 }

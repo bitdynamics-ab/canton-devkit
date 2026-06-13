@@ -55,7 +55,7 @@ func TestRunCreate_HappyPath_PersistsRef(t *testing.T) {
 		t.Errorf("InstrumentID must be populated")
 	}
 	if res.TokenRef.Status != "recorded" {
-		t.Errorf("Status = %q, want recorded (until BIT-139 submits)", res.TokenRef.Status)
+		t.Errorf("Status = %q, want recorded (until v2 submit lands)", res.TokenRef.Status)
 	}
 
 	got, err := registry.Read("demo")

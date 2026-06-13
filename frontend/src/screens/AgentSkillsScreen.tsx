@@ -7,7 +7,7 @@ import {
 } from "../api";
 import { W, wMono } from "../tokens";
 
-// AgentSkillsScreen — BIT-189.
+// AgentSkillsScreen — .
 //
 // Browses the bundled AI-agent skill docs (served by /api/skills,
 // the SAME embedded markdown the CLI `localnet skills` command
