@@ -329,6 +329,9 @@ func RunAccept(ctx context.Context, out io.Writer, opts AcceptOptions) error {
 	// (its TokenRules is the registry); only Amulet / external-registry
 	// instructions go through the off-ledger choice-context endpoint.
 	// runAcceptOnLedgerIfTestToken reports handled=false for the latter.
+	// For an Amulet/off-ledger instrument this probe intentionally dials
+	// the ledger and ACS-queries for TokenRules before falling through —
+	// a deliberate extra dial+query per off-ledger auto-accept, not a bug.
 	if handled, err := runAcceptOnLedgerFn(ctx, out, opts); handled || err != nil {
 		return err
 	}
