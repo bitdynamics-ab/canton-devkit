@@ -49,6 +49,16 @@ func TestRestart_StoppedInstance202(t *testing.T) {
 		map[string]int{"app_user_ui": 44440}, registry.StatusStopped)
 	srv, _ := restartMux(t)
 
+	// Install a worker that signals completion so we can await the
+	// spawned goroutine before returning. Otherwise it reads the
+	// recreateWork global concurrently with restartMux's t.Cleanup
+	// restoring it — a residual read/write race under -race, plus
+	// jobs/buffer churn after the test ends.
+	done := make(chan struct{})
+	recreateWork = func(context.Context, *stream.Hub, string, string, []string) {
+		close(done)
+	}
+
 	resp, err := http.Post(srv.URL+"/api/instances/pebble/recreate",
 		"application/json", nil)
 	if err != nil {
@@ -72,6 +82,7 @@ func TestRestart_StoppedInstance202(t *testing.T) {
 		t.Errorf("events_url = %q, want /api/instances/pebble/events",
 			body.EventsURL)
 	}
+	<-done
 }
 
 // TestRestart_RunningInstance202 — restart accepts a running
@@ -84,6 +95,14 @@ func TestRestart_RunningInstance202(t *testing.T) {
 		map[string]int{"app_user_ui": 44440}, registry.StatusRunning)
 	srv, _ := restartMux(t)
 
+	// Await the spawned worker so it finishes reading the recreateWork
+	// global (and runs its deferred jobs.Unregister + hub.ClearBuffer)
+	// before restartMux's t.Cleanup restores recreateWork.
+	done := make(chan struct{})
+	recreateWork = func(context.Context, *stream.Hub, string, string, []string) {
+		close(done)
+	}
+
 	resp, err := http.Post(srv.URL+"/api/instances/demo/recreate",
 		"application/json", nil)
 	if err != nil {
@@ -93,6 +112,7 @@ func TestRestart_RunningInstance202(t *testing.T) {
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("status = %d, want 202", resp.StatusCode)
 	}
+	<-done
 }
 
 // TestRestart_UnknownInstance404 — a name that's not in the
