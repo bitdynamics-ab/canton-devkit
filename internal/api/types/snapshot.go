@@ -8,9 +8,9 @@ package types
 // right Splice version before touching disk.
 //
 // A snapshot is a logical PostgreSQL dump (pg_dumpall) of the
-// instance's single Postgres container — the same backup method Canton
-// and Splice document for participant/synchronizer nodes — rather than
-// a raw copy of the docker volumes. Everything a LocalNet keeps
+// instance's single Postgres container, rather than a raw copy of the
+// docker volumes. This is the backup method Canton and Splice document
+// for participant/synchronizer nodes. Everything a LocalNet keeps
 // (ledger, contracts, parties, node identities/keys) lives in that one
 // Postgres, so the dump is the whole instance.
 type Snapshot struct {

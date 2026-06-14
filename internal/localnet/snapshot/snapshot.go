@@ -29,12 +29,12 @@ import (
 
 // Implements `dpm localnet snapshot` + `restore`.
 //
-// A LocalNet keeps all of its state — ledger, contracts, parties, node
-// identities/keys — in a single PostgreSQL container. So a snapshot is
-// a logical `pg_dumpall` of that Postgres, and a restore loads it back,
-// which is exactly the backup/restore method Canton and Splice document
-// for participant/synchronizer nodes. This decouples snapshot/restore
-// from the docker-compose volume layout (no volume-name discovery, no
+// A LocalNet keeps all of its state (ledger, contracts, parties, node
+// identities/keys) in a single PostgreSQL container. So a snapshot is a
+// logical `pg_dumpall` of that Postgres, and a restore loads it back,
+// the backup/restore method Canton and Splice document for
+// participant/synchronizer nodes. This decouples snapshot/restore from
+// the docker-compose volume layout (no volume-name discovery, no
 // compose-label re-stamping) and makes archives portable across
 // Postgres point releases.
 //
@@ -42,8 +42,9 @@ import (
 //
 //  1. Zip Slip on restore is rejected: only the strict entry path
 //     `database/dumpall.sql` is honoured.
-//  2. Nothing is buffered whole in RAM: the dump streams pg_dumpall →
-//     temp file → archive on capture, and archive → psql on restore.
+//  2. Nothing is buffered whole in RAM: the dump streams pg_dumpall to
+//     a temp file to the archive on capture, and archive to psql on
+//     restore.
 //  3. registry.State is captured as the SECOND archive entry so a
 //     restored snapshot is bringable; restore re-registers via
 //     registry.Write.
@@ -229,9 +230,8 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 	}
 
 	// pg_dumpall reads from a live Postgres, so the instance must be up.
-	// (The volume-era snapshot could read a stopped instance's volumes
-	// off disk; a logical dump can't — and a consistent dump wants the
-	// DB up anyway.)
+	// The volume-era snapshot could read a stopped instance's volumes off
+	// disk; a logical dump can't.
 	if state.Status != registry.StatusRunning {
 		_, _ = fmt.Fprintf(errw,
 			"instance %q is not running — a database snapshot reads from a live Postgres. "+
@@ -251,19 +251,18 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 	_, _ = fmt.Fprintln(out, term.Step(term.StepCheck, "Reading registry state", state.ComposeProject, ""))
 
 	// Quiesce writers before the dump. pg_dumpall is a single-step
-	// whole-cluster backup, and Canton's rule for that path is to "make
-	// sure no component writes to the database while the backup is in
-	// progress". With the node containers paused, every database is frozen
-	// at one instant, so the cross-database ordering invariant (the
+	// whole-cluster backup, and Canton's rule for that path is that no
+	// component writes to the database while the backup is in progress.
+	// With the node containers paused, every database is frozen at one
+	// instant, so the cross-database ordering invariant holds (the
 	// participant is never more recent than the sequencer, which would be
-	// a ledger fork) holds automatically and the capture is consistent —
-	// not merely crash-consistent.
+	// a ledger fork) and the capture is application-consistent.
 	resume, qErr := archiverFn.Quiesce(ctx, state.ComposeProject, pg.Container)
 	if qErr != nil {
 		_, _ = fmt.Fprintf(errw, "quiesce writers: %s\n", qErr)
 		return localnet.ExitRuntimeFailure
 	}
-	defer resume() // safety net; resume() is idempotent and also called right after the dump
+	defer resume() // idempotent safety net; also called right after the dump
 	_, _ = fmt.Fprintln(out, term.Step(term.StepCheck, "Paused writers", "consistent capture", ""))
 	_, _ = fmt.Fprintln(out, term.Step(term.StepBusy, "Dumping Postgres", pg.Container, ""))
 
@@ -288,7 +287,7 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 		_, _ = fmt.Fprintf(errw, "dump database: %s\n", err)
 		return localnet.ExitRuntimeFailure
 	}
-	resume() // dump captured — resume writers immediately (the deferred resume is now a no-op)
+	resume() // dump captured: resume writers now (the deferred resume becomes a no-op)
 	defer func() { _ = os.Remove(dumpPath) }()
 
 	header := types.Snapshot{

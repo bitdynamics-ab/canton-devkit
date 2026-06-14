@@ -1,12 +1,12 @@
-// — cobra wrappers for `dpm localnet snapshot` + `restore`.
+// Cobra wrappers for `dpm localnet snapshot` + `restore`.
 //
-// The orchestrators live in internal/localnet/snapshot. They were
-// extracted from this package as part of so the UI handlers
-// (internal/ui/handlers/snapshots.go) can call the same code paths —
-// the import cycle ui→handlers→cli/localnet was blocking parity.
+// The orchestrators live in internal/localnet/snapshot so the UI
+// handlers (internal/ui/handlers/snapshots.go) can call the same code
+// paths; keeping them here would force an ui→handlers→cli/localnet
+// import cycle.
 //
-// Keep this file thin: flag parsing + delegate. Anything more
-// belongs in the snapshot package alongside the streaming/tar code.
+// Keep this file thin: flag parsing + delegate. Anything more belongs
+// in the snapshot package alongside the streaming/tar code.
 package localnet
 
 import (
