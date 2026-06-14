@@ -168,7 +168,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Reject unknown --profile values up front (#42). Shared with the
+	// Reject unknown --profile values up front. Shared with the
 	// Web UI create handler via ValidateProfiles so a typo'd
 	// `--profile observabilty` fails fast with a user error here
 	// instead of silently producing a metric-less instance — the
@@ -326,7 +326,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	}
 	composeFiles = append(composeFiles, loopbackPath)
 
-	// Re-up profile continuity (#41). When the caller passes no
+	// Re-up profile continuity. When the caller passes no
 	// explicit profiles, inherit the set the instance was last brought
 	// up with so a `down` → `up` cycle (or the UI Restart) doesn't
 	// silently shed observability / tokens-v2. An explicit --profile
@@ -460,7 +460,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	state.DataDir = dataDir
 	state.Ports = adapter.EndpointMap() // overwritten post-up if ephemeral
 	// Persist the (possibly inherited) profile set so a later down → up
-	// re-enables the same overlays without --profile (#41). Stored as
+	// re-enables the same overlays without --profile. Stored as
 	// resolved above: explicit flags, or the prior set when none given.
 	state.Profiles = opts.Profiles
 	state.AlphaProtocolEnabled = adapter.SupportsAlphaProtocol()

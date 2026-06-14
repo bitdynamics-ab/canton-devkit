@@ -1175,8 +1175,7 @@ export interface ObservabilityToggleResponse {
 // setObservability toggles the Prometheus + Grafana sidecars on a
 // running instance via the per-component HTTP body. Routed through
 // apiFetch (the single chokepoint) so the envelope decoding +
-// ApiError mapping apply uniformly — the previous hand-rolled fetch
-// in MetricsScreen bypassed that (#80). The CLI mirror is
+// ApiError mapping apply uniformly. The CLI mirror is
 // `dpm localnet observability enable|disable`.
 export function setObservability(
   name: string,

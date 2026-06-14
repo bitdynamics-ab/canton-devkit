@@ -236,7 +236,7 @@ func KnownProfiles() []string {
 // Shared by RunUp so `dpm localnet up --profile observabilty` (typo)
 // fails fast with a user error instead of silently producing a
 // metric-less instance — the exact failure the Web UI's allowlist
-// already prevents with a 400 (#42). The UI handler delegates to this
+// already prevents with a 400. The UI handler delegates to this
 // function so a single allowlist governs both surfaces.
 func ValidateProfiles(profiles []string) error {
 	known := make(map[string]bool, len(KnownProfiles()))

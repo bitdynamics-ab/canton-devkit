@@ -612,7 +612,7 @@ function ObservabilityOffPanel({
       // we send BOTH because the Metrics screen needs Prometheus
       // (for data) AND Grafana (for the embedded dashboards). Routed
       // through the typed setObservability helper so the apiFetch
-      // chokepoint's envelope decoding + ApiError mapping apply (#80),
+      // chokepoint's envelope decoding + ApiError mapping apply,
       // instead of a hand-rolled fetch that re-implemented them.
       await setObservability(name, { prometheus: true, grafana: true });
       onEnabled();

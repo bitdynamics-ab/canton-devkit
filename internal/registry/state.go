@@ -91,7 +91,7 @@ type State struct {
 	// "grafana"], ["tokens-v2"]). Persisted so a down → up cycle
 	// re-enables the same profiles without the caller having to
 	// re-pass `--profile` — losing observability on every restart was
-	// the bug #41. Authoritative over sniffing the compose overlay
+	// the bug. Authoritative over sniffing the compose overlay
 	// filenames. Additive — older state.json files without this key
 	// decode cleanly with Profiles == nil, and RunUp falls back to
 	// the empty set (no opt-in profiles), matching pre-field behavior.

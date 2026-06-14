@@ -87,7 +87,7 @@ func TestScrapeMetrics_PopulatesLatencyBlock(t *testing.T) {
 	}
 }
 
-// TestScrapeMetrics_TransportFailureSurfacesError (#37): when
+// TestScrapeMetrics_TransportFailureSurfacesError: when
 // Prometheus is unreachable (here: a closed listener) EVERY query
 // fails at the transport layer, so scrapeMetrics must return a
 // non-nil error rather than an all-nil report. This is the contract
@@ -118,7 +118,7 @@ func TestScrapeMetrics_TransportFailureSurfacesError(t *testing.T) {
 	}
 }
 
-// TestScrapeMetrics_EmptyButReachableIsNotError (#37): a healthy
+// TestScrapeMetrics_EmptyButReachableIsNotError: a healthy
 // Prometheus that simply has no samples yet (fresh instance) returns
 // (nil,nil) per query. scrapeMetrics must treat that as a valid empty
 // report — NOT a failure — so a just-started instance doesn't trip the

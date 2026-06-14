@@ -12,19 +12,14 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// This file holds the NEUTRAL observability-toggle orchestration that
+// This file holds the neutral observability-toggle orchestration that
 // BOTH the Web UI handler (POST /api/instances/{name}/observability)
 // and the CLI verb (`dpm localnet observability enable|disable`) call.
-//
-// Before this extraction the docker-compose orchestration was
-// hand-rolled inside internal/ui/handlers (enableSidecar /
-// disableService) with no CLI counterpart — a load-bearing AGENTS.md
-// parity violation (#38/#65/#80). The logic is pure orchestration
-// (materialize overlay → docker compose up/stop+rm → discover host
-// port), so it belongs here in the neutral package; the two surfaces
-// are thin wrappers that resolve the instance, hold the per-instance
-// lock, and translate the typed result into an HTTP envelope / CLI
-// text respectively.
+// The logic is pure orchestration (materialize overlay → docker
+// compose up/stop+rm → discover host port), so it lives in the neutral
+// package; the two surfaces are thin wrappers that resolve the
+// instance, hold the per-instance lock, and translate the typed result
+// into an HTTP envelope / CLI text respectively.
 
 // ObservabilityState reports which observability sidecars are currently
 // running for an instance, derived from the persisted host-port map: a
@@ -163,7 +158,7 @@ func SetObservability(ctx context.Context, state *registry.State, wantProm, want
 	}
 
 	// Keep the persisted Profiles in sync so a later down → up re-up
-	// (#41) re-enables exactly the components that are on NOW. We map
+	// re-enables exactly the components that are on NOW. We map
 	// the two booleans to the per-component profile names.
 	state.Profiles = syncObservabilityProfiles(state.Profiles, wantProm, wantGraf)
 

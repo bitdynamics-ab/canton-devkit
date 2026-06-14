@@ -918,7 +918,7 @@ func handleRecreateInstance(hub *stream.Hub) http.HandlerFunc {
 		// don't race the goroutine reading `prior` after the HTTP
 		// response has already returned.
 		recordedVersion := prior.SpliceVersion
-		// Prefer the authoritative persisted profile set (#41); fall
+		// Prefer the authoritative persisted profile set; fall
 		// back to sniffing the compose overlay filenames for instances
 		// created before the Profiles field existed.
 		recordedProfiles := prior.Profiles

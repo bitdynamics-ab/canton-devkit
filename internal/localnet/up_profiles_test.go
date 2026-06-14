@@ -75,7 +75,7 @@ func TestValidateProfiles(t *testing.T) {
 	}
 }
 
-// TestRunUp_RejectsUnknownProfile (#42): a typo'd profile must fail
+// TestRunUp_RejectsUnknownProfile: a typo'd profile must fail
 // RunUp with ExitUserError BEFORE any docker work — mirroring the Web
 // UI's 400 guard so `dpm localnet up --profile observabilty` can't
 // silently produce a metric-less instance.
@@ -111,7 +111,7 @@ func TestRunUp_RejectsUnknownProfile(t *testing.T) {
 	}
 }
 
-// TestRunUp_PersistsProfiles (#41): the resolved profile set is written
+// TestRunUp_PersistsProfiles: the resolved profile set is written
 // into state.json so a later re-up can re-enable it without --profile.
 func TestRunUp_PersistsProfiles(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
@@ -149,7 +149,7 @@ func TestRunUp_PersistsProfiles(t *testing.T) {
 	}
 }
 
-// TestRunUp_InheritsProfilesOnReup (#41): when the caller passes NO
+// TestRunUp_InheritsProfilesOnReup: when the caller passes NO
 // profiles but a prior up recorded some, RunUp re-enables the stored
 // set — the down → up survival contract. This is the regression test
 // for "observability vanishes on restart".
@@ -206,7 +206,7 @@ func TestRunUp_InheritsProfilesOnReup(t *testing.T) {
 	}
 }
 
-// TestRunUp_ExplicitProfilesOverrideStored (#41): an explicit --profile
+// TestRunUp_ExplicitProfilesOverrideStored: an explicit --profile
 // on re-up REPLACES the stored set (doesn't merge), so a user can
 // deliberately drop observability.
 func TestRunUp_ExplicitProfilesOverrideStored(t *testing.T) {

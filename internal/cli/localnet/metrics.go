@@ -195,7 +195,7 @@ const grafanaDashboardUID = "canton-localnet-v1"
 // internal/metricsq so CLI + handler share one canonical map (no
 // copy-paste drift).
 //
-// Error model (#37): a per-query failure where Prometheus answered
+// Error model: a per-query failure where Prometheus answered
 // but the metric simply has no samples yet (promQuery returns
 // (nil, nil)) must NOT fail the whole call — a fresh instance
 // legitimately has empty headlines. But a TRANSPORT failure
