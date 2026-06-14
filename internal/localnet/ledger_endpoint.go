@@ -74,7 +74,7 @@ func ResolveLedgerEndpoint(instance, role string) (LedgerEndpoint, error) {
 	port, ok := state.Ports[portKey]
 	if !ok || port == 0 {
 		// Same failure shape as the Web UI's PARTICIPANT_PORT_NOT_RECORDED:
-		// the instance pre-dates port capture (BIT-190) or this Splice
+		// the instance pre-dates port capture or this Splice
 		// version doesn't expose the role. Point at the same remedy.
 		return LedgerEndpoint{}, fmt.Errorf(
 			"instance %q has no recorded participant ledger port for role %q — "+

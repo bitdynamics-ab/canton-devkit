@@ -17,12 +17,12 @@ import (
 )
 
 // Explorer happy-path coverage for the Web UI transactions handler
-// (finding #28: the only existing tests stopped at the pre-gRPC
+// (the only existing tests stopped at the pre-gRPC
 // validation branches). We run a real in-process gRPC participant on
 // a loopback TCP port — the handler dials `localhost:<port>` exactly
 // like production — so the newest-N ring buffer, the bounded scan
-// window, and the create/archive event projection (the subjects of
-// finding #22 / #26) are exercised end to end without a live Canton.
+// window, and the create/archive event projection are exercised
+// end to end without a live Canton.
 
 // fakeParticipant implements just enough of the Ledger API v2 surface
 // for the transactions handler: GetLedgerEnd + GetUpdates
@@ -156,7 +156,7 @@ func TestTransactions_HappyPath_NewestFirst(t *testing.T) {
 	if got["ledger_end"].(float64) != 50 {
 		t.Errorf("ledger_end = %v, want 50", got["ledger_end"])
 	}
-	// scanned_from must be a recent floor, NOT 0 (finding #22). With
+	// scanned_from must be a recent floor, NOT 0. With
 	// end=50 < window span, it clamps to 0 here — but the key must be
 	// present so the client knows the window.
 	if _, ok := got["scanned_from"]; !ok {
@@ -198,7 +198,7 @@ func TestTransactions_HappyPath_NewestFirst(t *testing.T) {
 }
 
 // TestTransactions_HappyPath_NewestNWhenOverLimit pins the newest-N
-// ring semantics (the core of finding #22): when the participant has
+// ring semantics: when the participant has
 // more transactions than `limit`, the handler returns the NEWEST
 // `limit`, not the oldest — even though the stream arrives ascending.
 func TestTransactions_HappyPath_NewestNWhenOverLimit(t *testing.T) {
@@ -240,7 +240,7 @@ func TestTransactions_HappyPath_NewestNWhenOverLimit(t *testing.T) {
 }
 
 // TestTransactions_WindowFlooredAtRecentOffset is the direct
-// regression for finding #22: on a long-lived ledger the scan must
+// regression: on a long-lived ledger the scan must
 // start at a RECENT offset (end - window span), not 0. Before the
 // fix, BeginExclusive was hard-coded to 0, so a busy LocalNet would
 // process only the oldest streamCap updates and label ancient

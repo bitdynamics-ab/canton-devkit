@@ -106,7 +106,7 @@ func TestHashSources_IgnoresGeneratedDir(t *testing.T) {
 }
 
 // TestIsWatchedSource pins the extension set so a future edit can't
-// silently drop yaml (the #58 regression) or daml.
+// silently drop yaml or daml.
 func TestIsWatchedSource(t *testing.T) {
 	cases := map[string]bool{
 		"Main.daml":     true,

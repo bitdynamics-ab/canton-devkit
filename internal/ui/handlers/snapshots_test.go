@@ -232,7 +232,7 @@ func seedSnapshotState(t *testing.T, name string, status registry.Status) {
 }
 
 // TestSnapshot_RunningInstanceSetsWarningHeader is the CLI↔UI parity
-// regression for finding #12. RunSnapshot prints a consistency caveat
+// regression. RunSnapshot prints a consistency caveat
 // to stderr for a running instance, which the HTTP path discards; the
 // handler must instead echo it in an X-Snapshot-Warning header so the
 // Web UI can surface the same warning. We swap in a docker-free

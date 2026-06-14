@@ -82,7 +82,7 @@ func TestFetchInstallsAndVerifiesContent(t *testing.T) {
 
 	// First pass: empty wantContentSHA now means trust-on-first-use —
 	// downloadAndExtract extracts and RETURNS the computed hash rather
-	// than refusing. (Previously this refused, which is the #68 bug.)
+	// than refusing. (Previously this refused.)
 	scratch := t.TempDir()
 	wantContent, err := downloadAndExtract(context.Background(), srv.URL, "", 1<<20, scratch)
 	if err != nil {
@@ -157,7 +157,7 @@ func TestDownloadAndExtractRejectsContentMismatch(t *testing.T) {
 	}
 }
 
-// TestDownloadAndExtractTOFUOnEmptyContentSHA pins the #68 fix: an empty
+// TestDownloadAndExtractTOFUOnEmptyContentSHA pins the fix: an empty
 // wantContentSHA (uncurated tag) is trust-on-first-use — the tree is
 // extracted and the computed hash returned, NOT refused. Refusing here
 // is what made `--allow-uncurated` fail end to end at StepFetchSplice.
@@ -424,7 +424,7 @@ func TestFetchHandlesConcurrentRenameRace(t *testing.T) {
 	_ = tarball
 }
 
-// TestProjectDirIncludesCommit pins the #70 cache-key change: the cache
+// TestProjectDirIncludesCommit pins the cache-key change: the cache
 // directory folds in the short commit so a mutable-stream tag re-pinned
 // to a new commit lands in a DIFFERENT directory (forcing a re-fetch)
 // rather than silently reusing the stale tree.
@@ -444,7 +444,7 @@ func TestProjectDirIncludesCommit(t *testing.T) {
 	}
 }
 
-// TestFetchRejectsTamperedCacheMarker pins the #70 re-verification: a
+// TestFetchRejectsTamperedCacheMarker pins the re-verification: a
 // cache hit whose recorded ContentSHA marker no longer matches the
 // catalogue (a re-pin to the same commit, or local tampering) must be
 // dropped and re-fetched, not blindly trusted.
@@ -491,7 +491,7 @@ func TestFetchRejectsTamperedCacheMarker(t *testing.T) {
 	}
 }
 
-// TestResolveUpstreamThenFetch_RecordsTOFU is the #68 end-to-end:
+// TestResolveUpstreamThenFetch_RecordsTOFU is the end-to-end:
 // ResolveUpstream synthesises an uncurated Version with an empty
 // ContentSHA; Fetch must extract it (trust-on-first-use), record the
 // computed hash into resolved-versions.json, and a second Fetch must

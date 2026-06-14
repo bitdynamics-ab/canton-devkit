@@ -202,7 +202,7 @@ func TestComposeContext_UsesOverlayFile(t *testing.T) {
 	}
 }
 
-// TestComposeContext_UncuratedInstanceResolves is the #68 operability
+// TestComposeContext_UncuratedInstanceResolves is the operability
 // regression: an instance brought up with --allow-uncurated has a
 // splice_version tag that ISN'T in the catalogue. composeContext must
 // still reconstruct its env-file list (so down / logs / restart / clean

@@ -385,7 +385,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	//
 	// We also stash the prior run's recorded image digests so the
 	// post-up capture can WARN if a republished ghcr tag changed what
-	// runs (#74). Only meaningful when the SAME version is being
+	// runs. Only meaningful when the SAME version is being
 	// brought back up — a version change legitimately swaps images, so
 	// we skip the comparison in that case.
 	var priorPorts map[string]int
@@ -589,7 +589,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	// 8b. Capture the content digests of the images that actually ran
 	// and persist them. The catalogue pins the source tree but ghcr
 	// image tags are mutable; recording digests lets a later up/restart
-	// detect a republished tag (#74). Best-effort — a capture failure
+	// detect a republished tag. Best-effort — a capture failure
 	// just skips drift detection, never fails the bring-up. If the same
 	// version was up before with recorded digests, warn on any change.
 	if digests := CaptureImageDigests(ctx, state.ComposeProject); len(digests) > 0 {

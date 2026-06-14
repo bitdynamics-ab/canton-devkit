@@ -9,7 +9,7 @@ import (
 )
 
 // TestHostCheck_RejectsRebindingHost is the DNS-rebinding regression
-// pin (#64). It models the attack precisely: the victim's browser
+// pin. It models the attack precisely: the victim's browser
 // dials the loopback server (the connection terminates on 127.0.0.1)
 // but — because the attacker rebound evil.example.com's A record to
 // 127.0.0.1 — sends Origin AND Host as evil.example.com:7777.

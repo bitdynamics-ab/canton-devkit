@@ -207,7 +207,7 @@ func TestCreate_DuplicateNameReturns409(t *testing.T) {
 	waitJobsDrain(t, time.Second)
 }
 
-// TestCreate_UncuratedRunsPreflightGate is the #73 UI-parity
+// TestCreate_UncuratedRunsPreflightGate is the UI-parity
 // regression: an uncurated tag with allow_uncurated must STILL pass
 // through the synchronous preflight gate (with the Major-aware memory
 // floor) before the 202 — previously the uncurated path skipped the

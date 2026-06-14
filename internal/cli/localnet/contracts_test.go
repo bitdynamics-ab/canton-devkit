@@ -191,7 +191,7 @@ func TestBuildUpdateFormat_HasACSDeltaShape(t *testing.T) {
 }
 
 // TestResolveOffsetWindow pins the --from/--to window semantics.
-// Key fixes (finding #27): the default window is a generous fixed
+// Key fixes: the default window is a generous fixed
 // span DECOUPLED from --limit (so filtered queries find sparse
 // matches), and --from is a real offset gated by `Changed` — `--from
 // 0` reads from genesis instead of being a "use --limit" sentinel.

@@ -25,7 +25,7 @@ func hubServingMux(t *testing.T) (*httptest.Server, *stream.Hub) {
 	return srv, hub
 }
 
-// TestInstanceEvents_RejectsCrossOrigin is the #66 regression pin: a
+// TestInstanceEvents_RejectsCrossOrigin is the regression pin: a
 // cross-origin EventSource open against the per-instance progress
 // stream must be rejected with 403, mirroring the global /events
 // handler. Before the fix this stream had NO Origin check, so a tab on

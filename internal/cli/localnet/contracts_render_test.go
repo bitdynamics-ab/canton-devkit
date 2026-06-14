@@ -43,8 +43,8 @@ func feedUpdates(updates ...*lapiv2.GetUpdatesResponse) <-chan ledger.StreamItem
 	return ch
 }
 
-// TestRenderUpdateStream_PrintsPerEventDetail is the regression for
-// finding #26: `contracts watch` must print the create/archive events
+// TestRenderUpdateStream_PrintsPerEventDetail pins that
+// `contracts watch` must print the create/archive events
 // it streams (kind, template, contract id), not just the event COUNT.
 func TestRenderUpdateStream_PrintsPerEventDetail(t *testing.T) {
 	var out bytes.Buffer
@@ -90,8 +90,8 @@ func TestRenderUpdateStream_JSONIncludesEvents(t *testing.T) {
 	}
 }
 
-// TestRenderUpdateList_NewestFirstAndScannedWindow is the regression
-// for finding #27: `tx ls` must return the NEWEST `limit` rows (the
+// TestRenderUpdateList_NewestFirstAndScannedWindow pins that
+// `tx ls` must return the NEWEST `limit` rows (the
 // stream is ascending, so a naive first-N would return the oldest),
 // and it must print the scanned offset window so a filtered query that
 // finds nothing isn't mistaken for "no such transactions".

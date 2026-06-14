@@ -28,7 +28,7 @@ type fakeArchiver struct {
 	listErr error
 	// labels records the (project, suffix) RestoreVolume was asked to
 	// stamp, keyed by volume name — so tests can assert the Compose
-	// labels are re-applied on restore (finding #10).
+	// labels are re-applied on restore.
 	labels map[string]restoreLabels
 	// volStorageBytes / volStorageErr drive
 	// VolumeStorageAvailableBytes; zero/nil means "report a large,
@@ -53,7 +53,7 @@ func (f *fakeArchiver) ListVolumes(_ context.Context, composeProject string) ([]
 		// Mirror production's label filter: ListVolumes selects on
 		// com.docker.compose.project. If a volume has recorded labels
 		// (i.e. it was created via RestoreVolume), honor them so the
-		// finding-#10 round-trip (snapshot→restore→snapshot) is
+		// round-trip (snapshot→restore→snapshot) is
 		// faithful — a restored volume missing the project label must
 		// NOT appear here. Volumes with no recorded labels (seeded
 		// directly into the map to model an already-up instance) are
@@ -817,7 +817,7 @@ func TestSnapshot_NoWarnWhenStopped(t *testing.T) {
 	}
 }
 
-// TestRestore_ReappliesComposeLabels is the regression for finding #10:
+// TestRestore_ReappliesComposeLabels is the regression:
 // restored volumes must carry the com.docker.compose.project /
 // com.docker.compose.volume labels so ListVolumes (which filters on the
 // project label) can find them again. Without the labels every later
@@ -865,7 +865,7 @@ func TestRestore_ReappliesComposeLabels(t *testing.T) {
 }
 
 // TestSnapshot_RestoreSnapshot_SecondCaptureKeepsVolumes is the
-// round-trip regression for finding #10. The promised workflow is
+// round-trip regression. The promised workflow is
 // snapshot -> restore -> work -> snapshot again. Before the fix the
 // SECOND snapshot found zero volumes (restored volumes lacked the
 // project label ListVolumes filters on) and silently wrote an empty
@@ -909,8 +909,8 @@ func TestSnapshot_RestoreSnapshot_SecondCaptureKeepsVolumes(t *testing.T) {
 	}
 }
 
-// TestSnapshot_RefusesEmptyVolumeList is the second half of finding
-// #10: an empty volume list must be a loud refusal, not a silent
+// TestSnapshot_RefusesEmptyVolumeList pins that
+// an empty volume list must be a loud refusal, not a silent
 // 0-volume success archive.
 func TestSnapshot_RefusesEmptyVolumeList(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
@@ -934,7 +934,7 @@ func TestSnapshot_RefusesEmptyVolumeList(t *testing.T) {
 }
 
 // TestRestore_RefusesWhenDockerStorageTooSmall is the regression for
-// finding #13: the disk preflight must measure DOCKER's volume storage
+// the disk preflight must measure DOCKER's volume storage
 // (VolumeStorageAvailableBytes), not the host filesystem holding the
 // archive. We give the archiver a tiny Docker-storage figure; the
 // restore must refuse even though the host temp dir (where the archive
@@ -968,7 +968,7 @@ func TestRestore_RefusesWhenDockerStorageTooSmall(t *testing.T) {
 }
 
 // TestRestore_DockerStorageProbeFailureFallsBackToHost asserts the
-// graceful degradation path for finding #13: when the Docker probe
+// graceful degradation path: when the Docker probe
 // errors (old docker, missing image), the preflight falls back to the
 // host filesystem rather than blocking restore. With a huge host fs the
 // restore must still succeed.
@@ -993,8 +993,8 @@ func TestRestore_DockerStorageProbeFailureFallsBackToHost(t *testing.T) {
 	}
 }
 
-// TestRestore_ReplacesStaleVolumeContents is the regression for finding
-// #11. Restore must be a true REPLACE, not a tar-merge onto stale
+// TestRestore_ReplacesStaleVolumeContents is the regression.
+// Restore must be a true REPLACE, not a tar-merge onto stale
 // contents. The fake's RestoreVolume overwrites the body (mirroring the
 // production `find -delete && tar xf`), so a leftover key from a prior
 // restore must NOT survive into the new body.
@@ -1026,7 +1026,7 @@ func TestRestore_ReplacesStaleVolumeContents(t *testing.T) {
 }
 
 // TestVolumeSuffix unit-tests the Compose-volume-label derivation used
-// when re-stamping restored volumes (finding #10).
+// when re-stamping restored volumes.
 func TestVolumeSuffix(t *testing.T) {
 	cases := []struct{ project, volume, want string }{
 		{"canton-demo", "canton-demo_postgres", "postgres"},
@@ -1043,7 +1043,7 @@ func TestVolumeSuffix(t *testing.T) {
 }
 
 // TestRunningSnapshotWarning pins the shared running-instance caveat
-// wording (finding #12). Both surfaces consume this: the CLI prints it
+// wording. Both surfaces consume this: the CLI prints it
 // to stderr, the Web UI handler echoes it in X-Snapshot-Warning. The
 // instance name must appear so the `pause` hint is copy-pasteable.
 func TestRunningSnapshotWarning(t *testing.T) {
@@ -1056,7 +1056,7 @@ func TestRunningSnapshotWarning(t *testing.T) {
 	}
 }
 
-// TestParseDfAvailableKB covers the df parser feeding finding #13's
+// TestParseDfAvailableKB covers the df parser feeding the
 // Docker-storage probe.
 func TestParseDfAvailableKB(t *testing.T) {
 	const out = "Filesystem           1024-blocks      Used Available Capacity Mounted on\n" +

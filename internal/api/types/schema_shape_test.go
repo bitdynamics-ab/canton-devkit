@@ -37,7 +37,7 @@ import (
 //     bootstrap handshake forces stale frontends to reload.
 //
 // The golden is the human checkpoint: regenerating it is a deliberate
-// one-line edit a reviewer sees in the diff, not something that
+// one-line edit visible in the diff, not something that
 // happens by accident.
 func TestSchemaShape_GoldenPinsFieldLevelShape(t *testing.T) {
 	got := schemaShape(schemaShapeRoots())

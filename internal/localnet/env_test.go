@@ -119,7 +119,7 @@ func TestBuildEnvExport_NoScanUIWhenPortMissing(t *testing.T) {
 	}
 }
 
-// TestBuildEnvExport_PartyIDsDistinctFromUser pins the #17 fix: party
+// TestBuildEnvExport_PartyIDsDistinctFromUser pins the party-id fix: party
 // ids come from state.Parties (real on-ledger ids), NOT from the
 // credential User (a ledger-api user name). Conflating the two is the
 // defect the old UI partiesFromCredentials shipped.

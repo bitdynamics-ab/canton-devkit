@@ -69,7 +69,7 @@ export function BackupRestore({ instanceName }: Props) {
   }, [instanceName]);
 
   async function onDownload() {
-    // TODO(#issue): UI parity — when the instance is RUNNING the
+    // TODO: UI parity — when the instance is RUNNING the
     // backend now emits an X-Snapshot-Warning header (shared wording
     // with the CLI's stderr caveat, snapshot.RunningSnapshotWarning)
     // because a live snapshot is only crash-consistent. downloadSnapshot

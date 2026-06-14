@@ -135,7 +135,7 @@ func TestLatestAliasIsInSupported(t *testing.T) {
 	}
 }
 
-// TestMinMemoryFor_UncuratedInheritsMajorFloor is the #73 regression:
+// TestMinMemoryFor_UncuratedInheritsMajorFloor is the regression:
 // an uncurated Version (no MinMemoryBytes of its own) must inherit the
 // STRICTEST catalogued floor for its Major rather than the global 4 GiB
 // default. Splice 0.6.x's resource profile doesn't change just because

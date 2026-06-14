@@ -55,7 +55,7 @@ func dialFakeUserMgmt(t *testing.T, parties []string) *ledger.Client {
 	return client
 }
 
-// TestResolveDefaultParties covers the parity helper (finding #21):
+// TestResolveDefaultParties covers the parity helper:
 // no --party projects through the JWT's resolved parties; an explicit
 // --party (or --template) is honoured verbatim; and an empty/failed
 // resolution falls back to the wildcard so admin tokens still work.

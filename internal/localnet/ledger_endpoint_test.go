@@ -49,7 +49,7 @@ func writeAuthEnv(t *testing.T, projectDir string) {
 }
 
 // TestResolveLedgerEndpoint_CapturedCreds is the primary happy path
-// (finding #21): with --endpoint omitted, the CLI must resolve the
+// with --endpoint omitted, the CLI must resolve the
 // participant ledger port AND the per-role JWT from the registry —
 // exactly what the Web UI already does — so the shipped skill
 // examples (`dpm localnet contracts watch --name dev`) work.
