@@ -33,6 +33,18 @@ When the work spans both:
 
 **When you can't reach parity in the same PR**, file a follow-up ticket and add a `// TODO(#issue): CLI parity — <description>` comment at the divergence point so reviewers can see it. Never close out a feature as "done" while one surface is silently missing it.
 
+### Docker Compose teardown must be `-p`-only (load-bearing)
+
+**Teardown verbs (`docker compose down` / `stop` without an explicit service argument) MUST tear down by Docker project label — `-p <project>` — and MUST NOT pass `-f` compose files, `--env-file`, or `--profile`.**
+
+Every Splice LocalNet service is profile-gated (`profiles: [sv, app-provider, app-user, multi-sync, ...]`). When `-f` compose files are present, `docker compose down`/`stop` apply **profile filtering** and act only on non-profiled + explicitly-enabled-profile services — for Splice that is the **empty set**. The result is a silent no-op (exit 0) that leaves every container running and strands ledger state. This is documented compose behavior (https://docs.docker.com/compose/how-tos/profiles/#stop-application-and-services-with-specific-profiles), not a version bug, and it reproduces on every supported Compose v2.x/v5.x. Tearing down by `-p` label only is profile-agnostic and removes the whole project.
+
+Rules:
+
+- **Teardown (`down`/`clean`/Web-UI Stop):** use the `-p`-only path (`ComposeRunner.Stop` / `ForceStop`). Do not route teardown through `composeBase()` (which appends `-f`/`--env-file`/`--profile`). The `TestStopTeardownIsProjectLabelOnly` test pins this — do not add `-f` back.
+- **Service-model subcommands (`restart`/`pause`/`unpause`/`ps`):** these genuinely need the `-f` model, so they MUST replay the enabled profile set via `composeProfiles(state)` (persisted as `state.Profiles` at `up` time, with an adapter fallback for pre-fix instances). Omitting `--profile` here targets zero services.
+- **Explicitly-targeted single-service actions** (e.g. `docker compose -p <project> stop <service>`): exempt — explicitly naming a service bypasses profile filtering per the compose docs.
+
 ### Testing Requirements
 
 - **All bug fixes must include regression tests**

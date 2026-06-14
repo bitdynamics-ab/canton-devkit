@@ -119,6 +119,9 @@ func runPauseTransition(ctx context.Context, out, errw io.Writer, opts *PauseOpt
 			Env:          env,
 			WorkDir:      state.ProjectDir,
 			LogWriter:    out,
+			// Every Splice service is profile-gated; replay the enabled
+			// set or `pause`/`unpause` targets zero services.
+			Profiles: composeProfiles(state),
 		}
 	}
 

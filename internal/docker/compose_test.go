@@ -176,6 +176,57 @@ func TestDownArgvShape(t *testing.T) {
 	}, "Down")
 }
 
+// TestStopTeardownIsProjectLabelOnly pins that Stop() (and therefore
+// `localnet down` / `clean` / the Web UI Stop action that route through
+// it) tears down by Docker PROJECT LABEL only — it MUST NOT pass `-f`
+// compose files, `--env-file`, or `--profile`.
+//
+// Why this is load-bearing: every Splice LocalNet service is
+// profile-gated. When `-f` is present, `docker compose down` applies
+// profile filtering and removes only non-profiled / enabled-profile
+// services — for Splice that's the empty set, so down silently no-ops
+// (exit 0) and leaves every container running. The `-p`-only form reads
+// the running project from the engine by label and is profile-agnostic.
+// Re-adding `-f` here would resurrect that data-stranding bug. See
+// AGENTS.md "Docker Compose teardown must be `-p`-only".
+func TestStopTeardownIsProjectLabelOnly(t *testing.T) {
+	for _, removeVolumes := range []bool{false, true} {
+		rec := &recorder{}
+		c := runnerForWiring(t, rec)
+		_ = c.Stop(context.Background(), removeVolumes)
+
+		if len(rec.calls) != 1 {
+			t.Fatalf("removeVolumes=%v: expected 1 call, got %d", removeVolumes, len(rec.calls))
+		}
+		argv := argvOf(rec.calls[0])
+
+		for _, banned := range []string{"-f", "--env-file", "--profile"} {
+			if contains(argv, banned) {
+				t.Errorf("removeVolumes=%v: Stop argv must not contain %q (profile filtering would strand containers)\nfull argv: %v",
+					removeVolumes, banned, argv)
+			}
+		}
+		assertArgvContains(t, argv, []string{
+			"docker", "compose", "-p", "canton-test", "down", "--remove-orphans",
+		}, "Stop")
+		if removeVolumes && !contains(argv, "--volumes") {
+			t.Errorf("Stop(removeVolumes=true) argv missing --volumes\nfull argv: %v", argv)
+		}
+		if !removeVolumes && contains(argv, "--volumes") {
+			t.Errorf("Stop(removeVolumes=false) argv must not contain --volumes\nfull argv: %v", argv)
+		}
+	}
+}
+
+func contains(argv []string, want string) bool {
+	for _, a := range argv {
+		if a == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestRestartArgvShape(t *testing.T) {
 	rec := &recorder{}
 	c := runnerForWiring(t, rec)
