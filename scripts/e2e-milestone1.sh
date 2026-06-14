@@ -89,6 +89,37 @@ print_summary() {
     echo "  $r"
   done
   echo "═══════════════════════════════════════════════════════"
+  write_step_summary
+}
+
+# Emit a GitHub Actions job summary (markdown table) when running in CI.
+# No-op outside GitHub Actions so local/macOS runs are unaffected.
+write_step_summary() {
+  [ -n "${GITHUB_STEP_SUMMARY:-}" ] || return 0
+
+  {
+    echo "## E2E Milestone 1 Results"
+    echo ""
+    echo "**Passed:** ${PASS} &nbsp;&nbsp; **Failed:** ${FAIL} &nbsp;&nbsp; **Skipped:** ${SKIP}"
+    echo ""
+    echo "| Result | Test |"
+    echo "| :----: | :--- |"
+    for r in "${RESULTS[@]}"; do
+      # RESULTS entries look like:
+      #   "✓ PASS  <test>"
+      #   "✗ FAIL  <test>  — <reason>"
+      #   "- SKIP  <test>  — <reason>"
+      case "$r" in
+        "✓ PASS"*) icon="✅"; rest="${r#✓ PASS  }" ;;
+        "✗ FAIL"*) icon="❌"; rest="${r#✗ FAIL  }" ;;
+        "- SKIP"*) icon="⏭️"; rest="${r#- SKIP  }" ;;
+        *)         icon="";   rest="$r" ;;
+      esac
+      # Keep only the test id/name; drop any "  — reason" suffix.
+      test="${rest%%  — *}"
+      printf '| %s | %s |\n' "$icon" "$test"
+    done
+  } >> "$GITHUB_STEP_SUMMARY"
 }
 
 # ── Preflight ───────────────────────────────────────────────────────
