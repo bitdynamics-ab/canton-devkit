@@ -1148,7 +1148,7 @@ export interface TransactionsListResponse {
 }
 
 // TransactionFilters mirror the CLI `tx ls` flags now also accepted by
-// the transactions endpoint (#24): party / template are repeatable
+// the transactions endpoint: party / template are repeatable
 // (each is comma-joined onto one query param), from / to bound the
 // scanned offset window (from is exclusive, to inclusive). Omit a
 // field to leave it unset — the backend then projects through the

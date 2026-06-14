@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
 import { ExplorerScreen } from "./ExplorerScreen";
 
-// ExplorerScreen — transaction filters (#24) + tx replay (#20).
+// ExplorerScreen — transaction filters + tx replay.
 //
 // We drive the real screen with a routed fetch stub. The contracts
 // snapshot resolves so the Contracts/Transactions/Timeline toggle is

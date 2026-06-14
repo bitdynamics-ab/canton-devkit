@@ -9,10 +9,9 @@
 // shape (exercised choices, not just the ACS delta) and projects it
 // through the requested party set. Querying the SAME transaction as
 // different parties yields different event sets — that is the
-// per-party visibility projection the proposal commits to (#20). The
-// CLI's `dpm localnet tx replay --id <id>` is the mirror verb; both
-// build their wire rows from ledger.ProjectReplayEvents so they can
-// never drift.
+// per-party visibility projection. The CLI's `dpm localnet tx replay
+// --id <id>` is the mirror verb; both build their wire rows from
+// ledger.ProjectReplayEvents so they can never drift.
 package handlers
 
 import (

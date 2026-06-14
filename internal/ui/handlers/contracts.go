@@ -97,7 +97,7 @@ const (
 // `contracts ls --format json` via internal/api/types
 // (apitypes.ContractRow / ContractsListResponse), so the two surfaces
 // can never drift and TestSchemaShape_GoldenPinsFieldLevelShape pins
-// the field layout against frontend/src/api.ts (#23).
+// the field layout against frontend/src/api.ts.
 
 func handleContractsList(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
@@ -641,7 +641,7 @@ func projectStreamEvents(resp *lapiv2.GetUpdatesResponse, out func(streamEventFr
 
 // The contract-detail drawer payload (apitypes.ContractDetail /
 // ContractDetailResponse) is shared with the CLI and pinned by the
-// schema-shape golden (#23).
+// schema-shape golden.
 
 // handleContractDetail returns a deep view of one contract — the
 // CreatedEvent payload + the ArchivedEvent (if any) — using
@@ -799,7 +799,7 @@ func formatTemplateID(id *lapiv2.Identifier) string {
 // recordToMap converts a Daml-LF Record proto into a JSON-friendly
 // map[string]any. Delegates to the shared ledger.RecordToMap so the
 // Web UI ACS payload preview + contract drawer and the CLI
-// `contracts ls --format json` decode payloads identically (#24).
+// `contracts ls --format json` decode payloads identically.
 func recordToMap(r *lapiv2.Record) map[string]any {
 	return ledger.RecordToMap(r)
 }

@@ -435,7 +435,7 @@ export function ExplorerScreen() {
                   SSE delta stream + a 30s reconciliation timer. A
                   manual refresh re-pulls it immediately — there is no
                   time-range to pick (the dead Live/5m/1h/24h buttons
-                  were removed in #25/#78). */}
+                  were removed). */}
               <button
                 onClick={() => void refreshSnapshot(name, role, false)}
                 style={{
@@ -1072,7 +1072,7 @@ function DetailDrawer({ row }: { row: ContractRow | null }) {
 // UpdateService.GetUpdates. Each transaction row expands inline to
 // show its event tree and can be replayed as a per-party visibility
 // projection. The filter bar mirrors the CLI `tx ls --party /
-// --template / --from / --to` (#24): filters are applied server-side
+// --template / --from / --to`: filters are applied server-side
 // over the offset window, so a contract outside the row cap can still
 // be found by narrowing the query — not just hidden by a client-side
 // filter over an already-truncated snapshot.

@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TxReplayDrawer } from "./TxReplayDrawer";
 
-// TxReplayDrawer — the per-party visibility projection (#20).
+// TxReplayDrawer — the per-party visibility projection.
 //
 // Renders the LEDGER_EFFECTS event tree of one transaction projected
 // through a party set, and lets the user re-project through a

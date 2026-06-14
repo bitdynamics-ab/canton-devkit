@@ -9,9 +9,8 @@ import (
 // The party + template filter construction now lives in the neutral
 // internal/canton/ledger package so the CLI and the Web UI Explorer
 // handlers share one decoder and `--party`/`--template` behave
-// identically on both surfaces (CLI ↔ Web UI parity; #24). These thin
-// wrappers preserve the package-local names the CLI commands and tests
-// already call.
+// identically on both surfaces. These thin wrappers preserve the
+// package-local names the CLI commands and tests already call.
 
 // buildEventFormat — see ledger.BuildEventFormat.
 func buildEventFormat(parties, templates []string, verbose bool) *lapiv2.EventFormat {

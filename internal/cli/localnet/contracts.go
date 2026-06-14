@@ -20,7 +20,7 @@ import (
 // recordToMap decodes a Daml-LF Record into the JSON payload shape
 // `contracts ls --format json` emits. Delegates to the shared
 // ledger.RecordToMap so the CLI and Web UI decode payloads
-// identically (#24).
+// identically.
 func recordToMap(r *lapiv2.Record) map[string]any {
 	return ledger.RecordToMap(r)
 }
@@ -429,7 +429,7 @@ func buildTxReplay() *cobra.Command {
 // The per-event `tx replay` shape is shared with the Web UI replay
 // endpoint via apitypes.TxReplayEvent / TxReplayResponse, and the
 // projection itself is ledger.ProjectReplayEvents — so the two
-// surfaces can never drift on which fields a replay surfaces (#20/#23).
+// surfaces can never drift on which fields a replay surfaces.
 
 func renderTxReplay(out io.Writer, instance string, parties []string, format string, txn *lapiv2.Transaction) error {
 	summaries := ledger.ProjectReplayEvents(txn)
@@ -667,10 +667,9 @@ func resolveDefaultParties(
 // The per-contract row + list response shapes are shared with the Web
 // UI ACS handler via apitypes.ContractRow / ContractsListResponse, so
 // the two surfaces emit the same JSON and TestSchemaShape_GoldenPins…
-// keeps them aligned with frontend/src/api.ts (#23). `contracts ls
+// keeps them aligned with frontend/src/api.ts. `contracts ls
 // --format json` now also includes the decoded payload (the UI always
-// did) so the jq/CI use case the docstring advertises can read field
-// values, not just ids (#24).
+// did) so a jq/CI consumer can read field values, not just ids.
 
 func renderACSStream(
 	out io.Writer,

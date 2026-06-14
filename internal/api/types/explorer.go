@@ -6,13 +6,9 @@ package types
 // These are the single source of truth for BOTH the Web UI Explorer
 // handlers (internal/ui/handlers/contracts.go, transactions.go) and
 // the CLI `--format json` paths (internal/cli/localnet/contracts.go:
-// `contracts ls`, `tx ls`, `tx replay`). Before this package owned
-// the shapes the two surfaces each declared their own anonymous
-// map[string]any / unexported structs, the CLI comment falsely
-// claimed they mirrored each other, and TestSchemaShape_GoldenPins…
-// could not see either — so a field drift between the Go handler and
-// frontend/src/api.ts shipped with no CI signal (#23). Pinning the
-// shapes here closes that gap.
+// `contracts ls`, `tx ls`, `tx replay`). Pinning the shapes here lets
+// TestSchemaShape_GoldenPins… keep the Go handlers, the CLI JSON, and
+// frontend/src/api.ts from drifting with no CI signal.
 //
 // snake_case JSON tags throughout (matches the rest of this package
 // and frontend/src/api.ts). Fields not applicable to a row kind are

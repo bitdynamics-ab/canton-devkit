@@ -175,7 +175,7 @@ func identString(id *lapiv2.Identifier) string {
 // map[string]any, recursing into nested records and lists. Shared by
 // the Web UI Explorer (contract drawer + ACS payload preview) and the
 // CLI `contracts ls --format json` so both decode payloads
-// identically (#24). Best-effort: value kinds the decoder hasn't
+// identically. Best-effort: value kinds the decoder hasn't
 // enumerated fall back to their textual proto form rather than
 // panicking. Returns nil for a nil record.
 func RecordToMap(r *lapiv2.Record) map[string]any {

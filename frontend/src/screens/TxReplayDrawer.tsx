@@ -8,7 +8,7 @@ import {
 } from "../api";
 import { W, wMono } from "../tokens";
 
-// TxReplayDrawer — the per-party visibility projection (#20).
+// TxReplayDrawer — the per-party visibility projection.
 //
 // The Web UI counterpart of `dpm localnet tx replay --id <id>`. It
 // fetches one transaction with the LEDGER_EFFECTS shape (exercised

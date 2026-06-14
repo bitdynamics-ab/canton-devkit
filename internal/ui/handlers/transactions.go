@@ -57,7 +57,7 @@ func MountTransactions(mux *http.ServeMux) {
 // The transaction list row + event shapes are shared with the CLI
 // `tx ls --format json` via internal/api/types
 // (apitypes.TransactionRow / TransactionEvent / TransactionsListResponse),
-// so the two surfaces can never drift (#23).
+// so the two surfaces can never drift.
 
 func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
@@ -87,7 +87,7 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Filters — mirror the CLI `tx ls`'s --party / --template /
-	// --from / --to (#24). `party` / `template` are repeatable
+	// --from / --to. `party` / `template` are repeatable
 	// (?party=a&party=b) AND comma-splittable; `from` / `to` are
 	// inclusive/exclusive offset bounds. Validate them BEFORE any
 	// gRPC work so a bad value fails 400 rather than 502.
@@ -232,7 +232,7 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 		BeginExclusive: beginExclusive,
 		EndInclusive:   &endInc,
 		// Shared filter builder so ?party/?template behave exactly like
-		// the CLI's flags (#24). ACS_DELTA = the flat create/archive
+		// the CLI's flags. ACS_DELTA = the flat create/archive
 		// projection the table renders.
 		UpdateFormat: ledger.BuildUpdateFormat(effParties, reqTemplates, true,
 			lapiv2.TransactionShape_TRANSACTION_SHAPE_ACS_DELTA),

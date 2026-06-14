@@ -14,13 +14,9 @@ import (
 // Web UI handlers (contracts.go, transactions.go) need to translate a
 // party set + a list of "Module:Entity" / "pkg:Module:Entity"
 // template strings into the proto EventFormat / UpdateFormat shapes.
-// Previously the CLI owned a private copy in
-// internal/cli/localnet/ledger_filter.go while the UI hand-rolled the
-// FiltersByParty map inline with no template support at all — exactly
-// the per-surface duplication + capability asymmetry AGENTS.md's
-// parity rule warns against (#24). Hosting it here lets both surfaces
-// share one decoder so `--party`/`--template` behave identically and
-// can never drift.
+// Hosting it here lets the CLI and the UI share one decoder so
+// `--party`/`--template` behave identically and can never drift,
+// instead of each surface hand-rolling its own FiltersByParty map.
 
 // BuildTemplateFilters parses user-supplied template selectors into
 // the proto Filters shape. Accepts:

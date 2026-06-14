@@ -11,8 +11,8 @@ import (
 )
 
 // Coverage for the new Explorer parity surfaces:
-//   - GET .../transactions party/template/from/to filters (#24)
-//   - GET .../transactions/{update_id}/replay per-party projection (#20)
+//   - GET .../transactions party/template/from/to filters
+//   - GET .../transactions/{update_id}/replay per-party projection
 //
 // Both run against the in-process fakeParticipant from
 // explorer_happy_test.go so the filter the handler builds and the
@@ -21,7 +21,7 @@ import (
 // TestTransactions_FilterParamsBuildByPartyFilter pins that an
 // explicit ?party / ?template builds a FiltersByParty EventFormat with
 // the requested parties + a template cumulative filter — the parity
-// the CLI's `tx ls --party/--template` already had (#24). With an
+// the CLI's `tx ls --party/--template` already had. With an
 // explicit party the handler must NOT consult the JWT's party rights
 // (so the fake's empty rights don't matter).
 func TestTransactions_FilterParamsBuildByPartyFilter(t *testing.T) {
@@ -174,7 +174,7 @@ func replayUpdate(updateID string, offset int64) *lapiv2.GetUpdateResponse {
 // TestTxReplay_HappyPath drives the replay handler against the fake
 // and asserts the per-event projection (kind/node_id/choice), the
 // LEDGER_EFFECTS shape, and that an explicit ?party threads into the
-// EventFormat (#20).
+// EventFormat.
 func TestTxReplay_HappyPath(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	fake := &fakeParticipant{

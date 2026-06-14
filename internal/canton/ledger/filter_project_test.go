@@ -9,7 +9,7 @@ import (
 // TestBuildEventFormat_Wildcard pins that the flag-less default emits
 // a NON-NIL FiltersForAnyParty (the participant rejects an EventFormat
 // with both filter maps empty). The shared builder is consumed by both
-// the CLI and the Web UI Explorer (#24), so this invariant guards both.
+// the CLI and the Web UI Explorer, so this invariant guards both.
 func TestBuildEventFormat_Wildcard(t *testing.T) {
 	ef := BuildEventFormat(nil, nil, true)
 	if ef.GetFiltersForAnyParty() == nil {
@@ -94,7 +94,7 @@ func TestBuildUpdateFormat_Shape(t *testing.T) {
 // TestProjectReplayEvents pins the replay-specific projection: it
 // carries NodeID + the exercised choice detail that the flat
 // ProjectTransactionEvents omits, so the per-party `tx replay` tree
-// renders on both the CLI and Web UI from one decoder (#20).
+// renders on both the CLI and Web UI from one decoder.
 func TestProjectReplayEvents(t *testing.T) {
 	tx := &lapiv2.Transaction{
 		Events: []*lapiv2.Event{
@@ -135,7 +135,7 @@ func TestProjectReplayEvents(t *testing.T) {
 
 // TestRecordToMap pins the shared payload decoder both surfaces use so
 // `contracts ls --format json` and the UI drawer render field values
-// identically (#24).
+// identically.
 func TestRecordToMap(t *testing.T) {
 	rec := &lapiv2.Record{
 		Fields: []*lapiv2.RecordField{
