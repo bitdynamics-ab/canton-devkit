@@ -8,17 +8,16 @@ import (
 )
 
 // TestSpliceMemoryFloors_NeverBelowDockerGate pins the invariant that
-// internal/docker/threshold_parity_test.go's comment relies on but did
-// not enforce: the per-version splice memory floors are allowed to
-// REPLACE the literal docker.DefaultMinMemoryBytes in `up`/`doctor`/the
-// UI preflight handler ONLY because they can only RAISE the floor, never
-// lower it. If a catalogue edit ever set MinMemoryFor(v) below the
-// docker gate, the preflight surfaces would silently admit a host the
-// doctor gate would reject — defeating the parity the AST scan checks.
+// internal/docker/threshold_parity_test.go relies on: the per-version
+// splice memory floors may REPLACE the literal docker.DefaultMinMemoryBytes
+// in `up`/`doctor`/the UI preflight handler ONLY because they can only
+// RAISE the floor, never lower it. If a catalogue edit ever set
+// MinMemoryFor(v) below the docker gate, the preflight surfaces would
+// silently admit a host the doctor gate would reject.
 //
 // This lives in internal/localnet because it is the one package that
-// already imports both internal/splice and internal/docker (RunUp uses
-// both), so it can compare the two without adding a new import edge.
+// already imports both internal/splice and internal/docker, so it can
+// compare the two without adding a new import edge.
 func TestSpliceMemoryFloors_NeverBelowDockerGate(t *testing.T) {
 	if len(splice.SupportedVersions) == 0 {
 		t.Fatal("splice.SupportedVersions is empty — catalogue failed to load")

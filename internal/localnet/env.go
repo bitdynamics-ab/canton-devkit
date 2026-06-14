@@ -81,13 +81,11 @@ func BuildEnvExport(name string, includeJWT bool) (apitypes.EnvExport, error) {
 	out.Vars["CANTON_INSTANCE"] = name
 	out.Vars["CANTON_SPLICE_VERSION"] = state.SpliceVersion
 	// CANTON_AUTH_FILE points at the per-instance auth.json a user can
-	// load with `jq` (<DataDir>/auth.json). The path was emitted even
-	// though NOTHING ever wrote the file, so a script doing
-	// `jq < $CANTON_AUTH_FILE` hit ENOENT. writeAuthFile now
-	// materialises it (best-effort, 0600 — it carries the dev JWTs)
-	// whenever the data dir + credentials are present, so the path
-	// resolves for a healthy instance. The var is still always emitted
-	// (it documents the conventional location); the write is the fix.
+	// load with `jq` (<DataDir>/auth.json). writeAuthFile materialises
+	// it (best-effort, 0600 — it carries the dev JWTs) when the data dir
+	// and credentials are present, so the path resolves for a healthy
+	// instance. The var is always emitted (it documents the conventional
+	// location) regardless of whether the write succeeded.
 	authFile := filepath.Join(state.DataDir, "auth.json")
 	writeAuthFile(authFile, state.Credentials)
 	out.Vars["CANTON_AUTH_FILE"] = authFile
@@ -180,22 +178,17 @@ type authFileEntry struct {
 
 // writeAuthFile materialises auth.json (a 0600 JSON object keyed by
 // role, so a script can `jq -r '."app-provider".jwt' "$CANTON_AUTH_FILE"`)
-// next to the instance's data dir. This is what makes CANTON_AUTH_FILE
-// resolve — previously nothing wrote it.
+// next to the instance's data dir, making CANTON_AUTH_FILE resolve.
 //
-// Best-effort: it is a no-op when there are no credentials yet, the
-// parent data dir doesn't exist (a stale/half-removed instance — we
-// never MkdirAll one), or marshalling/writing fails. Callers always
-// emit the path regardless; a missing parent dir is an abnormal-instance
-// edge, not the common case this fixes. Safe to call on every env export
-// — both the CLI `env` command and the Web UI app-config handler do.
+// Best-effort: a no-op when there are no credentials, the parent data
+// dir doesn't exist (a stale instance — we never MkdirAll one), or
+// marshalling/writing fails. Safe to call on every env export.
 //
 // The write goes through a temp-file-in-same-dir + explicit Chmod(0600)
-// + Rename rather than os.WriteFile, mirroring registry.atomicWrite. This
-// is rerun on every export (not skipped when the file already exists) so
-// a pre-existing world-readable auth.json is re-tightened to 0600 — the
-// file carries dev JWTs — and the Chmod is umask-independent. The rename
-// is atomic, so a crash mid-write can never leave partial JSON behind.
+// + Rename (mirroring registry.atomicWrite): the rewrite runs on every
+// export so a pre-existing world-readable auth.json is re-tightened to
+// 0600 (umask-independent), and the atomic rename never leaves partial
+// JSON behind on a crash.
 func writeAuthFile(path string, creds map[string]registry.Credential) {
 	if len(creds) == 0 {
 		return

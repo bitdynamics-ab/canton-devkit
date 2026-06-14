@@ -82,7 +82,7 @@ func TestBuildEnvExport_IncludesParticipantPorts(t *testing.T) {
 	}
 }
 
-// TestBuildEnvExport_AuthFileWrittenAndExported pins the #14 fix:
+// TestBuildEnvExport_AuthFileWrittenAndExported pins that
 // CANTON_AUTH_FILE must point at a file that actually exists. The
 // builder writes <DataDir>/auth.json (0600, real per-role creds) and
 // emits the var; a script doing `jq < $CANTON_AUTH_FILE` then works.
@@ -157,12 +157,9 @@ func TestBuildEnvExport_AuthFileNotWrittenWhenDirMissing(t *testing.T) {
 
 // TestBuildEnvExport_AuthFileRewriteTightensPerms pins that an export
 // rewrites auth.json atomically every call and re-tightens a
-// pre-existing world-readable file. The old writeAuthFile only set 0600
-// on CREATE and early-returned when the file already existed, so a
-// loose-perm auth.json (carrying dev JWTs) was left readable; it also
-// truncated in place, risking partial JSON on a crash. After rewriting
-// over a pre-seeded 0644 file the perms must be 0600 and the body must
-// still be valid JSON.
+// pre-existing world-readable file (it carries dev JWTs). After
+// rewriting over a pre-seeded 0644 file the perms must be 0600 and the
+// body must still be valid JSON.
 func TestBuildEnvExport_AuthFileRewriteTightensPerms(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	dataDir := t.TempDir()
