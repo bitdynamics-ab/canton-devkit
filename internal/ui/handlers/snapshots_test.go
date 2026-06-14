@@ -200,17 +200,16 @@ func seedSnapshotState(t *testing.T, name string, status registry.Status) {
 	}
 }
 
-// TestSnapshot_RunningInstanceSetsWarningHeader is the CLI↔UI parity
-// regression. RunSnapshot prints a consistency caveat
-// to stderr for a running instance, which the HTTP path discards; the
-// handler must instead echo it in an X-Snapshot-Warning header so the
-// Web UI can surface the same warning. We swap in a docker-free
-// archiver so the capture succeeds without a daemon.
-func TestSnapshot_RunningInstanceSetsWarningHeader(t *testing.T) {
+// TestSnapshot_RunningInstanceIsConsistentNoWarning: the UI snapshot of
+// a running instance succeeds and carries NO consistency warning header —
+// RunSnapshot quiesces the node containers for the dump (same as the CLI),
+// so the capture is application-consistent and there is nothing to warn
+// about. (Was the X-Snapshot-Warning parity test back when the dump ran
+// live.)
+func TestSnapshot_RunningInstanceIsConsistentNoWarning(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
-	restore := snapshot.SetArchiverForTest(&snapshot.FakeArchiver{
-		Dump: []byte("-- pg_dumpall\n"), DBCount: 3,
-	})
+	fa := &snapshot.FakeArchiver{Dump: []byte("-- pg_dumpall\n"), DBCount: 3}
+	restore := snapshot.SetArchiverForTest(fa)
 	defer restore()
 	seedSnapshotState(t, "run", registry.StatusRunning)
 
@@ -225,17 +224,11 @@ func TestSnapshot_RunningInstanceSetsWarningHeader(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("want 200, got %d; body=%s", resp.StatusCode, body)
 	}
-	warn := resp.Header.Get("X-Snapshot-Warning")
-	if warn == "" {
-		t.Fatal("running-instance snapshot must set X-Snapshot-Warning (CLI↔UI parity)")
+	if warn := resp.Header.Get("X-Snapshot-Warning"); warn != "" {
+		t.Errorf("a quiesced snapshot must NOT set X-Snapshot-Warning, got %q", warn)
 	}
-	// The wording is the shared helper's — assert it matches so a drift
-	// between the CLI stderr and the UI header is caught.
-	if want := snapshot.RunningSnapshotWarning("run"); warn != want {
-		t.Errorf("X-Snapshot-Warning = %q, want shared wording %q", warn, want)
-	}
-	if !strings.Contains(warn, "pg_dumpall") {
-		t.Errorf("warning should mention the dump mechanism, got %q", warn)
+	if !fa.Quiesced || !fa.Resumed {
+		t.Errorf("UI snapshot must quiesce+resume writers: quiesced=%v resumed=%v", fa.Quiesced, fa.Resumed)
 	}
 }
 

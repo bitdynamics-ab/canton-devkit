@@ -33,10 +33,12 @@ loading anything.
 
 The instance MUST be running — pg_dumpall reads from a live Postgres.
 
-Consistency caveat: pg_dumpall is consistent per-database but not atomic
-across the node's several databases, so a snapshot of a busy instance
-can catch cross-database skew. Quiesce activity for a fully-consistent
-capture; the command warns when it runs.`,
+For a consistent capture, the node containers are paused (docker pause)
+for the duration of the dump and resumed afterwards, so no component
+writes to the database while the backup runs — Canton's documented rule
+for a single-step whole-cluster backup. With every database frozen at
+one instant, the cross-database ordering invariant holds automatically,
+so the snapshot is application-consistent, not merely crash-consistent.`,
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,

@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
@@ -97,6 +98,13 @@ type pgArchiver interface {
 	// is up — a guard so restore never starts a second writer against a
 	// volume an instance is still using.
 	AnyContainerRunning(ctx context.Context, composeProject string) (bool, error)
+	// Quiesce pauses every container of the project EXCEPT pgContainer so
+	// no node writes to Postgres while the dump runs — Canton's rule for a
+	// single-step whole-cluster backup ("make sure no component writes to
+	// the database while the backup is in progress"). It returns an
+	// idempotent resume func that unpauses them; callers defer it so the
+	// instance is never left paused on an error path.
+	Quiesce(ctx context.Context, composeProject, pgContainer string) (resume func(), err error)
 	// DumpAll streams `pg_dumpall --clean --if-exists` to w.
 	DumpAll(ctx context.Context, container, user string, w io.Writer) error
 	// CountDatabases reports the number of application databases (for
@@ -132,11 +140,19 @@ func SetArchiverForTest(a pgArchiver) (restore func()) {
 type FakeArchiver struct {
 	Image, User    string
 	Dump           []byte // DumpAll writes this (defaults to a stub dump)
+	DumpErr        error  // if set, DumpAll returns it
 	DBCount        int
 	Running        bool   // AnyContainerRunning result
 	RestoreErr     error  // if set, RestoreInto returns it
 	Restored       []byte // captures the bytes RestoreInto received
 	RestoredVolume string // captures the restore target volume
+	Quiesced       bool   // set true when Quiesce was called
+	Resumed        bool   // set true when the resume func ran
+}
+
+func (f *FakeArchiver) Quiesce(context.Context, string, string) (func(), error) {
+	f.Quiesced = true
+	return func() { f.Resumed = true }, nil
 }
 
 func (f *FakeArchiver) ResolvePostgres(_ context.Context, project string) (pgInfo, error) {
@@ -157,6 +173,9 @@ func (f *FakeArchiver) AnyContainerRunning(context.Context, string) (bool, error
 }
 
 func (f *FakeArchiver) DumpAll(_ context.Context, _, _ string, w io.Writer) error {
+	if f.DumpErr != nil {
+		return f.DumpErr
+	}
 	body := f.Dump
 	if body == nil {
 		body = []byte("-- pg_dumpall\n")
@@ -226,17 +245,26 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 		return localnet.ExitRuntimeFailure
 	}
 
-	// Consistency caveat — pg_dumpall is MVCC-consistent per database
-	// but not atomic across the node's several databases, so a snapshot
-	// of a busy instance can catch cross-database skew. Shared wording
-	// with the Web UI (RunningSnapshotWarning) for CLI↔UI parity.
-	_, _ = fmt.Fprintln(errw, term.Step(term.StepWarn,
-		"Snapshotting a running instance", RunningSnapshotWarning(name), ""))
-
 	_, _ = fmt.Fprintln(out, term.Prompt("", "", "", fmt.Sprintf(
 		"dpm localnet snapshot %s %s %s %s",
 		term.Amberc("--name"), name, term.Amberc("--to"), dest)))
 	_, _ = fmt.Fprintln(out, term.Step(term.StepCheck, "Reading registry state", state.ComposeProject, ""))
+
+	// Quiesce writers before the dump. pg_dumpall is a single-step
+	// whole-cluster backup, and Canton's rule for that path is to "make
+	// sure no component writes to the database while the backup is in
+	// progress". With the node containers paused, every database is frozen
+	// at one instant, so the cross-database ordering invariant (the
+	// participant is never more recent than the sequencer, which would be
+	// a ledger fork) holds automatically and the capture is consistent —
+	// not merely crash-consistent.
+	resume, qErr := archiverFn.Quiesce(ctx, state.ComposeProject, pg.Container)
+	if qErr != nil {
+		_, _ = fmt.Fprintf(errw, "quiesce writers: %s\n", qErr)
+		return localnet.ExitRuntimeFailure
+	}
+	defer resume() // safety net; resume() is idempotent and also called right after the dump
+	_, _ = fmt.Fprintln(out, term.Step(term.StepCheck, "Paused writers", "consistent capture", ""))
 	_, _ = fmt.Fprintln(out, term.Step(term.StepBusy, "Dumping Postgres", pg.Container, ""))
 
 	tmp := dest + ".tmp"
@@ -260,6 +288,7 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 		_, _ = fmt.Fprintf(errw, "dump database: %s\n", err)
 		return localnet.ExitRuntimeFailure
 	}
+	resume() // dump captured — resume writers immediately (the deferred resume is now a no-op)
 	defer func() { _ = os.Remove(dumpPath) }()
 
 	header := types.Snapshot{
@@ -333,15 +362,6 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 				header.CreatedAt,
 				term.Textc(fmt.Sprintf("localnet restore --name %s --from %s", name, dest)))))))
 	return localnet.ExitSuccess
-}
-
-// RunningSnapshotWarning is the canonical plain-text caveat shown when
-// a snapshot is taken (the instance must be running). Shared by the CLI
-// (a StepWarn) and the Web UI (an X-Snapshot-Warning header) so both
-// surfaces tell the operator the same thing.
-func RunningSnapshotWarning(name string) string {
-	return "captured live — pg_dumpall is consistent per-database but not atomic " +
-		"across the node's databases; quiesce activity for a fully-consistent capture"
 }
 
 // streamDumpToTemp runs DumpAll into a temp file under dir, computing
@@ -707,6 +727,38 @@ func (dockerPgArchiver) AnyContainerRunning(ctx context.Context, composeProject 
 		return false, fmt.Errorf("docker ps: %w", err)
 	}
 	return strings.TrimSpace(string(out)) != "", nil
+}
+
+func (dockerPgArchiver) Quiesce(ctx context.Context, composeProject, pgContainer string) (func(), error) {
+	out, err := exec.CommandContext(ctx, "docker", "ps", "--format", "{{.Names}}",
+		"--filter", "label=com.docker.compose.project="+composeProject).Output()
+	if err != nil {
+		return func() {}, fmt.Errorf("list containers: %w", err)
+	}
+	var nodes []string
+	for _, n := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if n = strings.TrimSpace(n); n != "" && n != pgContainer {
+			nodes = append(nodes, n)
+		}
+	}
+	if len(nodes) == 0 {
+		return func() {}, nil
+	}
+	// Freeze the node processes (SIGSTOP) so nothing writes to Postgres
+	// during the dump. Postgres itself is left running so pg_dumpall can
+	// read. Pause is instant and keeps ports bound — no reboot cost.
+	if err := exec.CommandContext(ctx, "docker", append([]string{"pause"}, nodes...)...).Run(); err != nil {
+		_ = exec.Command("docker", append([]string{"unpause"}, nodes...)...).Run()
+		return func() {}, fmt.Errorf("pause node containers: %w", err)
+	}
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			// Detached from ctx: we must unpause even if the dump's context
+			// was cancelled (e.g. a timeout), or the instance is left frozen.
+			_ = exec.Command("docker", append([]string{"unpause"}, nodes...)...).Run()
+		})
+	}, nil
 }
 
 func (dockerPgArchiver) DumpAll(ctx context.Context, container, user string, w io.Writer) error {

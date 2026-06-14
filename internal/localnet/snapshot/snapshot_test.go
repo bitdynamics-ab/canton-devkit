@@ -131,7 +131,8 @@ func TestSnapshot_RoundTrip(t *testing.T) {
 	seedInstance(t, "demo", "0.6.4", registry.StatusRunning)
 
 	dump := []byte("-- pg_dumpall --clean\nCREATE DATABASE x;\n")
-	installFake(t, &FakeArchiver{Dump: dump, DBCount: 3})
+	faSnap := &FakeArchiver{Dump: dump, DBCount: 3}
+	installFake(t, faSnap)
 
 	dest := filepath.Join(t.TempDir(), "snap.tgz")
 	var out, errBuf bytes.Buffer
@@ -140,6 +141,11 @@ func TestSnapshot_RoundTrip(t *testing.T) {
 	}
 	if _, err := os.Stat(dest); err != nil {
 		t.Fatalf("archive not written: %v", err)
+	}
+	// The snapshot must quiesce writers for the dump (no-writes single-step
+	// backup) and resume them after.
+	if !faSnap.Quiesced || !faSnap.Resumed {
+		t.Errorf("snapshot must quiesce+resume writers: quiesced=%v resumed=%v", faSnap.Quiesced, faSnap.Resumed)
 	}
 
 	// Restore into a FRESH registry root with no prior `demo`.
@@ -206,10 +212,21 @@ func TestSnapshot_NotFoundIsUserError(t *testing.T) {
 	}
 }
 
-func TestRunningSnapshotWarning_SharedWording(t *testing.T) {
-	w := RunningSnapshotWarning("demo")
-	if !strings.Contains(w, "pg_dumpall") || !strings.Contains(w, "per-database") {
-		t.Errorf("warning lost its key phrasing: %q", w)
+// TestSnapshot_ResumesWritersOnDumpFailure pins that a failed dump still
+// unpauses the node containers — otherwise a snapshot error would leave
+// the instance frozen.
+func TestSnapshot_ResumesWritersOnDumpFailure(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "demo", "0.6.4", registry.StatusRunning)
+	fa := &FakeArchiver{DumpErr: errors.New("pg_dumpall boom")}
+	installFake(t, fa)
+
+	var out, errBuf bytes.Buffer
+	if code := RunSnapshot(context.Background(), &out, &errBuf, "demo", filepath.Join(t.TempDir(), "s.tgz")); code == localnet.ExitSuccess {
+		t.Fatal("expected failure on dump error")
+	}
+	if !fa.Quiesced || !fa.Resumed {
+		t.Errorf("writers must be resumed even when the dump fails: quiesced=%v resumed=%v", fa.Quiesced, fa.Resumed)
 	}
 }
 
