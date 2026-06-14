@@ -366,7 +366,7 @@ func secondsToMs(v *float64) *float64 {
 // Discovery: walks `compose ps` for a service named "prometheus".
 // When found we hit it via 127.0.0.1:<host-port>.
 //
-// Defence (review blocker #6):
+// Defence:
 //   - dedicated http.Client with Timeout = metricsTimeout (no longer
 //     leaks http.DefaultClient's unbounded behaviour on a misbehaving
 //     upstream)

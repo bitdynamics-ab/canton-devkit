@@ -67,7 +67,7 @@ func TestCodeOf_DeepWrap(t *testing.T) {
 }
 
 // TestPreflightCodeFromReport pins the priority order. The
-// reviewer's worry was that the SSE-side helper and the HTTP-side
+// concern was that the SSE-side helper and the HTTP-side
 // helper could drift; this test plus the dedupe (handlers/
 // preflight.go is now just an alias for this function) keeps them
 // in lockstep.

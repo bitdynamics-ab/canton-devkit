@@ -126,7 +126,7 @@ func Dial(ctx context.Context, opts DialOptions) (*Client, error) {
 
 	dialOpts := []grpc.DialOption{}
 
-	// Transport credentials contract (review blocker #10):
+	// Transport credentials contract:
 	//   - PlainText=true  → we inject WithTransportCredentials(insecure).
 	//   - PlainText=false → we add NOTHING here; the caller MUST supply a
 	//     real credentials.NewTLS(...) via ExtraDialOptions. If they

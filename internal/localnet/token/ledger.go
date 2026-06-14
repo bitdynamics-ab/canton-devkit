@@ -17,8 +17,7 @@ import (
 
 // LedgerClient is the narrow slice of *ledger.Client that the live-ACS
 // orchestration paths (runBalanceLive, scanWorkspace) actually use.
-// Exists because review feedback on PRs #86 (m3-integration) and #89
-// (token-views backend) flagged that those paths had no unit coverage
+// Exists because the live-ACS orchestration paths had no unit coverage
 // for their error branches (PermissionDenied, no-parties, stream-error)
 // — *ledger.Client is a concrete struct wrapping grpc.ClientConn, so
 // there was no seam to inject a fake without going through a real
