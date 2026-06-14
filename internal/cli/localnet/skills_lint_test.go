@@ -101,9 +101,9 @@ func TestSkillsLint_AgainstLiveCobraSurface(t *testing.T) {
 // from this map. A regression then fails the lint with the real
 // flag-mismatch error rather than the allowlist skip.
 //
-// Currently empty: every documented verb (including the BIT-138 token
-// surface) has a real implementation. Add entries here only when a
-// skill documents a command ahead of its landing.
+// Currently empty: every documented verb has a real implementation.
+// Add entries here only when a skill documents a command ahead of its
+// landing.
 var futureVerbs = map[string]string{}
 
 // scannedCommand is one extracted `dpm localnet <verb> ... --flag ...`
