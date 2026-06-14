@@ -702,7 +702,7 @@ export interface MetricsSummary {
   schema_version: number;
   instance: string;
   // scope is the instance label to filter chart queries by when
-  // non-empty (the shared multi-instance Prometheus, #39); "" means the
+  // non-empty (the shared multi-instance Prometheus); "" means the
   // single-instance per-instance Prometheus, so chart queries stay
   // unscoped. The Metrics screen mirrors this for its own range queries.
   scope?: string;

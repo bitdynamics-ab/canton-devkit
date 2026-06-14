@@ -152,7 +152,7 @@ func loopbackPortTable() []loopbackService {
 				{"0", "4901"}, {"0", "4902"}, {"0", "4975"},
 				// :10013 is the built-in Prometheus reporter (JVM + canton
 				// metrics). Published to loopback so the SHARED host-level
-				// Prometheus (#39) can scrape it via host.docker.internal —
+				// Prometheus can scrape it via host.docker.internal —
 				// it lives in its own compose network and can't reach the
 				// `canton` service name. Ephemeral host port, captured as
 				// canton_metrics.

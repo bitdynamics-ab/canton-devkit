@@ -90,7 +90,7 @@ const (
 //
 // SummaryQueries is the unscoped set (sums across every series Prometheus
 // holds). Correct for a per-instance Prometheus that only scrapes one
-// LocalNet. For the SHARED host-level stack (#39), which scrapes every
+// LocalNet. For the SHARED host-level stack, which scrapes every
 // instance, use SummaryQueriesFor(<instance>) so a headline reflects one
 // instance, not the sum across all of them.
 var SummaryQueries = SummaryQueriesFor("")
@@ -100,12 +100,12 @@ var SummaryQueries = SummaryQueriesFor("")
 // label matcher is injected into every metric selector — this matches the
 // `instance` label the shared stack's file_sd attaches to each target. An
 // empty instance reproduces the unscoped queries byte-for-byte (so the
-// per-instance Prometheus path and the metric-name fix are unchanged).
+// per-instance Prometheus path is unchanged).
 //
 // Building the selectors here (rather than hand-writing two copies) keeps
-// the CLI and Web UI byte-identical — the AGENTS.md CLI<->UI parity rule —
-// and composes the label matcher correctly whether or not the metric
-// already carries its own labels (no invalid trailing comma).
+// the CLI and Web UI byte-identical, and composes the label matcher
+// correctly whether or not the metric already carries its own labels (no
+// invalid trailing comma).
 func SummaryQueriesFor(instance string) map[Headline]string {
 	sel := func(metric, extra string) string {
 		var matchers []string

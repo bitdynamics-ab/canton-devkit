@@ -94,7 +94,7 @@ const Q = {
 
 // scopeQ injects instance="<scope>" into every metric selector of a chart
 // query when the summary reports a scope — i.e. when this instance is
-// served by the shared multi-instance Prometheus (#39), so a chart shows
+// served by the shared multi-instance Prometheus, so a chart shows
 // one instance, not the sum across all of them. It targets our known
 // metric-name prefixes, so it never touches function names (sum, rate,
 // histogram_quantile) or `by (...)` label lists, and composes with a

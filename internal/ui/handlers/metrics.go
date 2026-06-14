@@ -350,7 +350,7 @@ func handleMetricsSummary() http.HandlerFunc {
 // filtered by, derived from the SAME cached discovery the chart/range
 // queries use (discoverPrometheus, keyed by compose project) rather than
 // re-resolving independently. The instance name when served by the shared
-// multi-instance stack (#39), or "" on the per-instance fallback (which
+// multi-instance stack, or "" on the per-instance fallback (which
 // holds only that instance, so no filter is needed). The frontend mirrors
 // this via the summary response's `scope` field.
 //
@@ -460,7 +460,7 @@ func discoverPrometheus(ctx context.Context, project string) (string, int, error
 	if host, port, err, ok := lookupPromCache(project); ok {
 		return host, port, err
 	}
-	// Shared host-level stack first (#39): when this project's instance
+	// Shared host-level stack first: when this project's instance
 	// is registered with it and the stack is up, every metrics surface
 	// reads from the one shared Prometheus. Falls through to the
 	// per-instance Prometheus below otherwise (no regression for

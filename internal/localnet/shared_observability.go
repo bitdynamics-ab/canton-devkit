@@ -17,7 +17,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// Shared, host-level observability stack (Dev Fund #39). ONE Prometheus +
+// Shared, host-level observability stack. ONE Prometheus +
 // Grafana serves every running LocalNet instead of a per-instance pair.
 // The stack runs as its own compose project, independent of any instance
 // lifecycle, and scrapes each instance's 127.0.0.1-published canton/splice

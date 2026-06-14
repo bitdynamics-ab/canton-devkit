@@ -126,7 +126,7 @@ func resolveMetricsInstance(name string) (*registry.State, error) {
 // off" from "the instance is old / state is stale".
 // resolvePrometheusEndpoint locates the Prometheus to scrape and reports
 // which instance to scope queries to. It prefers the SHARED host-level
-// stack (#39) when this instance is registered with it — returning the
+// stack when this instance is registered with it — returning the
 // instance name so scrapeMetrics filters by instance=<name> across the
 // multi-instance Prometheus. Otherwise it falls back to a per-instance
 // Prometheus (legacy / explicit --prometheus-port), where queries stay

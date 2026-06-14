@@ -1,5 +1,5 @@
 # SHARED, host-level observability stack — ONE Prometheus + Grafana
-# serving every running LocalNet instance (Dev Fund #39). Runs as its
+# serving every running LocalNet instance. Runs as its
 # own compose project (canton-devkit-observability), independent of any
 # instance lifecycle, so it survives a single instance's down→up and is
 # torn down only when no instance references it (refcount = number of

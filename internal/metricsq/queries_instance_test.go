@@ -3,8 +3,8 @@ package metricsq
 import "testing"
 
 // TestSummaryQueriesFor_Unscoped pins that the empty-instance form
-// reproduces the curated, probe-verified PromQL byte-for-byte — so the
-// per-instance Prometheus path and the metric-name fix are unchanged.
+// reproduces the curated PromQL byte-for-byte — so the per-instance
+// Prometheus path is unchanged.
 func TestSummaryQueriesFor_Unscoped(t *testing.T) {
 	want := map[Headline]string{
 		HeadlineLedgerTPS:    "sum(rate(daml_participant_api_indexer_updates[5m])) or vector(0)",

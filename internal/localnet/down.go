@@ -150,7 +150,7 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 		_, _ = fmt.Fprintf(errw, "Warning: state update failed: %s\n", err)
 	}
 
-	// Deregister from the shared observability stack (#39) and tear it
+	// Deregister from the shared observability stack and tear it
 	// down if no instance still references it — atomically under the
 	// shared-stack lock so a concurrent `up` can't race the teardown.
 	// Best-effort — a stopped instance has no live :10013 to scrape.

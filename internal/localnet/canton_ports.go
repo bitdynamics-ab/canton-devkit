@@ -125,7 +125,7 @@ func CaptureCantonPorts(ctx context.Context, project string) map[string]int {
 // CaptureMetricsPorts discovers the loopback host ports for the canton
 // and splice :10013 Prometheus-reporter endpoints, keyed as
 // PortCantonMetrics / PortSpliceMetrics. The shared host-level Prometheus
-// (#39) scrapes these via host.docker.internal:<port>. An absent key
+// scrapes these via host.docker.internal:<port>. An absent key
 // means the instance didn't publish :10013 (e.g. an older bring-up that
 // predates the publish) — the caller registers whatever was found.
 func CaptureMetricsPorts(ctx context.Context, project string) map[string]int {

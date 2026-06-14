@@ -607,7 +607,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		state.Ports[key] = port
 	}
 	// Capture the canton/splice :10013 metrics ports too, so the shared
-	// host-level Prometheus (#39) can scrape this instance via
+	// host-level Prometheus can scrape this instance via
 	// host.docker.internal:<port> once it's registered.
 	for key, port := range CaptureMetricsPorts(ctx, state.ComposeProject) {
 		state.Ports[key] = port
@@ -643,7 +643,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	prog.FinishStep(StepCaptureJWTs, "")
 
 	// Register this instance with the shared host-level observability
-	// stack (#39) and ensure the stack is up, so one Prometheus+Grafana
+	// stack and ensure the stack is up, so one Prometheus+Grafana
 	// scrapes every instance. Register+ensure run atomically under the
 	// shared-stack lock so a concurrent teardown can't race us. Best-effort
 	// — a failure here is a warning, never a failed bring-up. (The
