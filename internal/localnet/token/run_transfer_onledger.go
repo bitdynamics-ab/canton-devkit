@@ -487,10 +487,7 @@ func selectSenderAccountAndInputs(holdings []holdingRef, amount string) (tokenAc
 		}, picked, total, nil
 	}
 	if lastErr != nil {
-		// All accounts came up short; surface the closest reason. When
-		// the sender holds across several accounts none of which alone
-		// covers the amount, this is the "insufficient in any single
-		// account" case.
+		// All accounts came up short; surface the closest reason.
 		return tokenAccount{}, nil, "", lastErr
 	}
 	return tokenAccount{}, nil, "", fmt.Errorf("no single account covers %s", amount)
