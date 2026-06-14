@@ -6,10 +6,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TestConnectFlags_NameAliasesInstance pins the CLI consistency fix:
-// the dar verbs accept --name as an alias for --instance, so the same
-// instance selector works across the whole CLI (up/status/env/contracts
-// all use --name). Without the normalize alias a user who typed
+// TestConnectFlags_NameAliasesInstance verifies the dar verbs accept
+// --name as an alias for --instance, so the same instance selector works
+// across the whole CLI. Without the normalize alias a user who typed
 // `dar list --name foo` hit "unknown flag: --name".
 func TestConnectFlags_NameAliasesInstance(t *testing.T) {
 	var f connectFlags

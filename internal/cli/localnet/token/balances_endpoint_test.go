@@ -6,10 +6,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TestBuildBalances_EndpointOptional pins the consistency fix: `token
-// balances` resolves the participant ledger endpoint from --instance
-// (like `token balance` and `contracts`), so --endpoint is optional, not
-// required. --instance stays required.
+// TestBuildBalances_EndpointOptional verifies `token balances` resolves
+// the participant ledger endpoint from --instance (like `token balance`
+// and `contracts`), so --endpoint is optional, not required. --instance
+// stays required.
 func TestBuildBalances_EndpointOptional(t *testing.T) {
 	cmd := buildBalances()
 

@@ -177,7 +177,7 @@ func TestScanWorkspace_TruncatesAtCap(t *testing.T) {
 	}
 }
 
-// TestRunBalanceMatrix_NoEndpointReturnsInstanceError pins the
+// TestRunBalanceMatrix_NoEndpointReturnsInstanceError verifies the
 // resolution-failed guard: with no explicit --endpoint and an instance
 // that has no recorded participant ledger port (absent or stopped),
 // RunBalanceMatrix returns an instance-specific error naming the
@@ -209,10 +209,10 @@ func TestRunBalanceMatrix_NoEndpointReturnsInstanceError(t *testing.T) {
 	}
 }
 
-// TestRunBalanceMatrix_ExplicitEndpointSkipsGuard pins the other half of
-// the guard: an explicit --endpoint bypasses resolution entirely, so the
-// no-port instance does NOT trip the instance-specific error and the scan
-// proceeds against the caller-supplied endpoint.
+// TestRunBalanceMatrix_ExplicitEndpointSkipsGuard verifies the other half
+// of the guard: an explicit --endpoint bypasses resolution entirely, so
+// the no-port instance does NOT trip the instance-specific error and the
+// scan proceeds against the caller-supplied endpoint.
 func TestRunBalanceMatrix_ExplicitEndpointSkipsGuard(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	fake := &fakeLedger{

@@ -56,11 +56,10 @@ func (f *connectFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.Role, "role", "app-user",
 		"Participant role within --instance: sv, app-provider, or app-user.")
 	// Accept --name as an alias for --instance so the dar verbs take the
-	// same instance selector as the rest of the CLI (up/status/env/logs/
-	// contracts/tx all use --name). A normalize alias — not a second
-	// flag — so --instance's resolution/validation stays intact. (The
-	// `token` verbs keep --instance because there --name is the
-	// instrument name; `container` takes the instance positionally.)
+	// same instance selector as the rest of the CLI. A normalize alias —
+	// not a second flag — so --instance's resolution/validation stays
+	// intact. (The `token` verbs keep --instance because there --name is
+	// the instrument name; `container` takes the instance positionally.)
 	cmd.Flags().SetNormalizeFunc(func(_ *pflag.FlagSet, name string) pflag.NormalizedName {
 		if name == "name" {
 			name = "instance"
