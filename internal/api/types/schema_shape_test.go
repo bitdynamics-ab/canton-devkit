@@ -61,7 +61,7 @@ func TestSchemaShape_GoldenPinsFieldLevelShape(t *testing.T) {
 // schemaShapeRoots is the hand-enumerated set of shared shapes whose
 // field-level layout we pin. Every top-level response/request struct
 // in this package belongs here; nested types (Endpoint, Party,
-// Credential, ServiceStatus, PreflightSection/Check, SnapshotVolume,
+// Credential, ServiceStatus, PreflightSection/Check, SnapshotDatabase,
 // skills.Skill) are reached transitively by the walker, so they do not
 // need their own entry.
 //
@@ -334,11 +334,15 @@ types.Snapshot {
   splice_version string
   created_at string
   devkit_version string
-  volumes []types.SnapshotVolume
+  database *types.SnapshotDatabase
 }
 
-types.SnapshotVolume {
-  name string
+types.SnapshotDatabase {
+  engine string
+  postgres_image string
+  user string
+  volume_suffix string
+  database_count int
   size_bytes int64
   content_sha string
 }

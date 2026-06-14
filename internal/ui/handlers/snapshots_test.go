@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -14,39 +13,9 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// stubArchiver is a docker-free volumeArchiver for the handler happy
-// path. snapshot.SetArchiverForTest accepts any value implementing the
-// (unexported) volumeArchiver interface; we satisfy its method set here
-// so the snapshot handler can run end-to-end without a daemon.
-type stubArchiver struct {
-	volumes map[string][]byte
-}
-
-func (s stubArchiver) ListVolumes(_ context.Context, _ string) ([]string, error) {
-	out := make([]string, 0, len(s.volumes))
-	for k := range s.volumes {
-		out = append(out, k)
-	}
-	return out, nil
-}
-
-func (s stubArchiver) ArchiveVolume(_ context.Context, volume string, w io.Writer) error {
-	_, err := w.Write(s.volumes[volume])
-	return err
-}
-
-func (s stubArchiver) RestoreVolume(_ context.Context, _, volume string, r io.Reader) error {
-	b, err := io.ReadAll(r)
-	if err != nil {
-		return err
-	}
-	s.volumes[volume] = b
-	return nil
-}
-
-func (s stubArchiver) VolumeStorageAvailableBytes(_ context.Context) (uint64, error) {
-	return 1 << 50, nil
-}
+// The snapshot handler is exercised with snapshot.FakeArchiver — the
+// docker-free in-memory pgArchiver the snapshot package exposes for
+// cross-package tests — so these handler tests run without a daemon.
 
 // snapshotMux mounts only the snapshots handlers — the other Mount*
 // calls would require docker / hub wiring that's irrelevant to these
@@ -239,8 +208,8 @@ func seedSnapshotState(t *testing.T, name string, status registry.Status) {
 // archiver so the capture succeeds without a daemon.
 func TestSnapshot_RunningInstanceSetsWarningHeader(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
-	restore := snapshot.SetArchiverForTest(stubArchiver{
-		volumes: map[string][]byte{"canton-run_postgres": []byte("PG")},
+	restore := snapshot.SetArchiverForTest(&snapshot.FakeArchiver{
+		Dump: []byte("-- pg_dumpall\n"), DBCount: 3,
 	})
 	defer restore()
 	seedSnapshotState(t, "run", registry.StatusRunning)
@@ -260,23 +229,22 @@ func TestSnapshot_RunningInstanceSetsWarningHeader(t *testing.T) {
 	if warn == "" {
 		t.Fatal("running-instance snapshot must set X-Snapshot-Warning (CLI↔UI parity)")
 	}
-	// The wording is the shared helper's — assert the key phrase so a
-	// drift between the CLI stderr and the UI header is caught.
+	// The wording is the shared helper's — assert it matches so a drift
+	// between the CLI stderr and the UI header is caught.
 	if want := snapshot.RunningSnapshotWarning("run"); warn != want {
 		t.Errorf("X-Snapshot-Warning = %q, want shared wording %q", warn, want)
 	}
-	if !strings.Contains(warn, "crash-consistent") {
-		t.Errorf("warning should mention crash-consistency, got %q", warn)
+	if !strings.Contains(warn, "pg_dumpall") {
+		t.Errorf("warning should mention the dump mechanism, got %q", warn)
 	}
 }
 
-// TestSnapshot_StoppedInstanceNoWarningHeader is the companion: a
-// stopped instance is application-consistent, so no header.
-func TestSnapshot_StoppedInstanceNoWarningHeader(t *testing.T) {
+// TestSnapshot_StoppedInstanceRefused: a database snapshot reads from a
+// live Postgres, so a stopped instance is refused rather than producing
+// an empty/garbage archive.
+func TestSnapshot_StoppedInstanceRefused(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
-	restore := snapshot.SetArchiverForTest(stubArchiver{
-		volumes: map[string][]byte{"canton-stp_postgres": []byte("PG")},
-	})
+	restore := snapshot.SetArchiverForTest(&snapshot.FakeArchiver{Dump: []byte("x")})
 	defer restore()
 	seedSnapshotState(t, "stp", registry.StatusStopped)
 
@@ -287,11 +255,9 @@ func TestSnapshot_StoppedInstanceNoWarningHeader(t *testing.T) {
 		t.Fatalf("POST: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusBadRequest {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("want 200, got %d; body=%s", resp.StatusCode, body)
-	}
-	if warn := resp.Header.Get("X-Snapshot-Warning"); warn != "" {
-		t.Errorf("stopped-instance snapshot must NOT set X-Snapshot-Warning, got %q", warn)
+		t.Fatalf("snapshot of a stopped instance must be refused with 400, got %d; body=%s",
+			resp.StatusCode, body)
 	}
 }

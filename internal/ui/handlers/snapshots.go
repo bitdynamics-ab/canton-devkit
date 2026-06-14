@@ -71,15 +71,14 @@ func contextWithTimeout(parent context.Context, d time.Duration) (context.Contex
 const restoreUploadMax = 4 << 30 // 4 GiB
 
 // snapshotTimeout caps the entire snapshot pipeline (registry read +
-// volume archives + tar write). Sized to cover a multi-volume capture
-// on a slow disk: typical pebble snapshot takes ~20s; 10 min is two
-// orders of magnitude of slack without leaving a runaway docker
+// pg_dumpall + tar write). Sized to cover a large logical dump on a slow
+// disk: a fresh instance dumps in seconds, a heavily-used one in ~tens
+// of seconds; 10 min is ample slack without leaving a runaway docker
 // process around forever.
 const snapshotTimeout = 10 * time.Minute
 
-// restoreTimeout has the same shape but covers extraction + docker
-// volume creates. Slightly tighter because there's no remote work —
-// pure local I/O.
+// restoreTimeout has the same shape but covers loading the dump into a
+// throwaway Postgres (container start + psql load).
 const restoreTimeout = 10 * time.Minute
 
 // MountSnapshots installs the snapshot/restore endpoints on mux.
@@ -157,7 +156,13 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	exit := snapshot.RunSnapshot(ctx, io.Discard, &errBuf, name, tmpPath)
 	if exit != localnet.ExitSuccess {
-		writeError(w, http.StatusInternalServerError,
+		// A user error (e.g. the instance isn't running, which a database
+		// snapshot requires) maps to 400; everything else is a 500.
+		status := http.StatusInternalServerError
+		if exit == localnet.ExitUserError {
+			status = http.StatusBadRequest
+		}
+		writeError(w, status,
 			"snapshot failed", errors.New(strings.TrimSpace(errBuf.String())))
 		return
 	}
@@ -210,9 +215,10 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request) {
 //	  -> 200 OK
 //	     {"name":"pebble","restored":true}
 //
-// On success the embedded state.json is registered and the volumes
-// are written to docker; the instance is NOT brought up. Caller hits
-// POST /api/instances/{name}/up (existing endpoint) to start it.
+// On success the embedded state.json is registered and the database is
+// loaded into the instance's Postgres volume; the instance is NOT
+// brought up. Caller hits POST /api/instances/{name}/up (existing
+// endpoint) to start it on the restored database.
 func handleRestore(w http.ResponseWriter, r *http.Request) {
 	// Cap the body BEFORE ParseMultipartForm so a malicious or
 	// buggy client can't exhaust memory before we get a chance
