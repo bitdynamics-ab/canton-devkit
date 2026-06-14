@@ -53,9 +53,9 @@ type TokenCreateRequest struct {
 }
 
 // HoldingSource records WHERE a balance row came from so neither
-// surface presents a fabricated number as real on-ledger state
-// (#63). The CLI's `token balance` JSON and the Web UI holdings
-// table both branch on it.
+// surface presents a fabricated number as real on-ledger state.
+// The CLI's `token balance` JSON and the Web UI holdings table both
+// branch on it.
 type HoldingSource string
 
 const (
@@ -72,12 +72,11 @@ const (
 )
 
 // TokenHolding is one balance row — instrument + party + summed
-// amount, plus the Source that produced it. MIRRORS
+// amount, plus the Source that produced it. Mirrors
 // internal/localnet/token.BalanceRow byte-for-byte (same JSON tags);
-// the localnet/token package keeps its own copy so it doesn't depend
-// on api/types, exactly as registry.TokenRef mirrors TokenRef. The
-// single source of truth for the JSON shape is this declaration —
-// adding a field requires updating both.
+// that package keeps its own copy so it doesn't depend on api/types.
+// This declaration is the source of truth for the JSON shape — adding
+// a field requires updating both.
 type TokenHolding struct {
 	// InstrumentSymbol is the friendly ticker when the instrument is
 	// recorded in the local registry; omitted for an unknown holding.

@@ -89,7 +89,7 @@ export function TokensScreen() {
   // holdingsSource: "ledger" = real on-ledger balances; "registry" =
   // the pseudo-balance fallback shown when no live participant is
   // reachable. Drives the disclaimer banner so a user never mistakes a
-  // fabricated row for a real holding (#63).
+  // fabricated row for a real holding.
   const [holdingsSource, setHoldingsSource] = useState<HoldingSource>("ledger");
   const [expanded, setExpanded] = useState<string | null>(null); // party whose UTXOs are shown
   const [contracts, setContracts] = useState<HoldingContract[]>([]);

@@ -167,14 +167,13 @@ type BalanceRow struct {
 	Amount           string `json:"amount"`
 	// Source records whether this row was summed from the live ACS
 	// ("ledger") or synthesized from the registry pseudo-balance
-	// ("registry"). #63: the Web UI table previously presented the
-	// fabricated fallback as a real holding with no qualifier — every
-	// row now carries its provenance so neither surface can mislead.
+	// ("registry"). Every row carries its provenance so neither surface
+	// can present the fallback as a real holding.
 	Source HoldingSource `json:"source"`
 }
 
 // HoldingSource is the provenance of a BalanceRow. Mirrors
-// api/types.HoldingSource — the wire values ("ledger"/"registry") MUST
+// api/types.HoldingSource — the wire values ("ledger"/"registry") must
 // match. Defined here too so this package stays free of an api/types
 // import (which would create a cycle as shared types grow).
 type HoldingSource string
@@ -416,8 +415,8 @@ func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]Bala
 	}
 	opts.Party = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Party)
 	// Auto-discover the participant endpoint from the registry when the
-	// caller didn't pass one explicitly (#63). This gives BOTH surfaces
-	// the live ACS by default — the CLI no longer needs a manual
+	// caller didn't pass one explicitly. This gives both surfaces the
+	// live ACS by default — the CLI no longer needs a manual
 	// `--endpoint host:port`, matching the Web UI which already resolves
 	// the port from state.Ports. An explicit Endpoint still wins.
 	if opts.Endpoint == "" {

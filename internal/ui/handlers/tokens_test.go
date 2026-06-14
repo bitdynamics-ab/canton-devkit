@@ -91,9 +91,9 @@ func TestTokens_CreateThenListAndDetail(t *testing.T) {
 	}
 }
 
-// TestTokens_HoldingsRegistryFallbackTagged pins #63 on the UI surface:
+// TestTokens_HoldingsRegistryFallbackTagged covers the UI surface:
 // with no captured participant ledger port (instance down / pre-port-
-// capture), GET /holdings returns the registry pseudo-balance AND tags
+// capture), GET /holdings returns the registry pseudo-balance and tags
 // both the response and every row with source="registry" so the
 // frontend can render the "not on-ledger" disclaimer instead of
 // presenting fabricated rows as real holdings.

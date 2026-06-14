@@ -14,7 +14,7 @@ import (
 
 // seedTokenInstance writes a running instance with one recorded token
 // and (deliberately) no participant_ledger_* port, so `token balance`
-// takes the registry pseudo-balance fallback — the #63 case under test.
+// takes the registry pseudo-balance fallback — the case under test.
 func seedTokenInstance(t *testing.T, name string) {
 	t.Helper()
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
@@ -35,7 +35,7 @@ func seedTokenInstance(t *testing.T, name string) {
 	}
 }
 
-// TestBalance_RegistryFallback_TextShowsSource pins #63 on the CLI text
+// TestBalance_RegistryFallback_TextShowsSource covers the CLI text
 // path: with no live ledger, the SOURCE column reads "registry" and a
 // stderr note warns the amounts are pseudo-balances, not on-ledger.
 func TestBalance_RegistryFallback_TextShowsSource(t *testing.T) {

@@ -65,7 +65,7 @@ row came from. With --party, filter to a single party; with
 			}
 			// Text: simple aligned table via term. The SOURCE column makes
 			// a registry pseudo-balance visibly distinct from a real
-			// on-ledger holding (#63).
+			// on-ledger holding.
 			cols := []term.Column{
 				{Label: "INSTRUMENT"},
 				{Label: "PARTY"},

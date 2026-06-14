@@ -13,7 +13,7 @@ import { TokensScreen } from "./TokensScreen";
 
 afterEach(() => vi.unstubAllGlobals());
 
-// holdingsResponse lets a test drive the #63 source banner: pass
+// holdingsResponse lets a test drive the source banner: pass
 // { source: "registry", rows: [...] } to exercise the pseudo-balance
 // disclaimer. Defaults to a live empty ACS (no banner) so existing
 // callers are unaffected.
@@ -289,7 +289,7 @@ describe("TokensScreen", () => {
     expect(screen.queryAllByText(/treasury/).length).toBeGreaterThan(0);
   });
 
-  // #63: when the holdings endpoint reports source="registry" (no live
+  // When the holdings endpoint reports source="registry" (no live
   // ledger), the table must carry an explicit "pseudo-balance, not
   // on-ledger" disclaimer so the fabricated rows can't be mistaken for
   // real holdings.

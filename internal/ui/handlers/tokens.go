@@ -324,23 +324,16 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
-	// RunBalance auto-discovers the role's participant ledger port from
-	// the registry (via token.ResolveLedgerEndpoint) and hits the live
-	// V2 ACS when it's present; an absent port falls back to the
-	// registry pseudo-balance path (instance down / pre-port-capture).
-	// Either way the response is tagged with its source (#63) so the UI
-	// can flag the fallback. Auto-grant + per-party filter inside
-	// dialLedger / runBalanceLive handle the V2 alpha permission gate
-	// transparently. Empty role defaults to app-user.
-	role := roleFromQuery(r)
-	// Resolve the role's participant ledger endpoint ONCE and thread it
+	// Resolve the role's participant ledger endpoint once and thread it
 	// via opts.Endpoint, rather than letting the expand guard, RunBalance,
 	// and BalanceSource each re-resolve it independently (≈4 registry-file
 	// reads per request). A present endpoint means the live V2 ACS path
 	// (rows tagged SourceLedger); an absent one falls back to the registry
-	// pseudo-balance path (SourceRegistry). Auto-grant + per-party filter
-	// inside dialLedger / runBalanceLive handle the V2 alpha permission
-	// gate transparently. Empty role defaults to app-user.
+	// pseudo-balance path (SourceRegistry), which the response source tags
+	// so the UI can flag it. Auto-grant + per-party filter inside
+	// dialLedger / runBalanceLive handle the V2 alpha permission gate
+	// transparently. Empty role defaults to app-user.
+	role := roleFromQuery(r)
 	endpoint := token.ResolveLedgerEndpoint(instance, role)
 	opts := token.BalanceOptions{
 		Instance:   instance,
@@ -370,14 +363,13 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 		mapTokenError(w, err, "balance")
 		return
 	}
-	// #63: tell the client whether these are live on-ledger balances or
-	// the registry pseudo-balance fallback, so the UI can flag the latter
+	// Tell the client whether these are live on-ledger balances or the
+	// registry pseudo-balance fallback, so the UI can flag the latter
 	// instead of presenting fabricated rows as real holdings. Derived from
-	// the same resolved endpoint — equivalent to token.BalanceSource,
-	// which keys on endpoint availability (not reachability), exactly as
-	// RunBalance branches. Each row also carries its Source from RunBalance;
-	// the response-level value lets the UI render one disclaimer banner
-	// without scanning every row.
+	// the same resolved endpoint — keyed on endpoint availability (not
+	// reachability), exactly as RunBalance branches. The response-level
+	// value lets the UI render one disclaimer banner without scanning
+	// every row.
 	source := token.SourceRegistry
 	if endpoint != "" {
 		source = token.SourceLedger

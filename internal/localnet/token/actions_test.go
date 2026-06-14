@@ -133,7 +133,7 @@ func TestRunTransfer_UnknownSymbol(t *testing.T) {
 	}
 }
 
-// --- #63: holdings provenance (live ACS vs registry fallback) -------
+// --- holdings provenance (live ACS vs registry fallback) -----------
 
 // setLedgerPort records a participant_ledger_<role> port on an
 // already-seeded instance so ResolveLedgerEndpoint / BalanceSource see
@@ -150,10 +150,10 @@ func setLedgerPort(t *testing.T, instance, role string, port int) {
 	}
 }
 
-// TestRunBalance_RegistryFallbackTaggedRegistry pins #63: with no
-// captured ledger port (instance down / pre-port-capture), RunBalance
-// takes the pseudo-balance path AND every row is tagged
-// SourceRegistry so the surfaces can flag it as not-on-ledger.
+// TestRunBalance_RegistryFallbackTaggedRegistry: with no captured
+// ledger port (instance down / pre-port-capture), RunBalance takes the
+// pseudo-balance path and every row is tagged SourceRegistry so the
+// surfaces can flag it as not-on-ledger.
 func TestRunBalance_RegistryFallbackTaggedRegistry(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo")
@@ -193,7 +193,7 @@ func TestBalanceSource(t *testing.T) {
 	}
 }
 
-// TestRunBalanceLive_TagsRowsLedger pins #63's other half: when the
+// TestRunBalanceLive_TagsRowsLedger covers the other half: when the
 // live ACS yields a holding, the summed row is tagged SourceLedger.
 // Uses the fakeLedger seam + a single HoldingViewV2-shaped created
 // event so we exercise the real row-construction path.
