@@ -28,13 +28,13 @@ import { DARDiff } from "./DARDiff";
 //   - RIGHT (360px) inspect drawer with hash/lf/uploaded + (future)
 //                  diff vs prior version
 //
-// Vetting is REAL end-to-end: the package-list column (VettingCell)
+// Vetting is real end-to-end: the package-list column (VettingCell)
 // and the inspect-drawer toggles (VettingPanel) both read live
 // per-participant state from GET …/dar/{id}/vetting and POST to the
 // vet/unvet endpoint — a package unvetted via `dar remove` now shows
-// grey, not a hardcoded green badge (#53/#79). The Watch-mode card
-// reflects live SSE events from a `dpm localnet dar watch` process
-// when one is running, and stays "Idle" otherwise.
+// grey, not a hardcoded green badge. The Watch-mode card reflects
+// live SSE events from a `dpm localnet dar watch` process when one is
+// running, and stays "Idle" otherwise.
 
 const ROLES: Role[] = ["app-user", "app-provider", "sv"];
 
@@ -81,10 +81,9 @@ export function DARScreen() {
   const [dragOver, setDragOver] = useState(false);
   const [filter, setFilter] = useState<"all" | "app">("all");
   const [tick, setTick] = useState(0); // bump to refetch after upload
-  // vetting — real per-participant vetting state for each listed DAR,
-  // keyed by main package id. Populated lazily by a bounded batch
-  // fetch after the list loads (see effect below). Replaces the old
-  // hardcoded "vetted" badge that lied for every row (#53/#79).
+  // vetting — per-participant vetting state for each listed DAR, keyed
+  // by main package id. Populated lazily by a bounded batch fetch after
+  // the list loads (see effect below).
   const [vetting, setVetting] = useState<Record<string, VetState>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -718,13 +717,11 @@ function PkgRow({
   );
 }
 
-// VettingCell renders the real per-participant vetting state for one
-// DAR as a compact "U P S" trio of dots — green vetted, grey unvetted,
-// amber "?" when that participant couldn't be probed. This replaces a
-// previously hardcoded green "vetted" badge that lied for every row
-// (issues #53/#79): a package unvetted via `dar remove` now shows grey
-// here, matching the CLI `dar list --vetting` column and the
-// per-participant toggles in the inspect drawer.
+// VettingCell renders the per-participant vetting state for one DAR as
+// a compact "U P S" trio of dots — green vetted, grey unvetted, amber
+// "?" when that participant couldn't be probed. A package unvetted via
+// `dar remove` shows grey here, matching the CLI `dar list --vetting`
+// column and the per-participant toggles in the inspect drawer.
 function VettingCell({ vet }: { vet: VetState | undefined }) {
   if (!vet || vet.kind === "loading") {
     return (

@@ -4,8 +4,7 @@ package types
 // json) and the Web UI handlers (internal/ui/handlers/dar.go). Kept
 // here — rather than as anonymous map[string]any literals in each
 // surface — so the two cannot drift: a field added for one surface
-// lands on both, and the schema-pin tests (schema_shape_test.go +
-// schema_pin_test.go) catch any rename/retype.
+// lands on both, and the schema-pin tests catch any rename/retype.
 //
 // The business logic that populates these lives in
 // internal/localnet/darops; both surfaces call it.
@@ -14,9 +13,6 @@ package types
 // Admin API DarDescription projection. `Vetted` is a tri-state via a
 // pointer: nil means "vetting state not queried" (cheap list path),
 // non-nil is the resolved per-row state on the targeted participant.
-// Surfacing vetting was a proposal-listed `dar list` column
-// (docs/original-devkit-proposal.md) that both surfaces previously
-// lacked or faked.
 type DARRow struct {
 	Main        string `json:"main"`
 	Name        string `json:"name"`

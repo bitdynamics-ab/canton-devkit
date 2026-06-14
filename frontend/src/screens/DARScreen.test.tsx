@@ -316,9 +316,9 @@ describe("DARScreen", () => {
   });
 
   it("renders REAL per-participant vetting dots in the package list, not a hardcoded badge", async () => {
-    // Regression for #53/#79: every list row used to show a green
-    // "vetted" badge regardless of ledger state. Now each row's column
-    // reflects the real GET …/vetting response per participant.
+    // Every list row used to show a green "vetted" badge regardless of
+    // ledger state. Now each row's column reflects the real GET …/vetting
+    // response per participant.
     vi.stubGlobal("EventSource", FakeEventSource as unknown as typeof EventSource);
     const mainA = "a".repeat(64);
     const mainB = "b".repeat(64);

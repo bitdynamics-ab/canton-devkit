@@ -107,8 +107,7 @@ Exit codes:
 				return localnet.AsExitError(localnet.ExitRuntimeFailure)
 			}
 			// --vetting enrichment: probe every participant for each
-			// DAR's vetting state. The proposal lists vetting as a
-			// `dar list` column; "vetted on the participant I'm
+			// DAR's vetting state. "Vetted on the participant I'm
 			// listing" is tautological (ListDars only returns vetted
 			// DARs there), so the useful signal is cross-participant —
 			// shared with the Web UI via darops.ListVetting.

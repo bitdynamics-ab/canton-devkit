@@ -1,19 +1,9 @@
 // Package darops holds the neutral DAR-management business logic
 // shared by both the CLI (`internal/cli/localnet/dar`) and the Web UI
-// handlers (`internal/ui/handlers/dar.go`).
-//
-// Before this package existed the two surfaces hand-rolled the same
-// three things independently and drifted:
-//
-//   - the role → "participant_admin_<role>" port lookup + per-role JWT
-//     resolution (CLI connect.go vs the handler's inline copy, twice),
-//   - the "is this DAR vetted on participant X?" probe (the UI faked
-//     it; the CLI had no surface at all — issues #18/#53/#79),
-//   - the upload fan-out shape.
-//
-// Centralising them here means the guards and wire shapes can't drift
-// (AGENTS.md "Mirror the guards" / "Share the business logic"). The
-// shared wire structs live in internal/api/types.
+// handlers (`internal/ui/handlers/dar.go`). Centralising the role →
+// port/JWT lookup, the per-participant vetting probe, and the upload
+// fan-out here keeps the two surfaces' guards and wire shapes from
+// drifting. The shared wire structs live in internal/api/types.
 package darops
 
 import (
