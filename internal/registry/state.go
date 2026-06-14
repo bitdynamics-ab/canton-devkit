@@ -67,6 +67,17 @@ type State struct {
 	DockerNetwork   string   `json:"docker_network"`
 	ContainerPrefix string   `json:"container_prefix"`
 
+	// Profiles is the exact set of `docker compose --profile` names
+	// enabled at `up` time (adapter base profiles + the user's
+	// `--profile` opt-ins). Every Splice LocalNet service is
+	// profile-gated, so any compose subcommand that operates on the
+	// service model (`restart`, `pause`, `ps`) MUST replay this set or
+	// it targets zero services. Teardown (`down`/`clean`) does NOT need
+	// it — it tears down by project label (`-p`-only). Additive: older
+	// state.json files without this key decode with Profiles == nil;
+	// callers fall back to re-deriving from the version adapter.
+	Profiles []string `json:"profiles,omitempty"`
+
 	// Filesystem locations
 	ProjectDir string `json:"project_dir"` // ~/.canton-devkit/cache/splice-<tag>/
 	DataDir    string `json:"data_dir"`    // ~/.canton-devkit/localnet/<name>/

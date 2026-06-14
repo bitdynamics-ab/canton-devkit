@@ -383,12 +383,35 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	// ephemeral allocation.
 	var priorPorts map[string]int
 	if prior, err := registry.Read(opts.Name); err == nil {
+		// Refuse to re-up an instance that is already running. Without
+		// this guard RunUp overwrites the live state with
+		// Status=creating and then fails port allocation (the published
+		// host ports are still held), stranding the healthy instance as
+		// a permanent `creating` zombie the reconciler won't heal and
+		// `scrub` would orphan. Mirrors the Web UI's 409 INSTANCE_RUNNING
+		// guard.
+		if prior.Status == registry.StatusRunning {
+			prog.FailStep(StepPersistState, fmt.Sprintf(
+				"instance %q is already running — stop it first with "+
+					"`localnet down --name %s`, or bounce it with `localnet restart --name %s`",
+				opts.Name, opts.Name, opts.Name), nil)
+			return ExitUserError
+		}
 		priorPorts = prior.Ports
 	}
+
+	// The enabled profile set: the adapter's base profiles (which gate
+	// every core Splice service) plus the user's `--profile` opt-ins.
+	// Persisted in state and re-used for the `up` runner below so the
+	// recorded set is byte-identical to what we actually bring up;
+	// `restart`/`pause`/`status` replay it (teardown does not need it —
+	// see ComposeRunner.Stop).
+	enabledProfiles := append(adapter.Profiles(), opts.Profiles...)
 
 	state := registry.NewState(opts.Name, version.Tag)
 	state.ComposeProject = "canton-" + opts.Name
 	state.ComposeFiles = composeFiles
+	state.Profiles = enabledProfiles
 	state.DockerNetwork = opts.Name
 	state.ContainerPrefix = containerPrefix
 	state.ProjectDir = projectDir
@@ -505,8 +528,9 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			// app-user / swagger-ui) is filtered out → "no service
 			// selected". Merge the adapter's base profiles with the
 			// user's opt-ins on the CLI so the union is what docker
-			// compose sees.
-			Profiles: append(adapter.Profiles(), opts.Profiles...),
+			// compose sees. Persisted as state.Profiles above so
+			// restart/pause/status replay the identical set.
+			Profiles: enabledProfiles,
 		}
 	}
 
@@ -580,6 +604,14 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	// The renderer auto-degrades to a plain text variant on non-TTY
 	// writers so `localnet up | tee log` still grep-cleanly.
 	renderWelcome(prog.Out(), opts.Name, version.Tag, state, time.Since(startedAt))
+
+	// Emit the terminal `done` event. On the CLI (TextProgress) Done("")
+	// is a no-op — renderWelcome already printed the success box. On the
+	// Web UI (SSEProgress) this is the ONLY signal that flips the create/
+	// resume/restart modal out of its "running" state: without it the
+	// modal hangs forever on every successful bring-up, never refreshes
+	// the dashboard, and can't be dismissed via Esc/backdrop.
+	prog.Done("")
 	return ExitSuccess
 }
 

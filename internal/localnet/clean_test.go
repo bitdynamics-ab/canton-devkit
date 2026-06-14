@@ -82,12 +82,17 @@ func TestRunClean_RunningForcedTearsDownAndDeletes(t *testing.T) {
 	seedInstanceStatus(t, "live-force", registry.StatusRunning)
 
 	downCalled := false
+	removedVolumes := false
 	var out, errBuf bytes.Buffer
 	code := RunClean(context.Background(), &out, &errBuf, &CleanOptions{
 		Name:  "live-force",
 		Force: true,
 		NewRunner: func(string, []string, []string, []string, string, io.Writer) composeDowner {
-			return downerFn(func(context.Context) error { downCalled = true; return nil })
+			return removeVolumesCapture(func(_ context.Context, removeVolumes bool) error {
+				downCalled = true
+				removedVolumes = removeVolumes
+				return nil
+			})
 		},
 	})
 	if code != ExitSuccess {
@@ -95,6 +100,11 @@ func TestRunClean_RunningForcedTearsDownAndDeletes(t *testing.T) {
 	}
 	if !downCalled {
 		t.Error("--force clean must invoke compose down on a running instance")
+	}
+	// `clean` is the destructive verb: unlike `down`, it MUST remove the
+	// ledger volumes (the symmetric half of the data-loss fix).
+	if !removedVolumes {
+		t.Error("--force clean must pass removeVolumes=true to reclaim ledger volumes")
 	}
 	if _, err := registry.Read("live-force"); err != registry.ErrNotFound {
 		t.Errorf("registry entry should be gone after forced clean, got err=%v", err)

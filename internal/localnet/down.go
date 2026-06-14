@@ -15,8 +15,15 @@ import (
 // drives. Extracted as an interface so tests can swap in a stub that
 // returns a controlled error (or success) without touching Docker.
 // *docker.ComposeRunner satisfies it implicitly.
+//
+// RunDown always calls Stop(ctx, false): `down` — and the Web UI Stop /
+// Restart actions that route through RunDown — MUST preserve the named
+// volumes that hold the ledger (Postgres) state so a later `up` resumes.
+// Volume removal is `clean`'s job only. Passing removeVolumes=true here
+// was a data-loss bug: the UI confirm dialog promised preservation while
+// `docker compose down --volumes` wiped the ledger.
 type composeDowner interface {
-	Down(ctx context.Context) error
+	Stop(ctx context.Context, removeVolumes bool) error
 }
 
 // DownOptions captures `localnet down` flags. Cobra binds directly.
@@ -36,8 +43,9 @@ type DownOptions struct {
 // Steps:
 //  1. Acquire the per-instance lock (prevents concurrent up/down).
 //  2. Load state.json. If missing, exit 0 with a hint.
-//  3. Run `docker compose down --volumes --remove-orphans` with the
-//     compose files recorded in state (no --env-file needed).
+//  3. Run `docker compose down --remove-orphans` (NO --volumes — the
+//     ledger volumes are preserved so a later `up` resumes; volume
+//     removal is `clean`'s job) with the compose files recorded in state.
 //  4. Set status=stopped and persist the registry entry so that a
 //     subsequent `localnet clean` can discover the instance.
 func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptions) int {
@@ -101,7 +109,10 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 			LogWriter:    out,
 		}
 	}
-	if err := runner.Down(ctx); err != nil {
+	// removeVolumes=false: `down` and the Web UI Stop/Restart that call
+	// this MUST preserve the ledger volumes. Passing --volumes here wiped
+	// Postgres while the UI promised "Data volumes are preserved".
+	if err := runner.Stop(ctx, false); err != nil {
 		// A compose-down failure must NOT silently fall through to
 		// registry.Delete — doing so would scrub the retry metadata
 		// while containers / volumes may still be running. Preserve
