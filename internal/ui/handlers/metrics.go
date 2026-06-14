@@ -80,7 +80,7 @@ func handleMetricsQuery() http.HandlerFunc {
 				"pass ?query=<PromQL> — e.g. ?query=up")
 			return
 		}
-		// Guard the regex from pathological inputs (review yellow): a
+		// Guard the regex from pathological inputs: a
 		// 4 KiB ceiling is generous for any panel we ship and stops
 		// catastrophic-backtracking probes early.
 		if len(query) > maxQueryLen {
