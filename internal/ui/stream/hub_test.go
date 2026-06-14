@@ -256,8 +256,8 @@ func TestEvent_CarriesSchemaVersion(t *testing.T) {
 	}
 }
 
-// TestHub_NoSendOnClosedChannelAcrossCancelRace is the reviewer
-// pin cancel() closes the subscriber's channel; a
+// TestHub_NoSendOnClosedChannelAcrossCancelRace pins that
+// cancel() closes the subscriber's channel; a
 // concurrent Publish that already picked up the subscription
 // could panic on send-to-closed. The fix (closeMu RWMutex)
 // serialises close with deliverTo. This test drives the race
@@ -297,8 +297,8 @@ func TestHub_NoSendOnClosedChannelAcrossCancelRace(t *testing.T) {
 	wg.Wait()
 }
 
-// TestHub_DropAccountingUnderConcurrentLoad is the reviewer
-// pin the Load + Store pair in deliverTo's
+// TestHub_DropAccountingUnderConcurrentLoad pins that
+// the Load + Store pair in deliverTo's
 // dropped-event prepend was racy — a concurrent increment
 // between the Load and the Store would be lost. The fix uses
 // Swap(0). This test publishes faster than the subscriber

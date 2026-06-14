@@ -126,8 +126,11 @@ func renderNarrowHelp() string {
 
 // helpCategories returns the canonical hand-list shared by the
 // boxed and narrow renderers. Hand-listed (not scraped from cobra)
-// because the listing groups by intent, and unshipped commands
-// must NOT appear until they land.
+// because the listing groups by intent, and unshipped commands must
+// NOT appear until they land. The inverse also holds: every command
+// wired in localnet.Build() must be listed here, or users can't
+// discover it. TestLocalnetHelp_MatchesWiredCommandSet enforces both
+// directions.
 func helpCategories() []helpCategory {
 	return []helpCategory{
 		{
@@ -135,6 +138,10 @@ func helpCategories() []helpCategory {
 			Commands: []helpRow{
 				{"up", "start a named LocalNet with preflight checks and readiness wait"},
 				{"down", "stop services and remove runtime containers"},
+				{"restart", "restart services in place without removing containers"},
+				{"pause", "freeze a running LocalNet (docker compose pause)"},
+				{"resume", "resume a paused LocalNet (docker compose unpause)"},
+				{"clean", "remove instance state, containers, and volumes"},
 				{"snapshot", "capture docker volumes and registry state to a tarball"},
 				{"restore", "restore docker volumes and registry state from a tarball"},
 				{"status", "services, endpoints, identities, version"},
@@ -155,7 +162,9 @@ func helpCategories() []helpCategory {
 				{"contracts", "query active contracts from a participant endpoint"},
 				{"tx", "inspect transactions from a participant endpoint"},
 				{"dar", "upload, list, download, diff, and watch DAR files"},
+				{"token", "create, mint, transfer, burn, and check token balances"},
 				{"metrics", "inspect observability endpoints and metrics state"},
+				{"skills", "browse and install AI-agent skill docs for DevKit workflows"},
 			},
 		},
 	}

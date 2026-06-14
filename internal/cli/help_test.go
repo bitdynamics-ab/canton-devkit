@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/cli/localnet"
 )
 
 // TestLocalnetHelp_RendersMockupShape verifies the help body contains
@@ -35,6 +37,7 @@ func TestLocalnetHelp_RendersMockupShape(t *testing.T) {
 		"--format=json",
 		"NO_COLOR=1",
 		"up", "down", "status", "logs", "snapshot", "dar",
+		"restart", "clean", "skills", "token",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("help body missing %q\nfull:\n%s", want, body)
@@ -42,28 +45,51 @@ func TestLocalnetHelp_RendersMockupShape(t *testing.T) {
 	}
 }
 
-// TestLocalnetHelp_OmitsUnshippedCommands is the inverse contract:
-// the help template MUST NOT advertise commands that aren't wired
-// yet, or users will try them and hit the "not implemented yet"
-// stub (which is a worse UX than not seeing the command at all).
+// TestLocalnetHelp_MatchesWiredCommandSet pins the hand-written
+// helpCategories() list to the live cobra tree in BOTH directions:
 //
-// This pins the explicit-rather-than-scrape design choice in
-// renderHelpRow's comment: when new commands land (snapshot, dar,
-// contracts, token, metrics), the change that lands them MUST also
-// touch this file to add the row.
-func TestLocalnetHelp_OmitsUnshippedCommands(t *testing.T) {
-	var out, errBuf bytes.Buffer
-	app := New(&out, &errBuf, "test", "")
-	_ = app.Run([]string{"localnet", "--help"})
+//   - every visible command registered in localnet.Build() must have
+//     a help row, or users can't discover it from --help (restart,
+//     clean, skills, and token shipped without rows and were
+//     invisible until this test existed);
+//   - every help row must correspond to a registered command, so the
+//     help never advertises commands that aren't wired yet.
+//
+// Cobra's auto-added help/completion builtins and hidden commands are
+// exempt — they're not part of the curated surface.
+func TestLocalnetHelp_MatchesWiredCommandSet(t *testing.T) {
+	wired := make(map[string]bool)
+	for _, cmd := range localnet.Build().Commands() {
+		if cmd.Hidden || cmd.Name() == "help" || cmd.Name() == "completion" {
+			continue
+		}
+		wired[cmd.Name()] = true
+	}
+	if len(wired) == 0 {
+		t.Fatal("localnet.Build() registered no visible commands — enumeration broken?")
+	}
 
-	for _, mustNot := range []string{
-		"restart", // still a stub on main; container restart is separate
-		"clean",   // still a stub on main
-		"token",   // not landed
-	} {
-		if commandListed(out.String(), mustNot) {
-			t.Errorf("help body should not list unshipped command %q\nfull:\n%s",
-				mustNot, out.String())
+	listed := make(map[string]bool)
+	for _, cat := range helpCategories() {
+		for _, row := range cat.Commands {
+			// Rows name top-level verbs; a future multi-word row
+			// (e.g. "container restart") counts under its first token.
+			name := strings.Fields(row.name)[0]
+			if listed[name] {
+				t.Errorf("help row %q listed more than once", name)
+			}
+			listed[name] = true
+		}
+	}
+
+	for name := range wired {
+		if !listed[name] {
+			t.Errorf("command %q is wired in localnet.Build() but missing from helpCategories() — users can't discover it from --help", name)
+		}
+	}
+	for name := range listed {
+		if !wired[name] {
+			t.Errorf("helpCategories() advertises %q but no such command is registered in localnet.Build()", name)
 		}
 	}
 }
@@ -313,14 +339,4 @@ func utf8RuneCount(s string) int {
 		n++
 	}
 	return n
-}
-
-func commandListed(body, name string) bool {
-	for _, line := range strings.Split(body, "\n") {
-		line = strings.TrimSpace(line)
-		if line == name || strings.HasPrefix(line, name+" ") {
-			return true
-		}
-	}
-	return false
 }

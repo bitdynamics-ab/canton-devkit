@@ -97,3 +97,30 @@ func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
+
+// composeProfiles returns the `docker compose --profile` set to replay
+// for an existing instance on a service-model compose subcommand
+// (restart / pause / ps). Every Splice service is profile-gated, so
+// omitting these targets zero services.
+//
+// Prefers the set persisted at `up` time (state.Profiles). For instances
+// created before that field existed (state.Profiles == nil) it falls
+// back to re-deriving the adapter's base profiles from the recorded
+// Splice version — which covers the core sv/app-provider/app-user/
+// swagger-ui services. User `--profile` opt-ins (observability,
+// tokens-v2) can't be recovered from old state and are best-effort only
+// on the fallback path.
+func composeProfiles(state *registry.State) []string {
+	if len(state.Profiles) > 0 {
+		return state.Profiles
+	}
+	v, err := splice.Resolve(state.SpliceVersion)
+	if err != nil {
+		return nil
+	}
+	adapter, err := adapterFor(v)
+	if err != nil {
+		return nil
+	}
+	return adapter.Profiles()
+}

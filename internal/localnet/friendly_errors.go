@@ -158,8 +158,8 @@ func RenderFriendly(w io.Writer, f *FriendlyError) {
 // FriendlyError and `errw` is a TTY, render the box; otherwise print
 // the machine-readable Error() form.
 //
-// Exit-code precedence (CLAUDE.md: "ExitCodeError must not silently
-// collapse through wrappers"):
+// Exit-code precedence (invariant: an ExitCodeError must not silently
+// collapse through wrappers):
 //
 //  1. If err's chain carries an ExitCodeError, that wins. This
 //     preserves the exit-code contract every Run* function in this

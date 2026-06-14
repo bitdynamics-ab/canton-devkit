@@ -465,8 +465,22 @@ func (c *ComposeRunner) DiscoverPort(ctx context.Context, service string, contai
 // dangling containers when a later compose project rename happens
 // (e.g. across an instance rename), and the user has no way to find
 // or clean them without inspecting docker directly.
+//
+// TEARDOWN IS `-p`-ONLY — it deliberately omits the `-f` compose files,
+// `--env-file`, and `--profile` flags (i.e. it does NOT use
+// composeBase). Every Splice LocalNet service is profile-gated
+// (`profiles: [sv, app-provider, app-user, multi-sync]`); when `-f` is
+// present, `docker compose down` applies profile filtering and removes
+// ONLY non-profiled + explicitly-enabled-profile services — which for
+// Splice is the empty set. The result is a silent no-op (exit 0) that
+// leaves every container running. This is documented compose behavior
+// (https://docs.docker.com/compose/how-tos/profiles/#stop-application-and-services-with-specific-profiles),
+// not a version bug. Tearing down by project label (`-p`) is
+// profile-agnostic and removes the whole project — exactly what `down`
+// and `clean` want, and what ForceStop already relies on. See AGENTS.md
+// "Docker Compose teardown must be `-p`-only".
 func (c *ComposeRunner) Stop(ctx context.Context, removeVolumes bool) error {
-	args := append(c.composeBase(), "down", "--remove-orphans")
+	args := []string{"compose", "-p", c.ProjectName, "down", "--remove-orphans"}
 	if removeVolumes {
 		args = append(args, "--volumes")
 	}

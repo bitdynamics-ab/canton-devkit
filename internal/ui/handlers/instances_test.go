@@ -250,7 +250,7 @@ func writeBytes(path string, body []byte) error {
 // on the create handler: BOTH a too-low and a too-high port_base must be
 // rejected synchronously with a 400, before the async bring-up spawns —
 // matching DeriveUIPorts' bounds and the CLI flag. Regression for the
-// reviewer finding that only the lower bound was guarded.
+// case where only the lower bound was guarded.
 func TestCreate_RejectsOutOfRangePortBase(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	mux := http.NewServeMux()

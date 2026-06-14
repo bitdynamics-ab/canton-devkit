@@ -139,6 +139,9 @@ func RunRestart(ctx context.Context, out io.Writer, errw io.Writer, opts *Restar
 			Env:          env,
 			WorkDir:      state.ProjectDir,
 			LogWriter:    out,
+			// Every Splice service is profile-gated; replay the enabled
+			// set or `restart` targets zero services. See composeProfiles.
+			Profiles: composeProfiles(state),
 		}
 	}
 

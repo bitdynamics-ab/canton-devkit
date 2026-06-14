@@ -113,7 +113,7 @@ func buildActivity(txs []rawTx, instrument string, decimals int, limit int) []Ac
 // Amount arithmetic uses math/big.Rat (not big.Float): Float carries a
 // binary mantissa and silently drifts past ~15 decimal digits, so
 // 0.1 + 0.2 came out "0.30000000000000004" and any 18-decimal-place V2
-// amount netted wrong on the wire — the SAME class of bug #87's
+// amount netted wrong on the wire — the same class of bug that
 // selectInputHoldings fixed. Rat is exact for decimal input and renders
 // back via FloatString(decimals).
 func netTransaction(tx rawTx, instrument string, decimals int) (ActivityEvent, bool) {

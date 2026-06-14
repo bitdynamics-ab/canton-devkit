@@ -253,8 +253,8 @@ func TestFriendlyExit_NilErrorReturnsZero(t *testing.T) {
 // to whatever generic code the caller passed in — losing the
 // exit-code contract scripts depend on.
 //
-// CLAUDE.md: "ExitCodeError must not silently collapse through
-// wrappers." This test is the artifact-grep that ensures it.
+// Invariant: an ExitCodeError must not silently collapse through
+// wrappers. This test is the artifact-grep that ensures it.
 func TestFriendlyExit_PreservesExitCodeError(t *testing.T) {
 	// A: bare ExitCodeError.
 	var buf bytes.Buffer

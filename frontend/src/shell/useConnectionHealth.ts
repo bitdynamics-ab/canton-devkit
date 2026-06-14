@@ -18,7 +18,7 @@ import { SCHEMA_VERSION, fetchVersion } from "../api";
 // transient blip would be more disruptive than the colored dot
 // the user can ignore until the next deliberate reload.
 //
-// 10s default poll matches the SSE heartbeat cadence (#42) — same
+// 10s default poll matches the SSE heartbeat cadence — same
 // "is the binary alive" question, different transport. We do NOT
 // use SSE here because that would mask the case where the SSE
 // stream stays open but /api/version 5xx's (separate handler,

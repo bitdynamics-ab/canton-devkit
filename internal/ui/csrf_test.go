@@ -336,7 +336,7 @@ func TestRouter_AccessLogEmittedPerRequest(t *testing.T) {
 
 // TestCSRF_JWTEndpointProtectedEndToEnd pins: the /api/instances/{name}/jwt
 // route is credential-issuing and MUST go through the CSRF
-// middleware from withOriginCheck (#41). The handler-package
+// middleware from withOriginCheck. The handler-package
 // unit tests use a bare ServeMux that bypasses the middleware;
 // without this end-to-end test, a regression that drops
 // withOriginCheck from NewRouter or accidentally exempts /api/

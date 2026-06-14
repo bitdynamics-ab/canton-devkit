@@ -397,7 +397,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		// host ports are still held), stranding the healthy instance as
 		// a permanent `creating` zombie the reconciler won't heal and
 		// `scrub` would orphan. Mirrors the Web UI's 409 INSTANCE_RUNNING
-		// guard (AGENTS.md "mirror the guards").
+		// guard.
 		if prior.Status == registry.StatusRunning {
 			prog.FailStep(StepPersistState, fmt.Sprintf(
 				"instance %q is already running — stop it first with "+
@@ -411,9 +411,18 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		}
 	}
 
+	// The enabled profile set: the adapter's base profiles (which gate
+	// every core Splice service) plus the user's `--profile` opt-ins.
+	// Persisted in state and re-used for the `up` runner below so the
+	// recorded set is byte-identical to what we actually bring up;
+	// `restart`/`pause`/`status` replay it (teardown does not need it —
+	// see ComposeRunner.Stop).
+	enabledProfiles := append(adapter.Profiles(), opts.Profiles...)
+
 	state := registry.NewState(opts.Name, version.Tag)
 	state.ComposeProject = "canton-" + opts.Name
 	state.ComposeFiles = composeFiles
+	state.Profiles = enabledProfiles
 	state.DockerNetwork = opts.Name
 	state.ContainerPrefix = containerPrefix
 	state.ProjectDir = projectDir
@@ -530,8 +539,9 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			// app-user / swagger-ui) is filtered out → "no service
 			// selected". Merge the adapter's base profiles with the
 			// user's opt-ins on the CLI so the union is what docker
-			// compose sees.
-			Profiles: append(adapter.Profiles(), opts.Profiles...),
+			// compose sees. Persisted as state.Profiles above so
+			// restart/pause/status replay the identical set.
+			Profiles: enabledProfiles,
 		}
 	}
 
