@@ -389,7 +389,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		// host ports are still held), stranding the healthy instance as
 		// a permanent `creating` zombie the reconciler won't heal and
 		// `scrub` would orphan. Mirrors the Web UI's 409 INSTANCE_RUNNING
-		// guard (AGENTS.md "mirror the guards").
+		// guard.
 		if prior.Status == registry.StatusRunning {
 			prog.FailStep(StepPersistState, fmt.Sprintf(
 				"instance %q is already running — stop it first with "+
