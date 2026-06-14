@@ -16,7 +16,7 @@ import { W, wMono } from "../tokens";
 // layers two advisory checks (platform-support matrix + host-port
 // availability) on top of the resource/Docker gate that
 // /api/preflight already exposes — advisories a Web UI operator
-// previously could not see (BIT-131 parity gap). The report shape is
+// previously could not see. The report shape is
 // types.PreflightReport, identical to the create-modal preflight panel,
 // so the two surfaces can't drift.
 //
