@@ -112,7 +112,7 @@ describe("remediationForCode", () => {
   });
 
   it("every known code is handled — guards against the silent-default regression", () => {
-    // This is THE test the reviewer asked for. If a contributor
+    // This test guards that behavior. If a contributor
     // adds a new code to the ErrorCode union in api.ts but
     // forgets to extend remediationForCode, the new code maps
     // to the `default:` arm returning null — silently no

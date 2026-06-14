@@ -134,8 +134,8 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	// resolve user-id → party-rights set so the filter
 	// matches what the JWT can actually see.
 	//
-	// Disambiguate the three failure modes (review blocker #5,
-	// mirrors handlers/contracts.go):
+	// Disambiguate the three failure modes (mirrors
+	// handlers/contracts.go):
 	//   - transport / dial error  → 502 BAD_GATEWAY
 	//   - PermissionDenied        → 503 EXPLORER_NEEDS_PARTY_JWT
 	//   - no party rights granted → 503 EXPLORER_NEEDS_PARTY_JWT
@@ -174,7 +174,7 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	// disturbing the rest of the handler (the parent ctx still
 	// drives writeJSON). Without this we'd churn rows forever on a
 	// busy participant — the original `rows = rows[len(rows)-limit:]`
-	// reslice never broke the loop. (Review blocker #4.)
+	// reslice never broke the loop.
 	streamCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
 	stream, err := client.Updates(streamCtx, ledger.UpdatesRequest{
@@ -202,8 +202,7 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fixed-size ring buffer (review blocker #4; tightened in
-	// follow-up).
+	// Fixed-size ring buffer.
 	//
 	// Why we DON'T break at `count >= limit`:
 	// ------------------------------------------------------------
@@ -229,7 +228,7 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	//      every item so a slow upstream surfaces promptly as
 	//      DeadlineExceeded.
 	//
-	// The "stop when we have what we need" reviewer hint is
+	// The "stop when we have what we need" approach is
 	// genuinely incompatible with newest-N semantics on a
 	// strictly-ascending stream. If a future Canton release adds
 	// reverse-iteration (or a server-side "latest N" RPC), we can

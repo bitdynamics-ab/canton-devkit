@@ -58,5 +58,5 @@ func TestValidateAmount(t *testing.T) {
 	}
 }
 
-// (TestValidatePartyID lives in validate_test.go, added by #82 which
-// owns validatePartyID; removed the duplicate here on merge to main.)
+// (TestValidatePartyID lives in validate_test.go, which owns
+// validatePartyID; removed the duplicate here on merge to main.)

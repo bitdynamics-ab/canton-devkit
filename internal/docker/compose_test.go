@@ -16,7 +16,7 @@ import (
 // We use this in lieu of writing a fake docker binary to a temp dir
 // because:
 //
-//   - The wiring assertions reviewers care about (project name, compose
+//   - The wiring assertions we need to verify (project name, compose
 //     files, env files, WorkDir, Env, argv order) are all observable on
 //     the *exec.Cmd struct — no need to actually run docker.
 //   - The behaviour assertions (WaitForHealthy under exited/unhealthy/
