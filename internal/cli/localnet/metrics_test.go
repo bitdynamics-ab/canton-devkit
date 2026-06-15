@@ -87,6 +87,68 @@ func TestScrapeMetrics_PopulatesLatencyBlock(t *testing.T) {
 	}
 }
 
+// TestScrapeMetrics_TransportFailureSurfacesError: when
+// Prometheus is unreachable (here: a closed listener) EVERY query
+// fails at the transport layer, so scrapeMetrics must return a
+// non-nil error rather than an all-nil report. This is the contract
+// the RunE failure branch ("prometheus query failed", exit 4)
+// depends on — without it the CLI prints all-dashes and exits 0
+// whether observability is off, the port is wrong, or the instance
+// is healthy.
+func TestScrapeMetrics_TransportFailureSurfacesError(t *testing.T) {
+	// Bind then immediately close so the port is almost certainly
+	// refused (no listener) for the duration of the test.
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := u.Hostname()
+	port, _ := strconv.Atoi(u.Port())
+	srv.Close() // now connections to host:port are refused
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	report, err := scrapeMetrics(ctx, host, port)
+	if err == nil {
+		t.Fatalf("expected transport error when prometheus is unreachable, got report=%+v", report)
+	}
+	if report != nil {
+		t.Errorf("expected nil report on transport failure, got %+v", report)
+	}
+}
+
+// TestScrapeMetrics_EmptyButReachableIsNotError: a healthy
+// Prometheus that simply has no samples yet (fresh instance) returns
+// (nil,nil) per query. scrapeMetrics must treat that as a valid empty
+// report — NOT a failure — so a just-started instance doesn't trip the
+// exit-4 branch. The headline fields are nil; the call succeeds.
+func TestScrapeMetrics_EmptyButReachableIsNotError(t *testing.T) {
+	// fakePromHandler with an empty value map answers every query with
+	// an empty Prometheus result vector (status success, no samples).
+	srv := httptest.NewServer(fakePromHandler(t, map[metricsq.Headline]float64{}))
+	defer srv.Close()
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := u.Hostname()
+	port, _ := strconv.Atoi(u.Port())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	report, err := scrapeMetrics(ctx, host, port)
+	if err != nil {
+		t.Fatalf("empty-but-reachable prometheus should not error: %v", err)
+	}
+	if report == nil {
+		t.Fatal("expected a (nil-fields) report, got nil")
+	}
+	if report.LedgerTPS != nil || report.Latency.P95Ms != nil {
+		t.Errorf("expected nil headline fields on empty prometheus, got %+v", report)
+	}
+}
+
 func TestPromQuery_DecodesPrometheusVectorObject(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

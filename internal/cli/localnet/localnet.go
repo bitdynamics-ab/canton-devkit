@@ -53,6 +53,7 @@ func Build() *cobra.Command {
 	localnet.AddCommand(buildContainer())
 	localnet.AddCommand(buildRefresh())
 	localnet.AddCommand(buildMetrics())
+	localnet.AddCommand(buildObservability())
 
 	// contracts/tx CLI. Endpoint discovery (auto-resolving the
 	// participant gRPC port from registry state) is not yet done;

@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
@@ -40,6 +42,44 @@ func TestObservabilityRequestResolveTargets(t *testing.T) {
 					p, g, ok, tc.wantProm, tc.wantGraf, tc.wantOk)
 			}
 		})
+	}
+}
+
+// TestFailedObservabilityServiceNamesComponent guards the
+// OBSERVABILITY_TOGGLE_FAIL remediation hint: it must name the sidecar
+// that actually failed. Before the fix the hint hardcoded
+// `<project>-prometheus` even when only Grafana failed; the component is
+// now derived from the wrapped SetObservability error.
+func TestFailedObservabilityServiceNamesComponent(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"grafana-only failure", errors.New("enable grafana: docker compose up: exit status 1"), "grafana"},
+		{"disable grafana failure", errors.New("disable grafana: docker compose stop: exit status 1"), "grafana"},
+		{"prometheus failure", errors.New("enable prometheus: docker compose up: exit status 1"), "prometheus"},
+		// The wrapped docker output of a PROMETHEUS failure can mention
+		// the grafana service (a compose error listing both); the prefix
+		// match must still name prometheus, not be fooled by the tail.
+		{"prometheus failure whose output names grafana", errors.New("enable prometheus: docker compose up: exit status 1\noutput:\nservice \"grafana\" depends on undefined network"), "prometheus"},
+		{"non-component error falls back", errors.New("persist observability toggle: disk full"), "prometheus"},
+		{"nil error falls back", nil, "prometheus"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := failedObservabilityService(tc.err); got != tc.want {
+				t.Errorf("failedObservabilityService(%v) = %q; want %q", tc.err, got, tc.want)
+			}
+		})
+	}
+
+	// The hint string the handler builds must carry the resolved
+	// component so an operator tails the right container.
+	grafErr := errors.New("enable grafana: docker compose up: exit status 1")
+	hint := "docker logs proj-" + failedObservabilityService(grafErr)
+	if !strings.Contains(hint, "-grafana") {
+		t.Errorf("grafana-only remediation hint = %q; want it to name -grafana", hint)
 	}
 }
 

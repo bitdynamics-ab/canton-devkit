@@ -119,3 +119,31 @@ and links to follow-up tickets where applicable. Updated as we ship.
 - **Windows users**: use the standalone zip from GitHub Releases
   rather than DPM until the Windows `.exe` path through DPM is
   verified.
+
+## Shared observability stack
+
+- **Observability is per-instance, not a single host-level stack
+  (yet).** Each LocalNet started (or runtime-toggled) with observability
+  gets its own Prometheus **and** Grafana container, joined to that
+  instance's docker network. Two observability-enabled instances
+  therefore run two of each — roughly **~250–350 MiB each** for
+  Prometheus and Grafana respectively (so ~600 MiB of duplicated
+  overhead per extra environment).
+- **Trade-off.** The per-instance model keeps scraping trivial:
+  Prometheus resolves `canton:10013` / `splice:10013` over the
+  instance's own docker network DNS, so no metrics port is published to
+  the host and instances never contend on one scrape config. The cost
+  is the duplicated RAM above when several environments run at once.
+- **Planned follow-up — host-level shared stack.** The original
+  proposal (docs/original-devkit-proposal.md line 188) envisioned ONE
+  host-level Prometheus + Grafana serving every instance via Prometheus
+  file-based service discovery (`file_sd_configs`) regenerated as
+  instances come and go. That requires the shared Prometheus to reach
+  each instance's metrics endpoint across docker networks (joining every
+  instance network, or publishing the metrics port to loopback) plus
+  refcounted teardown when the last instance referencing it goes away —
+  a larger, networking-sensitive change deferred to keep this pass
+  coherent. The runtime toggle already funnels through a single neutral
+  function (`internal/localnet.SetObservability`), so the migration is
+  additive rather than a rewrite of both surfaces. Tracked as a
+  `// TODO: shared observability stack` follow-up.

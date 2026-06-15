@@ -3,6 +3,7 @@ import {
   ApiError,
   fetchMetricsRange,
   fetchMetricsSummary,
+  setObservability,
   type MetricsSummary,
   type PrometheusRangeResponse,
 } from "../api";
@@ -251,7 +252,6 @@ export function MetricsScreen() {
         <Header name={name} />
         <ObservabilityOffPanel
           name={name}
-          remediation={observabilityOff}
           onEnabled={() => {
             // Clearing the empty-state re-runs the effect via the
             // `observabilityOff` dependency; the next tick will
@@ -596,11 +596,9 @@ function ErrLine({ msg }: { msg: string }) {
 
 function ObservabilityOffPanel({
   name,
-  remediation,
   onEnabled,
 }: {
   name: string;
-  remediation: string;
   onEnabled: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -612,30 +610,14 @@ function ObservabilityOffPanel({
     try {
       // Per-component fields are the canonical shape on the server;
       // we send BOTH because the Metrics screen needs Prometheus
-      // (for data) AND Grafana (for the embedded dashboards). The
-      // legacy `enabled` field is also accepted but per-component
-      // is the documented, non-deprecated path.
-      const resp = await fetch(
-        `/api/instances/${encodeURIComponent(name)}/observability`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prometheus: true, grafana: true }),
-        },
-      );
-      if (!resp.ok) {
-        let msg = `HTTP ${resp.status}`;
-        try {
-          const body = (await resp.json()) as { error?: string; remediation?: string[] };
-          msg = body.error ?? msg;
-        } catch {
-          /* keep status */
-        }
-        throw new Error(msg);
-      }
+      // (for data) AND Grafana (for the embedded dashboards). Routed
+      // through the typed setObservability helper so the apiFetch
+      // chokepoint's envelope decoding + ApiError mapping apply,
+      // instead of a hand-rolled fetch that re-implemented them.
+      await setObservability(name, { prometheus: true, grafana: true });
       onEnabled();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "failed");
+      setErr(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "failed");
       setBusy(false);
     }
   }
@@ -690,7 +672,7 @@ function ObservabilityOffPanel({
       )}
 
       <p style={{ color: W.dim, fontSize: 12, marginTop: 14 }}>
-        Or restart from the CLI:{" "}
+        Or from the CLI (same hot toggle, no restart):{" "}
         <code
           style={{
             fontFamily: wMono,
@@ -700,10 +682,7 @@ function ObservabilityOffPanel({
             borderRadius: 4,
           }}
         >
-          {remediation
-            .replace(/^.*`/, "")
-            .replace(/`.*$/, "")
-            .trim() || `dpm localnet up --profile observability --name ${name}`}
+          {`dpm localnet observability enable --name ${name}`}
         </code>
       </p>
     </div>

@@ -191,8 +191,22 @@ type DashboardsBlock struct {
 const grafanaDashboardUID = "canton-localnet-v1"
 
 // scrapeMetrics runs the curated Prometheus queries in parallel
-// and assembles them into a MetricsReport. // queries now live in internal/metricsq so CLI + handler share
-// one canonical map (no copy-paste drift).
+// and assembles them into a MetricsReport. Queries live in
+// internal/metricsq so CLI + handler share one canonical map (no
+// copy-paste drift).
+//
+// Error model: a per-query failure where Prometheus answered
+// but the metric simply has no samples yet (promQuery returns
+// (nil, nil)) must NOT fail the whole call — a fresh instance
+// legitimately has empty headlines. But a TRANSPORT failure
+// (connection refused, wrong port, non-200, malformed body) is a
+// different class of problem: it means we could not ask Prometheus
+// at all. If EVERY query fails that way we return an error so the
+// CLI exits non-zero (ExitRuntimeFailure) instead of printing
+// all-dashes and exiting 0 — the previously-dead failure branch in
+// RunE. We require ALL queries to fail (not just one) so a single
+// flaky query against a healthy Prometheus still yields a report;
+// a real outage takes every query down together.
 func scrapeMetrics(ctx context.Context, host string, port int) (*MetricsReport, error) {
 	base := fmt.Sprintf("http://%s:%d", host, port)
 	results := make(map[metricsq.Headline]*float64, len(metricsq.SummaryQueries))
@@ -208,13 +222,27 @@ func scrapeMetrics(ctx context.Context, host string, port int) (*MetricsReport, 
 			ch <- res{k, v, err}
 		}(k, q)
 	}
+	var firstErr error
+	transportFailures := 0
 	for range metricsq.SummaryQueries {
 		r := <-ch
-		// Per-query failure doesn't fail the whole call —
-		// metric may not exist yet on a fresh instance.
-		if r.err == nil {
-			results[r.key] = r.val
+		if r.err != nil {
+			// Transport-level failure (could not reach Prometheus).
+			// Count it; remember the first for the surfaced message.
+			transportFailures++
+			if firstErr == nil {
+				firstErr = r.err
+			}
+			continue
 		}
+		// Prometheus answered; r.val may be nil ("no samples yet"),
+		// which is a genuine empty result, not a failure.
+		results[r.key] = r.val
+	}
+	// All queries failed at the transport layer → Prometheus is
+	// unreachable. Surface it rather than masquerading as empty data.
+	if transportFailures == len(metricsq.SummaryQueries) && firstErr != nil {
+		return nil, firstErr
 	}
 	return &MetricsReport{
 		SchemaVersion: metricsq.SchemaVersion,

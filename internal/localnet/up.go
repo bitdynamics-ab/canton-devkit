@@ -168,6 +168,17 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Reject unknown --profile values up front. Shared with the
+	// Web UI create handler via ValidateProfiles so a typo'd
+	// `--profile observabilty` fails fast with a user error here
+	// instead of silently producing a metric-less instance — the
+	// exact failure the UI's allowlist already prevents with a 400.
+	// A pure input check: runs before the lock / any side effect.
+	if err := ValidateProfiles(opts.Profiles); err != nil {
+		prog.FailStep(StepResolveVersion, err.Error(), nil)
+		return ExitUserError
+	}
+
 	// Wall-clock start for the welcome screen's "ready in Nm Ns" line.
 	// Captured at the top of RunUp so it includes resolve+preflight
 	// time, not just compose-up time — gives the user a realistic

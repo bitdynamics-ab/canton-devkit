@@ -213,6 +213,45 @@ const PrometheusProfileName = "prometheus"
 // prometheus.
 const GrafanaProfileName = "grafana"
 
+// KnownProfiles returns the set of docker-compose profiles DevKit
+// recognises as valid `--profile` / UI checkbox values. This is the
+// single source of truth both surfaces validate against: the CLI's
+// RunUp (via ValidateProfiles) and the Web UI create handler's
+// allowlist. Keeping the list here — beside the profile-name
+// constants — stops the two surfaces from drifting (AGENTS.md
+// "mirror the guards").
+func KnownProfiles() []string {
+	return []string{
+		ObservabilityProfileName,
+		PrometheusProfileName,
+		GrafanaProfileName,
+		TokensV2ProfileName,
+	}
+}
+
+// ValidateProfiles returns a non-nil error naming the first unknown
+// profile in the list (and the supported set) when any entry is not
+// in KnownProfiles. Empty / nil input is valid (no opt-in profiles).
+//
+// Shared by RunUp so `dpm localnet up --profile observabilty` (typo)
+// fails fast with a user error instead of silently producing a
+// metric-less instance — the exact failure the Web UI's allowlist
+// already prevents with a 400. The UI handler delegates to this
+// function so a single allowlist governs both surfaces.
+func ValidateProfiles(profiles []string) error {
+	known := make(map[string]bool, len(KnownProfiles()))
+	for _, p := range KnownProfiles() {
+		known[p] = true
+	}
+	for _, p := range profiles {
+		if !known[p] {
+			return fmt.Errorf("unknown profile %q — supported profiles: %s",
+				p, strings.Join(KnownProfiles(), ", "))
+		}
+	}
+	return nil
+}
+
 // ExpandObservabilityProfiles returns the de-duplicated set of
 // per-component profiles equivalent to the input list. Legacy
 // "observability" expands to ["prometheus", "grafana"]; the

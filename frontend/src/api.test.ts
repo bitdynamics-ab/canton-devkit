@@ -12,6 +12,7 @@ import {
   issueJwt,
   mintToken,
   openContractsStream,
+  setObservability,
   transferToken,
 } from "./api";
 
@@ -197,6 +198,65 @@ describe("issueJwt", () => {
     // %2F = '/', so '..%2Fetc%2Fpasswd' — never reaches the
     // server as a literal slash that could be mis-routed.
     expect(url).toBe("/api/instances/..%2Fetc%2Fpasswd/jwt");
+  });
+});
+
+describe("setObservability", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("POSTs the per-component body through apiFetch and decodes the envelope", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          schema_version: 1,
+          instance: "demo",
+          prometheus: true,
+          grafana: true,
+          enabled: true,
+          prometheus_ui: 19090,
+          grafana_ui: 13000,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const res = await setObservability("demo", { prometheus: true, grafana: true });
+
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("/api/instances/demo/observability");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({ prometheus: true, grafana: true });
+    // Routed through apiFetch → Content-Type is set for a body request.
+    expect(init.headers["Content-Type"]).toBe("application/json");
+    expect(res.prometheus).toBe(true);
+    expect(res.grafana_ui).toBe(13000);
+  });
+
+  it("maps an error envelope to ApiError (does not bypass the chokepoint)", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ code: "OBSERVABILITY_TOGGLE_FAIL", error: "docker compose up failed" }),
+        { status: 502, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    await expect(
+      setObservability("demo", { prometheus: true, grafana: false }),
+    ).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it("url-encodes the instance name", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ schema_version: 1, instance: "x", prometheus: false, grafana: false, enabled: false }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    await setObservability("../etc/passwd", { prometheus: false, grafana: false });
+    const [url] = fetchSpy.mock.calls[0];
+    expect(url).toBe("/api/instances/..%2Fetc%2Fpasswd/observability");
   });
 });
 
