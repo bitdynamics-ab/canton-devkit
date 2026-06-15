@@ -1,12 +1,12 @@
-// — cobra wrappers for `dpm localnet snapshot` + `restore`.
+// Cobra wrappers for `dpm localnet snapshot` + `restore`.
 //
-// The orchestrators live in internal/localnet/snapshot. They were
-// extracted from this package as part of so the UI handlers
-// (internal/ui/handlers/snapshots.go) can call the same code paths —
-// the import cycle ui→handlers→cli/localnet was blocking parity.
+// The orchestrators live in internal/localnet/snapshot so the UI
+// handlers (internal/ui/handlers/snapshots.go) can call the same code
+// paths; keeping them here would force an ui→handlers→cli/localnet
+// import cycle.
 //
-// Keep this file thin: flag parsing + delegate. Anything more
-// belongs in the snapshot package alongside the streaming/tar code.
+// Keep this file thin: flag parsing + delegate. Anything more belongs
+// in the snapshot package alongside the streaming/tar code.
 package localnet
 
 import (
@@ -21,22 +21,24 @@ func buildSnapshot() *cobra.Command {
 	var name, to string
 	cmd := &cobra.Command{
 		Use:   "snapshot",
-		Short: "Capture a LocalNet's docker volumes + registry state to a tarball",
-		Long: `Captures every docker volume owned by the named LocalNet's
-compose project, plus the instance's registry.State, into a single
-.tgz archive. The header (snapshot.json) is written FIRST so
-'restore' can stream-validate schema + Splice version before
-unpacking anything.
+		Short: "Capture a LocalNet's database + registry state to a tarball",
+		Long: `Captures a logical PostgreSQL dump (pg_dumpall) of the named
+LocalNet's database, plus the instance's registry.State, into a single
+.tgz archive. A LocalNet keeps all of its state — ledger, contracts,
+parties, node identities/keys — in that one Postgres, so the dump is the
+whole instance. This is the same backup method Canton and Splice
+document for their nodes, and the header (snapshot.json) is written
+FIRST so 'restore' can stream-validate schema + Splice version before
+loading anything.
 
-The instance does NOT need to be stopped. Volumes are read from
-ephemeral alpine containers — services keep using their own copy.
+The instance MUST be running — pg_dumpall reads from a live Postgres.
 
-Consistency caveat: a snapshot of a RUNNING instance is
-crash-consistent, not application-consistent — in-flight ledger
-transactions or unflushed database writes may be only partially
-captured, so a restored copy can need crash recovery. For a
-guaranteed-consistent capture, 'localnet pause --name X' (or 'down')
-first; the command warns when run against a running instance.`,
+For a consistent capture, the node containers are paused (docker pause)
+for the duration of the dump and resumed afterwards, so no component
+writes to the database while the backup runs — Canton's documented rule
+for a single-step whole-cluster backup. With every database frozen at
+one instant, the cross-database ordering invariant holds automatically,
+so the snapshot is application-consistent, not merely crash-consistent.`,
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -65,18 +67,21 @@ func buildRestore() *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "restore",
-		Short: "Restore docker volumes + registry state from a snapshot tarball",
-		Long: `Restores every volume from the named snapshot archive AND
-re-registers the instance via the state.json embedded in the
-archive. Header is validated before any volume is touched.
+		Short: "Restore a LocalNet's database + registry state from a snapshot tarball",
+		Long: `Loads the database dump from the named snapshot archive back
+into the instance's Postgres AND re-registers the instance via the
+state.json embedded in the archive. The header is validated before
+anything is touched. The load runs against a throwaway Postgres on the
+instance's data volume — no nodes, so no open connections block it.
 
 If the snapshot's Splice version differs from an existing local
-instance's, restore refuses unless --force is set — restoring
-volumes formatted for a different binary is unsafe by default.
+instance's, restore refuses unless --force is set.
 
-If the instance does not exist locally, it is registered from the
-embedded state.json with Status=stopped. If it exists and is
-running, restore refuses — run 'localnet down --name X' first.`,
+The instance must NOT be running (a restore drops and recreates every
+database) — run 'localnet down --name X' first. If the instance does
+not exist locally, it is registered from the embedded state.json. Either
+way the restore leaves it stopped; run 'localnet up --name X' to start
+it on the restored database.`,
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,

@@ -114,6 +114,17 @@ type State struct {
 	// with Parties == nil.
 	Parties map[string]PartyRef `json:"parties,omitempty"`
 
+	// ImageDigests records the content digest (image ID, sha256:…) of
+	// each Splice container image that was actually pulled and run, keyed
+	// by "<repository>:<tag>". Captured post-up from `docker compose
+	// images`. The catalogue pins the source TREE (commit + ContentSHA)
+	// but the ghcr image tags are mutable; recording the resolved digests
+	// lets a later `up`/`restart` WARN if a republished tag changed what
+	// actually runs — the strongest verification otherwise covers only
+	// the least-dangerous artifact. Additive — older state.json files
+	// without this key decode cleanly with ImageDigests == nil.
+	ImageDigests map[string]string `json:"image_digests,omitempty"`
+
 	// Current lifecycle status.
 	Status            Status `json:"status"`
 	LastHealthCheckAt string `json:"last_health_check_at,omitempty"`
@@ -422,6 +433,17 @@ var forceFailBeforeRename func()
 // The defer runs through panic unwinding as well, so even a panic
 // between write and rename (simulated via forceFailBeforeRename) leaves
 // no leftover temp file — see TestAtomicWriteSurvivesPanicBeforeRename.
+//
+// Durability: the temp file's contents are fsync'd BEFORE the rename,
+// and the containing directory is fsync'd AFTER the rename. Without
+// the data fsync, a power loss shortly after the rename can persist
+// the directory entry (the rename) before the file's data blocks on
+// ext4 and other journaled filesystems without strict ordering —
+// leaving a zero-length or partially-written state.json/index.json,
+// exactly the corruption the temp+rename dance exists to prevent. The
+// dir fsync makes the rename itself durable. The panic-injection test
+// only proves process-crash safety; these barriers add power-loss
+// safety on top.
 func atomicWrite(path string, data []byte, mode os.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".tmp-state-*")
@@ -444,6 +466,12 @@ func atomicWrite(path string, data []byte, mode os.FileMode) error {
 		_ = tmp.Close()
 		return fmt.Errorf("chmod temp: %w", err)
 	}
+	// Flush the file's data to stable storage before the rename so the
+	// bytes are durable independent of the directory entry.
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("sync temp: %w", err)
+	}
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close temp: %w", err)
 	}
@@ -454,5 +482,11 @@ func atomicWrite(path string, data []byte, mode os.FileMode) error {
 		return fmt.Errorf("rename %s → %s: %w", tmpPath, path, err)
 	}
 	committed = true
+	// Persist the rename itself: an fsync of the parent directory makes
+	// the new directory entry survive a crash. Best-effort on platforms
+	// where directory fsync isn't meaningful (see fsyncDir).
+	if err := fsyncDir(dir); err != nil {
+		return fmt.Errorf("sync dir %s: %w", dir, err)
+	}
 	return nil
 }

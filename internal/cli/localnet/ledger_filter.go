@@ -35,6 +35,20 @@ import (
 //
 // `verbose=true` requests RecordWithType verbosity so the CLI can
 // render template-id strings without a separate package lookup.
+//
+// Wire-shape contract (the bug this guards against): Canton's Ledger
+// API v2 request validation REJECTS an EventFormat whose FiltersByParty
+// is empty AND whose FiltersForAnyParty is nil — "filtersByParty and
+// filtersForAnyParty cannot both be empty" (INVALID_ARGUMENT). The
+// wildcard is therefore a NON-NIL but empty *Filters{} in
+// FiltersForAnyParty: an empty Cumulative list defaults to a wildcard
+// CumulativeFilter per the proto, which the participant gates by the
+// JWT's own claim. So the flag-less default path must emit
+// FiltersForAnyParty: &Filters{}, never nil. Likewise a --party with
+// no --template maps each party to &Filters{} (empty wildcard),
+// never a nil value. See internal/canton/ledger/state.go and the
+// token package (holdingInterfaceFilterV2) which both rely on the
+// non-nil-empty-Filters shape.
 func buildEventFormat(parties, templates []string, verbose bool) *lapiv2.EventFormat {
 	tplFilters, err := buildTemplateFilters(templates)
 	if err != nil {
@@ -45,6 +59,14 @@ func buildEventFormat(parties, templates []string, verbose bool) *lapiv2.EventFo
 		_ = err
 	}
 	if len(parties) == 0 {
+		// Wildcard: FiltersForAnyParty MUST be non-nil. When no
+		// --template was given, tplFilters is nil — substitute an
+		// empty *Filters{} so the participant sees the valid
+		// "wildcard, no template restriction" shape rather than an
+		// empty EventFormat it rejects.
+		if tplFilters == nil {
+			tplFilters = &lapiv2.Filters{}
+		}
 		return &lapiv2.EventFormat{
 			FiltersForAnyParty: tplFilters,
 			Verbose:            verbose,
@@ -52,7 +74,15 @@ func buildEventFormat(parties, templates []string, verbose bool) *lapiv2.EventFo
 	}
 	byParty := make(map[string]*lapiv2.Filters, len(parties))
 	for _, p := range parties {
-		byParty[p] = tplFilters
+		// Each per-party entry must be a non-nil *Filters. With no
+		// --template the wildcard-per-party shape is an empty
+		// *Filters{}; a nil value would marshal as an absent entry
+		// and the participant rejects a party key with no filter.
+		if tplFilters != nil {
+			byParty[p] = tplFilters
+		} else {
+			byParty[p] = &lapiv2.Filters{}
+		}
 	}
 	return &lapiv2.EventFormat{
 		FiltersByParty: byParty,

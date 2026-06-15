@@ -2,7 +2,8 @@ package ui
 
 import (
 	"net/http"
-	"strings"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui/httpsec"
 )
 
 // withOriginCheck is the CSRF-protection middleware for credential-
@@ -32,6 +33,14 @@ import (
 // reads cheap and removes a class of false-positive 403s from
 // inline-image fetches.
 //
+// # The DNS-rebinding gap is covered separately
+//
+// Origin==Host alone does NOT stop DNS rebinding (attacker rebinds
+// evil.example.com → 127.0.0.1, so Origin and Host are BOTH
+// evil.example.com and this check passes). That hole is closed by
+// withHostCheck, which runs on ALL methods including GET. See that
+// middleware's godoc.
+//
 // # SSE caveat
 //
 // EventSource (the browser SSE client) only sends GET, so SSE is
@@ -52,6 +61,43 @@ func withOriginCheck(next http.Handler) http.Handler {
 	})
 }
 
+// withHostCheck rejects any request whose Host header host-part is not
+// a loopback name ({127.0.0.0/8, ::1, localhost}, plus any extra hosts
+// the operator explicitly allowed via --allow-non-loopback). Runs on
+// EVERY method, including GET — unlike withOriginCheck.
+//
+// # Why a Host allowlist is required
+//
+// The CSRF middleware checks Origin == Host, and the listener binds to
+// loopback. Neither stops DNS rebinding:
+//
+//	attacker controls evil.example.com → initially their server,
+//	then rebinds the A record to 127.0.0.1. The victim's browser
+//	loads evil.example.com:7777 and its fetch()es now hit OUR
+//	loopback server with Origin: http://evil.example.com:7777 and
+//	Host: evil.example.com:7777. Origin == Host, so withOriginCheck
+//	passes; the loopback bind doesn't help because the browser (on
+//	the victim's box) makes the loopback connection itself.
+//
+// The blast radius is real: token mint/transfer/burn move value, the
+// instance create/delete endpoints stand up and tear down LocalNets,
+// and GET /api/instances/{name}/app-config leaks party IDs +
+// endpoints. The standard mitigation (webpack-dev-server allowedHosts,
+// Grafana, etc.) is a Host allowlist; this is ours.
+//
+// We deliberately fail closed on a missing Host header too — a real
+// browser always sends one; its absence is anomalous.
+func withHostCheck(allowedExtra []string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !httpsec.IsLoopbackHost(r.Host, allowedExtra...) {
+			http.Error(w, "forbidden: "+httpsec.ErrHostNotAllowed.Error(),
+				http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // isStateChanging is the method set CSRF protection applies to.
 // Mirrors the standard "safe methods" list from RFC 7231 §4.2.1.
 func isStateChanging(method string) bool {
@@ -64,88 +110,17 @@ func isStateChanging(method string) bool {
 }
 
 // checkOriginAgainstHost validates that the request's Origin (or
-// Referer, fallback) header host matches r.Host. Treats missing
-// Origin+Referer as a failure (browsers always send one on
-// cross-origin fetch; curl users can opt-in by setting Origin to
-// the server's URL).
+// Referer, fallback) header host matches r.Host. Thin wrapper over
+// httpsec.CheckOriginAgainstHost so the package-ui middleware and the
+// package-handlers SSE endpoint share one implementation.
 //
-// Returns nil on match, an explanatory error otherwise. The error
-// text is returned to the client as the 403 body — useful for
-// debugging during dev, deliberately vague about the comparison
-// (no "expected X got Y" so a fuzzer can't binary-search).
+// Returns nil on match, an explanatory error otherwise.
 func checkOriginAgainstHost(r *http.Request) error {
-	host := r.Host
-	if host == "" {
-		return errCSRFMissingHost
-	}
-	// Origin header wins if present (per RFC 6454). Falls back to
-	// Referer (still useful but easier to spoof in older browsers).
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		origin = r.Header.Get("Referer")
-	}
-	if origin == "" {
-		return errCSRFMissingOrigin
-	}
-	// Extract host from the Origin URL. We don't pull net/url for
-	// this — we already strip the scheme and any path so a string-
-	// match against r.Host is correct and faster.
-	originHost := stripOriginToHost(origin)
-	if originHost == "" {
-		return errCSRFMalformedOrigin
-	}
-	if !hostsMatch(originHost, host) {
-		return errCSRFOriginMismatch
-	}
-	return nil
+	return httpsec.CheckOriginAgainstHost(
+		r.Header.Get("Origin"), r.Header.Get("Referer"), r.Host)
 }
 
-// stripOriginToHost extracts the host portion of an Origin URL
-// ("http://127.0.0.1:7777/foo" → "127.0.0.1:7777"). Returns ""
-// for inputs that don't look like a URL with a scheme separator.
-func stripOriginToHost(origin string) string {
-	const sep = "://"
-	i := strings.Index(origin, sep)
-	if i < 0 {
-		return ""
-	}
-	rest := origin[i+len(sep):]
-	if j := strings.IndexAny(rest, "/?"); j >= 0 {
-		rest = rest[:j]
-	}
-	return rest
-}
-
-// hostsMatch compares two host strings, tolerating an implicit
-// port (Origin without ":port" vs r.Host with ":port"). Strict
-// otherwise — we don't normalise case (hosts are case-insensitive
-// but loopback IPs are ASCII numerics, so case is a non-issue).
-func hostsMatch(a, b string) bool {
-	if a == b {
-		return true
-	}
-	// Allow "127.0.0.1" to match "127.0.0.1:7777" only if the
-	// HOST side carries the port. Origin without port → port 80
-	// (HTTP default), which we'd never bind for the UI; this
-	// fallback is for the rare curl case.
-	if strings.HasPrefix(b, a+":") {
-		return true
-	}
-	if strings.HasPrefix(a, b+":") {
-		return true
-	}
-	return false
-}
-
-// Error sentinels. Distinct types so a debugging test can branch
-// on the specific failure mode without scraping strings.
-type csrfErr string
-
-func (e csrfErr) Error() string { return string(e) }
-
-const (
-	errCSRFMissingHost     = csrfErr("request has no Host header")
-	errCSRFMissingOrigin   = csrfErr("missing Origin and Referer headers")
-	errCSRFMalformedOrigin = csrfErr("Origin/Referer header malformed")
-	errCSRFOriginMismatch  = csrfErr("Origin/Referer host does not match server")
-)
+// hostsMatch is retained as a package-local alias of the shared helper
+// so the existing TestCSRF_HostsMatch unit test (csrf_test.go) keeps
+// exercising the comparison rules from this package.
+func hostsMatch(a, b string) bool { return httpsec.HostsMatch(a, b) }

@@ -2,10 +2,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   SCHEMA_VERSION,
+  acceptTransfer,
   apiFetch,
+  burnToken,
+  createToken,
+  downloadSnapshot,
+  faucetToken,
   fetchContractDetail,
   issueJwt,
+  mintToken,
   openContractsStream,
+  transferToken,
 } from "./api";
 
 // apiFetch is the single chokepoint for every backend call.
@@ -101,6 +108,43 @@ describe("apiFetch", () => {
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(502);
     expect((err as ApiError).code).toBe("UNKNOWN");
+  });
+
+  it("falls back to ApiError when the server returns a NON-EMPTY non-JSON body", async () => {
+    // Regression: a proxy 502 HTML page (or a plain-text panic) is a
+    // non-empty body that is NOT our JSON envelope. The parse must
+    // not throw a raw SyntaxError — that would escape every screen's
+    // `e instanceof ApiError` branch and surface as an opaque
+    // "failed to load" with no status/code.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("<html><body>502 Bad Gateway</body></html>", {
+          status: 502,
+          statusText: "Bad Gateway",
+          headers: { "Content-Type": "text/html" },
+        }),
+      ),
+    );
+    const err = await apiFetch("/api/instances").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(502);
+    expect((err as ApiError).code).toBe("UNKNOWN");
+  });
+
+  it("returns undefined (not a thrown SyntaxError) on a malformed 2xx body", async () => {
+    // A 2xx with a non-JSON body is pathological but must not crash
+    // the caller with a raw SyntaxError; it decodes to undefined.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("not json at all", {
+          status: 200,
+          headers: { "Content-Type": "text/plain" },
+        }),
+      ),
+    );
+    await expect(apiFetch("/api/version")).resolves.toBeUndefined();
   });
 });
 
@@ -207,6 +251,58 @@ describe("fetchContractDetail", () => {
   });
 });
 
+// The server-side idempotency middleware is opt-in on the
+// Idempotency-Key header (internal/ui/handlers/idempotency.go). It was
+// dead code until the client started sending the header — these tests
+// pin that every value-moving token mutation now does, so a retry /
+// double-click can't mint/transfer/burn twice.
+describe("token mutations send an Idempotency-Key", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const headerOf = (init: RequestInit | undefined): string | undefined => {
+    const h = init?.headers as Record<string, string> | undefined;
+    return h?.["Idempotency-Key"];
+  };
+
+  it("attaches a fresh UUID Idempotency-Key to each mutating POST", async () => {
+    // Deterministic, monotonic UUIDs so we can assert uniqueness.
+    let n = 0;
+    vi.stubGlobal("crypto", {
+      ...globalThis.crypto,
+      randomUUID: () => `uuid-${++n}` as `${string}-${string}-${string}-${string}-${string}`,
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(new Response(JSON.stringify({}), { status: 200 })),
+      );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await createToken("demo", {
+      name: "Retail",
+      symbol: "RTK",
+      decimals: 6,
+      initial_supply: "1000",
+      issuer: "alice::abc",
+    });
+    await mintToken("demo", "RTK", "alice::abc", "10");
+    await transferToken("demo", "RTK", "alice::abc", "bob::def", "5");
+    await faucetToken("demo", "RTK", "alice::abc", "1");
+    await burnToken("demo", "RTK", "alice::abc", "1");
+    await acceptTransfer("demo", "ti-1");
+
+    expect(fetchSpy).toHaveBeenCalledTimes(6);
+    const keys = fetchSpy.mock.calls.map(([, init]) => headerOf(init));
+    for (const k of keys) {
+      expect(k).toMatch(/^uuid-\d+$/);
+    }
+    // Each submission gets its own key (no collisions across verbs).
+    expect(new Set(keys).size).toBe(6);
+  });
+});
+
 describe("openContractsStream", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -230,5 +326,55 @@ describe("openContractsStream", () => {
       "/api/instances/demo/contracts/stream?role=app-provider",
     ]);
     es.close();
+  });
+});
+
+describe("downloadSnapshot", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    document
+      .querySelectorAll('iframe[name="_dpm_dl"]')
+      .forEach((n) => n.remove());
+  });
+
+  it("rejects with an ApiError when the hidden iframe navigates (server error body)", async () => {
+    // On failure the server returns an inline JSON error body with no
+    // Content-Disposition, so the hidden iframe navigates to it and
+    // fires `load`. That asymmetry is how we detect a failed download
+    // without buffering the (possibly huge) success tar.
+    vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(
+      function (this: HTMLFormElement) {
+        const frame = document.querySelector(
+          'iframe[name="_dpm_dl"]',
+        ) as HTMLIFrameElement;
+        // Simulate the browser rendering the error document.
+        frame.dispatchEvent(new Event("load"));
+      },
+    );
+    const err = await downloadSnapshot("ghost").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).code).toBe("SNAPSHOT_DOWNLOAD_FAILED");
+  });
+
+  it("resolves (no error) when no navigation happens within the settle window", async () => {
+    // Success path: the body is handed to the download manager, the
+    // iframe never navigates, so no `load` fires and the settle timer
+    // resolves cleanly.
+    vi.useFakeTimers();
+    vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(
+      () => {},
+    );
+    const p = downloadSnapshot("pebble");
+    let resolved = false;
+    void p.then(() => {
+      resolved = true;
+    });
+    // Before the settle window elapses the promise is still pending.
+    await vi.advanceTimersByTimeAsync(100);
+    expect(resolved).toBe(false);
+    // After the settle window it resolves without rejecting.
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(p).resolves.toBeUndefined();
   });
 });

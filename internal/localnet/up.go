@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -333,7 +334,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			"manually before relying on the dashboards.")
 	}
 	if hasObservabilityProfile {
-		overlay, err := MaterializeObservabilityOverlay(dataDir, projectDir)
+		overlay, err := MaterializeObservabilityOverlay(dataDir, projectDir, prog.Err())
 		if err != nil {
 			prog.FailStep(StepPersistState,
 				"Failed to extract observability overlay", err)
@@ -355,7 +356,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		}
 	}
 	if hasTokensV2Profile {
-		overlay, err := MaterializeTokensV2Overlay(dataDir)
+		overlay, err := MaterializeTokensV2Overlay(dataDir, prog.Err())
 		if err != nil {
 			prog.FailStep(StepPersistState,
 				"Failed to extract tokens-v2 overlay", err)
@@ -381,7 +382,14 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	// prior state exists (first run, or it was deleted), priorPorts
 	// stays nil and ReuseOrAllocateUIPorts falls back to full
 	// ephemeral allocation.
+	//
+	// We also stash the prior run's recorded image digests so the
+	// post-up capture can WARN if a republished ghcr tag changed what
+	// runs. Only meaningful when the SAME version is being
+	// brought back up — a version change legitimately swaps images, so
+	// we skip the comparison in that case.
 	var priorPorts map[string]int
+	var priorImageDigests map[string]string
 	if prior, err := registry.Read(opts.Name); err == nil {
 		// Refuse to re-up an instance that is already running. Without
 		// this guard RunUp overwrites the live state with
@@ -398,6 +406,9 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			return ExitUserError
 		}
 		priorPorts = prior.Ports
+		if prior.SpliceVersion == version.Tag {
+			priorImageDigests = prior.ImageDigests
+		}
 	}
 
 	// The enabled profile set: the adapter's base profiles (which gate
@@ -583,6 +594,22 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	// that fails to query is silently omitted, not stamped as 0.
 	for key, port := range CaptureCantonPorts(ctx, state.ComposeProject) {
 		state.Ports[key] = port
+	}
+
+	// 8b. Capture the content digests of the images that actually ran
+	// and persist them. The catalogue pins the source tree but ghcr
+	// image tags are mutable; recording digests lets a later up/restart
+	// detect a republished tag. Best-effort — a capture failure
+	// just skips drift detection, never fails the bring-up. If the same
+	// version was up before with recorded digests, warn on any change.
+	if digests := CaptureImageDigests(ctx, state.ComposeProject); len(digests) > 0 {
+		if changed := DiffImageDigests(priorImageDigests, digests); len(changed) > 0 {
+			prog.Warn(fmt.Sprintf(
+				"Splice image digest(s) changed since the last up of %q — a mutable ghcr tag was republished; "+
+					"verify this is expected: %s",
+				version.Tag, strings.Join(changed, ", ")))
+		}
+		state.ImageDigests = digests
 	}
 
 	// 9. Capture JWTs and persist running state. (UI ports were

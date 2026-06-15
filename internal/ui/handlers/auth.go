@@ -7,7 +7,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 
+	apitypes "github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
@@ -18,7 +21,9 @@ import (
 // handlers_schema_test.go asserts the two stay equal.
 //
 // every top-level response in this
-// package now carries this version (jwtResponse, appConfigPayload).
+// package now carries this version (jwtResponse). The app-config
+// endpoint emits the shared apitypes.EnvExport, which carries its own
+// SchemaVersion from the api/types package.
 const SchemaVersion = 1
 
 // MountAuth installs the auth/credential routes — the surfaces the
@@ -231,6 +236,18 @@ const (
 // renders this on the Developer setup card with format-switching
 // chip buttons.
 //
+// The payload is the SHARED apitypes.EnvExport built by
+// localnet.BuildEnvExport — the exact same shape and value set the
+// CLI's `dpm localnet env` emits, so the two surfaces can't drift.
+// That means the participant Ledger / Admin / JSON API ports a dApp
+// needs (which the old hand-rolled endpointsFromPorts hid), the scan
+// UI URL, and the real on-ledger party ids all appear here too. See
+// AGENTS.md "CLI ↔ Web UI parity".
+//
+// JWTs are redacted by default (matching the CLI's --include-jwt
+// convention and the jwt endpoint above); pass ?include_jwt=true to
+// emit raw tokens.
+//
 // Defaults to format=env (the most-clicked tab in the mockup).
 func handleAppConfig(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
@@ -238,7 +255,21 @@ func handleAppConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid instance name", err)
 		return
 	}
-	s, err := registry.Read(name)
+
+	format := appConfigFormat(r.URL.Query().Get("format"))
+	if format == "" {
+		format = formatEnv
+	}
+	// Validate the format BEFORE building the export so a bad
+	// ?format= is a clean 400 regardless of instance state.
+	if format != formatEnv && format != formatJSON && format != formatYAML {
+		writeError(w, http.StatusBadRequest,
+			"format must be one of env|json|yaml", nil)
+		return
+	}
+
+	includeJWT := r.URL.Query().Get("include_jwt") == "true"
+	ex, err := localnet.BuildEnvExport(name, includeJWT)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "instance not registered", err)
@@ -248,135 +279,57 @@ func handleAppConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	format := appConfigFormat(r.URL.Query().Get("format"))
-	if format == "" {
-		format = formatEnv
-	}
-
-	// Build the shared payload first, then render per-format.
-	// Keeps the per-format rendering branches small.
-	cfg := appConfigPayload{
-		SchemaVersion: SchemaVersion,
-		Name:          s.Name,
-		SpliceVersion: s.SpliceVersion,
-		Endpoints:     endpointsFromPorts(s.Ports),
-		Parties:       partiesFromCredentials(s.Credentials),
-	}
-
 	switch format {
 	case formatEnv:
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write([]byte(renderEnv(cfg)))
+		_, _ = w.Write([]byte(renderEnv(ex)))
 	case formatJSON:
-		writeJSON(w, http.StatusOK, cfg)
+		writeJSON(w, http.StatusOK, ex)
 	case formatYAML:
 		w.Header().Set("Content-Type", "application/yaml")
-		_, _ = w.Write([]byte(renderYAML(cfg)))
-	default:
-		writeError(w, http.StatusBadRequest,
-			"format must be one of env|json|yaml", nil)
+		_, _ = w.Write([]byte(renderYAML(ex)))
 	}
 }
 
-// appConfigPayload is the canonical shape across all output
-// formats. Renderers project it into env / json / yaml.
-//
-// SchemaVersion. Same rationale as
-// jwtResponse — every top-level response carries it so the
-// frontend can validate the handshake. The env/yaml renderers
-// skip it (the formats are line-oriented, not structured), but
-// the JSON path includes it.
-type appConfigPayload struct {
-	SchemaVersion int               `json:"schema_version" yaml:"-"`
-	Name          string            `json:"name" yaml:"name"`
-	SpliceVersion string            `json:"splice_version" yaml:"splice_version"`
-	Endpoints     map[string]string `json:"endpoints" yaml:"endpoints"`
-	Parties       map[string]string `json:"parties" yaml:"parties"`
-}
-
-// endpointsFromPorts converts the registry's port map into a
-// localhost-URL view useful for an external app. Only the
-// user-facing ports (UIs, postgres) are surfaced; internal admin
-// gRPC ports stay hidden.
-func endpointsFromPorts(ports map[string]int) map[string]string {
-	out := map[string]string{}
-	mapping := map[string]string{
-		"app_user_ui":     "app_user_ui",
-		"app_provider_ui": "app_provider_ui",
-		"sv_ui":           "sv_ui",
-		"swagger_ui":      "swagger_ui",
-		"postgres":        "postgres",
+// sortedVarKeys returns the EnvExport var keys in stable lexical
+// order. Map iteration order is randomised in Go, so without this the
+// env/yaml bodies would differ byte-for-byte between requests — bad
+// for diffing, caching, and golden-test comparisons (the CLI's shell
+// renderer sorts for the same reason).
+func sortedVarKeys(vars map[string]string) []string {
+	keys := make([]string, 0, len(vars))
+	for k := range vars {
+		keys = append(keys, k)
 	}
-	for src, dst := range mapping {
-		if p, ok := ports[src]; ok && p > 0 {
-			out[dst] = fmt.Sprintf("http://localhost:%d", p)
-		}
-	}
-	return out
-}
-
-// partiesFromCredentials projects the per-role credential map into a
-// simple role→partyID view. Strips the JWT (the JWT endpoint above is
-// the way to obtain one; this endpoint is for identity discovery).
-func partiesFromCredentials(creds map[string]registry.Credential) map[string]string {
-	out := map[string]string{}
-	for role, c := range creds {
-		if c.User != "" {
-			out[role] = c.User
-		}
-	}
-	return out
+	sort.Strings(keys)
+	return keys
 }
 
 // renderEnv emits the .env shape the dashboard's "env" tab shows.
-// One KEY=value line per logical entry, capitalised to standard
-// dotenv conventions. Endpoints become LEDGER_HOST/_PORT pairs
-// (which is what most Daml/Canton tooling expects).
-func renderEnv(c appConfigPayload) string {
+// One KEY=value line per EnvExport var, in stable key order. The keys
+// are already in CANTON_<...> form (the CLI's canonical env names), so
+// no extra capitalisation is needed.
+func renderEnv(ex apitypes.EnvExport) string {
 	var b []byte
-	b = append(b, fmt.Sprintf("# %s · splice %s\n", c.Name, c.SpliceVersion)...)
-	for k, v := range c.Endpoints {
-		b = append(b, fmt.Sprintf("%s=%s\n", upperEnv(k), v)...)
-	}
-	for role, party := range c.Parties {
-		b = append(b, fmt.Sprintf("PARTY_%s=%s\n", upperEnv(role), party)...)
+	b = append(b, fmt.Sprintf("# %s · splice %s\n", ex.Instance, ex.Vars["CANTON_SPLICE_VERSION"])...)
+	for _, k := range sortedVarKeys(ex.Vars) {
+		b = append(b, fmt.Sprintf("%s=%s\n", k, ex.Vars[k])...)
 	}
 	return string(b)
 }
 
 // renderYAML emits a minimal YAML rendering — we don't pull a YAML
 // dep for one handler; the structure is shallow enough that
-// hand-rolling is cleaner than adding gopkg.in/yaml.v3.
-func renderYAML(c appConfigPayload) string {
+// hand-rolling is cleaner than adding gopkg.in/yaml.v3. Keys are
+// emitted in stable order under a single `vars:` mapping, mirroring
+// the EnvExport JSON shape.
+func renderYAML(ex apitypes.EnvExport) string {
 	var b []byte
-	b = append(b, fmt.Sprintf("name: %s\n", c.Name)...)
-	b = append(b, fmt.Sprintf("splice_version: %s\n", c.SpliceVersion)...)
-	b = append(b, "endpoints:\n"...)
-	for k, v := range c.Endpoints {
-		b = append(b, fmt.Sprintf("  %s: %s\n", k, v)...)
-	}
-	b = append(b, "parties:\n"...)
-	for k, v := range c.Parties {
-		b = append(b, fmt.Sprintf("  %s: %s\n", k, v)...)
+	b = append(b, fmt.Sprintf("instance: %s\n", ex.Instance)...)
+	b = append(b, fmt.Sprintf("schema_version: %d\n", ex.SchemaVersion)...)
+	b = append(b, "vars:\n"...)
+	for _, k := range sortedVarKeys(ex.Vars) {
+		b = append(b, fmt.Sprintf("  %s: %s\n", k, ex.Vars[k])...)
 	}
 	return string(b)
-}
-
-// upperEnv uppercases and replaces dashes/dots with underscores.
-// Pulled out so the env renderer reads cleanly. ASCII-only by
-// design — the registry rejects non-ASCII names.
-func upperEnv(s string) string {
-	out := make([]byte, 0, len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		case c >= 'a' && c <= 'z':
-			out = append(out, c-32)
-		case c == '-' || c == '.':
-			out = append(out, '_')
-		default:
-			out = append(out, c)
-		}
-	}
-	return string(out)
 }

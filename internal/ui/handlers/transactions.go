@@ -29,6 +29,16 @@ const (
 	transactionsRequestTimeout = 15 * time.Second
 	transactionsDefaultLimit   = 100
 	transactionsMaxLimit       = 1000
+
+	// transactionsWindowSpan is how many offsets back from the ledger
+	// end the list scans by default. Canton offsets are
+	// participant-global (topology events, checkpoints, and other
+	// parties' transactions consume offsets between the caller's
+	// matches), so the window is generous enough that a filtered
+	// query still finds recent matches, while keeping the scan
+	// O(window) instead of O(full-history-from-0). Mirrors the CLI's
+	// defaultTxWindowSpan in internal/cli/localnet/contracts.go.
+	transactionsWindowSpan = 10_000
 )
 
 // MountTransactions installs the Explorer transactions endpoint.
@@ -169,6 +179,23 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	endInc := end.Offset
+	// Lower-bound the scan at a recent offset instead of 0.
+	//
+	// The old floor of BeginExclusive:0 re-scanned the WHOLE ledger
+	// on every request and, once history exceeded streamCap, the
+	// ascending stream meant we processed only the OLDEST streamCap
+	// updates and returned "newest N of the oldest streamCap" — i.e.
+	// ancient activity labelled "newest first" — with HTTP 200.
+	// Splice LocalNet continuously emits amulet round/system
+	// transactions, so an instance left up for days easily crosses
+	// that threshold. Since we already know the ledger end, we floor
+	// the window at end-transactionsWindowSpan: a generous recent
+	// window that captures the newest matches without O(history) work
+	// on every tab switch.
+	beginExclusive := endInc - transactionsWindowSpan
+	if beginExclusive < 0 {
+		beginExclusive = 0
+	}
 	// Stream context is derived from the request context so we can
 	// cancel mid-iteration when we've reached `limit` without
 	// disturbing the rest of the handler (the parent ctx still
@@ -178,7 +205,7 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	streamCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
 	stream, err := client.Updates(streamCtx, ledger.UpdatesRequest{
-		BeginExclusive: 0,
+		BeginExclusive: beginExclusive,
 		EndInclusive:   &endInc,
 		UpdateFormat: &lapiv2.UpdateFormat{
 			IncludeTransactions: &lapiv2.TransactionFormat{
@@ -217,13 +244,16 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	// `break at limit` is correct.)
 	//
 	// What we DO bound:
-	//   1. Memory — fixed ring of `limit` rows; new arrivals
-	//      overwrite the oldest. O(limit) regardless of history.
-	//   2. Loop iterations — `streamCap` is a hard wall (sized at
-	//      max(100*limit, 10_000) so a busy ledger doesn't spin
-	//      forever, but generous enough that we drain typical
-	//      LocalNet histories naturally to EOF).
-	//   3. Wall clock — `streamCtx` is derived from the request
+	//   1. Window — BeginExclusive floors the scan at a recent offset
+	//      (see above), so this is O(window) not O(history).
+	//   2. Memory — fixed ring of `limit` rows; new arrivals
+	//      overwrite the oldest. O(limit) regardless of window size.
+	//   3. Loop iterations — `streamCap` is a hard wall (sized at
+	//      max(100*limit, 10_000)). With the bounded window it should
+	//      almost never fire; when it does we set windowTruncated so
+	//      the client knows the result is the newest N of a clipped
+	//      scan, not silently-stale data.
+	//   4. Wall clock — `streamCtx` is derived from the request
 	//      ctx (which has a 15s timeout); we poll ctx.Err() on
 	//      every item so a slow upstream surfaces promptly as
 	//      DeadlineExceeded.
@@ -240,11 +270,18 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	buf := make([]txRow, limit)
 	head, count := 0, 0
 	processed := 0
+	// windowTruncated is true when we stopped before draining the
+	// window to EOF — either the streamCap wall or a mid-scan
+	// deadline. Surfaced to the client so the Explorer can show a
+	// "showing a partial window" hint instead of presenting clipped
+	// data as the complete recent history.
+	windowTruncated := false
 	for item := range stream {
 		// Honour parent-context cancellation promptly — a slow
 		// upstream shouldn't keep the goroutine alive past the
 		// request timeout.
 		if err := streamCtx.Err(); err != nil {
+			windowTruncated = true
 			break
 		}
 		if item.Err != nil {
@@ -253,8 +290,10 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 			}
 			// Treat our own cancellation (DeadlineExceeded /
 			// Canceled) as a non-error termination — we have
-			// whatever rows fit in the ring.
+			// whatever rows fit in the ring, but flag that the scan
+			// didn't reach EOF.
 			if errors.Is(item.Err, context.Canceled) || errors.Is(item.Err, context.DeadlineExceeded) {
+				windowTruncated = true
 				break
 			}
 			if isPermissionDenied(item.Err) {
@@ -276,6 +315,7 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 		}
 		processed++
 		if processed >= streamCap {
+			windowTruncated = true
 			cancelStream()
 			break
 		}
@@ -300,7 +340,32 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 		"ledger_end":     endInc,
 		"transactions":   rows,
 		"count":          len(rows),
+		// scanned_from is the lower bound (exclusive) of the offset
+		// window we inspected; window_truncated is true when we
+		// stopped before reaching EOF (streamCap / deadline), so the
+		// rows are the newest of a clipped scan rather than the
+		// complete recent history.
+		"scanned_from":     beginExclusive,
+		"window_truncated": windowTruncated,
 	})
+}
+
+// eventKindAbbrev maps the shared projection's past-tense EventKind
+// ("created"/"archived"/"exercised") to the abbreviated form this
+// handler has always emitted on the wire ("create"/"archive"/
+// "exercise"). Kept stable so the frontend's existing render path
+// doesn't break; the CLI uses the past-tense form directly.
+func eventKindAbbrev(k ledger.EventKind) string {
+	switch k {
+	case ledger.EventCreated:
+		return "create"
+	case ledger.EventArchived:
+		return "archive"
+	case ledger.EventExercised:
+		return "exercise"
+	default:
+		return string(k)
+	}
 }
 
 // projectUpdate folds the GetUpdatesResponse oneof into a unified
@@ -311,34 +376,18 @@ func projectUpdate(resp *lapiv2.GetUpdatesResponse) *txRow {
 		return nil
 	}
 	if t := resp.GetTransaction(); t != nil {
-		events := make([]txEventRow, 0, len(t.GetEvents()))
-		for _, e := range t.GetEvents() {
-			if c := e.GetCreated(); c != nil {
-				events = append(events, txEventRow{
-					Kind:       "create",
-					ContractID: c.GetContractId(),
-					Template:   formatTemplateID(c.GetTemplateId()),
-					Witnesses:  c.GetWitnessParties(),
-				})
-				continue
-			}
-			if a := e.GetArchived(); a != nil {
-				events = append(events, txEventRow{
-					Kind:       "archive",
-					ContractID: a.GetContractId(),
-					Template:   formatTemplateID(a.GetTemplateId()),
-					Witnesses:  a.GetWitnessParties(),
-				})
-				continue
-			}
-			if ex := e.GetExercised(); ex != nil {
-				events = append(events, txEventRow{
-					Kind:       "exercise",
-					ContractID: ex.GetContractId(),
-					Template:   formatTemplateID(ex.GetTemplateId()),
-					Witnesses:  ex.GetWitnessParties(),
-				})
-			}
+		// Shared per-event decoder (ledger.ProjectTransactionEvents) so
+		// the CLI Explorer (`contracts watch` / `tx ls`) and this
+		// handler agree on the create/archive/exercise projection.
+		summaries := ledger.ProjectTransactionEvents(t)
+		events := make([]txEventRow, 0, len(summaries))
+		for _, s := range summaries {
+			events = append(events, txEventRow{
+				Kind:       eventKindAbbrev(s.Kind),
+				ContractID: s.ContractID,
+				Template:   s.TemplateID,
+				Witnesses:  s.Witnesses,
+			})
 		}
 		row := txRow{
 			Kind:         "transaction",

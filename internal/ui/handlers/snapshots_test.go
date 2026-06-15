@@ -9,8 +9,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/snapshot"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
+
+// The snapshot handler is exercised with snapshot.FakeArchiver — the
+// docker-free in-memory pgArchiver the snapshot package exposes for
+// cross-package tests — so these handler tests run without a daemon.
 
 // snapshotMux mounts only the snapshots handlers — the other Mount*
 // calls would require docker / hub wiring that's irrelevant to these
@@ -176,5 +181,76 @@ func TestSnapshot_PathValueWiring(t *testing.T) {
 	_, err = registry.Read("well-formed")
 	if err == nil {
 		t.Fatalf("registry unexpectedly contains 'well-formed'")
+	}
+}
+
+// seedSnapshotState registers an instance with the given status so the
+// snapshot success path can run against the stub archiver.
+func seedSnapshotState(t *testing.T, name string, status registry.Status) {
+	t.Helper()
+	s := registry.NewState(name, "0.6.4")
+	s.ComposeProject = "canton-" + name
+	s.DockerNetwork = name
+	s.ContainerPrefix = name + "-"
+	s.ProjectDir = t.TempDir()
+	s.DataDir = t.TempDir()
+	s.Status = status
+	if err := registry.Write(s); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+}
+
+// TestSnapshot_RunningInstanceIsConsistentNoWarning: the UI snapshot of
+// a running instance succeeds and carries NO consistency warning header —
+// RunSnapshot quiesces the node containers for the dump (same as the CLI),
+// so the capture is application-consistent and there is nothing to warn
+// about. (Was the X-Snapshot-Warning parity test back when the dump ran
+// live.)
+func TestSnapshot_RunningInstanceIsConsistentNoWarning(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	fa := &snapshot.FakeArchiver{Dump: []byte("-- pg_dumpall\n"), DBCount: 3}
+	restore := snapshot.SetArchiverForTest(fa)
+	defer restore()
+	seedSnapshotState(t, "run", registry.StatusRunning)
+
+	srv := snapshotMux(t)
+	resp, err := http.Post(srv.URL+"/api/instances/run/snapshot",
+		"application/octet-stream", nil)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("want 200, got %d; body=%s", resp.StatusCode, body)
+	}
+	if warn := resp.Header.Get("X-Snapshot-Warning"); warn != "" {
+		t.Errorf("a quiesced snapshot must NOT set X-Snapshot-Warning, got %q", warn)
+	}
+	if !fa.Quiesced || !fa.Resumed {
+		t.Errorf("UI snapshot must quiesce+resume writers: quiesced=%v resumed=%v", fa.Quiesced, fa.Resumed)
+	}
+}
+
+// TestSnapshot_StoppedInstanceRefused: a database snapshot reads from a
+// live Postgres, so a stopped instance is refused rather than producing
+// an empty/garbage archive.
+func TestSnapshot_StoppedInstanceRefused(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	restore := snapshot.SetArchiverForTest(&snapshot.FakeArchiver{Dump: []byte("x")})
+	defer restore()
+	seedSnapshotState(t, "stp", registry.StatusStopped)
+
+	srv := snapshotMux(t)
+	resp, err := http.Post(srv.URL+"/api/instances/stp/snapshot",
+		"application/octet-stream", nil)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("snapshot of a stopped instance must be refused with 400, got %d; body=%s",
+			resp.StatusCode, body)
 	}
 }

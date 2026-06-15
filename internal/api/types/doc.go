@@ -14,7 +14,11 @@
 //  1. JSON tags use snake_case; matches existing
 //     internal/registry.State on disk and the JSX mockup keys.
 //  2. Schema versioned per top-level response (`schema_version` int)
-//     so a future field rename is detectable.
+//     so a future field rename is detectable. The field-level shape
+//     of every response is itself pinned against a golden by
+//     TestSchemaShape_GoldenPinsFieldLevelShape, so any add / remove /
+//     rename / retype that drifts from frontend/src/api.ts is caught
+//     in CI rather than at the user's runtime.
 //  3. No methods. Pure data — keeps the package importable from any
 //     layer without inviting circular deps with internal/registry.
 //  4. Mirrors registry.State and registry.Credential for the
@@ -29,5 +33,8 @@ package types
 
 // SchemaVersion is the current shape version for every top-level
 // response struct in this package. Bumped (+ a migration note in
-// docs/limitations.md) when a field is renamed or removed.
+// docs/limitations.md) on any wire-breaking change — a field renamed,
+// removed, or retyped. Purely additive changes (a new optional field)
+// stay backward-compatible and need only the golden + api.ts mirror
+// update that TestSchemaShape_GoldenPinsFieldLevelShape forces.
 const SchemaVersion = 1

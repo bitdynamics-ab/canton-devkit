@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -22,13 +21,15 @@ import (
 //
 //	eval "$(dpm localnet env --name hubble)"
 //
-// Three formats:
+// Four formats:
 //
-//	shell (default) export KEY='value' with POSIX quoting
-//	dotenv KEY="value" with dotenv escaping
-//	json api/types.EnvExport for scripted consumers
+//	shell (default)  export KEY='value' with POSIX quoting
+//	dotenv           KEY="value" with dotenv escaping
+//	github-env       bare KEY=value for $GITHUB_ENV (>> in a workflow step)
+//	json             api/types.EnvExport for scripted consumers
 //
-// The Web UI handler reuses collectEnv() to emit the json variant.
+// The Web UI app-config handler reuses the same localnet.BuildEnvExport
+// builder, so both surfaces emit an identical apitypes.EnvExport.
 func buildEnv() *cobra.Command {
 	var (
 		name       string
@@ -39,16 +40,21 @@ func buildEnv() *cobra.Command {
 		Use:   "env",
 		Short: "Export LocalNet endpoints and credentials as env vars",
 		Long: `Prints an exported KEY=value block summarising the named LocalNet
-instance -- every host port from the Ports map plus the user/
-audience for each captured credential. Use with:
+instance -- every host port from the Ports map (Ledger / JSON /
+admin APIs per role, wallet UIs, scan UI, postgres) plus the
+user/audience for each captured credential and the real on-ledger
+party ids. Use with:
 
   eval "$(dpm localnet env --name hubble)"
 
 Formats:
 
-  shell    POSIX single-quoted export KEY='value'  (default; eval-safe)
-  dotenv   double-quoted KEY="value" with $/\/" escapes (dotenv spec)
-  json     machine-readable shape; matches the Web UI handler
+  shell       POSIX single-quoted export KEY='value'  (default; eval-safe)
+  dotenv      double-quoted KEY="value" with $/\/" escapes (dotenv spec)
+  github-env  bare KEY=value lines for the GitHub Actions environment file:
+                dpm localnet env --name ci --format github-env >> "$GITHUB_ENV"
+              (shell/dotenv carry comments + quotes that $GITHUB_ENV rejects)
+  json        machine-readable shape; matches the Web UI handler
 
 JWTs are REDACTED by default (CANTON_<ROLE>_JWT=<redacted>) so
 CI logs / shared terminals don't leak the dev-only signing
@@ -76,11 +82,13 @@ raw token values.`,
 				return writeEnvShell(cmd.OutOrStdout(), ex)
 			case "dotenv":
 				return writeEnvDotenv(cmd.OutOrStdout(), ex)
+			case "github-env":
+				return writeEnvGithub(cmd.OutOrStdout(), ex)
 			case "json":
 				return writeEnvJSON(cmd.OutOrStdout(), ex)
 			default:
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-					"--format must be shell, dotenv, or json (got %q)\n", format)
+					"--format must be shell, dotenv, github-env, or json (got %q)\n", format)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
 		},
@@ -88,96 +96,29 @@ raw token values.`,
 	cmd.Flags().StringVar(&name, "name", "",
 		"Required. Identifier of the LocalNet instance to export.")
 	cmd.Flags().StringVar(&format, "format", "shell",
-		"Output format: shell | dotenv | json")
+		"Output format: shell | dotenv | github-env | json")
 	cmd.Flags().BoolVar(&includeJWT, "include-jwt", false,
 		"Emit raw CANTON_<ROLE>_JWT values. Default is <redacted>.")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }
 
-// jwtRedaction is the placeholder string that replaces a captured
-// JWT when --include-jwt is not set. Format chosen so a downstream
-// shell that expects a real token errors loudly ("Bearer
-// <redacted>" -> 401) instead of silently passing an empty header.
-const jwtRedaction = "<redacted>"
-
-// collectEnv builds the export from the registry. Two sources:
-//
-// 1. state.Ports map -> CANTON_<UPPER>_PORT for each logical name.
-// Hyphens in the logical name become underscores so a value like
-// "app-user-ui" produces CANTON_APP_USER_UI_PORT (matches what
-// scripts already expect -- no env name has hyphens).
-//
-// 2. state.Credentials map -> CANTON_<ROLE>_JWT and the user/audience
-// pair that signed it, so a downstream client can re-derive the
-// JWT if it later rotates.
-//
-// Plus a small set of stable convenience keys (CANTON_INSTANCE,
-// CANTON_SPLICE_VERSION, CANTON_AUTH_FILE) so shell scripts can
-// branch on them without re-reading state.json.
+// collectEnv builds the export from the registry via the shared
+// localnet.BuildEnvExport builder. The CLI keeps this thin wrapper so
+// the existing callsites + tests read unchanged; the actual shape
+// (ports incl. participant Ledger/Admin/JSON APIs + scan UI, per-role
+// credentials, real party ids) is produced by the same function the
+// Web UI app-config handler calls. See AGENTS.md "CLI ↔ Web UI
+// parity".
 func collectEnv(name string, includeJWT bool) (apitypes.EnvExport, error) {
-	state, err := registry.Read(name)
-	if err != nil {
-		return apitypes.EnvExport{}, err
-	}
-	out := apitypes.EnvExport{
-		SchemaVersion: apitypes.SchemaVersion,
-		Instance:      name,
-		Vars:          make(map[string]string, len(state.Ports)*2+len(state.Credentials)*3+3),
-	}
-
-	out.Vars["CANTON_INSTANCE"] = name
-	out.Vars["CANTON_SPLICE_VERSION"] = state.SpliceVersion
-	// AuthFile points at the per-instance auth.json the user can
-	// load with `jq` (~/.canton-devkit/<name>/auth.json).
-	// filepath.Join (not "/" concat) so the path is correct on
-	// Windows and doesn't duplicate separators if state.DataDir
-	// has a trailing slash.
-	out.Vars["CANTON_AUTH_FILE"] = filepath.Join(state.DataDir, "auth.json")
-
-	for logical, port := range state.Ports {
-		out.Vars[portEnvKey(logical)] = fmt.Sprintf("%d", port)
-	}
-	for role, cred := range state.Credentials {
-		base := credEnvKeyPrefix(role)
-		if includeJWT {
-			out.Vars[base+"_JWT"] = cred.JWT
-		} else {
-			// Default: emit a non-empty redaction placeholder so
-			// downstream tooling that asserts the variable is set
-			// keeps working, but the dev-only signing secret never
-			// hits stdout / CI logs / shared terminals.
-			out.Vars[base+"_JWT"] = jwtRedaction
-		}
-		if cred.User != "" {
-			out.Vars[base+"_USER"] = cred.User
-		}
-		if cred.Audience != "" {
-			out.Vars[base+"_AUDIENCE"] = cred.Audience
-		}
-	}
-	return out, nil
+	return localnet.BuildEnvExport(name, includeJWT)
 }
 
-// portEnvKey converts a logical port name ("app_user_ui" or
-// "app-provider-ui") into the canonical CANTON_<UPPER>_PORT env-var
-// key. Both underscore and hyphen are normalised because the state
-// file's Port keys vary across adapter versions.
+// portEnvKey converts a logical port name into the canonical
+// CANTON_<UPPER>_PORT env-var key. Delegates to the shared builder so
+// the CLI and UI normalise identically.
 func portEnvKey(logical string) string {
-	upper := strings.ToUpper(logical)
-	upper = strings.ReplaceAll(upper, "-", "_")
-	return "CANTON_" + upper + "_PORT"
-}
-
-// credEnvKeyPrefix turns a role label ("sv", "app-user") into the
-// shared prefix for that role's CANTON_ env vars. Mirrors
-// portEnvKey's normalisation rules so a downstream consumer sees a
-// consistent CANTON_APP_USER_* set whether the role is hyphenated
-// or underscored upstream.
-func credEnvKeyPrefix(role string) string {
-	upper := strings.ToUpper(role)
-	upper = strings.ReplaceAll(upper, "-", "_")
-	return "CANTON_" + upper
+	return localnet.PortEnvKey(logical)
 }
 
 // writeEnvShell prints export KEY='value' POSIX-single-quoted so the
@@ -229,6 +170,58 @@ func writeEnvDotenv(w io.Writer, ex apitypes.EnvExport) error {
 		}
 	}
 	return nil
+}
+
+// writeEnvGithub prints bare KEY=value lines for the GitHub Actions
+// environment file. A workflow step appends them with
+//
+//	dpm localnet env --name ci --format github-env >> "$GITHUB_ENV"
+//
+// and every subsequent step sees them as env vars. This is a distinct
+// format because the runner parses $GITHUB_ENV itself, NOT through a
+// shell: it rejects the `#` comment header writeEnvShell/writeEnvDotenv
+// emit ("Invalid format"), and any surrounding quotes (export KEY='v',
+// KEY="v") become literal characters in the value. So we emit no
+// header, no `export`, and no quoting -- the value is taken verbatim to
+// end of line.
+//
+// A value containing a newline (a hostile DataDir can) cannot use the
+// single-line form -- the runner would treat the second line as a new
+// KEY=value. GitHub documents a heredoc form for that case:
+//
+//	KEY<<delimiter
+//	<value, possibly multi-line>
+//	delimiter
+//
+// We pick a delimiter that does not occur in the value so it can't be
+// closed early (a documented injection vector for the multi-line form).
+func writeEnvGithub(w io.Writer, ex apitypes.EnvExport) error {
+	for _, k := range sortedKeys(ex.Vars) {
+		v := ex.Vars[k]
+		if !strings.ContainsAny(v, "\r\n") {
+			if _, err := fmt.Fprintf(w, "%s=%s\n", k, v); err != nil {
+				return err
+			}
+			continue
+		}
+		delim := githubEnvDelimiter(v)
+		if _, err := fmt.Fprintf(w, "%s<<%s\n%s\n%s\n", k, delim, v, delim); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// githubEnvDelimiter returns a heredoc delimiter guaranteed not to
+// appear as a line in value, so the GitHub Actions multi-line env
+// syntax (KEY<<delim ... delim) cannot be terminated early by hostile
+// content. Starts from a fixed token and widens until it's absent.
+func githubEnvDelimiter(value string) string {
+	delim := "CANTON_DEVKIT_EOF"
+	for strings.Contains(value, delim) {
+		delim += "_"
+	}
+	return delim
 }
 
 // shellQuote returns a POSIX-safe single-quoted form of s. The

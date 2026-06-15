@@ -202,6 +202,49 @@ func TestComposeContext_UsesOverlayFile(t *testing.T) {
 	}
 }
 
+// TestComposeContext_UncuratedInstanceResolves is the operability
+// regression: an instance brought up with --allow-uncurated has a
+// splice_version tag that ISN'T in the catalogue. composeContext must
+// still reconstruct its env-file list (so down / logs / restart / clean
+// work from a fresh shell) by inferring the adapter Major from the tag,
+// rather than failing with ErrUncuratedTag the way catalogue-only
+// Resolve would.
+func TestComposeContext_UncuratedInstanceResolves(t *testing.T) {
+	// Temp HOME so ResolveForOperation's resolved-cache read can't touch
+	// the real ~/.canton-devkit.
+	t.Setenv("HOME", t.TempDir())
+
+	dataDir := t.TempDir()
+	if _, err := WriteOverlayEnv(dataDir, map[string]string{
+		"PARTY_HINT": "unc-hint",
+		"IMAGE_TAG":  "0.6.99-rc.1",
+	}); err != nil {
+		t.Fatalf("WriteOverlayEnv: %v", err)
+	}
+
+	state := &registry.State{
+		Name:          "unc",
+		SpliceVersion: "0.6.99-rc.1", // NOT in the curated catalogue
+		ProjectDir:    "/cache/splice-0.6.99-rc.1",
+		DataDir:       dataDir,
+	}
+
+	_, envFiles, err := composeContext(state)
+	if err != nil {
+		t.Fatalf("composeContext for uncurated instance failed (the #68 bug): %v", err)
+	}
+	// The 0.6 adapter's env files plus the overlay must be present.
+	found := false
+	for _, f := range envFiles {
+		if filepath.Base(f) == OverlayEnvFile {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("envFiles %v missing overlay.env for uncurated instance", envFiles)
+	}
+}
+
 // TestComposeContext_ErrorWithoutOverlay verifies composeContext returns
 // an error when overlay.env doesn't exist.
 func TestComposeContext_ErrorWithoutOverlay(t *testing.T) {

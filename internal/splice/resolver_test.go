@@ -228,6 +228,45 @@ func TestResolveOrUpstream_CuratedTagSkipsNetwork(t *testing.T) {
 	}
 }
 
+// TestResolveForOperation_ThreeTiers pins the operability fix: an
+// already-running instance must stay operable from a fresh shell across
+// all three resolution tiers — curated catalogue, resolved cache, and
+// bare Major-from-tag inference — where Resolve alone would reject the
+// uncurated tag with ErrUncuratedTag and strand down/restart/logs/clean.
+func TestResolveForOperation_ThreeTiers(t *testing.T) {
+	withTempCache(t)
+
+	// Tier 1: curated tag resolves from the catalogue.
+	if v, err := ResolveForOperation(LatestAlias); err != nil || v.Tag != LatestAlias {
+		t.Errorf("curated: got (%+v, %v), want tag %q", v, err, LatestAlias)
+	}
+
+	// Tier 2: an uncurated tag recorded in the resolved cache resolves
+	// to the cached Version (with its Major).
+	c := &ResolvedVersionCache{Entries: []ResolvedVersion{
+		{Version: Version{Tag: "0.7.0-alpha.4", Commit: "abc123", Major: "0.7"}},
+	}}
+	if err := WriteResolvedCache(c); err != nil {
+		t.Fatal(err)
+	}
+	v, err := ResolveForOperation("0.7.0-alpha.4")
+	if err != nil || v.Major != "0.7" || v.Commit != "abc123" {
+		t.Errorf("cached: got (%+v, %v), want Major 0.7 commit abc123", v, err)
+	}
+
+	// Tier 3: an uncurated tag NOT in the cache still yields a Version
+	// carrying the Major inferred from the tag, so the adapter resolves.
+	v, err = ResolveForOperation("0.8.1-rc.2")
+	if err != nil || v.Major != "0.8" {
+		t.Errorf("inferred: got (%+v, %v), want Major 0.8", v, err)
+	}
+
+	// A genuinely unparseable tag is the only error case.
+	if _, err := ResolveForOperation("not-a-version"); err == nil {
+		t.Error("expected error for an unparseable version tag")
+	}
+}
+
 // withTempCache redirects CacheRoot to a per-test temp dir so we
 // never read or write the user's real ~/.canton-devkit/cache.
 func withTempCache(t *testing.T) {

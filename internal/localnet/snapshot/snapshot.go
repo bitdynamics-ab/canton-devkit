@@ -2,6 +2,8 @@ package snapshot
 
 import (
 	"archive/tar"
+	"bufio"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -14,8 +16,9 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
-	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
@@ -24,71 +27,191 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 )
 
-// Implements `dpm localnet snapshot` + `restore`. Key safety
-// properties:
+// Implements `dpm localnet snapshot` + `restore`.
 //
-// 1. Zip Slip on restore is rejected: validateArchivePath only
-// accepts strictly `volumes/<safename>.tar` and validateVolumeName
-// constrains the inner component.
-// 2. Nothing is buffered whole in RAM: volumes stream straight into
-// tar.Writer; restore reads streaming via io.Pipe.
-// 3. registry.State is captured as the SECOND archive entry so a
-// restored snapshot is bringable; restore re-registers via
-// registry.Write.
-// 4. Content is verified: streaming sha256 on both writer + reader;
-// mismatch aborts with the volume name.
-// 5. Splice-version mismatch is refused (unless --force):
-// header.SpliceVersion is compared to the existing instance or the
-// embedded state.json.
+// A LocalNet keeps all of its state (ledger, contracts, parties, node
+// identities/keys) in a single PostgreSQL container. So a snapshot is a
+// logical `pg_dumpall` of that Postgres, and a restore loads it back,
+// the backup/restore method Canton and Splice document for
+// participant/synchronizer nodes. This decouples snapshot/restore from
+// the docker-compose volume layout (no volume-name discovery, no
+// compose-label re-stamping) and makes archives portable across
+// Postgres point releases.
 //
-// On-disk layout (strict):
+// Key safety properties:
 //
-// snapshot.tgz
-// ├── snapshot.json (types.Snapshot header, FIRST)
-// ├── state.json (registry.State, SECOND)
-// ├── volumes/<vol>.tar (one per docker volume; <vol> must
-// │ validate via validateVolumeName)
-// └── …
+//  1. Zip Slip on restore is rejected: only the strict entry path
+//     `database/dumpall.sql` is honoured.
+//  2. Nothing is buffered whole in RAM: the dump streams pg_dumpall to
+//     a temp file to the archive on capture, and archive to psql on
+//     restore.
+//  3. registry.State is captured as the SECOND archive entry so a
+//     restored snapshot is bringable; restore re-registers via
+//     registry.Write.
+//  4. Content is verified: streaming sha256 on both writer + reader;
+//     mismatch aborts.
+//  5. Splice-version mismatch is refused (unless --force).
+//
+// On-disk layout (strict order):
+//
+//	snapshot.tgz
+//	├── snapshot.json        (types.Snapshot header, FIRST)
+//	├── state.json           (registry.State, SECOND)
+//	└── database/dumpall.sql (pg_dumpall --clean --if-exists, THIRD)
 
 const (
-	snapshotSchemaVersion = 1
+	// snapshotSchemaVersion is 2: v1 was the volume-tar format. A v1
+	// archive (Database == nil) is refused rather than mis-restored.
+	snapshotSchemaVersion = 2
 
-	archiveHeaderName  = "snapshot.json"
-	archiveStateName   = "state.json"
-	archiveVolumesDir  = "volumes"
-	archiveVolumesPath = archiveVolumesDir + "/"
+	archiveHeaderName = "snapshot.json"
+	archiveStateName  = "state.json"
+	archiveDumpName   = "database/dumpall.sql"
 
-	// maxArchiveEntry caps any single entry so a malicious header
-	// advertising 2^63 bytes can't OOM the reader or fill the
-	// staging disk. 16 GiB > any reasonable Splice LocalNet volume.
-	maxArchiveEntry = 16 << 30
+	// pgDataDir is where the Postgres image stores PGDATA; the volume
+	// mounted here is what restore loads into.
+	pgDataDir = "/var/lib/postgresql/data"
+
+	// maxDump caps the dump entry so a hostile header can't fill the
+	// staging disk. 64 GiB is far above any realistic LocalNet logical
+	// dump (a fresh instance is ~100 MB; a heavily-used one ~1 GB).
+	maxDump = 64 << 30
 )
 
-// volumeArchiver is the seam tests use; production uses
-// dockerVolumeArchiver. All three methods are streaming so neither
-// side ever holds a whole volume in memory.
-type volumeArchiver interface {
-	ListVolumes(ctx context.Context, composeProject string) ([]string, error)
-	ArchiveVolume(ctx context.Context, volume string, w io.Writer) error
-	RestoreVolume(ctx context.Context, volume string, r io.Reader) error
+// pgInfo is what ResolvePostgres discovers about a running instance's
+// Postgres, recorded into the snapshot header so restore can rebuild
+// the throwaway loader without the instance being up.
+type pgInfo struct {
+	Container    string
+	User         string
+	Image        string
+	Volume       string // full docker volume name holding PGDATA
+	VolumeSuffix string // compose volume key, i.e. Volume without the "<project>_" prefix
 }
 
-var archiverFn volumeArchiver = dockerVolumeArchiver{}
+// pgArchiver is the seam tests fake; production uses dockerPgArchiver.
+// All methods stream so neither side holds the dump in memory.
+type pgArchiver interface {
+	// ResolvePostgres finds the running Postgres container for the
+	// compose project and reports the user/image/volume restore needs.
+	ResolvePostgres(ctx context.Context, composeProject string) (pgInfo, error)
+	// AnyContainerRunning reports whether any container of the project
+	// is up — a guard so restore never starts a second writer against a
+	// volume an instance is still using.
+	AnyContainerRunning(ctx context.Context, composeProject string) (bool, error)
+	// Quiesce pauses every container of the project EXCEPT pgContainer so
+	// no node writes to Postgres while the dump runs — Canton's rule for a
+	// single-step whole-cluster backup ("make sure no component writes to
+	// the database while the backup is in progress"). It returns an
+	// idempotent resume func that unpauses them; callers defer it so the
+	// instance is never left paused on an error path.
+	Quiesce(ctx context.Context, composeProject, pgContainer string) (resume func(), err error)
+	// DumpAll streams `pg_dumpall --clean --if-exists` to w.
+	DumpAll(ctx context.Context, container, user string, w io.Writer) error
+	// CountDatabases reports the number of application databases (for
+	// the success banner); best-effort, 0 on error.
+	CountDatabases(ctx context.Context, container, user string) int
+	// RestoreInto loads r (a pg_dumpall stream) into the named volume by
+	// running a throwaway Postgres container from image, as user. It
+	// returns an error only on a genuine failure — the two deterministic
+	// role lines (the connection role can't drop or re-create itself)
+	// are ignored.
+	RestoreInto(ctx context.Context, image, volume, user string, r io.Reader) error
+	// VolumeStorageAvailableBytes reports free space on Docker's volume
+	// store (where the restored database lands), which on macOS/Windows
+	// is inside the Docker VM and invisible to a host statfs.
+	VolumeStorageAvailableBytes(ctx context.Context) (uint64, error)
+}
 
-// RunSnapshot streams a snapshot to dest. Memory footprint per
-// volume is bounded by the tar copy buffer, not the volume size.
-// Two-pass strategy: write each volume body to an intermediate tar
-// file (so we know its size + SHA when writing the header), then
-// copy header + state.json + intermediate into the real archive in
-// strict on-disk order.
+var archiverFn pgArchiver = dockerPgArchiver{}
+
+// SetArchiverForTest swaps the docker-backed archiver for a fake and
+// returns a restore func. Used by callers in other packages (the Web UI
+// snapshot handler tests) to exercise the happy path without docker.
+func SetArchiverForTest(a pgArchiver) (restore func()) {
+	prev := archiverFn
+	archiverFn = a
+	return func() { archiverFn = prev }
+}
+
+// FakeArchiver is an in-memory pgArchiver for tests — including tests in
+// other packages (the Web UI snapshot handler), which can't name the
+// unexported pgArchiver/pgInfo. Configure the dump it emits and inspect
+// what a restore received. Production code never uses it.
+type FakeArchiver struct {
+	Image, User    string
+	Dump           []byte // DumpAll writes this (defaults to a stub dump)
+	DumpErr        error  // if set, DumpAll returns it
+	DBCount        int
+	Running        bool   // AnyContainerRunning result
+	RestoreErr     error  // if set, RestoreInto returns it
+	Restored       []byte // captures the bytes RestoreInto received
+	RestoredVolume string // captures the restore target volume
+	Quiesced       bool   // set true when Quiesce was called
+	Resumed        bool   // set true when the resume func ran
+}
+
+func (f *FakeArchiver) Quiesce(context.Context, string, string) (func(), error) {
+	f.Quiesced = true
+	return func() { f.Resumed = true }, nil
+}
+
+func (f *FakeArchiver) ResolvePostgres(_ context.Context, project string) (pgInfo, error) {
+	user := f.User
+	if user == "" {
+		user = "cnadmin"
+	}
+	image := f.Image
+	if image == "" {
+		image = "postgres:14"
+	}
+	return pgInfo{Container: project + "-postgres", User: user, Image: image,
+		Volume: project + "_postgres", VolumeSuffix: "postgres"}, nil
+}
+
+func (f *FakeArchiver) AnyContainerRunning(context.Context, string) (bool, error) {
+	return f.Running, nil
+}
+
+func (f *FakeArchiver) DumpAll(_ context.Context, _, _ string, w io.Writer) error {
+	if f.DumpErr != nil {
+		return f.DumpErr
+	}
+	body := f.Dump
+	if body == nil {
+		body = []byte("-- pg_dumpall\n")
+	}
+	_, err := w.Write(body)
+	return err
+}
+
+func (f *FakeArchiver) CountDatabases(context.Context, string, string) int { return f.DBCount }
+
+func (f *FakeArchiver) RestoreInto(_ context.Context, _, volume, _ string, r io.Reader) error {
+	if f.RestoreErr != nil {
+		return f.RestoreErr
+	}
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	f.Restored = b
+	f.RestoredVolume = volume
+	return nil
+}
+
+func (f *FakeArchiver) VolumeStorageAvailableBytes(context.Context) (uint64, error) {
+	return 1 << 50, nil
+}
+
+// RunSnapshot streams a snapshot to dest. The instance must be running
+// (pg_dumpall reads from a live Postgres). Two-pass: dump to an
+// intermediate temp file (so the header can carry size + SHA), then
+// write header → state.json → dump into the real archive in strict
+// order.
 func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest string) int {
-	// Per-instance exclusive lock. Snapshot reads volumes via
-	// temporary `docker run` containers and
-	// concurrent execution against the same instance can produce a
-	// half-snapshotted archive. The lock is the SAME one held by
-	// `localnet up`/`down`, so a snapshot while the instance is
-	// being torn down will refuse with "instance busy" — exactly
-	// the behaviour we want.
+	// Per-instance exclusive lock — the SAME one `up`/`down` hold, so a
+	// snapshot taken while the instance is being torn down refuses.
 	release, lockErr := registry.Lock(name)
 	if lockErr != nil {
 		_, _ = fmt.Fprintf(errw, "%s\n", lockErr)
@@ -106,39 +229,42 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 		return localnet.ExitRuntimeFailure
 	}
 
-	// Application-consistency caveat. Snapshotting a RUNNING
-	// instance copies its Docker volumes live: it captures a
-	// crash-consistent point-in-time, not an application-consistent one.
-	// In-flight ledger transactions or unflushed Postgres/Canton writes
-	// may be only partially present, so a restored copy can need crash
-	// recovery (or, rarely, be inconsistent). For a guaranteed-consistent
-	// snapshot, `localnet pause` (or `down`) the instance first.
-	if state.Status == registry.StatusRunning {
-		_, _ = fmt.Fprintln(errw, term.Step(term.StepWarn,
-			"Snapshotting a running instance",
-			"crash-consistent only — in-flight writes may be partial; "+
-				"`localnet pause --name "+name+"` first for an application-consistent copy", ""))
+	// pg_dumpall reads from a live Postgres, so the instance must be up.
+	// The volume-era snapshot could read a stopped instance's volumes off
+	// disk; a logical dump can't.
+	if state.Status != registry.StatusRunning {
+		_, _ = fmt.Fprintf(errw,
+			"instance %q is not running — a database snapshot reads from a live Postgres. "+
+				"Run `localnet up --name %s` first.\n", name, name)
+		return localnet.ExitUserError
 	}
 
-	volumes, err := archiverFn.ListVolumes(ctx, state.ComposeProject)
+	pg, err := archiverFn.ResolvePostgres(ctx, state.ComposeProject)
 	if err != nil {
-		_, _ = fmt.Fprintf(errw, "list volumes for %q: %s\n", state.ComposeProject, err)
+		_, _ = fmt.Fprintf(errw, "locate Postgres for %q: %s\n", state.ComposeProject, err)
 		return localnet.ExitRuntimeFailure
-	}
-	sort.Strings(volumes)
-	for _, v := range volumes {
-		if err := validateVolumeName(v); err != nil {
-			_, _ = fmt.Fprintf(errw, "volume %q rejected: %s\n", v, err)
-			return localnet.ExitRuntimeFailure
-		}
 	}
 
 	_, _ = fmt.Fprintln(out, term.Prompt("", "", "", fmt.Sprintf(
 		"dpm localnet snapshot %s %s %s %s",
 		term.Amberc("--name"), name, term.Amberc("--to"), dest)))
 	_, _ = fmt.Fprintln(out, term.Step(term.StepCheck, "Reading registry state", state.ComposeProject, ""))
-	_, _ = fmt.Fprintf(out, "%s\n", term.Step(term.StepCheck,
-		fmt.Sprintf("Listed %d volume(s)", len(volumes)), strings.Join(volumes, ", "), ""))
+
+	// Quiesce writers before the dump. pg_dumpall is a single-step
+	// whole-cluster backup, and Canton's rule for that path is that no
+	// component writes to the database while the backup is in progress.
+	// With the node containers paused, every database is frozen at one
+	// instant, so the cross-database ordering invariant holds (the
+	// participant is never more recent than the sequencer, which would be
+	// a ledger fork) and the capture is application-consistent.
+	resume, qErr := archiverFn.Quiesce(ctx, state.ComposeProject, pg.Container)
+	if qErr != nil {
+		_, _ = fmt.Fprintf(errw, "quiesce writers: %s\n", qErr)
+		return localnet.ExitRuntimeFailure
+	}
+	defer resume() // idempotent safety net; also called right after the dump
+	_, _ = fmt.Fprintln(out, term.Step(term.StepCheck, "Paused writers", "consistent capture", ""))
+	_, _ = fmt.Fprintln(out, term.Step(term.StepBusy, "Dumping Postgres", pg.Container, ""))
 
 	tmp := dest + ".tmp"
 	f, err := os.Create(tmp)
@@ -153,60 +279,38 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 		}
 	}()
 
-	intermediate, err := os.CreateTemp(filepath.Dir(tmp), "snap-vols-*.tar")
+	// Pass 1: stream pg_dumpall to an intermediate temp file, hashing
+	// and size-capping as we go.
+	dumpPath, written, sum, err := streamDumpToTemp(ctx, pg, filepath.Dir(tmp))
 	if err != nil {
 		_ = f.Close()
-		_, _ = fmt.Fprintf(errw, "create intermediate tar: %s\n", err)
+		_, _ = fmt.Fprintf(errw, "dump database: %s\n", err)
 		return localnet.ExitRuntimeFailure
 	}
-	intermediatePath := intermediate.Name()
-	defer func() { _ = os.Remove(intermediatePath) }()
+	resume() // dump captured: resume writers now (the deferred resume becomes a no-op)
+	defer func() { _ = os.Remove(dumpPath) }()
 
-	itw := tar.NewWriter(intermediate)
 	header := types.Snapshot{
 		SchemaVersion: snapshotSchemaVersion,
 		Instance:      name,
 		SpliceVersion: state.SpliceVersion,
 		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
 		DevKitVersion: "dev",
-	}
-	for _, vol := range volumes {
-		_, _ = fmt.Fprintln(out, term.Step(term.StepBusy, "Capturing volume", vol, ""))
-		volPath, written, sum, err := streamVolumeToTemp(ctx, vol, filepath.Dir(tmp))
-		if err != nil {
-			_ = itw.Close()
-			_ = intermediate.Close()
-			_ = f.Close()
-			_, _ = fmt.Fprintf(errw, "archive %q: %s\n", vol, err)
-			return localnet.ExitRuntimeFailure
-		}
-		header.Volumes = append(header.Volumes, types.SnapshotVolume{
-			Name:       vol,
-			SizeBytes:  written,
-			ContentSHA: sum,
-		})
-		if err := streamTarEntry(itw, path.Join(archiveVolumesDir, vol+".tar"),
-			volPath, written); err != nil {
-			_ = os.Remove(volPath)
-			_, _ = fmt.Fprintf(errw, "stream %q: %s\n", vol, err)
-			return localnet.ExitRuntimeFailure
-		}
-		_ = os.Remove(volPath)
-	}
-	if err := itw.Close(); err != nil {
-		_, _ = fmt.Fprintf(errw, "close intermediate tar: %s\n", err)
-		return localnet.ExitRuntimeFailure
-	}
-	if _, err := intermediate.Seek(0, io.SeekStart); err != nil {
-		_, _ = fmt.Fprintf(errw, "rewind intermediate: %s\n", err)
-		return localnet.ExitRuntimeFailure
+		Database: &types.SnapshotDatabase{
+			Engine:        "postgresql",
+			PostgresImage: pg.Image,
+			User:          pg.User,
+			VolumeSuffix:  pg.VolumeSuffix,
+			DatabaseCount: archiverFn.CountDatabases(ctx, pg.Container, pg.User),
+			SizeBytes:     written,
+			ContentSHA:    sum,
+		},
 	}
 
+	// Pass 2: header → state.json → dump, in strict order.
 	gz := gzip.NewWriter(f)
 	tw := tar.NewWriter(gz)
 
-	// On-disk order: header → state.json → volumes/*. Reader
-	// depends on it.
 	headerBytes, _ := json.MarshalIndent(header, "", "  ")
 	if err := writeTarEntry(tw, archiveHeaderName, headerBytes); err != nil {
 		_, _ = fmt.Fprintf(errw, "write header: %s\n", err)
@@ -221,26 +325,10 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 		_, _ = fmt.Fprintf(errw, "write state.json: %s\n", err)
 		return localnet.ExitRuntimeFailure
 	}
-	itr := tar.NewReader(intermediate)
-	for {
-		ih, err := itr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			_, _ = fmt.Fprintf(errw, "read intermediate: %s\n", err)
-			return localnet.ExitRuntimeFailure
-		}
-		if err := tw.WriteHeader(ih); err != nil {
-			_, _ = fmt.Fprintf(errw, "write entry header %q: %s\n", ih.Name, err)
-			return localnet.ExitRuntimeFailure
-		}
-		if _, err := io.Copy(tw, itr); err != nil {
-			_, _ = fmt.Fprintf(errw, "copy %q: %s\n", ih.Name, err)
-			return localnet.ExitRuntimeFailure
-		}
+	if err := streamTarEntry(tw, archiveDumpName, dumpPath, written); err != nil {
+		_, _ = fmt.Fprintf(errw, "write dump: %s\n", err)
+		return localnet.ExitRuntimeFailure
 	}
-	_ = intermediate.Close()
 
 	if err := tw.Close(); err != nil {
 		_, _ = fmt.Fprintf(errw, "close tar: %s\n", err)
@@ -260,59 +348,59 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 	}
 	renamed = true
 
+	_, _ = fmt.Fprintln(out, term.Step(term.StepCheck,
+		fmt.Sprintf("Captured %d database(s)", header.Database.DatabaseCount),
+		fmt.Sprintf("%d MiB dump", written/1024/1024), ""))
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, term.Box(term.BoxBrand,
 		fmt.Sprintf("%s Snapshot of %s saved to %s\n%s",
 			term.Brandc("✦"),
 			term.Bold("\""+name+"\""),
 			term.Bold(dest),
-			term.Dimc(fmt.Sprintf("%d volume(s) · %s · run %s to restore.",
-				len(volumes), header.CreatedAt,
+			term.Dimc(fmt.Sprintf("%s · run %s to restore.",
+				header.CreatedAt,
 				term.Textc(fmt.Sprintf("localnet restore --name %s --from %s", name, dest)))))))
 	return localnet.ExitSuccess
 }
 
-// streamVolumeToTemp runs ArchiveVolume into a temp file under
-// dir, computing sha256 and a size ceiling as it goes. Returns
-// (path, written, sha) on success. Caller owns the temp file's
-// lifecycle (os.Remove) and must close any tw handle even on
-// error — we never touch tw here.
-func streamVolumeToTemp(ctx context.Context, vol, dir string) (string, int64, string, error) {
-	volFile, err := os.CreateTemp(dir, "snap-vol-*.tar")
+// streamDumpToTemp runs DumpAll into a temp file under dir, computing
+// sha256 and a size ceiling as it goes.
+func streamDumpToTemp(ctx context.Context, pg pgInfo, dir string) (string, int64, string, error) {
+	dumpFile, err := os.CreateTemp(dir, "snap-dump-*.sql")
 	if err != nil {
-		return "", 0, "", fmt.Errorf("create vol tmp: %w", err)
+		return "", 0, "", fmt.Errorf("create dump tmp: %w", err)
 	}
-	volPath := volFile.Name()
+	dumpPath := dumpFile.Name()
 	hasher := sha256.New()
-	capW := newCappedWriter(volFile, maxArchiveEntry)
+	capW := newCappedWriter(dumpFile, maxDump)
 	mw := io.MultiWriter(capW, hasher)
-	if err := archiverFn.ArchiveVolume(ctx, vol, mw); err != nil {
-		_ = volFile.Close()
-		_ = os.Remove(volPath)
+	if err := archiverFn.DumpAll(ctx, pg.Container, pg.User, mw); err != nil {
+		_ = dumpFile.Close()
+		_ = os.Remove(dumpPath)
 		return "", 0, "", err
 	}
 	if capW.exceeded {
-		_ = volFile.Close()
-		_ = os.Remove(volPath)
-		return "", 0, "", fmt.Errorf("volume exceeds %d-byte ceiling", maxArchiveEntry)
+		_ = dumpFile.Close()
+		_ = os.Remove(dumpPath)
+		return "", 0, "", fmt.Errorf("dump exceeds %d-byte ceiling", maxDump)
 	}
-	if err := volFile.Close(); err != nil {
-		_ = os.Remove(volPath)
-		return "", 0, "", fmt.Errorf("close vol tmp: %w", err)
+	if err := dumpFile.Close(); err != nil {
+		_ = os.Remove(dumpPath)
+		return "", 0, "", fmt.Errorf("close dump tmp: %w", err)
 	}
-	return volPath, capW.written, "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
+	if capW.written == 0 {
+		_ = os.Remove(dumpPath)
+		return "", 0, "", fmt.Errorf("pg_dumpall produced an empty dump")
+	}
+	return dumpPath, capW.written, "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-// RunRestore streams the archive: validates header, refuses on
-// version mismatch (unless --force), refuses on existing running
-// instance, re-registers from embedded state.json, restores each
-// volume while re-hashing to verify ContentSHA.
+// RunRestore loads a snapshot's database dump back into the instance's
+// Postgres volume. The instance must NOT be running (a restore drops
+// and recreates every database; a live node would block it). The
+// restore runs a throwaway Postgres against the data volume — no nodes,
+// so no connections — then leaves the instance stopped for `up`.
 func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src string, force bool) int {
-	// Per-instance exclusive lock. Without this,
-	// `dpm localnet restore --name X` and `POST /api/instances/X/
-	// snapshot/restore` can run simultaneously and half-merge two
-	// volume sets, with the registry pointing at whichever Write
-	// wins the race.
 	release, lockErr := registry.Lock(name)
 	if lockErr != nil {
 		_, _ = fmt.Fprintf(errw, "%s\n", lockErr)
@@ -345,9 +433,11 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 			meta.SchemaVersion, snapshotSchemaVersion)
 		return localnet.ExitUserError
 	}
-	expectedSHA := make(map[string]string, len(meta.Volumes))
-	for _, v := range meta.Volumes {
-		expectedSHA[v.Name] = v.ContentSHA
+	if meta.Database == nil {
+		_, _ = fmt.Fprintf(errw,
+			"unsupported snapshot: this archive predates the database-dump format. "+
+				"Re-capture with this DevKit version.\n")
+		return localnet.ExitUserError
 	}
 
 	embedded, err := readEmbeddedState(tr)
@@ -366,15 +456,12 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 		"dpm localnet restore %s %s %s %s",
 		term.Amberc("--name"), name, term.Amberc("--from"), src)))
 	_, _ = fmt.Fprintln(out, term.Step(term.StepCheck, "Validated header",
-		fmt.Sprintf("schema %d · %d volume(s) · captured %s",
-			meta.SchemaVersion, len(meta.Volumes), meta.CreatedAt), ""))
+		fmt.Sprintf("schema %d · %d database(s) · captured %s",
+			meta.SchemaVersion, meta.Database.DatabaseCount, meta.CreatedAt), ""))
 
-	// Distinguish ErrNotFound (the legitimate "no existing instance"
-	// case) from every other error. A bare `existing, _ :=
-	// registry.Read(name)` would swallow permission-denied and corrupt
-	// JSON, then assume nil meant "no existing instance" — masking real
-	// failures and letting a restore overwrite a state file. Surface
-	// any non-ErrNotFound error and bail.
+	// Distinguish ErrNotFound (legitimate "no existing instance") from
+	// every other error so a permission/parse failure can't be mistaken
+	// for "fresh restore".
 	existing, rerr := registry.Read(name)
 	if rerr != nil && !errors.Is(rerr, registry.ErrNotFound) {
 		_, _ = fmt.Fprintf(errw, "read existing registry state for %q: %s\n", name, rerr)
@@ -389,208 +476,106 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 		if existing.SpliceVersion != meta.SpliceVersion && !force {
 			_, _ = fmt.Fprintf(errw,
 				"Splice version mismatch: existing instance is %s, snapshot is %s. "+
-					"Restore would write volumes formatted for a different binary. "+
 					"Pass --force to override.\n",
 				existing.SpliceVersion, meta.SpliceVersion)
 			return localnet.ExitUserError
 		}
 	}
 
-	// If the user-supplied --name differs from the snapshot's embedded
-	// original name, surface a warning. The restore proceeds
-	// (renaming-on-restore is a
-	// supported workflow) but the user should know they're not
-	// recovering the original identity — e.g. agents, log paths,
-	// and credentials baked into the embedded state may reference
-	// the OLD name. This is a soft warning, NOT a refusal.
+	// Build the registry record we'll commit only after a successful
+	// load. On cross-name restore the compose-project / network /
+	// container-prefix are rewritten to the target, matching up.go.
+	toWrite := *embedded
+	toWrite.Name = name
+	toWrite.Status = registry.StatusStopped
 	if embedded.Name != "" && embedded.Name != name {
 		_, _ = fmt.Fprintln(errw, term.Warnc(fmt.Sprintf(
 			"warning: snapshot's original instance name was %q; restoring as %q. "+
 				"Embedded log paths and identifiers still reference the original name.",
 			embedded.Name, name)))
-	}
-
-	// Disk preflight. Restore unpacks every volume tar into the docker
-	// volume root; without a
-	// preflight the user can fill the disk mid-restore and leave
-	// a half-populated registry entry behind. Sum the expected
-	// volume sizes from the snapshot header and refuse if the
-	// destination filesystem has less free space + a 20% safety
-	// margin. The header sizes are the compressed-tar bytes; the
-	// margin covers tar overhead and filesystem block rounding.
-	if avail, err := availableDiskBytes(filepath.Dir(src)); err == nil {
-		var need int64
-		for _, v := range meta.Volumes {
-			need += v.SizeBytes
-		}
-		needWithMargin := need + need/5 // 20%
-		if avail > 0 && needWithMargin > 0 && avail < uint64(needWithMargin) {
-			_, _ = fmt.Fprintf(errw,
-				"insufficient disk space to restore: snapshot needs ~%d MiB (with margin) but only %d MiB available. "+
-					"Free space and retry.\n",
-				needWithMargin/1024/1024, avail/1024/1024)
-			return localnet.ExitUserError
-		}
-	}
-	// availableDiskBytes returning an error (unsupported FS,
-	// permissions) is non-fatal: we proceed without the preflight
-	// rather than blocking restore in environments where statfs
-	// isn't available. The unpack loop will still surface ENOSPC
-	// with a useful error.
-
-	// Build the registry record we WOULD write — but defer the actual
-	// Write until after all volumes restore successfully. Writing the
-	// registry first and unpacking volumes after would leave a registry
-	// entry pointing at a half-restored instance with no rollback on a
-	// volume failure. Either commit the registry on full success or
-	// leave it untouched.
-	//
-	// When --name differs from the embedded original, the
-	// compose-project / network / container-prefix fields must be
-	// rewritten too, matching the naming convention in
-	// internal/localnet/up.go: ComposeProject = "canton-"+name,
-	// DockerNetwork = name, ContainerPrefix = name+"-".
-	toWrite := *embedded
-	toWrite.Name = name
-	toWrite.Status = registry.StatusStopped
-	srcComposeProject := embedded.ComposeProject
-	if embedded.Name != "" && embedded.Name != name {
 		toWrite.ComposeProject = "canton-" + name
 		toWrite.DockerNetwork = name
 		toWrite.ContainerPrefix = name + "-"
 	}
 
-	// Cumulative tar-size budget. The per-entry maxArchiveEntry cap
-	// (16 GiB) doesn't bound N×16 GiB
-	// across the archive. Re-derive available disk now and track
-	// extracted bytes across the loop; abort if we'd exceed the
-	// budget. avail==0 means availableDiskBytes failed earlier; we
-	// fall back to a hard 256 GiB cumulative ceiling — well above
-	// any reasonable LocalNet snapshot but a backstop against a
-	// hostile archive with under-reported SizeBytes.
-	const cumulativeFloor = int64(256) << 30 // 256 GiB
-	cumulativeBudget := cumulativeFloor
-	if a, err := availableDiskBytes(filepath.Dir(src)); err == nil && a > 0 {
-		// Leave a 20% margin to avoid filling the filesystem.
-		margin := uint64(float64(a) * 0.8)
-		if margin > 0 && int64(margin) < cumulativeBudget {
-			cumulativeBudget = int64(margin)
-		}
-	}
-	var cumulativeRestored int64
-
-	restored := 0
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			_, _ = fmt.Fprintf(errw, "read entry: %s\n", err)
-			return localnet.ExitRuntimeFailure
-		}
-		srcVolName, ok := validateArchivePath(hdr.Name)
-		if !ok {
-			_, _ = fmt.Fprintln(out, term.Step(term.StepWarn,
-				"Skipping unknown entry", hdr.Name, ""))
-			if _, err := io.CopyN(io.Discard, tr, hdr.Size); err != nil && err != io.EOF {
-				_, _ = fmt.Fprintf(errw, "discard %q: %s\n", hdr.Name, err)
-				return localnet.ExitRuntimeFailure
-			}
-			continue
-		}
-		// rewrite the volume name so the restored docker
-		// volume sits under the target instance's compose-project
-		// prefix. When --name matches the embedded original this is
-		// a no-op (srcComposeProject == toWrite.ComposeProject) and
-		// the volume keeps its original name — same-name restore is
-		// unchanged. For cross-name, the rewrite is what lets two
-		// instances (source + clone) coexist with independent volumes.
-		dstVolName := rewriteVolumeForTarget(
-			srcVolName, srcComposeProject, toWrite.ComposeProject)
-		if hdr.Size > maxArchiveEntry {
-			_, _ = fmt.Fprintf(errw, "volume %q size %d exceeds %d-byte ceiling\n",
-				dstVolName, hdr.Size, maxArchiveEntry)
-			return localnet.ExitRuntimeFailure
-		}
-		// Cumulative budget check BEFORE extracting, using hdr.Size
-		// (the tar-declared size); the streaming
-		// copy is also bounded to hdr.Size via io.LimitReader, so a
-		// rogue archive cannot blow past this number even with a
-		// truncated header.
-		if cumulativeRestored+hdr.Size > cumulativeBudget {
-			_, _ = fmt.Fprintf(errw,
-				"cumulative restore size %d + this volume %d would exceed budget %d "+
-					"(remaining disk minus 20%% margin); aborting before disk fills\n",
-				cumulativeRestored, hdr.Size, cumulativeBudget)
-			return localnet.ExitRuntimeFailure
-		}
-		_, _ = fmt.Fprintln(out, term.Step(term.StepBusy, "Restoring volume", dstVolName, ""))
-
-		// Tee into archiver + sha hasher via io.Pipe so we
-		// stream without buffering. The goroutine writes; the
-		// archiver reads.
-		hasher := sha256.New()
-		pr, pw := io.Pipe()
-		copyErr := make(chan error, 1)
-		go func() {
-			_, err := io.Copy(io.MultiWriter(pw, hasher), io.LimitReader(tr, hdr.Size))
-			_ = pw.CloseWithError(err)
-			copyErr <- err
-		}()
-		restErr := archiverFn.RestoreVolume(ctx, dstVolName, pr)
-		// If the alpine `tar xf -` exited early (e.g. disk full
-		// mid-stream), pr's reader side is closed but
-		// the goroutine on the other end may still be blocked
-		// writing into the pipe buffer. Closing pr with the error
-		// unblocks the writer so we don't leak a goroutine on the
-		// error path. (Successful path: io.Copy returned EOF, the
-		// goroutine already exited via CloseWithError(nil).)
-		if restErr != nil {
-			_ = pr.CloseWithError(restErr)
-		}
-		streamErr := <-copyErr
-		if restErr != nil {
-			_, _ = fmt.Fprintf(errw, "restore %q: %s\n", dstVolName, restErr)
-			return localnet.ExitRuntimeFailure
-		}
-		if streamErr != nil && streamErr != io.EOF {
-			_, _ = fmt.Fprintf(errw, "stream %q: %s\n", dstVolName, streamErr)
-			return localnet.ExitRuntimeFailure
-		}
-		got := "sha256:" + hex.EncodeToString(hasher.Sum(nil))
-		// SHA was computed on the SOURCE name at snapshot time;
-		// look it up that way even when we restored under a new
-		// name. Bytes are identical; only the docker label changed.
-		want, hadExpected := expectedSHA[srcVolName]
-		if hadExpected && got != want {
-			_, _ = fmt.Fprintf(errw,
-				"volume %q SHA mismatch: archive reports %s, computed %s\n",
-				dstVolName, want, got)
-			return localnet.ExitRuntimeFailure
-		}
-		restored++
-		cumulativeRestored += hdr.Size
-		_, _ = fmt.Fprintln(out, term.Step(term.StepCheck, "Restored volume", dstVolName, ""))
+	// Hard guard: never start a second writer. If any container of the
+	// target project is still up (a stale/half-down instance), refuse.
+	if running, _ := archiverFn.AnyContainerRunning(ctx, toWrite.ComposeProject); running {
+		_, _ = fmt.Fprintf(errw,
+			"instance %q still has running containers — run `localnet down --name %s` first\n",
+			name, name)
+		return localnet.ExitUserError
 	}
 
-	// Commit point: only NOW do we write the registry. Up to here any
-	// failure leaves the existing registry entry (if
-	// any) and the volumes we did unpack in place — but no
-	// half-committed registry row claiming an instance is restored
-	// when it isn't.
+	// Disk preflight against Docker's volume store (where the restored
+	// database lands), falling back to the host fs holding the archive.
+	volAvail, volAvailErr := archiverFn.VolumeStorageAvailableBytes(ctx)
+	if volAvailErr != nil {
+		volAvail, _ = availableDiskBytes(filepath.Dir(src))
+	}
+	if volAvail > 0 {
+		// A restored database is roughly the dump size; add a 50% margin
+		// for indexes/WAL the load rebuilds.
+		need := meta.Database.SizeBytes + meta.Database.SizeBytes/2
+		if need > 0 && volAvail < uint64(need) {
+			_, _ = fmt.Fprintf(errw,
+				"insufficient disk space to restore: dump is ~%d MiB (needs ~%d MiB with margin) "+
+					"but only %d MiB available on Docker's volume storage.\n",
+				meta.Database.SizeBytes/1024/1024, need/1024/1024, volAvail/1024/1024)
+			return localnet.ExitUserError
+		}
+	}
+
+	// Find the dump entry and stream it into the restore loader while
+	// re-hashing to verify ContentSHA.
+	hdr, err := tr.Next()
+	if err != nil {
+		_, _ = fmt.Fprintf(errw, "read dump entry: %s\n", err)
+		return localnet.ExitUserError
+	}
+	if !validArchiveDumpPath(hdr.Name) {
+		_, _ = fmt.Fprintf(errw,
+			"archive third entry must be %s (got %q)\n", archiveDumpName, hdr.Name)
+		return localnet.ExitUserError
+	}
+	if hdr.Size > maxDump {
+		_, _ = fmt.Fprintf(errw, "dump size %d exceeds %d-byte ceiling\n", hdr.Size, maxDump)
+		return localnet.ExitRuntimeFailure
+	}
+
+	volume := toWrite.ComposeProject + "_" + meta.Database.VolumeSuffix
+	_, _ = fmt.Fprintln(out, term.Step(term.StepBusy, "Restoring database", volume, ""))
+
+	hasher := sha256.New()
+	tee := io.TeeReader(io.LimitReader(tr, hdr.Size), hasher)
+	if err := archiverFn.RestoreInto(ctx, meta.Database.PostgresImage, volume, meta.Database.User, tee); err != nil {
+		_, _ = fmt.Fprintf(errw, "restore database: %s\n", err)
+		return localnet.ExitRuntimeFailure
+	}
+	// Drain any trailing bytes so the hash covers the whole entry.
+	_, _ = io.Copy(io.Discard, tee)
+	got := "sha256:" + hex.EncodeToString(hasher.Sum(nil))
+	if meta.Database.ContentSHA != "" && got != meta.Database.ContentSHA {
+		_, _ = fmt.Fprintf(errw,
+			"dump SHA mismatch: archive reports %s, computed %s — restore may be incomplete\n",
+			meta.Database.ContentSHA, got)
+		return localnet.ExitRuntimeFailure
+	}
+
+	// Commit the registry only after a successful load.
 	if err := registry.Write(&toWrite); err != nil {
 		_, _ = fmt.Fprintf(errw, "register restored instance: %s\n", err)
 		return localnet.ExitRuntimeFailure
 	}
 
+	_, _ = fmt.Fprintln(out, term.Step(term.StepCheck, "Restored database", volume, ""))
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, term.Box(term.BoxBrand,
-		fmt.Sprintf("%s Restored %s from %s (%d volume(s))\n%s",
+		fmt.Sprintf("%s Restored %s from %s (%d database(s))\n%s",
 			term.Brandc("✦"),
 			term.Bold("\""+name+"\""),
 			term.Bold(src),
-			restored,
+			meta.Database.DatabaseCount,
 			term.Dimc(fmt.Sprintf("Run %s to bring it up.",
 				term.Textc(fmt.Sprintf("localnet up --name %s", name)))))))
 	return localnet.ExitSuccess
@@ -642,91 +627,14 @@ func readEmbeddedState(tr *tar.Reader) (*registry.State, error) {
 	return &s, nil
 }
 
-// validateArchivePath is the Zip Slip gate. Rejects anything that
-// isn't strictly
-// `volumes/<safename>.tar`. Returns the extracted volume name on
-// success.
-func validateArchivePath(name string) (string, bool) {
-	if name == "" {
-		return "", false
-	}
-	if path.Clean(name) != name {
-		return "", false
-	}
-	if !strings.HasPrefix(name, archiveVolumesPath) || !strings.HasSuffix(name, ".tar") {
-		return "", false
-	}
-	inner := strings.TrimSuffix(strings.TrimPrefix(name, archiveVolumesPath), ".tar")
-	if inner == "" || strings.Contains(inner, "/") {
-		return "", false
-	}
-	if err := validateVolumeName(inner); err != nil {
-		return "", false
-	}
-	return inner, true
+// validArchiveDumpPath is the Zip Slip gate: the dump entry must be
+// exactly archiveDumpName, nothing else.
+func validArchiveDumpPath(name string) bool {
+	return name == archiveDumpName && path.Clean(name) == name
 }
 
-// validateVolumeName mirrors docker's own volume-name regex
-// (^[a-zA-Z0-9][a-zA-Z0-9_.-]*$, max 64). Tightening here doubles
-// as the Zip Slip safety net.
-func validateVolumeName(s string) error {
-	if s == "" || len(s) > 64 {
-		return fmt.Errorf("length out of range")
-	}
-	for i, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z',
-			r >= 'A' && r <= 'Z',
-			r >= '0' && r <= '9':
-			// ok
-		case i > 0 && (r == '_' || r == '.' || r == '-'):
-			// ok — docker forbids these as first char
-		default:
-			return fmt.Errorf("disallowed char %q at %d", r, i)
-		}
-	}
-	return nil
-}
-
-// rewriteVolumeForTarget translates a captured volume name from its
-// source compose-project prefix to the target's, when --name differs
-// from the embedded original. Docker compose volumes are named
-// `<project>_<suffix>`; on cross-name restore we want the same suffix
-// under the new project so the restored instance has independent
-// volumes.
-//
-// Examples (src="canton-pebble", dst="canton-pebble-clone"):
-//
-//	canton-pebble_postgres -> canton-pebble-clone_postgres
-//	canton-pebble_domain-upgrade-dump -> canton-pebble-clone_domain-upgrade-dump
-//
-// Edge cases:
-//
-// - src == dst (same-name restore): returns name unchanged. The
-// common path stays a no-op so the no-rewrite branch can't drift.
-// - name doesn't start with src+"_": returns name unchanged with a
-// conservative bias. This shouldn't happen for archives produced
-// by our snapshot path (every volume there carries the source's
-// compose-project prefix) but a custom or hand-crafted archive
-// might. Leaving the name alone is safer than producing a
-// nonsense rewrite the operator can't diagnose.
-// - src == "": returns name unchanged. The embedded state.json
-// should always carry ComposeProject, but defending against an
-// older snapshot is cheap.
-func rewriteVolumeForTarget(name, srcProject, dstProject string) string {
-	if srcProject == "" || srcProject == dstProject {
-		return name
-	}
-	prefix := srcProject + "_"
-	if !strings.HasPrefix(name, prefix) {
-		return name
-	}
-	return dstProject + "_" + name[len(prefix):]
-}
-
-// streamTarEntry copies bodyPath into tw as `name`. `size` is
-// trusted (passed by caller who just wrote bodyPath) to avoid a
-// TOCTOU stat.
+// streamTarEntry copies bodyPath into tw as `name`. `size` is trusted
+// (the caller just wrote bodyPath) to avoid a TOCTOU stat.
 func streamTarEntry(tw *tar.Writer, name, bodyPath string, size int64) error {
 	if err := tw.WriteHeader(&tar.Header{
 		Name: name, Size: size, Mode: 0o600, ModTime: time.Now().UTC(),
@@ -742,8 +650,7 @@ func streamTarEntry(tw *tar.Writer, name, bodyPath string, size int64) error {
 	return err
 }
 
-// writeTarEntry is the small-body sibling — header + state.json,
-// both < 1 MiB.
+// writeTarEntry is the small-body sibling — header + state.json.
 func writeTarEntry(tw *tar.Writer, name string, body []byte) error {
 	if err := tw.WriteHeader(&tar.Header{
 		Name: name, Size: int64(len(body)), Mode: 0o600, ModTime: time.Now().UTC(),
@@ -754,8 +661,8 @@ func writeTarEntry(tw *tar.Writer, name string, body []byte) error {
 	return err
 }
 
-// cappedWriter enforces a max byte ceiling. Used during snapshot
-// so a runaway tar can't fill the staging disk.
+// cappedWriter enforces a max byte ceiling so a runaway dump can't fill
+// the staging disk.
 type cappedWriter struct {
 	inner    io.Writer
 	max      int64
@@ -777,46 +684,252 @@ func (c *cappedWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// dockerVolumeArchiver — production volumeArchiver. Streaming via
-// docker run -i / -v.
-type dockerVolumeArchiver struct{}
+// dockerPgArchiver — production pgArchiver. Talks to docker / postgres
+// via the docker CLI.
+type dockerPgArchiver struct{}
 
-func (dockerVolumeArchiver) ListVolumes(ctx context.Context, composeProject string) ([]string, error) {
-	args := []string{
-		"volume", "ls",
-		"--filter", "label=com.docker.compose.project=" + composeProject,
-		"--format", "{{.Name}}",
+func (dockerPgArchiver) ResolvePostgres(ctx context.Context, composeProject string) (pgInfo, error) {
+	name, err := exec.CommandContext(ctx, "docker", "ps",
+		"--filter", "label=com.docker.compose.project="+composeProject,
+		"--filter", "label=com.docker.compose.service=postgres",
+		"--format", "{{.Names}}").Output()
+	container := strings.TrimSpace(string(err2nil(name, err)))
+	if container == "" {
+		return pgInfo{}, fmt.Errorf("no running postgres container for project %q", composeProject)
 	}
-	out, err := exec.CommandContext(ctx, "docker", args...).Output()
+	// First line only, in case of replicas.
+	if i := strings.IndexByte(container, '\n'); i >= 0 {
+		container = container[:i]
+	}
+
+	user := dockerExecOut(ctx, container, "printenv", "POSTGRES_USER")
+	if user == "" {
+		user = "postgres"
+	}
+	image := strings.TrimSpace(string(err2nil(
+		exec.CommandContext(ctx, "docker", "inspect", "-f", "{{.Config.Image}}", container).Output())))
+
+	volume := strings.TrimSpace(string(err2nil(exec.CommandContext(ctx, "docker", "inspect", "-f",
+		`{{range .Mounts}}{{if eq .Destination "`+pgDataDir+`"}}{{.Name}}{{end}}{{end}}`, container).Output())))
+	if volume == "" {
+		volume = composeProject + "_postgres"
+	}
+	suffix := strings.TrimPrefix(volume, composeProject+"_")
+
+	return pgInfo{Container: container, User: user, Image: image, Volume: volume, VolumeSuffix: suffix}, nil
+}
+
+func (dockerPgArchiver) AnyContainerRunning(ctx context.Context, composeProject string) (bool, error) {
+	out, err := exec.CommandContext(ctx, "docker", "ps", "-q",
+		"--filter", "label=com.docker.compose.project="+composeProject).Output()
 	if err != nil {
-		return nil, fmt.Errorf("docker %s: %w", strings.Join(args, " "), err)
+		return false, fmt.Errorf("docker ps: %w", err)
 	}
-	var vols []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if line = strings.TrimSpace(line); line != "" {
-			vols = append(vols, line)
+	return strings.TrimSpace(string(out)) != "", nil
+}
+
+func (dockerPgArchiver) Quiesce(ctx context.Context, composeProject, pgContainer string) (func(), error) {
+	out, err := exec.CommandContext(ctx, "docker", "ps", "--format", "{{.Names}}",
+		"--filter", "label=com.docker.compose.project="+composeProject).Output()
+	if err != nil {
+		return func() {}, fmt.Errorf("list containers: %w", err)
+	}
+	var nodes []string
+	for _, n := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if n = strings.TrimSpace(n); n != "" && n != pgContainer {
+			nodes = append(nodes, n)
 		}
 	}
-	return vols, nil
-}
-
-func (dockerVolumeArchiver) ArchiveVolume(ctx context.Context, volume string, w io.Writer) error {
-	cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
-		"-v", volume+":/src:ro",
-		"alpine:3.20", "tar", "cf", "-", "-C", "/src", ".")
-	cmd.Stdout = w
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-func (dockerVolumeArchiver) RestoreVolume(ctx context.Context, volume string, r io.Reader) error {
-	if err := exec.CommandContext(ctx, "docker", "volume", "create", volume).Run(); err != nil {
-		return fmt.Errorf("create volume %q: %w", volume, err)
+	if len(nodes) == 0 {
+		return func() {}, nil
 	}
-	cmd := exec.CommandContext(ctx, "docker", "run", "--rm", "-i",
-		"-v", volume+":/dst",
-		"alpine:3.20", "tar", "xf", "-", "-C", "/dst")
+	// Freeze the node processes (SIGSTOP) so nothing writes to Postgres
+	// during the dump. Postgres itself is left running so pg_dumpall can
+	// read. Pause is instant and keeps ports bound — no reboot cost.
+	if err := exec.CommandContext(ctx, "docker", append([]string{"pause"}, nodes...)...).Run(); err != nil {
+		_ = exec.Command("docker", append([]string{"unpause"}, nodes...)...).Run()
+		return func() {}, fmt.Errorf("pause node containers: %w", err)
+	}
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			// Detached from ctx: we must unpause even if the dump's context
+			// was cancelled (e.g. a timeout), or the instance is left frozen.
+			_ = exec.Command("docker", append([]string{"unpause"}, nodes...)...).Run()
+		})
+	}, nil
+}
+
+func (dockerPgArchiver) DumpAll(ctx context.Context, container, user string, w io.Writer) error {
+	var errBuf bytes.Buffer
+	cmd := exec.CommandContext(ctx, "docker", "exec", container,
+		"pg_dumpall", "-U", user, "--clean", "--if-exists")
+	cmd.Stdout = w
+	cmd.Stderr = &errBuf
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("pg_dumpall: %w: %s", err, strings.TrimSpace(errBuf.String()))
+	}
+	return nil
+}
+
+func (dockerPgArchiver) CountDatabases(ctx context.Context, container, user string) int {
+	out := dockerExecOut(ctx, container, "psql", "-U", user, "-d", "postgres", "-At", "-c",
+		"select count(*) from pg_database where datname not in ('template0','template1','postgres')")
+	n, _ := strconv.Atoi(strings.TrimSpace(out))
+	return n
+}
+
+func (dockerPgArchiver) RestoreInto(ctx context.Context, image, volume, user string, r io.Reader) error {
+	if image == "" || volume == "" || user == "" {
+		return fmt.Errorf("incomplete restore target (image=%q volume=%q user=%q)", image, volume, user)
+	}
+	tmpName := "dpm-restore-pg-" + sanitizeContainerName(volume)
+	// Clear any leftover from a previous interrupted restore.
+	_ = exec.CommandContext(ctx, "docker", "rm", "-f", tmpName).Run()
+
+	// Throwaway Postgres on the target volume. HOST_AUTH_METHOD=trust
+	// makes the (only) case where the volume is empty — restore into a
+	// never-started instance — initialise without a password and accept
+	// the local psql connection; for an already-initialised volume the
+	// env is ignored.
+	if err := exec.CommandContext(ctx, "docker", "run", "-d", "--name", tmpName,
+		"-v", volume+":"+pgDataDir,
+		"-e", "POSTGRES_USER="+user,
+		"-e", "POSTGRES_HOST_AUTH_METHOD=trust",
+		image).Run(); err != nil {
+		return fmt.Errorf("start restore container: %w", err)
+	}
+	defer func() { _ = exec.Command("docker", "rm", "-f", tmpName).Run() }()
+
+	// Wait for readiness.
+	ready := false
+	for i := 0; i < 60; i++ {
+		if exec.CommandContext(ctx, "docker", "exec", tmpName, "pg_isready", "-U", user).Run() == nil {
+			ready = true
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
+	if !ready {
+		return fmt.Errorf("restore Postgres did not become ready")
+	}
+
+	// Load the dump. ON_ERROR_STOP=0 because pg_dumpall --clean emits a
+	// DROP/CREATE for the connection role, which deterministically fails
+	// (a role can't drop itself / already exists); we scan stderr and
+	// fail only on errors outside that allowlist.
+	var errBuf bytes.Buffer
+	cmd := exec.CommandContext(ctx, "docker", "exec", "-i", tmpName,
+		"psql", "-U", user, "-d", "postgres", "-v", "ON_ERROR_STOP=0")
 	cmd.Stdin = r
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	cmd.Stderr = &errBuf
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("psql restore: %w: %s", err, firstLines(errBuf.String(), 3))
+	}
+	if bad := nonIgnorableRestoreErrors(errBuf.String(), user); len(bad) > 0 {
+		return fmt.Errorf("psql restore reported %d error(s), e.g.: %s",
+			len(bad), strings.Join(bad[:min(len(bad), 3)], " | "))
+	}
+	return nil
+}
+
+// nonIgnorableRestoreErrors returns the psql ERROR/FATAL lines that are
+// NOT the two deterministic connection-role lines a `pg_dumpall --clean`
+// restore always emits.
+func nonIgnorableRestoreErrors(stderr, user string) []string {
+	roleExists := `role "` + user + `" already exists`
+	var bad []string
+	sc := bufio.NewScanner(strings.NewReader(stderr))
+	sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
+	for sc.Scan() {
+		line := sc.Text()
+		if !strings.Contains(line, "ERROR") && !strings.Contains(line, "FATAL") {
+			continue
+		}
+		if strings.Contains(line, "current user cannot be dropped") ||
+			strings.Contains(line, roleExists) {
+			continue
+		}
+		bad = append(bad, strings.TrimSpace(line))
+	}
+	return bad
+}
+
+func (dockerPgArchiver) VolumeStorageAvailableBytes(ctx context.Context) (uint64, error) {
+	out, err := exec.CommandContext(ctx, "docker", "run", "--rm",
+		"-v", "/probe",
+		"alpine:3.20", "df", "-Pk", "/probe").Output()
+	if err != nil {
+		return 0, fmt.Errorf("probe docker volume storage: %w", err)
+	}
+	return parseDfAvailableKB(string(out))
+}
+
+// parseDfAvailableKB extracts the Available column (1K-blocks) from
+// POSIX `df -Pk` output and returns it as bytes.
+func parseDfAvailableKB(dfOut string) (uint64, error) {
+	for _, line := range strings.Split(strings.TrimSpace(dfOut), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		availKB, err := strconv.ParseUint(fields[3], 10, 64)
+		if err != nil {
+			continue
+		}
+		return availKB * 1024, nil
+	}
+	return 0, fmt.Errorf("df output not parseable: %q", dfOut)
+}
+
+// dockerExecOut runs `docker exec <container> <args...>` and returns
+// trimmed stdout, or "" on error.
+func dockerExecOut(ctx context.Context, container string, args ...string) string {
+	full := append([]string{"exec", container}, args...)
+	out, err := exec.CommandContext(ctx, "docker", full...).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// sanitizeContainerName keeps a docker-safe suffix for the throwaway
+// container name.
+func sanitizeContainerName(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '.', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	return b.String()
+}
+
+func firstLines(s string, n int) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	if len(lines) > n {
+		lines = lines[:n]
+	}
+	return strings.Join(lines, " | ")
+}
+
+func err2nil(out []byte, err error) []byte {
+	if err != nil {
+		return nil
+	}
+	return out
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

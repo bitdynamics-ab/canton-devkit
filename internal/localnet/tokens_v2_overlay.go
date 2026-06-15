@@ -2,6 +2,7 @@ package localnet
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -23,17 +24,22 @@ const TokensV2ProfileName = "tokens-v2"
 // overlay into a per-instance directory and returns the absolute path
 // of the overlay YAML to append to ComposeRunner.ComposeFiles.
 //
-// Idempotent. Mirrors MaterializeObservabilityOverlay's hash-compare
-// write-if-different pattern so operators who tweak the overlay in
-// place (e.g. to point at a different snapshot) don't have their
-// edits clobbered on every `localnet up`.
+// Idempotent and edit-preserving. The overlay is written only when the
+// destination is missing or still byte-identical to the embedded
+// asset; once an operator has tweaked it in place (e.g. to point at a
+// different snapshot), MaterializeTokensV2Overlay leaves their version
+// untouched and emits a one-line drift notice on warnw so the
+// divergence isn't silent. This matches the doc promise that operator
+// edits survive a `localnet up`.
+//
+// warnw may be nil (drift notices are then dropped).
 //
 // dataDir is the per-instance data directory (registry's DataDir);
-// the overlay lands under `<dataDir>/tokens-v2/`. projectDir is
-// accepted for symmetry with the observability overlay but is unused
-// — the tokens-v2 overlay declares no relative volume mounts, so it
-// needs nothing in the splice-base project directory.
-func MaterializeTokensV2Overlay(dataDir string) (string, error) {
+// the overlay lands under `<dataDir>/tokens-v2/`. The tokens-v2
+// overlay declares no relative volume mounts, so — unlike the
+// observability overlay — it needs nothing in the splice-base project
+// directory.
+func MaterializeTokensV2Overlay(dataDir string, warnw io.Writer) (string, error) {
 	if dataDir == "" {
 		return "", fmt.Errorf("MaterializeTokensV2Overlay: empty dataDir")
 	}
@@ -50,11 +56,7 @@ func MaterializeTokensV2Overlay(dataDir string) (string, error) {
 		return "", fmt.Errorf("read embedded %s: %w", embedPath, err)
 	}
 	dest := filepath.Join(root, "tokens-v2.yml")
-	// Write-if-different — don't silently stomp operator tweaks.
-	if existing, rerr := os.ReadFile(dest); rerr == nil && bytesEqual(existing, data) {
-		return dest, nil
-	}
-	if err := os.WriteFile(dest, data, 0o644); err != nil {
+	if err := writePreservingEdits(dest, data, warnw); err != nil {
 		return "", fmt.Errorf("write tokens-v2 overlay: %w", err)
 	}
 	return dest, nil

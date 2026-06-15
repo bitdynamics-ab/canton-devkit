@@ -419,6 +419,34 @@ func TestCSRF_TokensActionsProtectedEndToEnd(t *testing.T) {
 	}
 }
 
+// TestCSRF_DARUploadProtectedEndToEnd pins that the DAR upload POST
+// (POST /api/instances/{name}/dar) inherits the global Origin gate.
+// The route uploads attacker-chosen .dar packages to the local
+// participants and has no per-route CSRF guard of its own — it relies
+// entirely on withOriginCheck wrapping the mux in NewRouter. A
+// cross-origin POST must be rejected with 403 BEFORE the handler (and
+// any ledger-side vetting) runs. Without this pin, a regression that
+// dropped withOriginCheck from the DAR route would pass the
+// handler-package tests (they use a bare mux that bypasses the
+// middleware) and silently re-open the vector.
+func TestCSRF_DARUploadProtectedEndToEnd(t *testing.T) {
+	srv, addr := startTestServer(t)
+	defer func() { _ = srv.Shutdown(context.Background()) }()
+
+	req, _ := http.NewRequest("POST",
+		"http://"+addr+"/api/instances/demo/dar", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("cross-origin POST /api/instances/demo/dar status = %d, want 403 — withOriginCheck not reaching the DAR upload route",
+			resp.StatusCode)
+	}
+}
+
 func TestRouter_SkillsInstallRouteMountedEndToEnd(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

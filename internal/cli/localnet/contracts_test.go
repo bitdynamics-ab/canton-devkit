@@ -10,18 +10,28 @@ import (
 // TestBuildEventFormat_PartyHandling pins the // `--party` is no longer silent. Empty parties → FiltersForAnyParty
 // (wildcard); non-empty → FiltersByParty with one entry per party.
 func TestBuildEventFormat_PartyHandling(t *testing.T) {
-	t.Run("no parties + no templates → wildcard (nil FiltersForAnyParty is the wildcard shape)", func(t *testing.T) {
-		// Daml LF v2 contract: when both party-list and
-		// template-list are empty, the request is the bare
-		// wildcard — the participant interprets nil
-		// FiltersForAnyParty + no FiltersByParty as "everything
-		// visible to the JWT claim". So we explicitly assert
-		// that BY-PARTY is empty rather than that FOR-ANY-PARTY
-		// has a non-nil empty Filters.
+	t.Run("no parties + no templates → wildcard is non-nil empty FiltersForAnyParty", func(t *testing.T) {
+		// Daml LF v2 contract: Canton REJECTS an EventFormat whose
+		// FiltersByParty is empty AND FiltersForAnyParty is nil
+		// (INVALID_ARGUMENT: "filtersByParty and filtersForAnyParty
+		// cannot both be empty"). The wildcard is a NON-NIL empty
+		// *Filters{} in FiltersForAnyParty — an empty Cumulative
+		// list defaults to a wildcard CumulativeFilter, which the
+		// participant gates by the JWT's claim. Pin that shape so
+		// the flag-less default never regresses to the rejected
+		// empty-EventFormat form.
 		f := buildEventFormat(nil, nil, true)
 		if len(f.FiltersByParty) != 0 {
 			t.Errorf("FiltersByParty should be empty (wildcard), got %d entries",
 				len(f.FiltersByParty))
+		}
+		if f.FiltersForAnyParty == nil {
+			t.Fatal("wildcard: FiltersForAnyParty must be a non-nil empty Filters, got nil " +
+				"(Canton rejects FiltersByParty-empty + FiltersForAnyParty-nil)")
+		}
+		if len(f.FiltersForAnyParty.Cumulative) != 0 {
+			t.Errorf("wildcard: FiltersForAnyParty.Cumulative should be empty, got %d",
+				len(f.FiltersForAnyParty.Cumulative))
 		}
 		if !f.Verbose {
 			t.Error("verbose flag not propagated")
@@ -37,14 +47,21 @@ func TestBuildEventFormat_PartyHandling(t *testing.T) {
 				len(f.FiltersForAnyParty.Cumulative))
 		}
 	})
-	t.Run("single party → by-party with one entry", func(t *testing.T) {
+	t.Run("single party → by-party with one non-nil entry", func(t *testing.T) {
 		f := buildEventFormat([]string{"alice"}, nil, false)
 		if f.FiltersForAnyParty != nil {
 			t.Error("single party: wildcard should be nil")
 		}
-		if _, ok := f.FiltersByParty["alice"]; !ok {
+		v, ok := f.FiltersByParty["alice"]
+		if !ok {
 			t.Errorf("missing alice entry; got keys %v",
 				keysOf(f.FiltersByParty))
+		}
+		// With no --template the per-party value must be a non-nil
+		// empty *Filters{} (wildcard), never nil — a nil map value
+		// is the rejected "party key with no filter" shape.
+		if v == nil {
+			t.Error("party filter value is nil; want non-nil empty Filters")
 		}
 	})
 	t.Run("multi-party → one entry per", func(t *testing.T) {
@@ -173,55 +190,61 @@ func TestBuildUpdateFormat_HasACSDeltaShape(t *testing.T) {
 	}
 }
 
-// TestResolveOffsetWindow pins the --from/--to/--limit precedence
-// that flagged as missing.
+// TestResolveOffsetWindow pins the --from/--to window semantics.
+// Key fixes: the default window is a generous fixed
+// span DECOUPLED from --limit (so filtered queries find sparse
+// matches), and --from is a real offset gated by `Changed` — `--from
+// 0` reads from genesis instead of being a "use --limit" sentinel.
 func TestResolveOffsetWindow(t *testing.T) {
+	const span = defaultTxWindowSpan
 	cases := []struct {
-		name                             string
-		fromOff, toOff, limit, ledgerEnd int64
-		wantBegin                        int64
-		wantEnd                          int64
-		wantErr                          bool
+		name           string
+		fromOff, toOff int64
+		fromSet, toSet bool
+		ledgerEnd      int64
+		wantBegin      int64
+		wantEnd        int64
+		wantErr        bool
 	}{
 		{
-			name:  "no flags → end-limit window",
-			limit: 50, ledgerEnd: 1000,
-			wantBegin: 950, wantEnd: 1000,
+			name:      "no flags → generous recent window (span back from end), not end-limit",
+			ledgerEnd: 1_000_000,
+			wantBegin: 1_000_000 - span, wantEnd: 1_000_000,
 		},
 		{
-			name:  "limit larger than end → clamps to 0",
-			limit: 2000, ledgerEnd: 100,
+			name:      "default window clamps to 0 when end < span",
+			ledgerEnd: 100,
 			wantBegin: 0, wantEnd: 100,
 		},
 		{
-			name:  "explicit --to overrides ledger end",
-			limit: 10, toOff: 500, ledgerEnd: 1000,
-			wantBegin: 490, wantEnd: 500,
+			name:  "explicit --to overrides ledger end; default begin is span back from --to",
+			toOff: 500_000, toSet: true, ledgerEnd: 1_000_000,
+			wantBegin: 500_000 - span, wantEnd: 500_000,
 		},
 		{
-			name:    "explicit --from overrides --limit",
-			fromOff: 200, limit: 10, ledgerEnd: 1000,
-			wantBegin: 200, wantEnd: 1000,
+			name:    "explicit --from is an exact offset (ignores window span)",
+			fromOff: 200, fromSet: true, ledgerEnd: 1_000_000,
+			wantBegin: 200, wantEnd: 1_000_000,
+		},
+		{
+			name:    "--from 0 (explicit) reads from genesis, not a sentinel",
+			fromOff: 0, fromSet: true, ledgerEnd: 1_000_000,
+			wantBegin: 0, wantEnd: 1_000_000,
 		},
 		{
 			name:    "explicit --from and --to",
-			fromOff: 100, toOff: 300, ledgerEnd: 1000,
+			fromOff: 100, toOff: 300, fromSet: true, toSet: true, ledgerEnd: 1_000_000,
 			wantBegin: 100, wantEnd: 300,
 		},
 		{
 			name:    "--from > --to fails loudly",
-			fromOff: 500, toOff: 100, ledgerEnd: 1000,
+			fromOff: 500, toOff: 100, fromSet: true, toSet: true, ledgerEnd: 1_000_000,
 			wantErr: true,
-		},
-		{
-			name:      "no limit, no from/to → full from 0 to end",
-			ledgerEnd: 1000,
-			wantBegin: 0, wantEnd: 1000,
 		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			begin, endIncl, err := resolveOffsetWindow(c.fromOff, c.toOff, int(c.limit), c.ledgerEnd)
+			begin, endIncl, err := resolveOffsetWindow(c.fromOff, c.toOff, c.fromSet, c.toSet, c.ledgerEnd)
 			if (err != nil) != c.wantErr {
 				t.Fatalf("err = %v, wantErr = %v", err, c.wantErr)
 			}

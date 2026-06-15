@@ -182,6 +182,52 @@ func TestAtomicWrite_NoOrphanTempOnFirstWriteCrash(t *testing.T) {
 	}
 }
 
+// TestAtomicWriteFsyncsBeforeRename is the durability regression for the
+// power-loss gap: atomicWrite must fsync the temp file's contents BEFORE
+// the rename (so a crash can't persist the directory entry ahead of the
+// data) and fsync the parent dir AFTER the rename (so the rename itself
+// is durable). We can't observe fsync directly from a unit test, but we
+// CAN assert the observable contract that the fix preserves: the
+// committed file is complete and readable, the parent directory holds
+// no staging leftovers, and fsyncDir succeeds on a real directory (it
+// errors if atomicWrite ever passed it a path it can't open).
+func TestAtomicWriteFsyncsBeforeRename(t *testing.T) {
+	useTmpRoot(t)
+
+	want := NewState("durable", "0.6.4")
+	want.Ports = map[string]int{"app_user_ui": 2001}
+	if err := Write(want); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	// File is fully written (the Sync()+rename path completed).
+	got, err := Read("durable")
+	if err != nil {
+		t.Fatalf("Read after durable write: %v", err)
+	}
+	if got.Ports["app_user_ui"] != 2001 {
+		t.Errorf("durable write lost ports: %v", got.Ports)
+	}
+
+	// No staging temp file survived the rename + dir fsync.
+	entries, err := os.ReadDir(DataDirFor("durable"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".tmp-state-") {
+			t.Errorf("staging temp file leaked after durable write: %s", e.Name())
+		}
+	}
+
+	// fsyncDir must succeed on the directory atomicWrite syncs. On
+	// Windows this is a documented no-op; on Unix it opens+fsyncs the
+	// handle. Either way it must not error for a real directory.
+	if err := fsyncDir(DataDirFor("durable")); err != nil {
+		t.Errorf("fsyncDir on a real directory failed: %v", err)
+	}
+}
+
 func TestRejectsFutureSchema(t *testing.T) {
 	useTmpRoot(t)
 	if err := os.MkdirAll(DataDirFor("alice"), 0o700); err != nil {
@@ -257,10 +303,13 @@ func TestIndexTracksMultipleInstances(t *testing.T) {
 	}
 }
 
+// TestLockExcludesConcurrentOps is the cross-platform lock contract:
+// a second Lock() on a held instance fails immediately, and the lock is
+// re-acquirable after release. This now runs on Windows too — the lock
+// is no longer a no-op there (see lock_windows.go, which uses
+// windows.LockFileEx with LOCKFILE_FAIL_IMMEDIATELY). The earlier
+// `t.Skip` on windows masked the no-op stub and must not come back.
 func TestLockExcludesConcurrentOps(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("lock is a no-op on windows")
-	}
 	useTmpRoot(t)
 
 	rel1, err := Lock("alice")

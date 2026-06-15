@@ -59,7 +59,7 @@ func TestSkillsLint_AgainstLiveCobraSurface(t *testing.T) {
 					sc.verbPath[0], reason)
 				return
 			}
-			cmd, found := resolveCobra(root, sc.verbPath)
+			cmd, extraArgs, found := resolveCobra(root, sc.verbPath)
 			if !found {
 				t.Errorf("verb %q not found under `dpm localnet`; skill at %s references a command that doesn't exist (typo, or add it to futureVerbs with a TODO note)",
 					strings.Join(sc.verbPath, " "), sc.location)
@@ -76,6 +76,21 @@ func TestSkillsLint_AgainstLiveCobraSurface(t *testing.T) {
 				t.Logf("verb %q is a stub (DisableFlagParsing=true) — flag checks skipped until real impl lands",
 					strings.Join(sc.verbPath, " "))
 				return
+			}
+			// Validate the unconsumed positional tokens against the
+			// command's Args policy. resolveCobra stops at the deepest
+			// real subcommand, so anything left over is a positional the
+			// skill is passing. A command declaring cobra.NoArgs (logs,
+			// env, status, ...) rejects positionals at runtime, so a doc
+			// like `logs canton --name dev` would fail for the user even
+			// though the verb + flags resolve. Running the command's own
+			// Args validator catches exactly that without hard-coding
+			// which policy each command uses.
+			if len(extraArgs) > 0 && cmd.Args != nil {
+				if err := cmd.Args(cmd, extraArgs); err != nil {
+					t.Errorf("`dpm localnet %s` rejects positional args %v (skill: %s): %v — the skill passes a positional the command doesn't accept (likely a flag value missing its `--flag`)",
+						strings.Join(sc.verbPath, " "), extraArgs, sc.location, err)
+				}
 			}
 			for _, flag := range sc.flags {
 				if !cmdHasFlag(cmd, flag) {
@@ -290,12 +305,16 @@ func parseBlock(lines []string, startLine int) []scannedCommand {
 // the `upload` command (validating its flags) instead of treating
 // `./app.dar` as a missing sub-subcommand.
 //
-// Returns the deepest matched command and true, or false when not even
-// the first token is a real verb (a genuine top-level typo).
-func resolveCobra(root *cobra.Command, verbPath []string) (*cobra.Command, bool) {
+// Returns the deepest matched command, the unconsumed trailing tokens
+// (the positional args, if any), and true — or false when not even the
+// first token is a real verb (a genuine top-level typo). The leftover
+// tokens let the lint validate them against the command's Args policy
+// so a doc like `logs canton` (positional on a cobra.NoArgs command)
+// is caught instead of being silently treated as an argument.
+func resolveCobra(root *cobra.Command, verbPath []string) (*cobra.Command, []string, bool) {
 	current := root
 	matchedAny := false
-	for _, verb := range verbPath {
+	for i, verb := range verbPath {
 		var next *cobra.Command
 		for _, child := range current.Commands() {
 			if child.Name() == verb {
@@ -304,12 +323,14 @@ func resolveCobra(root *cobra.Command, verbPath []string) (*cobra.Command, bool)
 			}
 		}
 		if next == nil {
-			break // positional arg (or end) — stop at the deepest match
+			// Positional arg (or end) — stop at the deepest match and
+			// hand back everything we didn't consume.
+			return current, verbPath[i:], matchedAny
 		}
 		current = next
 		matchedAny = true
 	}
-	return current, matchedAny
+	return current, nil, matchedAny
 }
 
 // cmdHasFlag asks whether `cmd` (or any of its parents — cobra's
@@ -461,6 +482,55 @@ func TestSkillsLint_FutureVerbsHaveTODOs(t *testing.T) {
 		}
 		if !strings.HasPrefix(note, "TODO") {
 			t.Errorf("futureVerbs[%q] = %q — expected TODO prefix for grep-ability", verb, note)
+		}
+	}
+}
+
+// TestSkillsLint_RejectsPositionalArgsOnNoArgsCommand is the regression
+// pin for the lint hole that let `dpm localnet logs canton --name dev`
+// (a positional `canton` on a cobra.NoArgs command) ship in a skill
+// doc: resolveCobra's longest-prefix match used to treat the unmatched
+// `canton` token as a positional argument and never validate it, so the
+// lint passed while the command failed for the user with `unknown
+// command "canton"`. The lint now runs each command's own Args policy
+// against the leftover tokens. This test asserts both directions:
+//   - a positional on a NoArgs command (logs) is reported as leftover
+//     and rejected by the command's Args validator;
+//   - a positional on a command that accepts args (dar upload <path>)
+//     is reported as leftover but accepted, so it is NOT flagged.
+func TestSkillsLint_RejectsPositionalArgsOnNoArgsCommand(t *testing.T) {
+	root := Build()
+
+	// `logs` is cobra.NoArgs — the offending doc shape.
+	cmd, extra, found := resolveCobra(root, []string{"logs", "canton"})
+	if !found {
+		t.Fatal("`logs` should resolve under `dpm localnet`")
+	}
+	if cmd.Name() != "logs" {
+		t.Fatalf("resolved command = %q, want logs", cmd.Name())
+	}
+	if len(extra) != 1 || extra[0] != "canton" {
+		t.Fatalf("leftover tokens = %v, want [canton]", extra)
+	}
+	if cmd.Args == nil {
+		t.Fatal("logs command has no Args policy; the NoArgs guard is gone")
+	}
+	if err := cmd.Args(cmd, extra); err == nil {
+		t.Error("logs command accepted a positional arg; the lint would miss `logs canton`")
+	}
+
+	// `dar upload ./app.dar` is the legitimate positional case the
+	// longest-prefix match exists to support; it must NOT be flagged.
+	upCmd, upExtra, upFound := resolveCobra(root, []string{"dar", "upload", "./app.dar"})
+	if !upFound || upCmd.Name() != "upload" {
+		t.Fatalf("`dar upload` should resolve to the upload command, got found=%v name=%q", upFound, upCmd.Name())
+	}
+	if len(upExtra) != 1 || upExtra[0] != "./app.dar" {
+		t.Fatalf("dar upload leftover = %v, want [./app.dar]", upExtra)
+	}
+	if upCmd.Args != nil {
+		if err := upCmd.Args(upCmd, upExtra); err != nil {
+			t.Errorf("dar upload rejected its DAR-path positional %v: %v", upExtra, err)
 		}
 	}
 }

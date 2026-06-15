@@ -7,16 +7,15 @@
 // to take io.Writer/io.Reader directly because:
 //
 //  1. RunSnapshot writes via an atomic temp-then-rename to defeat
-//     partial-write corruption; mirroring that semantic into a
-//     streaming HTTP response is a deep refactor for tiny upside
-//     (snapshots are 100s of MB, not GBs — disk-spool latency is
-//     noise next to docker-archive time).
+//     partial-write corruption; mirroring that into a streaming HTTP
+//     response is a deep refactor for little gain (snapshots are 100s
+//     of MB, so disk-spool latency is noise next to docker-archive
+//     time).
 //  2. RunRestore validates the entire tar header before touching
-//     docker; the input MUST be seekable. http.Request.Body is
-//     read-once. A temp file is the obvious bridge.
-//  3. Keeping a single orchestrator path means the CLI behaviour
-//     and the UI behaviour can't drift — same tar layout, same
-//     validation, same friendly errors, same exit-code → HTTP
+//     docker, so the input must be seekable; http.Request.Body is
+//     read-once, and a temp file is seekable.
+//  3. A single orchestrator path keeps the CLI and UI from drifting:
+//     same tar layout, validation, errors, and exit-code-to-HTTP
 //     status mapping.
 //
 // # Security
@@ -27,9 +26,8 @@
 //     guard as registry.Read uses); --from path on restore is
 //     handler-controlled (temp file under os.TempDir).
 //   - Resource exhaustion: restore upload is capped at
-//     restoreUploadMax (4 GiB). A snapshot of a realistic LocalNet
-//     fits in 200 MB; 4 GiB is a generous safety net well below
-//     the "fill the disk" attacker payload.
+//     restoreUploadMax (4 GiB). A realistic LocalNet snapshot fits in
+//     200 MB; 4 GiB is a safety net well below a disk-filling payload.
 //   - Disk leak: every temp file is removed on the defer path,
 //     including the error branches.
 package handlers
@@ -53,42 +51,33 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// contextWithTimeout is the small adapter we use instead of inlining
-// context.WithTimeout at every call site — keeps the handler bodies
-// flat and lets a future test swap in a shorter clock if needed.
+// contextWithTimeout adapts context.WithTimeout so handler bodies stay
+// flat and a future test can swap in a shorter clock.
 func contextWithTimeout(parent context.Context, d time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, d)
 }
 
 // restoreUploadMax is the hard ceiling on the multipart body for a
-// restore upload. 4 GiB is comfortably above realistic snapshots
-// (sub-200 MB for a healthy pebble-class instance) and comfortably
-// below a "fill the disk" attacker payload on a typical dev box.
-//
-// The number doubles as backpressure: a buggy frontend that tries
-// to upload the wrong file (e.g. a postgres dump) hits the cap and
-// gets a clean 413 instead of streaming silently for minutes.
+// restore upload. 4 GiB sits above realistic snapshots (sub-200 MB for
+// a healthy pebble-class instance) and below a disk-filling payload on
+// a typical dev box. A buggy frontend uploading the wrong file gets a
+// clean 413 rather than streaming silently for minutes.
 const restoreUploadMax = 4 << 30 // 4 GiB
 
 // snapshotTimeout caps the entire snapshot pipeline (registry read +
-// volume archives + tar write). Sized to cover a multi-volume capture
-// on a slow disk: typical pebble snapshot takes ~20s; 10 min is two
-// orders of magnitude of slack without leaving a runaway docker
-// process around forever.
+// pg_dumpall + tar write). 10 min covers a large logical dump on a slow
+// disk without leaving a runaway docker process around forever.
 const snapshotTimeout = 10 * time.Minute
 
-// restoreTimeout has the same shape but covers extraction + docker
-// volume creates. Slightly tighter because there's no remote work —
-// pure local I/O.
+// restoreTimeout has the same shape but covers loading the dump into a
+// throwaway Postgres (container start + psql load).
 const restoreTimeout = 10 * time.Minute
 
-// MountSnapshots installs the snapshot/restore endpoints on mux.
-//
-// Mounted from router.go alongside the other resource Mount* calls.
-// hub is currently unused — the snapshot/restore flow is request-
-// scoped (not a long-running create-instance-style job), so there's
-// no SSE topic. Reserved as a parameter for future "background
-// snapshot to /tmp/snapshots" progress streaming.
+// MountSnapshots installs the snapshot/restore endpoints on mux,
+// mounted from router.go alongside the other resource Mount* calls.
+// The flow is request-scoped (not a long-running job), so there is no
+// SSE topic; a hub parameter is reserved for future background-snapshot
+// progress streaming.
 func MountSnapshots(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/instances/{name}/snapshot", handleSnapshot)
 	mux.HandleFunc("POST /api/instances/restore", handleRestore)
@@ -116,7 +105,8 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid instance name", err)
 		return
 	}
-	if _, err := registry.Read(name); err != nil {
+	_, err := registry.Read(name)
+	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
 			writeErrorWithCode(w, http.StatusNotFound,
 				"INSTANCE_NOT_FOUND",
@@ -156,7 +146,13 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	exit := snapshot.RunSnapshot(ctx, io.Discard, &errBuf, name, tmpPath)
 	if exit != localnet.ExitSuccess {
-		writeError(w, http.StatusInternalServerError,
+		// A user error (e.g. the instance isn't running, which a database
+		// snapshot requires) maps to 400; everything else is a 500.
+		status := http.StatusInternalServerError
+		if exit == localnet.ExitUserError {
+			status = http.StatusBadRequest
+		}
+		writeError(w, status,
 			"snapshot failed", errors.New(strings.TrimSpace(errBuf.String())))
 		return
 	}
@@ -173,8 +169,8 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Timestamp resolution = seconds so two same-day downloads don't
-	// collide in the user's Downloads folder (review yellow).
+	// Second resolution so two same-day downloads don't collide in the
+	// user's Downloads folder.
 	filename := fmt.Sprintf("%s-%s.tgz", name, time.Now().UTC().Format("2006-01-02T150405Z"))
 	w.Header().Set("Content-Type", "application/gzip")
 	w.Header().Set("Content-Disposition",
@@ -183,6 +179,9 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	// no-store: snapshots include credentials (JWTs in state.json).
 	// We don't want browsers or proxies caching them.
 	w.Header().Set("Cache-Control", "no-store")
+	// No consistency warning: RunSnapshot pauses the node containers for
+	// the duration of the dump (CLI and UI alike), so the capture is
+	// application-consistent, not merely crash-consistent.
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.Copy(w, f)
 }
@@ -200,9 +199,10 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request) {
 //	  -> 200 OK
 //	     {"name":"pebble","restored":true}
 //
-// On success the embedded state.json is registered and the volumes
-// are written to docker; the instance is NOT brought up. Caller hits
-// POST /api/instances/{name}/up (existing endpoint) to start it.
+// On success the embedded state.json is registered and the database is
+// loaded into the instance's Postgres volume; the instance is NOT
+// brought up. Caller hits POST /api/instances/{name}/up (existing
+// endpoint) to start it on the restored database.
 func handleRestore(w http.ResponseWriter, r *http.Request) {
 	// Cap the body BEFORE ParseMultipartForm so a malicious or
 	// buggy client can't exhaust memory before we get a chance
@@ -233,11 +233,9 @@ func handleRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Field naming (yellow Y12): CLI uses --from for the source
-	// archive; HTTP multipart historically used "file". We accept
-	// BOTH so scripts written against either surface keep working
-	// — the CLI mental model ("from where do I restore?") and the
-	// HTTP convention ("the file part") are both legitimate.
+	// CLI uses --from for the source archive; HTTP multipart historically
+	// used "file". Accept both so scripts written against either surface
+	// keep working.
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		// Try the CLI-aligned alias before giving up.
@@ -294,11 +292,10 @@ func handleRestore(w http.ResponseWriter, r *http.Request) {
 }
 
 // spoolToTemp writes r to a fresh temp file, returning the path on
-// success. Caller owns os.Remove. cap is the hard ceiling — exceeding
-// it returns an error and removes the partial file. We can't fully
-// trust http.MaxBytesReader because the multipart parser already
-// consumed the envelope bytes by the time we see `file`; this is
-// belt-and-braces.
+// success. Caller owns os.Remove. cap is the hard ceiling: exceeding it
+// returns an error and removes the partial file. This re-checks the cap
+// because the multipart parser has already consumed the envelope bytes
+// by the time we see `file`, so http.MaxBytesReader no longer guards it.
 func spoolToTemp(r multipart.File, cap int64) (string, error) {
 	tmp, err := os.CreateTemp("", "dpm-restore-*.tgz")
 	if err != nil {

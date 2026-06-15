@@ -10,6 +10,14 @@ on:
       - "docs/design/mockups/**.jsx"
       - "frontend/**"
       - "Makefile"
+      # Guarded artifacts whose tests only run when the Go suite runs:
+      # skill docs (TestSkillsLint_AgainstLiveCobraSurface), the DPM
+      # component template (packaging/component_test.go), and the
+      # copy-pasteable CI examples. A doc-only edit that breaks a flag
+      # reference used to merge with zero CI; these patterns close that.
+      - "internal/skills/docs/**"
+      - "packaging/**"
+      - "examples/**"
   push:
     branches:
       - main
@@ -21,6 +29,12 @@ on:
       - "docs/design/mockups/**.jsx"
       - "frontend/**"
       - "Makefile"
+      # Keep in sync with the pull_request paths above: skill docs,
+      # the DPM component template, and the CI examples are all guarded
+      # by Go tests that otherwise never run on a doc-only push.
+      - "internal/skills/docs/**"
+      - "packaging/**"
+      - "examples/**"
 
 permissions:
   contents: read

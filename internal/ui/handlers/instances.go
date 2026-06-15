@@ -43,7 +43,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
-	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui/httpsec"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/progress"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 )
@@ -371,6 +371,7 @@ type errorBody struct {
 // here belong in the docs at devkit.dev/e/<CODE>.
 const (
 	ErrCodeInvalidRequest  = "INVALID_REQUEST"
+	ErrCodeForbidden       = "FORBIDDEN"
 	ErrCodeNotFound        = "NOT_FOUND"
 	ErrCodeInternal        = "INTERNAL"
 	ErrCodeRegistry        = "REGISTRY_READ_FAILED"
@@ -559,21 +560,27 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 			return
 		}
 
-		// Resolve the version up front so the preflight gate uses
-		// the same Splice catalogue entry RunUp will. If the user
-		// asked for an uncurated tag with AllowUncurated, skip
-		// the version-specific memory floor — there's no curated
-		// requirement to enforce — and rely on RunUp's own
-		// in-stream preflight for the global defaults.
-		if v, err := splice.Resolve(req.Version); err == nil {
-			report := runPreflightForVersion(r.Context(), v)
+		// Resolve the version up front so the synchronous preflight
+		// gate uses the same Splice version RunUp will. Curated tags
+		// resolve offline; uncurated tags (allow_uncurated) resolve
+		// against upstream so the gate can apply the Major-aware
+		// memory floor (see splice.MinMemoryFor) — previously the
+		// uncurated path skipped this gate entirely and deferred to
+		// RunUp's in-stream check with the weakened 4 GiB default,
+		// letting the Web UI 202 a host that then OOM-loops mid
+		// bring-up. If upstream resolution itself fails (network blip,
+		// bad tag) we DON'T fail the create here — RunUp surfaces that
+		// in-stream with the proper error code.
+		if gateVersion, ok := resolveForGate(r.Context(), req.Version, req.AllowUncurated); ok {
+			report := runPreflightForVersion(r.Context(), gateVersion)
 			if !report.OK {
 				w.Header().Set("X-Preflight-Failed", "1")
 				writeJSON(w, http.StatusUnprocessableEntity, report)
 				return
 			}
 		} else if !req.AllowUncurated {
-			// Same shape RunUp would produce for the same input.
+			// Curated resolution failed and the caller didn't opt into
+			// uncurated — same shape RunUp would produce for this input.
 			writeErrorWithCode(w, http.StatusBadRequest,
 				ErrCodeInvalidRequest,
 				"unknown splice version: "+req.Version,
@@ -1691,6 +1698,18 @@ func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
 // goroutine's done event the client closes the EventSource;
 // idle connections beyond that survive on the heartbeat until
 // the user navigates away.
+//
+// # Origin gate (parity with the global /events handler)
+//
+// EventSource issues a GET, so this stream is exempt from the
+// router's state-changing CSRF middleware — but a tab on another
+// origin can still open EventSource("http://127.0.0.1:7777/api/
+// instances/x/events") and READ the bring-up progress (instance
+// name, Splice version, step status, RunUp error text). The global
+// /events handler (internal/ui/sse.go) hardens against exactly this;
+// we mirror the guard here so the two SSE surfaces are consistent.
+// Origin is absent on direct curl, so we only enforce when it is
+// present and only fail on mismatch.
 func handleInstanceEvents(hub *stream.Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
@@ -1699,6 +1718,19 @@ func handleInstanceEvents(hub *stream.Hub) http.HandlerFunc {
 				ErrCodeInvalidRequest,
 				"invalid instance name: "+err.Error())
 			return
+		}
+
+		// Mirror sse.go's Origin/Host check. Host-level rebinding is
+		// blocked by the router's withHostCheck; this catches the
+		// cross-origin EventSource read where Host is loopback but
+		// Origin is the attacker's site.
+		if origin := r.Header.Get("Origin"); origin != "" {
+			if err := httpsec.CheckOriginAgainstHost(
+				origin, r.Header.Get("Referer"), r.Host); err != nil {
+				writeErrorWithCode(w, http.StatusForbidden,
+					ErrCodeForbidden, "forbidden: "+err.Error())
+				return
+			}
 		}
 
 		flusher, ok := w.(http.Flusher)
@@ -2144,9 +2176,18 @@ func enableGrafana(ctx context.Context, state *registry.State) (string, int, err
 // host port. portInternal is the in-container port to look up via
 // `docker compose port <svc> <port>` after the up succeeds.
 func enableSidecar(ctx context.Context, state *registry.State, profile, service string, portInternal int) (string, int, error) {
-	overlay, err := localnet.MaterializeObservabilityOverlay(state.DataDir, state.ProjectDir)
+	// Capture any "preserving local edits" drift notices the overlay
+	// emits and surface them in the server log — the overlay now leaves
+	// operator-edited dashboards / scrape configs untouched, and an
+	// operator toggling a sidecar from the UI should still learn that
+	// their local copy diverges from the bundled default.
+	var overlayWarn bytes.Buffer
+	overlay, err := localnet.MaterializeObservabilityOverlay(state.DataDir, state.ProjectDir, &overlayWarn)
 	if err != nil {
 		return "", 0, fmt.Errorf("materialize overlay: %w", err)
+	}
+	if overlayWarn.Len() > 0 {
+		log.Printf("observability overlay for %q: %s", state.Name, strings.TrimSpace(overlayWarn.String()))
 	}
 	hasOverlay := false
 	for _, f := range state.ComposeFiles {

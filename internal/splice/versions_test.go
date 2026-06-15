@@ -135,6 +135,78 @@ func TestLatestAliasIsInSupported(t *testing.T) {
 	}
 }
 
+// TestMinMemoryFor_UncuratedInheritsMajorFloor is the regression:
+// an uncurated Version (no MinMemoryBytes of its own) must inherit the
+// STRICTEST catalogued floor for its Major rather than the global 4 GiB
+// default. Splice 0.6.x's resource profile doesn't change just because
+// the tag wasn't reviewed, so the gate must TIGHTEN, not loosen, on the
+// escape hatch.
+func TestMinMemoryFor_UncuratedInheritsMajorFloor(t *testing.T) {
+	// Compute the expected strictest 0.6 floor straight from the
+	// catalogue so this test tracks versions.json without hardcoding.
+	var want06 uint64
+	for _, v := range SupportedVersions {
+		if v.Major == "0.6" && v.MinMemoryBytes > want06 {
+			want06 = v.MinMemoryBytes
+		}
+	}
+	if want06 == 0 {
+		t.Skip("no 0.6 catalogue entry with a memory floor — nothing to inherit")
+	}
+
+	// Uncurated 0.6.x: no memory fields, Major inferred from the tag.
+	uncurated := Version{Tag: "0.6.99-rc.1", Commit: "deadbeef", Major: "0.6"}
+	if got := MinMemoryFor(uncurated); got != want06 {
+		t.Errorf("MinMemoryFor(uncurated 0.6) = %d, want strictest-0.6 floor %d (not the 4 GiB default)",
+			got, want06)
+	}
+	if got := MinMemoryFor(uncurated); got <= defaultMinMemoryBytesFallback {
+		t.Errorf("uncurated 0.6 floor %d must exceed the global default %d — the escape hatch must not loosen the gate",
+			got, defaultMinMemoryBytesFallback)
+	}
+
+	// Recommended (WARN tier) must also inherit, not silently disable.
+	var wantRec06 uint64
+	for _, v := range SupportedVersions {
+		if v.Major == "0.6" && v.RecommendedMemoryBytes > wantRec06 {
+			wantRec06 = v.RecommendedMemoryBytes
+		}
+	}
+	if got := RecommendedMemoryFor(uncurated); got != wantRec06 {
+		t.Errorf("RecommendedMemoryFor(uncurated 0.6) = %d, want %d", got, wantRec06)
+	}
+}
+
+// TestMinMemoryFor_UnknownMajorFallsBackToDefault covers the safety
+// net: a tag whose Major has no catalogue entry at all (or an empty
+// Major) still gets the global default floor — never 0, which would
+// silently disable the gate.
+func TestMinMemoryFor_UnknownMajorFallsBackToDefault(t *testing.T) {
+	for _, v := range []Version{
+		{Tag: "9.9.9", Major: "9.9"}, // no catalogued 9.9 entry
+		{Tag: "weird", Major: ""},    // unparseable tag → empty major
+	} {
+		if got := MinMemoryFor(v); got != defaultMinMemoryBytesFallback {
+			t.Errorf("MinMemoryFor(%+v) = %d, want default %d", v, got, defaultMinMemoryBytesFallback)
+		}
+		if got := RecommendedMemoryFor(v); got != 0 {
+			t.Errorf("RecommendedMemoryFor(%+v) = %d, want 0 (no same-major recommendation)", v, got)
+		}
+	}
+}
+
+// TestMinMemoryFor_ExplicitOverrideWins confirms a curated entry's own
+// MinMemoryBytes still takes precedence over the Major-derived floor.
+func TestMinMemoryFor_ExplicitOverrideWins(t *testing.T) {
+	v := Version{Tag: "custom", Major: "0.6", MinMemoryBytes: 16_000_000_000, RecommendedMemoryBytes: 20_000_000_000}
+	if got := MinMemoryFor(v); got != 16_000_000_000 {
+		t.Errorf("MinMemoryFor explicit = %d, want 16e9", got)
+	}
+	if got := RecommendedMemoryFor(v); got != 20_000_000_000 {
+		t.Errorf("RecommendedMemoryFor explicit = %d, want 20e9", got)
+	}
+}
+
 func TestSupportedIsSorted(t *testing.T) {
 	got := Supported()
 	for i := 1; i < len(got); i++ {

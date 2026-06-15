@@ -57,7 +57,20 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     },
   });
   const text = await resp.text();
-  const body = text ? (JSON.parse(text) as unknown) : undefined;
+  // A proxy or a panicking server can return a non-empty body that
+  // is NOT our JSON envelope (an HTML 502 page, a plain-text stack
+  // trace). Parsing must not throw a raw SyntaxError here — that
+  // would escape every screen's `e instanceof ApiError` branch and
+  // surface as an opaque "failed to load" with no status/code. Fall
+  // back to `undefined` so the !resp.ok branch still emits a proper
+  // ApiError (carrying the HTTP status), and a malformed 2xx body
+  // surfaces as `undefined` rather than crashing the caller.
+  let body: unknown;
+  try {
+    body = text ? (JSON.parse(text) as unknown) : undefined;
+  } catch {
+    body = undefined;
+  }
   if (!resp.ok) {
     throw new ApiError(resp.status, (body as ApiErrorBody) ?? { code: "UNKNOWN", error: resp.statusText });
   }
@@ -276,14 +289,16 @@ export async function fetchAppConfigText(
   return resp.text();
 }
 
-// AppConfigPayload mirrors internal/ui/handlers/auth.go
-// appConfigPayload (the JSON shape).
+// AppConfigPayload mirrors the shared apitypes.EnvExport
+// (internal/api/types/env.go) the app-config handler now emits — the
+// SAME shape `dpm localnet env --format=json` produces. `vars` carries
+// the flat CANTON_<...> key/value set: endpoint ports (incl. the
+// participant Ledger/Admin/JSON APIs and scan UI URL), per-role
+// credentials, and the real on-ledger party ids.
 export interface AppConfigPayload {
   schema_version: number;
-  name: string;
-  splice_version: string;
-  endpoints: Record<string, string>;
-  parties: Record<string, string>;
+  instance: string;
+  vars: Record<string, string>;
 }
 
 export const fetchAppConfigJSON = (name: string) =>
@@ -452,32 +467,84 @@ export const fetchPreflight = (version: string) =>
 // it back to the browser is wasteful. The form-submit trick keeps the
 // response entirely in the browser's download pipeline.
 //
-// Returns a Promise that resolves when the request is dispatched
-// (not when the download completes — the browser owns that). Errors
-// from the server arrive as a JSON body the browser displays as a
-// download; we accept that UX limitation rather than buffer the tar
-// just to surface a structured error toast.
-export async function downloadSnapshot(name: string): Promise<void> {
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = `/api/instances/${encodeURIComponent(name)}/snapshot`;
-  // Hidden iframe target avoids navigating away from the SPA on
-  // success. Browsers attach the download attribute on the response
-  // headers (Content-Disposition), so the iframe never actually
-  // renders anything — the file goes straight to the downloads bar.
-  form.target = "_dpm_dl";
-  let frame = document.querySelector(
-    'iframe[name="_dpm_dl"]',
-  ) as HTMLIFrameElement | null;
-  if (!frame) {
-    frame = document.createElement("iframe");
-    frame.name = "_dpm_dl";
-    frame.style.display = "none";
-    document.body.appendChild(frame);
-  }
-  document.body.appendChild(form);
-  form.submit();
-  document.body.removeChild(form);
+// Error surfacing: on success the server replies with
+// Content-Disposition: attachment, so the browser hands the body to
+// the download manager and the hidden iframe never navigates — no
+// `load` event fires. On failure (instance not found, docker error,
+// 5xx) the server replies with an inline JSON error body and NO
+// Content-Disposition, so the iframe DOES navigate to it and fires a
+// `load` event. We listen for that asymmetry: a `load` on the iframe
+// means the download did not happen and an error document was
+// rendered instead, so we reject with an ApiError the caller can
+// toast. A successful download is detected by absence (a settle
+// timeout resolves once the dispatch is clean), since we cannot read
+// the cross-document iframe body.
+//
+// Returns a Promise that REJECTS with an ApiError when the server
+// returned an error instead of a download, and otherwise resolves
+// once the request has been dispatched (not when the download
+// completes — the browser owns that). The hidden iframe is reused
+// across downloads (one per document), and each call attaches a
+// one-shot `load` listener so handlers don't accumulate.
+const DOWNLOAD_SETTLE_MS = 1200;
+
+export function downloadSnapshot(name: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = `/api/instances/${encodeURIComponent(name)}/snapshot`;
+    // Hidden iframe target avoids navigating away from the SPA on
+    // success. Browsers attach the download attribute on the response
+    // headers (Content-Disposition), so the iframe never actually
+    // renders anything — the file goes straight to the downloads bar.
+    form.target = "_dpm_dl";
+    let frame = document.querySelector(
+      'iframe[name="_dpm_dl"]',
+    ) as HTMLIFrameElement | null;
+    if (!frame) {
+      frame = document.createElement("iframe");
+      frame.name = "_dpm_dl";
+      frame.style.display = "none";
+      document.body.appendChild(frame);
+    }
+
+    let settled = false;
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
+    const onLoad = () => {
+      // The iframe navigated → the server returned an inline
+      // document (the JSON error body) rather than an attachment.
+      // A successful download hands the body to the download
+      // manager and never navigates the iframe, so a `load` here
+      // means the snapshot did NOT download. We can't read the
+      // cross-document body safely, so surface a generic-but-honest
+      // error instead of failing silently.
+      if (settled) return;
+      settled = true;
+      if (settleTimer !== undefined) clearTimeout(settleTimer);
+      frame?.removeEventListener("load", onLoad);
+      reject(
+        new ApiError(0, {
+          code: "SNAPSHOT_DOWNLOAD_FAILED",
+          error:
+            "snapshot download failed — the server returned an error instead of a file",
+        }),
+      );
+    };
+    frame.addEventListener("load", onLoad);
+
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+
+    // No `load` within the settle window → the body was taken by the
+    // download manager (success).
+    settleTimer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      frame?.removeEventListener("load", onLoad);
+      resolve();
+    }, DOWNLOAD_SETTLE_MS);
+  });
 }
 
 export interface RestoreResponse {
@@ -1647,6 +1714,17 @@ export interface TokenCreateInput {
   issuer: string;
 }
 
+// idempotencyHeader returns a fresh per-submission Idempotency-Key
+// header for the value-moving token POSTs. The server dedupes retries
+// of the SAME key (idempotency.go), so we mint one key per logical
+// submission — a user-initiated retry that re-invokes the API function
+// gets a new key (a genuinely new attempt), while a transport-level
+// retry of the same fetch would reuse it. crypto.randomUUID is
+// available in every browser the UI targets (and in jsdom under test).
+function idempotencyHeader(): Record<string, string> {
+  return { "Idempotency-Key": crypto.randomUUID() };
+}
+
 export const createToken = (
   instance: string,
   body: TokenCreateInput,
@@ -1656,7 +1734,7 @@ export const createToken = (
     `/api/tokens?${tokenQuery(instance, role)}`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...idempotencyHeader() },
       body: JSON.stringify(body),
     },
   );
@@ -1671,6 +1749,7 @@ export const mintToken = (
   apiFetchVoid(
     `/api/tokens/${encodeURIComponent(symbol)}/mint?${tokenQuery(instance, role)}`,
     { to, amount },
+    idempotencyHeader(),
   );
 
 export const transferToken = (
@@ -1686,6 +1765,7 @@ export const transferToken = (
   apiFetchVoid(
     `/api/tokens/${encodeURIComponent(symbol)}/transfer?${tokenQuery(instance, role)}`,
     { from, to, amount, reason: reason ?? "", auto_accept: !!autoAccept },
+    idempotencyHeader(),
   );
 
 // faucetToken funds a party from a well-known source,
@@ -1701,6 +1781,7 @@ export const faucetToken = (
   apiFetchVoid(
     `/api/tokens/${encodeURIComponent(symbol)}/faucet?${tokenQuery(instance, role)}`,
     { to, amount, source: source ?? "" },
+    idempotencyHeader(),
   );
 
 // TransferPlan — dry-run coin selection. Which Holding
@@ -1750,6 +1831,7 @@ export const burnToken = (
   apiFetchVoid(
     `/api/tokens/${encodeURIComponent(symbol)}/burn?${tokenQuery(instance, role)}`,
     { from, amount },
+    idempotencyHeader(),
   );
 
 export const acceptTransfer = (
@@ -1760,15 +1842,25 @@ export const acceptTransfer = (
   apiFetchVoid(
     `/api/tokens/transfers/${encodeURIComponent(transferInstructionID)}/accept?${tokenQuery(instance, role)}`,
     {},
+    idempotencyHeader(),
   );
 
 // apiFetchVoid is a thin POST wrapper for 204-returning handlers. The
 // mint/transfer/burn/accept endpoints return 204 on success and an
 // ApiError on failure — no body to decode either way.
-async function apiFetchVoid(path: string, body: unknown): Promise<void> {
+//
+// extraHeaders lets value-moving callers attach an Idempotency-Key so a
+// network-blip retry or double-click can't mint/transfer/burn twice —
+// the server-side idempotency middleware (internal/ui/handlers/
+// idempotency.go) is opt-in on exactly that header.
+async function apiFetchVoid(
+  path: string,
+  body: unknown,
+  extraHeaders?: Record<string, string>,
+): Promise<void> {
   const resp = await fetch(path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...extraHeaders },
     body: JSON.stringify(body),
   });
   if (resp.ok) return;

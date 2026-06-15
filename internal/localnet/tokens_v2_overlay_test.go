@@ -1,6 +1,7 @@
 package localnet
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +14,7 @@ import (
 // Canton alpha-protocol flags V2 needs.
 func TestMaterializeTokensV2Overlay_WritesExpectedFile(t *testing.T) {
 	dataDir := t.TempDir()
-	out, err := MaterializeTokensV2Overlay(dataDir)
+	out, err := MaterializeTokensV2Overlay(dataDir, nil)
 	if err != nil {
 		t.Fatalf("MaterializeTokensV2Overlay: %v", err)
 	}
@@ -46,11 +47,11 @@ func TestMaterializeTokensV2Overlay_WritesExpectedFile(t *testing.T) {
 // the materialiser clobbering or panicking.
 func TestMaterializeTokensV2Overlay_Idempotent(t *testing.T) {
 	dataDir := t.TempDir()
-	first, err := MaterializeTokensV2Overlay(dataDir)
+	first, err := MaterializeTokensV2Overlay(dataDir, nil)
 	if err != nil {
 		t.Fatalf("first call: %v", err)
 	}
-	second, err := MaterializeTokensV2Overlay(dataDir)
+	second, err := MaterializeTokensV2Overlay(dataDir, nil)
 	if err != nil {
 		t.Fatalf("second call: %v", err)
 	}
@@ -59,16 +60,13 @@ func TestMaterializeTokensV2Overlay_Idempotent(t *testing.T) {
 	}
 }
 
-// TestMaterializeTokensV2Overlay_NoOpWhenBytesMatch pins the Y5
-// write-if-different contract: when the destination already has the
+// TestMaterializeTokensV2Overlay_NoOpWhenBytesMatch pins the
+// write-if-unchanged contract: when the destination already has the
 // canonical embedded bytes, re-materialising MUST NOT call WriteFile
 // — proven by checking the file's mtime is unchanged across calls.
-// (Note: this is "no churn on unchanged files", not "preserves
-// operator edits"; the latter is intentionally NOT a contract here,
-// matching the observability overlay's behaviour.)
 func TestMaterializeTokensV2Overlay_NoOpWhenBytesMatch(t *testing.T) {
 	dataDir := t.TempDir()
-	out, err := MaterializeTokensV2Overlay(dataDir)
+	out, err := MaterializeTokensV2Overlay(dataDir, nil)
 	if err != nil {
 		t.Fatalf("first materialise: %v", err)
 	}
@@ -82,7 +80,7 @@ func TestMaterializeTokensV2Overlay_NoOpWhenBytesMatch(t *testing.T) {
 		t.Fatalf("chtimes: %v", err)
 	}
 
-	if _, err := MaterializeTokensV2Overlay(dataDir); err != nil {
+	if _, err := MaterializeTokensV2Overlay(dataDir, nil); err != nil {
 		t.Fatalf("second materialise: %v", err)
 	}
 	stat2, err := os.Stat(out)
@@ -95,11 +93,45 @@ func TestMaterializeTokensV2Overlay_NoOpWhenBytesMatch(t *testing.T) {
 	}
 }
 
+// TestMaterializeTokensV2Overlay_PreservesOperatorEdits is the
+// regression for the inverted edit-preservation logic: an operator who
+// tweaks the overlay in place (the workflow the doc comment promises is
+// safe) must keep their edit across a re-materialise, and the drift
+// must be reported on the warn writer rather than silently stomped.
+func TestMaterializeTokensV2Overlay_PreservesOperatorEdits(t *testing.T) {
+	dataDir := t.TempDir()
+	out, err := MaterializeTokensV2Overlay(dataDir, nil)
+	if err != nil {
+		t.Fatalf("first materialise: %v", err)
+	}
+
+	edited := []byte("# operator tweak: point at a custom snapshot\n")
+	if err := os.WriteFile(out, edited, 0o644); err != nil {
+		t.Fatalf("simulate operator edit: %v", err)
+	}
+
+	var warn bytes.Buffer
+	if _, err := MaterializeTokensV2Overlay(dataDir, &warn); err != nil {
+		t.Fatalf("re-materialise over edited overlay: %v", err)
+	}
+
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read after re-materialise: %v", err)
+	}
+	if !bytes.Equal(got, edited) {
+		t.Errorf("operator edit was clobbered:\n got: %q\nwant: %q", got, edited)
+	}
+	if !strings.Contains(warn.String(), out) {
+		t.Errorf("expected a drift notice mentioning %q on the warn writer, got %q", out, warn.String())
+	}
+}
+
 // TestMaterializeTokensV2Overlay_RejectsEmptyDataDir guards the same
 // contract as the observability overlay: an empty dataDir is a caller
 // bug, not a silent CWD-relative materialise.
 func TestMaterializeTokensV2Overlay_RejectsEmptyDataDir(t *testing.T) {
-	_, err := MaterializeTokensV2Overlay("")
+	_, err := MaterializeTokensV2Overlay("", nil)
 	if err == nil {
 		t.Fatal("expected error for empty dataDir, got nil")
 	}

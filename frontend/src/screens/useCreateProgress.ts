@@ -1,4 +1,4 @@
-import { useEffect, useReducer } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import {
   STEP_ORDER,
   type CreateProgressEvent,
@@ -174,6 +174,18 @@ export function reducer(state: ProgressState, ev: CreateProgressEvent): Progress
   }
 }
 
+// parseEventId turns the SSE frame's `id:` value (surfaced by the
+// browser as MessageEvent.lastEventId) into the monotonic sequence
+// number the server assigns per stream (sse_progress.go: id =
+// seq.Add(1)). Returns null when the frame carried no id or a
+// non-numeric one, in which case the event is always applied (we
+// have nothing to compare against).
+export function parseEventId(lastEventId: string | undefined): number | null {
+  if (!lastEventId) return null;
+  const n = Number(lastEventId);
+  return Number.isInteger(n) ? n : null;
+}
+
 // useCreateProgress opens an EventSource on the given URL, parses
 // each message's data as a typed CreateProgressEvent, and feeds
 // the reducer. Returns the current snapshot.
@@ -190,10 +202,33 @@ export function reducer(state: ProgressState, ev: CreateProgressEvent): Progress
 export function useCreateProgress(eventsUrl: string | null): ProgressState {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
 
+  // Highest server sequence id applied so far on the current
+  // stream. EventSource auto-reconnects after a transient drop, and
+  // the per-instance handler (instances.go: SubscribeWithReplay)
+  // replays the WHOLE ring buffer on every (re)connection — it does
+  // not honor Last-Event-ID server-side. Without a client-side
+  // guard, append-only events (`output`, `warn`) would be applied
+  // twice (or N times across N reconnects), so the terminal log and
+  // warning list would show duplicates. Server ids are monotonic
+  // per stream, so dropping any frame whose id is <= the highest
+  // we've already applied makes the replay idempotent.
+  const lastEventIdRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (!eventsUrl) return;
+    // New stream → reset the watermark; sequence ids restart at 1.
+    lastEventIdRef.current = null;
     const es = new EventSource(eventsUrl);
     es.onmessage = (msg) => {
+      const id = parseEventId(msg.lastEventId);
+      if (id !== null) {
+        if (lastEventIdRef.current !== null && id <= lastEventIdRef.current) {
+          // Already applied (this is a replayed frame after a
+          // reconnect) — skip so collections don't duplicate.
+          return;
+        }
+        lastEventIdRef.current = id;
+      }
       try {
         const ev = JSON.parse(msg.data) as CreateProgressEvent;
         dispatch(ev);

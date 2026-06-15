@@ -19,6 +19,10 @@ import (
 //     with `Idempotency-Replayed: true`.
 //   - replay while the first is still in flight: 409 Conflict, so a
 //     concurrent double-submit can't execute the mutation twice.
+//   - a 5xx response is NOT cached: a transient upstream blip (e.g. the
+//     participant briefly returning 503) must not pin a stale failure
+//     for the whole TTL — the key is freed so a retry re-attempts the
+//     mutation rather than replaying the error.
 //
 // The cache is in-process (a single devkit serves one user's loopback
 // UI) with a TTL; it is NOT a distributed/durable idempotency store and
@@ -77,6 +81,16 @@ func (s *idemStore) wrap(next http.HandlerFunc) http.HandlerFunc {
 		next(rec, r)
 
 		s.mu.Lock()
+		if rec.status >= 500 {
+			// Don't cache a transient failure: drop the placeholder so the
+			// next request with this key re-runs the handler instead of
+			// replaying the 5xx for the rest of the TTL. The in-flight
+			// guard above still serialises concurrent duplicates while the
+			// first attempt runs.
+			delete(s.entries, ck)
+			s.mu.Unlock()
+			return
+		}
 		e.done = true
 		e.status = rec.status
 		e.ctype = w.Header().Get("Content-Type")
