@@ -35,6 +35,10 @@ func TestThresholdParity_DoctorMatchesUp(t *testing.T) {
 	files := []string{
 		filepath.Join(repoRoot, "internal", "localnet", "up.go"),
 		filepath.Join(repoRoot, "internal", "localnet", "doctor.go"),
+		// The Web UI preflight handler builds the same PreflightReport
+		// and must use the same thresholds, or the CLI gate (`up`/
+		// `doctor`) and the Create dialog's pre-flight gate (UI) drift.
+		filepath.Join(repoRoot, "internal", "ui", "handlers", "preflight.go"),
 	}
 
 	wantedFields := map[string]string{

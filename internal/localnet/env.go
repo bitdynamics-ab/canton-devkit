@@ -1,7 +1,9 @@
 package localnet
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -78,11 +80,15 @@ func BuildEnvExport(name string, includeJWT bool) (apitypes.EnvExport, error) {
 
 	out.Vars["CANTON_INSTANCE"] = name
 	out.Vars["CANTON_SPLICE_VERSION"] = state.SpliceVersion
-	// AuthFile points at the per-instance auth.json the user can load
-	// with `jq` (~/.canton-devkit/<name>/auth.json). filepath.Join (not
-	// "/" concat) so the path is correct on Windows and doesn't
-	// duplicate separators if state.DataDir has a trailing slash.
-	out.Vars["CANTON_AUTH_FILE"] = filepath.Join(state.DataDir, "auth.json")
+	// CANTON_AUTH_FILE points at the per-instance auth.json a user can
+	// load with `jq` (<DataDir>/auth.json). writeAuthFile materialises
+	// it (best-effort, 0600 — it carries the dev JWTs) when the data dir
+	// and credentials are present, so the path resolves for a healthy
+	// instance. The var is always emitted (it documents the conventional
+	// location) regardless of whether the write succeeded.
+	authFile := filepath.Join(state.DataDir, "auth.json")
+	writeAuthFile(authFile, state.Credentials)
+	out.Vars["CANTON_AUTH_FILE"] = authFile
 
 	for logical, port := range state.Ports {
 		out.Vars[PortEnvKey(logical)] = fmt.Sprintf("%d", port)
@@ -158,4 +164,73 @@ func CredEnvKeyPrefix(role string) string {
 // two never drift.
 func normalizeEnvSegment(s string) string {
 	return strings.ReplaceAll(strings.ToUpper(s), "-", "_")
+}
+
+// authFileEntry is one role's credentials as written to auth.json. It
+// mirrors registry.Credential but is declared here so the on-disk
+// auth-file shape is owned by the env layer that emits CANTON_AUTH_FILE.
+type authFileEntry struct {
+	Role     string `json:"role"`
+	User     string `json:"user"`
+	Audience string `json:"audience"`
+	JWT      string `json:"jwt"`
+}
+
+// writeAuthFile materialises auth.json (a 0600 JSON object keyed by
+// role, so a script can `jq -r '."app-provider".jwt' "$CANTON_AUTH_FILE"`)
+// next to the instance's data dir, making CANTON_AUTH_FILE resolve.
+//
+// Best-effort: a no-op when there are no credentials, the parent data
+// dir doesn't exist (a stale instance — we never MkdirAll one), or
+// marshalling/writing fails. Safe to call on every env export.
+//
+// The write goes through a temp-file-in-same-dir + explicit Chmod(0600)
+// + Rename (mirroring registry.atomicWrite): the rewrite runs on every
+// export so a pre-existing world-readable auth.json is re-tightened to
+// 0600 (umask-independent), and the atomic rename never leaves partial
+// JSON behind on a crash.
+func writeAuthFile(path string, creds map[string]registry.Credential) {
+	if len(creds) == 0 {
+		return
+	}
+	dir := filepath.Dir(path)
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return // data dir absent — don't create a tree for a stale instance
+	}
+	entries := make(map[string]authFileEntry, len(creds))
+	for role, c := range creds {
+		entries[role] = authFileEntry{Role: c.Role, User: c.User, Audience: c.Audience, JWT: c.JWT}
+	}
+	body, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		return
+	}
+	tmp, err := os.CreateTemp(dir, ".tmp-auth-*")
+	if err != nil {
+		return
+	}
+	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		if !committed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if _, err := tmp.Write(append(body, '\n')); err != nil {
+		_ = tmp.Close()
+		return
+	}
+	// Chmod explicitly (umask-independent) so the temp — and the file it
+	// becomes after the rename — is 0600 regardless of the process umask.
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		return
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return
+	}
+	committed = true
 }
