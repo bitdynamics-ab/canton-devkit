@@ -107,6 +107,11 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 			Env:          env,
 			WorkDir:      state.ProjectDir,
 			LogWriter:    out,
+			// Replay the up-time --profile set. Splice gates every core
+			// service behind `profiles:`, so a profile-less `compose -f
+			// down` skips them all and exits 0 while leaving the stack
+			// running. composeProfiles returns the persisted full set.
+			Profiles: composeProfiles(state),
 		}
 	}
 	// removeVolumes=false: `down` and the Web UI Stop/Restart that call
