@@ -302,7 +302,7 @@ func NewState(name, spliceVersion string) *State {
 // the instance whose ComposeProject matches. Returns ErrNotFound
 // when no match is found.
 //
-// Added for handlers/metrics.go (yellow Y6): the previous reverse
+// Added for handlers/metrics.go: the previous reverse
 // lookup did strings.TrimPrefix(project, "canton-"), which broke if
 // the naming convention ever changed or an instance was renamed.
 // This walks the authoritative ground truth instead.
