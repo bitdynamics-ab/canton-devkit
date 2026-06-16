@@ -10,12 +10,18 @@ import (
 func buildLogs() *cobra.Command {
 	opts := &localnet.LogsOptions{Tail: "100"}
 	cmd := &cobra.Command{
-		Use:           "logs",
+		Use:           "logs [name]",
 		Short:         "Tail or dump container logs for a Canton LocalNet instance",
-		Args:          cobra.NoArgs,
+		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name, err := resolveName(cmd, args)
+			if err != nil {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
+				return localnet.AsExitError(localnet.ExitUserError)
+			}
+			opts.Name = name
 			if err := localnet.ValidateName(opts.Name); err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
@@ -24,7 +30,7 @@ func buildLogs() *cobra.Command {
 				localnet.RunLogs(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), opts))
 		},
 	}
-	cmd.Flags().StringVar(&opts.Name, "name", "", "Required. Instance name.")
+	cmd.Flags().StringVar(&opts.Name, "name", "", "Instance name. Can also be passed as a positional argument.")
 	cmd.Flags().StringArrayVar(&opts.Services, "service", nil,
 		"Compose service to filter on (may be repeated; omit for all).")
 	cmd.Flags().BoolVarP(&opts.Follow, "follow", "f", false, "Stream logs (Ctrl-C to stop).")
@@ -32,6 +38,5 @@ func buildLogs() *cobra.Command {
 		`Number of trailing lines per container (use "all" for everything).`)
 	cmd.Flags().StringVar(&opts.Since, "since", "",
 		"Show logs since duration (e.g. 10m, 1h) or RFC3339 timestamp.")
-	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }

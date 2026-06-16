@@ -28,7 +28,7 @@ if [[ ! -d "$cache_root" ]]; then
   cache_root="${HOME}/.canton/devkit-cache"
 fi
 if [[ ! -d "$cache_root" ]]; then
-  echo "no Splice cache found; run 'canton-devkit localnet up --name probe' once first" >&2
+  echo "no Splice cache found; run 'canton-devkit localnet up probe' once first" >&2
   exit 2
 fi
 

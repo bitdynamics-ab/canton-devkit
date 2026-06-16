@@ -37,13 +37,14 @@ func buildDown() *cobra.Command {
 		force bool
 	)
 	cmd := &cobra.Command{
-		Use:   "down",
-		Short: "Stop a Canton LocalNet instance (preserves volumes)",
+		Use:     "down [name]",
+		Aliases: []string{"stop"},
+		Short:   "Stop a Canton LocalNet instance (preserves volumes)",
 		Long: `Stops the named LocalNet instance gracefully and detaches its
 Docker networks. Volumes and the registry entry are preserved so
 a follow-up
 
-  dpm localnet up --name <name>
+  dpm localnet up <name>
 
 resumes from the same on-disk state.
 
@@ -55,10 +56,16 @@ restart-looping after an out-of-memory kill, or the cached compose
 env is broken), pass --force: it tears the instance down by Docker
 project label only — bypassing the compose files/env that the
 normal path needs — and SIGKILLs containers that won't stop.`,
-		Args:          cobra.NoArgs,
+		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resolved, err := resolveName(cmd, args)
+			if err != nil {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
+				return localnet.AsExitError(localnet.ExitUserError)
+			}
+			name = resolved
 			if err := localnet.ValidateName(name); err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
@@ -69,10 +76,9 @@ normal path needs — and SIGKILLs containers that won't stop.`,
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "",
-		"Required. Identifier of the LocalNet instance to stop.")
+		"Identifier of the LocalNet instance to stop. Can also be passed as a positional argument.")
 	cmd.Flags().BoolVar(&force, "force", false,
 		"Tear down by Docker project label only — resilient to an unhealthy/wedged instance a normal down can't remove.")
-	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }
 
@@ -224,7 +230,7 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 		_, _ = fmt.Fprintf(errw, "%s\n",
 			term.Step(term.StepCross, "Compose down failed", err.Error(), ""))
 		_, _ = fmt.Fprintln(errw, term.Dimc(fmt.Sprintf(
-			"Registry state preserved at %s. Re-run `localnet down --name %s` "+
+			"Registry state preserved at %s. Re-run `localnet down %s` "+
 				"once the host is healthy.",
 			state.DataDir, opts.Name)))
 		markStatus(state, registry.StatusFailed, errw)
@@ -257,7 +263,7 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 			term.Bold("\""+opts.Name+"\""),
 			term.Dimc("· state preserved."),
 			term.Dimc(fmt.Sprintf("Run %s to resume, or %s to remove volumes.",
-				term.Textc(fmt.Sprintf("localnet up --name %s", opts.Name)),
+				term.Textc(fmt.Sprintf("localnet up %s", opts.Name)),
 				term.Textc("localnet clean"))))))
 
 	return localnet.ExitSuccess

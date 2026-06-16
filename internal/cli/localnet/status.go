@@ -10,7 +10,7 @@ import (
 func buildStatus() *cobra.Command {
 	opts := &localnet.StatusOptions{}
 	cmd := &cobra.Command{
-		Use:   "status",
+		Use:   "status [name]",
 		Short: "Show LocalNet services, endpoints, identities",
 		Long: `Reads ~/.canton-devkit/localnet/<name>/state.json and best-effort
 docker compose ps output for live service health. The registry view renders
@@ -21,14 +21,16 @@ Web UI. --no-live skips the Docker query entirely for offline inspection.
 
 JWTs in credentials are redacted by default to <redacted>. Pass --include-jwt
 to opt in to raw JWT output.`,
-		Args:          cobra.NoArgs,
+		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			if opts.Name == "" {
-				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "--name is required.\nRun `dpm localnet list` to see available instances.")
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name, err := resolveName(cmd, args)
+			if err != nil {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
+			opts.Name = name
 			if err := localnet.ValidateName(opts.Name); err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
@@ -41,7 +43,7 @@ to opt in to raw JWT output.`,
 				localnet.RunStatus(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), opts))
 		},
 	}
-	cmd.Flags().StringVar(&opts.Name, "name", "", "Required. Instance to inspect.")
+	cmd.Flags().StringVar(&opts.Name, "name", "", "Instance to inspect. Can also be passed as a positional argument.")
 	cmd.Flags().StringVar(&opts.Format, "format", "table", "Output format: table or json.")
 	cmd.Flags().BoolVar(&opts.NoLive, "no-live", false, "Skip docker compose ps; print registry view only.")
 	cmd.Flags().BoolVar(&opts.IncludeJWT, "include-jwt", false, "Emit raw JWT values in credentials. Default is <redacted>.")

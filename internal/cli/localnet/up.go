@@ -18,8 +18,9 @@ func buildUp() *cobra.Command {
 	cacheRoot := splice.CacheRoot()
 	instanceRoot := registry.Root()
 	cmd := &cobra.Command{
-		Use:   "up",
-		Short: "Start a Canton LocalNet instance (Splice LocalNet)",
+		Use:     "up [name]",
+		Aliases: []string{"start"},
+		Short:   "Start a Canton LocalNet instance (Splice LocalNet)",
 		Long: fmt.Sprintf(`Start a Canton LocalNet instance backed by Splice LocalNet.
 
 The Splice LocalNet compose project is fetched from
@@ -39,10 +40,16 @@ Supported Splice versions: %s
 "latest" resolves to %s.`,
 			cacheRoot, instanceRoot,
 			strings.Join(splice.Supported(), ", "), splice.LatestAlias),
-		Args:          cobra.NoArgs,
+		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name, err := resolveName(cmd, args)
+			if err != nil {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
+				return localnet.AsExitError(localnet.ExitUserError)
+			}
+			opts.Name = name
 			if err := localnet.ValidateName(opts.Name); err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
@@ -66,7 +73,7 @@ Supported Splice versions: %s
 		},
 	}
 	cmd.Flags().StringVar(&opts.Name, "name", "",
-		"Required. Identifier for this LocalNet instance (DNS label: lowercase a-z, 0-9, hyphens; no leading/trailing hyphen; 1-63 chars).")
+		"Identifier for this LocalNet instance (DNS label: lowercase a-z, 0-9, hyphens; no leading/trailing hyphen; 1-63 chars). Can also be passed as a positional argument.")
 	cmd.Flags().StringVar(&opts.Version, "version", "latest",
 		"Splice LocalNet release tag.")
 	cmd.Flags().BoolVar(&opts.AllowUncurated, "allow-uncurated", false,
@@ -86,6 +93,5 @@ Supported Splice versions: %s
 			"(e.g. --port-base 20000 → each service gets base+N). Use for reproducible "+
 			"multi-instance or CI layouts; every derived port must be free or `up` fails "+
 			"fast (no silent fallback). 0 (default) = auto-allocate with stable reuse.")
-	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }

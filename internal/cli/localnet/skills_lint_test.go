@@ -494,29 +494,33 @@ func TestSkillsLint_FutureVerbsHaveTODOs(t *testing.T) {
 // lint passed while the command failed for the user with `unknown
 // command "canton"`. The lint now runs each command's own Args policy
 // against the leftover tokens. This test asserts both directions:
-//   - a positional on a NoArgs command (logs) is reported as leftover
+//   - a positional on a NoArgs command (list) is reported as leftover
 //     and rejected by the command's Args validator;
 //   - a positional on a command that accepts args (dar upload <path>)
 //     is reported as leftover but accepted, so it is NOT flagged.
+//
+// NOTE: the lifecycle commands (up/down/logs/...) now accept an optional
+// positional instance name, so `list` — a true cobra.NoArgs command (it
+// takes no instance) — stands in as the reject-direction example.
 func TestSkillsLint_RejectsPositionalArgsOnNoArgsCommand(t *testing.T) {
 	root := Build()
 
-	// `logs` is cobra.NoArgs — the offending doc shape.
-	cmd, extra, found := resolveCobra(root, []string{"logs", "canton"})
+	// `list` is cobra.NoArgs — the offending doc shape.
+	cmd, extra, found := resolveCobra(root, []string{"list", "canton"})
 	if !found {
-		t.Fatal("`logs` should resolve under `dpm localnet`")
+		t.Fatal("`list` should resolve under `dpm localnet`")
 	}
-	if cmd.Name() != "logs" {
-		t.Fatalf("resolved command = %q, want logs", cmd.Name())
+	if cmd.Name() != "list" {
+		t.Fatalf("resolved command = %q, want list", cmd.Name())
 	}
 	if len(extra) != 1 || extra[0] != "canton" {
 		t.Fatalf("leftover tokens = %v, want [canton]", extra)
 	}
 	if cmd.Args == nil {
-		t.Fatal("logs command has no Args policy; the NoArgs guard is gone")
+		t.Fatal("list command has no Args policy; the NoArgs guard is gone")
 	}
 	if err := cmd.Args(cmd, extra); err == nil {
-		t.Error("logs command accepted a positional arg; the lint would miss `logs canton`")
+		t.Error("list command accepted a positional arg; the lint would miss `list canton`")
 	}
 
 	// `dar upload ./app.dar` is the legitimate positional case the

@@ -19,8 +19,8 @@ The user asks to "create a test token", "mint/transfer/burn tokens", or
    on-ledger surfaces need it; see `dpm localnet versions` for an
    alpha-channel Splice version that supports it):
    ```
-   dpm localnet up --name dev --profile tokens-v2
-   dpm localnet status --name dev
+   dpm localnet up dev --profile tokens-v2
+   dpm localnet status dev
    ```
 
 2. **Create a token instrument**. Interactive wizard in a terminal

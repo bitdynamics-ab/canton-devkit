@@ -223,6 +223,48 @@ func TestDown_InvalidNameRejected(t *testing.T) {
 	}
 }
 
+// TestDown_InvalidNameRejectedPositional covers the same validation
+// when the name is passed as a positional argument.
+func TestDown_InvalidNameRejectedPositional(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	cmd := buildDown()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"bad/name"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error for invalid positional name")
+	}
+}
+
+// TestDownAliasStop confirms that "stop" is registered as an alias for "down".
+func TestDownAliasStop(t *testing.T) {
+	cmd := buildDown()
+	found := false
+	for _, a := range cmd.Aliases {
+		if a == "stop" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected 'stop' alias on `down`")
+	}
+}
+
+// TestDown_RejectsPositionalAndFlag confirms that providing the name
+// both as a positional arg and --name is an error.
+func TestDown_RejectsPositionalAndFlag(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	cmd := buildDown()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"mynet", "--name", "mynet"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error when both positional and --name are provided")
+	}
+}
+
 // TestDown_LockAcquiredBeforeStateBranch pins lock-ordering. Reading
 // state, branching on StatusStopped, THEN acquiring the lock would be
 // racy: a concurrent writer flipping status between the Read and the

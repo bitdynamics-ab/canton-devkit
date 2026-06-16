@@ -484,7 +484,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			// instead of the generic failure dialog.
 			prog.FailStep(StepPersistState,
 				fmt.Sprintf("%s\nFree the conflicting process (lsof -i :<port>), pick a different --port-base, or tear down the "+
-					"other instance and re-run `localnet up --name %s`.", err, opts.Name),
+					"other instance and re-run `localnet up %s`.", err, opts.Name),
 				WithCode(err, ErrCodePortsInUse))
 			return ExitPreflightFail
 		}
@@ -741,11 +741,11 @@ func renderWelcome(out io.Writer, name, spliceVersion string, state *registry.St
 	}
 
 	tryNext := []term.NextStep{
-		{Label: "Status", Command: fmt.Sprintf("canton-devkit localnet status --name %s", name)},
-		{Label: "Env", Command: fmt.Sprintf("eval $(canton-devkit localnet env --name %s)", name)},
+		{Label: "Status", Command: fmt.Sprintf("canton-devkit localnet status %s", name)},
+		{Label: "Env", Command: fmt.Sprintf("eval $(canton-devkit localnet env %s)", name)},
 		{Label: "Live ACS", Command: fmt.Sprintf("canton-devkit localnet contracts watch --name %s", name)},
 		{Label: "Upload DAR", Command: fmt.Sprintf("canton-devkit localnet dar upload <path> --name %s", name)},
-		{Label: "Stop", Command: fmt.Sprintf("canton-devkit localnet down --name %s", name)},
+		{Label: "Stop", Command: fmt.Sprintf("canton-devkit localnet down %s", name)},
 	}
 
 	term.WelcomeScreen{

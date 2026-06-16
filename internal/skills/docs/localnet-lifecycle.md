@@ -23,25 +23,29 @@ if the network is healthy", or "tear it down".
 
 2. **Start a named instance** (blocks until healthy):
    ```
-   dpm localnet up --name dev
+   dpm localnet up dev
    ```
    Use `--version <tag>` to pin a Splice version (`dpm localnet versions`
-   lists curated tags). `--name` isolates instances so several can run.
+   lists curated tags). The instance name isolates instances so several
+   can run. Aliases: `start` works in place of `up`.
 
 3. **Inspect**:
    ```
-   dpm localnet status --name dev      # health, ports, endpoints
+   dpm localnet status dev             # health, ports, endpoints
    dpm localnet list                   # all instances + state
-   dpm localnet logs --service canton --name dev # tail one service
+   dpm localnet logs dev --service canton  # tail one service
    ```
 
 4. **Stop** (removes containers + volumes for that instance):
    ```
-   dpm localnet down --name dev
+   dpm localnet down dev
    ```
+   Alias: `stop` works in place of `down`.
 
 ## Guardrails
 - Always run `doctor` before `up` if the user reports trouble.
 - Prefer `down` for normal teardown; use `clean --name <n>` only to
   reclaim orphaned/stopped state (`--force` for a running instance).
 - Never pass secrets on the command line — JWTs come from `localnet env`.
+- The instance name can be passed as a positional arg (`localnet up dev`)
+  or via `--name` (`localnet up --name dev`). Both forms are equivalent.
