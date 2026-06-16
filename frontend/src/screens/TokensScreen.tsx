@@ -7,6 +7,7 @@ import {
   createParty,
   createToken,
   faucetToken,
+  launchDemoToken,
   fetchActivity,
   fetchHoldingContracts,
   fetchParties,
@@ -141,6 +142,7 @@ export function TokensScreen() {
     | null
   >(null);
   const [topNotice, setTopNotice] = useState<{ tone: "ok" | "warn" | "err"; text: string } | null>(null);
+  const [demoBusy, setDemoBusy] = useState(false);
 
   useEffect(() => {
     if (!instance) {
@@ -334,6 +336,31 @@ export function TokensScreen() {
     return { tone: "err", text: e instanceof ApiError ? e.message : fallback };
   }
 
+  // launchDemo provisions a live, transferable demo token in one click —
+  // the server composes issuer-party → create → mint → faucet-a-holder.
+  // A 412 (no live V2) surfaces via renderActionError's NEEDS_V2_LOCALNET
+  // branch ("bring up a V2 LocalNet first") rather than a generic error.
+  async function launchDemo() {
+    if (!instance) return;
+    setDemoBusy(true);
+    setTopNotice(null);
+    try {
+      const res = await launchDemoToken(instance);
+      setActiveSymbol(res.token.symbol);
+      bump();
+      setTopNotice({
+        tone: "ok",
+        text: res.seeded
+          ? `Launched ${res.token.symbol} — supply minted to ${res.issuer.alias}, ${res.holder?.alias ?? "a holder"} funded. Try a transfer.`
+          : `Launched ${res.token.symbol} — supply minted to ${res.issuer.alias}.`,
+      });
+    } catch (e) {
+      setTopNotice(renderActionError(e, "demo launch failed"));
+    } finally {
+      setDemoBusy(false);
+    }
+  }
+
   if (!instance) {
     return (
       <section style={{ padding: 24 }}>
@@ -365,9 +392,18 @@ export function TokensScreen() {
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            style={btnStyle(W.brand, false, true)}
+            style={btnStyle(W.brand, false)}
           >
             + Create token
+          </button>
+          <button
+            type="button"
+            disabled={demoBusy}
+            onClick={() => void launchDemo()}
+            title="Provision a live, transferable demo token in one click"
+            style={btnStyle(W.brand, demoBusy, true)}
+          >
+            {demoBusy ? "Launching…" : "⚡ Launch demo"}
           </button>
         </span>
       } />
@@ -397,9 +433,25 @@ export function TokensScreen() {
       {view === "matrix" ? (
         <MatrixLens matrix={matrix} err={matrixErr} aliases={aliases} />
       ) : list.length === 0 ? (
-        <div style={{ color: W.dim, fontSize: 13 }}>
-          No instruments on <code>{instance}</code> yet. Click <b>Create token</b> above
-          (or run <code>dpm localnet token create --instance {instance}</code>).
+        <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 10, padding: 24, textAlign: "center" }}>
+          <div style={{ color: W.text, fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+            No tokens on <code>{instance}</code> yet
+          </div>
+          <div style={{ color: W.dim, fontSize: 13, marginBottom: 16 }}>
+            Go from empty to a live, transferable token in one click — no party ids to paste.
+          </div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+            <button type="button" disabled={demoBusy} onClick={() => void launchDemo()} style={btnStyle(W.brand, demoBusy, true)}>
+              {demoBusy ? "Launching demo…" : "⚡ Launch demo token"}
+            </button>
+            <button type="button" onClick={() => setShowCreate(true)} style={btnStyle(W.dim, false)}>
+              + Create token manually
+            </button>
+          </div>
+          <div style={{ color: W.faint, fontSize: 11.5, marginTop: 14 }}>
+            One click provisions an issuer party, a DEMO instrument with supply, and a funded holder.
+            Or run <code>dpm localnet token demo --instance {instance}</code>.
+          </div>
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 14 }}>
