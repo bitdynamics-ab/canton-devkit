@@ -169,6 +169,12 @@ jobs:
         with:
           name: canton-devkit-${{ steps.meta.outputs.version }}
           path: dist/*
+          # Cap retention: these are convenience downloads of each main
+          # build. Without a limit they default to 90 days and accumulate
+          # (one ~20 MB set per push) until the Actions artifact storage
+          # quota fills and EVERY upload — including the component-binaries
+          # the dpm-component job depends on — starts failing.
+          retention-days: 7
 
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/')
