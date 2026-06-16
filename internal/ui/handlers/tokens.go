@@ -694,6 +694,12 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 	switch {
 	case err == nil:
 		w.WriteHeader(http.StatusNoContent)
+	case errors.Is(err, token.ErrTokenDARUnavailable):
+		// On-ledger V2 create on a non-token-standard-v2 instance: the
+		// example DAR isn't published for that Splice version. Actionable
+		// 412 (the message names the remedy) instead of a raw GitHub 404.
+		writeErrorWithCode(w, http.StatusPreconditionFailed,
+			"TEST_TOKEN_DAR_UNAVAILABLE", err.Error())
 	case errors.Is(err, token.ErrNeedsV2LocalNet):
 		writeErrorWithCode(w, http.StatusPreconditionFailed,
 			"NEEDS_V2_LOCALNET", err.Error())
