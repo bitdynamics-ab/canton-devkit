@@ -135,3 +135,25 @@ func composeProfiles(state *registry.State) []string {
 func ComposeProfilesFor(state *registry.State) []string {
 	return composeProfiles(state)
 }
+
+// subtractProfiles returns the elements of a that are not in b, preserving
+// a's order. RunUp uses it to recover a user's --profile opt-ins from the
+// persisted FULL profile set (state.Profiles = adapter base + opt-ins) by
+// subtracting the adapter's base services — so a no-flag re-up can
+// re-enable just the opt-ins without double-counting the base (#161).
+func subtractProfiles(a, b []string) []string {
+	if len(a) == 0 {
+		return nil
+	}
+	inB := make(map[string]bool, len(b))
+	for _, p := range b {
+		inB[p] = true
+	}
+	var out []string
+	for _, p := range a {
+		if !inB[p] {
+			out = append(out, p)
+		}
+	}
+	return out
+}
