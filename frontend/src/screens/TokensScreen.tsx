@@ -545,6 +545,8 @@ export function TokensScreen() {
       {showCreate && (
         <CreateTokenModal
           instance={instance}
+          parties={parties}
+          onPartiesChanged={() => bump()}
           onClose={() => setShowCreate(false)}
           onCreated={(ref) => {
             setShowCreate(false);
@@ -557,7 +559,10 @@ export function TokensScreen() {
       {modal?.kind === "mint" && active && (
         <ActionModal
           title={`Mint ${modal.symbol}`}
-          fields={[{ label: "To party", key: "to" }, { label: "Amount", key: "amount" }]}
+          fields={[{ label: "To party", key: "to", party: true }, { label: "Amount", key: "amount" }]}
+          instance={instance}
+          parties={parties}
+          onPartiesChanged={() => bump()}
           onClose={() => setModal(null)}
           submit={(v) => mintToken(instance, modal.symbol, v.to, v.amount)}
           onDone={() => { setModal(null); bump(); }}
@@ -568,6 +573,8 @@ export function TokensScreen() {
         <TransferModal
           instance={instance}
           symbol={modal.symbol}
+          parties={parties}
+          onPartiesChanged={() => bump()}
           onClose={() => setModal(null)}
           onDone={() => { setModal(null); bump(); }}
           onError={(e) => setTopNotice(renderActionError(e, "transfer failed"))}
@@ -576,7 +583,10 @@ export function TokensScreen() {
       {modal?.kind === "burn" && active && (
         <ActionModal
           title={`Burn ${modal.symbol}`}
-          fields={[{ label: "From party", key: "from" }, { label: "Amount", key: "amount" }]}
+          fields={[{ label: "From party", key: "from", party: true }, { label: "Amount", key: "amount" }]}
+          instance={instance}
+          parties={parties}
+          onPartiesChanged={() => bump()}
           onClose={() => setModal(null)}
           submit={(v) => burnToken(instance, modal.symbol, v.from, v.amount)}
           onDone={() => { setModal(null); bump(); }}
@@ -587,10 +597,13 @@ export function TokensScreen() {
         <ActionModal
           title={`Faucet ${modal.symbol}`}
           fields={[
-            { label: "To party", key: "to" },
+            { label: "To party", key: "to", party: true },
             { label: "Amount", key: "amount" },
-            { label: "Source (optional — defaults to funded party)", key: "source", optional: true },
+            { label: "Source (optional — defaults to funded party)", key: "source", optional: true, party: true },
           ]}
+          instance={instance}
+          parties={parties}
+          onPartiesChanged={() => bump()}
           onClose={() => setModal(null)}
           submit={(v) => faucetToken(instance, modal.symbol, v.to, v.amount, v.source || undefined)}
           onDone={() => { setModal(null); bump(); }}
@@ -601,6 +614,8 @@ export function TokensScreen() {
         <ActionModal
           title="Accept transfer"
           fields={[{ label: "Transfer instruction id", key: "id" }]}
+          instance={instance}
+          parties={parties}
           onClose={() => setModal(null)}
           submit={(v) => acceptTransfer(instance, v.id)}
           onDone={() => { setModal(null); bump(); }}
@@ -616,10 +631,12 @@ export function TokensScreen() {
 // (planTransfer) and shows which Holding contracts would be consumed and
 // the change returned — the Canton UTXO reality, before any submit.
 function TransferModal({
-  instance, symbol, onClose, onDone, onError,
+  instance, symbol, parties, onPartiesChanged, onClose, onDone, onError,
 }: {
   instance: string;
   symbol: string;
+  parties: PartyRef[];
+  onPartiesChanged?: () => void;
   onClose: () => void;
   onDone: () => void;
   onError: (e: unknown) => void;
@@ -663,8 +680,12 @@ function TransferModal({
   return (
     <ModalShell title={`Transfer ${symbol}`} onClose={onClose}>
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 10 }}>
-        <Field label="From party"><input value={from} onChange={(e) => setFrom(e.target.value)} style={input} required /></Field>
-        <Field label="To party"><input value={to} onChange={(e) => setTo(e.target.value)} style={input} required /></Field>
+        <Field label="From party">
+          <PartyPicker instance={instance} parties={parties} value={from} onChange={setFrom} onPartiesChanged={onPartiesChanged} placeholder="Select sender" />
+        </Field>
+        <Field label="To party">
+          <PartyPicker instance={instance} parties={parties} value={to} onChange={setTo} onPartiesChanged={onPartiesChanged} placeholder="Select recipient" />
+        </Field>
         <Field label="Amount"><input value={amount} onChange={(e) => setAmount(e.target.value)} style={input} required /></Field>
         <Field label="Reason (optional)"><input value={reason} onChange={(e) => setReason(e.target.value)} style={input} /></Field>
         <label style={{ display: "flex", alignItems: "center", gap: 8, color: W.text2, fontSize: 12, cursor: "pointer" }}>
@@ -712,8 +733,8 @@ function TransferModal({
           <button type="button" onClick={onClose} style={btnStyle(W.dim, false)}>Cancel</button>
           <button
             type="submit"
-            disabled={busy || (plan ? !plan.sufficient : false)}
-            style={btnStyle(W.brand, busy, true, plan ? !plan.sufficient : false)}
+            disabled={busy || !from || !to || !amount || (plan ? !plan.sufficient : false)}
+            style={btnStyle(W.brand, busy, true, !from || !to || !amount || (plan ? !plan.sufficient : false))}
           >
             {busy ? "Submitting…" : "Transfer"}
           </button>
@@ -1043,10 +1064,14 @@ function PartyManagerModal({
 
 function CreateTokenModal({
   instance,
+  parties,
+  onPartiesChanged,
   onClose,
   onCreated,
 }: {
   instance: string;
+  parties: PartyRef[];
+  onPartiesChanged?: () => void;
   onClose: () => void;
   onCreated: (ref: TokenRef) => void;
 }) {
@@ -1060,6 +1085,10 @@ function CreateTokenModal({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!issuer) {
+      setErr("pick or create an issuer party");
+      return;
+    }
     setBusy(true);
     try {
       const ref = await createToken(instance, {
@@ -1081,7 +1110,16 @@ function CreateTokenModal({
           <input type="number" min={0} max={18} value={decimals} onChange={(e) => setDecimals(Number(e.target.value))} style={input} />
         </Field>
         <Field label="Initial supply"><input value={initialSupply} onChange={(e) => setInitialSupply(e.target.value)} style={input} required /></Field>
-        <Field label="Issuer party id"><input value={issuer} onChange={(e) => setIssuer(e.target.value)} style={input} required /></Field>
+        <Field label="Issuer party">
+          <PartyPicker
+            instance={instance}
+            parties={parties}
+            value={issuer}
+            onChange={setIssuer}
+            onPartiesChanged={onPartiesChanged}
+            placeholder="Select issuer party"
+          />
+        </Field>
         {err && <div role="alert" style={{ color: W.err, fontSize: 12 }}>{err}</div>}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
           <button type="button" onClick={onClose} style={btnStyle(W.dim, false)}>Cancel</button>
@@ -1095,13 +1133,19 @@ function CreateTokenModal({
 function ActionModal({
   title,
   fields,
+  instance,
+  parties,
+  onPartiesChanged,
   onClose,
   submit,
   onDone,
   onError,
 }: {
   title: string;
-  fields: { label: string; key: string; optional?: boolean }[];
+  fields: { label: string; key: string; optional?: boolean; party?: boolean }[];
+  instance: string;
+  parties: PartyRef[];
+  onPartiesChanged?: () => void;
   onClose: () => void;
   submit: (values: Record<string, string>) => Promise<void>;
   onDone: () => void;
@@ -1128,12 +1172,23 @@ function ActionModal({
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 8 }}>
         {fields.map((f) => (
           <Field key={f.key} label={f.label}>
-            <input
-              value={values[f.key] ?? ""}
-              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-              style={input}
-              required={!f.optional}
-            />
+            {f.party ? (
+              <PartyPicker
+                instance={instance}
+                parties={parties}
+                value={values[f.key] ?? ""}
+                onChange={(v) => setValues((vv) => ({ ...vv, [f.key]: v }))}
+                onPartiesChanged={onPartiesChanged}
+                placeholder={f.optional ? "Select party (optional)" : "Select party"}
+              />
+            ) : (
+              <input
+                value={values[f.key] ?? ""}
+                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                style={input}
+                required={!f.optional}
+              />
+            )}
           </Field>
         ))}
         {err && <div role="alert" style={{ color: W.err, fontSize: 12 }}>{err}</div>}
@@ -1143,6 +1198,143 @@ function ActionModal({
         </div>
       </form>
     </ModalShell>
+  );
+}
+
+// PartyPicker — alias-aware party selector. Replaces the raw
+// fingerprinted-party-id text inputs across the token modals: pick a
+// registered alias, create one inline (POST /api/parties), or fall back
+// to typing a raw id. Always emits the resolved party_id, which the
+// backend's ResolveAlias passes through unchanged — so it's correct for
+// create (no alias resolution) and the mint/transfer/burn/faucet paths
+// (which do resolve) alike.
+function PartyPicker({
+  instance,
+  parties,
+  value,
+  onChange,
+  role = "app-user",
+  onPartiesChanged,
+  placeholder = "Select party",
+}: {
+  instance: string;
+  parties: PartyRef[];
+  value: string;
+  onChange: (partyId: string) => void;
+  role?: string;
+  onPartiesChanged?: () => void;
+  placeholder?: string;
+}) {
+  const [mode, setMode] = useState<"select" | "create" | "raw">("select");
+  const [newAlias, setNewAlias] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  // Locally-created parties show in the list instantly, before the
+  // parent's onPartiesChanged refetch lands.
+  const [extra, setExtra] = useState<PartyRef[]>([]);
+
+  const all = useMemo(() => {
+    const seen = new Set(parties.map((p) => p.party_id));
+    return [...parties, ...extra.filter((e) => !seen.has(e.party_id))];
+  }, [parties, extra]);
+  const known = all.some((p) => p.party_id === value);
+
+  const linkBtn: React.CSSProperties = {
+    background: "transparent", border: "none", color: W.dim,
+    fontSize: 11, cursor: "pointer", justifySelf: "start", padding: 0,
+  };
+
+  async function createNew() {
+    const a = newAlias.trim();
+    if (!a) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const ref = await createParty(instance, a, role);
+      setExtra((x) => [...x, ref]);
+      onChange(ref.party_id);
+      onPartiesChanged?.();
+      setNewAlias("");
+      setMode("select");
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "could not create party");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (mode === "create") {
+    return (
+      <div style={{ display: "grid", gap: 6 }}>
+        <div style={{ display: "flex", gap: 6 }}>
+          <input
+            autoFocus
+            value={newAlias}
+            onChange={(e) => setNewAlias(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void createNew();
+              }
+            }}
+            placeholder="new alias (e.g. bob)"
+            style={{ ...input, flex: 1 }}
+          />
+          <button
+            type="button"
+            disabled={busy || !newAlias.trim()}
+            onClick={() => void createNew()}
+            style={btnStyle(W.brand, busy, true, !newAlias.trim())}
+          >
+            {busy ? "…" : "Create"}
+          </button>
+        </div>
+        {err && <span role="alert" style={{ color: W.err, fontSize: 11 }}>{err}</span>}
+        <button type="button" onClick={() => { setMode("select"); setErr(null); }} style={linkBtn}>
+          ← back to list
+        </button>
+      </div>
+    );
+  }
+
+  if (mode === "raw" || (value !== "" && !known)) {
+    return (
+      <div style={{ display: "grid", gap: 4 }}>
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="party id (alias::fingerprint)"
+          style={{ ...input, fontFamily: wMono, fontSize: 12 }}
+        />
+        {all.length > 0 && (
+          <button type="button" onClick={() => { onChange(""); setMode("select"); }} style={linkBtn}>
+            ← pick a registered party
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => {
+        const v = e.target.value;
+        if (v === "__create__") { setMode("create"); return; }
+        if (v === "__raw__") { setMode("raw"); onChange(""); return; }
+        onChange(v);
+      }}
+      style={{ ...input, cursor: "pointer" }}
+    >
+      <option value="">{placeholder}</option>
+      {all.map((p) => (
+        <option key={p.party_id} value={p.party_id}>
+          {p.alias} · {shortParty(p.party_id)}
+        </option>
+      ))}
+      <option value="__create__">＋ create new party…</option>
+      <option value="__raw__">↳ enter raw party id…</option>
+    </select>
   );
 }
 
