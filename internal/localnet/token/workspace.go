@@ -34,6 +34,9 @@ type HoldingContract struct {
 	InstrumentID string `json:"instrument_id"`
 	Amount       string `json:"amount"`
 	Locked       bool   `json:"locked"`
+	// Gen is the token-standard generation the holding was read through
+	// (V1/V2). Internal — drives per-instrument tagging + write routing.
+	Gen Generation `json:"-"`
 }
 
 // InstrumentRef is an on-chain-discovered instrument, enriched with any
@@ -45,8 +48,12 @@ type InstrumentRef struct {
 	Name     string `json:"name,omitempty"`
 	Symbol   string `json:"symbol,omitempty"`
 	Decimals int    `json:"decimals,omitempty"`
-	Standard string `json:"standard,omitempty"` // "Splice Amulet" | "CIP-0112 v2"
-	OnLedger bool   `json:"on_ledger"`          // discovered from the ACS
+	// Standard is the human label ("Splice Amulet" / "Token Standard V1
+	// (CIP-0056)" / "Token Standard V2 (CIP-0112)"); Generation is the
+	// machine tag ("v1"/"v2") the transfer path routes on.
+	Standard   string `json:"standard,omitempty"`
+	Generation string `json:"generation,omitempty"`
+	OnLedger   bool   `json:"on_ledger"` // discovered from the ACS
 }
 
 // maxWorkspaceScan caps how many ACS contracts scanWorkspace will
@@ -104,13 +111,25 @@ func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error)
 		return &Workspace{}, nil
 	}
 
+	// Per-instrument generation: query every token-standard holding
+	// surface the participant has vetted (V1 and/or V2). A participant can
+	// carry both during the V1→V2 transition; querying only V2 would hide
+	// V1 tokens like Amulet (which is why 0.6.4 shows 0 instruments today).
+	surfaces, err := discoverTokenSurfaces(ctx, client)
+	if err != nil {
+		return nil, err
+	}
+	if !surfaces.Any() {
+		return nil, fmt.Errorf("instance %q has no token-standard Holding package vetted (neither V1 nor V2) — token operations are unavailable", opts.Instance)
+	}
+
 	end, err := client.LedgerEnd(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("ledger end: %w", err)
 	}
 	stream, err := client.ActiveContracts(ctx, ledger.ActiveContractsRequest{
 		ActiveAtOffset: end.Offset,
-		EventFormat:    holdingInterfaceFilterV2(parties),
+		EventFormat:    holdingInterfaceFilter(surfaces, parties),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("ACS query: %w", err)
@@ -136,11 +155,10 @@ func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error)
 		if ce == nil {
 			continue
 		}
-		for _, iv := range ce.GetInterfaceViews() {
-			view, ok := extractHoldingViewV2(iv)
-			if !ok {
-				continue
-			}
+		// One holding per contract: a contract implementing both Holding
+		// interfaces returns two views; extractBestHoldingView picks one
+		// (prefers V2) so balances are never double-counted.
+		if view, ok := extractBestHoldingView(ce.GetInterfaceViews()); ok {
 			holdings = append(holdings, HoldingContract{
 				ContractID:   ce.GetContractId(),
 				Party:        view.Owner,
@@ -148,6 +166,7 @@ func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error)
 				InstrumentID: view.InstrumentID,
 				Amount:       view.Amount,
 				Locked:       view.Locked,
+				Gen:          view.Generation,
 			})
 		}
 	}
@@ -165,12 +184,16 @@ func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error)
 // pairs seen on the ledger and enriches each with recorded metadata.
 func instrumentsFromHoldings(holdings []HoldingContract, instance string) []InstrumentRef {
 	seen := map[string]*InstrumentRef{}
+	gen := map[string]Generation{} // richest generation seen per instrument
 	order := []string{}
 	for _, h := range holdings {
 		key := h.Admin + "\x00" + h.InstrumentID
 		if _, ok := seen[key]; !ok {
 			seen[key] = &InstrumentRef{Admin: h.Admin, InstrumentID: h.InstrumentID, OnLedger: true}
 			order = append(order, key)
+		}
+		if h.Gen > gen[key] { // genV2 (2) outranks genV1 (1)
+			gen[key] = h.Gen
 		}
 	}
 	// Enrich from state.Tokens (keyed by symbol; our on-ledger create
@@ -193,20 +216,26 @@ func instrumentsFromHoldings(holdings []HoldingContract, instance string) []Inst
 		if ir.Symbol == "" {
 			ir.Symbol = ir.InstrumentID
 		}
-		ir.Standard = standardFor(ir.InstrumentID)
+		ir.Standard = standardFor(gen[key], ir.InstrumentID)
+		ir.Generation = gen[key].String()
 		out = append(out, *ir)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Symbol < out[j].Symbol })
 	return out
 }
 
-// standardFor labels the token standard. Amulet is the V1-era Canton
-// Coin (dual V1+V2); everything else we create is native CIP-0112 v2.
-func standardFor(instrumentID string) string {
+// standardFor is the human label for an instrument's token standard.
+// Amulet is the Splice-native Canton Coin; other V1 instruments are
+// Token Standard V1 (CIP-0056); V2 instruments are Token Standard V2
+// (CIP-0112). Used for the per-instrument UI badge.
+func standardFor(gen Generation, instrumentID string) string {
 	if instrumentID == "Amulet" {
 		return "Splice Amulet"
 	}
-	return "CIP-0112 v2"
+	if gen == genV1 {
+		return "Token Standard V1 (CIP-0056)"
+	}
+	return "Token Standard V2 (CIP-0112)"
 }
 
 // MatrixCell is one (party, instrument) summed amount.

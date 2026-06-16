@@ -1653,7 +1653,12 @@ export interface InstrumentRef {
   name?: string;
   symbol?: string;
   decimals?: number;
-  standard?: string; // "Splice Amulet" | "CIP-0112 v2"
+  // standard is the human label ("Splice Amulet" / "Token Standard V1
+  // (CIP-0056)" / "Token Standard V2 (CIP-0112)"); generation is the
+  // machine tag ("v1"/"v2") the UI gates mint/burn on — never gate on
+  // the display string.
+  standard?: string;
+  generation?: string;
   on_ledger: boolean;
 }
 
@@ -1761,7 +1766,9 @@ export async function fetchInstruments(
     name: t.name,
     symbol: t.symbol,
     decimals: t.decimals,
-    standard: t.symbol === "Amulet" ? "Splice Amulet" : "CIP-0112 v2",
+    standard:
+      t.symbol === "Amulet" ? "Splice Amulet" : "Token Standard V2 (CIP-0112)",
+    generation: t.symbol === "Amulet" ? "v1" : "v2",
     on_ledger: t.status === "on-ledger",
   }));
 }

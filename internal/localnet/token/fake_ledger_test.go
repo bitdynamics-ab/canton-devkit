@@ -23,6 +23,7 @@ type fakeLedger struct {
 	ResolveActAndReadPartiesFn func(ctx context.Context) ([]string, error)
 	ListKnownPartiesFn         func(ctx context.Context) (*adminv2.ListKnownPartiesResponse, error)
 	GrantUserActAndReadAsFn    func(ctx context.Context, userID string, parties []string) error
+	ListKnownPackagesFn        func(ctx context.Context) (*adminv2.ListKnownPackagesResponse, error)
 }
 
 func (f *fakeLedger) LedgerEnd(ctx context.Context) (ledger.LedgerEnd, error) {
@@ -58,6 +59,21 @@ func (f *fakeLedger) GrantUserActAndReadAs(ctx context.Context, userID string, p
 		return f.GrantUserActAndReadAsFn(ctx, userID, parties)
 	}
 	return nil
+}
+
+func (f *fakeLedger) ListKnownPackages(ctx context.Context) (*adminv2.ListKnownPackagesResponse, error) {
+	if f.ListKnownPackagesFn != nil {
+		return f.ListKnownPackagesFn(ctx)
+	}
+	// Happy default: both token-standard holding surfaces vetted, so
+	// existing fixtures (which feed holdings via ActiveContracts) flow
+	// through discovery unchanged.
+	return &adminv2.ListKnownPackagesResponse{
+		PackageDetails: []*adminv2.PackageDetails{
+			{Name: "splice-api-token-holding-v1"},
+			{Name: "splice-api-token-holding-v2"},
+		},
+	}, nil
 }
 
 // newStream returns a closed channel pre-populated with the items, then
