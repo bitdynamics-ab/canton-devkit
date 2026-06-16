@@ -626,7 +626,15 @@ func roleFromQuery(r *http.Request) string {
 // stub. Delegates to the neutral token.ResolveLedgerEndpoint so the
 // CLI's `token balance` auto-discovery and this handler resolve the
 // same participant from the same `participant_ledger_<role>` key.
-func liveLedgerEndpoint(instance, role string) string {
+//
+// It's a package var (not a plain func), like runTokenCreate, so the
+// registry-only handler tests can force the offline path
+// deterministically. Those tests seed an instance with no recorded
+// port and assert the offline branch (201→409 create, 422 mint,
+// registry-tagged holdings); a port leaking in from a sibling test's
+// registry would otherwise flip them onto the live-dial branch and
+// flake the assertions.
+var liveLedgerEndpoint = func(instance, role string) string {
 	return token.ResolveLedgerEndpoint(instance, role)
 }
 
