@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,9 +14,19 @@ import (
 // restartMux mounts the instance handlers with a live hub — the
 // restart flow needs the hub to publish progress events to a
 // per-instance topic just like the create/resume flows.
+//
+// It also swaps recreateWork for a no-op so the restart goroutine
+// doesn't shell out to a real `docker compose`. The production worker
+// outlived the test and raced t.TempDir cleanup, which made these
+// tests flaky under the full `./...` run on a docker host. Tests that
+// need the goroutine to hold the jobs slot (the 409 idempotency test)
+// install their own blocking worker after calling restartMux.
 func restartMux(t *testing.T) (*httptest.Server, *stream.Hub) {
 	t.Helper()
 	jobsReset()
+	prevWork := recreateWork
+	recreateWork = func(context.Context, *stream.Hub, string, string, []string) {}
+	t.Cleanup(func() { recreateWork = prevWork })
 	hub := stream.New()
 	t.Cleanup(func() { hub.Close() })
 	mux := http.NewServeMux()
@@ -37,6 +48,16 @@ func TestRestart_StoppedInstance202(t *testing.T) {
 	seedInstance(t, "pebble", "0.6.4",
 		map[string]int{"app_user_ui": 44440}, registry.StatusStopped)
 	srv, _ := restartMux(t)
+
+	// Install a worker that signals completion so we can await the
+	// spawned goroutine before returning. Otherwise it reads the
+	// recreateWork global concurrently with restartMux's t.Cleanup
+	// restoring it — a residual read/write race under -race, plus
+	// jobs/buffer churn after the test ends.
+	done := make(chan struct{})
+	recreateWork = func(context.Context, *stream.Hub, string, string, []string) {
+		close(done)
+	}
 
 	resp, err := http.Post(srv.URL+"/api/instances/pebble/recreate",
 		"application/json", nil)
@@ -61,6 +82,7 @@ func TestRestart_StoppedInstance202(t *testing.T) {
 		t.Errorf("events_url = %q, want /api/instances/pebble/events",
 			body.EventsURL)
 	}
+	<-done
 }
 
 // TestRestart_RunningInstance202 — restart accepts a running
@@ -73,6 +95,14 @@ func TestRestart_RunningInstance202(t *testing.T) {
 		map[string]int{"app_user_ui": 44440}, registry.StatusRunning)
 	srv, _ := restartMux(t)
 
+	// Await the spawned worker so it finishes reading the recreateWork
+	// global (and runs its deferred jobs.Unregister + hub.ClearBuffer)
+	// before restartMux's t.Cleanup restores recreateWork.
+	done := make(chan struct{})
+	recreateWork = func(context.Context, *stream.Hub, string, string, []string) {
+		close(done)
+	}
+
 	resp, err := http.Post(srv.URL+"/api/instances/demo/recreate",
 		"application/json", nil)
 	if err != nil {
@@ -82,6 +112,7 @@ func TestRestart_RunningInstance202(t *testing.T) {
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("status = %d, want 202", resp.StatusCode)
 	}
+	<-done
 }
 
 // TestRestart_UnknownInstance404 — a name that's not in the
@@ -137,10 +168,22 @@ func TestRestart_AlreadyInFlight409(t *testing.T) {
 		map[string]int{"app_user_ui": 44440}, registry.StatusStopped)
 	srv, _ := restartMux(t)
 
-	// First POST claims the jobs slot. The goroutine will try to
-	// reach docker and almost certainly fail, but that doesn't
-	// matter for this test — what matters is the slot is held
-	// while the goroutine runs.
+	// Override restartMux's no-op worker with one that blocks until
+	// the test releases it, so the first POST deterministically holds
+	// the jobs slot while the second POST races for it. This replaces
+	// the old reliance on a real `docker compose` call being slow
+	// enough to still be running when the second POST arrives — that
+	// timing assumption is what made this test flaky.
+	started := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan struct{})
+	recreateWork = func(context.Context, *stream.Hub, string, string, []string) {
+		close(started)
+		<-release
+		close(done)
+	}
+
+	// First POST claims the slot; wait until the worker is in-flight.
 	resp1, err := http.Post(srv.URL+"/api/instances/busy/recreate",
 		"application/json", nil)
 	if err != nil {
@@ -150,6 +193,7 @@ func TestRestart_AlreadyInFlight409(t *testing.T) {
 	if resp1.StatusCode != http.StatusAccepted {
 		t.Fatalf("first POST status = %d, want 202", resp1.StatusCode)
 	}
+	<-started // the slot is now held — no timing guess
 
 	// Second POST must lose the race.
 	resp2, err := http.Post(srv.URL+"/api/instances/busy/recreate",
@@ -161,6 +205,11 @@ func TestRestart_AlreadyInFlight409(t *testing.T) {
 	if resp2.StatusCode != http.StatusConflict {
 		t.Fatalf("second POST status = %d, want 409", resp2.StatusCode)
 	}
+
+	// Release the worker and wait for it to return so its
+	// jobs.Unregister + buffer cleanup run before t.TempDir teardown.
+	close(release)
+	<-done
 }
 
 // TestProfilesFromComposeFiles — derivation helper used by the
