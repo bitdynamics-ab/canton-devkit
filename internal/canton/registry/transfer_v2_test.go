@@ -70,8 +70,8 @@ func TestGetTransferFactory_HappyPath(t *testing.T) {
 		t.Fatalf("GetTransferFactory: %v", err)
 	}
 	// Wire-level assertions.
-	if capturedPath != transferFactoryPath {
-		t.Errorf("path: got %q, want %q", capturedPath, transferFactoryPath)
+	if capturedPath != "/registry/transfer-instruction/v2/transfer-factory" {
+		t.Errorf("path: got %q, want the v2 transfer-factory path", capturedPath)
 	}
 	if capturedAuth != "Bearer test-token" {
 		t.Errorf("auth: got %q, want %q", capturedAuth, "Bearer test-token")
@@ -231,6 +231,87 @@ func TestGetTransferFactory_PropagatesAPIError(t *testing.T) {
 	}
 	if !strings.Contains(string(apiErr.Body), "insufficient funds") {
 		t.Errorf("body missing reason: %s", apiErr.Body)
+	}
+}
+
+// TestTransferFactoryChoiceArgs_V1Encoding pins the V1 (CIP-0056) wire
+// shape: { expectedAdmin, transfer{sender:Party,...}, extraArgs } — no
+// `actors`, and transfer.sender is a bare Party string (not an Account
+// object). Sending the V2 Account shape to a V1 registry is what caused
+// the live "Expected text but was {" 400; this guards the regression.
+func TestTransferFactoryChoiceArgs_V1Encoding(t *testing.T) {
+	args := TransferFactoryChoiceArgs{
+		Version:       TransferVersionV1,
+		ExpectedAdmin: "DSO::1220",
+		Transfer: TransferArgs{
+			Sender:           NewOwnedAccount("alice::1220"),
+			Receiver:         NewOwnedAccount("bob::1220"),
+			Amount:           "100",
+			InstrumentID:     InstrumentID{Admin: "DSO::1220", ID: "Amulet"},
+			RequestedAt:      time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC),
+			ExecuteBefore:    time.Date(2026, 5, 30, 13, 0, 0, 0, time.UTC),
+			InputHoldingCids: []string{"00cid-h1"},
+			Meta:             Metadata{Values: map[string]string{}},
+		},
+		Actors: []string{"alice::1220"},
+	}
+	raw, err := json.Marshal(args)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, raw)
+	}
+	if got["expectedAdmin"] != "DSO::1220" {
+		t.Errorf("expectedAdmin: got %v, want DSO::1220 — V1 needs it", got["expectedAdmin"])
+	}
+	if _, hasActors := got["actors"]; hasActors {
+		t.Errorf("V1 must NOT carry `actors`; body=%s", raw)
+	}
+	transfer, ok := got["transfer"].(map[string]any)
+	if !ok {
+		t.Fatalf("transfer not an object: %s", raw)
+	}
+	// The crux: sender/receiver must be bare Party strings.
+	if s, ok := transfer["sender"].(string); !ok || s != "alice::1220" {
+		t.Errorf("V1 transfer.sender must be a Party string, got %T %v", transfer["sender"], transfer["sender"])
+	}
+	if s, ok := transfer["receiver"].(string); !ok || s != "bob::1220" {
+		t.Errorf("V1 transfer.receiver must be a Party string, got %T %v", transfer["receiver"], transfer["receiver"])
+	}
+}
+
+// TestTransferFactoryChoiceArgs_V2Encoding pins the V2 (CIP-0112)
+// default shape: { transfer{sender:Account,...}, actors, extraArgs } —
+// no `expectedAdmin`. This is the empty-Version default.
+func TestTransferFactoryChoiceArgs_V2Encoding(t *testing.T) {
+	args := TransferFactoryChoiceArgs{
+		Transfer: TransferArgs{
+			Sender:   NewOwnedAccount("alice::1220"),
+			Receiver: NewOwnedAccount("bob::1220"),
+			Amount:   "100",
+			Meta:     Metadata{Values: map[string]string{}},
+		},
+		Actors: []string{"alice::1220"},
+	}
+	raw, err := json.Marshal(args)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, raw)
+	}
+	if _, hasExpected := got["expectedAdmin"]; hasExpected {
+		t.Errorf("V2 must NOT carry `expectedAdmin`; body=%s", raw)
+	}
+	if _, hasActors := got["actors"]; !hasActors {
+		t.Errorf("V2 needs `actors`; body=%s", raw)
+	}
+	transfer := got["transfer"].(map[string]any)
+	if _, ok := transfer["sender"].(map[string]any); !ok {
+		t.Errorf("V2 transfer.sender must be an Account object, got %T", transfer["sender"])
 	}
 }
 

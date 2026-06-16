@@ -44,28 +44,39 @@ func exerciseV2TransferFactory(
 	factoryID string,
 	transferArgs registry.TransferArgs,
 	factoryResp *registry.TransferFactoryResponse,
+	gen Generation,
 ) (*lapiv2.SubmitAndWaitForTransactionResponse, error) {
-	// Build the choice argument record. Per TransferInstructionV2.daml,
-	// TransferFactory_Transfer takes { transfer, actors, extraArgs } —
-	// actors is the controller list (the sender, who authorizes the
-	// transfer). There is NO expectedAdmin field on the choice (the
-	// admin is carried inside transfer.instrumentId).
+	// Build the choice argument record. The two generations differ:
+	//   V2 (TransferInstructionV2.daml): { transfer, actors, extraArgs }
+	//     — actors is the controller list (the sender).
+	//   V1 (TransferInstructionV1.daml): { expectedAdmin, transfer,
+	//     extraArgs } — expectedAdmin is the factory admin the choice
+	//     validates; the controller is fixed to transfer.sender.
 	extraArgs, err := buildExtraArgsRecord(factoryResp.ChoiceContextData(), registry.Metadata{Values: map[string]string{}})
 	if err != nil {
 		return nil, fmt.Errorf("build extraArgs: %w", err)
 	}
-	choiceArg := recordValue([]field{
-		{"transfer", buildTransferRecord(transferArgs)},
-		{"actors", listValue([]string{actAs}, partyValue)},
-		{"extraArgs", extraArgs},
-	})
+	var choiceArg *lapiv2.Value
+	if gen == genV1 {
+		choiceArg = recordValue([]field{
+			{"expectedAdmin", partyValue(transferArgs.InstrumentID.Admin)},
+			{"transfer", buildTransferRecord(transferArgs, gen)},
+			{"extraArgs", extraArgs},
+		})
+	} else {
+		choiceArg = recordValue([]field{
+			{"transfer", buildTransferRecord(transferArgs, gen)},
+			{"actors", listValue([]string{actAs}, partyValue)},
+			{"extraArgs", extraArgs},
+		})
+	}
 
 	disclosed, err := disclosedContractsToProto(factoryResp.DisclosedContractsList())
 	if err != nil {
 		return nil, fmt.Errorf("convert disclosed contracts: %w", err)
 	}
 
-	pkg, mod, entity := splitInterfaceID(TransferFactoryInterfaceV2)
+	pkg, mod, entity := splitInterfaceID(transferFactoryInterface(gen))
 	exercise := &lapiv2.Command{
 		Command: &lapiv2.Command_Exercise{
 			Exercise: &lapiv2.ExerciseCommand{
@@ -80,7 +91,7 @@ func exerciseV2TransferFactory(
 			},
 		},
 	}
-	return submitExercise(ctx, client, actAs, []*lapiv2.Command{exercise}, disclosed)
+	return submitExercise(ctx, client, actAs, []*lapiv2.Command{exercise}, disclosed, gen)
 }
 
 // exerciseV2AcceptInstruction submits TransferInstruction_Accept against
@@ -93,24 +104,35 @@ func exerciseV2AcceptInstruction(
 	actAs string,
 	instructionID string,
 	ctxResp *registry.ChoiceContextResponse,
+	gen Generation,
 ) (*lapiv2.SubmitAndWaitForTransactionResponse, error) {
 	extraArgs, err := buildExtraArgsRecord(ctxResp.ChoiceContextData, registry.Metadata{Values: map[string]string{}})
 	if err != nil {
 		return nil, fmt.Errorf("build extraArgs: %w", err)
 	}
-	// Per TransferInstructionV2.daml, TransferInstruction_Accept takes
-	// { actors, extraArgs } — actors is the controller (the receiver).
-	choiceArg := recordValue([]field{
-		{"actors", listValue([]string{actAs}, partyValue)},
-		{"extraArgs", extraArgs},
-	})
+	// TransferInstruction_Accept differs by generation:
+	//   V2 (TransferInstructionV2.daml): { actors, extraArgs } — actors
+	//     is the controller (the receiver).
+	//   V1 (TransferInstructionV1.daml): { extraArgs } only — the
+	//     controller is fixed to (view this).transfer.receiver.
+	var choiceArg *lapiv2.Value
+	if gen == genV1 {
+		choiceArg = recordValue([]field{
+			{"extraArgs", extraArgs},
+		})
+	} else {
+		choiceArg = recordValue([]field{
+			{"actors", listValue([]string{actAs}, partyValue)},
+			{"extraArgs", extraArgs},
+		})
+	}
 
 	disclosed, err := disclosedContractsToProto(ctxResp.DisclosedContracts)
 	if err != nil {
 		return nil, fmt.Errorf("convert disclosed contracts: %w", err)
 	}
 
-	pkg, mod, entity := splitInterfaceID(TransferInstructionInterfaceV2)
+	pkg, mod, entity := splitInterfaceID(transferInstructionInterface(gen))
 	exercise := &lapiv2.Command{
 		Command: &lapiv2.Command_Exercise{
 			Exercise: &lapiv2.ExerciseCommand{
@@ -125,7 +147,7 @@ func exerciseV2AcceptInstruction(
 			},
 		},
 	}
-	return submitExercise(ctx, client, actAs, []*lapiv2.Command{exercise}, disclosed)
+	return submitExercise(ctx, client, actAs, []*lapiv2.Command{exercise}, disclosed, gen)
 }
 
 // submitExercise is the shared submission seam: same Commands envelope
@@ -138,6 +160,7 @@ func submitExercise(
 	actAs string,
 	commands []*lapiv2.Command,
 	disclosed []*lapiv2.DisclosedContract,
+	gen Generation,
 ) (*lapiv2.SubmitAndWaitForTransactionResponse, error) {
 	cmdID, err := newCommandID()
 	if err != nil {
@@ -157,7 +180,7 @@ func submitExercise(
 		// contract id from the response. Without an explicit
 		// TransactionFormat the participant returns a minimal
 		// (event-less) transaction and the CID would be lost.
-		TransactionFormat: transferInstructionTxFormat(actAs),
+		TransactionFormat: transferInstructionTxFormat(actAs, gen),
 	}
 	// Default submission timeout: 60s. Commit latency on a healthy
 	// LocalNet is sub-second; the headroom covers GC / image-pull
@@ -176,8 +199,8 @@ func submitExercise(
 // ACS_DELTA shape is sufficient: an offer transfer's create of the
 // TransferInstruction is an ACS-positive event, so it shows up without
 // needing the heavier LEDGER_EFFECTS tree shape.
-func transferInstructionTxFormat(actAs string) *lapiv2.TransactionFormat {
-	pkg, mod, entity := splitInterfaceID(TransferInstructionInterfaceV2)
+func transferInstructionTxFormat(actAs string, gen Generation) *lapiv2.TransactionFormat {
+	pkg, mod, entity := splitInterfaceID(transferInstructionInterface(gen))
 	return &lapiv2.TransactionFormat{
 		TransactionShape: lapiv2.TransactionShape_TRANSACTION_SHAPE_ACS_DELTA,
 		EventFormat: &lapiv2.EventFormat{

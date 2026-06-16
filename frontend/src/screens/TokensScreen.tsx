@@ -137,7 +137,7 @@ export function TokensScreen() {
     | { kind: "transfer"; symbol: string }
     | { kind: "burn"; symbol: string }
     | { kind: "faucet"; symbol: string }
-    | { kind: "accept" }
+    | { kind: "accept"; id?: string; party?: string }
     | null
   >(null);
   const [topNotice, setTopNotice] = useState<{ tone: "ok" | "warn" | "err"; text: string } | null>(null);
@@ -601,7 +601,17 @@ export function TokensScreen() {
           parties={parties}
           onPartiesChanged={() => bump()}
           onClose={() => setModal(null)}
-          onDone={() => { setModal(null); bump(); }}
+          onDone={(offered) => {
+            bump();
+            if (offered) {
+              // Offer transfer: hand the id straight to a prefilled Accept
+              // modal so the receiver can settle it without copy-pasting.
+              setTopNotice({ tone: "ok", text: `Transfer offered — accept instruction ${offered.instructionId.slice(0, 12)}… to settle it` });
+              setModal({ kind: "accept", id: offered.instructionId, party: offered.receiver });
+            } else {
+              setModal(null);
+            }
+          }}
           onError={(e) => setTopNotice(renderActionError(e, "transfer failed"))}
         />
       )}
@@ -638,11 +648,15 @@ export function TokensScreen() {
       {modal?.kind === "accept" && (
         <ActionModal
           title="Accept transfer"
-          fields={[{ label: "Transfer instruction id", key: "id" }]}
+          initial={{ id: modal.id ?? "", party: modal.party ?? "" }}
+          fields={[
+            { label: "Transfer instruction id", key: "id" },
+            { label: "Receiver party", key: "party", party: true },
+          ]}
           instance={instance}
           parties={parties}
           onClose={() => setModal(null)}
-          submit={(v) => acceptTransfer(instance, v.id)}
+          submit={(v) => acceptTransfer(instance, v.id, v.party || undefined)}
           onDone={() => { setModal(null); bump(); }}
           onError={(e) => setTopNotice(renderActionError(e, "accept failed"))}
         />
@@ -663,7 +677,10 @@ function TransferModal({
   parties: PartyRef[];
   onPartiesChanged?: () => void;
   onClose: () => void;
-  onDone: () => void;
+  // offered is set when the transfer created a pending TransferInstruction
+  // (Offer kind, no auto-accept) the caller should route to Accept;
+  // undefined when it already settled.
+  onDone: (offered?: { instructionId: string; receiver: string }) => void;
   onError: (e: unknown) => void;
 }) {
   const [from, setFrom] = useState("");
@@ -693,8 +710,12 @@ function TransferModal({
     e.preventDefault();
     setBusy(true);
     try {
-      await transferToken(instance, symbol, from, to, amount, reason || undefined, undefined, autoAccept);
-      onDone();
+      const res = await transferToken(instance, symbol, from, to, amount, reason || undefined, undefined, autoAccept);
+      // A non-auto-accept Offer hands back an instruction id to accept;
+      // anything settled (auto-accept / Direct / self) just closes.
+      onDone(!res.settled && res.transferInstructionId
+        ? { instructionId: res.transferInstructionId, receiver: to }
+        : undefined);
     } catch (err) {
       onError(err);
     } finally {
@@ -982,7 +1003,7 @@ function Header({ right }: { right?: React.ReactNode }) {
   return (
     <header style={{ display: "flex", alignItems: "center", gap: 12 }}>
       <h2 style={{ color: W.text, fontSize: 18, margin: 0 }}>Tokens</h2>
-      <span style={{ color: W.dim, fontSize: 12 }}>V2 Token Standard instruments + actions</span>
+      <span style={{ color: W.dim, fontSize: 12 }}>Token Standard instruments + actions</span>
       <span style={{ marginLeft: "auto" }}>{right}</span>
     </header>
   );
@@ -1161,6 +1182,7 @@ function ActionModal({
   instance,
   parties,
   onPartiesChanged,
+  initial,
   onClose,
   submit,
   onDone,
@@ -1171,12 +1193,13 @@ function ActionModal({
   instance: string;
   parties: PartyRef[];
   onPartiesChanged?: () => void;
+  initial?: Record<string, string>;
   onClose: () => void;
   submit: (values: Record<string, string>) => Promise<void>;
   onDone: () => void;
   onError: (e: unknown) => void;
 }) {
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<Record<string, string>>(initial ?? {});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   async function onSubmit(e: React.FormEvent) {

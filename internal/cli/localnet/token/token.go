@@ -13,20 +13,25 @@ import (
 func Build() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "token",
-		Short: "Create and manage Canton Token Standard V2 instruments on LocalNet",
-		Long: `Manage Token Standard V2 token instruments on a LocalNet instance.
+		Short: "Create and manage Canton Token Standard instruments on LocalNet",
+		Long: `Manage Canton Token Standard token instruments on a LocalNet instance.
 
-The subcommands wrap the upstream V2 flow ([HoldingV2], TransferInstructionV2)
-for the convenience of a local developer: create a fresh issuer-managed
+The subcommands wrap the upstream token-standard flow ([HoldingV2] /
+TransferInstructionV2 and their V1/CIP-0056 counterparts) for the
+convenience of a local developer: create a fresh issuer-managed
 instrument, mint/transfer/burn holdings, fund parties, and query balances —
 all by party alias, with no JWTs, ports, or contract ids in your face.
 
-V2 only — V1 / CIP-0056 is not supported by this CLI. Selecting an
-alpha-channel Splice version with the --profile tokens-v2 overlay is
-required for the on-ledger surfaces to function (see "localnet versions"
-+ "localnet up --profile tokens-v2").
+Both token-standard generations are supported and routed per instrument:
+V1 / CIP-0056 (what real assets like Amulet / Canton Coin implement on
+stable releases such as Splice 0.6.4) and V2 / CIP-0112 (the alpha
+HoldingV2 / TransferInstructionV2 surface). Read + transfer/faucet work
+against either. Creating a NEW on-ledger instrument uses the bundled
+splice-test-token-v2, which needs an alpha-channel Splice version with the
+--profile tokens-v2 overlay (see "localnet versions" + "localnet up
+--profile tokens-v2"); the V1 read/transfer path needs no overlay.
 
-Quick start (on a running V2 instance):
+Quick start (on a running instance):
   token create  --instance <i> --endpoint <p> --non-interactive --name … --symbol …
   token mint    --instance <i> --endpoint <p> --instrument <sym> --to <party> --amount …
   token balances --instance <i> --endpoint <p>          # everyone's holdings at a glance

@@ -317,55 +317,6 @@ func resolveLedgerTokenRaw(conn LedgerConn) (string, error) {
 		role, conn.Instance, conn.Instance, role)
 }
 
-// holdingInterfaceFilterV2 builds the EventFormat the participant
-// accepts for "stream every contract that implements HoldingV2 and
-// give me the parsed HoldingViewV2 record on each event".
-//
-// Parties:
-//
-//	nil/empty → wildcard (FiltersForAnyParty). The participant gates
-//	            this by the Bearer JWT's claims — under LocalNet's
-//	            `unsafe` dev secret with a per-role token the wildcard
-//	            yields every party visible to that role.
-//	non-empty → per-party filter; only the listed parties' holdings
-//	            show up.
-//
-// The interface filter sets IncludeInterfaceView=true so the
-// participant ships the HoldingViewV2 record alongside the contract
-// id — no second round-trip to fetch the payload.
-func holdingInterfaceFilterV2(parties []string) *lapiv2.EventFormat {
-	pkg, mod, entity := parseInterfaceID(HoldingInterfaceV2)
-	filter := &lapiv2.Filters{
-		Cumulative: []*lapiv2.CumulativeFilter{{
-			IdentifierFilter: &lapiv2.CumulativeFilter_InterfaceFilter{
-				InterfaceFilter: &lapiv2.InterfaceFilter{
-					InterfaceId: &lapiv2.Identifier{
-						PackageId:  pkg,
-						ModuleName: mod,
-						EntityName: entity,
-					},
-					IncludeInterfaceView:    true,
-					IncludeCreatedEventBlob: false,
-				},
-			},
-		}},
-	}
-	if len(parties) == 0 {
-		return &lapiv2.EventFormat{
-			FiltersForAnyParty: filter,
-			Verbose:            true,
-		}
-	}
-	byParty := make(map[string]*lapiv2.Filters, len(parties))
-	for _, p := range parties {
-		byParty[p] = filter
-	}
-	return &lapiv2.EventFormat{
-		FiltersByParty: byParty,
-		Verbose:        true,
-	}
-}
-
 // parseInterfaceID splits the upstream `#package-name:Module:Entity`
 // form into the Identifier shape the Ledger API takes. The `#`-prefix
 // is the package-name reference that the participant resolves to
@@ -462,6 +413,30 @@ func holdingInterfaceFilter(surfaces Surfaces, parties []string) *lapiv2.EventFo
 	}
 	if surfaces.HasV2 {
 		cumulative = append(cumulative, interfaceFilterEntry(HoldingInterfaceV2))
+	}
+	filter := &lapiv2.Filters{Cumulative: cumulative}
+	if len(parties) == 0 {
+		return &lapiv2.EventFormat{FiltersForAnyParty: filter, Verbose: true}
+	}
+	byParty := make(map[string]*lapiv2.Filters, len(parties))
+	for _, p := range parties {
+		byParty[p] = filter
+	}
+	return &lapiv2.EventFormat{FiltersByParty: byParty, Verbose: true}
+}
+
+// transferInstructionInterfaceFilter builds the EventFormat matching a
+// pending TransferInstruction of either vetted generation, so a contract
+// can be classified by the interface it actually implements (used to
+// route accept by the instruction's own generation rather than the
+// participant's surfaces). Same shape as holdingInterfaceFilter.
+func transferInstructionInterfaceFilter(surfaces Surfaces, parties []string) *lapiv2.EventFormat {
+	var cumulative []*lapiv2.CumulativeFilter
+	if surfaces.HasV1 {
+		cumulative = append(cumulative, interfaceFilterEntry(TransferInstructionInterfaceV1))
+	}
+	if surfaces.HasV2 {
+		cumulative = append(cumulative, interfaceFilterEntry(TransferInstructionInterfaceV2))
 	}
 	filter := &lapiv2.Filters{Cumulative: cumulative}
 	if len(parties) == 0 {
@@ -595,15 +570,20 @@ func extractHoldingViewV1(view *lapiv2.InterfaceView) (holdingView, bool) {
 }
 
 // interfaceGeneration classifies a returned InterfaceView's interface id
-// by its Daml module name (HoldingV1 / HoldingV2).
+// by its Daml module name. Covers both the Holding interfaces (read
+// path) and the TransferInstruction interfaces (so a pending instruction
+// can be classified by the contract it is, not by the participant's
+// vetted surfaces).
 func interfaceGeneration(id *lapiv2.Identifier) (Generation, bool) {
 	if id == nil {
 		return 0, false
 	}
 	switch {
-	case strings.Contains(id.ModuleName, "HoldingV2"):
+	case strings.Contains(id.ModuleName, "HoldingV2"),
+		strings.Contains(id.ModuleName, "TransferInstructionV2"):
 		return genV2, true
-	case strings.Contains(id.ModuleName, "HoldingV1"):
+	case strings.Contains(id.ModuleName, "HoldingV1"),
+		strings.Contains(id.ModuleName, "TransferInstructionV1"):
 		return genV1, true
 	}
 	return 0, false

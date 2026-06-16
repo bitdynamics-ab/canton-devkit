@@ -38,27 +38,40 @@ import (
 
 // buildTransferRecord constructs the Daml `Transfer` record the
 // TransferFactory_Transfer choice argument expects under its `transfer`
-// field. Matches the field set + order from
-// TransferInstructionV2.daml:
+// field. The two generations differ in exactly one field:
 //
-//	data Transfer = Transfer with
-//	  sender           : Party
-//	  receiver         : Party
-//	  amount           : Decimal
-//	  instrumentId     : InstrumentId
-//	  requestedAt      : Time
-//	  executeBefore    : Time
-//	  inputHoldingCids : [ContractId Holding]
-//	  meta             : Metadata
+//	V2 (CIP-0112, TransferInstructionV2.daml):
+//	  sender   : Account      receiver : Account
+//	V1 (CIP-0056, TransferInstructionV1.daml):
+//	  sender   : Party        receiver : Party
 //
-// Field-label order matters for the participant's record decoder when
-// `verbose=true` is on the response side; for submissions the
-// participant accepts any order and matches by label. We emit in the
-// upstream-canonical order to stay greppable against the .daml source.
-func buildTransferRecord(t registry.TransferArgs) *lapiv2.Value {
+// (mirrors the read-path HoldingView.owner difference). The remaining
+// fields are identical across generations:
+//
+//	amount           : Decimal
+//	instrumentId     : InstrumentId
+//	requestedAt      : Time
+//	executeBefore    : Time
+//	inputHoldingCids : [ContractId Holding]
+//	meta             : Metadata
+//
+// For submissions the participant matches record fields by label, so
+// order is not load-bearing; we emit the upstream-canonical order to
+// stay greppable against the .daml source.
+func buildTransferRecord(t registry.TransferArgs, gen Generation) *lapiv2.Value {
+	var sender, receiver *lapiv2.Value
+	if gen == genV1 {
+		// V1 (CIP-0056): sender/receiver are bare Party.
+		sender = partyValue(accountParty(t.Sender))
+		receiver = partyValue(accountParty(t.Receiver))
+	} else {
+		// V2 (CIP-0112): sender/receiver are Account records.
+		sender = buildAccountRecord(t.Sender)
+		receiver = buildAccountRecord(t.Receiver)
+	}
 	return recordValue([]field{
-		{"sender", buildAccountRecord(t.Sender)},
-		{"receiver", buildAccountRecord(t.Receiver)},
+		{"sender", sender},
+		{"receiver", receiver},
 		{"amount", numericValue(t.Amount)},
 		{"instrumentId", buildInstrumentIDRecord(t.InstrumentID)},
 		{"requestedAt", timestampValue(t.RequestedAt)},
@@ -66,6 +79,15 @@ func buildTransferRecord(t registry.TransferArgs) *lapiv2.Value {
 		{"inputHoldingCids", listValue(t.InputHoldingCids, contractIDValue)},
 		{"meta", buildMetadataRecord(t.Meta)},
 	})
+}
+
+// accountParty flattens an Account to its owner party (or "" when None)
+// — the bare Party the V1 transfer shape uses for sender/receiver.
+func accountParty(a registry.Account) string {
+	if a.Owner != nil {
+		return *a.Owner
+	}
+	return ""
 }
 
 // buildAccountRecord:

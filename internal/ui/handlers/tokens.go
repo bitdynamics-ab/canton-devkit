@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	regclient "github.com/bitdynamics-ab/canton-devkit/internal/canton/registry"
@@ -518,7 +521,45 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 	opts.NoWait = body.NoWait
 	opts.AutoAccept = body.AutoAccept
 	opts.Reason = body.Reason
-	mapTokenError(w, token.RunTransfer(r.Context(), nil, opts), "transfer")
+	// Capture RunTransfer's emitted events so we can return the created
+	// TransferInstruction id to the client. Without it the two-step
+	// offer→accept flow is unusable from the UI: the receiver has no way
+	// to learn the id the Accept action needs. (LocalNet single-operator
+	// fix — the sender, who owns the receiver, gets the id back and can
+	// accept it.)
+	var buf bytes.Buffer
+	if err := runTokenTransfer(r.Context(), &buf, opts); err != nil {
+		mapTokenError(w, err, "transfer")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema_version":          types.SchemaVersion,
+		"transfer_instruction_id": extractEmittedID(buf.String()),
+		// settled is true when auto-accept chained the receiver-side
+		// accept (or a Direct/self transfer needed none) — the UI then
+		// skips the Accept step.
+		"settled": opts.AutoAccept,
+	})
+}
+
+// extractEmittedID scans RunTransfer's emitted "<verb>: {json}" lines
+// for a transfer_instruction_id (emitted on the "transfer complete"
+// verb). Returns "" when absent — e.g. a Direct/self transfer that
+// settled with no pending instruction, or a path that doesn't emit one.
+func extractEmittedID(emitted string) string {
+	for _, line := range strings.Split(emitted, "\n") {
+		brace := strings.Index(line, "{")
+		if brace < 0 {
+			continue
+		}
+		var payload struct {
+			TransferInstructionID string `json:"transfer_instruction_id"`
+		}
+		if json.Unmarshal([]byte(line[brace:]), &payload) == nil && payload.TransferInstructionID != "" {
+			return payload.TransferInstructionID
+		}
+	}
+	return ""
 }
 
 // handleTokenFaucet funds a party from a well-known source, auto-accepted.
@@ -564,12 +605,18 @@ func handleTokenAccept(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role := roleFromQuery(r)
-	err = token.RunAccept(r.Context(), nil, token.AcceptOptions{
+	err = runTokenAccept(r.Context(), token.AcceptOptions{
 		Instance:              instance,
 		TransferInstructionID: r.PathValue("id"),
-		Endpoint:              liveLedgerEndpoint(instance, role),
-		Role:                  role,
-		Insecure:              true,
+		// Party targets the receiver on a multi-party participant — the
+		// TransferInstruction_Accept controller is transfer.receiver, so
+		// without it RunAccept falls back to the JWT's first granted
+		// party, which is usually the wrong one. Mirrors the CLI's
+		// `token transfer accept --party` flag (parity).
+		Party:    r.URL.Query().Get("party"),
+		Endpoint: liveLedgerEndpoint(instance, role),
+		Role:     role,
+		Insecure: true,
 	})
 	mapTokenError(w, err, "accept")
 }
@@ -609,6 +656,18 @@ func handleTokenBurn(w http.ResponseWriter, r *http.Request) {
 // derive them from the instance registry + request role).
 var runTokenCreate = func(opts token.CreateOptions) (*token.CreateResult, error) {
 	return token.RunCreate(nil, opts)
+}
+
+// runTokenTransfer / runTokenAccept are indirection points for the
+// transfer + accept handlers so tests can assert the wiring — the
+// surfaced instruction id and the ?party= threading — without a live
+// ledger. Same package-var pattern as runTokenCreate.
+var runTokenTransfer = func(ctx context.Context, out io.Writer, opts token.TransferOptions) error {
+	return token.RunTransfer(ctx, out, opts)
+}
+
+var runTokenAccept = func(ctx context.Context, opts token.AcceptOptions) error {
+	return token.RunAccept(ctx, nil, opts)
 }
 
 // roleFromQuery returns the `?role=` value, defaulting to app-user.

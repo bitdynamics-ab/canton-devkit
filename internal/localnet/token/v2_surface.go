@@ -79,7 +79,50 @@ const (
 	// is the choice the receiver exercises on it; choice context comes
 	// from the registry's POST /choice-contexts/accept.
 	TransferInstructionInterfaceV2 = "#splice-api-token-transfer-instruction-v2:Splice.Api.Token.TransferInstructionV2:TransferInstruction"
+
+	// V1 (CIP-0056) transfer interfaces — the generation real tokens like
+	// Amulet implement on stable Splice releases. Same choice names as V2
+	// (TransferFactory_Transfer / TransferInstruction_Accept); only the
+	// package + module differ.
+	TransferFactoryInterfaceV1 = "#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferFactory"
+
+	TransferInstructionInterfaceV1 = "#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferInstruction"
 )
+
+// transferFactoryInterface / transferInstructionInterface pick the
+// interface id for an instrument's generation.
+func transferFactoryInterface(gen Generation) string {
+	if gen == genV1 {
+		return TransferFactoryInterfaceV1
+	}
+	return TransferFactoryInterfaceV2
+}
+
+func transferInstructionInterface(gen Generation) string {
+	if gen == genV1 {
+		return TransferInstructionInterfaceV1
+	}
+	return TransferInstructionInterfaceV2
+}
+
+// transferInstructionModule is the resolved Daml module a created
+// TransferInstruction carries for a generation — used to mine the
+// instruction id out of a submit response (the package id rotates; the
+// module name is stable).
+func transferInstructionModule(gen Generation) string {
+	if gen == genV1 {
+		return "Splice.Api.Token.TransferInstructionV1"
+	}
+	return "Splice.Api.Token.TransferInstructionV2"
+}
+
+// registryVersionSeg maps a generation to the registry URL path segment.
+func registryVersionSeg(gen Generation) string {
+	if gen == genV1 {
+		return "v1"
+	}
+	return "v2"
+}
 
 // Asset-specific choice / template names for the bundled
 // splice-test-token-v2 example token. These move with the upstream

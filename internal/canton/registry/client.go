@@ -71,6 +71,13 @@ type DialOptions struct {
 	// upstream rather than the SV-info default vhost. On a real DevNet
 	// (where scan has its own DNS name) this stays empty.
 	HostHeader string
+
+	// Version selects the token-standard transfer-instruction registry
+	// API generation ("v1" / "v2") — the
+	// /registry/transfer-instruction/{version}/... path segment. Empty
+	// defaults to "v2" (back-compat). Set "v1" for V1/CIP-0056 tokens
+	// like Amulet on a stable Splice release.
+	Version string
 }
 
 // Client is the typed Splice HTTP API wrapper. Safe for concurrent use
@@ -82,6 +89,7 @@ type Client struct {
 	http       *http.Client
 	userAgent  string
 	hostHeader string
+	version    string
 }
 
 // Dial constructs a Client. There is no network call here — the
@@ -111,12 +119,17 @@ func Dial(opts DialOptions) (*Client, error) {
 		ua = "canton-devkit/registry"
 	}
 
+	version := opts.Version
+	if version == "" {
+		version = "v2"
+	}
 	return &Client{
 		baseURL:    strings.TrimRight(opts.BaseURL, "/"),
 		token:      opts.Token,
 		http:       httpClient,
 		userAgent:  ua,
 		hostHeader: opts.HostHeader,
+		version:    version,
 	}, nil
 }
 

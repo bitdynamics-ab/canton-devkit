@@ -39,10 +39,10 @@ import (
 // runTransferLive is the live path RunTransfer dispatches to when
 // Endpoint is set. Returns the response's resulting TransferInstruction
 // CID (or new Holding CID for Direct kind) — caller prints / returns.
-func runTransferLive(ctx context.Context, out io.Writer, opts TransferOptions) (string, error) {
+func runTransferLive(ctx context.Context, out io.Writer, opts TransferOptions) (string, Generation, error) {
 	regBaseURL, regHost, err := resolveRegistryURL(opts.Instance, opts.RegistryURL)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
 	if err != nil {
@@ -60,7 +60,7 @@ func runTransferLive(ctx context.Context, out io.Writer, opts TransferOptions) (
 	}
 	client, cleanup, err := dialLedger(ctx, conn)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	defer cleanup()
 
@@ -72,31 +72,36 @@ func runTransferLive(ctx context.Context, out io.Writer, opts TransferOptions) (
 	// and the caller can retry (out of MVP scope).
 	holdings, err := listSenderHoldings(ctx, client, opts.From, ref.InstrumentID)
 	if err != nil {
-		return "", fmt.Errorf("list sender holdings: %w", err)
+		return "", 0, fmt.Errorf("list sender holdings: %w", err)
 	}
 	picked, total, err := selectInputHoldings(holdings, opts.Amount)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	emit(out, "transfer: selected", map[string]any{
 		"input_count": len(picked), "total_input": total, "amount": opts.Amount,
 	})
+
+	// Route by the selected instrument's generation (from its holdings):
+	// V1/CIP-0056 tokens like Amulet use the v1 registry + interfaces.
+	gen := pickGeneration(picked)
 
 	// Off-ledger factory lookup.
 	regCli, err := registry.Dial(registry.DialOptions{
 		BaseURL:    regBaseURL,
 		HostHeader: regHost,
 		Token:      registry.StaticToken(resolveRegistryToken(opts.Token, opts.Instance, opts.Role)),
+		Version:    registryVersionSeg(gen),
 	})
 	if err != nil {
-		return "", fmt.Errorf("dial registry: %w", err)
+		return "", 0, fmt.Errorf("dial registry: %w", err)
 	}
 	admin := ref.IssuerParty
 	if admin == "" {
 		admin = inferAdminFromHoldings(holdings)
 	}
 	if admin == "" {
-		return "", fmt.Errorf("could not determine instrument admin party — pass an instrument with a recorded issuer or rely on at least one holding being present for the sender")
+		return "", 0, fmt.Errorf("could not determine instrument admin party — pass an instrument with a recorded issuer or rely on at least one holding being present for the sender")
 	}
 	requestedAt, executeBefore := transferTimes()
 	transferArgs := registry.TransferArgs{
@@ -111,8 +116,13 @@ func runTransferLive(ctx context.Context, out io.Writer, opts TransferOptions) (
 	}
 	factoryReq := registry.TransferFactoryRequest{
 		ChoiceArguments: registry.TransferFactoryChoiceArgs{
-			Transfer: transferArgs,
-			Actors:   []string{opts.From},
+			// Version drives the choice-arg wire shape: V1/CIP-0056
+			// (Amulet) uses { expectedAdmin, transfer{Party sender}, … };
+			// V2/CIP-0112 uses { transfer{Account sender}, actors, … }.
+			Version:       registryVersionSeg(gen),
+			ExpectedAdmin: admin,
+			Transfer:      transferArgs,
+			Actors:        []string{opts.From},
 			ExtraArgs: registry.ExtraArgs{
 				Context: registry.Metadata{Values: map[string]string{}},
 				Meta:    registry.Metadata{Values: map[string]string{}},
@@ -121,7 +131,7 @@ func runTransferLive(ctx context.Context, out io.Writer, opts TransferOptions) (
 	}
 	factoryResp, err := regCli.GetTransferFactory(ctx, factoryReq)
 	if err != nil {
-		return "", fmt.Errorf("registry transfer-factory: %w", err)
+		return "", 0, fmt.Errorf("registry transfer-factory: %w", err)
 	}
 	emit(out, "transfer: factory", map[string]any{
 		"factory_id":    factoryResp.FactoryID,
@@ -132,17 +142,17 @@ func runTransferLive(ctx context.Context, out io.Writer, opts TransferOptions) (
 	// On-ledger exercise.
 	resp, err := exerciseV2TransferFactory(
 		ctx, client, opts.From,
-		factoryResp.FactoryID, transferArgs, factoryResp,
+		factoryResp.FactoryID, transferArgs, factoryResp, gen,
 	)
 	if err != nil {
-		return "", fmt.Errorf("exercise TransferFactory_Transfer: %w", err)
+		return "", 0, fmt.Errorf("exercise TransferFactory_Transfer: %w", err)
 	}
-	instructionID := findCreatedInstructionID(resp)
+	instructionID := findCreatedInstructionID(resp, gen)
 	emit(out, "transfer: submitted", map[string]any{
 		"transfer_instruction_id": instructionID,
 		"update_id":               resp.GetTransaction().GetUpdateId(),
 	})
-	return instructionID, nil
+	return instructionID, gen, nil
 }
 
 // runAcceptLive is the receiver-side counterpart.
@@ -164,10 +174,39 @@ func runAcceptLive(ctx context.Context, out io.Writer, opts AcceptOptions) error
 	}
 	defer cleanup()
 
+	// The receiver acts on the instruction. Use the explicit --party
+	// when given (required when the participant hosts multiple
+	// parties); otherwise fall back to the first Act-As party granted
+	// to the JWT (correct for a single-party participant). Resolved
+	// first because we inspect the instruction as this party below.
+	receiver := opts.Party
+	if receiver == "" {
+		receiver, err = pickActAsParty(ctx, client)
+		if err != nil {
+			return fmt.Errorf("resolve receiver party: %w", err)
+		}
+	}
+
+	// Route by the INSTRUCTION's generation, not the participant's vetted
+	// surfaces. A V1 Amulet instruction must be accepted with V1
+	// interfaces + the v1 registry path even on a participant that also
+	// vets V2 — deriving from surfaces (prefer-V2) would misroute it and
+	// strand the transfer. The caller may pass the gen directly (the
+	// in-process auto-accept knows the gen the transfer just used); zero
+	// means inspect the on-ledger instruction contract.
+	gen := opts.Gen
+	if gen == 0 {
+		gen, err = instructionGeneration(ctx, client, opts.TransferInstructionID, receiver)
+		if err != nil {
+			return fmt.Errorf("determine instruction generation: %w", err)
+		}
+	}
+
 	regCli, err := registry.Dial(registry.DialOptions{
 		BaseURL:    regBaseURL,
 		HostHeader: regHost,
 		Token:      registry.StaticToken(resolveRegistryToken(opts.Token, opts.Instance, opts.Role)),
+		Version:    registryVersionSeg(gen),
 	})
 	if err != nil {
 		return fmt.Errorf("dial registry: %w", err)
@@ -178,19 +217,7 @@ func runAcceptLive(ctx context.Context, out io.Writer, opts AcceptOptions) error
 		return fmt.Errorf("registry accept choice-context: %w", err)
 	}
 
-	// The receiver acts on the instruction. Use the explicit --party
-	// when given (required when the participant hosts multiple
-	// parties); otherwise fall back to the first Act-As party granted
-	// to the JWT (correct for a single-party participant).
-	receiver := opts.Party
-	if receiver == "" {
-		receiver, err = pickActAsParty(ctx, client)
-		if err != nil {
-			return fmt.Errorf("resolve receiver party: %w", err)
-		}
-	}
-
-	resp, err := exerciseV2AcceptInstruction(ctx, client, receiver, opts.TransferInstructionID, ctxResp)
+	resp, err := exerciseV2AcceptInstruction(ctx, client, receiver, opts.TransferInstructionID, ctxResp, gen)
 	if err != nil {
 		return fmt.Errorf("exercise TransferInstruction_Accept: %w", err)
 	}
@@ -212,7 +239,8 @@ type holdingRef struct {
 	AccountID  string // account.id
 	Admin      string
 	Instrument string
-	Amount     string // decimal string, untouched precision
+	Amount     string     // decimal string, untouched precision
+	Gen        Generation // the token-standard generation this holding was read through
 }
 
 func contractIDsOf(h []holdingRef) []string {
@@ -221,6 +249,73 @@ func contractIDsOf(h []holdingRef) []string {
 		out[i] = x.ContractID
 	}
 	return out
+}
+
+// pickGeneration returns the generation of the holdings being transferred
+// — they're all the same instrument, so the same generation. Defaults to
+// V2 when unset (the historical behaviour).
+func pickGeneration(h []holdingRef) Generation {
+	for _, x := range h {
+		if x.Gen != 0 {
+			return x.Gen
+		}
+	}
+	return genV2
+}
+
+// instructionGeneration determines a pending TransferInstruction's
+// token-standard generation by inspecting which TransferInstruction
+// interface (V1 or V2) the on-ledger contract actually implements —
+// authoritative, unlike guessing from the participant's vetted surfaces.
+// The receiver is a stakeholder, so the instruction is visible in their
+// ACS. interfaceGeneration prefers V2 when a contract somehow implements
+// both, matching the holdings path.
+func instructionGeneration(ctx context.Context, client *ledger.Client, instructionID, party string) (Generation, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	surfaces, err := discoverTokenSurfaces(ctx, client)
+	if err != nil {
+		return 0, err
+	}
+	if !surfaces.Any() {
+		return 0, fmt.Errorf("no token-standard package vetted on this participant")
+	}
+	end, err := client.LedgerEnd(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("ledger end: %w", err)
+	}
+	stream, err := client.ActiveContracts(ctx, ledger.ActiveContractsRequest{
+		ActiveAtOffset: end.Offset,
+		EventFormat:    transferInstructionInterfaceFilter(surfaces, []string{party}),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("ACS query: %w", err)
+	}
+	for item := range stream {
+		if item.Err != nil {
+			return 0, fmt.Errorf("ACS stream: %w", item.Err)
+		}
+		entry, ok := item.Value.ContractEntry.(*lapiv2.GetActiveContractsResponse_ActiveContract)
+		if !ok {
+			continue
+		}
+		created := entry.ActiveContract.GetCreatedEvent()
+		if created == nil || created.GetContractId() != instructionID {
+			continue
+		}
+		// Classify by the richest interface the instruction implements.
+		best := Generation(0)
+		for _, iv := range created.GetInterfaceViews() {
+			if g, ok := interfaceGeneration(iv.GetInterfaceId()); ok && g > best {
+				best = g
+			}
+		}
+		if best != 0 {
+			return best, nil
+		}
+		return 0, fmt.Errorf("transfer instruction %s implements no known TransferInstruction interface", instructionID)
+	}
+	return 0, fmt.Errorf("transfer instruction %s not visible to %s — already settled, withdrawn, or wrong party", instructionID, party)
 }
 
 // listSenderHoldings runs an ACS query filtered by HoldingInterfaceV2
@@ -232,13 +327,22 @@ func listSenderHoldings(ctx context.Context, client *ledger.Client, sender, inst
 	// tears down the stream pump goroutine instead of leaking it.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	// Query every vetted holding surface so a V1 token (Amulet) is found
+	// for coin selection on a stable release, not just V2.
+	surfaces, err := discoverTokenSurfaces(ctx, client)
+	if err != nil {
+		return nil, err
+	}
+	if !surfaces.Any() {
+		return nil, fmt.Errorf("no token-standard Holding package vetted on this participant")
+	}
 	end, err := client.LedgerEnd(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("ledger end: %w", err)
 	}
 	stream, err := client.ActiveContracts(ctx, ledger.ActiveContractsRequest{
 		ActiveAtOffset: end.Offset,
-		EventFormat:    holdingInterfaceFilterV2([]string{sender}),
+		EventFormat:    holdingInterfaceFilter(surfaces, []string{sender}),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("ACS query: %w", err)
@@ -256,26 +360,25 @@ func listSenderHoldings(ctx context.Context, client *ledger.Client, sender, inst
 		if created == nil {
 			continue
 		}
-		// HoldingV2 is queried as an interface, so the view we want
-		// is the first InterfaceView whose interface id matches.
-		for _, iv := range created.GetInterfaceViews() {
-			view, ok := extractHoldingViewV2(iv)
-			if !ok || view.Owner != sender {
-				continue
-			}
-			if instrumentID != "" && view.InstrumentID != instrumentID {
-				continue
-			}
-			out = append(out, holdingRef{
-				ContractID: created.GetContractId(),
-				Owner:      view.Owner,
-				Provider:   view.Provider,
-				AccountID:  view.AccountID,
-				Admin:      view.Admin,
-				Instrument: view.InstrumentID,
-				Amount:     view.Amount,
-			})
+		// One holding per contract (prefers the richer V2 view when a
+		// contract implements both interfaces); tagged with its generation.
+		view, ok := extractBestHoldingView(created.GetInterfaceViews())
+		if !ok || view.Owner != sender {
+			continue
 		}
+		if instrumentID != "" && view.InstrumentID != instrumentID {
+			continue
+		}
+		out = append(out, holdingRef{
+			ContractID: created.GetContractId(),
+			Owner:      view.Owner,
+			Provider:   view.Provider,
+			AccountID:  view.AccountID,
+			Admin:      view.Admin,
+			Instrument: view.InstrumentID,
+			Amount:     view.Amount,
+			Gen:        view.Generation,
+		})
 	}
 	return out, nil
 }
@@ -389,11 +492,12 @@ func transferTimes() (time.Time, time.Time) {
 // response for a created event whose template / interface implements
 // TransferInstructionV2. Returns "" when the transfer was Direct kind
 // (no instruction created — the receiver's Holding shows up instead).
-func findCreatedInstructionID(resp *lapiv2.SubmitAndWaitForTransactionResponse) string {
+func findCreatedInstructionID(resp *lapiv2.SubmitAndWaitForTransactionResponse, gen Generation) string {
 	tx := resp.GetTransaction()
 	if tx == nil {
 		return ""
 	}
+	wantModule := transferInstructionModule(gen)
 	for _, ev := range tx.GetEvents() {
 		created := ev.GetCreated()
 		if created == nil {
@@ -404,9 +508,8 @@ func findCreatedInstructionID(resp *lapiv2.SubmitAndWaitForTransactionResponse) 
 			if id == nil {
 				continue
 			}
-			// Module + entity match is enough — the package id is
-			// the alpha snapshot hash and rotates weekly.
-			if id.GetModuleName() == "Splice.Api.Token.TransferInstructionV2" &&
+			// Module + entity match is enough — the package id rotates.
+			if id.GetModuleName() == wantModule &&
 				id.GetEntityName() == "TransferInstruction" {
 				return created.GetContractId()
 			}
