@@ -2,6 +2,7 @@ package localnet
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -17,7 +18,10 @@ import (
 //	localnet up mynet --name x   # error: ambiguous
 //	localnet up                  # error: name required
 func resolveName(cmd *cobra.Command, args []string) (string, error) {
-	hasPos := len(args) > 0
+	// An empty/whitespace positional (e.g. `up ""`) counts as not
+	// provided, so it falls through to the generic "name required" message
+	// rather than a --name-flavored validation error from a blank name.
+	hasPos := len(args) > 0 && strings.TrimSpace(args[0]) != ""
 	hasFlag := cmd.Flags().Changed("name")
 	switch {
 	case hasPos && hasFlag:
