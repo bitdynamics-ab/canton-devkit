@@ -236,6 +236,27 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	defer release()
 	prog.FinishStep(StepAcquireLock, "")
 
+	// Re-up profile continuity (#161). On a plain `down` → `up` with no
+	// explicit --profile, re-enable the opt-in profiles the instance was
+	// last brought up with, so observability / tokens-v2 don't silently
+	// vanish on a CLI restart (the Web UI Restart already preserves them).
+	// state.Profiles persists the FULL set (adapter base + opt-ins), so we
+	// subtract the adapter base to recover just the opt-ins — enabledProfiles
+	// re-adds the base below, so there's no double-counting. An explicit
+	// --profile still wins (overrides, never merges). Best-effort: a
+	// missing/old state.json leaves opts.Profiles empty (pre-#161 behavior).
+	if len(opts.Profiles) == 0 {
+		if prior, rerr := registry.Read(opts.Name); rerr == nil {
+			if optIns := subtractProfiles(prior.Profiles, adapter.Profiles()); len(optIns) > 0 {
+				opts.Profiles = optIns
+				prog.Warn(fmt.Sprintf(
+					"re-enabling profiles from the previous up of %q: %s "+
+						"(pass --profile explicitly to change the set)",
+					opts.Name, strings.Join(optIns, ", ")))
+			}
+		}
+	}
+
 	// 3. Preflight (Docker CLI / daemon / Compose v2 / disk / memory).
 	// Host TCP ports are NOT preflight-checked — DevKit allocates them
 	// ephemerally (step 8) so port availability is never a precondition.
