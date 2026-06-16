@@ -48,6 +48,7 @@ func NewRouter(assets http.Handler, hub *stream.Hub, opts ...RouterOption) http.
 	handlers.MountAuth(mux)
 	handlers.MountSpliceVersions(mux)
 	handlers.MountPreflight(mux)
+	handlers.MountDoctor(mux) // host-readiness diagnostics (CLI `localnet doctor` parity)
 	handlers.MountMetrics(mux)
 	handlers.MountSnapshots(mux)    // UI parity for snapshot/restore
 	handlers.MountDAR(mux, hub)     // DAR Manager (list/upload/inspect/diff/vetting/watch)
@@ -179,6 +180,8 @@ func featureForPath(path string) string {
 		return "tokens"
 	case strings.HasPrefix(path, "/api/skills"):
 		return "skills"
+	case strings.HasPrefix(path, "/api/doctor"):
+		return "doctor"
 	case strings.HasPrefix(path, "/api/snapshots"):
 		return "backup"
 	case strings.HasPrefix(path, "/api/instances"):

@@ -449,6 +449,26 @@ export const fetchPreflight = (version: string) =>
     `/api/preflight?version=${encodeURIComponent(version)}`,
   );
 
+// fetchDoctor runs the host-readiness diagnostic — the Web UI
+// counterpart of `dpm localnet doctor`. It calls the same shared
+// localnet.CollectDoctor collector the CLI uses, so it returns the
+// resource/Docker gate PLUS the two doctor-only advisories
+// (platform-support matrix + host-port availability) that
+// /api/preflight omits.
+//
+// `version` (optional) sets the Splice tag whose memory thresholds the
+// resource checks are graded against — defaults to the curated
+// "latest" alias server-side. Always returns a PreflightReport (200);
+// `ok=false` is a diagnostic result, not a thrown error — only a
+// malformed request (unknown version / non-numeric port_base) or a
+// server-side collector failure rejects.
+export const fetchDoctor = (version?: string) =>
+  apiFetch<PreflightReport>(
+    version
+      ? `/api/doctor?version=${encodeURIComponent(version)}`
+      : "/api/doctor",
+  );
+
 // stopInstance invokes POST /api/instances/{name}/down — runs
 // `docker compose down` against the named instance, preserving
 // Docker volumes and the registry entry (status=stopped).

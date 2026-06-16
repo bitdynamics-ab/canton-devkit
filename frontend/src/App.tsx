@@ -5,6 +5,7 @@ import { Shell } from "./shell/Shell";
 import { InstanceSelectionProvider } from "./shell/useInstanceSelection";
 import { ErrorBoundary } from "./shell/ErrorBoundary";
 import { Dashboard } from "./screens/Dashboard";
+import { DoctorScreen } from "./screens/DoctorScreen";
 import { Placeholder } from "./screens/Placeholder";
 import { MetricsScreen } from "./screens/MetricsScreen";
 import { DARScreen } from "./screens/DARScreen";
@@ -75,6 +76,7 @@ function RoutedSurface() {
   return (
     <Routes>
       <Route path="/" element={<Guard routeKey={loc.pathname}><Dashboard /></Guard>} />
+      <Route path="/doctor/*" element={<Guard routeKey={loc.pathname}><DoctorScreen /></Guard>} />
       <Route path="/wallet/*" element={<Guard routeKey={loc.pathname}><WalletScreen /></Guard>} />
       <Route path="/explorer/*" element={<Guard routeKey={loc.pathname}><ExplorerScreen /></Guard>} />
       <Route path="/dar/*" element={<Guard routeKey={loc.pathname}><DARScreen /></Guard>} />

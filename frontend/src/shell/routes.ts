@@ -20,6 +20,10 @@ export interface NavEntry {
 
 export const NAV: readonly NavEntry[] = [
   { to: "/", label: "Overview", instanceScoped: false },
+  // Doctor diagnoses the HOST (Docker, resources, platform), not a
+  // single instance, so it is not instanceScoped — it reads the same
+  // regardless of which instance the picker shows.
+  { to: "/doctor", label: "Doctor", instanceScoped: false },
   { to: "/wallet", label: "Wallet", instanceScoped: true },
   { to: "/explorer", label: "Explorer", instanceScoped: true },
   { to: "/dar", label: "DAR Manager", instanceScoped: true },

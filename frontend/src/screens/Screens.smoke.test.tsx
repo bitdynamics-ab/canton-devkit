@@ -37,6 +37,7 @@ import { DARScreen } from "./DARScreen";
 import { MetricsScreen } from "./MetricsScreen";
 import { ExplorerScreen } from "./ExplorerScreen";
 import { WalletScreen } from "./WalletScreen";
+import { DoctorScreen } from "./DoctorScreen";
 
 interface InstanceShape {
   name: string;
@@ -127,6 +128,34 @@ function stubFetch(instance: InstanceShape) {
           }),
         );
       }
+      // Doctor: host-readiness report (not instance-scoped) + the
+      // version list its picker reads.
+      if (url.startsWith("/api/doctor")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              schema_version: 1,
+              ok: true,
+              summary: "All checks passed — host is ready for `localnet up`",
+              sections: [
+                {
+                  title: "System",
+                  checks: [{ label: "Docker daemon", result: "pass" }],
+                },
+              ],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      if (url.startsWith("/api/splice/versions")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ schema_version: 1, latest_alias: "0.6.4", versions: [] }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
       return Promise.resolve(new Response("not found", { status: 404 }));
     }),
   );
@@ -206,6 +235,22 @@ describe("WalletScreen smoke", () => {
     // The login hint is the most distinctive WalletScreen artefact.
     await waitFor(() => {
       expect(screen.getByText(/Login:/i)).toBeTruthy();
+    });
+  });
+});
+
+describe("DoctorScreen smoke", () => {
+  it("renders the host-readiness report without throwing", async () => {
+    stubFetch({ name: "demo" });
+    render(
+      <Providers>
+        <DoctorScreen />
+      </Providers>,
+    );
+    // The screen heading is the most stable anchor; it renders before
+    // the async report resolves.
+    await waitFor(() => {
+      expect(screen.getByText("Doctor")).toBeTruthy();
     });
   });
 });
