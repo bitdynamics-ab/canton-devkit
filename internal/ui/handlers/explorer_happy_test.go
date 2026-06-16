@@ -13,6 +13,8 @@ import (
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 	adminv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2/admin"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -39,10 +41,32 @@ type fakeParticipant struct {
 	// updates are sent in order on GetUpdates. They should be
 	// ascending-offset to mimic the real participant.
 	updates []*lapiv2.GetUpdatesResponse
+
+	// lastUpdatesReq captures the most recent GetUpdates request so a
+	// test can assert the party/template filter the handler built.
+	lastUpdatesReq *lapiv2.GetUpdatesRequest
+
+	// byID maps an update id → the response GetUpdateById should
+	// return; lastUpdateByIDReq captures the request for filter
+	// assertions. A missing id yields a NotFound (nil entry).
+	byID            map[string]*lapiv2.GetUpdateResponse
+	lastUpdateByID  *lapiv2.GetUpdateByIdRequest
+	updateByIDError error
 }
 
 func (f *fakeParticipant) GetLedgerEnd(_ context.Context, _ *lapiv2.GetLedgerEndRequest) (*lapiv2.GetLedgerEndResponse, error) {
 	return &lapiv2.GetLedgerEndResponse{Offset: f.ledgerEnd}, nil
+}
+
+func (f *fakeParticipant) GetUpdateById(_ context.Context, req *lapiv2.GetUpdateByIdRequest) (*lapiv2.GetUpdateResponse, error) {
+	f.lastUpdateByID = req
+	if f.updateByIDError != nil {
+		return nil, f.updateByIDError
+	}
+	if r, ok := f.byID[req.GetUpdateId()]; ok {
+		return r, nil
+	}
+	return nil, status.Errorf(codes.NotFound, "no update %q", req.GetUpdateId())
 }
 
 func (f *fakeParticipant) ListUserRights(_ context.Context, _ *adminv2.ListUserRightsRequest) (*adminv2.ListUserRightsResponse, error) {
@@ -55,7 +79,8 @@ func (f *fakeParticipant) ListUserRights(_ context.Context, _ *adminv2.ListUserR
 	return &adminv2.ListUserRightsResponse{Rights: rights}, nil
 }
 
-func (f *fakeParticipant) GetUpdates(_ *lapiv2.GetUpdatesRequest, stream grpc.ServerStreamingServer[lapiv2.GetUpdatesResponse]) error {
+func (f *fakeParticipant) GetUpdates(req *lapiv2.GetUpdatesRequest, stream grpc.ServerStreamingServer[lapiv2.GetUpdatesResponse]) error {
+	f.lastUpdatesReq = req
 	for _, u := range f.updates {
 		if err := stream.Send(u); err != nil {
 			return err

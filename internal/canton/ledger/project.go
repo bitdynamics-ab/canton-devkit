@@ -1,6 +1,8 @@
 package ledger
 
 import (
+	"encoding/json"
+
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
 
@@ -95,6 +97,71 @@ func ProjectTransactionEvents(tx *lapiv2.Transaction) []EventSummary {
 	return out
 }
 
+// ReplayEvent is the flattened view of one event in a REPLAYED
+// transaction (TRANSACTION_SHAPE_LEDGER_EFFECTS). Unlike EventSummary
+// — which projects the flat ACS-delta shape `tx ls` / `contracts
+// watch` use — replay carries the NodeID and the exercised-choice
+// detail so the per-party visibility projection (the proposal's `tx
+// replay`) renders the full tree. Both the CLI `tx replay` and the
+// Web UI replay endpoint build their wire rows from this so they can
+// never drift on which fields a replay surfaces.
+type ReplayEvent struct {
+	Kind          EventKind
+	NodeID        int32
+	ContractID    string
+	TemplateID    string
+	Choice        string   // exercised only
+	ActingParties []string // exercised only
+	Consuming     bool     // exercised only
+	Signatories   []string // created only
+	Observers     []string // created only
+}
+
+// ProjectReplayEvents flattens a replayed transaction's events into
+// ReplayEvent rows in their original (tree-walk) order. A nil
+// transaction yields a nil slice.
+func ProjectReplayEvents(tx *lapiv2.Transaction) []ReplayEvent {
+	if tx == nil {
+		return nil
+	}
+	evs := tx.GetEvents()
+	out := make([]ReplayEvent, 0, len(evs))
+	for _, e := range evs {
+		switch {
+		case e.GetCreated() != nil:
+			ce := e.GetCreated()
+			out = append(out, ReplayEvent{
+				Kind:        EventCreated,
+				NodeID:      ce.GetNodeId(),
+				ContractID:  ce.GetContractId(),
+				TemplateID:  identString(ce.GetTemplateId()),
+				Signatories: ce.GetSignatories(),
+				Observers:   ce.GetObservers(),
+			})
+		case e.GetExercised() != nil:
+			xe := e.GetExercised()
+			out = append(out, ReplayEvent{
+				Kind:          EventExercised,
+				NodeID:        xe.GetNodeId(),
+				ContractID:    xe.GetContractId(),
+				TemplateID:    identString(xe.GetTemplateId()),
+				Choice:        xe.GetChoice(),
+				ActingParties: xe.GetActingParties(),
+				Consuming:     xe.GetConsuming(),
+			})
+		case e.GetArchived() != nil:
+			ae := e.GetArchived()
+			out = append(out, ReplayEvent{
+				Kind:       EventArchived,
+				NodeID:     ae.GetNodeId(),
+				ContractID: ae.GetContractId(),
+				TemplateID: identString(ae.GetTemplateId()),
+			})
+		}
+	}
+	return out
+}
+
 // identString renders a proto Identifier as "package:Module:Entity"
 // — the canonical form both surfaces show. Empty string for a nil id.
 func identString(id *lapiv2.Identifier) string {
@@ -102,4 +169,67 @@ func identString(id *lapiv2.Identifier) string {
 		return ""
 	}
 	return id.GetPackageId() + ":" + id.GetModuleName() + ":" + id.GetEntityName()
+}
+
+// RecordToMap converts a Daml-LF Record proto into a JSON-friendly
+// map[string]any, recursing into nested records and lists. Shared by
+// the Web UI Explorer (contract drawer + ACS payload preview) and the
+// CLI `contracts ls --format json` so both decode payloads
+// identically. Best-effort: value kinds the decoder hasn't
+// enumerated fall back to their textual proto form rather than
+// panicking. Returns nil for a nil record.
+func RecordToMap(r *lapiv2.Record) map[string]any {
+	if r == nil {
+		return nil
+	}
+	out := make(map[string]any, len(r.Fields))
+	for _, f := range r.Fields {
+		out[f.GetLabel()] = ValueToAny(f.GetValue())
+	}
+	return out
+}
+
+// ValueToAny converts a single Daml-LF Value proto into a
+// JSON-friendly Go value. See [RecordToMap].
+func ValueToAny(v *lapiv2.Value) any {
+	if v == nil {
+		return nil
+	}
+	switch s := v.Sum.(type) {
+	case *lapiv2.Value_Bool:
+		return s.Bool
+	case *lapiv2.Value_Int64:
+		return s.Int64
+	case *lapiv2.Value_Numeric:
+		return s.Numeric
+	case *lapiv2.Value_Text:
+		return s.Text
+	case *lapiv2.Value_Party:
+		return s.Party
+	case *lapiv2.Value_ContractId:
+		return s.ContractId
+	case *lapiv2.Value_Date:
+		return s.Date
+	case *lapiv2.Value_Timestamp:
+		return s.Timestamp
+	case *lapiv2.Value_Record:
+		return RecordToMap(s.Record)
+	case *lapiv2.Value_List:
+		items := s.List.GetElements()
+		out := make([]any, len(items))
+		for i, e := range items {
+			out[i] = ValueToAny(e)
+		}
+		return out
+	case *lapiv2.Value_Optional:
+		opt := s.Optional.GetValue()
+		if opt == nil {
+			return nil
+		}
+		return ValueToAny(opt)
+	default:
+		// Variants, enums, maps, GenMap — proto-textual fallback.
+		b, _ := json.Marshal(v.Sum)
+		return string(b)
+	}
 }

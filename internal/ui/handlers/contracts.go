@@ -40,6 +40,7 @@ import (
 	"strconv"
 	"time"
 
+	apitypes "github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
@@ -92,21 +93,11 @@ const (
 	contractsStreamHeartbeat = 25 * time.Second
 )
 
-// contractRow is the projection we expose over JSON. We deliberately
-// flatten the proto's discriminated-union shape into a flat struct so
-// the frontend doesn't have to walk the oneof — the table only cares
-// about ActiveContract entries; in-flight reassignments are skipped
-// in the MVP and tracked as a follow-up.
-type contractRow struct {
-	ContractID     string         `json:"contract_id"`
-	TemplateID     string         `json:"template_id"`
-	Payload        map[string]any `json:"payload,omitempty"`
-	Signatories    []string       `json:"signatories"`
-	Observers      []string       `json:"observers"`
-	CreatedAt      string         `json:"created_at,omitempty"`
-	PackageName    string         `json:"package_name,omitempty"`
-	PackageVersion string         `json:"package_version,omitempty"`
-}
+// The ACS row + list response shapes are shared with the CLI
+// `contracts ls --format json` via internal/api/types
+// (apitypes.ContractRow / ContractsListResponse), so the two surfaces
+// can never drift and TestSchemaShape_GoldenPinsFieldLevelShape pins
+// the field layout against frontend/src/api.ts.
 
 func handleContractsList(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
@@ -231,7 +222,7 @@ func handleContractsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows := make([]contractRow, 0, limit)
+	rows := make([]apitypes.ContractRow, 0, limit)
 	truncated := false
 	for item := range stream {
 		if item.Err != nil {
@@ -280,7 +271,7 @@ func handleContractsList(w http.ResponseWriter, r *http.Request) {
 		if obs == nil {
 			obs = []string{}
 		}
-		row := contractRow{
+		row := apitypes.ContractRow{
 			ContractID:     ev.GetContractId(),
 			TemplateID:     formatTemplateID(ev.TemplateId),
 			Signatories:    sigs,
@@ -297,15 +288,16 @@ func handleContractsList(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"schema_version": 1,
-		"instance":       name,
-		"role":           role,
-		"ledger_end":     end.Offset,
-		"contracts":      rows,
-		// truncated:true means the participant had more matching
-		"truncated": truncated,
-		"limit":     limit,
+	// truncated:true means the participant had more matching contracts
+	// than the limit; the frontend shows a "showing first N" hint.
+	writeJSON(w, http.StatusOK, apitypes.ContractsListResponse{
+		SchemaVersion: apitypes.SchemaVersion,
+		Instance:      name,
+		Role:          role,
+		LedgerEnd:     end.Offset,
+		Contracts:     rows,
+		Truncated:     truncated,
+		Limit:         limit,
 	})
 }
 
@@ -647,25 +639,9 @@ func projectStreamEvents(resp *lapiv2.GetUpdatesResponse, out func(streamEventFr
 	}
 }
 
-// contractDetail is the deep-view payload returned by the drawer
-// endpoint. Captures everything the side-drawer renders: the
-// create event's payload + parties, and the archive event (if
-// present) with the archiving transaction id.
-type contractDetail struct {
-	ContractID     string         `json:"contract_id"`
-	TemplateID     string         `json:"template_id,omitempty"`
-	PackageName    string         `json:"package_name,omitempty"`
-	Payload        map[string]any `json:"payload,omitempty"`
-	Signatories    []string       `json:"signatories"`
-	Observers      []string       `json:"observers"`
-	CreatedAt      string         `json:"created_at,omitempty"`
-	CreatedOffset  int64          `json:"created_offset,omitempty"`
-	CreatedTxID    string         `json:"created_update_id,omitempty"`
-	Archived       bool           `json:"archived"`
-	ArchivedAt     string         `json:"archived_at,omitempty"`
-	ArchivedOffset int64          `json:"archived_offset,omitempty"`
-	ArchivedTxID   string         `json:"archived_update_id,omitempty"`
-}
+// The contract-detail drawer payload (apitypes.ContractDetail /
+// ContractDetailResponse) is shared with the CLI and pinned by the
+// schema-shape golden.
 
 // handleContractDetail returns a deep view of one contract — the
 // CreatedEvent payload + the ArchivedEvent (if any) — using
@@ -765,7 +741,7 @@ func handleContractDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	detail := contractDetail{
+	detail := apitypes.ContractDetail{
 		ContractID:  cid,
 		Signatories: []string{},
 		Observers:   []string{},
@@ -802,11 +778,11 @@ func handleContractDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"schema_version": 1,
-		"instance":       name,
-		"role":           role,
-		"contract":       detail,
+	writeJSON(w, http.StatusOK, apitypes.ContractDetailResponse{
+		SchemaVersion: apitypes.SchemaVersion,
+		Instance:      name,
+		Role:          role,
+		Contract:      detail,
 	})
 }
 
@@ -821,63 +797,9 @@ func formatTemplateID(id *lapiv2.Identifier) string {
 }
 
 // recordToMap converts a Daml-LF Record proto into a JSON-friendly
-// map[string]any. Recurses into nested records and lists. Anything
-// it can't classify becomes a string of its textual proto form —
-// safer than panicking on a value type we haven't enumerated.
-//
-// This is a deliberately-best-effort renderer for the MVP table.
-// The full typed decoder (using Daml-LF metadata) is a follow-up.
+// map[string]any. Delegates to the shared ledger.RecordToMap so the
+// Web UI ACS payload preview + contract drawer and the CLI
+// `contracts ls --format json` decode payloads identically.
 func recordToMap(r *lapiv2.Record) map[string]any {
-	if r == nil {
-		return nil
-	}
-	out := make(map[string]any, len(r.Fields))
-	for _, f := range r.Fields {
-		out[f.GetLabel()] = valueToAny(f.GetValue())
-	}
-	return out
-}
-
-func valueToAny(v *lapiv2.Value) any {
-	if v == nil {
-		return nil
-	}
-	switch s := v.Sum.(type) {
-	case *lapiv2.Value_Bool:
-		return s.Bool
-	case *lapiv2.Value_Int64:
-		return s.Int64
-	case *lapiv2.Value_Numeric:
-		return s.Numeric
-	case *lapiv2.Value_Text:
-		return s.Text
-	case *lapiv2.Value_Party:
-		return s.Party
-	case *lapiv2.Value_ContractId:
-		return s.ContractId
-	case *lapiv2.Value_Date:
-		return s.Date
-	case *lapiv2.Value_Timestamp:
-		return s.Timestamp
-	case *lapiv2.Value_Record:
-		return recordToMap(s.Record)
-	case *lapiv2.Value_List:
-		items := s.List.GetElements()
-		out := make([]any, len(items))
-		for i, e := range items {
-			out[i] = valueToAny(e)
-		}
-		return out
-	case *lapiv2.Value_Optional:
-		opt := s.Optional.GetValue()
-		if opt == nil {
-			return nil
-		}
-		return valueToAny(opt)
-	default:
-		// Variants, enums, maps, GenMap — left as proto-textual
-		// fallback. Tracked as follow-up; rare in dev workloads.
-		b, _ := json.Marshal(v.Sum)
-		return string(b)
-	}
+	return ledger.RecordToMap(r)
 }
