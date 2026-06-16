@@ -193,6 +193,9 @@ func cleanOne(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOpt
 			Env:          env,
 			WorkDir:      state.ProjectDir,
 			LogWriter:    out,
+			// Replay the up-time --profile set so the teardown reaches
+			// every profile-gated Splice service (see down.go).
+			Profiles: composeProfiles(state),
 		}
 	}
 	// removeVolumes=true: `clean` is the destructive verb — it reclaims

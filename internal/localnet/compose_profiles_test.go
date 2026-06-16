@@ -23,6 +23,23 @@ func TestComposeProfiles_PrefersPersistedSet(t *testing.T) {
 	}
 }
 
+// TestComposeProfilesFor_DelegatesToComposeProfiles guards the exported
+// accessor the CLI `down` command uses (cross-package) to pass the up-time
+// profile set to its teardown runner — without it, `compose -f down` skips
+// every profile-gated Splice service and falsely reports success. It must
+// return exactly what composeProfiles does.
+func TestComposeProfilesFor_DelegatesToComposeProfiles(t *testing.T) {
+	for _, profiles := range [][]string{
+		{"sv", "app-provider", "app-user", "swagger-ui", "observability"},
+		nil, // pre-Profiles instance → adapter-base fallback
+	} {
+		state := &registry.State{SpliceVersion: "0.6.4", Profiles: profiles}
+		if got, want := ComposeProfilesFor(state), composeProfiles(state); !reflect.DeepEqual(got, want) {
+			t.Errorf("ComposeProfilesFor(%v) = %v, want %v (must delegate to composeProfiles)", profiles, got, want)
+		}
+	}
+}
+
 // TestComposeProfiles_FallsBackToAdapter verifies that for instances
 // created before the Profiles field existed (state.Profiles == nil),
 // composeProfiles re-derives the adapter's base profiles from the

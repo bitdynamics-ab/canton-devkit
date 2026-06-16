@@ -273,6 +273,11 @@ func defaultStop(ctx context.Context, st *registry.State) error {
 		EnvFiles:     ce.EnvFiles,
 		Env:          ce.Env,
 		LogWriter:    io.Discard, // compose's logs are noisy; Step rows tell the user what's happening
+		// Replay the up-time --profile set so `compose -f down` reaches
+		// every profile-gated Splice service instead of skipping them all
+		// and reporting a false success (down --force uses the label-only
+		// ForceStop path, which is profile-agnostic).
+		Profiles: localnet.ComposeProfilesFor(st),
 	}
 	return runner.Stop(ctx, false)
 }

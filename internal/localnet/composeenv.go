@@ -124,3 +124,14 @@ func composeProfiles(state *registry.State) []string {
 	}
 	return adapter.Profiles()
 }
+
+// ComposeProfilesFor is the exported accessor for composeProfiles. The CLI
+// `down` command lives in a different package (internal/cli/localnet) and
+// needs the same up-time `--profile` set to pass to its teardown runner,
+// so a profile-less `compose -f down` doesn't skip every profile-gated
+// Splice service while reporting success. Same semantics as composeProfiles
+// (the persisted full set, with the adapter-base fallback for instances
+// created before the Profiles field existed).
+func ComposeProfilesFor(state *registry.State) []string {
+	return composeProfiles(state)
+}
