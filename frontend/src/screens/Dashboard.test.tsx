@@ -18,6 +18,7 @@ import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
 function mockListResponse(
   instances: Array<{ name: string; status: string }> | "error",
   warning?: string,
+  txOverride?: { status: number; body: unknown },
 ) {
   vi.stubGlobal(
     "fetch",
@@ -65,6 +66,14 @@ function mockListResponse(
       // /api/instances/{name}/transactions — the RecentActivity
       // panel's ledger-event scan, fired only for a running instance.
       if (url.includes("/transactions")) {
+        if (txOverride) {
+          return Promise.resolve(
+            new Response(JSON.stringify(txOverride.body), {
+              status: txOverride.status,
+              headers: { "Content-Type": "application/json" },
+            }),
+          );
+        }
         return Promise.resolve(
           new Response(
             JSON.stringify({
@@ -269,5 +278,40 @@ describe("Dashboard", () => {
     expect(await screen.findByText("exercise")).toBeInTheDocument();
     // template id is shortened to Module:Entity for the EVENT column
     expect(screen.getByText("Retail.Token:Token")).toBeInTheDocument();
+  });
+
+  it("recent-activity shows the party-JWT hint when the ledger needs a party JWT", async () => {
+    mockListResponse([{ name: "demo", status: "running" }], undefined, {
+      status: 503,
+      body: { code: "EXPLORER_NEEDS_PARTY_JWT", error: "jwt lacks party rights" },
+    });
+    renderDashboard();
+    await waitFor(() =>
+      expect(screen.getByText(/party-rights JWT/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("recent-activity shows the restart-to-capture hint for the no-JWT-recorded 500", async () => {
+    // The real e2e-metrics-demo case: instances predating JWT capture
+    // return a generic 500, distinguished by message, not a code.
+    mockListResponse([{ name: "demo", status: "running" }], undefined, {
+      status: 500,
+      body: { code: "INTERNAL", error: "no JWT recorded for role app-provider" },
+    });
+    renderDashboard();
+    await waitFor(() =>
+      expect(screen.getByText(/restart the instance to capture/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("recent-activity shows the empty hint when there are no ledger events", async () => {
+    mockListResponse([{ name: "demo", status: "running" }], undefined, {
+      status: 200,
+      body: { schema_version: 1, instance: "demo", role: "app-provider", ledger_end: 0, count: 0, transactions: [] },
+    });
+    renderDashboard();
+    await waitFor(() =>
+      expect(screen.getByText(/No recent ledger activity/i)).toBeInTheDocument(),
+    );
   });
 });
