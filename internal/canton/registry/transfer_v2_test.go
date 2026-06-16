@@ -70,8 +70,8 @@ func TestGetTransferFactory_HappyPath(t *testing.T) {
 		t.Fatalf("GetTransferFactory: %v", err)
 	}
 	// Wire-level assertions.
-	if capturedPath != transferFactoryPath {
-		t.Errorf("path: got %q, want %q", capturedPath, transferFactoryPath)
+	if capturedPath != "/registry/transfer-instruction/v2/transfer-factory" {
+		t.Errorf("path: got %q, want the v2 transfer-factory path", capturedPath)
 	}
 	if capturedAuth != "Bearer test-token" {
 		t.Errorf("auth: got %q, want %q", capturedAuth, "Bearer test-token")

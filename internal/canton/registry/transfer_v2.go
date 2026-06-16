@@ -179,12 +179,25 @@ type ChoiceContextResponse struct {
 	DisclosedContracts []DisclosedContract `json:"disclosedContracts"`
 }
 
-const (
-	transferFactoryPath          = "/registry/transfer-instruction/v2/transfer-factory"
-	choiceContextAcceptPathFmt   = "/registry/transfer-instruction/v2/%s/choice-contexts/accept"
-	choiceContextRejectPathFmt   = "/registry/transfer-instruction/v2/%s/choice-contexts/reject"
-	choiceContextWithdrawPathFmt = "/registry/transfer-instruction/v2/%s/choice-contexts/withdraw"
-)
+// transferFactoryPath / choiceContextPath build the version-segmented
+// registry endpoints from the Client's configured generation. V1 and V2
+// share identical path shapes — only the {version} segment differs (both
+// confirmed present in the upstream OpenAPI).
+func (c *Client) transferFactoryPath() string {
+	return fmt.Sprintf("/registry/transfer-instruction/%s/transfer-factory", c.versionSeg())
+}
+
+func (c *Client) choiceContextPath(kind, instructionID string) string {
+	return fmt.Sprintf("/registry/transfer-instruction/%s/%s/choice-contexts/%s",
+		c.versionSeg(), url.PathEscape(instructionID), kind)
+}
+
+func (c *Client) versionSeg() string {
+	if c.version == "" {
+		return "v2"
+	}
+	return c.version
+}
 
 // GetTransferFactory posts the sender's intended transfer to the
 // registry and returns the factory contract + choice context the
@@ -199,7 +212,7 @@ const (
 // rather than a generic "transfer rejected".
 func (c *Client) GetTransferFactory(ctx context.Context, req TransferFactoryRequest) (*TransferFactoryResponse, error) {
 	var out TransferFactoryResponse
-	if err := c.doJSON(ctx, "POST", transferFactoryPath, req, &out); err != nil {
+	if err := c.doJSON(ctx, "POST", c.transferFactoryPath(), req, &out); err != nil {
 		return nil, fmt.Errorf("GetTransferFactory: %w", err)
 	}
 	return &out, nil
@@ -214,10 +227,9 @@ func (c *Client) GetAcceptChoiceContext(ctx context.Context, instructionID strin
 		return nil, fmt.Errorf("GetAcceptChoiceContext: instructionID is required")
 	}
 	var out ChoiceContextResponse
-	// url.PathEscape protects against an instruction id containing
-	// reserved URL chars ('#', '?', ' ') from being mis-parsed by the
-	// registry as a separate path segment / query string.
-	path := fmt.Sprintf(choiceContextAcceptPathFmt, url.PathEscape(instructionID))
+	// choiceContextPath url-escapes the instruction id so reserved URL
+	// chars ('#', '?', ' ') aren't mis-parsed as a separate segment.
+	path := c.choiceContextPath("accept", instructionID)
 	if err := c.doJSON(ctx, "POST", path, req, &out); err != nil {
 		return nil, fmt.Errorf("GetAcceptChoiceContext: %w", err)
 	}
@@ -239,7 +251,7 @@ func (c *Client) GetRejectChoiceContext(ctx context.Context, instructionID strin
 		return nil, fmt.Errorf("GetRejectChoiceContext: instructionID is required")
 	}
 	var out ChoiceContextResponse
-	path := fmt.Sprintf(choiceContextRejectPathFmt, url.PathEscape(instructionID))
+	path := c.choiceContextPath("reject", instructionID)
 	if err := c.doJSON(ctx, "POST", path, req, &out); err != nil {
 		return nil, fmt.Errorf("GetRejectChoiceContext: %w", err)
 	}
@@ -254,7 +266,7 @@ func (c *Client) GetWithdrawChoiceContext(ctx context.Context, instructionID str
 		return nil, fmt.Errorf("GetWithdrawChoiceContext: instructionID is required")
 	}
 	var out ChoiceContextResponse
-	path := fmt.Sprintf(choiceContextWithdrawPathFmt, url.PathEscape(instructionID))
+	path := c.choiceContextPath("withdraw", instructionID)
 	if err := c.doJSON(ctx, "POST", path, req, &out); err != nil {
 		return nil, fmt.Errorf("GetWithdrawChoiceContext: %w", err)
 	}

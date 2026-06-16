@@ -185,7 +185,8 @@ func runTransferLiveOnLedger(ctx context.Context, out io.Writer, opts TransferOp
 	if err != nil {
 		return "", fmt.Errorf("exercise on-ledger TransferFactory_Transfer: %w", err)
 	}
-	instructionID := findCreatedInstructionID(resp)
+	// The on-ledger path is the V2 splice-test-token-v2.
+	instructionID := findCreatedInstructionID(resp, genV2)
 	emit(out, "transfer: submitted", map[string]any{
 		"transfer_instruction_id": instructionID,
 		"update_id":               resp.GetTransaction().GetUpdateId(),
@@ -411,7 +412,7 @@ func exerciseTestTokenTransferFactory(
 		},
 	}
 	return submitForTransactionMulti(ctx, client, actAs, []*lapiv2.Command{exercise}, nil,
-		transferInstructionTxFormat(actAs[0]))
+		transferInstructionTxFormat(actAs[0], genV2))
 }
 
 // acceptTestTokenTransfer submits TransferInstruction_Accept against a

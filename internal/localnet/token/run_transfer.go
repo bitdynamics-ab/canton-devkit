@@ -82,11 +82,16 @@ func runTransferLive(ctx context.Context, out io.Writer, opts TransferOptions) (
 		"input_count": len(picked), "total_input": total, "amount": opts.Amount,
 	})
 
+	// Route by the selected instrument's generation (from its holdings):
+	// V1/CIP-0056 tokens like Amulet use the v1 registry + interfaces.
+	gen := pickGeneration(picked)
+
 	// Off-ledger factory lookup.
 	regCli, err := registry.Dial(registry.DialOptions{
 		BaseURL:    regBaseURL,
 		HostHeader: regHost,
 		Token:      registry.StaticToken(resolveRegistryToken(opts.Token, opts.Instance, opts.Role)),
+		Version:    registryVersionSeg(gen),
 	})
 	if err != nil {
 		return "", fmt.Errorf("dial registry: %w", err)
@@ -132,12 +137,12 @@ func runTransferLive(ctx context.Context, out io.Writer, opts TransferOptions) (
 	// On-ledger exercise.
 	resp, err := exerciseV2TransferFactory(
 		ctx, client, opts.From,
-		factoryResp.FactoryID, transferArgs, factoryResp,
+		factoryResp.FactoryID, transferArgs, factoryResp, gen,
 	)
 	if err != nil {
 		return "", fmt.Errorf("exercise TransferFactory_Transfer: %w", err)
 	}
-	instructionID := findCreatedInstructionID(resp)
+	instructionID := findCreatedInstructionID(resp, gen)
 	emit(out, "transfer: submitted", map[string]any{
 		"transfer_instruction_id": instructionID,
 		"update_id":               resp.GetTransaction().GetUpdateId(),
@@ -164,10 +169,20 @@ func runAcceptLive(ctx context.Context, out io.Writer, opts AcceptOptions) error
 	}
 	defer cleanup()
 
+	// Route by generation: the accept has no holdings to infer from, so
+	// derive it from the vetted surfaces (V1-only → V1; both/V2 → V2,
+	// matching the transfer side's prefer-V2).
+	surfaces, err := discoverTokenSurfaces(ctx, client)
+	if err != nil {
+		return err
+	}
+	gen := acceptGeneration(surfaces)
+
 	regCli, err := registry.Dial(registry.DialOptions{
 		BaseURL:    regBaseURL,
 		HostHeader: regHost,
 		Token:      registry.StaticToken(resolveRegistryToken(opts.Token, opts.Instance, opts.Role)),
+		Version:    registryVersionSeg(gen),
 	})
 	if err != nil {
 		return fmt.Errorf("dial registry: %w", err)
@@ -190,7 +205,7 @@ func runAcceptLive(ctx context.Context, out io.Writer, opts AcceptOptions) error
 		}
 	}
 
-	resp, err := exerciseV2AcceptInstruction(ctx, client, receiver, opts.TransferInstructionID, ctxResp)
+	resp, err := exerciseV2AcceptInstruction(ctx, client, receiver, opts.TransferInstructionID, ctxResp, gen)
 	if err != nil {
 		return fmt.Errorf("exercise TransferInstruction_Accept: %w", err)
 	}
@@ -212,7 +227,8 @@ type holdingRef struct {
 	AccountID  string // account.id
 	Admin      string
 	Instrument string
-	Amount     string // decimal string, untouched precision
+	Amount     string     // decimal string, untouched precision
+	Gen        Generation // the token-standard generation this holding was read through
 }
 
 func contractIDsOf(h []holdingRef) []string {
@@ -221,6 +237,30 @@ func contractIDsOf(h []holdingRef) []string {
 		out[i] = x.ContractID
 	}
 	return out
+}
+
+// pickGeneration returns the generation of the holdings being transferred
+// — they're all the same instrument, so the same generation. Defaults to
+// V2 when unset (the historical behaviour).
+func pickGeneration(h []holdingRef) Generation {
+	for _, x := range h {
+		if x.Gen != 0 {
+			return x.Gen
+		}
+	}
+	return genV2
+}
+
+// acceptGeneration routes the receiver-side accept. The accept has no
+// holdings to infer from, so it derives the generation from the vetted
+// surfaces — preferring V2 when both are present, which matches the
+// transfer side (extractBestHoldingView prefers the V2 view, so the
+// instruction it created is V2). V1-only instances route V1.
+func acceptGeneration(s Surfaces) Generation {
+	if s.HasV2 {
+		return genV2
+	}
+	return genV1
 }
 
 // listSenderHoldings runs an ACS query filtered by HoldingInterfaceV2
@@ -232,13 +272,22 @@ func listSenderHoldings(ctx context.Context, client *ledger.Client, sender, inst
 	// tears down the stream pump goroutine instead of leaking it.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	// Query every vetted holding surface so a V1 token (Amulet) is found
+	// for coin selection on a stable release, not just V2.
+	surfaces, err := discoverTokenSurfaces(ctx, client)
+	if err != nil {
+		return nil, err
+	}
+	if !surfaces.Any() {
+		return nil, fmt.Errorf("no token-standard Holding package vetted on this participant")
+	}
 	end, err := client.LedgerEnd(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("ledger end: %w", err)
 	}
 	stream, err := client.ActiveContracts(ctx, ledger.ActiveContractsRequest{
 		ActiveAtOffset: end.Offset,
-		EventFormat:    holdingInterfaceFilterV2([]string{sender}),
+		EventFormat:    holdingInterfaceFilter(surfaces, []string{sender}),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("ACS query: %w", err)
@@ -256,26 +305,25 @@ func listSenderHoldings(ctx context.Context, client *ledger.Client, sender, inst
 		if created == nil {
 			continue
 		}
-		// HoldingV2 is queried as an interface, so the view we want
-		// is the first InterfaceView whose interface id matches.
-		for _, iv := range created.GetInterfaceViews() {
-			view, ok := extractHoldingViewV2(iv)
-			if !ok || view.Owner != sender {
-				continue
-			}
-			if instrumentID != "" && view.InstrumentID != instrumentID {
-				continue
-			}
-			out = append(out, holdingRef{
-				ContractID: created.GetContractId(),
-				Owner:      view.Owner,
-				Provider:   view.Provider,
-				AccountID:  view.AccountID,
-				Admin:      view.Admin,
-				Instrument: view.InstrumentID,
-				Amount:     view.Amount,
-			})
+		// One holding per contract (prefers the richer V2 view when a
+		// contract implements both interfaces); tagged with its generation.
+		view, ok := extractBestHoldingView(created.GetInterfaceViews())
+		if !ok || view.Owner != sender {
+			continue
 		}
+		if instrumentID != "" && view.InstrumentID != instrumentID {
+			continue
+		}
+		out = append(out, holdingRef{
+			ContractID: created.GetContractId(),
+			Owner:      view.Owner,
+			Provider:   view.Provider,
+			AccountID:  view.AccountID,
+			Admin:      view.Admin,
+			Instrument: view.InstrumentID,
+			Amount:     view.Amount,
+			Gen:        view.Generation,
+		})
 	}
 	return out, nil
 }
@@ -389,11 +437,12 @@ func transferTimes() (time.Time, time.Time) {
 // response for a created event whose template / interface implements
 // TransferInstructionV2. Returns "" when the transfer was Direct kind
 // (no instruction created — the receiver's Holding shows up instead).
-func findCreatedInstructionID(resp *lapiv2.SubmitAndWaitForTransactionResponse) string {
+func findCreatedInstructionID(resp *lapiv2.SubmitAndWaitForTransactionResponse, gen Generation) string {
 	tx := resp.GetTransaction()
 	if tx == nil {
 		return ""
 	}
+	wantModule := transferInstructionModule(gen)
 	for _, ev := range tx.GetEvents() {
 		created := ev.GetCreated()
 		if created == nil {
@@ -404,9 +453,8 @@ func findCreatedInstructionID(resp *lapiv2.SubmitAndWaitForTransactionResponse) 
 			if id == nil {
 				continue
 			}
-			// Module + entity match is enough — the package id is
-			// the alpha snapshot hash and rotates weekly.
-			if id.GetModuleName() == "Splice.Api.Token.TransferInstructionV2" &&
+			// Module + entity match is enough — the package id rotates.
+			if id.GetModuleName() == wantModule &&
 				id.GetEntityName() == "TransferInstruction" {
 				return created.GetContractId()
 			}
