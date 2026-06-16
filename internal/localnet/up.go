@@ -606,6 +606,12 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	for key, port := range CaptureCantonPorts(ctx, state.ComposeProject) {
 		state.Ports[key] = port
 	}
+	// Capture the canton/splice :10013 metrics ports too, so the shared
+	// host-level Prometheus can scrape this instance via
+	// host.docker.internal:<port> once it's registered.
+	for key, port := range CaptureMetricsPorts(ctx, state.ComposeProject) {
+		state.Ports[key] = port
+	}
 
 	// 8b. Capture the content digests of the images that actually ran
 	// and persist them. The catalogue pins the source tree but ghcr
@@ -635,6 +641,19 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		prog.Warn(fmt.Sprintf("services healthy but registry write failed: %s", err))
 	}
 	prog.FinishStep(StepCaptureJWTs, "")
+
+	// Register this instance with the shared host-level observability
+	// stack and ensure the stack is up, so one Prometheus+Grafana
+	// scrapes every instance. Register+ensure run atomically under the
+	// shared-stack lock so a concurrent teardown can't race us. Best-effort
+	// — a failure here is a warning, never a failed bring-up. (The
+	// per-instance overlay still runs alongside the shared stack; gating it
+	// off is a deferred decision — see docs/observability.md.)
+	if hasObservabilityProfile {
+		if _, err := RegisterInstanceAndEnsureStack(ctx, state, prog.Err()); err != nil {
+			prog.Warn("shared observability: " + err.Error())
+		}
+	}
 
 	// Welcome screen — replaces the old inline brand Box + plain
 	// endpoint listing with a single composable view (lockup +

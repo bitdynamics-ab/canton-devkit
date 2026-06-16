@@ -72,7 +72,7 @@ func TestScrapeMetrics_PopulatesLatencyBlock(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	report, err := scrapeMetrics(ctx, host, port)
+	report, err := scrapeMetrics(ctx, host, port, "")
 	if err != nil {
 		t.Fatalf("scrapeMetrics: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestScrapeMetrics_TransportFailureSurfacesError(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	report, err := scrapeMetrics(ctx, host, port)
+	report, err := scrapeMetrics(ctx, host, port, "")
 	if err == nil {
 		t.Fatalf("expected transport error when prometheus is unreachable, got report=%+v", report)
 	}
@@ -137,7 +137,7 @@ func TestScrapeMetrics_EmptyButReachableIsNotError(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	report, err := scrapeMetrics(ctx, host, port)
+	report, err := scrapeMetrics(ctx, host, port, "")
 	if err != nil {
 		t.Fatalf("empty-but-reachable prometheus should not error: %v", err)
 	}
@@ -299,7 +299,7 @@ func TestResolvePrometheusEndpoint_UsesRecordedRegistryPort(t *testing.T) {
 		ComposeProject: "demo",
 		Ports:          map[string]int{"prometheus_ui": 19190},
 	}
-	host, port, err := resolvePrometheusEndpoint(context.Background(), state, "127.0.0.1", 0)
+	host, port, _, err := resolvePrometheusEndpoint(context.Background(), state, "127.0.0.1", 0)
 	if err != nil {
 		t.Fatalf("resolvePrometheusEndpoint: %v", err)
 	}
@@ -320,7 +320,7 @@ func TestResolvePrometheusEndpoint_MissingRegistryPortWithRunningContainer(t *te
 		ComposeProject: "demo",
 		Ports:          map[string]int{},
 	}
-	_, _, err := resolvePrometheusEndpoint(context.Background(), state, "127.0.0.1", 0)
+	_, _, _, err := resolvePrometheusEndpoint(context.Background(), state, "127.0.0.1", 0)
 	if err == nil {
 		t.Fatal("expected error when prometheus runs but port is not recorded")
 	}

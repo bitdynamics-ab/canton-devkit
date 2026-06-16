@@ -224,6 +224,12 @@ func cleanOne(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOpt
 		_, _ = fmt.Fprintf(errw, "%s: remove instance state: %s\n", name, err)
 		return ExitRuntimeFailure
 	}
+
+	// Deregister from the shared observability stack and tear it
+	// down if this was the last instance referencing it — atomically under
+	// the shared-stack lock so a concurrent `up` can't race the teardown.
+	_ = DeregisterInstanceAndTeardownIfIdle(ctx, name, io.Discard)
+
 	_, _ = fmt.Fprintf(out, "Cleaned %q.\n", name)
 	return ExitSuccess
 }

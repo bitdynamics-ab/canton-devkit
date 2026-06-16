@@ -62,12 +62,12 @@ func buildMetrics() *cobra.Command {
 			}
 			ctx, cancel := context.WithTimeout(cmd.Context(), 15*time.Second)
 			defer cancel()
-			promHost, promPort, err := resolvePrometheusEndpoint(ctx, state, host, port)
+			promHost, promPort, promScope, err := resolvePrometheusEndpoint(ctx, state, host, port)
 			if err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
-			report, err := scrapeMetrics(ctx, promHost, promPort)
+			report, err := scrapeMetrics(ctx, promHost, promPort, promScope)
 			if err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(),
 					"prometheus query failed: "+err.Error())
@@ -124,29 +124,44 @@ func resolveMetricsInstance(name string) (*registry.State, error) {
 // persists after host-port allocation. We only shell out to docker when
 // that registry entry is absent so we can distinguish "observability is
 // off" from "the instance is old / state is stale".
-func resolvePrometheusEndpoint(ctx context.Context, state *registry.State, host string, explicitPort int) (string, int, error) {
+// resolvePrometheusEndpoint locates the Prometheus to scrape and reports
+// which instance to scope queries to. It prefers the SHARED host-level
+// stack when this instance is registered with it — returning the
+// instance name so scrapeMetrics filters by instance=<name> across the
+// multi-instance Prometheus. Otherwise it falls back to a per-instance
+// Prometheus (legacy / explicit --prometheus-port), where queries stay
+// unscoped because that Prometheus only holds one instance. The returned
+// scope is "" for the unscoped fallback paths.
+func resolvePrometheusEndpoint(ctx context.Context, state *registry.State, host string, explicitPort int) (rhost string, rport int, scope string, rerr error) {
 	if explicitPort > 0 {
-		return host, explicitPort, nil
+		return host, explicitPort, "", nil
+	}
+	// Shared stack first: only when this instance is registered with it
+	// (its file_sd target exists) AND the stack is actually running.
+	if localnet.InstanceObservabilityEnabled(state.Name) {
+		if h, p, err := localnet.SharedPrometheusEndpoint(ctx); err == nil {
+			return h, p, state.Name, nil
+		}
 	}
 	if port, ok := state.Ports["prometheus_ui"]; ok && port > 0 {
-		return host, port, nil
+		return host, port, "", nil
 	}
 	infos, err := metricsContainersList(ctx, state.ComposeProject)
 	if err != nil {
-		return "", 0, fmt.Errorf("docker probe: %w", err)
+		return "", 0, "", fmt.Errorf("docker probe: %w", err)
 	}
 	for _, c := range infos {
 		if c.Service != "prometheus" {
 			continue
 		}
-		return "", 0, fmt.Errorf("prometheus is running for instance %q but its host port was not recorded — "+
+		return "", 0, "", fmt.Errorf("prometheus is running for instance %q but its host port was not recorded — "+
 			"restart the instance with `dpm localnet restart --name %s` or pass --prometheus-port explicitly",
 			state.Name, state.Name)
 	}
-	return "", 0, fmt.Errorf("no prometheus container in compose project %q — "+
-		"start the instance with `dpm localnet up --profile observability --name %s` "+
-		"(or pass --prometheus-port to point at a remote target)",
-		state.ComposeProject, state.Name)
+	return "", 0, "", fmt.Errorf("no Prometheus for instance %q — "+
+		"enable observability (`dpm localnet observability enable --name %s`, or bring it up with "+
+		"`--profile observability`) so the shared stack scrapes it, or pass --prometheus-port to point at a remote target",
+		state.Name, state.Name)
 }
 
 // MetricsReport is the stable JSON shape `--format json` emits.
@@ -207,16 +222,21 @@ const grafanaDashboardUID = "canton-localnet-v1"
 // RunE. We require ALL queries to fail (not just one) so a single
 // flaky query against a healthy Prometheus still yields a report;
 // a real outage takes every query down together.
-func scrapeMetrics(ctx context.Context, host string, port int) (*MetricsReport, error) {
+// scrapeMetrics queries the curated headline set. instance scopes the
+// queries to a single LocalNet when non-empty (the shared host-level
+// Prometheus serves many); "" sums across whatever Prometheus holds (the
+// per-instance Prometheus only scrapes one).
+func scrapeMetrics(ctx context.Context, host string, port int, instance string) (*MetricsReport, error) {
 	base := fmt.Sprintf("http://%s:%d", host, port)
-	results := make(map[metricsq.Headline]*float64, len(metricsq.SummaryQueries))
+	queries := metricsq.SummaryQueriesFor(instance)
+	results := make(map[metricsq.Headline]*float64, len(queries))
 	type res struct {
 		key metricsq.Headline
 		val *float64
 		err error
 	}
-	ch := make(chan res, len(metricsq.SummaryQueries))
-	for k, q := range metricsq.SummaryQueries {
+	ch := make(chan res, len(queries))
+	for k, q := range queries {
 		go func(k metricsq.Headline, q string) {
 			v, err := promQuery(ctx, base, q)
 			ch <- res{k, v, err}
@@ -224,7 +244,7 @@ func scrapeMetrics(ctx context.Context, host string, port int) (*MetricsReport, 
 	}
 	var firstErr error
 	transportFailures := 0
-	for range metricsq.SummaryQueries {
+	for range queries {
 		r := <-ch
 		if r.err != nil {
 			// Transport-level failure (could not reach Prometheus).
@@ -241,7 +261,7 @@ func scrapeMetrics(ctx context.Context, host string, port int) (*MetricsReport, 
 	}
 	// All queries failed at the transport layer → Prometheus is
 	// unreachable. Surface it rather than masquerading as empty data.
-	if transportFailures == len(metricsq.SummaryQueries) && firstErr != nil {
+	if transportFailures == len(queries) && firstErr != nil {
 		return nil, firstErr
 	}
 	return &MetricsReport{

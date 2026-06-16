@@ -1,0 +1,42 @@
+# Prometheus scrape config for the SHARED, host-level observability
+# stack (canton-devkit-observability project). Unlike the per-instance
+# observability.yaml — which ran a Prometheus INSIDE each instance's
+# network and scraped canton:10013/splice:10013 by service-name DNS —
+# this single Prometheus lives in its own project/network and cannot
+# resolve those service names (and they collide: every instance has a
+# `canton`). Instead each instance publishes its canton/splice :10013
+# metrics port to 127.0.0.1:<ephemeral>, and DevKit writes one
+# file_sd target file per instance under /etc/prometheus/targets/.
+#
+# Targets look like host.docker.internal:<hostport> with an `instance`
+# label, so the bundled dashboard's `instance` template var and every
+# {instance=~"$instance"} panel filter keep working unchanged. Prometheus
+# re-reads the target files on the file_sd refresh interval — no restart
+# and no lifecycle call needed when an instance is added or removed.
+#
+# host.docker.internal: provided automatically on Docker Desktop
+# (macOS/Windows). On native Linux the shared compose file adds
+# extra_hosts: ["host.docker.internal:host-gateway"] (Docker 20.10+).
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+
+scrape_configs:
+  # Self-scrape — always produces data so an empty dashboard still
+  # shows the stack is alive.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          component: prometheus
+
+  # All LocalNet instances, discovered from the per-instance target
+  # files DevKit writes/removes on up/down. Each file carries its own
+  # {instance, component} labels.
+  - job_name: localnet
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/*.json
+        refresh_interval: 15s

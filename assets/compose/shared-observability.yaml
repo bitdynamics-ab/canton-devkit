@@ -1,0 +1,60 @@
+# SHARED, host-level observability stack — ONE Prometheus + Grafana
+# serving every running LocalNet instance. Runs as its
+# own compose project (canton-devkit-observability), independent of any
+# instance lifecycle, so it survives a single instance's down→up and is
+# torn down only when no instance references it (refcount = number of
+# files in the file_sd targets dir).
+#
+# Mount paths are passed as absolute paths via env so DevKit can point
+# them at the assets it materialised under ~/.canton-devkit/observability
+# (PROM_CONFIG_FILE = shared-prometheus.yml, PROM_TARGETS_DIR = the
+# file_sd targets dir, GRAFANA_* = the reused assets/grafana tree). Ports
+# default to the conventional 9090/3000 (one shared stack, so fixed
+# defaults are fine) and bind 127.0.0.1 only — same loopback posture as
+# the rest of DevKit; no LAN exposure.
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    container_name: canton-devkit-observability-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=6h
+      - --web.enable-lifecycle
+    # host.docker.internal is auto-provided on Docker Desktop; on native
+    # Linux this maps it to the host gateway so the shared Prometheus can
+    # reach each instance's 127.0.0.1-published :10013 metrics port.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${PROM_CONFIG_FILE}:/etc/prometheus/prometheus.yml:ro
+      - ${PROM_TARGETS_DIR}:/etc/prometheus/targets:ro
+    ports:
+      - "127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}:9090"
+    networks:
+      - default
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: canton-devkit-observability-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+    volumes:
+      - ${GRAFANA_PROVISIONING_DIR}:/etc/grafana/provisioning:ro
+      - ${GRAFANA_DASHBOARDS_DIR}:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:${GRAFANA_HOST_PORT:-3000}:3000"
+    networks:
+      - default
+
+networks:
+  default:
+    name: canton-devkit-observability

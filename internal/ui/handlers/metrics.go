@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/metricsq"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
@@ -275,22 +276,31 @@ func handleMetricsSummary() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), metricsTimeout)
 		defer cancel()
 
+		// Scope the queries to this instance when it's served by the
+		// shared multi-instance stack; "" sums over the single-instance
+		// per-instance Prometheus (the fallback). The frontend reads the
+		// returned scope to scope its own chart queries identically.
+		// Resolved from the SAME cached discovery the fan-out queries use
+		// (keyed by compose project) so scope and endpoint can't disagree.
+		scope := promScopeFor(ctx, state.ComposeProject)
+
 		// Queries come from the shared metricsq package so CLI
 		// + handler can't drift.
 		out := map[string]*float64{}
+		queries := metricsq.SummaryQueriesFor(scope)
 		type res struct {
 			k metricsq.Headline
 			v *float64
 		}
-		ch := make(chan res, len(metricsq.SummaryQueries))
-		for k, q := range metricsq.SummaryQueries {
+		ch := make(chan res, len(queries))
+		for k, q := range queries {
 			go func(k metricsq.Headline, q string) {
 				v, _ := singleScalar(ctx, state.ComposeProject, q)
 				ch <- res{k, v}
 			}(k, q)
 		}
 		anyFound := false
-		for range metricsq.SummaryQueries {
+		for range queries {
 			r := <-ch
 			if r.v != nil {
 				out[string(r.k)] = r.v
@@ -324,11 +334,37 @@ func handleMetricsSummary() http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"schema_version": 1,
 			"instance":       name,
-			"metrics":        out,
-			"latency":        latency,
-			"dashboards":     dashboards,
+			// scope is the instance label to filter chart queries by when
+			// non-empty (shared multi-instance stack); "" means the
+			// single-instance per-instance Prometheus, so the frontend
+			// leaves its chart queries unscoped.
+			"scope":      scope,
+			"metrics":    out,
+			"latency":    latency,
+			"dashboards": dashboards,
 		})
 	}
+}
+
+// promScopeFor reports the instance label the metrics queries should be
+// filtered by, derived from the SAME cached discovery the chart/range
+// queries use (discoverPrometheus, keyed by compose project) rather than
+// re-resolving independently. The instance name when served by the shared
+// multi-instance stack, or "" on the per-instance fallback (which
+// holds only that instance, so no filter is needed). The frontend mirrors
+// this via the summary response's `scope` field.
+//
+// Resolving through the shared cache closes a skew window: discoverPrometheus
+// caches host:port for a TTL, so a freshly-toggled instance could otherwise
+// have its summary report scope=name (uncached, live) while the cached
+// endpoint still points at the per-instance Prometheus for up to the TTL —
+// transiently filtering charts against series that lack the label. Sharing
+// the cached decision keeps scope and endpoint moving together.
+func promScopeFor(ctx context.Context, project string) string {
+	// Resolve (and cache) the endpoint, then read the scope that same
+	// cached decision recorded.
+	_, _, _ = discoverPrometheus(ctx, project)
+	return lookupPromScope(project)
 }
 
 // grafanaDashboardUID pins the bundled Canton LocalNet dashboard UID.
@@ -424,6 +460,21 @@ func discoverPrometheus(ctx context.Context, project string) (string, int, error
 	if host, port, err, ok := lookupPromCache(project); ok {
 		return host, port, err
 	}
+	// Shared host-level stack first: when this project's instance
+	// is registered with it and the stack is up, every metrics surface
+	// reads from the one shared Prometheus. Falls through to the
+	// per-instance Prometheus below otherwise (no regression for
+	// instances brought up before the shared stack existed).
+	if st, err := registry.LookupByComposeProject(project); err == nil {
+		if localnet.InstanceObservabilityEnabled(st.Name) {
+			if h, p, e := localnet.SharedPrometheusEndpoint(ctx); e == nil {
+				// scope = instance name: the shared Prometheus scrapes
+				// every instance, so headlines/charts must filter to one.
+				storePromCache(project, h, p, st.Name, nil)
+				return h, p, nil
+			}
+		}
+	}
 	infos, err := containers.List(ctx, project)
 	if err != nil {
 		return "", 0, err
@@ -438,7 +489,7 @@ func discoverPrometheus(ctx context.Context, project string) (string, int, error
 	if !running {
 		// Cache the negative result too — observability-off
 		// screens hammer this just as hard as -on screens.
-		storePromCache(project, "", 0, errPrometheusNotRunning)
+		storePromCache(project, "", 0, "", errPrometheusNotRunning)
 		return "", 0, errPrometheusNotRunning
 	}
 	st, err := registry.LookupByComposeProject(project)
@@ -447,10 +498,11 @@ func discoverPrometheus(ctx context.Context, project string) (string, int, error
 	}
 	port, ok := st.Ports["prometheus_ui"]
 	if !ok || port == 0 {
-		storePromCache(project, "", 0, errPrometheusNotRunning)
+		storePromCache(project, "", 0, "", errPrometheusNotRunning)
 		return "", 0, errPrometheusNotRunning
 	}
-	storePromCache(project, "127.0.0.1", port, nil)
+	// Per-instance Prometheus holds only this instance — no scope filter.
+	storePromCache(project, "127.0.0.1", port, "", nil)
 	return "127.0.0.1", port, nil
 }
 
@@ -462,8 +514,13 @@ func discoverPrometheus(ctx context.Context, project string) (string, int, error
 const promCacheTTL = 5 * time.Second
 
 type promCacheEntry struct {
-	host    string
-	port    int
+	host string
+	port int
+	// scope is the instance label the chart/summary queries should filter
+	// by when this project is served by the shared multi-instance stack
+	// (the instance name), or "" for the per-instance Prometheus. Stored
+	// alongside host:port so promScopeFor reads the same cached decision.
+	scope   string
 	err     error
 	expires time.Time
 }
@@ -483,12 +540,28 @@ func lookupPromCache(project string) (host string, port int, err error, ok bool)
 	return e.host, e.port, e.err, true
 }
 
-func storePromCache(project, host string, port int, err error) {
+// lookupPromScope returns the instance label the cached discovery decided
+// the queries should filter by (the shared multi-instance stack), or ""
+// for the per-instance path or a missing/expired entry. Same cache as
+// discoverPrometheus so the summary's reported scope and the endpoint the
+// charts query can't disagree within a TTL.
+func lookupPromScope(project string) string {
+	promCacheMu.Lock()
+	defer promCacheMu.Unlock()
+	e, found := promCache[project]
+	if !found || time.Now().After(e.expires) {
+		return ""
+	}
+	return e.scope
+}
+
+func storePromCache(project, host string, port int, scope string, err error) {
 	promCacheMu.Lock()
 	defer promCacheMu.Unlock()
 	promCache[project] = promCacheEntry{
 		host:    host,
 		port:    port,
+		scope:   scope,
 		err:     err,
 		expires: time.Now().Add(promCacheTTL),
 	}

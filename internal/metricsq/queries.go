@@ -33,6 +33,8 @@
 // concerns differ between CLI text mode and HTTP JSON.
 package metricsq
 
+import "strings"
+
 // Headline identifies one of the curated summary panels. The
 // frontend's MetricsReport JSON shape and the CLI's text rendering
 // both switch on these constants — keep stable.
@@ -85,13 +87,48 @@ const (
 //     summing it gives the number of DB connections actively held
 //     by the JVM processes — functionally the same headline a user
 //     would expect from "postgres conns".
-var SummaryQueries = map[Headline]string{
-	HeadlineLedgerTPS:    "sum(rate(daml_participant_api_indexer_updates[5m])) or vector(0)",
-	HeadlineMediatorP50:  "histogram_quantile(0.50, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))",
-	HeadlineMediatorP95:  "histogram_quantile(0.95, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))",
-	HeadlineMediatorP99:  "histogram_quantile(0.99, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))",
-	HeadlineHeapUsed:     `sum(jvm_memory_used_bytes{jvm_memory_type="heap"})`,
-	HeadlinePostgresConn: `sum(db_client_connections_usage{state="used"})`,
+//
+// SummaryQueries is the unscoped set (sums across every series Prometheus
+// holds). Correct for a per-instance Prometheus that only scrapes one
+// LocalNet. For the SHARED host-level stack, which scrapes every
+// instance, use SummaryQueriesFor(<instance>) so a headline reflects one
+// instance, not the sum across all of them.
+var SummaryQueries = SummaryQueriesFor("")
+
+// SummaryQueriesFor builds the curated PromQL set, optionally scoped to a
+// single instance. When instance is non-empty an `instance="<inst>"`
+// label matcher is injected into every metric selector — this matches the
+// `instance` label the shared stack's file_sd attaches to each target. An
+// empty instance reproduces the unscoped queries byte-for-byte (so the
+// per-instance Prometheus path is unchanged).
+//
+// Building the selectors here (rather than hand-writing two copies) keeps
+// the CLI and Web UI byte-identical, and composes the label matcher
+// correctly whether or not the metric already carries its own labels (no
+// invalid trailing comma).
+func SummaryQueriesFor(instance string) map[Headline]string {
+	sel := func(metric, extra string) string {
+		var matchers []string
+		if instance != "" {
+			matchers = append(matchers, `instance="`+instance+`"`)
+		}
+		if extra != "" {
+			matchers = append(matchers, extra)
+		}
+		if len(matchers) == 0 {
+			return metric
+		}
+		return metric + "{" + strings.Join(matchers, ",") + "}"
+	}
+	const bucket = "daml_sequencer_client_submissions_sequencing_duration_seconds_bucket"
+	return map[Headline]string{
+		HeadlineLedgerTPS:    "sum(rate(" + sel("daml_participant_api_indexer_updates", "") + "[5m])) or vector(0)",
+		HeadlineMediatorP50:  "histogram_quantile(0.50, sum(rate(" + sel(bucket, "") + "[5m])) by (le))",
+		HeadlineMediatorP95:  "histogram_quantile(0.95, sum(rate(" + sel(bucket, "") + "[5m])) by (le))",
+		HeadlineMediatorP99:  "histogram_quantile(0.99, sum(rate(" + sel(bucket, "") + "[5m])) by (le))",
+		HeadlineHeapUsed:     "sum(" + sel("jvm_memory_used_bytes", `jvm_memory_type="heap"`) + ")",
+		HeadlinePostgresConn: "sum(" + sel("db_client_connections_usage", `state="used"`) + ")",
+	}
 }
 
 // SchemaVersion is the wire-stable version of the metrics summary
