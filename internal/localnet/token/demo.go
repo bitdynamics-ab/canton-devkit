@@ -101,6 +101,16 @@ func RunDemo(ctx context.Context, out io.Writer, opts DemoOptions) (*DemoResult,
 		Insecure:      opts.Insecure,
 	})
 	if err != nil {
+		// Re-running the demo with the same symbol is the obvious "click it
+		// twice" case — surface it as an actionable conflict rather than a
+		// raw "symbol in use". Still wraps ErrSymbolInUse so both surfaces
+		// map it to 409.
+		if errors.Is(err, ErrSymbolInUse) {
+			return nil, fmt.Errorf(
+				"a demo token %q already exists on %q — open it on the Tokens screen, "+
+					"or relaunch with a different --symbol (%w)",
+				opts.Symbol, opts.Instance, ErrSymbolInUse)
+		}
 		return nil, fmt.Errorf("demo: create instrument: %w", err)
 	}
 

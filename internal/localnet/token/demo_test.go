@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
@@ -139,6 +140,28 @@ func TestRunDemo_StopsOnCreateError(t *testing.T) {
 	}
 	if minted {
 		t.Error("mint must not run after create fails")
+	}
+}
+
+// Re-running the demo with the same symbol (the "click it twice" case)
+// must give an actionable "already exists" message, while still wrapping
+// ErrSymbolInUse so both surfaces map it to 409.
+func TestRunDemo_DuplicateSymbolIsActionable(t *testing.T) {
+	stubDemoSeams(t,
+		func(_ context.Context, o PartyOptions) (*registry.PartyRef, error) {
+			return &registry.PartyRef{Alias: o.Alias, PartyID: "pid"}, nil
+		},
+		func(_ io.Writer, _ CreateOptions) (*CreateResult, error) { return nil, ErrSymbolInUse },
+		func(_ context.Context, _ io.Writer, _ MintOptions) error { return nil },
+		func(_ context.Context, _ io.Writer, _ FaucetOptions) error { return nil },
+	)
+
+	_, err := RunDemo(context.Background(), nil, DemoOptions{Instance: "demo", Endpoint: "x:1"})
+	if !errors.Is(err, ErrSymbolInUse) {
+		t.Fatalf("must still wrap ErrSymbolInUse (-> 409), got %v", err)
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("re-run error should be actionable (\"already exists\"), got %q", err.Error())
 	}
 }
 
