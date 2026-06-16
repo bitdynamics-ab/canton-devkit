@@ -282,32 +282,12 @@ func buildHoldingRecord(from holdingRef, amount string) *lapiv2.Record {
 // test token needs no off-ledger context).
 func acceptMintOffer(ctx context.Context, client *ledger.Client, receiver, offerCID, accountConfigCID, tokenRulesCID string, tokenRulesDisc *lapiv2.DisclosedContract) error {
 	// The accept's choice context must carry two well-known entries the
-	// test token's state machine looks up:
-	// testTokenV2/tokenRules → the TokenRules contract id
-	// testTokenV2/accountConfigs → list of AccountConfig contract ids
-	// both as tagged AnyValue (AV_ContractId / AV_List).
-	contextValues := &lapiv2.Value{Sum: &lapiv2.Value_TextMap{TextMap: &lapiv2.TextMap{
-		Entries: []*lapiv2.TextMap_Entry{
-			{
-				Key:   tokenRulesContextKey,
-				Value: variantValue("AV_ContractId", contractIDValue(tokenRulesCID)),
-			},
-			{
-				Key: accountConfigsContextKey,
-				Value: variantValue("AV_List", &lapiv2.Value{Sum: &lapiv2.Value_List{List: &lapiv2.List{
-					Elements: []*lapiv2.Value{
-						variantValue("AV_ContractId", contractIDValue(accountConfigCID)),
-					},
-				}}}),
-			},
-		},
-	}}}
+	// test token's state machine looks up: the issuer's TokenRules
+	// contract id and the involved accounts' AccountConfig contract ids.
+	// buildTestTokenExtraArgs assembles the tagged-AnyValue shape.
 	choiceArg := recordValue([]field{
 		{"actors", listValue([]string{receiver}, partyValue)},
-		{"extraArgs", recordValue([]field{
-			{"context", recordValue([]field{{"values", contextValues}})},
-			{"meta", buildMetadataRecord(registry.Metadata{Values: map[string]string{}})},
-		})},
+		{"extraArgs", buildTestTokenExtraArgs(tokenRulesCID, []string{accountConfigCID})},
 	})
 	pkg, mod, entity := splitInterfaceID(TransferInstructionInterfaceV2)
 	exercise := &lapiv2.Command{

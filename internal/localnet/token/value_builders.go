@@ -370,6 +370,60 @@ func scalarToAnyValueInner(ctor string, inner any) (*lapiv2.Value, error) {
 	}
 }
 
+// --- test-token (splice-test-token-v2) choice context ----------------
+
+// buildTestTokenExtraArgs builds the `extraArgs` record
+// ({context, meta}) the bundled splice-test-token-v2 transfer/accept
+// state machine expects. Unlike Amulet (whose choice context is an
+// opaque blob the off-ledger scan registry hands back), the test token
+// is issuer-administered on-ledger: the context is just two well-known
+// entries the choice looks up directly — the issuer's TokenRules
+// contract (used as the event log) and the involved accounts'
+// AccountConfig contracts. See TestTokenV2.daml's
+// token_transferFactory_transferImpl + Transfer.daml's
+// transferInstructionTransition (getEventLogFromContext +
+// extractAccountConfigMap).
+func buildTestTokenExtraArgs(tokenRulesCID string, accountConfigCIDs []string) *lapiv2.Value {
+	return recordValue([]field{
+		{"context", buildTestTokenChoiceContext(tokenRulesCID, accountConfigCIDs)},
+		{"meta", buildMetadataRecord(registry.Metadata{Values: map[string]string{}})},
+	})
+}
+
+// buildTestTokenChoiceContext builds the ChoiceContext record
+// ({values : Map Text AnyValue}) carrying:
+//
+//	testTokenV2/tokenRules    → AV_ContractId of the issuer's TokenRules
+//	testTokenV2/accountConfigs → AV_List of AV_ContractId for each
+//	                             provider-scoped account's AccountConfig
+//
+// Entries are emitted in key-sorted order ("…/accountConfigs" precedes
+// "…/tokenRules") for a deterministic wire form. An empty
+// accountConfigCIDs slice yields an empty AV_List, which the choice
+// accepts for self-custodial accounts (extractAccountConfigMap falls
+// back to the basic config when no contract is supplied).
+func buildTestTokenChoiceContext(tokenRulesCID string, accountConfigCIDs []string) *lapiv2.Value {
+	configElems := make([]*lapiv2.Value, len(accountConfigCIDs))
+	for i, cid := range accountConfigCIDs {
+		configElems[i] = variantValue("AV_ContractId", contractIDValue(cid))
+	}
+	values := &lapiv2.Value{Sum: &lapiv2.Value_TextMap{TextMap: &lapiv2.TextMap{
+		Entries: []*lapiv2.TextMap_Entry{
+			{
+				Key: accountConfigsContextKey,
+				Value: variantValue("AV_List", &lapiv2.Value{Sum: &lapiv2.Value_List{
+					List: &lapiv2.List{Elements: configElems},
+				}}),
+			},
+			{
+				Key:   tokenRulesContextKey,
+				Value: variantValue("AV_ContractId", contractIDValue(tokenRulesCID)),
+			},
+		},
+	}}}
+	return recordValue([]field{{"values", values}})
+}
+
 // --- low-level Value constructors -----------------------------------
 
 // field is the (label, value) tuple a Record carries; carried as a
