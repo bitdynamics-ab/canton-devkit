@@ -395,8 +395,10 @@ func exerciseTestTokenTransferFactory(
 	transferArgs registry.TransferArgs,
 	accountConfigCIDs []string,
 ) (*lapiv2.SubmitAndWaitForTransactionResponse, error) {
+	// The bundled splice-test-token-v2 is a V2 instrument, so its
+	// transfer record uses the V2 (Account) sender/receiver shape.
 	choiceArg := recordValue([]field{
-		{"transfer", buildTransferRecord(transferArgs)},
+		{"transfer", buildTransferRecord(transferArgs, genV2)},
 		{"actors", listValue(actors, partyValue)},
 		{"extraArgs", buildTestTokenExtraArgs(tokenRulesCID, accountConfigCIDs)},
 	})

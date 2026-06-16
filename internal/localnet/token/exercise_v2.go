@@ -46,20 +46,30 @@ func exerciseV2TransferFactory(
 	factoryResp *registry.TransferFactoryResponse,
 	gen Generation,
 ) (*lapiv2.SubmitAndWaitForTransactionResponse, error) {
-	// Build the choice argument record. Per TransferInstructionV2.daml,
-	// TransferFactory_Transfer takes { transfer, actors, extraArgs } —
-	// actors is the controller list (the sender, who authorizes the
-	// transfer). There is NO expectedAdmin field on the choice (the
-	// admin is carried inside transfer.instrumentId).
+	// Build the choice argument record. The two generations differ:
+	//   V2 (TransferInstructionV2.daml): { transfer, actors, extraArgs }
+	//     — actors is the controller list (the sender).
+	//   V1 (TransferInstructionV1.daml): { expectedAdmin, transfer,
+	//     extraArgs } — expectedAdmin is the factory admin the choice
+	//     validates; the controller is fixed to transfer.sender.
 	extraArgs, err := buildExtraArgsRecord(factoryResp.ChoiceContextData(), registry.Metadata{Values: map[string]string{}})
 	if err != nil {
 		return nil, fmt.Errorf("build extraArgs: %w", err)
 	}
-	choiceArg := recordValue([]field{
-		{"transfer", buildTransferRecord(transferArgs)},
-		{"actors", listValue([]string{actAs}, partyValue)},
-		{"extraArgs", extraArgs},
-	})
+	var choiceArg *lapiv2.Value
+	if gen == genV1 {
+		choiceArg = recordValue([]field{
+			{"expectedAdmin", partyValue(transferArgs.InstrumentID.Admin)},
+			{"transfer", buildTransferRecord(transferArgs, gen)},
+			{"extraArgs", extraArgs},
+		})
+	} else {
+		choiceArg = recordValue([]field{
+			{"transfer", buildTransferRecord(transferArgs, gen)},
+			{"actors", listValue([]string{actAs}, partyValue)},
+			{"extraArgs", extraArgs},
+		})
+	}
 
 	disclosed, err := disclosedContractsToProto(factoryResp.DisclosedContractsList())
 	if err != nil {
@@ -100,12 +110,22 @@ func exerciseV2AcceptInstruction(
 	if err != nil {
 		return nil, fmt.Errorf("build extraArgs: %w", err)
 	}
-	// Per TransferInstructionV2.daml, TransferInstruction_Accept takes
-	// { actors, extraArgs } — actors is the controller (the receiver).
-	choiceArg := recordValue([]field{
-		{"actors", listValue([]string{actAs}, partyValue)},
-		{"extraArgs", extraArgs},
-	})
+	// TransferInstruction_Accept differs by generation:
+	//   V2 (TransferInstructionV2.daml): { actors, extraArgs } — actors
+	//     is the controller (the receiver).
+	//   V1 (TransferInstructionV1.daml): { extraArgs } only — the
+	//     controller is fixed to (view this).transfer.receiver.
+	var choiceArg *lapiv2.Value
+	if gen == genV1 {
+		choiceArg = recordValue([]field{
+			{"extraArgs", extraArgs},
+		})
+	} else {
+		choiceArg = recordValue([]field{
+			{"actors", listValue([]string{actAs}, partyValue)},
+			{"extraArgs", extraArgs},
+		})
+	}
 
 	disclosed, err := disclosedContractsToProto(ctxResp.DisclosedContracts)
 	if err != nil {

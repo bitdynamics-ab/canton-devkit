@@ -241,6 +241,17 @@ func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult
 		return ActivityResult{Events: []ActivityEvent{}}, nil
 	}
 
+	// Query every vetted holding surface (V1 + V2), not just V2, so a V1
+	// instrument like Amulet appears in the activity feed on a stable
+	// release — matching the balance / instruments / matrix read paths.
+	surfaces, err := discoverTokenSurfaces(ctx, client)
+	if err != nil {
+		return ActivityResult{}, err
+	}
+	if !surfaces.Any() {
+		return ActivityResult{Events: []ActivityEvent{}}, nil
+	}
+
 	end, err := client.LedgerEnd(ctx)
 	if err != nil {
 		return ActivityResult{}, fmt.Errorf("ledger end: %w", err)
@@ -256,7 +267,7 @@ func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult
 		EndInclusive:   &endInc,
 		UpdateFormat: &lapiv2.UpdateFormat{
 			IncludeTransactions: &lapiv2.TransactionFormat{
-				EventFormat:      holdingInterfaceFilterV2(parties),
+				EventFormat:      holdingInterfaceFilter(surfaces, parties),
 				TransactionShape: lapiv2.TransactionShape_TRANSACTION_SHAPE_ACS_DELTA,
 			},
 		},
@@ -307,11 +318,11 @@ func consumeActivityStream(stream <-chan ledger.StreamItem[*lapiv2.GetUpdatesRes
 		}
 		for _, e := range t.GetEvents() {
 			if c := e.GetCreated(); c != nil {
-				for _, iv := range c.GetInterfaceViews() {
-					view, ok := extractHoldingViewV2(iv)
-					if !ok {
-						continue
-					}
+				// One delta per contract — prefer the richer V2 view, fall
+				// back to V1 — so a V1 Holding (Amulet) registers in the
+				// feed too, never double-counted when a contract implements
+				// both interfaces.
+				if view, ok := extractBestHoldingView(c.GetInterfaceViews()); ok {
 					d := rawHoldingDelta{
 						party:      view.Owner,
 						instrument: view.InstrumentID,

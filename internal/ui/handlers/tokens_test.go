@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -353,4 +355,157 @@ func TestMapTokenError_RegistryAPIError(t *testing.T) {
 	if strings.Contains(body, "abc123") {
 		t.Errorf("body must not leak full registry body (party-id fingerprint): %s", body)
 	}
+}
+
+// TestExtractEmittedID pins the parser that surfaces the created
+// TransferInstruction id from RunTransfer's emitted events so the UI can
+// drive the receiver-side Accept (without it the two-step flow is
+// unusable). It must find the id buried among other emit lines, and
+// return "" when no instruction was created (Direct/self transfer).
+func TestExtractEmittedID(t *testing.T) {
+	const id = "00abc-instruction::1220ff"
+	cases := []struct {
+		name    string
+		emitted string
+		want    string
+	}{
+		{
+			name: "buried among other events",
+			emitted: `transfer: selected {"amount":"7","input_count":1}
+transfer: factory {"factory_id":"00f","transfer_kind":"Offer"}
+transfer complete: {"transfer_instruction_id":"` + id + `"}
+`,
+			want: id,
+		},
+		{
+			name:    "single completion line",
+			emitted: `transfer complete: {"transfer_instruction_id":"` + id + `"}` + "\n",
+			want:    id,
+		},
+		{
+			name: "no instruction created (settled, empty id)",
+			emitted: `transfer: selected {"amount":"7"}
+transfer complete: {"transfer_instruction_id":""}
+`,
+			want: "",
+		},
+		{name: "empty input", emitted: "", want: ""},
+		{name: "no json", emitted: "transfer: done\n", want: ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := extractEmittedID(c.emitted); got != c.want {
+				t.Errorf("extractEmittedID = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// TestHandleTokenAccept_ThreadsParty pins the parity fix: the accept
+// handler must forward ?party= to RunAccept so the receiver is targeted
+// on a multi-party participant (the CLI's `transfer accept --party`
+// equivalent). Without it the accept misfires to the JWT's first party.
+func TestHandleTokenAccept_ThreadsParty(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DPM_REGISTRY_DIR", dir)
+	t.Setenv("XDG_DATA_HOME", dir)
+	const inst = "wire-accept"
+	st := &registry.State{SchemaVersion: 1, Name: inst, Ports: map[string]int{"participant_ledger_app-user": 13902}}
+	if err := registry.Write(st); err != nil {
+		t.Fatalf("registry.Write: %v", err)
+	}
+
+	var captured token.AcceptOptions
+	prev := runTokenAccept
+	runTokenAccept = func(_ context.Context, opts token.AcceptOptions) error {
+		captured = opts
+		return nil
+	}
+	defer func() { runTokenAccept = prev }()
+
+	srv := tokensSrv(t)
+	resp, err := http.Post(srv.URL+"/api/tokens/transfers/00abc/accept?instance="+inst+"&party=bob%3A%3A1220", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", resp.StatusCode)
+	}
+	if captured.Party != "bob::1220" {
+		t.Errorf("party not threaded: got %q, want bob::1220", captured.Party)
+	}
+	if captured.TransferInstructionID != "00abc" {
+		t.Errorf("instruction id not threaded: got %q", captured.TransferInstructionID)
+	}
+}
+
+// TestHandleTokenTransfer_ReturnsInstructionID pins that the transfer
+// handler surfaces the created TransferInstruction id (so the UI can
+// drive Accept) and reports settled=AutoAccept.
+func TestHandleTokenTransfer_ReturnsInstructionID(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DPM_REGISTRY_DIR", dir)
+	t.Setenv("XDG_DATA_HOME", dir)
+	const inst = "wire-transfer"
+	st := &registry.State{SchemaVersion: 1, Name: inst, Ports: map[string]int{"participant_ledger_app-user": 13902}}
+	if err := registry.Write(st); err != nil {
+		t.Fatalf("registry.Write: %v", err)
+	}
+
+	var capturedAuto bool
+	prev := runTokenTransfer
+	runTokenTransfer = func(_ context.Context, out io.Writer, opts token.TransferOptions) error {
+		capturedAuto = opts.AutoAccept
+		// Emit the same "transfer complete" event RunTransfer would, so the
+		// handler's extractEmittedID surfaces the id.
+		_, _ = io.WriteString(out, `transfer complete: {"transfer_instruction_id":"00inst-xyz"}`+"\n")
+		return nil
+	}
+	defer func() { runTokenTransfer = prev }()
+
+	srv := tokensSrv(t)
+	for _, tc := range []struct {
+		name    string
+		auto    bool
+		settled bool
+	}{
+		{"offer (no auto-accept)", false, false},
+		{"auto-accept", true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := bytes.NewBufferString(`{"from":"alice","to":"bob","amount":"5","auto_accept":` + boolStr(tc.auto) + `}`)
+			resp, err := http.Post(srv.URL+"/api/tokens/Amulet/transfer?instance="+inst, "application/json", body)
+			if err != nil {
+				t.Fatalf("POST: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want 200", resp.StatusCode)
+			}
+			var got struct {
+				TransferInstructionID string `json:"transfer_instruction_id"`
+				Settled               bool   `json:"settled"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if got.TransferInstructionID != "00inst-xyz" {
+				t.Errorf("instruction id = %q, want 00inst-xyz", got.TransferInstructionID)
+			}
+			if got.Settled != tc.settled {
+				t.Errorf("settled = %v, want %v", got.Settled, tc.settled)
+			}
+			if capturedAuto != tc.auto {
+				t.Errorf("auto_accept not wired: got %v, want %v", capturedAuto, tc.auto)
+			}
+		})
+	}
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
 }

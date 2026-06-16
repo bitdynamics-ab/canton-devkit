@@ -1913,7 +1913,11 @@ export const mintToken = (
     idempotencyHeader(),
   );
 
-export const transferToken = (
+// transferToken submits a live transfer and returns the created
+// TransferInstruction id (Offer kind) so the caller can drive the
+// receiver-side Accept. settled is true when auto-accept already chained
+// the accept (or a Direct/self transfer needed none).
+export const transferToken = async (
   instance: string,
   symbol: string,
   from: string,
@@ -1922,12 +1926,30 @@ export const transferToken = (
   reason?: string,
   role?: string,
   autoAccept?: boolean,
-): Promise<void> =>
-  apiFetchVoid(
+): Promise<{ transferInstructionId: string; settled: boolean }> => {
+  const resp = await fetch(
     `/api/tokens/${encodeURIComponent(symbol)}/transfer?${tokenQuery(instance, role)}`,
-    { from, to, amount, reason: reason ?? "", auto_accept: !!autoAccept },
-    idempotencyHeader(),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...idempotencyHeader() },
+      body: JSON.stringify({ from, to, amount, reason: reason ?? "", auto_accept: !!autoAccept }),
+    },
   );
+  if (!resp.ok) {
+    let parsed: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try {
+      parsed = await resp.json();
+    } catch {
+      /* keep default */
+    }
+    throw new ApiError(resp.status, parsed);
+  }
+  const body = (await resp.json().catch(() => ({}))) as {
+    transfer_instruction_id?: string;
+    settled?: boolean;
+  };
+  return { transferInstructionId: body.transfer_instruction_id ?? "", settled: !!body.settled };
+};
 
 // faucetToken funds a party from a well-known source,
 // auto-accepted. Empty source defaults to the role's funded party.
@@ -1998,10 +2020,13 @@ export const burnToken = (
 export const acceptTransfer = (
   instance: string,
   transferInstructionID: string,
+  party?: string,
   role?: string,
 ): Promise<void> =>
   apiFetchVoid(
-    `/api/tokens/transfers/${encodeURIComponent(transferInstructionID)}/accept?${tokenQuery(instance, role)}`,
+    `/api/tokens/transfers/${encodeURIComponent(transferInstructionID)}/accept?${tokenQuery(instance, role)}${
+      party ? `&party=${encodeURIComponent(party)}` : ""
+    }`,
     {},
     idempotencyHeader(),
   );

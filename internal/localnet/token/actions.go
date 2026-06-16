@@ -96,6 +96,14 @@ type AcceptOptions struct {
 	// alphabetically-first one.
 	Party string
 
+	// Gen is the instruction's token-standard generation, when the caller
+	// already knows it (e.g. the in-process auto-accept right after a
+	// transfer). Zero means "derive it" — runAcceptLive then inspects the
+	// instruction contract itself rather than guessing from the
+	// participant's vetted surfaces, which would misroute a V1 instruction
+	// on a participant that also vets V2.
+	Gen Generation
+
 	// Same live-submit envelope as TransferOptions.
 	Endpoint    string
 	Token       string
@@ -297,7 +305,7 @@ func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error
 // off-ledger dispatch is a single readable branch (and so tests can pin
 // it via the runTransferOffLedgerFn seam).
 func runTransferOffLedger(ctx context.Context, out io.Writer, opts TransferOptions) error {
-	instructionID, err := runTransferLive(ctx, out, opts)
+	instructionID, gen, err := runTransferLive(ctx, out, opts)
 	if err != nil {
 		return err
 	}
@@ -315,11 +323,15 @@ func runTransferOffLedger(ctx context.Context, out io.Writer, opts TransferOptio
 			Instance:              opts.Instance,
 			TransferInstructionID: instructionID,
 			Party:                 opts.To,
-			Endpoint:              opts.Endpoint,
-			Token:                 opts.Token,
-			Role:                  opts.Role,
-			Insecure:              opts.Insecure,
-			RegistryURL:           opts.RegistryURL,
+			// Thread the generation the transfer just used so the accept
+			// routes the same way — never re-derived from surfaces, which
+			// would misroute a V1 instruction on a dual-surface participant.
+			Gen:         gen,
+			Endpoint:    opts.Endpoint,
+			Token:       opts.Token,
+			Role:        opts.Role,
+			Insecure:    opts.Insecure,
+			RegistryURL: opts.RegistryURL,
 		}
 		if err := RunAccept(ctx, out, acc); err != nil {
 			return fmt.Errorf("auto-accept transfer %s: %w", instructionID, err)

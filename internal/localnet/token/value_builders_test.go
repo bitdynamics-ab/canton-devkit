@@ -27,7 +27,7 @@ func TestBuildTransferRecord_Shape(t *testing.T) {
 		InputHoldingCids: []string{"00cid-h1", "00cid-h2"},
 		Meta:             registry.Metadata{Values: map[string]string{"k": "v"}},
 	}
-	v := buildTransferRecord(in)
+	v := buildTransferRecord(in, genV2)
 	rec := v.GetRecord()
 	if rec == nil {
 		t.Fatal("top-level value is not a Record")
@@ -70,6 +70,41 @@ func TestBuildTransferRecord_Shape(t *testing.T) {
 	wantMicros := time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC).UnixMicro()
 	if got := rec.Fields[4].Value.GetTimestamp(); got != wantMicros {
 		t.Errorf("requestedAt: got %d, want %d", got, wantMicros)
+	}
+}
+
+// TestBuildTransferRecord_V1Shape pins the V1 (CIP-0056) difference:
+// sender/receiver are bare Party values, NOT Account records. Sending
+// the V2 Account shape to a V1 registry fails with "Expected text but
+// was {" — this test guards against that regression.
+func TestBuildTransferRecord_V1Shape(t *testing.T) {
+	in := registry.TransferArgs{
+		Sender:           registry.NewOwnedAccount("alice::1220"),
+		Receiver:         registry.NewOwnedAccount("bob::1220"),
+		Amount:           "10.00",
+		InstrumentID:     registry.InstrumentID{Admin: "DSO::1220", ID: "Amulet"},
+		RequestedAt:      time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC),
+		ExecuteBefore:    time.Date(2026, 5, 30, 13, 0, 0, 0, time.UTC),
+		InputHoldingCids: []string{"00cid-h1"},
+		Meta:             registry.Metadata{Values: map[string]string{}},
+	}
+	rec := buildTransferRecord(in, genV1).GetRecord()
+	if rec == nil {
+		t.Fatal("top-level value is not a Record")
+	}
+	// sender/receiver must be bare Party values, not Account records.
+	if got := rec.Fields[0].Value.GetParty(); got != "alice::1220" {
+		t.Errorf("V1 sender: got %v, want bare Party alice::1220", rec.Fields[0].Value.Sum)
+	}
+	if got := rec.Fields[1].Value.GetParty(); got != "bob::1220" {
+		t.Errorf("V1 receiver: got %v, want bare Party bob::1220", rec.Fields[1].Value.Sum)
+	}
+	if rec.Fields[0].Value.GetRecord() != nil {
+		t.Error("V1 sender must NOT be an Account record")
+	}
+	// Shared fields unchanged from V2.
+	if rec.Fields[2].Value.GetNumeric() != "10.00" {
+		t.Errorf("amount: got %v", rec.Fields[2].Value.Sum)
 	}
 }
 

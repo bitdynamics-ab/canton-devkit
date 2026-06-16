@@ -2,9 +2,20 @@ package registry
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"time"
+)
+
+// Token-standard generation discriminators for the transfer wire shape.
+// V1 (CIP-0056) and V2 (CIP-0112) differ in three places on the
+// transfer-factory / accept choices — sender/receiver type, the
+// factory choice's controller field, and the accept choice's arg set —
+// so the JSON encoders below switch on this.
+const (
+	TransferVersionV1 = "v1"
+	TransferVersionV2 = "v2"
 )
 
 // V2 Token Standard transfer-instruction registry endpoints. These
@@ -75,9 +86,18 @@ func NewOwnedAccount(party string) Account {
 }
 
 // TransferArgs is the structured `transfer` field of the
-// transfer-factory choice. Mirrors `Splice.Api.Token.TransferInstructionV2.
-// Transfer` from the standard. Field order matches the OpenAPI spec.
+// transfer-factory choice. Mirrors the standard's `Transfer` record.
+// The two generations differ in exactly one field: in V2 (CIP-0112)
+// `sender`/`receiver` are `Account` records, while in V1 (CIP-0056)
+// they are bare `Party` strings (this mirrors the read-path
+// HoldingView.owner difference). Every other field is identical, so a
+// single struct with a generation-aware MarshalJSON covers both. The
+// json tags drive unmarshal (and the V2 marshal default).
 type TransferArgs struct {
+	// Version selects the sender/receiver wire shape: "v1" => bare
+	// Party, "v2"/"" => Account. Not serialized; set by the enclosing
+	// choice args at marshal time.
+	Version          string       `json:"-"`
 	Sender           Account      `json:"sender"`
 	Receiver         Account      `json:"receiver"`
 	Amount           string       `json:"amount"`
@@ -86,6 +106,39 @@ type TransferArgs struct {
 	ExecuteBefore    time.Time    `json:"executeBefore"`
 	InputHoldingCids []string     `json:"inputHoldingCids"`
 	Meta             Metadata     `json:"meta"`
+}
+
+// partyOf returns an Account's owner party (or "" when None) — used to
+// flatten an Account down to the bare Party the V1 transfer expects.
+func partyOf(a Account) string {
+	if a.Owner != nil {
+		return *a.Owner
+	}
+	return ""
+}
+
+// MarshalJSON emits the generation-correct `transfer` shape. The
+// registry decodes this against the real Daml choice signature, so the
+// sender/receiver type must match the vetted package's generation.
+func (t TransferArgs) MarshalJSON() ([]byte, error) {
+	out := map[string]any{
+		"amount":           t.Amount,
+		"instrumentId":     t.InstrumentID,
+		"requestedAt":      t.RequestedAt,
+		"executeBefore":    t.ExecuteBefore,
+		"inputHoldingCids": t.InputHoldingCids,
+		"meta":             t.Meta,
+	}
+	if t.Version == TransferVersionV1 {
+		// V1 (CIP-0056): sender/receiver are bare Party.
+		out["sender"] = partyOf(t.Sender)
+		out["receiver"] = partyOf(t.Receiver)
+	} else {
+		// V2 (CIP-0112): sender/receiver are Account records.
+		out["sender"] = t.Sender
+		out["receiver"] = t.Receiver
+	}
+	return json.Marshal(out)
 }
 
 // Metadata is the standard's open-ended `Metadata` record — a string
@@ -112,16 +165,49 @@ type TransferFactoryRequest struct {
 }
 
 // TransferFactoryChoiceArgs is the JSON encoding of the Daml
-// TransferFactory_Transfer choice argument (per
-// TransferInstructionV2.daml): { transfer, actors, extraArgs }. The
-// registry validates this against the real choice signature, so the
-// field set must match exactly — `actors` is the controller list (the
-// sender party authorizing the transfer); there is no `expectedAdmin`
-// field (the admin lives inside transfer.instrumentId).
+// TransferFactory_Transfer choice argument. The registry validates it
+// against the real choice signature, so the field set must match the
+// instrument's generation exactly:
+//
+//   - V2 (CIP-0112, TransferInstructionV2.daml): { transfer, actors,
+//     extraArgs } — `actors` is the controller list (the sender).
+//   - V1 (CIP-0056, TransferInstructionV1.daml): { expectedAdmin,
+//     transfer, extraArgs } — `expectedAdmin` is the factory admin the
+//     choice validates against; there is no `actors` field (the
+//     controller is fixed to transfer.sender).
+//
+// Version selects which shape MarshalJSON emits (empty => v2). The json
+// tags drive unmarshal and the V2 marshal default.
 type TransferFactoryChoiceArgs struct {
-	Transfer  TransferArgs `json:"transfer"`
-	Actors    []string     `json:"actors"`
-	ExtraArgs ExtraArgs    `json:"extraArgs"`
+	// Version is the wire generation ("v1"/"v2"; empty => v2). Not serialized.
+	Version string `json:"-"`
+	// ExpectedAdmin is the V1 factory admin to validate; ignored for V2.
+	ExpectedAdmin string       `json:"-"`
+	Transfer      TransferArgs `json:"transfer"`
+	Actors        []string     `json:"actors"`
+	ExtraArgs     ExtraArgs    `json:"extraArgs"`
+}
+
+// MarshalJSON emits the generation-correct choice-argument shape,
+// propagating the wire generation into the nested transfer so its
+// sender/receiver match.
+func (a TransferFactoryChoiceArgs) MarshalJSON() ([]byte, error) {
+	tr := a.Transfer
+	tr.Version = a.Version
+	if a.Version == TransferVersionV1 {
+		// V1 (CIP-0056): { expectedAdmin, transfer, extraArgs }.
+		return json.Marshal(map[string]any{
+			"expectedAdmin": a.ExpectedAdmin,
+			"transfer":      tr,
+			"extraArgs":     a.ExtraArgs,
+		})
+	}
+	// V2 (CIP-0112): { transfer, actors, extraArgs }.
+	return json.Marshal(map[string]any{
+		"transfer":  tr,
+		"actors":    a.Actors,
+		"extraArgs": a.ExtraArgs,
+	})
 }
 
 // DisclosedContract is the OpenAPI shape registries return when they

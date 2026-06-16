@@ -1,6 +1,10 @@
 package token
 
-import "testing"
+import (
+	"testing"
+
+	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
+)
 
 // TestTransferInterfaceByGeneration pins the per-generation interface +
 // registry-segment selection the off-ledger transfer/accept routes on.
@@ -45,17 +49,33 @@ func TestPickGeneration(t *testing.T) {
 	}
 }
 
-// TestAcceptGeneration: the accept (no holdings) routes on the vetted
-// surfaces, preferring V2 when both — which matches the transfer side,
-// so the two never disagree on a contract.
-func TestAcceptGeneration(t *testing.T) {
-	if got := acceptGeneration(Surfaces{HasV1: true}); got != genV1 {
-		t.Errorf("v1-only → v1, got %v", got)
+// TestInterfaceGeneration_ClassifiesInstructionAndHolding pins that the
+// shared classifier recognizes BOTH the Holding interfaces (read path)
+// and the TransferInstruction interfaces. The accept now routes by the
+// instruction's OWN interface (instructionGeneration), not the
+// participant's vetted surfaces — so misclassifying a TransferInstruction
+// would misroute a V1 instruction on a dual-surface participant and
+// strand the transfer.
+func TestInterfaceGeneration_ClassifiesInstructionAndHolding(t *testing.T) {
+	cases := []struct {
+		module string
+		want   Generation
+		ok     bool
+	}{
+		{"Splice.Api.Token.TransferInstructionV1", genV1, true},
+		{"Splice.Api.Token.TransferInstructionV2", genV2, true},
+		{"Splice.Api.Token.HoldingV1", genV1, true},
+		{"Splice.Api.Token.HoldingV2", genV2, true},
+		{"Splice.Api.Token.MetadataV1", 0, false},
+		{"", 0, false},
 	}
-	if got := acceptGeneration(Surfaces{HasV2: true}); got != genV2 {
-		t.Errorf("v2-only → v2, got %v", got)
+	for _, c := range cases {
+		got, ok := interfaceGeneration(&lapiv2.Identifier{ModuleName: c.module})
+		if ok != c.ok || got != c.want {
+			t.Errorf("interfaceGeneration(%q) = (%v,%v), want (%v,%v)", c.module, got, ok, c.want, c.ok)
+		}
 	}
-	if got := acceptGeneration(Surfaces{HasV1: true, HasV2: true}); got != genV2 {
-		t.Errorf("both → v2 (matches transfer prefer-v2), got %v", got)
+	if _, ok := interfaceGeneration(nil); ok {
+		t.Error("nil interface id must not classify")
 	}
 }
