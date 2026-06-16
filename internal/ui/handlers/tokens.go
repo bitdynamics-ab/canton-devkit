@@ -55,6 +55,7 @@ func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	// carrying the header are deduplicated).
 	idem := newIdemStore()
 	mux.HandleFunc("POST /api/tokens", idem.wrap(handleTokensCreate))
+	mux.HandleFunc("POST /api/tokens/demo", idem.wrap(handleTokensDemo))
 	mux.HandleFunc("POST /api/tokens/{symbol}/mint", idem.wrap(handleTokenMint))
 	mux.HandleFunc("POST /api/tokens/{symbol}/transfer", idem.wrap(handleTokenTransfer))
 	mux.HandleFunc("POST /api/tokens/transfers/{id}/accept", idem.wrap(handleTokenAccept))
@@ -441,6 +442,54 @@ func handleTokensCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, res.TokenRef)
 }
 
+// handleTokensDemo provisions a live, transferable demo token in one
+// call (issuer party → V2 instrument → mint supply → faucet a holder) —
+// the server side of the Web UI's "Launch demo token" button and the
+// CLI `token demo` verb, both routed through token.RunDemo for parity.
+//
+// The request body is optional; an empty body provisions the defaults
+// (symbol DEMO, supply 1,000,000, decimals 6, seed a holder). Requires a
+// live V2 endpoint — without one RunDemo returns ErrNeedsV2LocalNet,
+// which maps to 412 so the UI can disable the button with a "start a V2
+// instance first" hint instead of producing an un-mintable stub.
+func handleTokensDemo(w http.ResponseWriter, r *http.Request) {
+	instance, err := instanceFromQuery(r)
+	if err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	var req struct {
+		Symbol        string `json:"symbol"`
+		InitialSupply string `json:"initial_supply"`
+		Decimals      int    `json:"decimals"`
+		SeedHolder    *bool  `json:"seed_holder"`
+	}
+	if err := decodeJSON(r.Body, &req); err != nil && !errors.Is(err, io.EOF) {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	role := roleFromQuery(r)
+	seed := true
+	if req.SeedHolder != nil {
+		seed = *req.SeedHolder
+	}
+	res, err := runTokenDemo(r.Context(), nil, token.DemoOptions{
+		Instance:      instance,
+		Role:          role,
+		Endpoint:      liveLedgerEndpoint(instance, role),
+		Insecure:      true,
+		Symbol:        req.Symbol,
+		InitialSupply: req.InitialSupply,
+		Decimals:      req.Decimals,
+		SeedHolder:    seed,
+	})
+	if err != nil {
+		mapTokenError(w, err, "demo")
+		return
+	}
+	writeJSON(w, http.StatusCreated, res)
+}
+
 func handleTokenMint(w http.ResponseWriter, r *http.Request) {
 	instance, err := instanceFromQuery(r)
 	if err != nil {
@@ -669,6 +718,11 @@ var runTokenTransfer = func(ctx context.Context, out io.Writer, opts token.Trans
 var runTokenAccept = func(ctx context.Context, opts token.AcceptOptions) error {
 	return token.RunAccept(ctx, nil, opts)
 }
+
+// runTokenDemo is the indirection point for handleTokensDemo. Tests
+// override it to assert the handler threads instance/role/endpoint +
+// seed flag through to RunDemo without standing up a live ledger.
+var runTokenDemo = token.RunDemo
 
 // roleFromQuery returns the `?role=` value, defaulting to app-user.
 func roleFromQuery(r *http.Request) string {
