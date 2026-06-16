@@ -13,7 +13,17 @@ import { TokensScreen } from "./TokensScreen";
 
 afterEach(() => vi.unstubAllGlobals());
 
-function stubFetch(tokens: Array<{ symbol: string; name: string }>) {
+// holdingsResponse lets a test drive the source banner: pass
+// { source: "registry", rows: [...] } to exercise the pseudo-balance
+// disclaimer. Defaults to a live empty ACS (no banner) so existing
+// callers are unaffected.
+function stubFetch(
+  tokens: Array<{ symbol: string; name: string }>,
+  holdingsResponse?: {
+    source: "ledger" | "registry";
+    rows: Array<{ party: string; amount: string }>;
+  },
+) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string) => {
@@ -100,7 +110,14 @@ function stubFetch(tokens: Array<{ symbol: string; name: string }>) {
         });
       }
       if (url.startsWith("/api/tokens/") && url.includes("/holdings")) {
-        return json({ schema_version: 1, holdings: [] });
+        const src = holdingsResponse?.source ?? "ledger";
+        const rows = (holdingsResponse?.rows ?? []).map((r) => ({
+          instrument_id: "RTK",
+          party: r.party,
+          amount: r.amount,
+          source: src,
+        }));
+        return json({ schema_version: 1, source: src, holdings: rows });
       }
       if (url.startsWith("/api/tokens")) {
         return json({
@@ -270,5 +287,38 @@ describe("TokensScreen", () => {
       { timeout: 4000 },
     );
     expect(screen.queryAllByText(/treasury/).length).toBeGreaterThan(0);
+  });
+
+  // When the holdings endpoint reports source="registry" (no live
+  // ledger), the table must carry an explicit "pseudo-balance, not
+  // on-ledger" disclaimer so the fabricated rows can't be mistaken for
+  // real holdings.
+  it("shows the registry pseudo-balance disclaimer when holdings are not on-ledger", async () => {
+    stubFetch(
+      [{ symbol: "RTK", name: "Retail Token" }],
+      { source: "registry", rows: [{ party: "alice::abc", amount: "1000000" }] },
+    );
+    renderTokens();
+    await waitFor(
+      () => expect(screen.queryByText(/registry pseudo-balances/i)).toBeInTheDocument(),
+      { timeout: 4000 },
+    );
+    // The "not on-ledger holdings" copy is split across <b> tags, so the
+    // trailing fragment lands in its own text node — match that.
+    expect(screen.queryByText(/on-ledger holdings/i)).toBeInTheDocument();
+  });
+
+  it("does NOT show the disclaimer when holdings are live on-ledger", async () => {
+    stubFetch(
+      [{ symbol: "RTK", name: "Retail Token" }],
+      { source: "ledger", rows: [{ party: "alice::abc", amount: "42.0" }] },
+    );
+    renderTokens();
+    // Wait for the live amount to render, then assert the banner is absent.
+    await waitFor(
+      () => expect(screen.queryAllByText("42.0").length).toBeGreaterThan(0),
+      { timeout: 4000 },
+    );
+    expect(screen.queryByText(/registry pseudo-balances/i)).not.toBeInTheDocument();
   });
 });

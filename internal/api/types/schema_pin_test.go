@@ -32,6 +32,7 @@ func TestAllTopLevelResponses_CarrySchemaVersion(t *testing.T) {
 		SkillsInstallResponse{},
 		SkillsListResponse{},
 		Snapshot{},
+		TokenHoldingsResponse{},
 		TransactionsListResponse{},
 		TxReplayResponse{},
 	}
@@ -165,6 +166,17 @@ func TestSchemaVersion_ConsistentAcrossResponses(t *testing.T) {
 				return json.Marshal(Snapshot{
 					SchemaVersion: SchemaVersion,
 					Instance:      "x",
+				})
+			},
+			want: SchemaVersion,
+		},
+		{
+			name: "TokenHoldingsResponse",
+			marshal: func() ([]byte, error) {
+				return json.Marshal(TokenHoldingsResponse{
+					SchemaVersion: SchemaVersion,
+					Source:        HoldingSourceRegistry,
+					Holdings:      nil,
 				})
 			},
 			want: SchemaVersion,

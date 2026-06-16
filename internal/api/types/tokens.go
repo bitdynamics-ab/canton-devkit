@@ -51,3 +51,65 @@ type TokenCreateRequest struct {
 	InitialSupply string `json:"initial_supply"`
 	Issuer        string `json:"issuer"`
 }
+
+// HoldingSource records WHERE a balance row came from so neither
+// surface presents a fabricated number as real on-ledger state.
+// The CLI's `token balance` JSON and the Web UI holdings table both
+// branch on it.
+type HoldingSource string
+
+const (
+	// HoldingSourceLedger means the amount was summed from the
+	// participant's live Active Contract Set (HoldingViewV2 records).
+	// This is the real on-ledger balance.
+	HoldingSourceLedger HoldingSource = "ledger"
+	// HoldingSourceRegistry means the row is the registry-derived
+	// pseudo-balance (issuer holds InitialSupply, everyone else 0) —
+	// a local bookkeeping placeholder, NOT on-ledger truth. Surfaced
+	// when no live participant endpoint is reachable. UIs MUST label
+	// these rows so a user can't mistake them for real holdings.
+	HoldingSourceRegistry HoldingSource = "registry"
+)
+
+// TokenHolding is one balance row — instrument + party + summed
+// amount, plus the Source that produced it. Mirrors
+// internal/localnet/token.BalanceRow byte-for-byte (same JSON tags);
+// that package keeps its own copy so it doesn't depend on api/types.
+// This declaration is the source of truth for the JSON shape — adding
+// a field requires updating both.
+type TokenHolding struct {
+	// InstrumentSymbol is the friendly ticker when the instrument is
+	// recorded in the local registry; omitted for an unknown holding.
+	InstrumentSymbol string `json:"instrument_symbol,omitempty"`
+	// InstrumentID is the V2 InstrumentId.id text.
+	InstrumentID string `json:"instrument_id"`
+	// Party is the holding owner's canonical party id.
+	Party string `json:"party"`
+	// Amount is the summed balance as a Daml Decimal string.
+	Amount string `json:"amount"`
+	// Source distinguishes a live-ACS sum from the registry fallback.
+	Source HoldingSource `json:"source"`
+}
+
+// TokenHoldingsResponse is the top-level body of
+// `GET /api/tokens/{symbol}/holdings` and the CLI `token balance
+// --format json` output. Shared so the two surfaces cannot drift,
+// and schema-pinned via schema_pin_test.
+type TokenHoldingsResponse struct {
+	SchemaVersion int `json:"schema_version"`
+	// Source is the response-level provenance: "ledger" when the rows
+	// were summed from a reachable participant, "registry" when the
+	// live endpoint was missing/unreachable and the rows are the
+	// pseudo-balance fallback. Per-row Source matches this — it is
+	// lifted to the top level so the UI can render one disclaimer
+	// banner without scanning every row.
+	Source HoldingSource `json:"source"`
+	// Holdings is the (possibly empty) set of balance rows. Never
+	// null on the wire — an empty live ACS yields [].
+	Holdings []TokenHolding `json:"holdings"`
+	// Truncated is true when the live ACS scan hit its safety cap and
+	// stopped early, so the rows are a partial view. Omitted (false)
+	// on the common complete-scan and registry-fallback paths. The UI
+	// renders a "showing N of many" hint when set.
+	Truncated bool `json:"truncated,omitempty"`
+}

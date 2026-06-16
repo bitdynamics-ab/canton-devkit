@@ -324,32 +324,29 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
-	// Discover the role's participant ledger port from the registry so
-	// the UI hits the live V2 ACS, same shape as contracts.go. Empty
-	// role defaults to app-user; absent port falls back to the registry
-	// pseudo-balance path (used when the instance pre-dates port
-	// capture). Auto-grant + per-party filter inside dialLedger /
-	// runBalanceLive handle the V2 alpha permission gate transparently.
-	role := r.URL.Query().Get("role")
-	if role == "" {
-		role = "app-user"
-	}
+	// Resolve the role's participant ledger endpoint once and thread it
+	// via opts.Endpoint, rather than letting the expand guard, RunBalance,
+	// and BalanceSource each re-resolve it independently (≈4 registry-file
+	// reads per request). A present endpoint means the live V2 ACS path
+	// (rows tagged SourceLedger); an absent one falls back to the registry
+	// pseudo-balance path (SourceRegistry), which the response source tags
+	// so the UI can flag it. Auto-grant + per-party filter inside
+	// dialLedger / runBalanceLive handle the V2 alpha permission gate
+	// transparently. Empty role defaults to app-user.
+	role := roleFromQuery(r)
+	endpoint := token.ResolveLedgerEndpoint(instance, role)
 	opts := token.BalanceOptions{
 		Instance:   instance,
 		Party:      r.URL.Query().Get("party"),
 		Instrument: r.PathValue("symbol"),
 		Role:       role,
-		Insecure:   true, // LocalNet default
-	}
-	if state, err := registry.Read(instance); err == nil {
-		if port, ok := state.Ports["participant_ledger_"+role]; ok && port > 0 {
-			opts.Endpoint = "localhost:" + strconv.Itoa(port)
-		}
+		Insecure:   true,     // LocalNet default
+		Endpoint:   endpoint, // resolved once above; "" → registry fallback
 	}
 	// expand=contracts → return the individual Holding contracts
 	// (the UTXO units) instead of the summed-per-party balance.
-	// A party's balance is the sum of these.
-	if r.URL.Query().Get("expand") == "contracts" && opts.Endpoint != "" {
+	// A party's balance is the sum of these. Requires a live endpoint.
+	if r.URL.Query().Get("expand") == "contracts" && endpoint != "" {
 		contracts, cerr := token.RunWorkspaceHoldings(r.Context(), opts)
 		if cerr != nil {
 			mapTokenError(w, cerr, "holdings")
@@ -366,20 +363,42 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 		mapTokenError(w, err, "balance")
 		return
 	}
-	if truncated {
-		// Surface the truncation so the UI can render a "showing N of
-		// many" hint instead of silently misreporting the wallet.
-		writeJSON(w, http.StatusOK, map[string]any{
-			"schema_version": types.SchemaVersion,
-			"holdings":       rows,
-			"truncated":      true,
-		})
-		return
+	// Tell the client whether these are live on-ledger balances or the
+	// registry pseudo-balance fallback, so the UI can flag the latter
+	// instead of presenting fabricated rows as real holdings. Derived from
+	// the same resolved endpoint — keyed on endpoint availability (not
+	// reachability), exactly as RunBalance branches. The response-level
+	// value lets the UI render one disclaimer banner without scanning
+	// every row.
+	source := token.SourceRegistry
+	if endpoint != "" {
+		source = token.SourceLedger
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"schema_version": types.SchemaVersion,
-		"holdings":       rows,
+	writeJSON(w, http.StatusOK, types.TokenHoldingsResponse{
+		SchemaVersion: types.SchemaVersion,
+		Source:        types.HoldingSource(source),
+		Holdings:      toHoldings(rows),
+		Truncated:     truncated,
 	})
+}
+
+// toHoldings converts the neutral token.BalanceRow slice into the
+// shared api/types.TokenHolding wire shape. The two structs mirror
+// each other field-for-field (same JSON tags); the conversion exists
+// so the package boundary stays one-directional (handlers → api/types,
+// localnet/token → neither) while the emitted bytes are identical.
+func toHoldings(rows []token.BalanceRow) []types.TokenHolding {
+	out := make([]types.TokenHolding, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, types.TokenHolding{
+			InstrumentSymbol: r.InstrumentSymbol,
+			InstrumentID:     r.InstrumentID,
+			Party:            r.Party,
+			Amount:           r.Amount,
+			Source:           types.HoldingSource(r.Source),
+		})
+	}
+	return out
 }
 
 // --- write paths -----------------------------------------------------
@@ -604,16 +623,11 @@ func roleFromQuery(r *http.Request) string {
 // liveLedgerEndpoint resolves the role's participant ledger gRPC
 // endpoint (host:port) from the instance's recorded ports. Empty when
 // the port wasn't captured — callers then fall back to the not-wired
-// stub. Same port-discovery shape as handleTokenHoldings + contracts.go.
+// stub. Delegates to the neutral token.ResolveLedgerEndpoint so the
+// CLI's `token balance` auto-discovery and this handler resolve the
+// same participant from the same `participant_ledger_<role>` key.
 func liveLedgerEndpoint(instance, role string) string {
-	state, err := registry.Read(instance)
-	if err != nil {
-		return ""
-	}
-	if port, ok := state.Ports["participant_ledger_"+role]; ok && port > 0 {
-		return "localhost:" + strconv.Itoa(port)
-	}
-	return ""
+	return token.ResolveLedgerEndpoint(instance, role)
 }
 
 // instanceFromQuery validates `?instance=` and protects the per-name

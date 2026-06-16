@@ -21,6 +21,7 @@ import {
   type ActivityEvent,
   type AliasMap,
   type BalanceMatrix,
+  type HoldingSource,
   type PartyRef,
   type HoldingContract,
   type InstrumentRef,
@@ -85,6 +86,11 @@ export function TokensScreen() {
 
   const [holdings, setHoldings] = useState<TokenHolding[]>([]);
   const [holdingsErr, setHoldingsErr] = useState<string | null>(null);
+  // holdingsSource: "ledger" = real on-ledger balances; "registry" =
+  // the pseudo-balance fallback shown when no live participant is
+  // reachable. Drives the disclaimer banner so a user never mistakes a
+  // fabricated row for a real holding.
+  const [holdingsSource, setHoldingsSource] = useState<HoldingSource>("ledger");
   const [expanded, setExpanded] = useState<string | null>(null); // party whose UTXOs are shown
   const [contracts, setContracts] = useState<HoldingContract[]>([]);
   // expandSeqRef is the monotonic counter behind toggleExpand's
@@ -175,6 +181,7 @@ export function TokensScreen() {
       .then((r) => {
         if (!cancelled) {
           setHoldings(r.holdings);
+          setHoldingsSource(r.source ?? "ledger");
           setHoldingsErr(null);
         }
       })
@@ -462,6 +469,14 @@ export function TokensScreen() {
                     <h4 style={{ color: W.text2, margin: "18px 0 8px" }}>
                       Holdings <span style={{ color: W.dim, fontWeight: 400, fontSize: 12 }}>· a balance is the sum of its Holding contracts — click a row to expand</span>
                     </h4>
+                    {holdingsSource === "registry" && (
+                      <div role="status" style={{ ...notice("warn"), marginBottom: 8 }}>
+                        No live ledger reachable for <code>{instance}</code>. These are
+                        <b> registry pseudo-balances</b> — local bookkeeping that shows the issuer
+                        holding the full supply and everyone else zero, <b>not</b> on-ledger holdings.
+                        Start the instance to see real balances.
+                      </div>
+                    )}
                     {holdingsErr && <div role="alert" style={{ color: W.err, fontSize: 12 }}>{holdingsErr}</div>}
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                       <thead>

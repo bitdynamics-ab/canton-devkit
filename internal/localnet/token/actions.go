@@ -155,12 +155,38 @@ const maxHoldingsScan = 10_000
 
 // BalanceRow is one row of the balance response — instrument + party
 // + summed amount across the participant's visible ACS holdings.
+//
+// MIRRORS internal/api/types.TokenHolding byte-for-byte (same JSON
+// tags); we keep a local copy so this package doesn't depend on
+// api/types, exactly as registry.TokenRef mirrors api/types.TokenRef.
+// Adding a field requires updating both.
 type BalanceRow struct {
 	InstrumentSymbol string `json:"instrument_symbol,omitempty"`
 	InstrumentID     string `json:"instrument_id"`
 	Party            string `json:"party"`
 	Amount           string `json:"amount"`
+	// Source records whether this row was summed from the live ACS
+	// ("ledger") or synthesized from the registry pseudo-balance
+	// ("registry"). Every row carries its provenance so neither surface
+	// can present the fallback as a real holding.
+	Source HoldingSource `json:"source"`
 }
+
+// HoldingSource is the provenance of a BalanceRow. Mirrors
+// api/types.HoldingSource — the wire values ("ledger"/"registry") must
+// match. Defined here too so this package stays free of an api/types
+// import (which would create a cycle as shared types grow).
+type HoldingSource string
+
+const (
+	// SourceLedger — summed from the participant's live ACS.
+	SourceLedger HoldingSource = "ledger"
+	// SourceRegistry — the registry-derived pseudo-balance fallback
+	// (issuer holds InitialSupply, everyone else 0). NOT on-ledger
+	// truth; surfaced only when no live participant endpoint is
+	// reachable.
+	SourceRegistry HoldingSource = "registry"
+)
 
 // RunMint, RunTransfer, RunBurn, RunAccept currently surface
 // ErrNeedsV2LocalNet — the ACS + ledger-submission wiring against
@@ -388,13 +414,24 @@ func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]Bala
 		return nil, false, errors.New("instance is required")
 	}
 	opts.Party = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Party)
-	// Live-ACS path takes precedence when the caller has dialed a
-	// participant. Symbol/admin pairs are joined back to the local
-	// state.Tokens registry so the rendered rows can still carry
-	// the friendly symbol when one exists.
+	// Auto-discover the participant endpoint from the registry when the
+	// caller didn't pass one explicitly. This gives both surfaces the
+	// live ACS by default — the CLI no longer needs a manual
+	// `--endpoint host:port`, matching the Web UI which already resolves
+	// the port from state.Ports. An explicit Endpoint still wins.
+	if opts.Endpoint == "" {
+		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
+	}
+	// Live-ACS path takes precedence when a participant is reachable.
+	// Symbol/admin pairs are joined back to the local state.Tokens
+	// registry so the rendered rows can still carry the friendly symbol
+	// when one exists. Rows are tagged SourceLedger inside runBalanceLive.
 	if opts.Endpoint != "" {
 		return runBalanceLive(ctx, opts)
 	}
+	// Registry fallback: no live participant. Rows are pseudo-balances
+	// (issuer holds InitialSupply, everyone else 0) and are tagged
+	// SourceRegistry so the caller can flag them as not-on-ledger.
 	state, err := registry.Read(opts.Instance)
 	if err != nil {
 		return nil, false, fmt.Errorf("read instance state: %w", err)
@@ -417,9 +454,24 @@ func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]Bala
 			InstrumentID:     t.InstrumentID,
 			Party:            party,
 			Amount:           amount,
+			Source:           SourceRegistry,
 		})
 	}
 	return rows, false, nil
+}
+
+// BalanceSource reports which path RunBalance will take for opts —
+// "ledger" when a live participant endpoint is available (explicit or
+// auto-discovered from the registry), "registry" otherwise. Callers use
+// it to set the response-level provenance and render the right
+// disclaimer without re-deriving the endpoint. Pure (no ledger I/O):
+// availability of the endpoint, not reachability, decides the path —
+// matching RunBalance's own branch.
+func BalanceSource(opts BalanceOptions) HoldingSource {
+	if opts.Endpoint != "" || ResolveLedgerEndpoint(opts.Instance, opts.Role) != "" {
+		return SourceLedger
+	}
+	return SourceRegistry
 }
 
 // runBalanceLive is the V2-native ACS path: stream every contract
@@ -569,6 +621,7 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, boo
 			InstrumentID:     k.id,
 			Party:            k.party,
 			Amount:           amount,
+			Source:           SourceLedger,
 		})
 	}
 	return rows, truncated, nil

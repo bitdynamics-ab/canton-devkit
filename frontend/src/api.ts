@@ -1571,11 +1571,18 @@ export interface TokenRef {
   status: string;
 }
 
+// HoldingSource mirrors api/types.HoldingSource: "ledger" = summed
+// from the live ACS (real on-ledger balance); "registry" = the
+// registry pseudo-balance fallback shown when no live participant is
+// reachable (NOT on-ledger truth — the UI labels these rows).
+export type HoldingSource = "ledger" | "registry";
+
 export interface TokenHolding {
   instrument_symbol?: string;
   instrument_id: string;
   party: string;
   amount: string;
+  source: HoldingSource;
 }
 
 export interface TokensListResponse {
@@ -1585,7 +1592,12 @@ export interface TokensListResponse {
 
 export interface TokenHoldingsResponse {
   schema_version: number;
+  // Response-level provenance — matches every row's source. The UI
+  // renders one disclaimer banner when this is "registry".
+  source: HoldingSource;
   holdings: TokenHolding[];
+  // true when the live ACS scan stopped at its safety cap (partial view).
+  truncated?: boolean;
 }
 
 // DEFAULT_ROLE matches the backend default in roleFromQuery — keep the
