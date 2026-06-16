@@ -155,6 +155,12 @@ jobs:
         # Unconditional: the dpm-component job needs these on every run
         # (it dry-runs on main and publishes on tags). upload-artifact
         # does NOT preserve the executable bit — the consumer re-chmods.
+        # On main, a full org-wide Actions artifact quota (recalculated
+        # only every 6-12h and driven by OTHER repos in the org) must not
+        # fail the build — the binaries are already built + tested, and the
+        # downstream dpm-component job only dry-runs. On a release tag this
+        # stays fatal: a real release must ship its binaries.
+        continue-on-error: ${{ github.ref == 'refs/heads/main' }}
         # actions/upload-artifact@v4
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -164,6 +170,9 @@ jobs:
 
       - name: Upload main branch artifacts
         if: github.ref == 'refs/heads/main'
+        # Convenience downloads of each main build — never worth failing
+        # the build over when the org-wide artifact quota is full.
+        continue-on-error: true
         # actions/upload-artifact@v4
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -248,6 +257,11 @@ jobs:
     # compiles Go exactly once.
     needs: binaries
     runs-on: ubuntu-latest
+    # On main this is a publish DRY-RUN (push=false). If the upstream
+    # component-binaries upload was skipped because the org-wide artifact
+    # quota is full, the download here can't succeed — don't let that fail
+    # the workflow on main. On a release tag it stays fatal (real publish).
+    continue-on-error: ${{ github.ref == 'refs/heads/main' }}
 
     steps:
       - name: Check out repository
