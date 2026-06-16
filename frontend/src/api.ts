@@ -744,6 +744,10 @@ export interface DARRow {
   name: string;
   version: string;
   description?: string;
+  // vetted is present only on enriched listings (the cheap list path
+  // leaves it undefined). Mirrors *bool on the Go types.DARRow — the
+  // per-participant breakdown is served by the vetting endpoint.
+  vetted?: boolean;
 }
 
 export interface DARListResponse {

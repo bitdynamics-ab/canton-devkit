@@ -26,13 +26,14 @@ import (
 	"io"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/admin"
 	adminproto "github.com/bitdynamics-ab/canton-devkit/internal/canton/admin/proto"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/darops"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
@@ -76,11 +77,15 @@ const darUploadMax = 64 << 20
 // LocalNet ships. Hyphens match the state.Credentials keys + the
 // CLI's --role flag default. Rejects anything else before we
 // touch the registry — clearer 400 than "no port for that role".
-var validRole = map[string]bool{
-	"app-user":     true,
-	"app-provider": true,
-	"sv":           true,
-}
+// Derived from darops.Roles so the UI membership check and the shared
+// darops.ValidateRole guard (used by the CLI) cannot drift.
+var validRole = func() map[string]bool {
+	m := make(map[string]bool, len(darops.Roles))
+	for _, r := range darops.Roles {
+		m[r] = true
+	}
+	return m
+}()
 
 func handleDARList(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
@@ -112,41 +117,19 @@ func handleDARList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Look up the per-role admin port that records into
-	// state.json. Older instances brought up before that fix don't
-	// have the key — surface a clear 503 with the remediation
-	// rather than crashing or pretending the API is down.
-	portKey := "participant_admin_" + role
-	adminPort, hasPort := state.Ports[portKey]
-	if !hasPort || adminPort == 0 {
-		writeErrorWithCode(w, http.StatusServiceUnavailable,
-			"PARTICIPANT_PORT_NOT_RECORDED",
-			"instance "+name+" was started before participant ports were recorded",
-			"restart the instance with `dpm localnet down --name "+name+
-				"` followed by `dpm localnet up --name "+name+
-				"` — the new up flow captures all Canton API ports")
-		return
-	}
-
-	cred, hasCred := state.Credentials[role]
-	if !hasCred {
-		// Should never happen for a healthy instance — captureCredentials
-		// fills every recorded role. Treat as a 500 since something's
-		// genuinely off if the registry has a port but no credential.
-		writeError(w, http.StatusInternalServerError,
-			"no JWT recorded for role "+role,
-			fmt.Errorf("missing credential for role %q", role))
+	// Resolve the per-role admin port + JWT via the shared darops
+	// lookup. Older instances brought up before per-role port capture
+	// landed surface as ErrPortNotRecorded → a clear 503 with the
+	// remediation rather than crashing or pretending the API is down.
+	cfg, ok := requireParticipantAccess(w, state, name, role)
+	if !ok {
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), darRequestTimeout)
 	defer cancel()
 
-	client, err := admin.Connect(ctx, admin.Config{
-		Host:     "localhost:" + strconv.Itoa(adminPort),
-		Token:    cred.JWT,
-		Insecure: true, // Splice LocalNet is plaintext by convention
-	})
+	client, err := admin.Connect(ctx, cfg)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "dial canton admin", err)
 		return
@@ -159,20 +142,16 @@ func handleDARList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Project the proto into a UI-stable shape. We deliberately
-	// don't pass the protobuf JSON straight through — the proto
-	// types include internal `state` fields and the field tags
-	// would marshal as snake_case anyway. Explicit projection keeps
-	// the wire format under our control.
-	type darRow struct {
-		Main        string `json:"main"`
-		Name        string `json:"name"`
-		Version     string `json:"version"`
-		Description string `json:"description,omitempty"`
-	}
-	rows := make([]darRow, 0, len(resp.GetDars()))
+	// Project the proto into the shared types.DARRow shape (also used
+	// by the CLI's `dar list --format json`). We deliberately don't
+	// pass the protobuf JSON straight through — the proto types include
+	// internal `state` fields. The list endpoint is the cheap path:
+	// Vetted is left nil (not probed) so a basic listing stays
+	// byte-identical to the pre-shared shape; the per-package vetting
+	// state is served by GET …/dar/{id}/vetting.
+	rows := make([]types.DARRow, 0, len(resp.GetDars()))
 	for _, d := range resp.GetDars() {
-		rows = append(rows, darRow{
+		rows = append(rows, types.DARRow{
 			Main:        d.GetMain(),
 			Name:        d.GetName(),
 			Version:     d.GetVersion(),
@@ -180,11 +159,11 @@ func handleDARList(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"schema_version": 1,
-		"instance":       name,
-		"role":           role,
-		"dars":           rows,
+	writeJSON(w, http.StatusOK, types.DARListResponse{
+		SchemaVersion: types.SchemaVersion,
+		Instance:      name,
+		Role:          role,
+		Dars:          rows,
 	})
 }
 
@@ -320,44 +299,26 @@ func handleDARUpload(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), darUploadTimeout)
 	defer cancel()
 
-	type roleResult struct {
-		Role   string   `json:"role"`
-		OK     bool     `json:"ok"`
-		DarIDs []string `json:"dar_ids,omitempty"`
-		Count  int      `json:"count"`
-		Error  string   `json:"error,omitempty"`
-	}
-
 	// Fan out: one goroutine per role. Each does its own dial,
 	// upload, and close. The aggregate response carries per-role
 	// success/failure so a partial failure (e.g. one participant
-	// down) doesn't masquerade as a total failure.
-	results := make([]roleResult, len(roles))
+	// down) doesn't masquerade as a total failure. Per-role config
+	// resolution goes through the shared darops.ResolveParticipant so
+	// the port/JWT lookup matches every other DAR surface.
+	results := make([]types.DARUploadRoleResult, len(roles))
 	var wg sync.WaitGroup
 	for i, role := range roles {
 		wg.Add(1)
 		go func(i int, role string) {
 			defer wg.Done()
-			res := roleResult{Role: role}
-			portKey := "participant_admin_" + role
-			adminPort, hasPort := state.Ports[portKey]
-			if !hasPort || adminPort == 0 {
-				res.Error = "participant_admin port not recorded for role " + role +
-					" — restart the instance to capture Canton API ports"
+			res := types.DARUploadRoleResult{Role: role}
+			cfg, err := darops.ResolveParticipant(state, role, "", true)
+			if err != nil {
+				res.Error = err.Error()
 				results[i] = res
 				return
 			}
-			cred, hasCred := state.Credentials[role]
-			if !hasCred {
-				res.Error = "no JWT recorded for role " + role
-				results[i] = res
-				return
-			}
-			client, err := admin.Connect(ctx, admin.Config{
-				Host:     "localhost:" + strconv.Itoa(adminPort),
-				Token:    cred.JWT,
-				Insecure: true,
-			})
+			client, err := admin.Connect(ctx, cfg)
 			if err != nil {
 				res.Error = "dial canton admin: " + err.Error()
 				results[i] = res
@@ -389,11 +350,11 @@ func handleDARUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"schema_version": 1,
-		"instance":       name,
-		"results":        results,
-		"total_uploaded": total,
+	writeJSON(w, http.StatusOK, types.DARUploadResponse{
+		SchemaVersion: types.SchemaVersion,
+		Instance:      name,
+		Results:       results,
+		TotalUploaded: total,
 	})
 }
 

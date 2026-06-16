@@ -28,11 +28,13 @@ import { DARDiff } from "./DARDiff";
 //   - RIGHT (360px) inspect drawer with hash/lf/uploaded + (future)
 //                  diff vs prior version
 //
-// Watch-mode card is informational only — no filesystem watcher
-// backend yet. Vetting toggles are display-only for the same
-// reason. Both are tracked as follow-ups; the visual contract
-// stays intact so the screen reads as "production" from the
-// user's POV.
+// Vetting is real end-to-end: the package-list column (VettingCell)
+// and the inspect-drawer toggles (VettingPanel) both read live
+// per-participant state from GET …/dar/{id}/vetting and POST to the
+// vet/unvet endpoint — a package unvetted via `dar remove` now shows
+// grey, not a hardcoded green badge. The Watch-mode card reflects
+// live SSE events from a `dpm localnet dar watch` process when one is
+// running, and stays "Idle" otherwise.
 
 const ROLES: Role[] = ["app-user", "app-provider", "sv"];
 
@@ -79,6 +81,10 @@ export function DARScreen() {
   const [dragOver, setDragOver] = useState(false);
   const [filter, setFilter] = useState<"all" | "app">("all");
   const [tick, setTick] = useState(0); // bump to refetch after upload
+  // vetting — per-participant vetting state for each listed DAR, keyed
+  // by main package id. Populated lazily by a bounded batch fetch after
+  // the list loads (see effect below).
+  const [vetting, setVetting] = useState<Record<string, VetState>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -186,6 +192,55 @@ export function DARScreen() {
     }
     return list;
   }, [state, filter]);
+
+  // Reset the vetting cache whenever the instance changes or the list
+  // is refetched (after an upload). Keying the cache by main id means a
+  // role switch — which doesn't change which DARs exist, only which
+  // participant's list we read — reuses already-fetched verdicts.
+  useEffect(() => {
+    setVetting({});
+  }, [name, tick]);
+
+  // Lazily fetch REAL per-participant vetting for each visible row. We
+  // probe per DAR (the vetting endpoint fans out to all three
+  // participants server-side) so the list column reflects ledger
+  // state, not a hardcoded badge. Bounded: at most one in-flight fetch
+  // per main id, marked "loading" before dispatch so we never
+  // double-fetch on re-render.
+  const visibleMains = useMemo(() => rows.map((d) => d.main).join(","), [rows]);
+  useEffect(() => {
+    if (!name || state.kind !== "ok") return;
+    let cancelled = false;
+    const toFetch = rows.filter((d) => vetting[d.main] === undefined);
+    if (toFetch.length === 0) return;
+    // Mark all pending rows loading in one batch so the cells show "…"
+    // immediately and the guard above stops re-dispatch.
+    setVetting((prev) => {
+      const next = { ...prev };
+      for (const d of toFetch) next[d.main] = { kind: "loading" };
+      return next;
+    });
+    for (const d of toFetch) {
+      fetchDARVetting(name, d.main)
+        .then((resp) => {
+          if (cancelled) return;
+          setVetting((prev) => ({
+            ...prev,
+            [d.main]: { kind: "ok", rows: resp.participants ?? [] },
+          }));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setVetting((prev) => ({ ...prev, [d.main]: { kind: "err" } }));
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+    // visibleMains captures the row-set identity; vetting is read via
+    // the functional updater so it isn't a dependency (would loop).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, state.kind, visibleMains]);
 
   const selected = useMemo(
     () =>
@@ -458,6 +513,7 @@ export function DARScreen() {
                   key={d.main}
                   row={d}
                   active={d.main === selectedHash}
+                  vet={vetting[d.main]}
                   onClick={() => setSelectedHash(d.main)}
                 />
               ))}
@@ -590,13 +646,24 @@ function formatAgo(deltaSec: number): string {
   return `${Math.floor(deltaSec / 86400)}d ago`;
 }
 
+// VetState is the per-row vetting cell state: "loading" while the
+// vetting probe is in flight, "ok" with the resolved per-participant
+// rows, or "err" when the probe failed. Undefined means not yet
+// requested.
+type VetState =
+  | { kind: "loading" }
+  | { kind: "ok"; rows: DARVettingRow[] }
+  | { kind: "err" };
+
 function PkgRow({
   row,
   active,
+  vet,
   onClick,
 }: {
   row: DARRow;
   active: boolean;
+  vet: VetState | undefined;
   onClick: () => void;
 }) {
   return (
@@ -645,27 +712,70 @@ function PkgRow({
       >
         {row.main.slice(0, 12)}…{row.main.slice(-6)}
       </code>
-      <span
-        style={{
-          fontSize: 11,
-          color: "#62E2A0",
-          fontFamily: wMono,
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-        }}
-      >
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: "#62E2A0",
-          }}
-        />
-        vetted
-      </span>
+      <VettingCell vet={vet} />
     </div>
+  );
+}
+
+// VettingCell renders the per-participant vetting state for one DAR as
+// a compact "U P S" trio of dots — green vetted, grey unvetted, amber
+// "?" when that participant couldn't be probed. A package unvetted via
+// `dar remove` shows grey here, matching the CLI `dar list --vetting`
+// column and the per-participant toggles in the inspect drawer.
+function VettingCell({ vet }: { vet: VetState | undefined }) {
+  if (!vet || vet.kind === "loading") {
+    return (
+      <span style={{ fontSize: 11, color: W.dim, fontFamily: wMono }}>…</span>
+    );
+  }
+  if (vet.kind === "err" || vet.rows.length === 0) {
+    return (
+      <span
+        style={{ fontSize: 11, color: W.warn, fontFamily: wMono }}
+        title="vetting state unavailable"
+      >
+        unknown
+      </span>
+    );
+  }
+  return (
+    <span
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        fontFamily: wMono,
+        fontSize: 10.5,
+      }}
+    >
+      {vet.rows.map((r) => {
+        const abbr =
+          r.role === "app-user" ? "U" : r.role === "app-provider" ? "P" : "S";
+        const color = r.error ? W.warn : r.vetted ? "#62E2A0" : W.dim;
+        const title = r.error
+          ? `${r.role}: ${r.error}`
+          : `${r.role}: ${r.vetted ? "vetted" : "not vetted"}`;
+        return (
+          <span
+            key={r.role}
+            title={title}
+            style={{ display: "flex", alignItems: "center", gap: 3, color }}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: color,
+                flexShrink: 0,
+              }}
+            />
+            {abbr}
+            {r.error ? "?" : ""}
+          </span>
+        );
+      })}
+    </span>
   );
 }
 

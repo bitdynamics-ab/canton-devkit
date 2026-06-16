@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/admin"
 	adminproto "github.com/bitdynamics-ab/canton-devkit/internal/canton/admin/proto"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/darops"
 	"github.com/spf13/cobra"
 )
 
@@ -33,6 +36,7 @@ func buildListUploaded() *cobra.Command {
 		format     string
 		packages   bool
 		enrich     bool
+		vetting    bool
 		filterName string
 		limit      int32
 	)
@@ -46,6 +50,11 @@ func buildListUploaded() *cobra.Command {
 By default lists DARs (PackageService.ListDars). Pass --packages to
 switch to the per-.dalf view (PackageService.ListPackages) — handy
 for chasing down which dependency is missing.
+
+Pass --vetting (requires --instance) to add a per-participant vetting
+column probing all three participants (app-user / app-provider / sv),
+so you can see where a package is vetted after a "dar remove" unvet —
+the same vetting signal the Web UI DAR screen shows.
 
 Exit codes:
   0  Listing returned (even if empty)
@@ -97,6 +106,23 @@ Exit codes:
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dar list: %s\n", err)
 				return localnet.AsExitError(localnet.ExitRuntimeFailure)
 			}
+			// --vetting enrichment: probe every participant for each
+			// DAR's vetting state. "Vetted on the participant I'm
+			// listing" is tautological (ListDars only returns vetted
+			// DARs there), so the useful signal is cross-participant —
+			// shared with the Web UI via darops.ListVetting.
+			if vetting {
+				rows, verr := vettingRows(cmd.Context(), &conn, resp.GetDars())
+				if verr != nil {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dar list --vetting: %s\n", verr)
+					return localnet.AsExitError(localnet.ExitUserError)
+				}
+				if format == "json" {
+					return writeJSON(cmd.OutOrStdout(), rows)
+				}
+				printVettingDars(cmd.OutOrStdout(), rows)
+				return nil
+			}
 			if enrich {
 				rows := enrichDars(cmd.Context(), client, resp.GetDars())
 				if format == "json" {
@@ -117,6 +143,8 @@ Exit codes:
 	cmd.Flags().BoolVar(&packages, "packages", false, "List individual .dalf packages instead of DARs.")
 	cmd.Flags().BoolVar(&enrich, "enrich", false,
 		"Add Daml-LF version + module count to each row by calling GetPackageContents per package. Adds latency.")
+	cmd.Flags().BoolVar(&vetting, "vetting", false,
+		"Add a per-participant vetting column (probes sv, app-provider, app-user). Requires --instance; ignored with --packages.")
 	cmd.Flags().StringVar(&filterName, "filter-name", "", "Server-side name substring filter.")
 	cmd.Flags().Int32Var(&limit, "limit", 0, "Max rows to return (0 = server default).")
 	return cmd
@@ -157,6 +185,95 @@ func writeJSON(out io.Writer, v any) error {
 	enc := json.NewEncoder(out)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
+}
+
+// --- vetting enrichment (--vetting) ----------------------------------
+
+// vettingDarRow is one DAR plus its per-participant vetting verdicts.
+// JSON output reuses the shared types.DARVettingRow shape for the
+// participants slice so the CLI and Web UI describe vetting state
+// identically.
+type vettingDarRow struct {
+	MainPackageID string                `json:"main_package_id"`
+	Name          string                `json:"name"`
+	Version       string                `json:"version"`
+	Description   string                `json:"description,omitempty"`
+	Participants  []types.DARVettingRow `json:"participants"`
+}
+
+// vettingRows probes every participant of --instance for each DAR's
+// vetting state, reusing the neutral darops.ListVetting the Web UI's
+// vetting endpoint also calls. Requires --instance (cross-participant
+// probing reads the registry); returns a clear error otherwise.
+func vettingRows(ctx context.Context, conn *connectFlags, dars []*adminproto.DarDescription) ([]vettingDarRow, error) {
+	state, err := conn.resolveState()
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]vettingDarRow, 0, len(dars))
+	for _, d := range dars {
+		rows = append(rows, vettingDarRow{
+			MainPackageID: d.GetMain(),
+			Name:          d.GetName(),
+			Version:       d.GetVersion(),
+			Description:   d.GetDescription(),
+			Participants:  darops.ListVetting(ctx, darops.DialAdmin, state, d.GetMain()),
+		})
+	}
+	return rows, nil
+}
+
+// vettingGlyph renders one participant's verdict for the text table:
+// ✓ vetted, ✗ not vetted, ? un-probable (port/JWT/dial error).
+func vettingGlyph(r types.DARVettingRow) string {
+	switch {
+	case r.Error != "":
+		return "?"
+	case r.Vetted:
+		return "✓"
+	default:
+		return "✗"
+	}
+}
+
+// printVettingDars renders the DAR list with a compact per-participant
+// vetting column (e.g. "U:✓ P:✓ S:✗"), in the canonical
+// app-user/app-provider/sv order darops.ListVetting returns.
+func printVettingDars(out io.Writer, rows []vettingDarRow) {
+	if len(rows) == 0 {
+		_, _ = fmt.Fprintln(out, "No DARs uploaded.")
+		return
+	}
+	_, _ = fmt.Fprintf(out, "%-32s %-26s %-10s %s\n",
+		"MAIN PACKAGE ID", "NAME", "VERSION", "VETTING (user/provider/sv)")
+	for _, r := range rows {
+		_, _ = fmt.Fprintf(out, "%-32s %-26s %-10s %s\n",
+			truncate(r.MainPackageID, 32),
+			truncate(r.Name, 26),
+			truncate(r.Version, 10),
+			vettingSummary(r.Participants))
+	}
+	_, _ = fmt.Fprintln(out, "\nLegend: ✓ vetted · ✗ not vetted · ? unavailable (port/JWT/dial)")
+}
+
+// vettingSummary turns the per-participant rows into the compact
+// "U:✓ P:✓ S:✗" column cell. Roles are abbreviated by first
+// letter of the meaningful segment to keep the column narrow.
+func vettingSummary(parts []types.DARVettingRow) string {
+	abbr := map[string]string{
+		"app-user":     "U",
+		"app-provider": "P",
+		"sv":           "S",
+	}
+	cells := make([]string, 0, len(parts))
+	for _, p := range parts {
+		label := abbr[p.Role]
+		if label == "" {
+			label = p.Role
+		}
+		cells = append(cells, label+":"+vettingGlyph(p))
+	}
+	return strings.Join(cells, " ")
 }
 
 // --- enrichment via GetPackageContents -------------------------------

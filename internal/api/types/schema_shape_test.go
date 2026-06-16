@@ -72,6 +72,10 @@ func schemaShapeRoots() []any {
 	return []any{
 		ContractsListResponse{},
 		ContractDetailResponse{},
+		DARListResponse{},
+		DARUploadResponse{},
+		DARVettingResponse{},
+		DARVettingToggleResponse{},
 		EnvExport{},
 		Instance{},
 		InstanceSummary{},
@@ -270,6 +274,57 @@ types.Credential {
   user string
   audience string
   jwt string
+}
+
+types.DARListResponse {
+  schema_version int
+  instance string
+  role string
+  dars []types.DARRow
+}
+
+types.DARRow {
+  main string
+  name string
+  version string
+  description string
+  vetted *bool
+}
+
+types.DARUploadResponse {
+  schema_version int
+  instance string
+  results []types.DARUploadRoleResult
+  total_uploaded int
+}
+
+types.DARUploadRoleResult {
+  role string
+  ok bool
+  dar_ids []string
+  count int
+  error string
+}
+
+types.DARVettingResponse {
+  schema_version int
+  instance string
+  main string
+  participants []types.DARVettingRow
+}
+
+types.DARVettingRow {
+  role string
+  vetted bool
+  error string
+}
+
+types.DARVettingToggleResponse {
+  schema_version int
+  instance string
+  main string
+  role string
+  vetted bool
 }
 
 types.Endpoint {
