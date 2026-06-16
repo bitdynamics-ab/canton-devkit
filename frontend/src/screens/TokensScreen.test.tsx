@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
@@ -215,15 +215,35 @@ describe("TokensScreen", () => {
     stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
     renderTokens();
     await user.click(await screen.findByRole("button", { name: "→ Transfer" }, { timeout: 4000 }));
-    // fill From + Amount → the dry-run plan fires (debounced)
-    const inputs = await screen.findAllByRole("textbox");
-    await user.type(inputs[0], "bob");
-    await user.type(inputs[2], "100");
+    // From is now a PartyPicker dropdown; pick a registered party, then
+    // fill Amount → the dry-run plan fires (debounced).
+    await user.selectOptions(
+      await screen.findByRole("combobox", { name: /from party/i }),
+      "bob::def",
+    );
+    await user.type(await screen.findByRole("textbox", { name: /amount/i }), "100");
     await waitFor(
       () => expect(screen.queryByText(/Coin selection preview/i)).toBeInTheDocument(),
       { timeout: 4000 },
     );
     expect(screen.queryByText(/change/i)).toBeInTheDocument();
+  });
+
+  it("party picker lists registered aliases and offers inline create", async () => {
+    const user = userEvent.setup();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    // The Faucet modal's "To party" is a PartyPicker dropdown, not a
+    // raw party-id input — registered aliases from GET /api/parties
+    // appear as options so the user never pastes a fingerprinted id.
+    await user.click(await screen.findByRole("button", { name: /Faucet/i }, { timeout: 4000 }));
+    const toParty = await screen.findByRole("combobox", { name: /to party/i });
+    expect(within(toParty).getByRole("option", { name: /treasury/i })).toBeInTheDocument();
+    expect(within(toParty).getByRole("option", { name: /app-user/i })).toBeInTheDocument();
+    // Choosing "create new party" switches the picker to an inline alias
+    // input (POST /api/parties), avoiding the separate Parties modal.
+    await user.selectOptions(toParty, "__create__");
+    expect(await screen.findByPlaceholderText(/new alias/i)).toBeInTheDocument();
   });
 
   it("renders the instrument KPI strip and holder distribution", async () => {

@@ -18,6 +18,7 @@ import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
 function mockListResponse(
   instances: Array<{ name: string; status: string }> | "error",
   warning?: string,
+  txOverride?: { status: number; body: unknown },
 ) {
   vi.stubGlobal(
     "fetch",
@@ -57,6 +58,42 @@ function mockListResponse(
               unhealthy_count: 0,
               restarting_count: 0,
               exited_count: 0,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      // /api/instances/{name}/transactions — the RecentActivity
+      // panel's ledger-event scan, fired only for a running instance.
+      if (url.includes("/transactions")) {
+        if (txOverride) {
+          return Promise.resolve(
+            new Response(JSON.stringify(txOverride.body), {
+              status: txOverride.status,
+              headers: { "Content-Type": "application/json" },
+            }),
+          );
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              schema_version: 1,
+              instance: "demo",
+              role: "app-provider",
+              ledger_end: 1200,
+              count: 2,
+              transactions: [
+                {
+                  kind: "transaction", offset: 1200, update_id: "u1200",
+                  record_time: "2026-05-30T15:42:14Z", event_count: 1,
+                  events: [{ kind: "create", contract_id: "0x77c1aaaa", template: "abcd:Retail.Token:Token" }],
+                },
+                {
+                  kind: "transaction", offset: 1199, update_id: "u1199",
+                  record_time: "2026-05-30T15:42:12Z", event_count: 1,
+                  events: [{ kind: "exercise", contract_id: "0x77c0bbbb", template: "abcd:Token:TokenProposal" }],
+                },
+              ],
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
           ),
@@ -228,5 +265,53 @@ describe("Dashboard", () => {
     await waitFor(() => {
       expect(screen.getByText(/instance detail/i)).toBeInTheDocument();
     });
+  });
+
+  it("shows the recent-activity panel with ledger events for a running instance", async () => {
+    mockListResponse([{ name: "demo", status: "running" }]);
+    renderDashboard();
+    // The panel mounts for the auto-selected running instance and
+    // flattens transactions → one row per ledger event.
+    await waitFor(() =>
+      expect(screen.getByText(/recent activity/i)).toBeInTheDocument(),
+    );
+    expect(await screen.findByText("exercise")).toBeInTheDocument();
+    // template id is shortened to Module:Entity for the EVENT column
+    expect(screen.getByText("Retail.Token:Token")).toBeInTheDocument();
+  });
+
+  it("recent-activity shows the party-JWT hint when the ledger needs a party JWT", async () => {
+    mockListResponse([{ name: "demo", status: "running" }], undefined, {
+      status: 503,
+      body: { code: "EXPLORER_NEEDS_PARTY_JWT", error: "jwt lacks party rights" },
+    });
+    renderDashboard();
+    await waitFor(() =>
+      expect(screen.getByText(/party-rights JWT/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("recent-activity shows the restart-to-capture hint for the no-JWT-recorded 500", async () => {
+    // The real e2e-metrics-demo case: instances predating JWT capture
+    // return a generic 500, distinguished by message, not a code.
+    mockListResponse([{ name: "demo", status: "running" }], undefined, {
+      status: 500,
+      body: { code: "INTERNAL", error: "no JWT recorded for role app-provider" },
+    });
+    renderDashboard();
+    await waitFor(() =>
+      expect(screen.getByText(/restart the instance to capture/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("recent-activity shows the empty hint when there are no ledger events", async () => {
+    mockListResponse([{ name: "demo", status: "running" }], undefined, {
+      status: 200,
+      body: { schema_version: 1, instance: "demo", role: "app-provider", ledger_end: 0, count: 0, transactions: [] },
+    });
+    renderDashboard();
+    await waitFor(() =>
+      expect(screen.getByText(/No recent ledger activity/i)).toBeInTheDocument(),
+    );
   });
 });
