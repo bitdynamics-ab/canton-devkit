@@ -1893,6 +1893,33 @@ export const createToken = (
     },
   );
 
+// DemoResult mirrors token.DemoResult (POST /api/tokens/demo) and the CLI
+// `token demo --format json`: the created instrument, the issuer party,
+// and (when seeded) the funded holder.
+export interface DemoResult {
+  token: TokenRef;
+  issuer: PartyRef;
+  holder?: PartyRef;
+  seeded: boolean;
+}
+
+// launchDemoToken provisions a live, transferable demo token in one call
+// — an issuer party, a V2 instrument with initial supply, and (by
+// default) a funded holder so a transfer works immediately. Throws
+// ApiError(412, NEEDS_V2_LOCALNET) when the instance has no live V2
+// endpoint, so the caller can disable the button with a "start a V2
+// instance first" hint.
+export const launchDemoToken = (
+  instance: string,
+  opts?: { symbol?: string; initial_supply?: string; decimals?: number; seed_holder?: boolean },
+  role?: string,
+): Promise<DemoResult> =>
+  apiFetch<DemoResult>(`/api/tokens/demo?${tokenQuery(instance, role)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...idempotencyHeader() },
+    body: JSON.stringify(opts ?? {}),
+  });
+
 export const mintToken = (
   instance: string,
   symbol: string,

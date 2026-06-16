@@ -119,6 +119,21 @@ function stubFetch(
         }));
         return json({ schema_version: 1, source: src, holdings: rows });
       }
+      if (url.includes("/api/tokens/demo")) {
+        return json(
+          {
+            token: {
+              name: "Demo Token", symbol: "DEMO", decimals: 6, initial_supply: "1000000",
+              issuer_party: "demo-issuer::pid", instrument_id: "DEMO",
+              created_at: "2026-06-16T10:00:00Z", status: "on-ledger",
+            },
+            issuer: { alias: "demo-issuer", party_id: "demo-issuer::pid", role: "app-user", created_at: "2026-06-16T10:00:00Z" },
+            holder: { alias: "demo-holder", party_id: "demo-holder::pid", role: "app-user", created_at: "2026-06-16T10:00:00Z" },
+            seeded: true,
+          },
+          201,
+        );
+      }
       if (url.startsWith("/api/tokens")) {
         return json({
           schema_version: 1,
@@ -169,9 +184,11 @@ describe("TokensScreen", () => {
     stubFetch([]);
     renderTokens();
     await waitFor(
-      () => expect(screen.queryByText(/No instruments on/i)).toBeInTheDocument(),
+      () => expect(screen.queryByText(/No tokens on/i)).toBeInTheDocument(),
       { timeout: 4000 },
     );
+    // The empty state leads with the one-click demo launch.
+    expect(screen.getByRole("button", { name: /Launch demo token/i })).toBeInTheDocument();
   });
 
   it("disables Burn for a non-native (recorded / Amulet) instrument", async () => {
@@ -243,6 +260,20 @@ describe("TokensScreen", () => {
     // input (POST /api/parties), avoiding the separate Parties modal.
     await user.selectOptions(toParty, "__create__");
     expect(await screen.findByPlaceholderText(/new alias/i)).toBeInTheDocument();
+  });
+
+  it("launches a demo token in one click", async () => {
+    const user = userEvent.setup();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    // The "⚡ Launch demo" button POSTs /api/tokens/demo, which provisions
+    // an issuer + instrument + funded holder server-side and returns the
+    // DemoResult; the screen confirms with a success notice.
+    await user.click(await screen.findByRole("button", { name: /Launch demo/i }, { timeout: 4000 }));
+    await waitFor(
+      () => expect(screen.queryByText(/Launched DEMO/i)).toBeInTheDocument(),
+      { timeout: 4000 },
+    );
   });
 
   it("renders the instrument KPI strip and holder distribution", async () => {
