@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -73,6 +74,43 @@ func (c *ComposeRunner) command(ctx context.Context, args ...string) *exec.Cmd {
 		cmd.Env = c.Env
 	}
 	return cmd
+}
+
+// workDirOrFallback returns dir when it exists, otherwise a neutral temp
+// dir. The label-only teardown (`compose -p <project> down
+// --remove-orphans`) and RemainingContainers don't need the project's
+// compose files, so falling back keeps them working even after the
+// shared Splice cache dir (the recorded WorkDir) has been pruned. Without
+// the fallback the chdir fails, `down` errors, and `clean` could then
+// orphan the containers by scrubbing their registry entry.
+func workDirOrFallback(dir string) string {
+	if dir != "" {
+		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
+			return dir
+		}
+	}
+	return os.TempDir()
+}
+
+// RemainingContainers returns the ids of every container (running or
+// stopped) still labelled for this compose project. `clean` calls it to
+// confirm a teardown actually cleared docker BEFORE it scrubs the
+// registry — so a `down` that errored or silently no-op'd can't orphan
+// containers by deleting their only record. It shells out to plain
+// `docker ps` with the project-label filter, independent of any compose
+// file, so it works even after the shared Splice cache dir is gone.
+func (c *ComposeRunner) RemainingContainers(ctx context.Context) ([]string, error) {
+	cmd := c.command(ctx, "ps", "-aq",
+		"--filter", "label=com.docker.compose.project="+c.ProjectName)
+	// Label-only query — independent of the project's compose files, so
+	// run it from a dir guaranteed to exist even if the cache WorkDir
+	// was pruned (otherwise the chdir fails and clean can't verify).
+	cmd.Dir = workDirOrFallback(c.WorkDir)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("docker ps for project %q: %w", c.ProjectName, err)
+	}
+	return strings.Fields(string(out)), nil
 }
 
 // composeBase returns the leading docker-compose argv shared by Up/Down/
@@ -486,7 +524,13 @@ func (c *ComposeRunner) Stop(ctx context.Context, removeVolumes bool) error {
 	}
 	// CombinedOutput so a failure surfaces the real docker error instead
 	// of a bare "exit status 1" (the message users actually see otherwise).
-	out, err := c.command(ctx, args...).CombinedOutput()
+	cmd := c.command(ctx, args...)
+	// Label-only teardown (no -f): run it from a dir guaranteed to exist
+	// so a pruned Splice cache dir (the recorded WorkDir) can't fail the
+	// chdir and strand the containers. ForceStop already sidesteps
+	// WorkDir via forceCommand; this gives Stop the same resilience.
+	cmd.Dir = workDirOrFallback(c.WorkDir)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("docker compose down failed: %w\n%s", err, strings.TrimSpace(string(out)))
 	}

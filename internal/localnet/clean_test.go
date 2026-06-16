@@ -133,6 +133,61 @@ func TestRunClean_ForceTeardownFailurePreservesState(t *testing.T) {
 	}
 }
 
+// downerWithContainers is a composeDowner whose Stop fails and that
+// reports a fixed set of still-present containers — exercising clean's
+// "don't scrub the registry while containers linger" guard.
+type downerWithContainers struct{ remaining []string }
+
+func (d downerWithContainers) Stop(context.Context, bool) error { return context.DeadlineExceeded }
+
+func (d downerWithContainers) RemainingContainers(context.Context) ([]string, error) {
+	return d.remaining, nil
+}
+
+// A STOPPED instance whose teardown errors AND still has containers must
+// keep its registry entry — deleting it would orphan those containers
+// (the exact bug behind the e2e-metrics-demo-style orphans).
+func TestRunClean_StoppedTeardownFailureWithLingeringContainersPreservesRegistry(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstanceStatus(t, "stuck", registry.StatusStopped)
+
+	var out, errBuf bytes.Buffer
+	code := RunClean(context.Background(), &out, &errBuf, &CleanOptions{
+		Name: "stuck",
+		NewRunner: func(string, []string, []string, []string, string, io.Writer) composeDowner {
+			return downerWithContainers{remaining: []string{"c1", "c2"}}
+		},
+	})
+	if code != ExitRuntimeFailure {
+		t.Fatalf("RunClean = %d, want ExitRuntimeFailure (containers linger); stderr=%q", code, errBuf.String())
+	}
+	if _, err := registry.Read("stuck"); err != nil {
+		t.Errorf("registry must be preserved when containers remain, got err=%v", err)
+	}
+}
+
+// The lenient case stays lenient: a teardown error with NO remaining
+// containers (the usual "no such project" for an already-gone instance)
+// still scrubs the registry.
+func TestRunClean_StoppedTeardownErrorButContainersGoneStillDeletes(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstanceStatus(t, "gone", registry.StatusStopped)
+
+	var out, errBuf bytes.Buffer
+	code := RunClean(context.Background(), &out, &errBuf, &CleanOptions{
+		Name: "gone",
+		NewRunner: func(string, []string, []string, []string, string, io.Writer) composeDowner {
+			return downerWithContainers{remaining: nil}
+		},
+	})
+	if code != ExitSuccess {
+		t.Fatalf("RunClean = %d, want ExitSuccess (containers already gone); stderr=%q", code, errBuf.String())
+	}
+	if _, err := registry.Read("gone"); err != registry.ErrNotFound {
+		t.Errorf("registry should be scrubbed when no containers remain, got err=%v", err)
+	}
+}
+
 func TestRunClean_DryRunChangesNothing(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstanceStatus(t, "dry-one", registry.StatusStopped)

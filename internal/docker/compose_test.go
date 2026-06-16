@@ -3,7 +3,9 @@ package docker
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
@@ -215,6 +217,49 @@ func TestStopTeardownIsProjectLabelOnly(t *testing.T) {
 		if !removeVolumes && contains(argv, "--volumes") {
 			t.Errorf("Stop(removeVolumes=false) argv must not contain --volumes\nfull argv: %v", argv)
 		}
+	}
+}
+
+// TestWorkDirOrFallback pins that a recorded WorkDir which no longer
+// exists (e.g. the shared Splice cache dir was pruned) falls back to a
+// neutral temp dir instead of being chdir'd into — otherwise the
+// label-only teardown's exec fails and clean could orphan containers.
+func TestWorkDirOrFallback(t *testing.T) {
+	existing := t.TempDir()
+	if got := workDirOrFallback(existing); got != existing {
+		t.Errorf("existing dir: got %q, want %q", got, existing)
+	}
+	missing := filepath.Join(t.TempDir(), "pruned-cache")
+	if got := workDirOrFallback(missing); got != os.TempDir() {
+		t.Errorf("missing dir: got %q, want TempDir %q", got, os.TempDir())
+	}
+	if got := workDirOrFallback(""); got != os.TempDir() {
+		t.Errorf("empty dir: got %q, want TempDir %q", got, os.TempDir())
+	}
+}
+
+// TestRemainingContainers_FiltersByProjectAndParsesIDs pins that the
+// helper queries `docker ps` by the compose project label and splits the
+// id list — the signal clean uses to avoid orphaning containers.
+func TestRemainingContainers_FiltersByProjectAndParsesIDs(t *testing.T) {
+	if _, err := os.Stat("/bin/sh"); err != nil {
+		t.Skip("no /bin/sh for scripted docker fake")
+	}
+	rec := &scriptedRecorder{script: func(args []string) (string, int) {
+		joined := strings.Join(args, " ")
+		if !strings.Contains(joined, "ps") ||
+			!strings.Contains(joined, "label=com.docker.compose.project=canton-test") {
+			t.Errorf("argv = %v; want `docker ps` with the project-label filter", args)
+		}
+		return "abc123\ndef456\n", 0
+	}}
+	c := &ComposeRunner{ProjectName: "canton-test", WorkDir: t.TempDir(), commandFn: rec.factory}
+	ids, err := c.RemainingContainers(context.Background())
+	if err != nil {
+		t.Fatalf("RemainingContainers: %v", err)
+	}
+	if len(ids) != 2 || ids[0] != "abc123" || ids[1] != "def456" {
+		t.Errorf("ids = %v, want [abc123 def456]", ids)
 	}
 }
 

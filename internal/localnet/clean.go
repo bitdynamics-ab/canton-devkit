@@ -123,6 +123,15 @@ func cleanTargets(opts *CleanOptions) ([]string, error) {
 	return []string{opts.Name}, nil
 }
 
+// containerLister is the optional capability cleanOne uses to confirm a
+// project's containers are actually gone before it scrubs the registry.
+// *docker.ComposeRunner implements it; cleanOne type-asserts (rather
+// than widening composeDowner) so down.go's runner and the existing test
+// stubs don't have to implement it.
+type containerLister interface {
+	RemainingContainers(ctx context.Context) ([]string, error)
+}
+
 // cleanOne cleans a single instance under its per-instance lock.
 func cleanOne(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOptions, name string) int {
 	indexed, err := cleanIndexHasEntry(name)
@@ -212,12 +221,25 @@ func cleanOne(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOpt
 			return ExitRuntimeFailure
 		}
 		// Non-running instance: the down failure is usually "no such
-		// project" because containers are already gone. Warn and
-		// proceed to scrub state anyway — that's the whole point of
-		// clean for an orphaned/stopped instance.
+		// project" because containers are already gone — in which case
+		// scrubbing the registry is exactly clean's job. But a down that
+		// errored while containers REMAIN must not let clean orphan them
+		// by deleting their only registry record. Verify docker is
+		// actually clear first; if containers linger, keep the entry and
+		// fail so the user can retry once the host is healthy.
+		if lister, ok := runner.(containerLister); ok {
+			if remaining, cerr := lister.RemainingContainers(ctx); cerr == nil && len(remaining) > 0 {
+				_, _ = fmt.Fprintf(errw,
+					"%s: docker compose down failed and %d container(s) still exist for project %q — "+
+						"registry entry preserved so they aren't orphaned. Retry once docker is healthy: %s\n",
+					name, len(remaining), state.ComposeProject, derr)
+				return ExitRuntimeFailure
+			}
+		}
+		// Containers confirmed gone (or unverifiable) — proceed to scrub.
 		_, _ = fmt.Fprintf(errw,
 			"%s: docker compose down reported an error (continuing — "+
-				"containers may already be gone): %s\n", name, derr)
+				"containers already gone): %s\n", name, derr)
 	}
 
 	if err := registry.Delete(name); err != nil {
