@@ -8,6 +8,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // connectFlags captures the connection-flag shape shared by every
@@ -54,6 +55,18 @@ func (f *connectFlags) register(cmd *cobra.Command) {
 		"DevKit LocalNet instance name; resolves --admin-host + --token from the registry.")
 	cmd.Flags().StringVar(&f.Role, "role", "app-user",
 		"Participant role within --instance: sv, app-provider, or app-user.")
+	// Accept --name as an alias for --instance so the dar verbs take the
+	// same instance selector as the rest of the CLI (up/status/env/logs/
+	// contracts/tx all use --name). A normalize alias — not a second
+	// flag — so --instance's resolution/validation stays intact. (The
+	// `token` verbs keep --instance because there --name is the
+	// instrument name; `container` takes the instance positionally.)
+	cmd.Flags().SetNormalizeFunc(func(_ *pflag.FlagSet, name string) pflag.NormalizedName {
+		if name == "name" {
+			name = "instance"
+		}
+		return pflag.NormalizedName(name)
+	})
 }
 
 // resolve picks an effective (host, token) pair from the flags. If

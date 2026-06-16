@@ -25,7 +25,8 @@ instrument as a matrix (rows = parties, columns = instruments). The
 god-mode reconciliation view — only the parties the role's JWT can read
 are included.
 
-Requires --endpoint (the participant ledger gRPC host:port).`,
+--endpoint defaults to the instance's captured ledger port, so
+--instance alone is enough on a running LocalNet.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			m, err := token.RunBalanceMatrix(cmd.Context(), opts)
@@ -87,13 +88,12 @@ Requires --endpoint (the participant ledger gRPC host:port).`,
 		},
 	}
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")
-	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Required.")
+	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Defaults to the instance's captured ledger port; set to override which participant the matrix scan dials.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
 	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the scan.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json.")
 	_ = cmd.MarkFlagRequired("instance")
-	_ = cmd.MarkFlagRequired("endpoint")
 	return cmd
 }
 

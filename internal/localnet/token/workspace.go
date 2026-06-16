@@ -307,6 +307,13 @@ func RunBalanceMatrix(ctx context.Context, opts BalanceOptions) (*BalanceMatrix,
 	if opts.Role == "" {
 		opts.Role = "app-user"
 	}
+	// Resolve the participant ledger endpoint from the instance when one
+	// wasn't passed explicitly, mirroring RunBalance — so `token balances`
+	// works with just --instance, like the single-party `token balance`
+	// and the explorer commands, instead of forcing a hand-typed --endpoint.
+	if opts.Endpoint == "" {
+		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
+	}
 	ws, err := scanWorkspace(ctx, opts)
 	if err != nil {
 		return nil, err
