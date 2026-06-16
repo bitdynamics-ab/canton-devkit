@@ -176,3 +176,62 @@ func TestScanWorkspace_TruncatesAtCap(t *testing.T) {
 			len(items), maxWorkspaceScan)
 	}
 }
+
+// TestRunBalanceMatrix_NoEndpointReturnsInstanceError verifies the
+// resolution-failed guard: with no explicit --endpoint and an instance
+// that has no recorded participant ledger port (absent or stopped),
+// RunBalanceMatrix returns an instance-specific error naming the
+// instance and the up/--endpoint remedy — not dialLedger's generic
+// "ledger endpoint is required (host:port)". The dial must never be
+// reached, so a fake that fails on use guards the early return.
+func TestRunBalanceMatrix_NoEndpointReturnsInstanceError(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	// No seedInstance / no recorded Ports → ResolveLedgerEndpoint == "".
+	fake := &fakeLedger{
+		ActiveContractsFn: func(ctx context.Context, _ ledger.ActiveContractsRequest) (<-chan ledger.StreamItem[*lapiv2.GetActiveContractsResponse], error) {
+			t.Fatal("ledger must not be dialled when the endpoint cannot resolve")
+			return nil, nil
+		},
+	}
+	withFakeDial(t, fake)
+
+	_, err := RunBalanceMatrix(context.Background(), BalanceOptions{Instance: "down"})
+	if err == nil {
+		t.Fatal("RunBalanceMatrix: nil error; want instance-specific endpoint error")
+	}
+	if strings.Contains(err.Error(), "ledger endpoint is required") {
+		t.Errorf("got generic dial guard, want instance-specific error: %v", err)
+	}
+	for _, want := range []string{`"down"`, "localnet up", "--endpoint"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q missing %q", err.Error(), want)
+		}
+	}
+}
+
+// TestRunBalanceMatrix_ExplicitEndpointSkipsGuard verifies the other half
+// of the guard: an explicit --endpoint bypasses resolution entirely, so
+// the no-port instance does NOT trip the instance-specific error and the
+// scan proceeds against the caller-supplied endpoint.
+func TestRunBalanceMatrix_ExplicitEndpointSkipsGuard(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	fake := &fakeLedger{
+		// No parties resolve → scan returns an empty workspace without error.
+		ListKnownPartiesFn: func(ctx context.Context) (*adminv2.ListKnownPartiesResponse, error) {
+			return &adminv2.ListKnownPartiesResponse{}, nil
+		},
+	}
+	withFakeDial(t, fake)
+
+	m, err := RunBalanceMatrix(context.Background(), BalanceOptions{
+		Instance: "down",
+		Endpoint: "fake:0", // explicit endpoint wins, guard must not fire
+		Insecure: true,
+	})
+	if err != nil {
+		t.Fatalf("RunBalanceMatrix with explicit endpoint: %v", err)
+	}
+	if m == nil {
+		t.Fatal("RunBalanceMatrix returned nil matrix; want empty *BalanceMatrix")
+	}
+}
