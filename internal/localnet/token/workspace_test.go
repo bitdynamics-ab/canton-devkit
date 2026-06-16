@@ -49,7 +49,7 @@ func TestInstrumentsFromHoldings_DistinctAndLabeled(t *testing.T) {
 	if bySym["Amulet"].Standard != "Splice Amulet" {
 		t.Errorf("Amulet standard: got %q", bySym["Amulet"].Standard)
 	}
-	if bySym["MYT"].Standard != "CIP-0112 v2" {
+	if bySym["MYT"].Standard != "Token Standard V2 (CIP-0112)" {
 		t.Errorf("MYT standard: got %q", bySym["MYT"].Standard)
 	}
 	if !bySym["MYT"].OnLedger {
@@ -62,11 +62,14 @@ func TestInstrumentsFromHoldings_DistinctAndLabeled(t *testing.T) {
 }
 
 func TestStandardFor(t *testing.T) {
-	if standardFor("Amulet") != "Splice Amulet" {
+	if standardFor(genV2, "Amulet") != "Splice Amulet" {
 		t.Error("Amulet should be Splice Amulet")
 	}
-	if standardFor("MYT") != "CIP-0112 v2" {
-		t.Error("non-Amulet should be CIP-0112 v2")
+	if standardFor(genV1, "MYT") != "Token Standard V1 (CIP-0056)" {
+		t.Error("a V1 instrument should be Token Standard V1 (CIP-0056)")
+	}
+	if standardFor(genV2, "MYT") != "Token Standard V2 (CIP-0112)" {
+		t.Error("a V2 instrument should be Token Standard V2 (CIP-0112)")
 	}
 }
 

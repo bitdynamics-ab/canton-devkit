@@ -555,9 +555,18 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, boo
 		// there are no holdings to report.
 		return nil, false, nil
 	}
+	// Query every vetted token-standard holding surface (V1 and/or V2) so
+	// a V1 token like Amulet is summed on a stable release, not just V2.
+	surfaces, err := discoverTokenSurfaces(ctx, client)
+	if err != nil {
+		return nil, false, err
+	}
+	if !surfaces.Any() {
+		return nil, false, nil
+	}
 	req := ledger.ActiveContractsRequest{
 		ActiveAtOffset: end.Offset,
-		EventFormat:    holdingInterfaceFilterV2(parties),
+		EventFormat:    holdingInterfaceFilter(surfaces, parties),
 	}
 	stream, err := client.ActiveContracts(ctx, req)
 	if err != nil {
@@ -588,25 +597,24 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, boo
 		if !ok || entry.ActiveContract == nil {
 			continue
 		}
-		// CreatedEvent carries the parsed interface views.
-		for _, iv := range entry.ActiveContract.GetCreatedEvent().GetInterfaceViews() {
-			hv, ok := extractHoldingViewV2(iv)
-			if !ok || hv.Owner == "" {
-				continue
-			}
-			if wantID != "" && hv.InstrumentID != wantID {
-				continue
-			}
-			if wantAdmin != "" && hv.Admin != wantAdmin {
-				continue
-			}
-			k := bucketKey{admin: hv.Admin, id: hv.InstrumentID, party: hv.Owner}
-			sum, err := addDecimal(bucket[k], hv.Amount)
-			if err != nil {
-				return nil, false, fmt.Errorf("sum holding amounts: %w", err)
-			}
-			bucket[k] = sum
+		// One holding per contract (prefers the richer V2 view when a
+		// contract implements both interfaces) — never double-counted.
+		hv, ok := extractBestHoldingView(entry.ActiveContract.GetCreatedEvent().GetInterfaceViews())
+		if !ok || hv.Owner == "" {
+			continue
 		}
+		if wantID != "" && hv.InstrumentID != wantID {
+			continue
+		}
+		if wantAdmin != "" && hv.Admin != wantAdmin {
+			continue
+		}
+		k := bucketKey{admin: hv.Admin, id: hv.InstrumentID, party: hv.Owner}
+		sum, err := addDecimal(bucket[k], hv.Amount)
+		if err != nil {
+			return nil, false, fmt.Errorf("sum holding amounts: %w", err)
+		}
+		bucket[k] = sum
 	}
 
 	// Join back to local symbol table for friendly rendering.

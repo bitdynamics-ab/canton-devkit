@@ -45,12 +45,14 @@ function partyLabel(aliases: AliasMap, p: string): string {
   return aliases[p] ?? shortParty(p);
 }
 
-// Asset capability guards — verified live:
-//   mint  : only the native test token (CIP-0112 v2) we created on-ledger.
+// Asset capability guards — gated on the machine generation tag, never
+// the human display label:
+//   mint  : only a native Token Standard V2 (CIP-0112) instrument we
+//           created on-ledger. V1 tokens (Amulet) have no user-mint.
 //   burn  : no deployable token supports a standalone burn yet (needs
-//           AllocationV2/DvP — ).
-function mintDisabledReason(t: InstrumentRef): string | null {
-  if (t.standard !== "CIP-0112 v2")
+//           AllocationV2/DvP).
+export function mintDisabledReason(t: InstrumentRef): string | null {
+  if (t.generation !== "v2")
     return `${t.symbol} (${t.standard}) has no standard mint — use the asset's wallet UI`;
   if (!t.on_ledger)
     return `${t.symbol} is recorded only — create it on-ledger first`;

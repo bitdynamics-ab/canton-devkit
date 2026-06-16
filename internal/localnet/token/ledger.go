@@ -35,6 +35,7 @@ type LedgerClient interface {
 	ResolveActAndReadParties(ctx context.Context) ([]string, error)
 	ListKnownParties(ctx context.Context) (*adminv2.ListKnownPartiesResponse, error)
 	GrantUserActAndReadAs(ctx context.Context, userID string, parties []string) error
+	ListKnownPackages(ctx context.Context) (*adminv2.ListKnownPackagesResponse, error)
 }
 
 // dialLedgerFn is the test seam runBalanceLive and scanWorkspace dial
@@ -383,18 +384,109 @@ func parseInterfaceID(qual string) (pkg, module, entity string) {
 	}
 }
 
-// holdingViewV2 is the structured form of HoldingViewV2 we extract
-// from a participant's InterfaceView Record. We carry just the fields
-// the balance / Web UI need — adding more is a one-liner once a
-// downstream consumer asks for them.
-type holdingViewV2 struct {
-	Owner        string // view.account.owner (Optional Party)
-	Provider     string // view.account.provider (Optional Party) — "" when None
-	AccountID    string // view.account.id (Text)
-	InstrumentID string // view.instrumentId.id
-	Admin        string // view.instrumentId.admin (the V2 InstrumentId admin = the issuer party)
-	Amount       string // view.amount as a Decimal string (we don't round on the wire)
-	Locked       bool   // view.lock present (Some) — held by an active allocation/proposal
+// Generation identifies a token-standard interface generation.
+type Generation int
+
+const (
+	genV1 Generation = 1 // Token Standard V1 (CIP-0056) — splice-api-token-*-v1
+	genV2 Generation = 2 // Token Standard V2 (CIP-0112) — splice-api-token-*-v2 (alpha)
+)
+
+func (g Generation) String() string {
+	switch g {
+	case genV1:
+		return "v1"
+	case genV2:
+		return "v2"
+	default:
+		return ""
+	}
+}
+
+// Surfaces is the set of token-standard generations whose Holding
+// interface package is vetted on a participant. A participant can carry
+// both at once during the V1→V2 transition.
+type Surfaces struct {
+	HasV1 bool
+	HasV2 bool
+}
+
+// Any reports whether any token-standard holding package is vetted.
+func (s Surfaces) Any() bool { return s.HasV1 || s.HasV2 }
+
+// discoverTokenSurfaces checks which Holding interface packages the
+// participant has vetted — the basis for per-instrument generation
+// routing. Explicit: a generation is "available" only when its package
+// is present (no implicit fallback). Reuses the ListKnownPackages call
+// resolvePackageID is built on.
+func discoverTokenSurfaces(ctx context.Context, client LedgerClient) (Surfaces, error) {
+	resp, err := client.ListKnownPackages(ctx)
+	if err != nil {
+		return Surfaces{}, fmt.Errorf("list known packages: %w", err)
+	}
+	var s Surfaces
+	for _, p := range resp.GetPackageDetails() {
+		switch p.GetName() {
+		case "splice-api-token-holding-v1":
+			s.HasV1 = true
+		case "splice-api-token-holding-v2":
+			s.HasV2 = true
+		}
+	}
+	return s, nil
+}
+
+// interfaceFilterEntry builds one interface-view CumulativeFilter.
+func interfaceFilterEntry(interfaceID string) *lapiv2.CumulativeFilter {
+	pkg, mod, entity := parseInterfaceID(interfaceID)
+	return &lapiv2.CumulativeFilter{
+		IdentifierFilter: &lapiv2.CumulativeFilter_InterfaceFilter{
+			InterfaceFilter: &lapiv2.InterfaceFilter{
+				InterfaceId:             &lapiv2.Identifier{PackageId: pkg, ModuleName: mod, EntityName: entity},
+				IncludeInterfaceView:    true,
+				IncludeCreatedEventBlob: false,
+			},
+		},
+	}
+}
+
+// holdingInterfaceFilter builds the EventFormat matching every Holding of
+// the available generations. Only the vetted generations' interface
+// filters are included, so we never reference an unvetted package (which
+// the participant would reject). Parties: empty → wildcard
+// (FiltersForAnyParty); non-empty → per-party.
+func holdingInterfaceFilter(surfaces Surfaces, parties []string) *lapiv2.EventFormat {
+	var cumulative []*lapiv2.CumulativeFilter
+	if surfaces.HasV1 {
+		cumulative = append(cumulative, interfaceFilterEntry(HoldingInterfaceV1))
+	}
+	if surfaces.HasV2 {
+		cumulative = append(cumulative, interfaceFilterEntry(HoldingInterfaceV2))
+	}
+	filter := &lapiv2.Filters{Cumulative: cumulative}
+	if len(parties) == 0 {
+		return &lapiv2.EventFormat{FiltersForAnyParty: filter, Verbose: true}
+	}
+	byParty := make(map[string]*lapiv2.Filters, len(parties))
+	for _, p := range parties {
+		byParty[p] = filter
+	}
+	return &lapiv2.EventFormat{FiltersByParty: byParty, Verbose: true}
+}
+
+// holdingView is the generation-agnostic structured form of a Holding
+// InterfaceView (V1 or V2) — just the fields the balance / Web UI need.
+// Generation records which interface the view came from, for per-
+// instrument write routing.
+type holdingView struct {
+	Generation   Generation
+	Owner        string // the holding owner party
+	Provider     string // V2 account.provider ("" for V1 / when None)
+	AccountID    string // V2 account.id ("" for V1)
+	InstrumentID string // instrumentId.id
+	Admin        string // instrumentId.admin (the issuer party)
+	Amount       string // amount as a Decimal string (we don't round on the wire)
+	Locked       bool   // lock present (Some) — held by an active allocation/proposal
 }
 
 // extractHoldingViewV2 walks a participant InterfaceView Record and
@@ -408,12 +500,12 @@ type holdingViewV2 struct {
 //	HoldingView { account, instrumentId, amount, lock?, meta }
 //	  Account { owner: Optional Party, provider: Optional Party, id: Text }
 //	  InstrumentId { admin: Party, id: Text }
-func extractHoldingViewV2(view *lapiv2.InterfaceView) (holdingViewV2, bool) {
+func extractHoldingViewV2(view *lapiv2.InterfaceView) (holdingView, bool) {
 	if view == nil || view.ViewValue == nil {
-		return holdingViewV2{}, false
+		return holdingView{}, false
 	}
 	fields := view.ViewValue.Fields
-	out := holdingViewV2{}
+	out := holdingView{Generation: genV2}
 	for _, f := range fields {
 		switch f.Label {
 		case "account":
@@ -458,6 +550,102 @@ func extractHoldingViewV2(view *lapiv2.InterfaceView) (holdingViewV2, bool) {
 		return out, false
 	}
 	return out, true
+}
+
+// extractHoldingViewV1 walks a V1 HoldingView InterfaceView. The V1 view
+// shape (HoldingV1.daml) differs from V2 in exactly one field: owner is a
+// direct `Party`, not nested in an Account. instrumentId / amount / lock
+// are identical.
+//
+//	HoldingView { owner: Party, instrumentId: InstrumentId, amount, lock?, meta }
+func extractHoldingViewV1(view *lapiv2.InterfaceView) (holdingView, bool) {
+	if view == nil || view.ViewValue == nil {
+		return holdingView{}, false
+	}
+	out := holdingView{Generation: genV1}
+	for _, f := range view.ViewValue.Fields {
+		switch f.Label {
+		case "owner":
+			out.Owner = partyOf(f.Value)
+		case "instrumentId":
+			rec := recordOf(f.Value)
+			if rec == nil {
+				return out, false
+			}
+			for _, ifld := range rec.Fields {
+				switch ifld.Label {
+				case "admin":
+					out.Admin = partyOf(ifld.Value)
+				case "id":
+					out.InstrumentID = textOf(ifld.Value)
+				}
+			}
+		case "amount":
+			out.Amount = numericOf(f.Value)
+		case "lock":
+			if o, ok := f.Value.Sum.(*lapiv2.Value_Optional); ok && o.Optional != nil && o.Optional.Value != nil {
+				out.Locked = true
+			}
+		}
+	}
+	if out.InstrumentID == "" || out.Amount == "" {
+		return out, false
+	}
+	return out, true
+}
+
+// interfaceGeneration classifies a returned InterfaceView's interface id
+// by its Daml module name (HoldingV1 / HoldingV2).
+func interfaceGeneration(id *lapiv2.Identifier) (Generation, bool) {
+	if id == nil {
+		return 0, false
+	}
+	switch {
+	case strings.Contains(id.ModuleName, "HoldingV2"):
+		return genV2, true
+	case strings.Contains(id.ModuleName, "HoldingV1"):
+		return genV1, true
+	}
+	return 0, false
+}
+
+// extractBestHoldingView picks exactly one holding view per contract —
+// preferring the richer V2 view, falling back to V1 — so a contract that
+// implements both interfaces is counted once (never a double-counted
+// balance). Returns the view tagged with the generation it came from.
+func extractBestHoldingView(views []*lapiv2.InterfaceView) (holdingView, bool) {
+	var v1, unclassified *lapiv2.InterfaceView
+	for _, iv := range views {
+		gen, ok := interfaceGeneration(iv.GetInterfaceId())
+		if !ok {
+			if unclassified == nil {
+				unclassified = iv
+			}
+			continue
+		}
+		if gen == genV2 {
+			if hv, ok := extractHoldingViewV2(iv); ok {
+				return hv, true
+			}
+		} else if v1 == nil {
+			v1 = iv
+		}
+	}
+	if v1 != nil {
+		if hv, ok := extractHoldingViewV1(v1); ok {
+			return hv, true
+		}
+	}
+	// Safety net for a view whose interface id we couldn't classify
+	// (a participant that omits it, or a fixture): try the V2 shape, then
+	// V1. Real ledgers always set the interface id, so this rarely fires.
+	if unclassified != nil {
+		if hv, ok := extractHoldingViewV2(unclassified); ok && hv.Owner != "" {
+			return hv, true
+		}
+		return extractHoldingViewV1(unclassified)
+	}
+	return holdingView{}, false
 }
 
 // --- tiny Value walkers, focused on the fields we need ---
