@@ -3,7 +3,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
-import { TokensScreen } from "./TokensScreen";
+import { TokensScreen, createErrorText } from "./TokensScreen";
+import { ApiError } from "../api";
 
 // TokensScreen tests — minimal smoke that the screen mounts under the
 // shared providers App.tsx uses, and that the list/empty paths render.
@@ -320,5 +321,26 @@ describe("TokensScreen", () => {
       { timeout: 4000 },
     );
     expect(screen.queryByText(/registry pseudo-balances/i)).not.toBeInTheDocument();
+  });
+});
+
+// createErrorText: the on-ledger create 412 (TEST_TOKEN_DAR_UNAVAILABLE)
+// must surface the actionable token-standard-v2 remedy in the create
+// modal, not the raw backend message — matching the NEEDS_V2_LOCALNET
+// remediation pattern (#169 UI-parity fix).
+describe("createErrorText", () => {
+  it("maps the on-ledger DAR 412 to the token-standard-v2 remedy", () => {
+    const e = new ApiError(412, {
+      code: "TEST_TOKEN_DAR_UNAVAILABLE",
+      error: "test-token DAR not available for this Splice version",
+    });
+    expect(createErrorText(e)).toMatch(/token-standard-v2/);
+  });
+  it("passes the raw server message through for other API errors", () => {
+    const e = new ApiError(409, { code: "SYMBOL_IN_USE", error: "symbol RTK already in use" });
+    expect(createErrorText(e)).toBe("symbol RTK already in use");
+  });
+  it("falls back to a generic message for a non-API error", () => {
+    expect(createErrorText(new Error("boom"))).toBe("create failed");
   });
 });

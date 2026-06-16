@@ -2,6 +2,7 @@ package token
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -32,6 +33,22 @@ var tokenBundleDARs = []struct{ pkg, file string }{
 
 const darFetchMaxBytes = 64 << 20 // 64 MiB — these DARs are well under 1 MiB
 
+// darBundleBaseURL is the raw.githubusercontent.com base for the upstream
+// splice repo's prebuilt DARs. A package var so tests can point it at a
+// local httptest server.
+var darBundleBaseURL = "https://raw.githubusercontent.com/canton-network/splice"
+
+// errDARNotPublished is returned by fetchDAR for an HTTP 404 — the DAR
+// isn't committed at that commit. The splice-test-token-v2 example only
+// lives on the token-standard-v2 stream, not on a release tag like 0.6.4.
+var errDARNotPublished = errors.New("DAR not published at this commit")
+
+// ErrTokenDARUnavailable is returned when a required test-token DAR isn't
+// published for the instance's Splice version — on-ledger V2 token create
+// needs a token-standard-v2 instance. Surfaced to both surfaces as an
+// actionable precondition rather than a raw GitHub 404.
+var ErrTokenDARUnavailable = errors.New("test-token DAR not available for this Splice version")
+
 // ensureTokenDARs uploads any test-token DAR not already vetted on the
 // participant, fetching it from the upstream repo pinned to the
 // instance's Splice commit. Idempotent: a fully-vetted participant is a
@@ -56,6 +73,9 @@ func ensureTokenDARs(ctx context.Context, client *ledger.Client, instance string
 		emit(out, "dar bundle: fetching", map[string]any{"package": d.pkg, "commit": commit[:12]})
 		dar, err := fetchDAR(ctx, commit, d.file)
 		if err != nil {
+			if errors.Is(err, errDARNotPublished) {
+				return darUnavailableError(d.pkg, instanceSpliceVersion(instance))
+			}
 			return fmt.Errorf("fetch %s: %w", d.file, err)
 		}
 		if _, err := client.UploadDarFile(ctx, &adminv2.UploadDarFileRequest{DarFile: dar}); err != nil {
@@ -87,11 +107,30 @@ func tokenBundleCommit(instance string) (string, error) {
 		"upload the test-token DARs manually with `localnet dar upload`", tag)
 }
 
+// darUnavailableError wraps ErrTokenDARUnavailable with an actionable
+// message: the example test-token DAR is only published on the
+// token-standard-v2 stream, so on-ledger V2 tokens need such an instance.
+func darUnavailableError(pkg, version string) error {
+	return fmt.Errorf("%w: %q is not published for Splice %q — on-ledger V2 tokens "+
+		"need a token-standard-v2 instance (`dpm localnet up --version token-standard-v2 "+
+		"--profile tokens-v2`), or upload the DAR manually with `dpm localnet dar upload`",
+		ErrTokenDARUnavailable, pkg, version)
+}
+
+// instanceSpliceVersion returns the instance's recorded Splice version
+// tag for an error message; best-effort ("" on a read failure).
+func instanceSpliceVersion(instance string) string {
+	if st, err := registry.Read(instance); err == nil {
+		return st.SpliceVersion
+	}
+	return ""
+}
+
 // fetchDAR downloads a prebuilt DAR from the upstream repo at a pinned
 // commit. Size-capped; the DARs are tiny but we never trust a remote
 // Content-Length.
 func fetchDAR(ctx context.Context, commit, file string) ([]byte, error) {
-	url := fmt.Sprintf("https://raw.githubusercontent.com/canton-network/splice/%s/daml/dars/%s", commit, file)
+	url := fmt.Sprintf("%s/%s/daml/dars/%s", darBundleBaseURL, commit, file)
 	reqCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
@@ -103,6 +142,12 @@ func fetchDAR(ctx context.Context, commit, file string) ([]byte, error) {
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		// 404 = the DAR isn't committed at this commit (the test-token
+		// example only exists on the token-standard-v2 stream). The
+		// caller turns this into the actionable ErrTokenDARUnavailable.
+		return nil, fmt.Errorf("%w (GET %s)", errDARNotPublished, url)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GET %s: HTTP %d", url, resp.StatusCode)
 	}

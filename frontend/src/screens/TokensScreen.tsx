@@ -62,6 +62,26 @@ const BURN_DISABLED_REASON =
   "Burn is only available on a native CIP-0112 v2 token created on this " +
   "instance — Amulet has no burn surface.";
 
+// TOKEN_DAR_UNAVAILABLE_HINT is the friendly remediation for the on-ledger
+// create 412 (TEST_TOKEN_DAR_UNAVAILABLE): the test-token DAR isn't
+// published for this instance's Splice version. Shared by the create modal
+// (where on-ledger create surfaces it) and the action-modal banner.
+const TOKEN_DAR_UNAVAILABLE_HINT =
+  "The test-token DAR isn't published for this instance's Splice version, so on-ledger " +
+  "V2 tokens can't be created here. Bring up a token-standard-v2 instance " +
+  "(localnet up --version token-standard-v2 --profile tokens-v2) and re-run.";
+
+// createErrorText maps a token-create failure to the message shown in the
+// create modal: the actionable DAR remedy for the on-ledger 412
+// (TEST_TOKEN_DAR_UNAVAILABLE), otherwise the raw server message (or a
+// generic fallback for a non-API error). Exported for unit testing.
+export function createErrorText(e: unknown): string {
+  if (e instanceof ApiError && e.code === "TEST_TOKEN_DAR_UNAVAILABLE") {
+    return TOKEN_DAR_UNAVAILABLE_HINT;
+  }
+  return e instanceof ApiError ? e.message : "create failed";
+}
+
 // TokensScreen — .
 //
 // V2 Token Standard surface: lists every instrument recorded on the
@@ -307,6 +327,9 @@ export function TokensScreen() {
           "V2 ledger action not yet wired on this instance. Bring up a V2 LocalNet first " +
           "(localnet up --version token-standard-v2 --profile tokens-v2) and re-run.",
       };
+    }
+    if (e instanceof ApiError && e.code === "TEST_TOKEN_DAR_UNAVAILABLE") {
+      return { tone: "warn", text: TOKEN_DAR_UNAVAILABLE_HINT };
     }
     return { tone: "err", text: e instanceof ApiError ? e.message : fallback };
   }
@@ -1069,7 +1092,7 @@ function CreateTokenModal({
       });
       onCreated(ref);
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "create failed");
+      setErr(createErrorText(e));
     } finally {
       setBusy(false);
     }
