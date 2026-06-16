@@ -30,6 +30,19 @@ func tokensSrv(t *testing.T) *httptest.Server {
 
 func seedForTokens(t *testing.T, name string) {
 	t.Helper()
+	// Hermetic offline path. These tests seed an instance with no
+	// recorded participant_ledger_* port and assert the create/mint/
+	// holdings handlers take the offline (registry-only) branch. Pin the
+	// endpoint resolver to "" so a port leaking in from a sibling test's
+	// registry (or the developer's real ~/.local registry, which may
+	// hold a live "demo") can't flip them onto the live-dial branch —
+	// which would fail the 201→409 / 422 / registry-source assertions.
+	// Mirrors the runTokenCreate seam; safe because handler tests run
+	// sequentially (no t.Parallel).
+	prevEndpoint := liveLedgerEndpoint
+	liveLedgerEndpoint = func(string, string) string { return "" }
+	t.Cleanup(func() { liveLedgerEndpoint = prevEndpoint })
+
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	s := registry.NewState(name, "0.6.4")
 	s.ComposeProject = "canton-" + name
