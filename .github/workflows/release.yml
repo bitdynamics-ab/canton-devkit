@@ -78,33 +78,40 @@ jobs:
         id: meta
         run: |
           short_sha="${GITHUB_SHA::7}"
+          # Three distinct versions flow through this workflow:
+          #   devkit_version    — the DevKit release, v-prefixed (v0.7.1).
+          #                       Used for GitHub Releases, tarball names,
+          #                       and the Homebrew formula.
+          #   component_version — the SAME DevKit version in bare semver
+          #                       (0.7.1) for the DPM component's OCI tag.
+          #   DPM_VERSION (env) — the pinned DPM *CLI* version (unrelated).
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             # Reject a non-semver tag (e.g. v0.7) up front, before any
             # release or asset is created. DPM's `publish component`
             # requires a full MAJOR.MINOR.PATCH OCI tag, so a 2-part tag
             # like v0.7 (which stripped to 0.7) is exactly what broke the
             # v0.7 release. Fail FAST here with an actionable message.
-            version="${GITHUB_REF_NAME}"
-            dpm_version="${GITHUB_REF_NAME#v}"
+            devkit_version="${GITHUB_REF_NAME}"
+            component_version="${GITHUB_REF_NAME#v}"
             semver_re='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
-            if [[ ! "${dpm_version}" =~ $semver_re ]]; then
-              echo "::error::Release tag '${version}' is not full semver. Tag a MAJOR.MINOR.PATCH release, e.g. v0.7.1 (not v0.7)." >&2
+            if [[ ! "${component_version}" =~ $semver_re ]]; then
+              echo "::error::Release tag '${devkit_version}' is not full semver. Tag a MAJOR.MINOR.PATCH release, e.g. v0.7.1 (not v0.7)." >&2
               exit 1
             fi
             push="true"
           else
-            version="main-${short_sha}"
+            devkit_version="main-${short_sha}"
             # DPM needs a valid semver even for the dry-run on main.
-            dpm_version="0.0.0-${short_sha}"
+            component_version="0.0.0-${short_sha}"
             push="false"
           fi
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          echo "dpm_version=${dpm_version}" >> "${GITHUB_OUTPUT}"
+          echo "devkit_version=${devkit_version}" >> "${GITHUB_OUTPUT}"
+          echo "component_version=${component_version}" >> "${GITHUB_OUTPUT}"
           echo "push=${push}" >> "${GITHUB_OUTPUT}"
 
       - name: Build release binaries + tarballs + checksums
         env:
-          VERSION: ${{ steps.meta.outputs.version }}
+          VERSION: ${{ steps.meta.outputs.devkit_version }}
           # Short commit SHA, baked into release binaries so `version`
           # reports `<version> (<commit>)`. -trimpath strips VCS stamping,
           # so the binary can't recover this from debug.ReadBuildInfo() —
@@ -178,7 +185,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.BUILDS_REPO_TOKEN }}
-          VERSION: ${{ steps.meta.outputs.version }}
+          VERSION: ${{ steps.meta.outputs.devkit_version }}
         run: |
           # Fetch release notes from the primary release just created above.
           # Use GITHUB_TOKEN (not BUILDS_REPO_TOKEN) to read from this repo.
@@ -195,7 +202,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.BUILDS_REPO_TOKEN }}
-          VERSION: ${{ steps.meta.outputs.version }}
+          VERSION: ${{ steps.meta.outputs.devkit_version }}
         run: |
           # SHA256SUMS lives at dist/SHA256SUMS — tarballs land directly
           # in dist/ and the checksum file uses GNU sha256sum format.
@@ -288,7 +295,7 @@ jobs:
 
       - name: Validate component manifest (dry-run)
         env:
-          VERSION: ${{ steps.meta.outputs.dpm_version }}
+          VERSION: ${{ steps.meta.outputs.component_version }}
         run: |
           set -euo pipefail
           dpm publish component \
@@ -301,7 +308,7 @@ jobs:
       - name: Publish DPM component (tag pushes only)
         if: steps.meta.outputs.push == 'true'
         env:
-          VERSION: ${{ steps.meta.outputs.dpm_version }}
+          VERSION: ${{ steps.meta.outputs.component_version }}
         run: |
           set -euo pipefail
           # Only move the `latest` tag for FINAL releases. A pre-release
