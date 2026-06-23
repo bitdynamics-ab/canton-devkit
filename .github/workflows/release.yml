@@ -23,14 +23,20 @@ env:
   #   curl -sL <release-tarball-url> | sha256sum
   DPM_VERSION: 1.0.16
   DPM_LINUX_SHA256: 387421d4b3d0e799f05cde1f5c2adc704acd2824796d436861602eb2be759874
-  # Build matrix (single source of truth — kept in sync between the
-  # standalone-binary and DPM-component jobs).
+  # Build matrix: shared by both the standalone-binary archives and the
+  # DPM-component OCI artifact (both produced in the single release job).
   RELEASE_TARGETS: linux/amd64 darwin/arm64 windows/amd64
 
 jobs:
-  binaries:
-    name: Build standalone binaries
-    runs-on: ubuntu-latest
+  release:
+    name: Build binaries + publish DPM component
+    # Single job so the standalone binaries and the DPM-component OCI
+    # artifact are built from ONE Go compile and handed off via local
+    # disk — no upload/download-artifact, so the workflow consumes ZERO
+    # GitHub Actions artifact-storage quota. Runs on the self-hosted
+    # runner to keep compute off GitHub-hosted minutes too.
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
@@ -42,9 +48,10 @@ jobs:
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
           go-version-file: go.mod
-          # Module + build cache on (setup-go default). This is the only
-          # Go-compiling job now — the dpm-component job consumes the
-          # binaries this job uploads, so the toolchain runs exactly once.
+          # No setup-go cache on the self-hosted runner (matches the other
+          # self-hosted workflows). Go compiles exactly once here — the DPM
+          # component is packaged from these same binaries via local disk.
+          cache: false
 
       - name: Set up Node
         # actions/setup-node@v4
@@ -72,20 +79,28 @@ jobs:
         run: |
           short_sha="${GITHUB_SHA::7}"
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            version="${GITHUB_REF_NAME}"
             # Reject a non-semver tag (e.g. v0.7) up front, before any
-            # release or asset is created — the DPM-component job would
-            # fail on it later anyway (invalid OCI semver). Keep the two
-            # jobs' tag contract identical.
+            # release or asset is created. DPM's `publish component`
+            # requires a full MAJOR.MINOR.PATCH OCI tag, so a 2-part tag
+            # like v0.7 (which stripped to 0.7) is exactly what broke the
+            # v0.7 release. Fail FAST here with an actionable message.
+            version="${GITHUB_REF_NAME}"
+            dpm_version="${GITHUB_REF_NAME#v}"
             semver_re='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
-            if [[ ! "${version#v}" =~ $semver_re ]]; then
+            if [[ ! "${dpm_version}" =~ $semver_re ]]; then
               echo "::error::Release tag '${version}' is not full semver. Tag a MAJOR.MINOR.PATCH release, e.g. v0.7.1 (not v0.7)." >&2
               exit 1
             fi
+            push="true"
           else
             version="main-${short_sha}"
+            # DPM needs a valid semver even for the dry-run on main.
+            dpm_version="0.0.0-${short_sha}"
+            push="false"
           fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "dpm_version=${dpm_version}" >> "${GITHUB_OUTPUT}"
+          echo "push=${push}" >> "${GITHUB_OUTPUT}"
 
       - name: Build release binaries + tarballs + checksums
         env:
@@ -115,11 +130,11 @@ jobs:
             binary_name="canton-devkit"
             [ "$os" = "windows" ] && binary_name="canton-devkit.exe"
 
-            # Build ONCE into component-bin/<os>_<arch>/. The dpm-component
-            # job downloads this exact binary, so GitHub Releases and the
-            # GHCR OCI artifact ship byte-identical bits (no rebuild skew).
-            # -trimpath strips the runner's local paths from the binary;
-            # -s -w shrink it ~30%.
+            # Build ONCE into component-bin/<os>_<arch>/. The DPM-component
+            # steps later in this job package this exact binary, so GitHub
+            # Releases and the GHCR OCI artifact ship byte-identical bits
+            # (no rebuild skew). -trimpath strips the runner's local paths
+            # from the binary; -s -w shrink it ~30%.
             bindir="component-bin/${os}_${arch}"
             mkdir -p "${bindir}"
             GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build \
@@ -150,40 +165,6 @@ jobs:
           #   sha256sum --check SHA256SUMS
           (cd dist && sha256sum * > SHA256SUMS)
           cat dist/SHA256SUMS
-
-      - name: Upload raw binaries for the DPM-component job
-        # Unconditional: the dpm-component job needs these on every run
-        # (it dry-runs on main and publishes on tags). upload-artifact
-        # does NOT preserve the executable bit — the consumer re-chmods.
-        # On main, a full org-wide Actions artifact quota (recalculated
-        # only every 6-12h and driven by OTHER repos in the org) must not
-        # fail the build — the binaries are already built + tested, and the
-        # downstream dpm-component job only dry-runs. On a release tag this
-        # stays fatal: a real release must ship its binaries.
-        continue-on-error: ${{ github.ref == 'refs/heads/main' }}
-        # actions/upload-artifact@v4
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: component-binaries
-          path: component-bin/**
-          retention-days: 1
-
-      - name: Upload main branch artifacts
-        if: github.ref == 'refs/heads/main'
-        # Convenience downloads of each main build — never worth failing
-        # the build over when the org-wide artifact quota is full.
-        continue-on-error: true
-        # actions/upload-artifact@v4
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: canton-devkit-${{ steps.meta.outputs.version }}
-          path: dist/*
-          # Cap retention: these are convenience downloads of each main
-          # build. Without a limit they default to 90 days and accumulate
-          # (one ~20 MB set per push) until the Actions artifact storage
-          # quota fills and EVERY upload — including the component-binaries
-          # the dpm-component job depends on — starts failing.
-          retention-days: 7
 
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/')
@@ -250,56 +231,6 @@ jobs:
             -f sha="$file_sha" \
             -f branch="main"
 
-  dpm-component:
-    name: Publish DPM component to GHCR
-    # Consumes the binaries built by `binaries` (no second Go build) so
-    # the OCI artifact and the GitHub Release ship identical bits and CI
-    # compiles Go exactly once.
-    needs: binaries
-    runs-on: ubuntu-latest
-    # On main this is a publish DRY-RUN (push=false). If the upstream
-    # component-binaries upload was skipped because the org-wide artifact
-    # quota is full, the download here can't succeed — don't let that fail
-    # the workflow on main. On a release tag it stays fatal (real publish).
-    continue-on-error: ${{ github.ref == 'refs/heads/main' }}
-
-    steps:
-      - name: Check out repository
-        # actions/checkout@v5
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-
-      - name: Download prebuilt binaries
-        # actions/download-artifact@v4
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: component-binaries
-          path: component-bin
-
-      - name: Set release metadata
-        id: meta
-        run: |
-          short_sha="${GITHUB_SHA::7}"
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            # DPM expects a full MAJOR.MINOR.PATCH semver string for the OCI
-            # tag — strip the `v` prefix. A 2-part tag like `v0.7` strips to
-            # `0.7`, which DPM's `publish component` rejects as invalid
-            # semver (this is exactly what broke the v0.7 release). Fail
-            # FAST here with an actionable message rather than letting the
-            # cryptic dpm usage dump surface three steps later.
-            version="${GITHUB_REF_NAME#v}"
-            semver_re='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
-            if [[ ! "${version}" =~ $semver_re ]]; then
-              echo "::error::Release tag '${GITHUB_REF_NAME}' is not full semver. Tag a MAJOR.MINOR.PATCH release, e.g. v0.7.1 (not v0.7)." >&2
-              exit 1
-            fi
-            push="true"
-          else
-            version="0.0.0-${short_sha}"
-            push="false"
-          fi
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          echo "push=${push}" >> "${GITHUB_OUTPUT}"
-
       - name: Install DPM CLI (sha256-verified)
         run: |
           set -euo pipefail
@@ -335,8 +266,8 @@ jobs:
             binary_name="canton-devkit"
             [ "$os" = "windows" ] && binary_name="canton-devkit.exe"
 
-            # Copy the prebuilt binary and restore the executable bit
-            # (upload/download-artifact drops file permissions).
+            # Copy the binary built earlier in this same job (local disk —
+            # no artifact round-trip, so the executable bit is preserved).
             cp "component-bin/${os}_${arch}/${binary_name}" "${dir}/bin/${binary_name}"
             chmod +x "${dir}/bin/${binary_name}"
 
@@ -357,7 +288,7 @@ jobs:
 
       - name: Validate component manifest (dry-run)
         env:
-          VERSION: ${{ steps.meta.outputs.version }}
+          VERSION: ${{ steps.meta.outputs.dpm_version }}
         run: |
           set -euo pipefail
           dpm publish component \
@@ -370,7 +301,7 @@ jobs:
       - name: Publish DPM component (tag pushes only)
         if: steps.meta.outputs.push == 'true'
         env:
-          VERSION: ${{ steps.meta.outputs.version }}
+          VERSION: ${{ steps.meta.outputs.dpm_version }}
         run: |
           set -euo pipefail
           # Only move the `latest` tag for FINAL releases. A pre-release
