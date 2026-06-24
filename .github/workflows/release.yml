@@ -392,8 +392,12 @@ jobs:
             "https://github.com/digital-asset/dpm/releases/download/${DPM_VERSION}/dpm-${DPM_VERSION}-linux-amd64.tar.gz" \
             -o "$tar"
           echo "${DPM_LINUX_SHA256}  ${tar}" | sha256sum --check --strict -
-          tar -xzf "$tar" -C /usr/local/bin dpm
-          dpm --version
+          bindir="${RUNNER_TEMP:-/tmp}/canton-devkit-bin"
+          mkdir -p "$bindir"
+          tar -xzf "$tar" -C "$bindir" dpm
+          chmod 0755 "$bindir/dpm"
+          echo "$bindir" >> "$GITHUB_PATH"
+          "$bindir/dpm" --version
 
       - name: Lay out per-platform component dirs
         run: |
