@@ -31,6 +31,10 @@ type consent struct {
 	// one-per-install increment to dpm/install. A boolean, never an
 	// identifier — it only ensures the install counter fires once per host.
 	InstallCounted bool `json:"install_counted,omitempty"`
+	// InstallSurfaceCounted records which install surfaces have already
+	// contributed their once-per-host ping (for example the APT postinst
+	// hook). Append-only per surface; never an identifier.
+	InstallSurfaceCounted map[string]bool `json:"install_surface_counted,omitempty"`
 	// InstallID is a random UUIDv4 minted once per config file (see
 	// installid.go). Sent alongside counter uploads so the collector can
 	// count DISTINCT installs without us ever learning anything about the

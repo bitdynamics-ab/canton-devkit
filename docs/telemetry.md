@@ -17,8 +17,11 @@ canton-devkit telemetry preview
 ## On by default (opt-out)
 
 Telemetry is **on by default**. The first time you run an operational
-command in an interactive terminal, a one-time notice explains this. Turn
-it off any time — your choice persists:
+command in an interactive terminal, a one-time notice explains this. The
+Debian package also records a one-time `apt` install-surface ping during
+package installation; because that path is non-interactive, opt out
+**before** install with `DPM_TELEMETRY=off` or `DO_NOT_TRACK=1` if you do
+not want it. Turn telemetry off any time — your choice persists:
 
 ```bash
 canton-devkit telemetry off      # disable (persists)
@@ -34,13 +37,14 @@ Precedence (highest first): `DO_NOT_TRACK` → `DPM_TELEMETRY` → config file
 
 ## What is collected — counters only
 
-A closed, compile-time-enforced allow-list of thirteen counters. Each is a
-`chart` with a small set of `buckets`; we keep weekly **counts** per
+A closed, compile-time-enforced allow-list of fourteen counters. Each is a
+`chart` with a small set of `buckets`; we keep daily **counts** per
 bucket and nothing else:
 
 | Counter | Buckets |
 |---|---|
 | `dpm/install` | `linux` `darwin` `windows` — **once per machine** on the first non-CI run (a device-count proxy; no identifier) |
+| `dpm/install_surface` | `apt` — **once per machine** when Debian/Ubuntu package installation finishes |
 | `dpm/command` | the localnet verb (`up`, `down`, `dar`, `token`, …) |
 | `dpm/command_exit` | `<verb>/ok` or `<verb>/fail` |
 | `dpm/token_action` | the token subcommand (`create` `mint` `transfer` `burn` `balance` …) — CIP-0112 flow visibility |
@@ -54,12 +58,13 @@ bucket and nothing else:
 | `dpm/compose_version_bucket` | `v2.20-` `v2.20-v2.27` `v2.28+` |
 | `dpm/doctor_fail` | failing `doctor` check ids (only on `doctor` failure) |
 
-A week's file is literally:
+A period file is literally:
 
 ```json
 {
-  "schema_version": 1,
-  "week": "2026-W22",
+  "schema_version": 2,
+  "period": "2026-06-21",
+  "granularity": "daily",
   "counters": {
     "dpm/command": {"up": 5, "down": 3},
     "dpm/os": {"darwin": 8}
@@ -67,7 +72,7 @@ A week's file is literally:
 }
 ```
 
-We learn *"this week saw 5 `up` invocations on darwin/arm64"* — and
+We learn *"this day saw 5 `up` invocations on darwin/arm64"* — and
 nothing else.
 
 ## The anonymous install token
@@ -107,10 +112,14 @@ correlates only to itself (an install count) — never to your usage.
 ## How it works
 
 - Counters accumulate in memory during a run and merge into the current
-  week's local file (`<config dir>/canton-devkit/telemetry/<week>.json`)
+  day's local file (`<config dir>/canton-devkit/telemetry/<period>.json`)
   on exit. Recording never blocks or fails a command.
-- A **completed** past week is uploaded once (a single POST), then its
-  file is deleted. On the first upload failure the week is marked deferred
+- The Debian package install hook uses the same spool/uploader path: it
+  records the install-surface counter locally first, then does a
+  best-effort flush so the install path is visible even if the user never
+  runs an operational command later.
+- A **completed** past period is uploaded once (a single POST), then its
+  file is deleted. On the first upload failure the period is marked deferred
   and retried at the next window; after a second miss it is dropped.
   Retrying an aggregate is privacy-safe; retrying individual events is
   not, so we don't keep events.
