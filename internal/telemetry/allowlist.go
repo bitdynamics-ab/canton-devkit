@@ -23,6 +23,7 @@ var allowedCounters = map[string]map[string]struct{}{
 	"dpm/token_action":           set(tokenActions...),
 	"dpm/ui_feature":             set(uiFeatures...),
 	"dpm/install":                set("linux", "darwin", "windows"), // once per machine (first non-CI run) — device-count proxy
+	"dpm/install_surface":        set("apt"),                        // once per package-manager install source
 }
 
 // commandVerbs is the bucket space for dpm/command — the localnet

@@ -7,7 +7,8 @@ LocalNet Docker stack. It ships two ways:
    Manager and invoke as `dpm localnet …`.
 2. **Standalone binary** (`canton-devkit`) — a self-contained
    executable for users who don't run DPM (CI, DevOps, workshop
-   facilitators). Invoke as `canton-devkit localnet …`.
+   facilitators), shipped as release archives plus APT convenience
+   packages for Debian/Ubuntu hosts. Invoke as `canton-devkit localnet …`.
 
 Both paths ship the **same binary** and expose the **same command
 tree**. Throughout the docs, `dpm localnet <cmd>` and
@@ -115,6 +116,55 @@ chmod +x canton-devkit
 sudo mv canton-devkit /usr/local/bin/
 canton-devkit version
 ```
+
+### APT — Debian / Ubuntu (amd64)
+
+Tagged releases update a static APT repository hosted from the public
+builds repo. Add it once, then install or upgrade with normal APT:
+
+```bash
+echo "deb [trusted=yes arch=amd64] https://raw.githubusercontent.com/bitdynamics-ab/homebrew-canton-devkit/main/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/canton-devkit.list
+sudo apt update
+sudo apt install canton-devkit
+canton-devkit version
+```
+
+List available versions:
+
+```bash
+apt list -a canton-devkit
+apt policy canton-devkit
+```
+
+Install a specific version:
+
+```bash
+sudo apt install canton-devkit=0.7.0
+```
+
+The APT repo is currently unsigned and therefore uses `trusted=yes`;
+the release still publishes SHA-256 metadata, and package installation
+records a best-effort anonymous `apt` install-surface telemetry ping.
+Adding a signed repository key is a follow-up hardening step.
+
+Direct `.deb` install also works:
+
+```bash
+VERSION=v0.7
+DEB_VERSION="${VERSION#v}"
+ASSET="canton-devkit_${DEB_VERSION}_amd64.deb"
+base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}"
+curl -fLO "${base}/${ASSET}"
+curl -fLO "${base}/SHA256SUMS"
+grep " ${ASSET}\$" SHA256SUMS | sha256sum -c - || { echo "checksum mismatch"; exit 1; }
+sudo apt install "./${ASSET}"
+canton-devkit version
+```
+
+The Debian package installs `/usr/bin/canton-devkit`. It does not install
+Docker; run `canton-devkit localnet doctor` after installation to verify
+Docker CLI, Compose v2, ports, disk, memory, and host prerequisites.
 
 ### Windows (amd64, PowerShell)
 

@@ -166,8 +166,61 @@ jobs:
             rm -rf "${stage}"
           done
 
+          # Linux Debian package (.deb) for Ubuntu/Debian users. This is
+          # also fed into the static APT repository in the public builds
+          # repo below. It reuses the exact linux/amd64 binary built above,
+          # preserving the "same binary across distribution surfaces"
+          # invariant.
+          if [[ "${VERSION}" == v* ]]; then
+            deb_version="${VERSION#v}"
+          else
+            deb_version="0.0.0+${short_commit}"
+          fi
+          command -v ar >/dev/null
+          command -v tar >/dev/null
+          command -v gzip >/dev/null
+          debwork="dist/debwork"
+          debroot="${debwork}/data"
+          debctrl="${debwork}/control"
+          mkdir -p \
+            "${debctrl}" \
+            "${debroot}/usr/bin" \
+            "${debroot}/usr/share/doc/canton-devkit"
+          cp "component-bin/linux_amd64/canton-devkit" "${debroot}/usr/bin/canton-devkit"
+          chmod 0755 "${debroot}/usr/bin/canton-devkit"
+          cp LICENSE "${debroot}/usr/share/doc/canton-devkit/LICENSE"
+          cp README.md "${debroot}/usr/share/doc/canton-devkit/README.md"
+          cp packaging/deb/postinst "${debctrl}/postinst"
+          chmod 0755 "${debctrl}/postinst"
+          cat > "${debctrl}/control" <<EOF
+          Package: canton-devkit
+          Version: ${deb_version}
+          Section: devel
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Bitdynamics <admin@bitdynamics.me>
+          Homepage: https://github.com/bitdynamics-ab/canton-devkit
+          Description: Canton DevKit LocalNet developer tooling
+           Canton DevKit manages Canton LocalNet instances, DAR workflows,
+           contract exploration, observability, and token testing from a
+           single standalone CLI.
+          EOF
+          sed -i 's/^          //' "${debctrl}/control"
+          printf '2.0\n' > "${debwork}/debian-binary"
+          tar --sort=name --owner=0 --group=0 --numeric-owner \
+            -C "${debctrl}" -cf - . | gzip -n > "${debwork}/control.tar.gz"
+          tar --sort=name --owner=0 --group=0 --numeric-owner \
+            -C "${debroot}" -cf - . | gzip -n > "${debwork}/data.tar.gz"
+          (
+            cd "${debwork}"
+            ar rcs "../canton-devkit_${deb_version}_amd64.deb" \
+              debian-binary control.tar.gz data.tar.gz
+          )
+          ar t "dist/canton-devkit_${deb_version}_amd64.deb"
+          rm -rf "${debwork}"
+
           # Single SHA256SUMS file covers every published archive (dist/
-          # now holds only the tarballs/zips). Format is GNU sha256sum
+          # now holds only release artifacts). Format is GNU sha256sum
           # compatible so users can verify via:
           #   sha256sum --check SHA256SUMS
           (cd dist && sha256sum * > SHA256SUMS)
@@ -237,6 +290,99 @@ jobs:
             -f content="$updated_content" \
             -f sha="$file_sha" \
             -f branch="main"
+
+      - name: Update public APT repository in public builds repo
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.BUILDS_REPO_TOKEN }}
+          VERSION: ${{ steps.meta.outputs.devkit_version }}
+        run: |
+          set -euo pipefail
+          version_num="${VERSION#v}"
+          deb_asset="dist/canton-devkit_${version_num}_amd64.deb"
+          test -f "${deb_asset}"
+
+          work="$(mktemp -d)"
+          trap 'rm -rf "${work}"' EXIT
+          gh auth setup-git
+          gh repo clone bitdynamics-ab/homebrew-canton-devkit "${work}/repo" -- --depth 1
+
+          repo="${work}/repo"
+          pool="${repo}/apt/pool/main/c/canton-devkit"
+          pkgdir="${repo}/apt/dists/stable/main/binary-amd64"
+          mkdir -p "${pool}" "${pkgdir}"
+          cp "${deb_asset}" "${pool}/$(basename "${deb_asset}")"
+
+          packages="${pkgdir}/Packages"
+          : > "${packages}"
+          while IFS= read -r -d '' deb; do
+            rel="${deb#"${repo}/apt/"}"
+            base="$(basename "${deb}")"
+            pkg_ver="${base#canton-devkit_}"
+            pkg_ver="${pkg_ver%_amd64.deb}"
+            size="$(stat -c%s "${deb}")"
+            md5="$(md5sum "${deb}" | awk '{print $1}')"
+            sha1="$(sha1sum "${deb}" | awk '{print $1}')"
+            sha256="$(sha256sum "${deb}" | awk '{print $1}')"
+            cat >> "${packages}" <<EOF
+          Package: canton-devkit
+          Version: ${pkg_ver}
+          Architecture: amd64
+          Maintainer: Bitdynamics <admin@bitdynamics.me>
+          Filename: ${rel}
+          Size: ${size}
+          MD5sum: ${md5}
+          SHA1: ${sha1}
+          SHA256: ${sha256}
+          Section: devel
+          Priority: optional
+          Homepage: https://github.com/bitdynamics-ab/canton-devkit
+          Description: Canton DevKit LocalNet developer tooling
+           Canton DevKit manages Canton LocalNet instances, DAR workflows,
+           contract exploration, observability, and token testing from a
+           single standalone CLI.
+
+          EOF
+          done < <(find "${pool}" -type f -name 'canton-devkit_*_amd64.deb' -print0 | sort -z -V)
+          sed -i 's/^          //' "${packages}"
+          gzip -n -c "${packages}" > "${packages}.gz"
+
+          release="${repo}/apt/dists/stable/Release"
+          date_rfc="$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')"
+          cat > "${release}" <<EOF
+          Origin: Bitdynamics
+          Label: Canton DevKit
+          Suite: stable
+          Codename: stable
+          Date: ${date_rfc}
+          Architectures: amd64
+          Components: main
+          Description: Canton DevKit APT repository
+          EOF
+          sed -i 's/^          //' "${release}"
+          for algo in MD5Sum SHA1 SHA256; do
+            printf '%s:\n' "${algo}" >> "${release}"
+            for rel_meta in main/binary-amd64/Packages main/binary-amd64/Packages.gz; do
+              meta_path="${repo}/apt/dists/stable/${rel_meta}"
+              case "${algo}" in
+                MD5Sum) sum="$(md5sum "${meta_path}" | awk '{print $1}')" ;;
+                SHA1) sum="$(sha1sum "${meta_path}" | awk '{print $1}')" ;;
+                SHA256) sum="$(sha256sum "${meta_path}" | awk '{print $1}')" ;;
+              esac
+              printf ' %s %16s %s\n' "${sum}" "$(stat -c%s "${meta_path}")" "${rel_meta}" >> "${release}"
+            done
+          done
+
+          git -C "${repo}" status --short
+          git -C "${repo}" add apt
+          if git -C "${repo}" diff --cached --quiet; then
+            echo "APT repo already up to date for ${VERSION}"
+            exit 0
+          fi
+          git -C "${repo}" -c user.name="github-actions[bot]" \
+            -c user.email="github-actions[bot]@users.noreply.github.com" \
+            commit -m "chore: update APT repo for ${VERSION}"
+          git -C "${repo}" push
 
       - name: Install DPM CLI (sha256-verified)
         run: |
