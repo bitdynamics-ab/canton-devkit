@@ -12,9 +12,10 @@ func buildPause() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "pause [name]",
 		Short: "Freeze a running LocalNet instance (docker compose pause)",
-		Long: `Pause a running instance with docker compose pause (SIGSTOP).
-Containers keep in-memory state and published ports but stop using CPU.
-Resume with localnet resume.`,
+		Long: `Freeze a running instance with 'docker compose pause' (SIGSTOP):
+containers hold their in-memory state and published ports but stop using
+CPU. Resume with 'localnet resume' — no boot cost, no port changes. The
+"stepping away, free my CPU but keep my ledger" control.`,
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,

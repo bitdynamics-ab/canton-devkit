@@ -35,8 +35,8 @@ func buildRefresh() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:           "refresh",
-		Short:         "Sync registry status with docker",
-		Long:          "Run docker compose ps for one or all registered instances and update registry status when it differs from docker. Useful after a timed-out bring-up that later became healthy.",
+		Short:         "Re-sync registry status from live docker truth",
+		Long:          "Probes `docker compose ps` for one or all registered instances and rewrites each instance's status if it diverges from docker. Useful when an instance's bring-up timed out but the containers actually became healthy later — the dashboard would otherwise stay `failed` forever.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,

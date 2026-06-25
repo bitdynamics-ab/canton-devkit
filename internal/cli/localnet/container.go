@@ -39,7 +39,7 @@ func buildContainer() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "container",
 		Short:         "Operate on individual containers within an instance",
-		Long:          "List, restart, or tail logs for containers in a LocalNet instance.",
+		Long:          "Per-container actions (list, restart, logs) for a registered LocalNet instance. Mirrors the Container Health panel in the Web UI.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -77,7 +77,7 @@ func buildContainerList() *cobra.Command {
 		Use:           "list <instance>",
 		Aliases:       []string{"ls", "ps"},
 		Short:         "List containers for an instance with state + health",
-		Long:          "Show each container's state, healthcheck result, and docker status line.",
+		Long:          "Lists each container in the instance's compose project with its state, healthcheck verdict, and the raw docker status line. Mirrors the Container Health panel in the Web UI. Output styled to match the JSX mockup's Section + glyph-prefixed row format.",
 		Args:          cobra.ExactArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -189,7 +189,7 @@ func buildContainerRestart() *cobra.Command {
 	return &cobra.Command{
 		Use:           "restart <instance> <service>",
 		Short:         "Restart a single container within an instance",
-		Long:          "Run docker restart on one container. Other containers stay up. The container must belong to the instance's compose project.",
+		Long:          "Runs `docker restart` against one container. Other containers stay up. Defence-in-depth: the named container must belong to the instance's compose project (rejects arbitrary host containers).",
 		Args:          cobra.ExactArgs(2),
 		SilenceUsage:  true,
 		SilenceErrors: true,

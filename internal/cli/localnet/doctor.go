@@ -31,11 +31,15 @@ func buildDoctor() *cobra.Command {
 	var portBase int
 	cmd := &cobra.Command{
 		Use:   "doctor",
-		Short: "Check host readiness (docker, resources, network)",
-		Long: `Run the same preflight checks as localnet up: Docker CLI, daemon,
-Compose v2, disk, and memory. Prints remediation hints on failure.
+		Short: "Check host readiness for LocalNet (docker, resources, network)",
+		Long: `Runs the same preflight checks ` + "`localnet up`" + ` runs before
+bringing up a new instance — Docker CLI, daemon reachability,
+Compose v2, disk + memory headroom — but reports them in a
+diagnostic format with remediation hints for the failures.
 
-Exits 0 on pass, 2 on any failure (same as localnet up preflight).`,
+Use this before filing a bug or after a fresh OS reinstall.
+Exits 0 on all-pass, 2 on any FAIL (matches localnet up's
+ExitPreflightFail semantics).`,
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,

@@ -40,11 +40,14 @@ func buildUI() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ui",
 		Short: "Launch the Web UI (loopback only)",
-		Long: `Start the web UI server on loopback (127.0.0.1 by default).
-Serves the dashboard, REST /api/ endpoints, and the /events SSE stream.
+		Long: `Starts the canton-devkit Web UI server, bound strictly to a
+loopback interface (127.0.0.1 by default). Serves the embedded
+Vite/React bundle plus REST endpoints under /api/ and the SSE
+/events stream.
 
-Remote access requires an SSH tunnel. The UI handles JWTs and party
-ids and is not meant for LAN-wide exposure.`,
+For security, the bind interface is locked to loopback in CLI flags;
+remote access requires an SSH tunnel. The UI handles JWTs and party
+identifiers and is not designed for LAN-wide exposure.`,
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,

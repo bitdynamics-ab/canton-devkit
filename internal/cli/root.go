@@ -10,7 +10,7 @@ import (
 func (a *App) buildRoot() *cobra.Command {
 	root := &cobra.Command{
 		Use:           appName,
-		Short:         "A Canton LocalNet helper tool for developer environments.",
+		Short:         "canton-devkit manages Canton LocalNet developer environments.",
 		Version:       a.versionString(),
 		SilenceUsage:  true,
 		SilenceErrors: true,

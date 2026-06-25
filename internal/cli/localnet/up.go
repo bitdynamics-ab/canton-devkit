@@ -20,7 +20,7 @@ func buildUp() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "up [name]",
 		Aliases: []string{"start"},
-		Short:   "Start a LocalNet instance",
+		Short:   "Start a Canton LocalNet instance (Splice LocalNet)",
 		Long: fmt.Sprintf(`Start a Canton LocalNet instance backed by Splice LocalNet.
 
 The Splice LocalNet compose project is fetched from

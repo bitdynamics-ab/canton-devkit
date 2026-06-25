@@ -54,7 +54,7 @@ Formats:
   github-env  bare KEY=value lines for the GitHub Actions environment file:
                 dpm localnet env --name ci --format github-env >> "$GITHUB_ENV"
               (shell/dotenv carry comments + quotes that $GITHUB_ENV rejects)
-  json        machine-readable JSON export
+  json        machine-readable shape; matches the Web UI handler
 
 JWTs are REDACTED by default (CANTON_<ROLE>_JWT=<redacted>) so
 CI logs / shared terminals don't leak the dev-only signing

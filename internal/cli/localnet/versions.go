@@ -30,7 +30,7 @@ func buildVersions() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "versions",
-		Short: "List supported and upstream Splice versions",
+		Short: "List Splice versions supported by this DevKit + upstream",
 		Long: `Lists every Splice version DevKit's curated catalogue knows about
 plus every tag the upstream canton-network/splice repository currently
 exposes.

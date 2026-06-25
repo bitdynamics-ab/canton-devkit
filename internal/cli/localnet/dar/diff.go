@@ -15,7 +15,7 @@ func buildDiff() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "diff <a.dar> <b.dar>",
 		Short: "Compare two DARs with SCU-aware upgrade signals",
-		Long: `Compare two DAR files at the package level. Reports signals
+		Long: `Diff two DAR files at the package level. Surfaces signals
 relevant to Smart Contract Upgrades (SCU):
 
   - main package name match (mismatch → not an SCU pair)
@@ -23,8 +23,9 @@ relevant to Smart Contract Upgrades (SCU):
   - main Daml-LF major change (always blocks SCU)
   - dependency packages added / removed / changed
 
-These are heuristic checks only — run damlc for authoritative SCU
-validation. Use this to catch obvious problems early.
+These are **best-effort** signals — authoritative SCU validation lives
+with daml damlc and the Ledger API. Use this command to catch obvious
+problems early; don't rely on it as the only check.
 
 Exit codes:
   0  Diff completed (regardless of whether changes were found)

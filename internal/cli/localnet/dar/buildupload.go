@@ -29,11 +29,12 @@ func buildBuildUpload() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "build-upload",
 		Short: "Build a Daml project (via dpm or daml) and upload the DAR",
-		Long: `Run dpm build or daml build on a Daml project, then upload the
-resulting DAR to the targeted participant.
+		Long: `Convenience shortcut: invoke the user's installed build tool
+(dpm build or daml build) on a Daml project, then upload the resulting
+DAR to the targeted participant.
 
-DevKit does not compile Daml itself. If neither dpm nor daml is on
-PATH, the command exits 1.
+DevKit never reimplements compilation. If neither dpm nor daml is on
+PATH, the command exits 1 with a clear message.
 
 Auto-discovery:
   --builder auto  (default) — prefers dpm, falls back to daml
