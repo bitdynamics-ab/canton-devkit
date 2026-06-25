@@ -11,7 +11,7 @@ func buildLogs() *cobra.Command {
 	opts := &localnet.LogsOptions{Tail: "100"}
 	cmd := &cobra.Command{
 		Use:           "logs [name]",
-		Short:         "Tail or dump container logs for a Canton LocalNet instance",
+		Short:         "Tail or follow container logs",
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,

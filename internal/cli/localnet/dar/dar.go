@@ -21,21 +21,20 @@ import (
 func Build() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dar",
-		Short: "Inspect and manage DAR files (Daml package archives)",
-		Long: `Tools for working with DAR files: the .dar zip archives that
-package Daml-LF compiled code for deployment to a Canton ledger.
+		Short: "Inspect and manage DAR files",
+		Long: `Work with DAR files (.dar archives of Daml-LF packages).
 
-Available commands (offline, file-based):
-  info           Inspect a local DAR and show its packages, LF version, deps
-  diff           Compare two DAR files with SCU-aware upgrade signals
+Offline (local files):
+  info           Inspect a local DAR
+  diff           Compare two DARs with SCU upgrade hints
 
-Available commands (participant Admin API):
-  upload         Upload a DAR to a participant
-  list           List uploaded DARs / packages on a participant
-  download       Download a DAR back from a participant by main package id
-  remove         Unvet (or fully purge) a DAR on a participant
-  build-upload   Shell out to dpm/daml build, then upload
-  watch          Rebuild + re-upload on source change (hot-deploy loop)`,
+Participant Admin API:
+  upload         Upload a DAR
+  list           List uploaded DARs or packages
+  download       Download a DAR by main package id
+  remove         Unvet or remove a DAR
+  build-upload   Build via dpm/daml, then upload
+  watch          Rebuild and re-upload on source change`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {

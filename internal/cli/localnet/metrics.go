@@ -47,7 +47,7 @@ func buildMetrics() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "metrics",
 		Short:         "Scrape live metrics from an instance's Prometheus",
-		Long:          "Reads headline numbers (TPS, submission p95, JVM heap, DB conns) from the per-instance Prometheus. Requires the instance to have been started with --profile observability. JSON output is stable for CI assertions. The wire JSON keys (ledger_tps_5m, mediator_p95_seconds, jvm_heap_used_bytes, postgres_conn_count) are kept stable; what they MEASURE is documented in internal/metricsq/queries.go.",
+		Long:          "Read headline metrics (TPS, submission p95, JVM heap, DB connections) from the instance's Prometheus. Requires --profile observability at up time. JSON keys are stable for CI scripts.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,

@@ -11,15 +11,12 @@ func buildClean() *cobra.Command {
 	opts := &localnet.CleanOptions{}
 	cmd := &cobra.Command{
 		Use:   "clean",
-		Short: "Remove Canton LocalNet state, containers, and volumes for an instance",
-		Long: `Remove DevKit-managed state for a named instance (or all instances
-with --all): the registry entry, the per-instance data directory, and
-any lingering docker containers/volumes for the compose project.
+		Short: "Remove instance state, containers, and volumes",
+		Long: `Remove the registry entry, per-instance data directory, and docker
+containers/volumes for a named instance (or all instances with --all).
 
-clean is the housekeeping / recovery verb — use it to reclaim disk
-from stopped instances or to scrub orphaned/corrupted state. A RUNNING
-instance is refused unless --force (which tears it down first). Use
---dry-run to preview what would be removed.`,
+Refuses a running instance unless --force (runs down first).
+Use --dry-run to preview what would be removed.`,
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,

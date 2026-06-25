@@ -28,16 +28,12 @@ func buildDemo() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "demo",
-		Short: "Provision a live, transferable demo token in one step",
-		Long: `Launch a demo token end-to-end in a single command: allocate an issuer
-party, create a V2 instrument on-ledger, mint the initial supply, and
-(unless --seed-holder=false) fund a holder party so the token is
-transferable immediately.
+		Short: "Create a demo token in one step",
+		Long: `Allocate an issuer party, create a V2 instrument, mint the initial
+supply, and (unless --seed-holder=false) fund a holder party.
 
-Requires a running V2 LocalNet — the participant endpoint is auto-
-discovered from the instance's captured port (pass --endpoint to
-override). The Web UI's "Launch demo token" button runs the same
-orchestration via POST /api/tokens/demo.`,
+Requires a running V2 LocalNet. The participant endpoint is
+auto-discovered from the instance (pass --endpoint to override).`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			out := cmd.OutOrStdout()

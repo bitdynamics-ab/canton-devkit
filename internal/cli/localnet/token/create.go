@@ -43,14 +43,12 @@ func buildCreate() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new V2 token instrument on the selected LocalNet",
-		Long: `Interactively create a new V2 token instrument: pick a name, symbol,
-decimal precision, initial supply, and issuer party. The instrument is
-recorded in the instance's registry under its symbol so subsequent
-` + "`token mint/transfer/burn/balance`" + ` commands can resolve it.
+		Long: `Create a new V2 token instrument: name, symbol, decimal precision,
+initial supply, and issuer party. The instrument is recorded in the
+instance registry under its symbol for later mint/transfer/burn/balance
+commands.
 
-Use --non-interactive (with all the per-field flags) to run from CI
-or from a script. The Web UI uses the same orchestration via
-POST /api/tokens.`,
+Use --non-interactive with the per-field flags to run from CI or scripts.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			out := cmd.OutOrStdout()

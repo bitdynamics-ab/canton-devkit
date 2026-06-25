@@ -52,9 +52,7 @@ switch to the per-.dalf view (PackageService.ListPackages) — handy
 for chasing down which dependency is missing.
 
 Pass --vetting (requires --instance) to add a per-participant vetting
-column probing all three participants (app-user / app-provider / sv),
-so you can see where a package is vetted after a "dar remove" unvet —
-the same vetting signal the Web UI DAR screen shows.
+column for app-user, app-provider, and sv.
 
 Exit codes:
   0  Listing returned (even if empty)

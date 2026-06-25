@@ -12,15 +12,13 @@ func buildStatus() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "status [name]",
 		Short: "Show LocalNet services, endpoints, identities",
-		Long: `Reads ~/.canton-devkit/localnet/<name>/state.json and best-effort
-docker compose ps output for live service health. The registry view renders
-even if Docker is unreachable, so status remains useful during outages.
+		Long: `Read ~/.canton-devkit/localnet/<name>/state.json and docker compose
+ps output for live service health. The registry view renders even if
+Docker is unreachable.
 
-Use --format=json for the typed Instance shape consumed by scripts and the
-Web UI. --no-live skips the Docker query entirely for offline inspection.
-
-JWTs in credentials are redacted by default to <redacted>. Pass --include-jwt
-to opt in to raw JWT output.`,
+Use --format=json for machine-readable output. --no-live skips the
+Docker query. JWTs in credentials are redacted by default; pass
+--include-jwt to print them.`,
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,

@@ -39,7 +39,7 @@ func buildDown() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "down [name]",
 		Aliases: []string{"stop"},
-		Short:   "Stop a Canton LocalNet instance (preserves volumes)",
+		Short:   "Stop a LocalNet instance (keeps volumes)",
 		Long: `Stops the named LocalNet instance gracefully and detaches its
 Docker networks. Volumes and the registry entry are preserved so
 a follow-up

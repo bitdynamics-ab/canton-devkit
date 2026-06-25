@@ -42,11 +42,9 @@ func buildObservability() *cobra.Command {
 		Use:     "observability",
 		Aliases: []string{"obs"},
 		Short:   "Toggle the Prometheus + Grafana sidecars on a running instance",
-		Long: "Enable, disable, or inspect the observability sidecars (Prometheus + Grafana) " +
-			"for a registered LocalNet instance WITHOUT restarting Canton. Mirrors the " +
-			"\"Enable observability now\" toggle on the Web UI Metrics screen — both surfaces " +
-			"call the same shared orchestration, so the result is identical. The enabled set " +
-			"is persisted, so a later `down` + `up` re-enables it automatically.",
+		Long: "Enable, disable, or inspect Prometheus and Grafana sidecars " +
+			"for a LocalNet instance without restarting Canton. " +
+			"The enabled set is persisted across down/up.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -90,7 +88,7 @@ func buildObservabilityEnable() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "enable",
 		Short:         "Enable Prometheus + Grafana on a running instance",
-		Long:          "Materializes the observability overlay and brings up the sidecars under their compose profiles, then prints the discovered Grafana / Prometheus URLs. Requires the instance to be running. Use --prometheus or --grafana to enable just one side.",
+		Long:          "Start the observability overlay and bring up sidecars. Prints Grafana and Prometheus URLs. Requires a running instance. Use --prometheus or --grafana to enable just one.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,

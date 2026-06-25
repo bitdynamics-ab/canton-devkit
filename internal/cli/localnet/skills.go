@@ -19,8 +19,8 @@ import (
 func buildSkills() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "skills",
-		Short:         "Browse and install AI-agent skill docs for DevKit workflows",
-		Long:          "Editor-agnostic skill documents describing safe `dpm localnet` workflows (lifecycle, DAR upload, hot-deploy, contract inspection, token flows, CI). Install them into ~/.claude/skills or ~/.codex/skills.",
+		Short:         "List and install bundled agent skills",
+		Long:          "Skill documents for common `dpm localnet` workflows. Install into ~/.claude/skills or ~/.codex/skills.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -80,14 +80,13 @@ func buildSkillsInstall() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "install",
-		Short: "Install the bundled skill docs into an agent's skills directory",
-		Long: `Copy the bundled skill documents into an agent skills directory.
-Defaults to the Claude convention (~/.claude/skills); use --target codex
-for ~/.codex/skills, or --dir to install to an explicit path. Each skill
-lands in its own <name>/SKILL.md subdirectory.
+		Short: "Install bundled skills into an agent skills directory",
+		Long: `Copy bundled skill documents into a skills directory.
+Defaults to ~/.claude/skills; use --target codex for ~/.codex/skills,
+or --dir for an explicit path. Each skill lands in <name>/SKILL.md.
 
-A SKILL.md that already exists with DIFFERENT content is preserved (not
-overwritten) unless --force is passed, so hand edits aren't lost.`,
+Existing SKILL.md files with different content are left alone unless
+--force is passed.`,
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,

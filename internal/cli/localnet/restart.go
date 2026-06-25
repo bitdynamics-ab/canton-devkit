@@ -11,7 +11,7 @@ func buildRestart() *cobra.Command {
 	opts := &localnet.RestartOptions{}
 	cmd := &cobra.Command{
 		Use:   "restart [name]",
-		Short: "Restart a Canton LocalNet instance (or specific services) in place",
+		Short: "Restart a LocalNet instance or specific services",
 		Long: `Bounce a running instance via 'docker compose restart' without
 removing containers, networks, or volumes. Re-runs the readiness wait
 and re-captures Canton's gRPC ports (which Docker re-assigns on

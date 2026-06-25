@@ -53,7 +53,7 @@ func buildContracts() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "contracts",
 		Short:         "Operate on the participant's Active Contract Set (ACS)",
-		Long:          "Subcommands wrap the Daml LF v2 Ledger API's StateService for ACS reads. The same internal/canton/ledger package backs both the CLI and the Web UI surfaces.",
+		Long:          "Read and stream active contracts from a participant ledger.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -76,7 +76,7 @@ func buildContractsLs() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "ls",
 		Short:         "Snapshot the participant's current Active Contract Set",
-		Long:          "Calls StateService.GetActiveContracts at the participant's current ledger end and prints one row per contract. `--party` filters to contracts visible to that party; pass multiple times. `--template` accepts Module:Entity or pkg:Module:Entity.",
+		Long:          "Print one row per active contract at the current ledger end. `--party` filters by party (repeatable). `--template` accepts Module:Entity or pkg:Module:Entity.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -145,7 +145,7 @@ func buildContractsWatch() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "watch",
 		Short:         "Stream ACS changes from the participant's ledger end",
-		Long:          "Subscribes to UpdateService.GetUpdates from the current ledger end and prints each create/archive event as it arrives. Ctrl-C to stop. --limit caps the total count (0 = unbounded).",
+		Long:          "Print create and archive events as they arrive. Ctrl-C to stop. --limit caps the total count (0 = unbounded).",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -235,10 +235,9 @@ func buildTxLs() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ls",
 		Short: "List recent transactions",
-		Long: "Calls UpdateService.GetUpdates over a bounded window and prints the newest --limit transactions. " +
-			"By default it scans a generous recent offset window so filtered queries (--party / --template) still " +
-			"find matches even though offsets are participant-global (topology events, checkpoints and other " +
-			"parties' transactions consume offsets between your matches). Use --from / --to for an explicit offset range.",
+		Long: "List the newest --limit transactions from a recent offset window. " +
+			"Filtered queries (--party / --template) scan a wide window because offsets are " +
+			"participant-global. Use --from / --to for an explicit range.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -345,11 +344,9 @@ func buildTxReplay() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "replay",
 		Short: "Fetch and render a single transaction by id or offset",
-		Long: "Calls UpdateService.GetUpdateById (when --id is set) or " +
-			"GetUpdateByOffset (when --offset is set) and prints the " +
-			"transaction's events. Exactly one of --id or --offset is required. " +
-			"--party filters the EventFormat to a per-party visibility " +
-			"projection (same shape as tx ls / contracts watch).",
+		Long: "Fetch one transaction by --id or --offset and print its events. " +
+			"Exactly one of --id or --offset is required. " +
+			"--party limits output to that party's view.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
