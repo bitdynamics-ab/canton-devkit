@@ -2,44 +2,25 @@ package localnet
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
-	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
-	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	"github.com/spf13/cobra"
 )
 
 func buildUp() *cobra.Command {
 	opts := &localnet.UpOptions{}
-	// Source paths dynamically so the help text reflects whatever
-	// CANTON_DEVKIT_REGISTRY override the user has active at help time,
-	// and never goes stale when the on-disk layout changes.
-	cacheRoot := splice.CacheRoot()
-	instanceRoot := registry.Root()
 	cmd := &cobra.Command{
 		Use:     "up [name]",
 		Aliases: []string{"start"},
-		Short:   "Start a Canton LocalNet instance (Splice LocalNet)",
-		Long: fmt.Sprintf(`Start a Canton LocalNet instance backed by Splice LocalNet.
-
-The Splice LocalNet compose project is fetched from
-https://github.com/canton-network/splice (verified by content-SHA over
-the extracted tree) and cached under %s/splice-<tag>/. Per-instance
-state lives under %s/<name>/. The host is never modified outside
-the parent of those two paths.
+		Short:   "Start a Canton LocalNet instance",
+		Long: `Start a named Canton LocalNet instance.
 
 Exit codes:
-  0  Success
-  1  Invalid arguments / unsupported version
-  2  Docker preflight failure
-  3  Timeout / interrupted
-  4  Runtime failure (fetch, compose-up, health check)
-
-Supported Splice versions: %s
-"latest" resolves to %s.`,
-			cacheRoot, instanceRoot,
-			strings.Join(splice.Supported(), ", "), splice.LatestAlias),
+  0  ok
+  1  bad arguments or unsupported version
+  2  docker preflight failed
+  3  timeout or interrupted
+  4  fetch, compose, or health-check failure`,
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -78,7 +59,7 @@ Supported Splice versions: %s
 		"Splice LocalNet release tag.")
 	cmd.Flags().BoolVar(&opts.AllowUncurated, "allow-uncurated", false,
 		"Allow --version tags not in the curated DevKit catalogue. "+
-			"DevKit will resolve the tag against the upstream Splice GitHub "+
+			"DevKit will fetch the specified release from the upstream Splice GitHub "+
 			"repo and proceed. The resulting LocalNet is not tested by "+
 			"DevKit — use for prereleases / alphas at your own risk.")
 	cmd.Flags().StringSliceVar(&opts.Profiles, "profile", nil,
