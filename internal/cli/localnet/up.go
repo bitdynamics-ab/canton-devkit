@@ -23,12 +23,6 @@ func buildUp() *cobra.Command {
 		Short:   "Start a Canton LocalNet instance (Splice LocalNet)",
 		Long: fmt.Sprintf(`Start a Canton LocalNet instance backed by Splice LocalNet.
 
-The Splice LocalNet compose project is fetched from
-https://github.com/canton-network/splice (verified by content-SHA over
-the extracted tree) and cached under %s/splice-<tag>/. Per-instance
-state lives under %s/<name>/. The host is never modified outside
-the parent of those two paths.
-
 Exit codes:
   0  Success
   1  Invalid arguments / unsupported version
