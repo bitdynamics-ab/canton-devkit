@@ -5,18 +5,12 @@ import (
 	"strings"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
-	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	"github.com/spf13/cobra"
 )
 
 func buildUp() *cobra.Command {
 	opts := &localnet.UpOptions{}
-	// Source paths dynamically so the help text reflects whatever
-	// CANTON_DEVKIT_REGISTRY override the user has active at help time,
-	// and never goes stale when the on-disk layout changes.
-	cacheRoot := splice.CacheRoot()
-	instanceRoot := registry.Root()
 	cmd := &cobra.Command{
 		Use:     "up [name]",
 		Aliases: []string{"start"},
@@ -32,7 +26,6 @@ Exit codes:
 
 Supported Splice versions: %s
 "latest" resolves to %s.`,
-			cacheRoot, instanceRoot,
 			strings.Join(splice.Supported(), ", "), splice.LatestAlias),
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
