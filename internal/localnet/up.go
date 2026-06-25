@@ -890,9 +890,9 @@ func PreflightCodeFromReport(r *docker.Report) string {
 // browsable URLs (not for sockets like postgres).
 func orderedEndpointKeys() []endpointDisplay {
 	return []endpointDisplay{
-		{key: "app_user_ui", label: "Wallet (app-user)", scheme: "http", category: "WEB UIs", external: true},
-		{key: "app_provider_ui", label: "Wallet (app-provider)", scheme: "http", category: "WEB UIs", external: true},
-		{key: "sv_ui", label: "Wallet (super-validator)", scheme: "http", category: "WEB UIs", external: true},
+		{key: "app_user_ui", label: "Wallet (username: app-user)", scheme: "http", category: "WEB UIs", external: true},
+		{key: "app_provider_ui", label: "Wallet (username: app-provider)", scheme: "http", category: "WEB UIs", external: true},
+		{key: "sv_ui", label: "Wallet (username: super-validator)", scheme: "http", category: "WEB UIs", external: true},
 		{key: "swagger_ui", label: "Swagger (OpenAPI)", scheme: "http", category: "WEB UIs", external: true},
 		{key: "postgres", label: "Postgres", scheme: "postgresql", category: "INFRASTRUCTURE", external: false},
 	}
