@@ -107,3 +107,11 @@ Before submitting:
 4. Relevant documentation added/updated
 5. PR title is clear and understandable
 6. **CLI ↔ Web UI parity:** if the change touches a user-facing feature, both surfaces are updated (or a follow-up ticket is filed with a `TODO(#issue): CLI parity` / `TODO(#issue): UI parity` comment at the divergence point). See "CLI ↔ Web UI parity" rule above.
+
+## Temporary Files & Folders
+
+When you need to create temporary files or directories, create them inside the **current working directory** or the **repository/worktree root** — not in `/tmp` or other system-level directories. This keeps operations within the workspace and avoids triggering permission approval prompts.
+
+- Use relative paths like `./tmp/`, `./.tmp/`, or a descriptive name in the project root.
+- Clean up temporary files and directories when they are no longer needed.
+- **Exception**: Using `/tmp` is allowed only when it is the only viable option — e.g., sharing data with another program or user that expects `/tmp`, or inspecting output written there by external tools (like tmux debug output). Exhaust in-project alternatives first.
