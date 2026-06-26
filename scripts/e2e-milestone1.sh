@@ -412,8 +412,12 @@ TEST_ID="M1-DWN-001"
     sleep 2
   fi
 
-  # Record non-devkit container count
-  NON_DEVKIT_BEFORE=$(docker ps --format '{{.Names}}' | grep -cv "e2e-test" || echo "0")
+  # Record non-devkit container count.
+  # grep -c already prints "0" on no match; do not append `|| echo "0"`
+  # because grep -c exits non-zero on an empty/no-match input, which would
+  # fire the fallback and produce a two-line value ("0\n0") that breaks the
+  # `[ ... -eq ... ]` integer comparison below.
+  NON_DEVKIT_BEFORE=$(docker ps --format '{{.Names}}' | grep -cv "e2e-test")
 
   # Step 1: down exits 0
   cli down e2e-test-default \
@@ -431,7 +435,7 @@ TEST_ID="M1-DWN-001"
   fi
 
   # Step 3: non-devkit containers unaffected
-  NON_DEVKIT_AFTER=$(docker ps --format '{{.Names}}' | grep -cv "e2e-test" || echo "0")
+  NON_DEVKIT_AFTER=$(docker ps --format '{{.Names}}' | grep -cv "e2e-test")
   [ "$NON_DEVKIT_BEFORE" -eq "$NON_DEVKIT_AFTER" ] \
     || { echo "FAIL step 3: non-devkit container count changed ($NON_DEVKIT_BEFORE → $NON_DEVKIT_AFTER)" >&2; exit 1; }
 )
