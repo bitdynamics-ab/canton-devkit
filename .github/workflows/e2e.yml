@@ -56,6 +56,14 @@ jobs:
         run: |
           for name in e2e-test-default e2e-named-test e2e-version-test e2e-bad-version; do
             docker compose -p "canton-${name}" down --volumes 2>/dev/null || true
+            # `compose down --volumes` only removes volumes Compose itself
+            # created; volumes left by a prior run get re-adopted as
+            # external and survive. On this persistent self-hosted runner
+            # that strands canton-<name>_postgres / _domain-upgrade-dump and
+            # trips M1-CLN-001's "volumes remain after clean" check. Remove
+            # them explicitly by project-name prefix to guarantee a clean slate.
+            docker volume ls -q --filter "name=^canton-${name}_" \
+              | xargs -r docker volume rm -f 2>/dev/null || true
             rm -f "$HOME/.canton-devkit/localnet/${name}/.lock"
           done
 
@@ -74,5 +82,9 @@ jobs:
         run: |
           for name in e2e-test-default e2e-named-test e2e-version-test e2e-bad-version; do
             docker compose -p "canton-${name}" down --volumes 2>/dev/null || true
+            # Also drop adopted/external volumes Compose won't remove, so the
+            # next run on this persistent runner starts from a clean slate.
+            docker volume ls -q --filter "name=^canton-${name}_" \
+              | xargs -r docker volume rm -f 2>/dev/null || true
           done
           rm -f /tmp/e2e-m1-snapshot.tgz
