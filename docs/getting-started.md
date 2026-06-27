@@ -57,7 +57,7 @@ version: 0.1.0
 source: .
 dependencies: []
 components:
-  - oci://ghcr.io/bitdynamics-ab/canton-devkit:<version>
+  - oci://ghcr.io/bitdynamics-ab/homebrew-canton-devkit:<version>
 ```
 
 ```bash

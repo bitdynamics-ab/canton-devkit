@@ -10,21 +10,19 @@ on:
 
 permissions:
   contents: write
-  packages: write
+  # packages: write — no longer needed; OCI publish moved to homebrew-canton-devkit
 
 env:
-  # GHCR namespace for both standalone-binary releases and the
-  # DPM-component OCI artifact.
-  GHCR_NAMESPACE: ghcr.io/${{ github.repository }}
-  # DPM CLI version pinned for reproducible publishes. Bump deliberately
-  # — see https://github.com/digital-asset/dpm/releases. The companion
-  # DPM_LINUX_SHA256 below pins the linux-amd64 tarball used to install
-  # the CLI in CI; recompute via:
-  #   curl -sL <release-tarball-url> | sha256sum
-  DPM_VERSION: 1.0.16
-  DPM_LINUX_SHA256: 387421d4b3d0e799f05cde1f5c2adc704acd2824796d436861602eb2be759874
-  # Build matrix: shared by both the standalone-binary archives and the
-  # DPM-component OCI artifact (both produced in the single release job).
+  # TODO: OCI publish has moved to homebrew-canton-devkit (the public
+  # distribution repo) so that the DPM component is published under a
+  # public GHCR namespace. Re-enable here once we have an OCI registry
+  # we can push to directly from this (private) repo.
+  # See: https://github.com/bitdynamics-ab/homebrew-canton-devkit
+  #
+  # GHCR_NAMESPACE: ghcr.io/${{ github.repository }}
+  # DPM_VERSION: 1.0.16
+  # DPM_LINUX_SHA256: 387421d4b3d0e799f05cde1f5c2adc704acd2824796d436861602eb2be759874
+  # Build matrix: shared by the standalone-binary archives.
   RELEASE_TARGETS: linux/amd64 darwin/arm64 windows/amd64
 
 jobs:
@@ -384,100 +382,82 @@ jobs:
             commit -m "chore: update APT repo for ${VERSION}"
           git -C "${repo}" push
 
-      - name: Install DPM CLI (sha256-verified)
-        run: |
-          set -euo pipefail
-          tar="/tmp/dpm-${DPM_VERSION}-linux-amd64.tar.gz"
-          curl -sSfL \
-            "https://github.com/digital-asset/dpm/releases/download/${DPM_VERSION}/dpm-${DPM_VERSION}-linux-amd64.tar.gz" \
-            -o "$tar"
-          echo "${DPM_LINUX_SHA256}  ${tar}" | sha256sum --check --strict -
-          bindir="${RUNNER_TEMP:-/tmp}/canton-devkit-bin"
-          mkdir -p "$bindir"
-          tar -xzf "$tar" -C "$bindir" dpm
-          chmod 0755 "$bindir/dpm"
-          echo "$bindir" >> "$GITHUB_PATH"
-          "$bindir/dpm" --version
-
-      - name: Lay out per-platform component dirs
-        run: |
-          set -euo pipefail
-          # Mirror the layout dpm publish component expects:
-          #   <dir>/component.yaml
-          #   <dir>/LICENSE
-          #   <dir>/bin/canton-devkit[.exe]
-          #
-          # DPM does NOT auto-append `.exe` on Windows — it stat()s the
-          # exact path in component.yaml. We therefore template the
-          # manifest per platform: Unix uses bin/canton-devkit; Windows
-          # gets bin/canton-devkit.exe. (Empirically verified against
-          # DPM 1.0.16.)
-          read -ra targets <<< "${RELEASE_TARGETS}"
-          for target in "${targets[@]}"; do
-            os="${target%/*}"
-            arch="${target#*/}"
-            dir="dist/component_${os}_${arch}"
-            mkdir -p "${dir}/bin"
-            cp LICENSE "${dir}/LICENSE"
-
-            binary_name="canton-devkit"
-            [ "$os" = "windows" ] && binary_name="canton-devkit.exe"
-
-            # Copy the binary built earlier in this same job (local disk —
-            # no artifact round-trip, so the executable bit is preserved).
-            cp "component-bin/${os}_${arch}/${binary_name}" "${dir}/bin/${binary_name}"
-            chmod +x "${dir}/bin/${binary_name}"
-
-            # Substitute the binary path token in the manifest template.
-            sed "s|@@BINARY_PATH@@|bin/${binary_name}|" \
-              packaging/component.yaml.tmpl > "${dir}/component.yaml"
-          done
-          ls -R dist
-
-      - name: Log in to GHCR
-        if: steps.meta.outputs.push == 'true'
-        # docker/login-action@v4
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Validate component manifest (dry-run)
-        env:
-          VERSION: ${{ steps.meta.outputs.component_version }}
-        run: |
-          set -euo pipefail
-          dpm publish component \
-            "oci://${GHCR_NAMESPACE}:${VERSION}" \
-            --dry-run \
-            --platform linux/amd64=dist/component_linux_amd64 \
-            --platform darwin/arm64=dist/component_darwin_arm64 \
-            --platform windows/amd64=dist/component_windows_amd64
-
-      - name: Publish DPM component (tag pushes only)
-        if: steps.meta.outputs.push == 'true'
-        env:
-          VERSION: ${{ steps.meta.outputs.component_version }}
-        run: |
-          set -euo pipefail
-          # Only move the `latest` tag for FINAL releases. A pre-release
-          # (v1.2.0-rc1) or a hotfix tagged against an older line must not
-          # clobber `latest`. Semver pre-releases carry a `-` in the
-          # build metadata; gate on its absence.
-          extra_tags=()
-          case "${VERSION}" in
-            *-*) echo "pre-release ${VERSION} — leaving 'latest' untouched" ;;
-            *)   extra_tags+=(--extra-tags latest) ;;
-          esac
-          # ${arr[@]+"${arr[@]}"} expands to nothing when the array is
-          # empty WITHOUT tripping `set -u` (portable across bash 3.2+),
-          # so a pre-release publishes with no extra args rather than a
-          # stray empty argument.
-          dpm publish component \
-            "oci://${GHCR_NAMESPACE}:${VERSION}" \
-            --include-git-info \
-            ${extra_tags[@]+"${extra_tags[@]}"} \
-            --platform linux/amd64=dist/component_linux_amd64 \
-            --platform darwin/arm64=dist/component_darwin_arm64 \
-            --platform windows/amd64=dist/component_windows_amd64
+      # TODO: OCI publish has moved to homebrew-canton-devkit (the public
+      # distribution repo). The workflow there triggers on GitHub Release
+      # creation, downloads these same tarballs, and publishes the DPM
+      # component to ghcr.io/bitdynamics-ab/homebrew-canton-devkit:<ver>.
+      # Re-enable these steps once we have a public OCI registry we can
+      # push to directly from this repo.
+      #
+      # - name: Install DPM CLI (sha256-verified)
+      #   run: |
+      #     set -euo pipefail
+      #     tar="/tmp/dpm-${DPM_VERSION}-linux-amd64.tar.gz"
+      #     curl -sSfL \
+      #       "https://github.com/digital-asset/dpm/releases/download/${DPM_VERSION}/dpm-${DPM_VERSION}-linux-amd64.tar.gz" \
+      #       -o "$tar"
+      #     echo "${DPM_LINUX_SHA256}  ${tar}" | sha256sum --check --strict -
+      #     bindir="${RUNNER_TEMP:-/tmp}/canton-devkit-bin"
+      #     mkdir -p "$bindir"
+      #     tar -xzf "$tar" -C "$bindir" dpm
+      #     chmod 0755 "$bindir/dpm"
+      #     echo "$bindir" >> "$GITHUB_PATH"
+      #     "$bindir/dpm" --version
+      #
+      # - name: Lay out per-platform component dirs
+      #   run: |
+      #     set -euo pipefail
+      #     read -ra targets <<< "${RELEASE_TARGETS}"
+      #     for target in "${targets[@]}"; do
+      #       os="${target%/*}"
+      #       arch="${target#*/}"
+      #       dir="dist/component_${os}_${arch}"
+      #       mkdir -p "${dir}/bin"
+      #       cp LICENSE "${dir}/LICENSE"
+      #       binary_name="canton-devkit"
+      #       [ "$os" = "windows" ] && binary_name="canton-devkit.exe"
+      #       cp "component-bin/${os}_${arch}/${binary_name}" "${dir}/bin/${binary_name}"
+      #       chmod +x "${dir}/bin/${binary_name}"
+      #       sed "s|@@BINARY_PATH@@|bin/${binary_name}|" \
+      #         packaging/component.yaml.tmpl > "${dir}/component.yaml"
+      #     done
+      #     ls -R dist
+      #
+      # - name: Log in to GHCR
+      #   if: steps.meta.outputs.push == 'true'
+      #   uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+      #   with:
+      #     registry: ghcr.io
+      #     username: ${{ github.actor }}
+      #     password: ${{ secrets.GITHUB_TOKEN }}
+      #
+      # - name: Validate component manifest (dry-run)
+      #   env:
+      #     VERSION: ${{ steps.meta.outputs.component_version }}
+      #   run: |
+      #     set -euo pipefail
+      #     dpm publish component \
+      #       "oci://${GHCR_NAMESPACE}:${VERSION}" \
+      #       --dry-run \
+      #       --platform linux/amd64=dist/component_linux_amd64 \
+      #       --platform darwin/arm64=dist/component_darwin_arm64 \
+      #       --platform windows/amd64=dist/component_windows_amd64
+      #
+      # - name: Publish DPM component (tag pushes only)
+      #   if: steps.meta.outputs.push == 'true'
+      #   env:
+      #     VERSION: ${{ steps.meta.outputs.component_version }}
+      #   run: |
+      #     set -euo pipefail
+      #     extra_tags=()
+      #     case "${VERSION}" in
+      #       *-*) echo "pre-release ${VERSION} — leaving 'latest' untouched" ;;
+      #       *)   extra_tags+=(--extra-tags latest) ;;
+      #     esac
+      #     dpm publish component \
+      #       "oci://${GHCR_NAMESPACE}:${VERSION}" \
+      #       --include-git-info \
+      #       ${extra_tags[@]+"${extra_tags[@]}"} \
+      #       --platform linux/amd64=dist/component_linux_amd64 \
+      #       --platform darwin/arm64=dist/component_darwin_arm64 \
+      #       --platform windows/amd64=dist/component_windows_amd64
