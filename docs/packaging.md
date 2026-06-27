@@ -44,11 +44,11 @@ tar -xzf canton-devkit_v0.1.0_linux_amd64.tar.gz
 ## DPM component
 
 The DPM component is published to GitHub Container Registry on every
-tagged release at `ghcr.io/bitdynamics-ab/canton-devkit:<version>`.
+tagged release at `ghcr.io/bitdynamics-ab/homebrew-canton-devkit:<version>`.
 Install via:
 
 ```sh
-dpm install package oci://ghcr.io/bitdynamics-ab/canton-devkit:<version>
+dpm install package oci://ghcr.io/bitdynamics-ab/homebrew-canton-devkit:<version>
 dpm localnet --help
 ```
 
