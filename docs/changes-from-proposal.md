@@ -2,40 +2,49 @@
 
 This document records every deliberate deviation — command syntax, flag names, behaviour, or scope — between the [original DevKit Development Fund proposal](./original-devkit-proposal.md) and the shipped implementation.
 
+Every deviation listed here is **intentional**, not an oversight or implementation mistake. Each one was made for a concrete reason: improving developer or user experience, system performance or resource efficiency, security, correctness, or CLI ↔ Web UI parity. The per-entry **"Why"** notes record that rationale. Where the proposal's wording was a high-level intent rather than a precise spec, the shipped form is the deliberate concretization of that intent.
+
 **Maintenance rule:** any PR that introduces or changes a command name, flag name, alias, default, or user-facing behaviour relative to the proposal **must** add or update an entry here in the same PR. See the "Proposal deviation tracking" rule in [AGENTS.md](../AGENTS.md).
 
 ---
 
 ## Table of contents
 
-- [Instance name addressing](#instance-name-addressing)
-- [Machine-readable output flag](#machine-readable-output-flag)
-- [Command aliases](#command-aliases)
-- [Lifecycle: `pause` and `resume` (new)](#lifecycle-pause-and-resume-new)
-- [Inspection: `creds` (new)](#inspection-creds-new)
-- [Inspection: `versions` (new)](#inspection-versions-new)
-- [Web UI: `ui` command (new)](#web-ui-ui-command-new)
-- [Orchestration: `refresh` (new)](#orchestration-refresh-new)
-- [Per-container operations: `container` (new)](#per-container-operations-container-new)
-- [Observability: `observability` command (new)](#observability-observability-command-new)
-- [Skills: installable CLI commands (new)](#skills-installable-cli-commands-new)
-- [Contracts: `contracts ls` (new)](#contracts-contracts-ls-new)
-- [Contracts/tx: endpoint not yet auto-discovered](#contractstx-endpoint-not-yet-auto-discovered)
-- [DAR: connection flags per-command](#dar-connection-flags-per-command)
-- [DAR: `--instance` flag name](#dar---instance-flag-name)
-- [Token: additional subcommands (new)](#token-additional-subcommands-new)
-- [Token: `transfer accept` subcommand](#token-transfer-accept-subcommand)
-- [Token: `burn` requires explicit confirmation](#token-burn-requires-explicit-confirmation)
-- [Token: `--instance` required flag](#token---instance-required-flag)
-- [Token: `--name` collision in `token create`](#token---name-collision-in-token-create)
-- [Root-level `telemetry` command (new)](#root-level-telemetry-command-new)
-- [`up`: `--allow-uncurated` flag (new)](#up---allow-uncurated-flag-new)
-- [`up`: `--profile` replaces a separate profiles config surface](#up---profile-replaces-a-separate-profiles-config-surface)
-- [`up`: `--port-base` flag (new)](#up---port-base-flag-new)
+- [Cross-cutting conventions](#cross-cutting-conventions)
+  - [Instance name addressing](#instance-name-addressing)
+  - [Machine-readable output flag](#machine-readable-output-flag)
+  - [Command aliases](#command-aliases)
+- [`localnet up`](#localnet-up)
+  - [`--allow-uncurated` flag (new)](#--allow-uncurated-flag-new)
+  - [`--profile` flag (new)](#--profile-flag-new)
+  - [`--port-base` flag (new)](#--port-base-flag-new)
+- [`localnet pause` / `resume` (new)](#localnet-pause--resume-new)
+- [`localnet creds` (new)](#localnet-creds-new)
+- [`localnet versions` (new)](#localnet-versions-new)
+- [`localnet ui` (new)](#localnet-ui-new)
+- [`localnet refresh` (new)](#localnet-refresh-new)
+- [`localnet container` (new)](#localnet-container-new)
+- [`localnet observability` (new)](#localnet-observability-new)
+- [`localnet skills` (new)](#localnet-skills-new)
+- [`localnet contracts` / `tx`](#localnet-contracts--tx)
+  - [`contracts ls` (new)](#contracts-ls-new)
+  - [Endpoint not yet auto-discovered](#endpoint-not-yet-auto-discovered)
+- [`localnet dar`](#localnet-dar)
+  - [Connection flags per-command](#connection-flags-per-command)
+  - [`--instance` flag name](#--instance-flag-name)
+- [`localnet token`](#localnet-token)
+  - [Additional subcommands (new)](#additional-subcommands-new)
+  - [`transfer accept` subcommand](#transfer-accept-subcommand)
+  - [`burn` requires explicit confirmation](#burn-requires-explicit-confirmation)
+  - [`--instance` required flag](#--instance-required-flag)
+  - [`--name` collision in `token create`](#--name-collision-in-token-create)
+- [`telemetry` (root-level, new)](#telemetry-root-level-new)
 
 ---
 
-## Instance name addressing
+## Cross-cutting conventions
+
+### Instance name addressing
 
 **Proposal said:** instance name is always passed as `--name <name>` across all commands.
 
@@ -49,7 +58,7 @@ This document records every deliberate deviation — command syntax, flag names,
 
 ---
 
-## Machine-readable output flag
+### Machine-readable output flag
 
 **Proposal said:** machine-readable output is requested via `--json`.
 
@@ -59,7 +68,7 @@ This document records every deliberate deviation — command syntax, flag names,
 
 ---
 
-## Command aliases
+### Command aliases
 
 The following aliases are not in the proposal but are shipped:
 
@@ -76,7 +85,39 @@ The following aliases are not in the proposal but are shipped:
 
 ---
 
-## Lifecycle: `pause` and `resume` (new)
+## `localnet up`
+
+### `--allow-uncurated` flag (new)
+
+**Proposal said:** `--version <version>` pins a Splice LocalNet version from the supported set. Unsupported versions were not addressed.
+
+**Shipped:** `--allow-uncurated` lets users pass a Splice tag that is not in the DevKit curated catalogue. DevKit resolves the tag against the upstream Splice GitHub repo and proceeds, printing a warning that the resulting LocalNet is not tested by DevKit.
+
+**Why:** Gives power users and maintainers a path to test prereleases and alpha tags without waiting for a catalogue update, while keeping the default path (no flag) restricted to tested versions.
+
+---
+
+### `--profile` flag (new)
+
+**Proposal said:** per-component toggles for Prometheus and Grafana as a LocalNet configuration model item; the exact mechanism was not specified.
+
+**Shipped:** `--profile <name>` (repeatable) is a flag on `localnet up`. Supported values include `prometheus`, `grafana`, and `observability` (legacy umbrella that activates both). Profiles are persisted in instance state so a subsequent `up` re-enables the same set. The `localnet observability enable/disable` command can toggle sidecars on a running instance without `--profile` at `up` time.
+
+**Why:** Docker Compose profiles are the natural mechanism for optional service groups in the Splice LocalNet stack. Exposing them directly as `--profile` keeps the model transparent and auditable. Persisting the profile set enables reproducible restarts.
+
+---
+
+### `--port-base` flag (new)
+
+**Proposal said:** named instances use explicit port configuration so two LocalNets can run on one machine, but the mechanism for specifying ports was not defined.
+
+**Shipped:** `--port-base <n>` pins host ports deterministically starting from `n` (each service gets `base+N`). With `--port-base 0` (default), ports are auto-allocated with stable reuse across restarts. Every derived port must be free or `up` fails immediately with no silent fallback.
+
+**Why:** Auto-allocation works for single-developer use; `--port-base` is needed for CI layouts and reproducible multi-instance setups where port assignments must be predictable and documented.
+
+---
+
+## `localnet pause` / `resume` (new)
 
 **Proposal said:** not mentioned.
 
@@ -84,51 +125,51 @@ The following aliases are not in the proposal but are shipped:
 
 `pause` sends SIGSTOP to all containers in the instance (via `docker compose pause`) — they hold in-memory state and published ports but stop using CPU. `resume` sends SIGCONT. No readiness wait is performed on resume.
 
-**Why:** Useful when stepping away briefly without wanting to pay the full boot cost of `down`/`up`. Required for Web UI parity (the UI exposes a pause/resume action on the instance card).
+**Why:** Useful when stepping away briefly without wanting to pay the full boot cost of `down`/`up`. Frees CPU and reduces resource consumption without discarding ledger state. Required for CLI ↔ Web UI parity (the UI exposes a pause/resume action on the instance card).
 
 ---
 
-## Inspection: `creds` (new)
+## `localnet creds` (new)
 
 **Proposal said:** not mentioned as a standalone command. `env` was the credential/config export surface.
 
 **Shipped:** `dpm localnet creds [name]` prints the HS256 JWTs captured at `up` time, in four formats: `table` (default — JWTs omitted for safety), `env` (shell-exportable `AUTH_<ROLE>_TOKEN=...` lines), `json` (full credential objects including JWTs), `raw` (single JWT, requires `--role`).
 
-**Why:** `env` covers Ledger API endpoints and wallet URLs; `creds` is the dedicated surface for auth tokens. Separating them avoids combining sensitive credential material with non-sensitive endpoint strings in one command.
+**Why:** `env` covers Ledger API endpoints and wallet URLs; `creds` is the dedicated surface for auth tokens. Separating them avoids combining sensitive credential material with non-sensitive endpoint strings in one command, and makes it easier to handle each category differently (e.g. redact tokens in logs while freely printing URLs).
 
 ---
 
-## Inspection: `versions` (new)
+## `localnet versions` (new)
 
 **Proposal said:** `--version <version>` in `localnet up` selects the Splice version. Supported versions and a compatibility matrix were mentioned as documentation items, not as a CLI command.
 
 **Shipped:** `dpm localnet versions` is a live command that lists every Splice version in the DevKit curated catalogue plus every tag the upstream Splice GitHub repository currently exposes. Each row has a status: `supported`, `drifted` (force-pushed — security signal), `available` (upstream only, not yet catalogued), or `catalogued-only` (removed upstream). Supports `--offline` and `--format json`.
 
-**Why:** The catalogue cross-reference against upstream helps maintainers catch force-pushed tags early and gives users visibility into which versions are safe to pin.
+**Why:** The catalogue cross-reference against upstream helps maintainers catch force-pushed tags early (a security signal) and gives users live visibility into which versions are safe to pin, without consulting external documentation.
 
 ---
 
-## Web UI: `ui` command (new)
+## `localnet ui` (new)
 
 **Proposal said:** a Web UI exists, but the proposal described it as a dashboard accessible alongside the CLI, not as a separately invocable CLI command.
 
 **Shipped:** `dpm localnet ui` starts the embedded Vite/React HTTP server (default port 7777, loopback-only). Flags: `--port`, `--host`, `--allow-non-loopback`. Non-loopback binding is refused by default as a DNS-rebinding defence; SSH tunnelling is the recommended remote-access path.
 
-**Why:** Packaging the UI launch as a CLI subcommand keeps the single-binary model and lets users control when the UI server is running.
+**Why:** Packaging the UI launch as a CLI subcommand keeps the single-binary model and lets users control when the UI server is running. The loopback-only default and the `--allow-non-loopback` guard are a deliberate security measure — the UI handles JWTs and party identifiers and is not designed for unauthenticated LAN-wide exposure.
 
 ---
 
-## Orchestration: `refresh` (new)
+## `localnet refresh` (new)
 
 **Proposal said:** not mentioned.
 
 **Shipped:** `dpm localnet refresh [--name <name>]` triggers an on-demand reconciliation pass that syncs the registry's persisted status with the live `docker compose ps` state. This is the CLI mirror of the background reconciler that runs inside `localnet ui`.
 
-**Why:** Required for Web UI parity. Useful when a user has stopped containers externally (e.g. via `docker compose down` directly) and wants the registry to reflect that without restarting the UI.
+**Why:** Required for CLI ↔ Web UI parity. Useful when a user has stopped containers externally (e.g. via `docker compose down` directly) and wants the registry to reflect that without restarting the UI server.
 
 ---
 
-## Per-container operations: `container` (new)
+## `localnet container` (new)
 
 **Proposal said:** `dpm localnet restart [service] --name <name>` restarts the full LocalNet or one service.
 
@@ -138,11 +179,11 @@ The following aliases are not in the proposal but are shipped:
 - `localnet container restart <instance> <service>` — restarts one container; verifies it belongs to the instance's compose project before acting.
 - `localnet container logs <instance> <service>` — tails logs for one container (flags: `--tail`, `--since`).
 
-**Why:** Separating the `container` subtree from top-level lifecycle commands keeps the namespace clean and mirrors the Web UI's Container Health panel. Accepting both the service short name and the full container name (e.g. `splice` or `pr432-splice`) makes the CLI friendlier than the raw Docker form.
+**Why:** Separating the `container` subtree from top-level lifecycle commands keeps the namespace clean and mirrors the Web UI's Container Health panel. Accepting both the service short name and the full container name (e.g. `splice` or `pr432-splice`) improves UX over the raw Docker form. The membership check before restart is a security measure that prevents a typo or hostile input from restarting an arbitrary host container.
 
 ---
 
-## Observability: `observability` command (new)
+## `localnet observability` (new)
 
 **Proposal said:** `dpm localnet metrics` prints Grafana dashboard URLs and a concise text summary. No separate toggle command was proposed; observability components were to be controlled via `--profile` flags at `up` time.
 
@@ -154,11 +195,11 @@ The following aliases are not in the proposal but are shipped:
 
 Both `--prometheus` and `--grafana` flags allow controlling each sidecar independently. With neither flag, both are selected (umbrella semantics). The enabled state is persisted so a subsequent `down`/`up` re-enables it automatically.
 
-**Why:** Enabling observability at `up` time via `--profile` requires a full restart to change. The `observability enable/disable` path lets developers toggle the monitoring stack without disrupting a running ledger — matching the Web UI's "Enable observability now" toggle.
+**Why:** Enabling observability at `up` time via `--profile` requires a full restart to change. The `observability enable/disable` path lets developers toggle the monitoring stack without disrupting a running ledger — saving the boot cost and preserving in-flight ledger state. Matches the Web UI's "Enable observability now" toggle for CLI ↔ Web UI parity.
 
 ---
 
-## Skills: installable CLI commands (new)
+## `localnet skills` (new)
 
 **Proposal said:** DevKit "may provide optional, editor-agnostic AI agent skill documents." The proposal described them as documentation artifacts, not as CLI commands.
 
@@ -169,51 +210,57 @@ Both `--prometheus` and `--grafana` flags allow controlling each sidecar indepen
 
 The embedded skill docs are the same artifacts that back the Web UI's Agent Skills screen, ensuring CLI and UI show the same content.
 
-**Why:** Users need a way to install skill documents without manually copying files. The `install` command provides a one-step path consistent with how users already install DPM components.
+**Why:** Users need a one-step way to install skill documents without manually locating and copying files. The clobber-safe default protects hand-edited skill docs from being silently overwritten on re-install. Required for CLI ↔ Web UI parity (the Web UI's Agent Skills screen surfaces the same embedded docs).
 
 ---
 
-## Contracts: `contracts ls` (new)
+## `localnet contracts` / `tx`
+
+### `contracts ls` (new)
 
 **Proposal said:** `dpm localnet contracts watch` — live tail of create/archive events.
 
-**Shipped:** `contracts watch` is present and matches the proposal. In addition, `contracts ls` (alias: none) lists active contracts via a one-shot query rather than a live stream.
+**Shipped:** `contracts watch` is present and matches the proposal. In addition, `contracts ls` lists active contracts via a one-shot query rather than a live stream.
 
-**Why:** A non-streaming list is often more useful than a continuous watch in CI and scripted contexts.
+**Why:** A non-streaming snapshot is more useful than a continuous watch in CI and scripted contexts where the caller wants to assert on current state without keeping a long-lived process open.
 
 ---
 
-## Contracts/tx: endpoint not yet auto-discovered
+### Endpoint not yet auto-discovered
 
 **Proposal said:** commands connect to the LocalNet participants automatically (implied by the named-instance model).
 
 **Shipped:** `contracts` and `tx` commands require callers to pass `--endpoint host:port` explicitly. Auto-discovery of the gRPC participant port from registry state is not yet implemented. A comment in `localnet.go` documents this as pending work.
 
-**Why:** Auto-discovery requires resolving the participant's gRPC port from the registry state, which was deferred to avoid blocking the initial contract/tx CLI release.
+**Why:** Auto-discovery was deferred to avoid blocking the initial contract/tx CLI release. The explicit `--endpoint` flag is a deliberate interim design — it keeps the commands usable against any Ledger API endpoint (not just DevKit-managed instances) until the auto-discovery path lands.
 
 ---
 
-## DAR: connection flags per-command
+## `localnet dar`
+
+### Connection flags per-command
 
 **Proposal said:** DAR commands connect to participants via the named instance implicitly.
 
 **Shipped:** Each `dar` subcommand carries its own connection flags: `--admin-host`, `--token`, `--insecure` (defaults to `true`), `--ca-cert`, `--instance` (alias `--name`), `--role` (default `app-user`). There is no standalone `dar connect` command.
 
-**Why:** Per-command connection flags make the DAR subcommands usable against any Ledger API endpoint, not just DevKit-managed instances, giving operators more flexibility in CI and multi-environment workflows.
+**Why:** Per-command connection flags make the DAR subcommands usable against any Ledger API endpoint, not just DevKit-managed instances. This gives operators more flexibility in CI and multi-environment workflows without requiring a running LocalNet registry.
 
 ---
 
-## DAR: `--instance` flag name
+### `--instance` flag name
 
 **Proposal said:** instance selection is `--name <name>` uniformly.
 
 **Shipped:** `dar` subcommands use `--instance` as the primary flag name (with `--name` as an alias).
 
-**Why:** In `dar` contexts, `--name` is ambiguous between the instance name and the DAR/package name. Using `--instance` as the primary name eliminates that ambiguity.
+**Why:** In `dar` contexts, `--name` is ambiguous between the instance name and the DAR/package name. Using `--instance` as the primary name eliminates that ambiguity and makes commands self-documenting at a glance.
 
 ---
 
-## Token: additional subcommands (new)
+## `localnet token`
+
+### Additional subcommands (new)
 
 **Proposal said:** `token create`, `token mint`, `token transfer`, `token burn`, `token balance`.
 
@@ -230,51 +277,51 @@ The embedded skill docs are the same artifacts that back the Web UI's Agent Skil
 | `token faucet <party> <amount>` | Fund a party with an auto-accepted transfer (no recipient interaction needed) |
 | `token demo` | One-step provision: creates a DEMO instrument and seeds a holder wallet |
 
-**Why:** The alias registry (`token party`) reduces repeated `--party <long-id>` flags. `faucet` and `demo` target workshop and onboarding use cases where speed matters more than full CIP-0112 flow fidelity.
+**Why:** The alias registry (`token party`) improves UX by eliminating repeated `--party <long-id>` flags across commands. `faucet` and `demo` target workshop and onboarding use cases where speed matters more than exercising the full CIP-0112 two-phase flow. `balances`, `summary`, and `activity` provide portfolio-level and historical views that are essential for verifying token operations during testing.
 
 ---
 
-## Token: `transfer accept` subcommand
+### `transfer accept` subcommand
 
 **Proposal said:** `token transfer` as a single command.
 
 **Shipped:** `token transfer` initiates a transfer; `token transfer accept` accepts a pending incoming transfer. CIP-0112 transfers are two-phase (offer + accept), so both halves are exposed as CLI subcommands.
 
-**Why:** The two-phase model is required by the CIP-0112 protocol. Exposing both steps gives scripts and workshops full control over the accept timing.
+**Why:** The two-phase model is required by the CIP-0112 protocol — it is not a simplification but a faithful implementation of the standard. Exposing both steps gives scripts and workshops full control over the accept timing, enabling realistic multi-party test scenarios.
 
 ---
 
-## Token: `burn` requires explicit confirmation
+### `burn` requires explicit confirmation
 
 **Proposal said:** `token burn {token-name} {amount}` as a straightforward command.
 
 **Shipped:** `token burn` prompts for confirmation before executing because the operation is irreversible. The prompt is bypassed with `--yes` / `-y`.
 
-**Why:** Guarding an irreversible ledger operation with a confirmation prompt is standard CLI practice and prevents accidental burns in interactive sessions.
+**Why:** Guarding an irreversible ledger operation with a confirmation prompt is standard CLI practice and prevents accidental burns in interactive sessions. The `--yes` flag preserves full scriptability for automation.
 
 ---
 
-## Token: `--instance` required flag
+### `--instance` required flag
 
 **Proposal said:** token commands connect to the active or `--name`-selected instance.
 
 **Shipped:** `--instance` is a **required** flag on all `token` subcommands (no default or auto-resolution from a single registered instance).
 
-**Why:** Making `--instance` explicit prevents token commands from silently targeting the wrong LocalNet when multiple instances are registered.
+**Why:** Making `--instance` explicit prevents token commands from silently targeting the wrong LocalNet when multiple instances are registered — a correctness and safety measure, not an inconvenience.
 
 ---
 
-## Token: `--name` collision in `token create`
+### `--name` collision in `token create`
 
 **Proposal said:** instance selection via `--name <name>`.
 
 **Shipped:** In `token create`, `--name` refers to the **instrument name** (e.g. `--name "My Token"`), not the instance. The instance is selected via `--instance`. This is an intentional exception to the general `--name` = instance name convention.
 
-**Why:** The instrument name is the primary user-facing input in the token creation wizard. Using `--name` for it matches natural language ("name this token") even though it breaks the global `--name` = instance convention. Document when using `token create` to avoid confusion.
+**Why:** The instrument name is the primary user-facing input in the token creation wizard. Using `--name` for it matches natural language ("name this token") and makes the interactive wizard more intuitive, even though it breaks the global `--name` = instance convention elsewhere.
 
 ---
 
-## Root-level `telemetry` command (new)
+## `telemetry` (root-level, new)
 
 **Proposal said:** not mentioned. Adoption measurement was described as a reporting/documentation exercise.
 
@@ -288,34 +335,4 @@ The embedded skill docs are the same artifacts that back the Web UI's Agent Skil
 
 Telemetry is **on by default** with opt-out via `DPM_TELEMETRY=off` or `DO_NOT_TRACK=1`. An internal hidden subcommand `_record-install-surface <surface>` is used by install scripts to record the distribution channel.
 
-**Why:** Provides the adoption signals described in Milestone 4 (install counts, usage trends) in a privacy-preserving, opt-out model. The opt-out via standard `DO_NOT_TRACK` honours ecosystem conventions.
-
----
-
-## `up`: `--allow-uncurated` flag (new)
-
-**Proposal said:** `--version <version>` pins a Splice LocalNet version from the supported set. Unsupported versions were not addressed.
-
-**Shipped:** `--allow-uncurated` lets users pass a Splice tag that is not in the DevKit curated catalogue. DevKit resolves the tag against the upstream Splice GitHub repo and proceeds, printing a warning that the resulting LocalNet is not tested by DevKit.
-
-**Why:** Gives power users and maintainers a path to test prereleases and alpha tags without waiting for a catalogue update, while keeping the default path (no flag) restricted to tested versions.
-
----
-
-## `up`: `--profile` replaces a separate profiles config surface
-
-**Proposal said:** per-component toggles for Prometheus and Grafana as a LocalNet configuration model item; the exact mechanism was not specified.
-
-**Shipped:** `--profile <name>` (repeatable) is a flag on `localnet up`. Supported values include `prometheus`, `grafana`, and `observability` (legacy umbrella that activates both). Profiles are persisted in instance state so a subsequent `up` re-enables the same set. The `localnet observability enable/disable` command can toggle sidecars on a running instance without `--profile` at `up` time.
-
-**Why:** Docker Compose profiles are the natural mechanism for optional service groups in the Splice LocalNet stack. Exposing them directly as `--profile` keeps the model transparent and auditable. Persisting the profile set enables reproducible restarts.
-
----
-
-## `up`: `--port-base` flag (new)
-
-**Proposal said:** named instances use explicit port configuration so two LocalNets can run on one machine, but the mechanism for specifying ports was not defined.
-
-**Shipped:** `--port-base <n>` pins host ports deterministically starting from `n` (each service gets `base+N`). With `--port-base 0` (default), ports are auto-allocated with stable reuse across restarts. Every derived port must be free or `up` fails immediately with no silent fallback.
-
-**Why:** Auto-allocation works for single-developer use; `--port-base` is needed for CI layouts and reproducible multi-instance setups where port assignments must be predictable and documented.
+**Why:** Provides the adoption signals described in Milestone 4 (install counts, usage trends) in a privacy-preserving, opt-out model without requiring manual tracking. The opt-out via standard `DO_NOT_TRACK` honours widely adopted ecosystem conventions. Placing it at the root level (not under `localnet`) reflects that it is a tool-wide concern, not a LocalNet-specific one.
