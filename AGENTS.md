@@ -45,6 +45,29 @@ Rules:
 - **Service-model subcommands (`restart`/`pause`/`unpause`/`ps`):** these genuinely need the `-f` model, so they MUST replay the enabled profile set via `composeProfiles(state)` (persisted as `state.Profiles` at `up` time, with an adapter fallback for pre-fix instances). Omitting `--profile` here targets zero services.
 - **Explicitly-targeted single-service actions** (e.g. `docker compose -p <project> stop <service>`): exempt — explicitly naming a service bypasses profile filtering per the compose docs.
 
+### Proposal deviation tracking (load-bearing)
+
+**Any PR that introduces or changes a command name, flag name, alias, default, or user-facing behaviour relative to `docs/original-devkit-proposal.md` MUST add or update an entry in `docs/changes-from-proposal.md` in the same PR.**
+
+The file exists so the committee, reviewers, and future contributors can see exactly where the shipped implementation differs from what was proposed — and why. Letting it go stale defeats the purpose.
+
+What triggers an update:
+
+- A new command or subcommand is added that the proposal did not name.
+- A command or flag is renamed from the proposal's wording.
+- A flag's semantics or default changes relative to the proposal's description.
+- A new alias is introduced.
+- A behaviour described in the proposal is intentionally not implemented, or is deferred with a `// TODO` comment.
+- A behaviour not mentioned in the proposal is added that a user would notice (e.g. a confirmation prompt, a new opt-out mechanism, a different connection model).
+
+What does **not** trigger an update:
+
+- Internal refactors with no user-visible effect.
+- Bug fixes that bring behaviour in line with what the proposal described.
+- Docs-only changes.
+
+The instruction lives in `AGENTS.md` (not a `.claude/skills/` skill) because it must fire on every contributor session, not only when an agent judges a "proposal-tracking" task is active.
+
 ### Testing Requirements
 
 - **All bug fixes must include regression tests**
@@ -107,6 +130,7 @@ Before submitting:
 4. Relevant documentation added/updated
 5. PR title is clear and understandable
 6. **CLI ↔ Web UI parity:** if the change touches a user-facing feature, both surfaces are updated (or a follow-up ticket is filed with a `TODO(#issue): CLI parity` / `TODO(#issue): UI parity` comment at the divergence point). See "CLI ↔ Web UI parity" rule above.
+7. **Proposal deviation tracking:** if the change introduces or alters command syntax, flags, aliases, defaults, or user-facing behaviour relative to `docs/original-devkit-proposal.md`, `docs/changes-from-proposal.md` is updated in this PR. See "Proposal deviation tracking" rule above.
 
 ## Temporary Files & Folders
 
