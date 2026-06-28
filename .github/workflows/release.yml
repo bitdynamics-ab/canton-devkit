@@ -21,7 +21,7 @@ env:
   # DPM_LINUX_SHA256 below pins the linux-amd64 tarball used to install
   # the CLI in CI; recompute via:
   #   curl -sL <release-tarball-url> | sha256sum
-  # Keep in sync with verify-public-oci.yml.
+  # Keep in sync with e2e-test-dpm-installation.yml.
   DPM_VERSION: 1.0.16
   DPM_LINUX_SHA256: 387421d4b3d0e799f05cde1f5c2adc704acd2824796d436861602eb2be759874
   # Build matrix: shared by both the standalone-binary archives and the
