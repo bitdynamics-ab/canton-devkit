@@ -275,12 +275,17 @@ export type AppConfigFormat = "env" | "json" | "yaml";
 // text — the env / yaml endpoints emit text/plain so apiFetch's
 // JSON-decode path would error. Inline a small fetch here that
 // returns the body verbatim.
+//
+// include_jwt=true: the app config is meant to be copy-pasted into a
+// dApp's environment, so a redacted token makes it unusable. LocalNet
+// is loopback-only with dev-secret tokens (the UI shows the dev-secret
+// warning), so the raw token is surfaced here on purpose.
 export async function fetchAppConfigText(
   name: string,
   format: "env" | "yaml",
 ): Promise<string> {
   const resp = await fetch(
-    `/api/instances/${encodeURIComponent(name)}/app-config?format=${format}`,
+    `/api/instances/${encodeURIComponent(name)}/app-config?format=${format}&include_jwt=true`,
   );
   if (!resp.ok) {
     const body = await resp.text();
@@ -303,7 +308,7 @@ export interface AppConfigPayload {
 
 export const fetchAppConfigJSON = (name: string) =>
   apiFetch<AppConfigPayload>(
-    `/api/instances/${encodeURIComponent(name)}/app-config?format=json`,
+    `/api/instances/${encodeURIComponent(name)}/app-config?format=json&include_jwt=true`,
   );
 
 // ── create-instance flow ──────────────────────────────────

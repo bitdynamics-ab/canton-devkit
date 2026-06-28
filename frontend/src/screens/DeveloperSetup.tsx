@@ -12,10 +12,12 @@ import { W, wMono } from "../tokens";
 // DeveloperSetup — the "Developer setup" card from the 2026-05-25
 // webui-dashboard.jsx refresh. Two sub-panels:
 //
-//  1. JWT generator: role/audience picker + redacted-by-default
-//     token preview + "show token" toggle that re-issues with
-//     ?include_jwt=true. Mirrors the mockup's chip-row controls
-//     and the colored token-segment display.
+//  1. JWT generator: role/audience picker + a usable token preview
+//     + copy button. LocalNet is loopback-only with dev-secret
+//     tokens (the dev-secret warning renders below), so the raw
+//     token is surfaced directly — no redaction toggle. Mirrors the
+//     mockup's chip-row controls and the colored token-segment
+//     display.
 //
 //  2. App config exporter: format tabs (env / json / yaml) +
 //     monospace preview + copy button. Each format hits the
@@ -29,10 +31,9 @@ import { W, wMono } from "../tokens";
 const ROLES = ["app-provider", "app-user", "sv"] as const;
 type Role = (typeof ROLES)[number];
 
-// Default-redact is enforced server-side; this UI surfaces it
-// explicitly. "Show token" triggers a one-shot re-fetch with
-// ?include_jwt=true rather than persisting the raw value in
-// component state for long — every render re-checks `revealed`.
+// The backend redacts JWTs by default; this LocalNet-only UI opts
+// into the raw token (?include_jwt=true) so the generated token is
+// usable as-is. The dev-secret warning makes the trade-off explicit.
 export function DeveloperSetup({ name }: { name: string }) {
   return (
     <div
@@ -52,21 +53,18 @@ export function DeveloperSetup({ name }: { name: string }) {
 function JwtPanel({ name }: { name: string }) {
   const [role, setRole] = useState<Role>("app-provider");
   const [audience, setAudience] = useState("https://canton.network.global");
-  const [redacted, setRedacted] = useState<JwtResponse | null>(null);
-  const [revealed, setRevealed] = useState<string | null>(null);
+  const [jwt, setJwt] = useState<JwtResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Fetch a redacted JWT on mount + whenever role/audience/name
-  // changes. The redacted form gives us the party + warning
-  // metadata without ever surfacing the raw token by default.
+  // Issue a usable JWT on mount + whenever role/audience/name changes.
+  // include_jwt=true so the raw token is returned — LocalNet only.
   useEffect(() => {
     let cancelled = false;
     setBusy(true);
-    setRevealed(null); // reveal is one-shot per (role, audience)
-    issueJwt(name, { role, audience }, false)
+    issueJwt(name, { role, audience }, true)
       .then((r) => {
-        if (!cancelled) setRedacted(r);
+        if (!cancelled) setJwt(r);
         setErr(null);
       })
       .catch((e) => {
@@ -81,17 +79,7 @@ function JwtPanel({ name }: { name: string }) {
     };
   }, [name, role, audience]);
 
-  const reveal = async () => {
-    setBusy(true);
-    try {
-      const r = await issueJwt(name, { role, audience }, true);
-      setRevealed(r.token);
-    } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "failed to reveal token");
-    } finally {
-      setBusy(false);
-    }
-  };
+  const token = jwt?.token ?? null;
 
   return (
     <Card title="JWT generator" subtitle="Signed against the Splice LocalNet dev secret">
@@ -120,11 +108,11 @@ function JwtPanel({ name }: { name: string }) {
       </Row>
       <Row label="party">
         <code style={{ color: W.text2, fontFamily: wMono, fontSize: 12 }}>
-          {redacted?.party ?? "—"}
+          {jwt?.party ?? "—"}
         </code>
       </Row>
       <div style={{ marginTop: 12 }}>
-        <TokenBox token={revealed ?? redacted?.token ?? "—"} revealed={!!revealed} />
+        <TokenBox token={busy ? "…" : token ?? "—"} revealed={!!token} />
         <div
           style={{
             display: "flex",
@@ -133,34 +121,16 @@ function JwtPanel({ name }: { name: string }) {
             alignItems: "center",
           }}
         >
-          {!revealed && (
-            <button
-              onClick={reveal}
-              disabled={busy}
-              style={btnStyle(W.brand)}
-            >
-              {busy ? "…" : "Show token"}
-            </button>
-          )}
-          {revealed && (
-            <button
-              onClick={() => navigator.clipboard.writeText(revealed)}
-              style={btnStyle(W.brand)}
-            >
-              Copy
-            </button>
-          )}
-          {revealed && (
-            <button
-              onClick={() => setRevealed(null)}
-              style={btnStyle(W.dim)}
-            >
-              Hide
-            </button>
-          )}
+          <button
+            onClick={() => token && navigator.clipboard.writeText(token)}
+            disabled={!token}
+            style={btnStyle(W.brand)}
+          >
+            Copy
+          </button>
         </div>
       </div>
-      {redacted?.warning_dev_secret && (
+      {jwt?.warning_dev_secret && (
         <p
           style={{
             color: W.warn,
@@ -170,7 +140,7 @@ function JwtPanel({ name }: { name: string }) {
             lineHeight: 1.5,
           }}
         >
-          {redacted.warning_dev_secret}
+          {jwt.warning_dev_secret}
         </p>
       )}
       {err && <ErrorLine msg={err} />}
@@ -353,8 +323,8 @@ function ChipRow({ options, value, onChange }: ChipRowProps) {
 
 function TokenBox({ token, revealed }: { token: string; revealed: boolean }) {
   // Split the JWT into header.payload.signature for the colored
-  // preview from the mockup. If the token is the redacted
-  // placeholder, render it without splitting.
+  // preview from the mockup. Placeholders ("—", "…") aren't 3-part
+  // tokens, so they render as plain text.
   const parts = token.split(".");
   const isJwt = parts.length === 3 && revealed;
   return (
