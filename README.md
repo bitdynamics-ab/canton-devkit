@@ -474,7 +474,7 @@ Open an [issue](https://github.com/bitdynamics-ab/canton-devkit/issues) first fo
 Tagged builds (`v*`) publish:
 
 - Linux + macOS + Windows binaries to [GitHub Releases](https://github.com/bitdynamics-ab/canton-devkit/releases)
-- DPM component (platform binaries) to `ghcr.io/bitdynamics-ab/canton-devkit:<tag>` — install with `dpm install package`
+- DPM component to `ghcr.io/bitdynamics-ab/canton-devkit:<tag>` — install with `dpm install package`
 
 Manual cut: `git tag v0.1.0 && git push origin v0.1.0`. The [release workflow](.github/workflows/release.yml) handles the rest.
 
