@@ -3,17 +3,17 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DeveloperSetup } from "./DeveloperSetup";
 
-// DeveloperSetup tests — the JWT redacted-by-default + reveal
-// contract is security-relevant; pin it in tests so a refactor
-// that breaks it can't ship silently.
+// DeveloperSetup tests — LocalNet surfaces usable (raw) tokens by
+// default. Pin that contract so a refactor that re-redacts the UI
+// (making copy-pasted config unusable) can't ship silently.
 //
 // What matters:
-//   1. mount fetches WITHOUT include_jwt=true  (redacted-default)
-//   2. "Show token" re-fetches WITH include_jwt=true
-//   3. Copy on the revealed token hits navigator.clipboard.writeText
-//   4. Hide re-redacts (state goes back to the redacted view)
-//   5. AppConfigPanel switches transport based on format
-//      (env/yaml → text endpoint, json → apiFetch JSON path)
+//   1. JWT panel fetches WITH include_jwt=true on mount and renders
+//      the real token split into header.payload.signature
+//   2. Copy writes the full token to navigator.clipboard.writeText
+//   3. AppConfigPanel fetches WITH include_jwt=true and switches
+//      transport based on format (env/yaml → text endpoint, json →
+//      apiFetch JSON path)
 //
 // Other surface (chip-row interactions, audience input) is
 // trivial and covered by the build/typecheck step; testing it
@@ -63,10 +63,10 @@ describe("DeveloperSetup — JwtPanel", () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("fetches redacted JWT on mount (no include_jwt query)", async () => {
+  it("fetches a usable JWT on mount with include_jwt=true and renders it", async () => {
     const { calls } = recordingFetch(({ url }) => {
       if (url.includes("/jwt")) {
-        return jwtResponse({ redacted: true, token: "<redacted>" });
+        return jwtResponse({ redacted: false, token: "header.payload.signature" });
       }
       // app-config text fetch from AppConfigPanel
       return new Response("KEY=value\n", { status: 200 });
@@ -79,34 +79,11 @@ describe("DeveloperSetup — JwtPanel", () => {
       expect(jwtCall).toBeDefined();
     });
     const jwtCall = calls.find((c) => c.url.includes("/jwt"))!;
-    // The mount fetch MUST NOT include the reveal query — the
-    // redacted-by-default contract lives here.
-    expect(jwtCall.url).toBe("/api/instances/demo/jwt");
-    expect(jwtCall.url).not.toContain("include_jwt");
-  });
+    // LocalNet surfaces a usable token — the mount fetch opts into
+    // the raw token so the generated JWT is copy-pasteable.
+    expect(jwtCall.url).toContain("include_jwt=true");
 
-  it("Show token re-fetches with include_jwt=true and displays the real token", async () => {
-    let callIdx = 0;
-    recordingFetch(({ url }) => {
-      if (url.includes("/jwt")) {
-        callIdx++;
-        // Second JWT call is the reveal — return the real token.
-        return callIdx === 1
-          ? jwtResponse({ redacted: true, token: "<redacted>" })
-          : jwtResponse({
-              redacted: false,
-              token: "header.payload.signature",
-            });
-      }
-      return new Response("KEY=value\n", { status: 200 });
-    });
-
-    render(<DeveloperSetup name="demo" />);
-
-    const showBtn = await screen.findByRole("button", { name: /show token/i });
-    await userEvent.click(showBtn);
-
-    // The revealed token appears in the TokenBox split into parts.
+    // The real token renders in the TokenBox split into parts.
     await waitFor(() => {
       expect(screen.getByText("header")).toBeInTheDocument();
       expect(screen.getByText("payload")).toBeInTheDocument();
@@ -114,24 +91,18 @@ describe("DeveloperSetup — JwtPanel", () => {
     });
   });
 
-  it("Copy on a revealed token writes the full token to clipboard", async () => {
-    let callIdx = 0;
+  it("Copy writes the full token to clipboard", async () => {
     recordingFetch(({ url }) => {
       if (url.includes("/jwt")) {
-        callIdx++;
-        return callIdx === 1
-          ? jwtResponse({ redacted: true, token: "<redacted>" })
-          : jwtResponse({
-              redacted: false,
-              token: "header.payload.signature",
-            });
+        return jwtResponse({ redacted: false, token: "header.payload.signature" });
       }
       return new Response("KEY=value\n", { status: 200 });
     });
 
     render(<DeveloperSetup name="demo" />);
 
-    await userEvent.click(await screen.findByRole("button", { name: /show token/i }));
+    // Wait for the token to render before copying.
+    await screen.findByText("signature");
     // Two Copy buttons exist (JwtPanel + AppConfigPanel). Scope
     // to the JWT card so we click the right one.
     const jwtCard = screen.getByText("JWT generator").closest("section")!;
@@ -141,32 +112,6 @@ describe("DeveloperSetup — JwtPanel", () => {
       "header.payload.signature",
     );
   });
-
-  it("Hide re-redacts the token view (back to the redacted UI)", async () => {
-    let callIdx = 0;
-    recordingFetch(({ url }) => {
-      if (url.includes("/jwt")) {
-        callIdx++;
-        return callIdx === 1
-          ? jwtResponse({ redacted: true, token: "<redacted>" })
-          : jwtResponse({
-              redacted: false,
-              token: "header.payload.signature",
-            });
-      }
-      return new Response("KEY=value\n", { status: 200 });
-    });
-
-    render(<DeveloperSetup name="demo" />);
-
-    await userEvent.click(await screen.findByRole("button", { name: /show token/i }));
-    await userEvent.click(await screen.findByRole("button", { name: /hide/i }));
-
-    // After Hide, the Show token button is back; the split-out
-    // header/payload/signature spans should be gone.
-    expect(await screen.findByRole("button", { name: /show token/i })).toBeInTheDocument();
-    expect(screen.queryByText("signature")).not.toBeInTheDocument();
-  });
 });
 
 describe("DeveloperSetup — AppConfigPanel", () => {
@@ -175,7 +120,7 @@ describe("DeveloperSetup — AppConfigPanel", () => {
   it("uses ?format=env on mount and switches to ?format=json on tab click", async () => {
     const { calls } = recordingFetch(({ url }) => {
       if (url.includes("/jwt")) {
-        return jwtResponse({ redacted: true, token: "<redacted>" });
+        return jwtResponse({ redacted: false, token: "header.payload.signature" });
       }
       if (url.includes("format=json")) {
         return new Response(
@@ -197,7 +142,11 @@ describe("DeveloperSetup — AppConfigPanel", () => {
 
     await waitFor(() => {
       expect(
-        calls.find((c) => c.url.includes("app-config?format=env")),
+        calls.find(
+          (c) =>
+            c.url.includes("app-config?format=env") &&
+            c.url.includes("include_jwt=true"),
+        ),
       ).toBeDefined();
     });
 
@@ -210,7 +159,11 @@ describe("DeveloperSetup — AppConfigPanel", () => {
 
     await waitFor(() => {
       expect(
-        calls.find((c) => c.url.includes("app-config?format=json")),
+        calls.find(
+          (c) =>
+            c.url.includes("app-config?format=json") &&
+            c.url.includes("include_jwt=true"),
+        ),
       ).toBeDefined();
     });
 
