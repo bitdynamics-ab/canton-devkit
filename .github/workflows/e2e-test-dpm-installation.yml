@@ -1,4 +1,4 @@
-name: E2E: DPM Installation
+name: "E2E: DPM Installation"
 
 # Weekly read-only detective check that the published DPM component at
 # ghcr.io/bitdynamics-ab/canton-devkit is genuinely PUBLIC and usable.
