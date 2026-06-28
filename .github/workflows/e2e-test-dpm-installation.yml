@@ -1,4 +1,4 @@
-name: Verify public OCI
+name: E2E: DPM Installation
 
 # Weekly read-only detective check that the published DPM component at
 # ghcr.io/bitdynamics-ab/canton-devkit is genuinely PUBLIC and usable.
@@ -54,7 +54,7 @@ permissions:
 
 jobs:
   verify:
-    name: verify-public-oci
+    name: e2e-test-dpm-installation
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 20
     env:
