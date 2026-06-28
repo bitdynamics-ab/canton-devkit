@@ -1,4 +1,4 @@
-name: E2E
+name: E2E: canton-devkit Functions
 
 # Shell-based end-to-end tests. Each milestone adds a job to this
 # workflow. Currently: Milestone 1 (LocalNet CLI lifecycle).
