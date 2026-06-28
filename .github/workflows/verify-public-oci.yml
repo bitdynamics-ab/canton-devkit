@@ -7,7 +7,7 @@ name: Verify public OCI
 #   1. Anonymously pullable from GHCR (the package is really Public).
 #   2. Multi-arch in metadata — the OCI index advertises all three release
 #      platforms (linux/amd64, darwin/arm64, windows/amd64).
-#   3. Installable + runnable on linux/amd64 — `dpm install package oci://…`
+#   3. Installable + runnable on linux/amd64 — `dpm install package`
 #      succeeds and `dpm localnet --help` runs the installed binary.
 #
 # A failed run means a regression: the package was flipped private, a
@@ -82,6 +82,12 @@ jobs:
             echo "::error::GHCR returned HTTP ${code} anonymously for ${NS}:${VERSION} — package may be private"
             exit 1
           }
+          # Extract the strict semver from the manifest annotations.
+          # dpm install package requires a strict semver OCI tag; symbolic
+          # tags like "latest" are rejected. org.opencontainers.image.version
+          # is always present in our published manifests (set by dpm publish).
+          INSTALL_VERSION=$(jq -r '.annotations["org.opencontainers.image.version"]' manifest.json)
+          echo "INSTALL_VERSION=${INSTALL_VERSION}" >> "$GITHUB_ENV"
 
       - name: Multi-arch metadata assertion
         run: |
@@ -110,12 +116,29 @@ jobs:
           tar -xzf "$tar" -C "$bindir" dpm
           chmod 0755 "$bindir/dpm"
           echo "$bindir" >> "$GITHUB_PATH"
+          # Use absolute path — $GITHUB_PATH additions only take effect in
+          # subsequent steps, not in the same step where the echo is done.
           "$bindir/dpm" --version
 
       - name: Anonymous install + smoke test (linux/amd64)
         run: |
           set -euo pipefail
-          dpm install package "oci://ghcr.io/${NS}:${VERSION}"
+          # dpm install package reads daml.yaml from the current directory.
+          # Create a minimal project file — no sdk-version (which would pull
+          # in the SDK bundle and conflict with opt-in components), just the
+          # component reference with the resolved strict semver tag.
+          workdir="${RUNNER_TEMP}/dpm-verify"
+          mkdir -p "$workdir"
+          cat > "$workdir/daml.yaml" <<EOF
+          name: oci-verify
+          version: 0.1.0
+          source: .
+          dependencies: []
+          components:
+            - oci://ghcr.io/${NS}:${INSTALL_VERSION}
+          EOF
+          cd "$workdir"
+          dpm install package
           # success ⇒ linux/amd64 binary resolved, downloaded, registered, executable
           dpm localnet --help
 
