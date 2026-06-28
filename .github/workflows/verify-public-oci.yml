@@ -110,7 +110,7 @@ jobs:
           tar -xzf "$tar" -C "$bindir" dpm
           chmod 0755 "$bindir/dpm"
           echo "$bindir" >> "$GITHUB_PATH"
-          dpm --version
+          "$bindir/dpm" --version
 
       - name: Anonymous install + smoke test (linux/amd64)
         run: |
