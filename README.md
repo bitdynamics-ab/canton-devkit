@@ -357,9 +357,10 @@ The `splice` container runs **one Java process** (`SpliceApp daemon`) that hosts
 
 | Milestone | Status | Highlights |
 |---|---|---|
-| **M1 — LocalNet CLI** | ✅ Shipped | `up` / `down` / `status` / `list` / `logs` / `env` / `doctor` / `snapshot` / `restore` + friendly errors |
-| **M2 — Web UI + Observability + DAR + Agent skills** | 🚧 In progress | Dashboard, container health, JWT issuer, app-config exporter, snapshot/restore UI |
-| **M3 — Canton Token Standard** | 📅 Planned | `token create` / `mint` / `transfer` / `balance` — CLI + Web UI. Tracks [CIP-0056](https://github.com/canton-foundation/cips/blob/main/cip-0056/cip-0056.md) (finalised) and incorporates [CIP-0112](https://github.com/canton-foundation/cips) (V2 draft — privacy, performance, accounting improvements) as it stabilises |
+| **M1 — LocalNet CLI + packaging** | ✅ Shipped | Lifecycle commands (`up` / `down` / `restart` / `clean` / `status` / `logs`), named instances, version pinning, explicit ports, snapshot/restore, doctor/preflight, deterministic automation output, DPM component, Homebrew/APT, and standalone release artifacts |
+| **M2 — Web UI + observability + DAR + Explorer** | ✅ Shipped | Web UI parity for LocalNet lifecycle, logs, env export, snapshots, and preflight; Prometheus/Grafana with Canton dashboard presets; `metrics`; DAR upload/list/info/download/diff/remove/build-upload/watch; ACS + transaction Explorer; optional agent skill docs |
+| **M3 — CIP-0112 token tooling** | ✅ Shipped | Token workspace for LocalNet: party aliases, `token create`, `mint`, `transfer`, `burn`, `faucet`, `balance(s)`, `summary`, and `activity`, targeting the Token Standard V2 / CIP-0112 path via the `token-standard-v2` catalogue entry and `tokens-v2` profile |
+| **M4 — Ecosystem outreach** | 🚧 Evidence package in progress | Measurement stack is shipped: external smoke-cron kit, privacy-preserving telemetry collector/dashboard, GitHub release-download snapshots, Homebrew/APT install-surface signals, and reviewer kit. Acceptance still depends on documented external usage: 5 apps/projects, 250 cumulative installs/downloads, 2 workshops, and 1 case study/blog post |
 
 Follow progress in [open PRs](https://github.com/bitdynamics-ab/canton-devkit/pulls), or [open an issue](https://github.com/bitdynamics-ab/canton-devkit/issues/new) to weigh in on direction.
 
