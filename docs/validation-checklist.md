@@ -1,9 +1,9 @@
 # Zero-to-LocalNet validation checklist
 
-The M1 adoption bar is: **a new developer reaches a running LocalNet in
-under 10 minutes.** This page is the reviewer-facing checklist behind that
-metric. Run it yourself before a release, or hand it to an external
-reviewer (see [adoption/reviewer-kit.md](adoption/reviewer-kit.md)).
+The goal: **a new developer reaches a running LocalNet in under 10
+minutes.** Use this checklist to validate your installation after
+installing canton-devkit, or to sanity-check a release candidate on a
+fresh machine.
 
 ## Automated harness
 
@@ -22,9 +22,9 @@ Exit `0` = passed within budget · `1` = a step failed · `2` = over budget.
 The harness times: binary present → `doctor` → `up` (the long pole) →
 `status` healthy → teardown.
 
-## Manual reviewer checklist
+## Manual checklist
 
-A first-time reviewer with Docker installed should be able to tick every
+A first-time user with Docker installed should be able to tick every
 box without reading source:
 
 - [ ] **Install** — one command from [getting-started.md](getting-started.md)
@@ -42,9 +42,10 @@ box without reading source:
 - [ ] **No surprises** — no manual Docker commands, no editing config
       files, no hunting for ports.
 
-## What to record
+## Reporting results
 
-For each reviewer / run, capture:
+If a step fails or blows the budget, please open an issue. These details
+make a run reproducible:
 
 | Field | Example |
 |---|---|
@@ -55,5 +56,5 @@ For each reviewer / run, capture:
 | Result | pass / fail (step) |
 | Friction notes | "doctor memory hint was clear"; "didn't know which port was the UI" |
 
-Aggregate these in the adoption transparency update (M4). Three external
-reviewers passing the manual checklist satisfies the M1 adoption metric.
+Successful timings are welcome too — they help track how the
+zero-to-LocalNet experience holds up across platforms.

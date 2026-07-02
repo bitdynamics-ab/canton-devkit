@@ -293,7 +293,8 @@ pool rather than the ledger itself.
   and starting LocalNet with the observability overlay.
 - [docs/observability.md](observability.md) — audited metric families
   and the `canton_*` → `daml_*` substitution table.
-- [docs/telemetry.md](telemetry.md) — what metrics DevKit itself
-  emits (separate from Canton's metrics).
+- [docs/telemetry.md](telemetry.md) — the anonymous usage counters
+  the DevKit CLI itself records (separate from Canton's Prometheus
+  metrics).
 - [docs/troubleshooting.md](troubleshooting.md) — common Grafana /
   Prometheus startup issues.

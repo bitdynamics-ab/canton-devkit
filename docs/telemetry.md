@@ -1,12 +1,12 @@
 # Telemetry
 
 canton-devkit records **anonymous, aggregate usage counters** — merged
-into a daily total with **no per-invocation rows** — to help the team see
-what's used and what breaks. The only identifier sent is a single
+into a daily total with **no per-invocation rows** — to help maintainers
+see what's used and what breaks. The only identifier sent is a single
 **anonymous random install token** (a UUID, not derived from any hardware
-detail) used purely so we can count *distinct* installs; it never tags an
-individual counter. See the full design at
-[docs/proposals/telemetry.md](proposals/telemetry.md).
+detail) used purely to count *distinct* installs; it never tags an
+individual counter. This page is the complete reference for what is
+collected, what is never collected, and how to inspect or disable it.
 
 Inspect exactly what's queued any time:
 
@@ -80,7 +80,7 @@ nothing else.
 One value is sent that *can* distinguish installs: a random **UUIDv4**
 minted on first upload and stored in your telemetry config. It exists for
 exactly one reason — so the collector can answer *"how many distinct
-installs?"* (the one adoption number pure counters can't give). What it is
+installs?"* (the one number pure counters can't give). What it is
 **not**:
 
 - **Not derived from your machine** — no hostname, MAC, serial, or
@@ -137,5 +137,4 @@ canton-devkit telemetry flush               # send all queued counters now (skip
 DPM_TELEMETRY_DEBUG=1 canton-devkit localnet status   # print the would-send JSON to stderr, send nothing
 ```
 
-See also: [proposals/telemetry.md](proposals/telemetry.md) (full design) ·
-[FAQ](faq.md) · [getting-started](getting-started.md).
+See also: [FAQ](faq.md) · [Getting started](getting-started.md).

@@ -1,30 +1,27 @@
 # Homebrew install
 
 `canton-devkit` ships a Homebrew formula for macOS (Apple Silicon) and
-Linux (x86_64). The formula and downloadable build artifacts live in the public
-[`bitdynamics-ab/homebrew-canton-devkit`](https://github.com/bitdynamics-ab/homebrew-canton-devkit)
-repository so users can download release artifacts without access to the
-private source repository.
+Linux (x86_64). The formula and downloadable build artifacts live in the
+dedicated tap repository
+[`bitdynamics-ab/homebrew-canton-devkit`](https://github.com/bitdynamics-ab/homebrew-canton-devkit),
+following the standard Homebrew tap layout.
 
-This private source repository does not keep a `Formula/` directory. Homebrew
+This source repository does not keep a `Formula/` directory. Homebrew
 distribution files are maintained in `homebrew-canton-devkit`; this repository only
 keeps the release helper script and docs that describe the process.
 
 ## Install (direct, no tap)
-
-After a public release is published and the formula is updated with real
-checksums:
 
 ```sh
 brew install --formula \
   https://raw.githubusercontent.com/bitdynamics-ab/homebrew-canton-devkit/main/Formula/canton-devkit.rb
 ```
 
-> Note: the formula's stable `url` + `sha256` start as placeholders
-> (`version "0.0.0"`, all-zero SHA) until the first release tag is cut;
-> the release workflow then rewrites them automatically (see below).
-> There is no public `--HEAD` install path because the source repository
-> is private.
+> Note: the formula's `url` + `sha256` are rewritten automatically by
+> the release workflow on every release tag (see below), so the direct
+> formula always points at the latest published release. There is no
+> `--HEAD` install path — the formula installs prebuilt release
+> artifacts only.
 
 ## Install (via tap)
 

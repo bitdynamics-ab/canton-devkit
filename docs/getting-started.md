@@ -144,9 +144,10 @@ sudo apt install canton-devkit=0.7.0
 ```
 
 The APT repo is currently unsigned and therefore uses `trusted=yes`;
-the release still publishes SHA-256 metadata, and package installation
-records a best-effort anonymous `apt` install-surface telemetry ping.
-Adding a signed repository key is a follow-up hardening step.
+the release still publishes SHA-256 metadata. A signed repository key
+is planned. Package installation records a best-effort anonymous `apt`
+install-surface telemetry ping — see [telemetry.md](./telemetry.md)
+for what is sent and how to opt out before installing.
 
 Direct `.deb` install also works:
 
@@ -222,7 +223,7 @@ canton-devkit localnet dar upload ./my-app.dar --instance demo
 
 # 6. Watch live contracts. The participant gRPC endpoint isn't
 #    host-published by default, so pass --endpoint host:port
-#    (auto-discovery from --name is a pending follow-up). Find the
+#    (auto-discovery from --name is not yet supported). Find the
 #    port under "participant_ledger_app-user" in `status` output.
 canton-devkit localnet contracts watch --name demo --endpoint localhost:<ledger-port>
 

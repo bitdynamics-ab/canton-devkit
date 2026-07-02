@@ -18,9 +18,9 @@ cp .env.example .env          # set POSTGRES_PASSWORD
 docker compose up -d --build
 ```
 
-> **Deploying for real** — local testing vs production / mainnet release,
-> TLS, secrets, backups, and baking the endpoint into release binaries:
-> see **[DEPLOY.md](DEPLOY.md)**.
+> **Deploying for real** — local testing vs production, TLS, secrets,
+> backups, and baking the endpoint into release binaries: see
+> **[DEPLOY.md](DEPLOY.md)**.
 
 This starts:
 
@@ -36,7 +36,7 @@ builds via `-ldflags`):
 ```bash
 # Local/dev stack:
 export CANTON_DEVKIT_TELEMETRY_ENDPOINT=http://<this-host>:8080/v1/counters
-# Our deployed instance (production):
+# Hosted collector used by official release builds:
 # export CANTON_DEVKIT_TELEMETRY_ENDPOINT=https://canton-devkit-telemetry.bitdynamics.me/v1/counters
 ```
 
@@ -52,18 +52,19 @@ MB_USER='you@example.com' MB_PASS='...' DB_PASS="$POSTGRES_PASSWORD" python3 set
 
 [`setup-metabase.py`](setup-metabase.py) is idempotent (re-runs update in
 place) and stdlib-only. It connects the `telemetry` database, creates a
-**canton-devkit telemetry** collection, and assembles a **milestone-
-grouped** `canton-devkit usage` dashboard — M1/M2/M3/M4 sections, each
-chart tagged by source (`[telemetry]` / `[GitHub]` / `[qualitative]`) so
-it doubles as the adoption-transparency artifact:
+**canton-devkit telemetry** collection, and assembles a `canton-devkit
+usage` dashboard grouped into topic sections, each chart tagged by source
+(`[telemetry]` / `[GitHub]` / `[qualitative]`):
 
-- **M1** — commands/day, LocalNet start ok-vs-fail, platform split (incl.
-  Windows), top commands
-- **M2** — Web UI features used, CI-vs-interactive, AI-agent usage
-- **M3** — token actions (the CIP-0112 create → mint → transfer flow)
-- **M4** — cumulative downloads (toward the 250 floor), stars/forks, and
-  the **`adoption_evidence`** table — the named external teams/projects you
-  log by hand (the leg neither telemetry nor GitHub can provide)
+- **LocalNet lifecycle** — commands/day, LocalNet start ok-vs-fail,
+  platform split (incl. Windows), top commands
+- **Web UI & tooling** — Web UI features used, CI-vs-interactive,
+  AI-agent usage
+- **Token flows** — token actions (the CIP-0112 create → mint → transfer
+  flow)
+- **Adoption** — cumulative downloads, stars/forks, and the
+  **`adoption_evidence`** table — externally reported usage you log by
+  hand (the one signal neither telemetry nor GitHub can provide)
 
 Works the same against a production Metabase by setting `MB_URL`.
 
@@ -72,13 +73,13 @@ manually and chart `counter_period` / the `v_command_usage` view.
 
 ## GitHub adoption signals (downloads, stars/forks)
 
-Telemetry is zero-PII, so it **can't count unique installs**. The
-install/visibility legs of the proposal's composite adoption measure come
-from GitHub instead. [`cmd/github-stats`](cmd/github-stats) snapshots
-release-asset download counts and repo stars/forks/watchers into the same
-Postgres (tables `github_release_downloads`, `github_repo_stats`, view
-`v_downloads_total`), so Metabase charts the cumulative-download trend
-toward the Milestone-4 floor and the visibility curve.
+Telemetry is zero-PII, so it **can't count unique installs**. Install and
+visibility signals come from GitHub instead.
+[`cmd/github-stats`](cmd/github-stats) snapshots release-asset download
+counts and repo stars/forks/watchers into the same Postgres (tables
+`github_release_downloads`, `github_repo_stats`, view
+`v_downloads_total`), so Metabase can chart the cumulative-download trend
+and the visibility curve.
 
 Run it daily (cron / GitHub Action — see
 [`deploy/github-stats.cron.yml`](deploy/github-stats.cron.yml)):
@@ -161,5 +162,7 @@ adds nothing. It never logs request bodies.
 go test ./...        # handler tests; no database required (fake store)
 ```
 
-End-to-end (collector → real Postgres) is exercised against a throwaway
-`postgres:16` container; see the PR description for the verified run.
+End-to-end coverage (collector → real Postgres) lives in
+[`aggregate_integration_test.go`](aggregate_integration_test.go); it is
+skipped unless `TEST_DATABASE_URL` points at a Postgres (e.g. a throwaway
+`postgres:16` container) with `schema.sql` applied.

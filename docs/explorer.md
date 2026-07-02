@@ -194,8 +194,8 @@ The **Contracts** view is live:
 The stream-status pill in the top bar and the table sub-header
 report the real connection state — `live`, `reconnecting`,
 `truncated` (the backend capped the stream; reconciliation takes
-over), or `idle`. The wording is honest: it tracks the stream, not
-a hard-coded label.
+over), or `idle`. The label tracks the actual stream state, not a
+hard-coded value.
 
 The **Transactions** and **Timeline** views are still snapshots —
 they call `UpdateService` for the most recent N updates. Re-apply
@@ -238,7 +238,7 @@ canton-devkit localnet tx replay \
   --party alice
 ```
 
-The `contracts ls --format json` output now includes the decoded
+The `contracts ls --format json` output includes the decoded
 contract `payload` (the same field the Web UI drawer shows), so a
 `jq` consumer can read field values, not just contract IDs.
 

@@ -1,8 +1,8 @@
 # Deploying the telemetry collector
 
-Two scenarios: **local testing** (your dev machine) and **production /
-mainnet release** (a host the released CLI fleet phones home to). Same
-compose stack, different hardening.
+Two scenarios: **local testing** (your dev machine) and **production**
+(a host the released CLI fleet reports to). Same compose stack,
+different hardening.
 
 The stack is three containers:
 
@@ -52,9 +52,9 @@ Tear down (and wipe data): `docker compose down -v`.
 
 ---
 
-## 2. Production / mainnet release
+## 2. Production
 
-### 2a. The production override + our hosted instance
+### 2a. The production override
 
 For any internet-facing deployment, run the base compose **with the
 production override**:
@@ -73,17 +73,13 @@ The override (`docker-compose.prod.yml`) hardens the dev stack:
 - Exposes the collector on `127.0.0.1:${COLLECTOR_PORT:-8090}` so it can sit
   beside other services on a shared host.
 
-> **Our hosted instance (`canton-devkit-telemetry.bitdynamics.me`).** The
-> nginx vhost, TLS/certbot scripts, the `.env`, and the deployment runbook for
-> the instance we operate do **not** live in this repo — they live in the
-> **`canton-infra`** repo under **`telemetry/`** (tracked as task 024). That
-> repo holds only the server/deploy glue; the collector code and compose
-> files stay here in `canton-devkit` as the single source of truth. The
-> server checks out both repos and runs this compose with `--env-file`
-> pointing at `canton-infra/telemetry/.env`. See `canton-infra/telemetry/README.md`.
+The collector code and compose files in this directory are the single
+source of truth; host-specific glue (reverse-proxy vhost, TLS scripts,
+the production `.env`) lives wherever you manage your own server config —
+run this compose with `--env-file` pointing at it.
 
-The rest of this section documents the generic self-host path (your own VM,
-your own proxy) for anyone running their own collector.
+The rest of this document describes the generic self-host path (your own
+VM, your own proxy) for anyone running their own collector.
 
 ### 2a-bis. Where to host
 
@@ -213,11 +209,10 @@ INGEST_TOKEN=$(openssl rand -hex 24)     # optional; see note below
 ```
 
 `INGEST_TOKEN` makes the collector require `X-Telemetry-Token`. The CLI
-doesn't send that header yet, so for the first rollout leave it **empty**
-and rely on: (a) HTTPS, (b) the endpoint being zero-PII anyway. If you
-later want authenticated ingest, that's a small CLI follow-up (add a
-`CANTON_DEVKIT_TELEMETRY_TOKEN` env → header); the collector side is
-already done.
+does not currently send that header, so leave it **empty** and rely on:
+(a) HTTPS, (b) the endpoint being zero-PII anyway. The collector side of
+authenticated ingest is already implemented; enabling it would require a
+CLI change to send the header.
 
 ### 2d. Bake the endpoint into release binaries
 
@@ -230,7 +225,7 @@ with:
 ```
 
 where `TELEMETRY_ENDPOINT` comes from the repo variable `vars.TELEMETRY_ENDPOINT`.
-So to turn on telemetry for the released ("mainnet") fleet:
+So to turn on telemetry for the binaries you release:
 
 1. **Settings → Secrets and variables → Actions → Variables → New
    repository variable**
@@ -238,17 +233,17 @@ So to turn on telemetry for the released ("mainnet") fleet:
    - Value: the HTTPS `/v1/counters` URL of the collector.
 2. Cut a release tag. The published binaries now POST there by default.
 
-> **Current state:** the variable is **set** to our deployed instance,
-> `https://canton-devkit-telemetry.bitdynamics.me/v1/counters` (the collector
-> running on the TestNet host — see `canton-infra` task 024). The next stable
-> release tag will bake this in; binaries cut before that still ship "dark".
+> In the canonical `canton-devkit` repository this variable is set to the
+> project's hosted collector,
+> `https://canton-devkit-telemetry.bitdynamics.me/v1/counters`, so official
+> release binaries report there by default.
 
 Leave the variable **unset** and binaries ship "dark" (counters spool
 locally, nothing sent). Users can always override or disable at runtime:
 `CANTON_DEVKIT_TELEMETRY_ENDPOINT=...`, `dpm telemetry off`,
 `DPM_TELEMETRY=off`, or `DO_NOT_TRACK=1`.
 
-### 2e. Backups (your "export when I need", automated)
+### 2e. Backups (automated export)
 
 The data lives in the `pgdata` Docker volume. Nightly logical backup:
 
@@ -273,13 +268,14 @@ Restore: `gunzip -c backup.sql.gz | docker compose exec -T postgres psql -U post
 
 The pipeline is zero-PII by construction (allow-listed counter names,
 coarse period buckets, integers — no IDs, IPs are not stored, bodies are
-never logged) and **opt-out** with a first-run notice. For a public
-release, link a short privacy note from the docs stating what's collected
-and how to opt out (`dpm telemetry off` / `DO_NOT_TRACK=1`).
+never logged) and **opt-out** with a first-run notice. If you distribute
+binaries that report to your collector, link a short privacy note from
+your docs stating what's collected and how to opt out
+(`dpm telemetry off` / `DO_NOT_TRACK=1`).
 
 ---
 
-## Mainnet release checklist
+## Production release checklist
 
 - [ ] VM provisioned; Docker + compose installed
 - [ ] `.env` with strong `POSTGRES_PASSWORD`
@@ -289,7 +285,6 @@ and how to opt out (`dpm telemetry off` / `DO_NOT_TRACK=1`).
 - [ ] Smoke: POST a sample payload, confirm a row in `counter_period`
 - [ ] Metabase admin created; `telemetry` DB added; a starter dashboard saved
 - [ ] Nightly `pg_dump` cron → off-host storage
-- [x] Repo variable `TELEMETRY_ENDPOINT` set to the HTTPS `/v1/counters` URL
-      (`https://canton-devkit-telemetry.bitdynamics.me/v1/counters`)
+- [ ] Repo variable `TELEMETRY_ENDPOINT` set to the HTTPS `/v1/counters` URL
 - [ ] Cut a release tag; download a binary; confirm a counter lands after a day’s use
 - [ ] Privacy note published; opt-out verified (`dpm telemetry off`)

@@ -1,6 +1,6 @@
-# Agent Guidelines for canton-devkit
+# Contributing to canton-devkit
 
-This file provides guidelines for AI agents contributing to canton-devkit.
+Thanks for your interest in contributing! This document describes the conventions the project follows and what we look for in a pull request.
 
 ## Project Overview
 
@@ -10,11 +10,24 @@ canton-devkit is a CLI tool for managing Canton LocalNet developer environments.
 - **CLI Framework:** Cobra
 - **Module path:** `github.com/bitdynamics-ab/canton-devkit`
 
+## Getting Started
+
+```sh
+git clone https://github.com/bitdynamics-ab/canton-devkit.git
+cd canton-devkit
+make build          # → ./bin/canton-devkit
+make test           # run Go tests
+make lint           # golangci-lint
+make frontend       # build the Web UI bundle (optional)
+```
+
+For anything non-trivial, please [open an issue](https://github.com/bitdynamics-ab/canton-devkit/issues) first to discuss the change.
+
 ## Code Change Rules
 
-### CLI ↔ Web UI parity (load-bearing)
+### CLI ↔ Web UI parity
 
-**Any user-facing feature must land on BOTH the CLI and the Web UI surface when it applies to both.** Single-surface features are a long-term debt: an operator who learns the feature in one place can't find it in the other, and the surfaces drift in subtle ways (different validation, different error shapes, different timeouts).
+**Any user-facing feature must land on BOTH the CLI and the Web UI surface when it applies to both.** This is a core project convention. Single-surface features are a long-term debt: an operator who learns the feature in one place can't find it in the other, and the surfaces drift in subtle ways (different validation, different error shapes, different timeouts).
 
 When adding or changing a feature, ask:
 
@@ -31,9 +44,9 @@ When the work spans both:
 - **Mirror the verbs.** If the UI gets `POST /api/instances/{name}/containers/{c}/restart`, the CLI should get `dpm localnet container restart <inst> <c>`. The CLI name is a wrapper around the same handler logic; both pass through the same shared function.
 - **Mirror the guards.** If the Web UI's pre-flight gate refuses to start a Splice 0.6.4 instance on a 4 GiB host, `dpm localnet up --version 0.6.4` must refuse it for the same reason. Don't let one surface be lenient where the other is strict.
 
-**When you can't reach parity in the same PR**, file a follow-up ticket and add a `// TODO(#issue): CLI parity — <description>` comment at the divergence point so reviewers can see it. Never close out a feature as "done" while one surface is silently missing it.
+**When you can't reach parity in the same PR**, file a follow-up issue and add a `// TODO(#issue): CLI parity — <description>` comment at the divergence point so reviewers can see it. Never close out a feature as "done" while one surface is silently missing it.
 
-### Docker Compose teardown must be `-p`-only (load-bearing)
+### Docker Compose teardown must be `-p`-only
 
 **Teardown verbs (`docker compose down` / `stop` without an explicit service argument) MUST tear down by Docker project label — `-p <project>` — and MUST NOT pass `-f` compose files, `--env-file`, or `--profile`.**
 
@@ -44,29 +57,6 @@ Rules:
 - **Teardown (`down`/`clean`/Web-UI Stop):** use the `-p`-only path (`ComposeRunner.Stop` / `ForceStop`). Do not route teardown through `composeBase()` (which appends `-f`/`--env-file`/`--profile`). The `TestStopTeardownIsProjectLabelOnly` test pins this — do not add `-f` back.
 - **Service-model subcommands (`restart`/`pause`/`unpause`/`ps`):** these genuinely need the `-f` model, so they MUST replay the enabled profile set via `composeProfiles(state)` (persisted as `state.Profiles` at `up` time, with an adapter fallback for pre-fix instances). Omitting `--profile` here targets zero services.
 - **Explicitly-targeted single-service actions** (e.g. `docker compose -p <project> stop <service>`): exempt — explicitly naming a service bypasses profile filtering per the compose docs.
-
-### Proposal deviation tracking (load-bearing)
-
-**Any PR that introduces or changes a command name, flag name, alias, default, or user-facing behaviour relative to `docs/original-devkit-proposal.md` MUST add or update an entry in `docs/changes-from-proposal.md` in the same PR.**
-
-The file exists so the committee, reviewers, and future contributors can see exactly where the shipped implementation differs from what was proposed — and why. Letting it go stale defeats the purpose.
-
-What triggers an update:
-
-- A new command or subcommand is added that the proposal did not name.
-- A command or flag is renamed from the proposal's wording.
-- A flag's semantics or default changes relative to the proposal's description.
-- A new alias is introduced.
-- A behaviour described in the proposal is intentionally not implemented, or is deferred with a `// TODO` comment.
-- A behaviour not mentioned in the proposal is added that a user would notice (e.g. a confirmation prompt, a new opt-out mechanism, a different connection model).
-
-What does **not** trigger an update:
-
-- Internal refactors with no user-visible effect.
-- Bug fixes that bring behaviour in line with what the proposal described.
-- Docs-only changes.
-
-The instruction lives in `AGENTS.md` (not a `.claude/skills/` skill) because it must fire on every contributor session, not only when an agent judges a "proposal-tracking" task is active.
 
 ### Testing Requirements
 
@@ -129,13 +119,4 @@ Before submitting:
 3. No test coverage regression (check with `go tool cover`)
 4. Relevant documentation added/updated
 5. PR title is clear and understandable
-6. **CLI ↔ Web UI parity:** if the change touches a user-facing feature, both surfaces are updated (or a follow-up ticket is filed with a `TODO(#issue): CLI parity` / `TODO(#issue): UI parity` comment at the divergence point). See "CLI ↔ Web UI parity" rule above.
-7. **Proposal deviation tracking:** if the change introduces or alters command syntax, flags, aliases, defaults, or user-facing behaviour relative to `docs/original-devkit-proposal.md`, `docs/changes-from-proposal.md` is updated in this PR. See "Proposal deviation tracking" rule above.
-
-## Temporary Files & Folders
-
-When you need to create temporary files or directories, create them inside the **current working directory** or the **repository/worktree root** — not in `/tmp` or other system-level directories. This keeps operations within the workspace and avoids triggering permission approval prompts.
-
-- Use relative paths like `./tmp/`, `./.tmp/`, or a descriptive name in the project root.
-- Clean up temporary files and directories when they are no longer needed.
-- **Exception**: Using `/tmp` is allowed only when it is the only viable option — e.g., sharing data with another program or user that expects `/tmp`, or inspecting output written there by external tools (like tmux debug output). Exhaust in-project alternatives first.
+6. **CLI ↔ Web UI parity:** if the change touches a user-facing feature, both surfaces are updated (or a follow-up issue is filed with a `TODO(#issue): CLI parity` / `TODO(#issue): UI parity` comment at the divergence point). See "CLI ↔ Web UI parity" rule above.
