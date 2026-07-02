@@ -45,7 +45,6 @@ export default defineConfig({
 						{ slug: 'reference/telemetry' },
 						{ slug: 'reference/limitations' },
 						{ slug: 'reference/troubleshooting' },
-						{ slug: 'reference/validation-checklist' },
 					],
 				},
 				{
