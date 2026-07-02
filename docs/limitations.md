@@ -18,26 +18,6 @@ resolved.
   must be torn down with that older binary and re-created under a
   DNS-label name.
 
-## Concurrency / locking
-
-- **(resolved)** Registry locking is now a real cross-process lock on
-  every platform. On Windows both the fail-fast per-instance lock and
-  the blocking index read-modify-write lock go through
-  `windows.LockFileEx` (`internal/registry/lock_windows.go`,
-  `internal/registry/index_lock_windows.go`); Linux/macOS use
-  `syscall.Flock`. The OS releases the lock when the handle closes or
-  the process exits, so there is no stale lock file to recover.
-
-## Splice version pinning
-
-- **(resolved)** The catalogue pins (a) the git commit SHA (immutable,
-  content-addressable — `internal/splice/versions.json`'s `commit`
-  field) and (b) the ContentSHA of the extracted
-  `cluster/compose/localnet/` subtree (`content_sha` field). The hash
-  covers the extracted tree, not the gzip envelope, so a gzip-level
-  rewrite by GitHub (compression-level change, mtime drift) has no
-  effect. See [versions.md](./versions.md).
-
 ## Container image pinning
 
 - **Splice container images are pulled by mutable ghcr tags, not
