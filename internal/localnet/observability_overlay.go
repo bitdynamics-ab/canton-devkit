@@ -1,6 +1,7 @@
 package localnet
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/fs"
@@ -137,7 +138,7 @@ func MaterializeObservabilityOverlay(dataDir, projectDir string, warnw io.Writer
 func writePreservingEdits(dest string, data []byte, warnw io.Writer) error {
 	existing, rerr := os.ReadFile(dest)
 	switch {
-	case rerr == nil && bytesEqual(existing, data):
+	case rerr == nil && bytes.Equal(existing, data):
 		// Already the canonical content — nothing to do.
 		return nil
 	case rerr == nil:
@@ -178,21 +179,6 @@ func rewriteObservabilityMounts(composeFile, root string) error {
 	return nil
 }
 
-// bytesEqual is a tiny shim so we don't have to import bytes for
-// one call. Equivalent to bytes.Equal but lets us keep the import
-// list focused on filesystem APIs.
-func bytesEqual(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // ObservabilityProfileName is the legacy umbrella docker compose
 // profile that activates BOTH Prometheus and Grafana together. Kept
 // for backward compatibility (existing scripts, docs, registry
@@ -218,8 +204,7 @@ const GrafanaProfileName = "grafana"
 // single source of truth both surfaces validate against: the CLI's
 // RunUp (via ValidateProfiles) and the Web UI create handler's
 // allowlist. Keeping the list here — beside the profile-name
-// constants — stops the two surfaces from drifting (AGENTS.md
-// "mirror the guards").
+// constants — stops the two surfaces from drifting.
 func KnownProfiles() []string {
 	return []string{
 		ObservabilityProfileName,

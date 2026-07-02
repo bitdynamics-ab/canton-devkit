@@ -207,13 +207,12 @@ func TestCreate_DuplicateNameReturns409(t *testing.T) {
 	waitJobsDrain(t, time.Second)
 }
 
-// TestCreate_UncuratedRunsPreflightGate is the UI-parity
-// regression: an uncurated tag with allow_uncurated must STILL pass
-// through the synchronous preflight gate (with the Major-aware memory
-// floor) before the 202 — previously the uncurated path skipped the
-// gate entirely and let the UI accept a host RunUp would then refuse.
-// We stub resolveForGate so the test stays offline, and make the
-// preflight report fail; the handler must surface 422, not 202.
+// TestCreate_UncuratedRunsPreflightGate: an uncurated tag with
+// allow_uncurated must STILL pass through the synchronous preflight
+// gate (with the Major-aware memory floor) before the 202 —
+// otherwise the UI would accept a host RunUp then refuses. We stub
+// resolveForGate so the test stays offline, and make the preflight
+// report fail; the handler must surface 422, not 202.
 func TestCreate_UncuratedRunsPreflightGate(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	jobsReset()

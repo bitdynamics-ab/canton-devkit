@@ -8,15 +8,12 @@ import {
 } from "../api";
 import { W, wMono } from "../tokens";
 
-// TxReplayDrawer — the per-party visibility projection.
-//
-// The Web UI counterpart of `dpm localnet tx replay --id <id>`. It
-// fetches one transaction with the LEDGER_EFFECTS shape (exercised
-// choices, not just the ACS delta) projected through a party set, and
-// renders the event tree. The "Project as" party selector lets a user
-// ask "what did party P see in this transaction?" — querying the same
-// id as different parties returns different event sets, which is the
-// whole point of the projection.
+// TxReplayDrawer — the Web UI counterpart of `dpm localnet tx replay
+// --id <id>`. Fetches one transaction with the LEDGER_EFFECTS shape
+// (exercised choices, not just the ACS delta) projected through a
+// party set and renders the event tree. The party selector answers
+// "what did party P see in this transaction?" — the same id queried
+// as different parties returns different event sets.
 
 const EVENT_COLOR: Record<TxReplayEvent["kind"], string> = {
   created: "#62E2A0",

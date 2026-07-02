@@ -88,11 +88,11 @@ func RunRestart(ctx context.Context, out io.Writer, errw io.Writer, opts *Restar
 	}
 
 	// Validate requested services against the live compose project
-	// (review fix, mirrors internal/cli/localnet/container.go's
-	// resolveContainerName). A typo'd `--service cantn` should get a
-	// friendly "known services: [...]" instead of a raw compose error.
-	// Best-effort: if the docker probe fails (daemon hiccup), fall
-	// through and let compose surface the error rather than blocking.
+	// (mirrors internal/cli/localnet/container.go's resolveContainerName):
+	// a typo'd `--service cantn` gets a friendly "known services: [...]"
+	// instead of a raw compose error. Best-effort: if the docker probe
+	// fails (daemon hiccup), fall through and let compose surface the
+	// error rather than blocking.
 	if len(opts.Services) > 0 {
 		if known, perr := listProjectContainers(ctx, state.ComposeProject); perr == nil && len(known) > 0 {
 			valid := make(map[string]bool, len(known))

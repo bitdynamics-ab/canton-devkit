@@ -1,8 +1,6 @@
 // Package dar wires the `canton-devkit localnet dar` Cobra subtree.
-// Subcommands here are thin adapters over internal/dar (which does the
-// real parsing). Keeping the wiring separate from the parser means the
-// parser is independently testable and reusable from the other dar
-// commands still to come .
+// Subcommands are thin adapters over internal/dar (which does the real
+// parsing), keeping the parser independently testable.
 package dar
 
 import (
@@ -10,14 +8,8 @@ import (
 )
 
 // Build returns the `dar` Cobra command, registered by
-// internal/cli/localnet/localnet.go.
-//
-// Subcommands currently implemented:
-// - `info` — inspect a local .dar
-// - `diff` — compare two local .dars
-//
-// Subcommands still to come get added here as their
-// PRs land. Each is its own file in this package.
+// internal/cli/localnet/localnet.go. Each subcommand lives in its own
+// file in this package.
 func Build() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dar",

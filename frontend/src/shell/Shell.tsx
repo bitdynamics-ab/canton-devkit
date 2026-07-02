@@ -6,21 +6,11 @@ import { type InstanceSelection, useInstanceSelection } from "./useInstanceSelec
 import { CommandPalette } from "./CommandPalette";
 import { NAV, linkTo } from "./routes";
 
-// Shell — sidebar + topbar layout from docs/design/mockups/webui-shell.jsx
-// (AppShell + TopBar). Children render in the main content area.
-//
-// Routes are hard-listed (matching App.tsx) rather than scraped
-// from a config because the sidebar order is a design decision,
-// not an alphabetical accident. New screens add one row here +
-// one route in App.tsx — the intentional friction keeps the
-// sidebar curated.
-//
-// LogoLockup is inlined as an inline SVG that mirrors the
-// webui-shell.jsx::LogoLockup component (chip+candle mark +
-// "BITDYNAMICS" wordmark). Same source as terminal.jsx +
-// docs/design/mockups/assets/bitdynamics-lockup.svg; we draw it
-// inline here so the shell renders correctly even before the
-// public/assets/ files are served.
+// Shell — sidebar + topbar layout; children render in the main
+// content area. The sidebar order comes from the shared NAV table
+// (./routes), a design decision rather than an alphabetical accident.
+// The logo is drawn as an inline SVG so the shell renders correctly
+// even before public/assets/ files are served.
 
 interface ShellProps {
   children: React.ReactNode;
@@ -68,22 +58,15 @@ export function Shell({ children }: ShellProps) {
 }
 
 function SkipLink() {
-  // First focusable element on the page. Tab once from a fresh
-  // load → a teal pill drops in from the top-left; Enter jumps
-  // keyboard focus past the sidebar into <main>. The link is
-  // visually hidden (positioned off-screen) until focused.
-  //
-  // Anchor (not button) so the URL hash updates — a screen reader
-  // user navigating with VO/JAWS announces "main, region" after
-  // activation, the standard pattern.
+  // First focusable element on the page; visually hidden until
+  // focused. Anchor (not button) so screen readers announce
+  // "main, region" after activation — the standard pattern.
   return (
     <a
       href="#main-content"
       className="skip-link"
       onClick={(e) => {
-        // Hash-jump alone scrolls but doesn't move keyboard
-        // focus. Explicit .focus() ensures the next Tab continues
-        // from inside the main region.
+        // Hash-jump alone scrolls but doesn't move keyboard focus.
         e.preventDefault();
         const main = document.getElementById("main-content");
         if (main) {
@@ -358,10 +341,9 @@ function HealthPill({ conn }: { conn: ConnectionState }) {
 }
 
 function Sidebar() {
-  // Thread the currently-selected instance into per-instance routes so
-  // sidebar clicks don't drop the selection. Pathname-only
-  // (isActive) is unchanged because NavLink matches on pathname. NAV +
-  // linkTo live in ./routes so the ⌘K palette shares the same table.
+  // Thread the currently-selected instance into per-instance routes
+  // so sidebar clicks don't drop the selection. NAV + linkTo live in
+  // ./routes so the ⌘K palette shares the same table.
   const [params] = useSearchParams();
   const instance = params.get("instance");
   return (

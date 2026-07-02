@@ -196,23 +196,12 @@ const (
 	SourceRegistry HoldingSource = "registry"
 )
 
-// RunMint, RunTransfer, RunBurn, RunAccept currently surface
-// ErrNeedsV2LocalNet — the ACS + ledger-submission wiring against
-// the live V2 splice-test-token-v2 templates lands incrementally.
-// Both the CLI and the HTTP handler call into here so the
-// "not yet wired" surface is consistent across both surfaces, and
-// the upgrade to a working submission is a one-package change.
-//
-// The functions still validate inputs + resolve symbols via the
-// registry so unit-level wiring tests cover the flow. Callers that
-// only want validation can pass a nil writer.
-
-// RunMint always returns ErrUnsupportedOnInstrument for the V2 alpha:
-// Amulet (the only seeded instrument) doesn't implement BurnMintFactoryV1
-// and there's no generic V2 mint interface. The asset-specific
-// TokenRules_OfferMint choice on splice-test-token-v2 is a future
-// follow-up gated on the test-token DAR being uploaded + an instrument
-// being created via the wizard.
+// RunMint mints supply of an on-ledger test-token instrument via its
+// asset-specific TokenRules_OfferMint choice (requires Endpoint and a
+// TokenRef with status "on-ledger"). Everything else — Amulet,
+// registry-only instruments, or a missing Endpoint — returns
+// ErrUnsupportedOnInstrument: Amulet doesn't implement
+// BurnMintFactoryV1 and there's no generic V2 mint interface.
 func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	if err := requireFields("mint", opts.Instance, opts.Instrument, opts.To, opts.Amount); err != nil {
 		return err
@@ -224,10 +213,7 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	if err := validateAmount("mint", opts.Amount); err != nil {
 		return err
 	}
-	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
-	if err != nil {
-		ref = registry.TokenRef{InstrumentID: opts.Instrument}
-	}
+	ref := instrumentRefOrRaw(opts.Instance, opts.Instrument)
 	// Live mint path: only for instruments created on-ledger via the
 	// test-token (status "on-ledger"). Amulet and registry-only
 	// instruments have no asset-specific mint, so they keep returning
@@ -281,10 +267,7 @@ func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error
 	// Amulet factory (admin = DSO), which rejects an issuer-administered
 	// instrument with an admin-mismatch assertion. Mirrors the
 	// ref.Status=="on-ledger" branch RunMint / RunBurn already take.
-	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
-	if err != nil {
-		ref = registry.TokenRef{InstrumentID: opts.Instrument}
-	}
+	ref := instrumentRefOrRaw(opts.Instance, opts.Instrument)
 	if ref.Status == "on-ledger" {
 		instructionID, err := runTransferOnLedgerFn(ctx, out, opts, ref)
 		if err != nil {
@@ -389,10 +372,7 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 	if err := validateAmount("burn", opts.Amount); err != nil {
 		return err
 	}
-	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
-	if err != nil {
-		ref = registry.TokenRef{InstrumentID: opts.Instrument}
-	}
+	ref := instrumentRefOrRaw(opts.Instance, opts.Instrument)
 	if opts.Endpoint != "" && ref.Status == "on-ledger" {
 		if opts.Role == "" {
 			opts.Role = "app-user"
@@ -405,32 +385,21 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 	return ErrUnsupportedOnInstrument
 }
 
-// RunBalance is the one action that's fully functional today: it
-// returns the recorded TokenRefs from registry.State.Tokens as
-// pseudo-balances (Amount = InitialSupply when --party matches the
-// issuer; otherwise zero). Callers that want the live ACS-derived
-// balance need a running V2 LocalNet + the future ledger ACS query —
-// that's the follow-up.
-//
-// When that follow-up lands, the ACS query uses HoldingInterfaceV2
-// (see v2_surface.go for the qualified interface id and why V2 rather
-// than V1) and sums the HoldingViewV2.amount for every contract whose
-// view.account.owner matches --party. The synthetic issuer-only case
-// goes away.
-//
-// Returning *something* here makes the Web UI's holdings table render
-// right away on whatever instance the user is browsing, and gives a
-// deterministic surface for tests.
+// RunBalance returns per-(party, instrument) balances. When a live
+// participant endpoint is available (explicit or auto-discovered from
+// the registry) it sums the ACS holdings; otherwise it falls back to
+// registry-derived pseudo-balances (Amount = InitialSupply when
+// --party matches the issuer, zero otherwise), tagged SourceRegistry
+// so no caller can present them as on-ledger truth. The bool result
+// reports whether the live scan was truncated at maxHoldingsScan.
 func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]BalanceRow, bool, error) {
 	if opts.Instance == "" {
 		return nil, false, errors.New("instance is required")
 	}
 	opts.Party = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Party)
 	// Auto-discover the participant endpoint from the registry when the
-	// caller didn't pass one explicitly. This gives both surfaces the
-	// live ACS by default — the CLI no longer needs a manual
-	// `--endpoint host:port`, matching the Web UI which already resolves
-	// the port from state.Ports. An explicit Endpoint still wins.
+	// caller didn't pass one explicitly, so both surfaces get the live
+	// ACS by default. An explicit Endpoint still wins.
 	if opts.Endpoint == "" {
 		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
 	}
@@ -496,12 +465,10 @@ func BalanceSource(opts BalanceOptions) HoldingSource {
 // otherwise the row just carries the raw `(admin, id)` pair so an
 // unknown-instrument holding still renders.
 //
-// Numeric amounts are summed as decimal strings via summary
-// concatenation? No — we add them. The participant emits each holding
-// as a Daml Decimal (textual, up to 10 fractional digits in V1, 38 in
-// V2). Adding them in Go without losing precision means using a big-
-// decimal-style approach: split on '.', align scale, add as big.Ints.
-// The helper addDecimal does that.
+// The participant emits each holding amount as a Daml Decimal
+// (textual, up to 10 fractional digits in V1, 38 in V2); addDecimal
+// sums them without precision loss by aligning scales and adding as
+// big.Ints.
 func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, bool, error) {
 	// Cancelling on every return path tears down the gRPC stream
 	// pump goroutine so an early break (cap, decode error) doesn't
@@ -692,6 +659,18 @@ func splitDecimal(s string) (intPart, fracPart string) {
 	return s, ""
 }
 
+// instrumentRefOrRaw resolves the user's --instrument string to a
+// recorded TokenRef, falling back to a bare ref carrying the string as
+// the InstrumentID — Amulet and other unregistered instruments are
+// on-chain without a `token create` record.
+func instrumentRefOrRaw(instance, ident string) registry.TokenRef {
+	ref, err := resolveInstrument(instance, ident)
+	if err != nil {
+		return registry.TokenRef{InstrumentID: ident}
+	}
+	return ref
+}
+
 // resolveInstrument turns the user's --instrument string into a full
 // TokenRef. The string MAY be the symbol (the common path, looked up
 // against state.Tokens) OR the raw InstrumentID (the escape hatch
@@ -731,11 +710,10 @@ func requireFields(verb string, fields ...string) error {
 	return nil
 }
 
-// validateAmount rejects an --amount that isn't a positive Daml decimal
-// BEFORE the action stubs out. Without it, "abc" or "1.2e5" fell through
-// to ErrNeedsV2LocalNet, mislabelling a plain input error as "this needs
-// a V2 LocalNet". looksLikeDecimal pins the same digits-and-one-dot
-// grammar the create wizard enforces.
+// validateAmount rejects an --amount that isn't a positive Daml
+// decimal before any action logic runs, so a plain input error ("abc",
+// "1.2e5") is never mislabelled as ErrNeedsV2LocalNet. looksLikeDecimal
+// pins the same digits-and-one-dot grammar the create wizard enforces.
 func validateAmount(verb, amount string) error {
 	if !looksLikeDecimal(amount) {
 		return fmt.Errorf(
@@ -759,20 +737,14 @@ func isZeroDecimal(s string) bool {
 	return true
 }
 
-// validatePartyID + partyIDPattern live in token.go. The
-// mint/transfer/burn actions in this file reuse them.
-
-// emit writes a human-readable "going to run X with Y" line on the
-// caller's writer before the action returns ErrNeedsV2LocalNet, so
-// users see what would have happened. JSON-encoded for consistent
-// surface across CLI and HTTP.
+// emit writes a "<verb>: {json}" progress line on the caller's
+// writer. JSON-encoded for a consistent surface across CLI and HTTP;
+// the format reads naturally for both pre-submit ("transfer:") and
+// result ("burn complete:") verbs.
 func emit(out io.Writer, verb string, payload map[string]any) {
 	if out == nil {
 		return
 	}
-	// "<verb>: {json}" reads naturally for both pre-submit ("transfer:")
-	// and result ("burn complete:") verbs — the older "Planned %s" prefix
-	// mislabelled completions as "Planned mint complete".
 	_, _ = fmt.Fprintf(out, "%s: ", verb)
 	enc := json.NewEncoder(out)
 	_ = enc.Encode(payload) // includes trailing newline

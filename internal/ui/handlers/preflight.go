@@ -114,12 +114,11 @@ func toAPIReport(r *docker.Report, v splice.Version) types.PreflightReport {
 	report := localnet.PreflightReportFromDocker(r)
 	if !report.OK {
 		report.Summary = "host does not meet Splice " + v.Tag + " requirements"
-		// stamp the most-specific structured code from
-		// the same priority table RunUp uses, so the Web UI's
-		// PreflightPanel can render targeted remediation (Docker
-		// not running vs memory too low) instead of generic
-		// failure copy.
-		report.ErrorCode = preflightCodeFromReport(r)
+		// Stamp the most-specific structured code from the same
+		// priority table RunUp uses, so the Web UI's PreflightPanel
+		// can render targeted remediation (Docker not running vs
+		// memory too low) instead of generic failure copy.
+		report.ErrorCode = localnet.PreflightCodeFromReport(r)
 	} else if r.HasWarnings() {
 		report.Summary = "host meets minimums for Splice " + v.Tag + " but raise resources for headroom"
 	} else {
@@ -127,12 +126,3 @@ func toAPIReport(r *docker.Report, v splice.Version) types.PreflightReport {
 	}
 	return report
 }
-
-// preflightCodeFromReport is now a thin alias for the canonical
-// implementation in internal/localnet. Originally duplicated here
-// "to avoid an upward dep on internal/localnet from the handler
-// package" — but the handler package already imports
-// internal/localnet (e.g. for ValidateName), so the dedupe is
-// free. Sharing one function means SSE + HTTP can never disagree
-// on the code emitted for the same docker.Report. review.
-var preflightCodeFromReport = localnet.PreflightCodeFromReport

@@ -8,28 +8,21 @@ import (
 // installID returns this install's anonymous de-duplication token, minting
 // and persisting a fresh random one on first use.
 //
-// What it is: a random UUIDv4 stored in the telemetry config file. It is
-// the ONE thing in the system that lets the collector answer "how many
-// distinct installs" — the question a purely additive, zero-id counter
-// model cannot. It is sent alongside each counter upload; the collector
-// records only (token, active-date) in a separate table and never tags an
-// individual counter with it, so usage can never be traced back to a host.
+// The token is a random UUIDv4 stored in the telemetry config file — pure
+// CSPRNG output, not derived from any machine attribute (no hostname, MAC,
+// serial, or hardware fingerprint). It exists solely so the collector can
+// count distinct installs: the collector records only (token, active-date)
+// in a separate table and never tags an individual counter with it, so
+// usage can never be traced back to a host. Because it lives in the config
+// file, a fresh container, VM, or reinstall mints a new token — by design,
+// so each environment counts once. It identifies a config-file lifetime,
+// never a person or a device.
 //
-// What it is NOT: it is not derived from any machine attribute — no
-// hostname, MAC, serial, or hardware fingerprint feeds it. It is pure
-// CSPRNG output. Because it lives in the config file rather than the
-// hardware, a fresh container, a new VM, or a reinstall starts with no
-// config and mints a new token — by design, so each environment counts
-// once. It therefore identifies a config-file lifetime, never a person or
-// a device.
+// Gated to non-CI like RecordInstallOnce: ephemeral CI runners would mint
+// a new token per job and inflate the unique-install count.
 //
-// Gated to NON-CI on purpose, exactly like RecordInstallOnce: CI runners
-// are ephemeral, so every job would mint a new token and inflate the
-// unique-install count for what is really one pipeline. CI is already
-// captured truthfully by dpm/ci, so gating loses nothing.
-//
-// Returns "" when running in CI or if the CSPRNG is unavailable; callers
-// simply ship the upload without a token in that case.
+// Returns "" in CI or if the CSPRNG is unavailable; callers ship the
+// upload without a token in that case.
 func installID() string {
 	if detectCI() {
 		return ""

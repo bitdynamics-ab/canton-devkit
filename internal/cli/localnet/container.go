@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"time"
@@ -18,23 +19,13 @@ import (
 
 // buildContainer wires `dpm localnet container <verb>` — the CLI
 // mirror of the per-container HTTP endpoints under
-// /api/instances/{name}/containers/. Per AGENTS.md "CLI ↔ Web UI
-// parity": every per-container operation surfaced in the Web UI
-// must also have a CLI verb here, calling into the same shared
-// internal/localnet/containers package.
+// /api/instances/{name}/containers/ (CLI ↔ Web UI parity, see
+// CONTRIBUTING.md). Every verb calls into the same shared
+// internal/localnet/containers package as the HTTP handlers:
 //
-// Sub-verbs:
-//
-//	list     → list containers + state/health, mirror of
-//	           GET /api/instances/{name}/containers
-//	restart  → restart one container, mirror of
-//	           POST /api/instances/{name}/containers/{c}/restart
-//	logs     → tail one container's logs, mirror of
-//	           GET /api/instances/{name}/containers/{c}/logs
-//
-// Future `start`, `stop`, `pause`, `unpause` slot in naturally
-// under the same parent without polluting the top-level localnet
-// command space.
+//	list     → GET  /api/instances/{name}/containers
+//	restart  → POST /api/instances/{name}/containers/{c}/restart
+//	logs     → GET  /api/instances/{name}/containers/{c}/logs
 func buildContainer() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "container",
@@ -82,7 +73,7 @@ func buildContainerList() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := localnet_validateFormat(format, "text", "json"); err != nil {
+			if err := ValidateFormat(format, "text", "json"); err != nil {
 				return err
 			}
 			state, err := resolveInstance(args[0])
@@ -126,7 +117,7 @@ func buildContainerList() *cobra.Command {
 // row is prefixed with a coloured glyph reflecting health/state
 // — same convention as the Web UI's signalFor() function so a
 // user moving between surfaces reads the same signal at a glance.
-func renderContainerSection(out cobraWriter, instance, project string, infos []containers.Info) {
+func renderContainerSection(out io.Writer, instance, project string, infos []containers.Info) {
 	var body strings.Builder
 	for _, c := range infos {
 		body.WriteString(renderContainerRow(c))

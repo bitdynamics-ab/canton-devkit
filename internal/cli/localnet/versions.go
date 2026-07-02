@@ -3,27 +3,18 @@ package localnet
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	"github.com/spf13/cobra"
 )
 
-// buildVersions returns the `localnet versions` Cobra command. It lists
-// every Splice version the catalogue knows about plus every tag the
-// upstream repository currently exposes, with a status flag per row:
-//
-// - supported → DevKit catalogues it, upstream pin matches.
-// - drifted → DevKit catalogues it, upstream tag was force-
-// moved to a different commit. Security signal.
-// - available → upstream has it; DevKit doesn't catalogue it
-// yet. Run scripts/add-splice-version.sh to add.
-// - catalogued-only → DevKit catalogues it; upstream no longer has
-// it (tag was deleted). Investigate before
-// removing.
-//
-// Network is optional: if `--offline` is passed or the network call
-// fails, we render the catalogue alone and print a friendly note.
+// buildVersions returns the `localnet versions` Cobra command: the
+// curated Splice catalogue cross-referenced against upstream tags,
+// one status per row (see the Long help for the vocabulary). Network
+// is optional — with `--offline` or on lookup failure we render the
+// catalogue alone.
 func buildVersions() *cobra.Command {
 	var offline bool
 	var format string
@@ -49,7 +40,7 @@ Format flags: --format=text (default) or --format=json.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := localnet_validateFormat(format, "text", "json"); err != nil {
+			if err := ValidateFormat(format, "text", "json"); err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
@@ -75,7 +66,7 @@ Format flags: --format=text (default) or --format=json.`,
 	return cmd
 }
 
-func renderCatalogueOnly(out cobraWriter, format string) error {
+func renderCatalogueOnly(out io.Writer, format string) error {
 	rows := make([]splice.VersionStatus, 0, len(splice.SupportedVersions))
 	for tag, v := range splice.SupportedVersions {
 		rows = append(rows, splice.VersionStatus{
@@ -90,7 +81,7 @@ func renderCatalogueOnly(out cobraWriter, format string) error {
 	return renderVersions(out, rows, format)
 }
 
-func renderVersions(out cobraWriter, rows []splice.VersionStatus, format string) error {
+func renderVersions(out io.Writer, rows []splice.VersionStatus, format string) error {
 	if format == "json" {
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
@@ -139,25 +130,10 @@ func short(sha string) string {
 	return sha
 }
 
-// cobraWriter is io.Writer minus the dependency cycle when this file
-// hand-rolls its own writer. We accept anything that can write bytes.
-type cobraWriter interface {
-	Write(p []byte) (n int, err error)
-}
-
-// localnet_validateFormat is the legacy lowercase name kept for
-// callers in this package that landed before PR-B promoted
-// ValidateFormat to its exported form .
-// Delegates to the public ValidateFormat — single source of truth.
-func localnet_validateFormat(got string, allowed ...string) error {
-	return ValidateFormat(got, allowed...)
-}
-
-// ValidateFormat checks that got is one of allowed. Exported so
-// the dar subcommands (internal/cli/localnet/dar) can
-// share the same validation as the in-package versions/container/
-// refresh subcommands — keeps the error wording identical across
-// every CLI surface that takes a --format flag.
+// ValidateFormat checks that got is one of allowed. Exported so the
+// dar subcommands (internal/cli/localnet/dar) share the same
+// validation as the in-package subcommands — keeps the error wording
+// identical across every CLI surface that takes a --format flag.
 func ValidateFormat(got string, allowed ...string) error {
 	for _, a := range allowed {
 		if got == a {

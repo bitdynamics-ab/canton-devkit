@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestFeatureForPath pins the path→feature mapping for the M2 adoption
+// TestFeatureForPath pins the path→feature mapping for the adoption
 // signal: real screen endpoints map to their feature, infra endpoints map
 // to "" (recorded as nothing).
 func TestFeatureForPath(t *testing.T) {

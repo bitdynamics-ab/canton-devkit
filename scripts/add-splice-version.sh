@@ -35,8 +35,8 @@ if [[ ! -f "$versions_json" ]]; then
   exit 1
 fi
 
-# Pre-flight: refuse if the tag is already catalogued. Skipping this
-# would let the script silently overwrite an entry.
+# Pre-flight: refuse if the tag is already catalogued — the insert
+# below would silently append a duplicate entry.
 if python3 -c "import json,sys;[sys.exit(0) for v in json.load(open('$versions_json'))['versions'] if v['tag']=='$tag'];sys.exit(1)" 2>/dev/null; then
   echo "error: tag $tag is already in $versions_json. Remove the entry first if you want to update it." >&2
   exit 1

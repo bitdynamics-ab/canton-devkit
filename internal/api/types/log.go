@@ -2,8 +2,8 @@ package types
 
 import "time"
 
-// LogLine is one streamed line from `localnet logs` (P1-06).
-// Both the CLI's bubbletea TUI and the future Web UI logs panel
+// LogLine is one streamed line from `localnet logs`.
+// Both the CLI's bubbletea TUI and the Web UI logs panel
 // consume the same shape — the CLI prints it with term color tokens,
 // the Web UI renders it as a virtualized list row.
 //

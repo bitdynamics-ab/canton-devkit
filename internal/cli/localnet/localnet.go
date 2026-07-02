@@ -47,7 +47,7 @@ func Build() *cobra.Command {
 	// Web UI Agent Skills screen.
 	localnet.AddCommand(buildSkills())
 
-	// CLI ↔ Web UI parity (see AGENTS.md): every per-container
+	// CLI ↔ Web UI parity (see CONTRIBUTING.md): every per-container
 	// HTTP endpoint has a CLI mirror under `container <verb>`,
 	// and the on-demand reconciler runs via `refresh`.
 	localnet.AddCommand(buildContainer())
@@ -55,19 +55,12 @@ func Build() *cobra.Command {
 	localnet.AddCommand(buildMetrics())
 	localnet.AddCommand(buildObservability())
 
-	// contracts/tx CLI. Endpoint discovery (auto-resolving the
-	// participant gRPC port from registry state) is not yet done;
-	// callers pass --endpoint host:port for now.
 	localnet.AddCommand(buildContracts())
 	localnet.AddCommand(buildTx())
 
-	// DAR admin commands (upload/list/download/info/diff/
-	// remove/build-upload/watch/connect).
+	// DAR admin and Token Standard commands live in their own
+	// subpackages, each owning its command tree.
 	localnet.AddCommand(dar.Build())
-
-	// Token Standard V2 commands (create wizard +
-	// mint/transfer/burn/balance). Mirrors dar.Build()'s pattern —
-	// the token subpackage owns its own command tree.
 	localnet.AddCommand(token.Build())
 
 	return localnet

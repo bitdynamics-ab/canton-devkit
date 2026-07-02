@@ -144,12 +144,11 @@ func pendingPeriodFiles(cur string) []string {
 // anonymous install_id dedup token — never the internal Deferred flag.
 //
 // Collector-rollout safety: a collector predating install_id rejects the
-// unknown field with a 400 (it decodes with DisallowUnknownFields). To
-// avoid a fleet upgrade dropping COUNTERS (not just unique-install dedup),
-// a 400 on a token-bearing body triggers exactly ONE retry without the
-// token. The counts then land on the old collector; only the dedup signal
-// is lost until it's upgraded. Any other status (or a 400 on a body that
-// never had a token) is returned as-is.
+// unknown field with a 400 (DisallowUnknownFields), so a 400 on a
+// token-bearing body triggers exactly ONE retry without the token — the
+// counters still land, only the dedup signal is lost until the collector
+// upgrades. Any other status (or a 400 on a token-less body) is returned
+// as-is.
 func uploadPeriod(url string, agg *PeriodAggregate) error {
 	base := map[string]any{
 		"schema_version": SchemaVersion,

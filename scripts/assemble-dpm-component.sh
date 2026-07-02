@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Assemble per-platform DPM component directories for `dpm publish
-# component` (Milestone 1 — native DPM component packaging).
+# component`.
 #
 # A DPM component is an OCI artifact containing a binary + a component.yaml
 # manifest. For a multi-platform publish, each platform gets its own

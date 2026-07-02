@@ -17,14 +17,6 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 )
 
-// recordToMap decodes a Daml-LF Record into the JSON payload shape
-// `contracts ls --format json` emits. Delegates to the shared
-// ledger.RecordToMap so the CLI and Web UI decode payloads
-// identically.
-func recordToMap(r *lapiv2.Record) map[string]any {
-	return ledger.RecordToMap(r)
-}
-
 // contractsTxSchemaVersion is the wire-stable schema version for
 // the JSON output of `contracts ls`, `contracts watch`, `tx ls`,
 // `tx replay`. Bumped only on breaking shape changes (renames,
@@ -261,12 +253,9 @@ func buildTxLs() *cobra.Command {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "ledger end query failed:", err)
 				return localnet.AsExitError(localnet.ExitRuntimeFailure)
 			}
-			// --from is a real offset only when the user set it; the
-			// zero value is "no lower bound given" so we can pick the
-			// default window. This is why --from 0 (explicit) reads
-			// from genesis while an unset --from picks the recent
-			// window — the old code conflated the two and forced
-			// `--limit 0` to read from the start.
+			// --from is a real offset only when the user set it:
+			// an explicit --from 0 reads from genesis, while an
+			// unset --from picks the default recent window.
 			fromSet := cmd.Flags().Changed("from")
 			toSet := cmd.Flags().Changed("to")
 			begin, endIncl, err := resolveOffsetWindow(fromOff, toOff, fromSet, toSet, end.Offset)
@@ -527,25 +516,21 @@ func identString(id *lapiv2.Identifier) string {
 // scans when the user gives neither --from nor --to. It is
 // DECOUPLED from --limit on purpose: Canton offsets are
 // participant-global, so a filtered query (--party / --template)
-// matches only a sparse subset of the offsets in the window.
-// Scanning `--limit` offsets (the old behaviour) therefore returned
-// far fewer — often zero — matching rows even when matches existed
-// slightly older, with no indication anything was missed. A
-// generous fixed span makes the default actually find the recent
-// matching transactions; --limit then caps the rows we keep. The
-// span is bounded so we never rescan the whole ledger on a
-// long-lived LocalNet.
+// matches only a sparse subset of the offsets in the window — a
+// window sized by --limit would often return zero matches with no
+// indication anything was missed. A generous fixed span finds the
+// recent matches; --limit then caps the rows we keep. The span is
+// bounded so we never rescan the whole ledger on a long-lived
+// LocalNet.
 const defaultTxWindowSpan = 10_000
 
 // resolveOffsetWindow computes the (beginExclusive, endInclusive]
 // offset window for `tx ls`. --limit is deliberately NOT an input:
-// it is a row cap the renderer applies, not an offset count (the old
-// code conflated the two — see defaultTxWindowSpan).
+// it is a row cap the renderer applies, not an offset count.
 //
 // Precedence:
 //   - --to set  → that exact end; otherwise the current ledger end.
-//   - --from set → that exact begin (so `--from 0` reads from
-//     genesis — it is a real offset, no longer a "use limit" sentinel).
+//   - --from set → that exact begin (`--from 0` reads from genesis).
 //   - --from unset → begin = max(0, end - defaultTxWindowSpan): a
 //     generous recent window independent of --limit, so sparse
 //     filtered matches are still found.
@@ -666,10 +651,8 @@ func resolveDefaultParties(
 
 // The per-contract row + list response shapes are shared with the Web
 // UI ACS handler via apitypes.ContractRow / ContractsListResponse, so
-// the two surfaces emit the same JSON and TestSchemaShape_GoldenPins…
-// keeps them aligned with frontend/src/api.ts. `contracts ls
-// --format json` now also includes the decoded payload (the UI always
-// did) so a jq/CI consumer can read field values, not just ids.
+// the two surfaces emit the same JSON and the schema pin test keeps
+// them aligned with frontend/src/api.ts.
 
 func renderACSStream(
 	out io.Writer,
@@ -710,7 +693,9 @@ func renderACSStream(
 			row.CreatedAt = ev.CreatedAt.AsTime().Format(time.RFC3339)
 		}
 		if ev.CreateArguments != nil {
-			row.Payload = recordToMap(ev.CreateArguments)
+			// Shared decoder so the CLI and Web UI decode payloads
+			// identically.
+			row.Payload = ledger.RecordToMap(ev.CreateArguments)
 		}
 		rows = append(rows, row)
 	}
@@ -793,10 +778,9 @@ func eventRowsFrom(txn *lapiv2.Transaction) []updateEventRow {
 // localnet contracts watch --format json | jq` stream-style.
 //
 // Each transaction is followed by one indented line PER event (kind,
-// template, contract id, witnesses) — the "live tail of create/archive
-// events, similar to kubectl get -w" the proposal promises. The old
-// renderer printed only the event COUNT, so a user watching for their
-// Token:Holding creation learned nothing actionable.
+// template, contract id, witnesses) — a live tail of create/archive
+// events, similar to `kubectl get -w`, so a user watching for a
+// specific contract creation sees it as it lands.
 func renderUpdateStream(
 	out io.Writer,
 	instance string,

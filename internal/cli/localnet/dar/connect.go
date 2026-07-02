@@ -6,7 +6,6 @@ import (
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/admin"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
-	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -70,15 +69,15 @@ func (f *connectFlags) register(cmd *cobra.Command) {
 
 // resolve picks an effective (host, token) pair from the flags. If
 // --admin-host is set explicitly it wins. Otherwise we look up
-// --instance in the registry. Returns a connect.Config ready to pass
-// to admin.Connect.
+// --instance in the registry. Returns a Config ready to pass to
+// admin.Connect.
 //
 // Instance resolution caveats:
 //   - The registry must contain a "participant_admin_<role>" port for
 //     us to derive a host. When the registry only persists UI ports,
 //     we error with a clear hint.
-//   - The JWT is signed locally using splice.SignToken, derived from
-//     the per-role auth env files in the cached compose project.
+//   - The JWT comes from --token, falling back to the per-role
+//     credential captured in the instance state.
 func (f *connectFlags) resolve() (admin.Config, error) {
 	if f.AdminHost != "" {
 		return admin.Config{
@@ -103,8 +102,7 @@ func (f *connectFlags) resolve() (admin.Config, error) {
 	portKey := "participant_admin_" + f.Role
 	port, ok := state.Ports[portKey]
 	if !ok {
-		// State doesn't yet record participant admin ports; surface a
-		// clear next step rather than guess.
+		// Surface a clear next step rather than guess at a port.
 		return admin.Config{}, fmt.Errorf("instance %q has no recorded port for %q. "+
 			"Pass --admin-host=localhost:<port> directly. "+
 			"For Splice LocalNet on default ports, app-user is :2902, app-provider :3902, sv :4902",
@@ -155,23 +153,4 @@ func (f *connectFlags) resolveState() (*registry.State, error) {
 		return nil, fmt.Errorf("read instance state: %w", err)
 	}
 	return state, nil
-}
-
-// signTokenForInstance derives a token from the per-role auth env
-// files (`splice.SignToken`) when the registry doesn't already have
-// one captured. Currently unused — RunUp captures these — but ready
-// for future flows where the instance is bootstrapped externally.
-//
-//nolint:unused // intentional API surface for future re-use.
-func signTokenForInstance(state *registry.State, role string) (string, error) {
-	inputs, err := splice.LoadCredentialInputs(state.ProjectDir)
-	if err != nil {
-		return "", err
-	}
-	for _, in := range inputs {
-		if string(in.Role) == role {
-			return splice.SignToken(in)
-		}
-	}
-	return "", fmt.Errorf("no auth inputs found for role %q", role)
 }

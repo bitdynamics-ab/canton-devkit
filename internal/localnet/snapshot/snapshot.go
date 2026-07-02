@@ -42,9 +42,9 @@ import (
 //
 //  1. Zip Slip on restore is rejected: only the strict entry path
 //     `database/dumpall.sql` is honoured.
-//  2. Nothing is buffered whole in RAM: the dump streams pg_dumpall to
-//     a temp file to the archive on capture, and archive to psql on
-//     restore.
+//  2. Nothing is buffered whole in RAM: pg_dumpall streams to a temp
+//     file then into the archive on capture, and the archive streams
+//     to psql on restore.
 //  3. registry.State is captured as the SECOND archive entry so a
 //     restored snapshot is bringable; restore re-registers via
 //     registry.Write.
@@ -85,8 +85,7 @@ type pgInfo struct {
 	Container    string
 	User         string
 	Image        string
-	Volume       string // full docker volume name holding PGDATA
-	VolumeSuffix string // compose volume key, i.e. Volume without the "<project>_" prefix
+	VolumeSuffix string // compose volume key: docker volume name minus the "<project>_" prefix
 }
 
 // pgArchiver is the seam tests fake; production uses dockerPgArchiver.
@@ -166,7 +165,7 @@ func (f *FakeArchiver) ResolvePostgres(_ context.Context, project string) (pgInf
 		image = "postgres:14"
 	}
 	return pgInfo{Container: project + "-postgres", User: user, Image: image,
-		Volume: project + "_postgres", VolumeSuffix: "postgres"}, nil
+		VolumeSuffix: "postgres"}, nil
 }
 
 func (f *FakeArchiver) AnyContainerRunning(context.Context, string) (bool, error) {
@@ -230,8 +229,6 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 	}
 
 	// pg_dumpall reads from a live Postgres, so the instance must be up.
-	// The volume-era snapshot could read a stopped instance's volumes off
-	// disk; a logical dump can't.
 	if state.Status != registry.StatusRunning {
 		_, _ = fmt.Fprintf(errw,
 			"instance %q is not running — a database snapshot reads from a live Postgres. "+
@@ -716,7 +713,7 @@ func (dockerPgArchiver) ResolvePostgres(ctx context.Context, composeProject stri
 	}
 	suffix := strings.TrimPrefix(volume, composeProject+"_")
 
-	return pgInfo{Container: container, User: user, Image: image, Volume: volume, VolumeSuffix: suffix}, nil
+	return pgInfo{Container: container, User: user, Image: image, VolumeSuffix: suffix}, nil
 }
 
 func (dockerPgArchiver) AnyContainerRunning(ctx context.Context, composeProject string) (bool, error) {
@@ -801,7 +798,6 @@ func (dockerPgArchiver) RestoreInto(ctx context.Context, image, volume, user str
 	}
 	defer func() { _ = exec.Command("docker", "rm", "-f", tmpName).Run() }()
 
-	// Wait for readiness.
 	ready := false
 	for i := 0; i < 60; i++ {
 		if exec.CommandContext(ctx, "docker", "exec", tmpName, "pg_isready", "-U", user).Run() == nil {
@@ -925,11 +921,4 @@ func err2nil(out []byte, err error) []byte {
 		return nil
 	}
 	return out
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

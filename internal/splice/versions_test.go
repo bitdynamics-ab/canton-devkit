@@ -8,10 +8,9 @@ import (
 
 // TestAlphaChannelEntryShape pins that the catalogue carries at least
 // one alpha entry with a non-empty ImageRepo override — the Token
-// Standard V2 snapshot — and that the IsAlpha helper agrees. This is
-// Contract: alpha catalogue entries opt into a separate image repo
-// via the new fields, and the CLI/up paths key off
-// `Channel == "alpha"`.
+// Standard V2 snapshot — and that the IsAlpha helper agrees.
+// Contract: alpha catalogue entries opt into a separate image repo via
+// these fields, and the CLI/up paths key off `Channel == "alpha"`.
 func TestAlphaChannelEntryShape(t *testing.T) {
 	var sawAlpha bool
 	for tag, v := range SupportedVersions {

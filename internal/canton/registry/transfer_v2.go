@@ -39,8 +39,7 @@ const (
 //	   → returns (choiceContextData, disclosedContracts)
 //	2. Exercise AcceptTransferInstruction with that choice context
 //
-// Reject + withdraw follow the same choice-contexts pattern; not in
-// MVP scope.
+// Reject + withdraw follow the same choice-contexts pattern.
 
 // TransferKind is the enum the registry returns to distinguish how the
 // factory choice resolves: Direct (atomic transfer with no holding
@@ -81,8 +80,7 @@ type Account struct {
 // default ("") account id. This is what a wallet uses for a plain
 // party-to-party transfer.
 func NewOwnedAccount(party string) Account {
-	p := party
-	return Account{Owner: &p, Provider: nil, ID: ""}
+	return Account{Owner: &party}
 }
 
 // TransferArgs is the structured `transfer` field of the
@@ -322,16 +320,10 @@ func (c *Client) GetAcceptChoiceContext(ctx context.Context, instructionID strin
 	return &out, nil
 }
 
-// GetRejectChoiceContext + GetWithdrawChoiceContext are stubbed here
-// for the symmetry the OpenAPI spec defines but are not exercised by
-// MVP CLI / UI flows — receiver reject and sender withdraw are
-// follow-up surface area. Keeping the methods present means the
-// registry-client contract is complete for callers that want to wire
-// them later without touching this file again.
-
 // GetRejectChoiceContext fetches the choice context the receiver needs
-// to exercise RejectTransferInstruction. Out of MVP scope; included
-// for API completeness.
+// to exercise RejectTransferInstruction. Not yet exercised by CLI / UI
+// flows; included so the registry-client contract matches the OpenAPI
+// spec.
 func (c *Client) GetRejectChoiceContext(ctx context.Context, instructionID string, req ChoiceContextRequest) (*ChoiceContextResponse, error) {
 	if instructionID == "" {
 		return nil, fmt.Errorf("GetRejectChoiceContext: instructionID is required")
@@ -345,8 +337,9 @@ func (c *Client) GetRejectChoiceContext(ctx context.Context, instructionID strin
 }
 
 // GetWithdrawChoiceContext fetches the choice context the sender needs
-// to exercise WithdrawTransferInstruction. Out of MVP scope; included
-// for API completeness.
+// to exercise WithdrawTransferInstruction. Not yet exercised by CLI / UI
+// flows; included so the registry-client contract matches the OpenAPI
+// spec.
 func (c *Client) GetWithdrawChoiceContext(ctx context.Context, instructionID string, req ChoiceContextRequest) (*ChoiceContextResponse, error) {
 	if instructionID == "" {
 		return nil, fmt.Errorf("GetWithdrawChoiceContext: instructionID is required")

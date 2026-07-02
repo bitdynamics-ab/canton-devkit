@@ -6,12 +6,8 @@
 # That file enables the built-in Prometheus reporter on port 10013
 # (0.0.0.0:10013/metrics) with JVM metrics, all qualifiers
 # (errors/latency/saturation/traffic/debug), and 40k cardinality.
-#
-# We discovered this by inspecting the upstream image — prior
-# versions of this comment assumed metrics were OFF in stock Splice;
-# they're not. The reporter is ON by default in both images and
-# active for the canton and splice JVM services without any extra
-# configuration overlay on our side.
+# The reporter is therefore ON by default in both images — no extra
+# configuration overlay is needed on our side.
 #
 # Both `canton` and `splice` containers join the project's default
 # docker network when the observability overlay is applied, so the

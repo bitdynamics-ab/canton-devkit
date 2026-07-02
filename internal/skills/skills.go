@@ -4,7 +4,7 @@
 //
 // The skill docs are editor-agnostic markdown describing safe
 // `dpm localnet` workflows. Both surfaces consume this package so
-// they never drift (AGENTS.md CLI ↔ Web UI parity):
+// they never drift (CLI ↔ Web UI parity):
 //   - the CLI `localnet skills list/install` command, and
 //   - the Web UI Agent Skills screen's `/api/skills` handler.
 //

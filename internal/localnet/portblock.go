@@ -29,7 +29,7 @@ func AllocateUIPorts(envVars []string) (map[string]int, error) {
 		_ = ln.Close()
 		// addr looks like "127.0.0.1:54321"; split off the port.
 		var port int
-		if i := lastByte(addr, ':'); i >= 0 {
+		if i := strings.LastIndexByte(addr, ':'); i >= 0 {
 			if _, err := fmt.Sscanf(addr[i+1:], "%d", &port); err != nil {
 				return nil, fmt.Errorf("parse allocated port %q: %w", addr, err)
 			}
@@ -37,15 +37,6 @@ func AllocateUIPorts(envVars []string) (map[string]int, error) {
 		out[ev] = port
 	}
 	return out, nil
-}
-
-func lastByte(s string, b byte) int {
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i] == b {
-			return i
-		}
-	}
-	return -1
 }
 
 // UIPortEnvVarToStateKey maps each compose env-var name to the
@@ -198,7 +189,7 @@ func allocateOneEphemeral() (int, error) {
 	addr := ln.Addr().String()
 	_ = ln.Close()
 	var port int
-	if i := lastByte(addr, ':'); i >= 0 {
+	if i := strings.LastIndexByte(addr, ':'); i >= 0 {
 		if _, err := fmt.Sscanf(addr[i+1:], "%d", &port); err != nil {
 			return 0, fmt.Errorf("parse allocated port %q: %w", addr, err)
 		}

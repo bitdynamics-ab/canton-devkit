@@ -6,8 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"io"
-	"os"
 	"sort"
 )
 
@@ -55,20 +53,11 @@ func (i *Info) PackageByID(id string) *PackageMeta {
 // Open reads a DAR file and returns a populated Info. The file is
 // closed before returning.
 func Open(path string) (*Info, error) {
-	abs := path
-	if absPath, err := os.Stat(path); err == nil {
-		_ = absPath // we don't actually need abs for now
-	}
-
 	raw, err := ReadDARFile(path)
 	if err != nil {
 		return nil, err
 	}
-	info, err := decodeDARBytes(raw, abs)
-	if err != nil {
-		return nil, err
-	}
-	return info, nil
+	return decodeDARBytes(raw, path)
 }
 
 // OpenBytes parses an in-memory DAR (no path). Used by the Web UI's
@@ -87,12 +76,10 @@ func OpenBytes(raw []byte) (*Info, error) {
 // decodeDARBytes is the shared core for Open and OpenBytes. Takes
 // the full file bytes and an optional path for the Info.Path field.
 func decodeDARBytes(raw []byte, path string) (*Info, error) {
-	// Compute the file-level SHA256 in one pass while also reading
-	// the zip via a second read. Cheaper than streaming once and
-	// hashing twice; for DARs in the 100KB–10MB range this is fine.
+	// File-level SHA256 for tamper detection.
 	fileSum := sha256.Sum256(raw)
 
-	zr, err := zip.NewReader(bytesReader(raw), int64(len(raw)))
+	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
 	if err != nil {
 		return nil, fmt.Errorf("open zip %s: %w", path, err)
 	}
@@ -232,21 +219,4 @@ func readDalf(f *zip.File, dalfPath string, cap int64) (*PackageMeta, int64, err
 		meta.Contents = c
 	}
 	return meta, int64(len(data)), nil
-}
-
-// bytesReader is a tiny zero-alloc adapter so we can hand a []byte to
-// zip.NewReader (which wants io.ReaderAt). bytes.NewReader exists but
-// is in the stdlib's `bytes` package; the unqualified name collides if
-// we shadow it. Keep this trivial wrapper to make intent obvious.
-type bytesReader []byte
-
-func (b bytesReader) ReadAt(p []byte, off int64) (int, error) {
-	if off < 0 || off >= int64(len(b)) {
-		return 0, io.EOF
-	}
-	n := copy(p, b[off:])
-	if n < len(p) {
-		return n, io.EOF
-	}
-	return n, nil
 }

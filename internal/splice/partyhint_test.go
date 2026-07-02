@@ -2,17 +2,13 @@ package splice
 
 import "testing"
 
-// TestPartyHintFor_RejectsHyphenInName covers the bug discovered by an
-// integration test: instance names with hyphens (e.g.
-// `ci-local`) were yielding party hints like
-// `app_user_ci-local-localparty-1` (after Splice's env-file prefix),
-// which Splice strictly rejects as INVALID_ARGUMENT because it expects
-// exactly three hyphen-separated segments — <organization>-<function>-
-// <enumerator>.
-//
-// The fix is to substitute underscores for hyphens in the name
-// component before assembling the hint. Single-segment names are
-// unchanged.
+// TestPartyHintFor covers hyphenated instance names: `ci-local` would
+// naively yield `app_user_ci-local-localparty-1` (after Splice's
+// env-file prefix), which Splice rejects as INVALID_ARGUMENT because it
+// expects exactly three hyphen-separated segments —
+// <organization>-<function>-<enumerator>. PartyHintFor substitutes
+// underscores for hyphens in the name component; single-segment names
+// pass through unchanged.
 func TestPartyHintFor(t *testing.T) {
 	cases := []struct {
 		name, want string
@@ -22,7 +18,7 @@ func TestPartyHintFor(t *testing.T) {
 		{"diag", "diag-localparty-1"},
 		{"ci", "ci-localparty-1"},
 
-		// Hyphenated names get underscored — the fix.
+		// Hyphenated names get underscored.
 		{"ci-local", "ci_local-localparty-1"},
 		{"my-test-stack", "my_test_stack-localparty-1"},
 

@@ -40,9 +40,9 @@ func TestSSE_ReceivesPublishedEvent(t *testing.T) {
 		t.Errorf("Cache-Control = %q, want no-cache", cc)
 	}
 
-	// Give the handler a beat to install its subscription before
-	// we publish; the helper polls Stats() instead of sleeping a
-	// fixed interval .
+	// Give the handler a beat to install its subscription before we
+	// publish; the helper polls Stats() instead of sleeping a fixed
+	// interval.
 	waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Second)
 	if !hub.WaitForSubscribers(waitCtx, 1) {
 		t.Fatal("subscriber didn't register")
@@ -276,9 +276,9 @@ func TestSSE_NoOriginAllowedForCurl(t *testing.T) {
 	}
 }
 
-// TestSSE_ContentTypeCharsetUTF8 is the the SSE Content-Type must include charset=utf-8.
-// Without it, older Safari + some proxies interpret the stream
-// as Latin-1 and mangle multi-byte event data.
+// TestSSE_ContentTypeCharsetUTF8: the SSE Content-Type must include
+// charset=utf-8. Without it, older Safari + some proxies interpret the
+// stream as Latin-1 and mangle multi-byte event data.
 func TestSSE_ContentTypeCharsetUTF8(t *testing.T) {
 	hub := stream.New()
 	assets, _ := AssetsHandler()
@@ -299,9 +299,9 @@ func TestSSE_ContentTypeCharsetUTF8(t *testing.T) {
 	}
 }
 
-// TestSSE_TrailingNewlineStripped is the a Data payload ending in "\n" must not produce
-// a spurious empty `data:` line that changes the event payload
-// from "msg" to "msg\n" on the client side.
+// TestSSE_TrailingNewlineStripped: a Data payload ending in "\n" must
+// not produce a spurious empty `data:` line that changes the event
+// payload from "msg" to "msg\n" on the client side.
 func TestSSE_TrailingNewlineStripped(t *testing.T) {
 	hub := stream.New()
 	assets, _ := AssetsHandler()

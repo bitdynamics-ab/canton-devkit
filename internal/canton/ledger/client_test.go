@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,15 +15,11 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 )
 
-// fakeStateServer is the minimum surface needed to exercise the first
-// vertical slice: GetLedgerEnd. It records the auth header it observed so
-// tests can prove the interceptor wired correctly, and lets the test
-// configure the returned offset + error.
-//
-// All other StateServiceServer RPCs panic if called — they should not be
-// reached by the tests in this file. As we add more state.go methods we
-// either expand this fake or use the UnimplementedStateServiceServer
-// embedding (which returns codes.Unimplemented).
+// fakeStateServer is the minimum surface needed to exercise GetLedgerEnd.
+// It records the auth header it observed so tests can prove the
+// interceptor wired correctly, and lets the test configure the returned
+// offset + error. The UnimplementedStateServiceServer embedding makes
+// every other RPC return codes.Unimplemented.
 type fakeStateServer struct {
 	lapiv2.UnimplementedStateServiceServer
 
@@ -232,14 +229,4 @@ func TestClose_OnNilClientIsSafe(t *testing.T) {
 	}
 }
 
-// contains is a tiny helper to avoid pulling in strings just for one call.
-// (Imported in real packages, fine; in tests we inline to keep the file
-// import block small.)
-func contains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
-}
+func contains(s, sub string) bool { return strings.Contains(s, sub) }

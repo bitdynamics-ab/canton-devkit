@@ -20,20 +20,17 @@ import (
 //	/events        — SSE stream
 //	/              — embedded Vite bundle with SPA fallback (assets.go)
 //
-// `hub` may be nil for callers that don't want SSE (test wiring,
-// future "read-only" mode); in that case /events is mounted as a
-// 503-returning stub. Production callers pass a real hub from
-// internal/ui/stream.
+// `hub` may be nil for callers that don't want SSE; in that case
+// /events is mounted as a 503-returning stub. Production callers pass a
+// real hub from internal/ui/stream.
 //
-// We use net/http.ServeMux (stdlib) rather than chi/gorilla. Go 1.22's mux
-// added method+path patterns ("GET /api/version"), which covers everything
-// the current surface needs. Pulling chi for one router would add a
-// transitive dep for no functional gain; if middleware composition gets
-// hairy (rate limiting, auth, request logging) the swap is mechanical.
+// The stdlib ServeMux (Go 1.22 method+path patterns) covers everything
+// the current surface needs; a third-party router would add a
+// transitive dep for no functional gain.
 //
-// Variadic opts keep the common two-arg call site (and every test)
-// unchanged while letting `dpm localnet ui --allow-non-loopback` widen
-// the Host allowlist — see RouterOption / WithAllowedHosts.
+// Variadic opts keep the common two-arg call site unchanged while
+// letting `dpm localnet ui --allow-non-loopback` widen the Host
+// allowlist — see RouterOption / WithAllowedHosts.
 func NewRouter(assets http.Handler, hub *stream.Hub, opts ...RouterOption) http.Handler {
 	var cfg routerConfig
 	for _, o := range opts {
@@ -42,20 +39,19 @@ func NewRouter(assets http.Handler, hub *stream.Hub, opts ...RouterOption) http.
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	mux.HandleFunc("GET /api/version", handleVersion)
-	// REST handlers under /api/*. Each handler package owns one
-	// resource; new resources mount themselves here as they land.
+	// REST handlers under /api/*; each handler package owns one resource.
 	handlers.MountInstances(mux, hub)
 	handlers.MountAuth(mux)
 	handlers.MountSpliceVersions(mux)
 	handlers.MountPreflight(mux)
-	handlers.MountDoctor(mux) // host-readiness diagnostics (CLI `localnet doctor` parity)
+	handlers.MountDoctor(mux)
 	handlers.MountMetrics(mux)
-	handlers.MountSnapshots(mux)    // UI parity for snapshot/restore
-	handlers.MountDAR(mux, hub)     // DAR Manager (list/upload/inspect/diff/vetting/watch)
-	handlers.MountContracts(mux)    // Explorer (ACS snapshot)
-	handlers.MountTransactions(mux) // Explorer (Transactions/Timeline)
-	handlers.MountSkills(mux)       // Agent Skills (browse + install)
-	handlers.MountTokens(mux, hub)  // Tokens (V2 instruments + actions)
+	handlers.MountSnapshots(mux)
+	handlers.MountDAR(mux, hub)
+	handlers.MountContracts(mux)
+	handlers.MountTransactions(mux)
+	handlers.MountSkills(mux)
+	handlers.MountTokens(mux, hub)
 	// /events (SSE). Handler does its own Origin check (sse.go)
 	// since EventSource sends GET and the global CSRF middleware
 	// is GET-exempt.
@@ -67,10 +63,9 @@ func NewRouter(assets http.Handler, hub *stream.Hub, opts ...RouterOption) http.
 				http.StatusServiceUnavailable)
 		})
 	}
-	// explicit 404 for /api/<typo> and /events/<typo>
-	// so a misspelled handler path doesn't fall through to the
-	// SPA index. Frontend fetch() consumers get a structured
-	// error instead of "the API returned HTML, weird".
+	// Explicit 404 for /api/<typo> and /events/<typo> so a misspelled
+	// path doesn't fall through to the SPA index — frontend fetch()
+	// consumers get a structured error, not HTML.
 	mux.HandleFunc("/api/", apiNotFound)
 	mux.HandleFunc("/events/", apiNotFound)
 	// Catch-all for everything else. Method intentionally
@@ -78,15 +73,13 @@ func NewRouter(assets http.Handler, hub *stream.Hub, opts ...RouterOption) http.
 	// rather than colliding with the /api/ method pattern under
 	// Go 1.22's mux conflict rules.
 	mux.Handle("/", assets)
-	// Middleware chain (outer → inner): access log first so it
-	// wraps everything including 403s from CSRF/Host and 404s from
-	// /api/typo. The Host allowlist runs next — before the Origin
-	// gate — because it applies to EVERY method (GET reads leak
-	// party IDs too) and is the DNS-rebinding defence the Origin
-	// check can't provide. Common headers + Origin gate run per
-	// request inside the logged span. Feature telemetry sits
-	// innermost so it only records requests that reached a real
-	// handler.
+	// Middleware chain (outer → inner): access log first so it wraps
+	// everything, including 403s from CSRF/Host and 404s. The Host
+	// allowlist runs before the Origin gate because it applies to
+	// EVERY method (GET reads leak party IDs too) and is the
+	// DNS-rebinding defence the Origin check can't provide. Feature
+	// telemetry sits innermost so it only records requests that
+	// reached a real handler.
 	return withAccessLog(
 		withHostCheck(cfg.allowedHosts,
 			withCommonHeaders(
@@ -96,10 +89,9 @@ func NewRouter(assets http.Handler, hub *stream.Hub, opts ...RouterOption) http.
 
 // routerConfig accumulates NewRouter options.
 type routerConfig struct {
-	// allowedHosts are extra Host-header host-parts the Host
-	// allowlist accepts beyond the built-in loopback names. Populated
-	// from --allow-non-loopback's bind host; empty in the default
-	// (loopback-only) posture.
+	// allowedHosts are extra Host-header host-parts the Host allowlist
+	// accepts beyond the built-in loopback names; empty in the default
+	// loopback-only posture.
 	allowedHosts []string
 }
 
@@ -109,12 +101,10 @@ type RouterOption func(*routerConfig)
 
 // WithAllowedHosts widens the Host-header allowlist (withHostCheck) to
 // include the given hosts in addition to the built-in loopback names.
-//
 // Used only on the `dpm localnet ui --allow-non-loopback` path: when an
 // operator deliberately binds the UI to a LAN IP, requests whose Host
 // names that IP would otherwise be rejected as a rebinding attempt.
-// Empty / blank entries are ignored. In the default loopback-only
-// posture this option is not passed and the allowlist stays minimal.
+// Empty entries are ignored.
 func WithAllowedHosts(hosts ...string) RouterOption {
 	return func(c *routerConfig) {
 		for _, h := range hosts {
@@ -213,14 +203,8 @@ func instanceSubResource(path string) string {
 	return sub
 }
 
-// statusRecorder wraps http.ResponseWriter to capture the final
-// status code for the access log. The stdlib type has no status-
-// read API; the standard pattern is to override WriteHeader.
-//
-// Flush pass-through: SSE handlers require http.Flusher. Without
-// the explicit forward, the type assertion in sse.go fails and
-// every /events request 500s. The stdlib provides the Flusher
-// on the underlying writer; we just need to expose it.
+// statusRecorder wraps http.ResponseWriter to capture the final status
+// code for the access log (the stdlib type has no status-read API).
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
@@ -233,26 +217,21 @@ func (s *statusRecorder) WriteHeader(code int) {
 
 // Flush forwards to the underlying writer's Flusher if present.
 // SSE depends on this — without the forward, sseHandler's
-// `w.(http.Flusher)` assertion fails through this wrapper.
+// `w.(http.Flusher)` assertion fails through this wrapper and
+// every /events request 500s.
 func (s *statusRecorder) Flush() {
 	if f, ok := s.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
 }
 
-// withAccessLog emits one line per request via log.Default():
+// withAccessLog emits one stable, parseable line per request via
+// log.Default() (so access and app logs share one stream):
 //
 //	access: 200 GET /api/version  127.0.0.1  3.2ms
 //
-// Format is stable and parseable.
-//
-// We deliberately do NOT log query strings — they can carry
-// credentials (?include_jwt=true today, future auth tokens). The
-// path-only line is enough for traffic-shape diagnostics.
-//
-// Routed through log.Default so audit/access/app logs share one
-// stream — operators redirect the logger once and get everything.
-// Future structured-logging migration is one-line change here.
+// Query strings are deliberately NOT logged — they can carry
+// credentials (?include_jwt=true today, future auth tokens).
 func withAccessLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -280,9 +259,9 @@ func clientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
-// apiNotFound is the explicit 404 for unknown /api/* and /events/*
-// paths. Returns JSON so a frontend fetch() consumer sees a
-// structured error instead of an HTML SPA-index 200.
+// apiNotFound is the explicit JSON 404 for unknown /api/* and /events/*
+// paths, so a frontend fetch() consumer sees a structured error instead
+// of an HTML SPA-index 200.
 func apiNotFound(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNotFound)
@@ -290,9 +269,8 @@ func apiNotFound(w http.ResponseWriter, _ *http.Request) {
 }
 
 // handleHealthz is the cheapest possible liveness probe — no docker
-// query, no registry read, no allocation beyond the response. Used by
-// orchestrators (and the eventual `dpm localnet ui` startup wait) to
-// confirm the server is listening before opening the browser.
+// query, no registry read. Used to confirm the server is listening
+// before opening the browser.
 func handleHealthz(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
@@ -304,9 +282,6 @@ func handleHealthz(w http.ResponseWriter, _ *http.Request) {
 // internal/api/types.SchemaVersion so a frontend bundled for v1 can
 // refuse to talk to a v2 backend (or vice versa) with a clear error
 // instead of silently mis-decoding responses.
-//
-// `Built` is intentionally not embedded yet — we don't have stable
-// build-info plumbing here yet. Added once the release pipeline lands.
 type versionPayload struct {
 	Name          string `json:"name"`
 	SchemaVersion int    `json:"schema_version"`
@@ -318,11 +293,6 @@ type versionPayload struct {
 // expectation.
 func handleVersion(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	// Imported lazily via blank var to avoid an import cycle here —
-	// the types package's reverse import is on the api side, but
-	// the handler in ui shouldn't pull a structural dep on types
-	// for one int. Inline the constant; keep them in sync via the
-	// versionParity test in router_test.go.
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(versionPayload{
@@ -331,25 +301,19 @@ func handleVersion(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-// schemaVersion mirrors types.SchemaVersion. A test in router_test.go
-// asserts the two stay in sync — see TestVersion_MatchesTypesSchema.
-// Inlined rather than imported to keep this package free of an upward
-// import on api/types (the dependency direction stays handlers→types,
-// not router→types).
+// schemaVersion mirrors types.SchemaVersion, inlined rather than
+// imported to keep this package free of an upward import on api/types.
+// TestVersion_MatchesTypesSchema asserts the two stay in sync.
 const schemaVersion = 1
 
-// withCommonHeaders is the only middleware the skeleton ships with.
-// Two header policies that apply to EVERY response:
+// withCommonHeaders sets two header policies that apply to EVERY
+// response:
 //
 //   - X-Content-Type-Options: nosniff — prevents browsers from
 //     interpreting a JSON response as HTML or script if a buggy
 //     handler ever forgets the Content-Type header.
-//   - Server: dpm — short identification banner. Better than the
-//     empty default; intentionally short to avoid fingerprinting.
-//
-// Auth headers, CORS, request logging — all added later in their own
-// commits with their own tests. Keeping the middleware stack minimal
-// here keeps each surface's review self-contained.
+//   - Server: dpm — short identification banner; intentionally
+//     short to avoid fingerprinting.
 func withCommonHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")

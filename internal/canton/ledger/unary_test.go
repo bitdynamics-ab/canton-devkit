@@ -16,11 +16,9 @@ import (
 // fakeUnaryServer is the "fan everything in" fake for the unary RPCs.
 // Each test reaches in and sets the field the RPC under test reads.
 //
-// Embedding all five Unimplemented*Server types means we satisfy the
-// gRPC server registrations without having to implement RPCs unrelated
-// to the test (they return codes.Unimplemented if anyone reaches them).
-// This is the "minimum surface to exercise the method under test"
-// pattern that keeps each new test from balooning the fake.
+// Embedding the Unimplemented*Server types satisfies the gRPC server
+// registrations without having to implement RPCs unrelated to the test
+// (they return codes.Unimplemented if anyone reaches them).
 type fakeUnaryServer struct {
 	lapiv2.UnimplementedEventQueryServiceServer
 	lapiv2.UnimplementedPackageServiceServer
@@ -62,7 +60,7 @@ func (f *fakeUnaryServer) GetParticipantId(context.Context, *adminv2.GetParticip
 	return f.participantId, nil
 }
 
-// newUnaryTestClient wires a Client to a bufconn server with all five
+// newUnaryTestClient wires a Client to a bufconn server with all the
 // unary fakes registered. Returns the Client + fake + teardown.
 func newUnaryTestClient(t *testing.T) (*Client, *fakeUnaryServer, func()) {
 	t.Helper()

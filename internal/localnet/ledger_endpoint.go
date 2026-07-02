@@ -11,17 +11,11 @@ import (
 )
 
 // Ledger endpoint + JWT resolution shared by the CLI Explorer
-// commands (`contracts ls/watch`, `tx ls/replay`) and the token
-// action layer. Before this, only the Web UI handlers
-// (internal/ui/handlers/contracts.go resolveLedgerForRole) and the
-// token package resolved the participant ledger port + per-role JWT
-// from the registry — the CLI Explorer demanded an explicit
-// --endpoint, so every shipped skill example (`dpm localnet
-// contracts watch --name dev`) failed with a misleading "not yet
-// exposed" error. This helper closes that CLI ↔ Web UI parity gap:
-// it lives in the neutral internal/localnet package so both surfaces
-// share one resolution path (registry → participant_ledger_<role>
-// port → captured JWT → SignToken fallback) instead of drifting.
+// commands (`contracts ls/watch`, `tx ls/replay`), the Web UI
+// handlers, and the token action layer. Lives in the neutral
+// internal/localnet package so all surfaces share one resolution path
+// (registry → participant_ledger_<role> port → captured JWT →
+// SignToken fallback) instead of drifting.
 
 // LedgerEndpoint is the resolved (endpoint, token) pair a ledger
 // client needs to dial a participant for a given instance + role.

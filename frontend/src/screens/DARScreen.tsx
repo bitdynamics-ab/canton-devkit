@@ -18,23 +18,19 @@ import { W, wMono } from "../tokens";
 import { DARPackageTree } from "./DARPackageTree";
 import { DARDiff } from "./DARDiff";
 
-// DARScreen — production layout.
+// DARScreen — three-column DAR manager:
+//   LEFT (320px)   drag-drop upload + per-participant vetting toggles
+//                  + Watch-mode card
+//   MIDDLE         package list (Package · Version · Package-id ·
+//                  Vetting)
+//   RIGHT (360px)  inspect drawer with package tree / structural diff
 //
-// Matches docs/design/mockups/webui-dar.jsx:
-//   - LEFT (320px) drag-drop upload + per-participant vetting
-//                  toggles + Watch-mode card
-//   - MIDDLE       package list with custom row layout
-//                  (Package · Version · Package-id · Vetting · ⋯)
-//   - RIGHT (360px) inspect drawer with hash/lf/uploaded + (future)
-//                  diff vs prior version
-//
-// Vetting is real end-to-end: the package-list column (VettingCell)
-// and the inspect-drawer toggles (VettingPanel) both read live
+// Vetting is live end-to-end: the package-list column (VettingCell)
+// and the inspect-drawer toggles (VettingPanel) both read
 // per-participant state from GET …/dar/{id}/vetting and POST to the
-// vet/unvet endpoint — a package unvetted via `dar remove` now shows
-// grey, not a hardcoded green badge. The Watch-mode card reflects
-// live SSE events from a `dpm localnet dar watch` process when one is
-// running, and stays "Idle" otherwise.
+// vet/unvet endpoint. The Watch-mode card reflects SSE events from a
+// `dpm localnet dar watch` process when one is running, and stays
+// "Idle" otherwise.
 
 const ROLES: Role[] = ["app-user", "app-provider", "sv"];
 
@@ -49,13 +45,11 @@ export function DARScreen() {
   const sel = useInstanceSelection();
   const name = sel.selected;
   const [role, setRole] = useState<Role>("app-user");
-  // vetTargets — which participants the upload fans out to. The
-  // backend dials each in parallel and returns a per-role result.
-  // Default ON for all three so the common "vet everywhere"
-  // workflow is one drag-and-drop. The selected `role` above
-  // drives the package LIST (read endpoint), not the upload set;
-  // they're orthogonal — the user can read one participant's
-  // packages while uploading to a different subset.
+  // Which participants an upload fans out to (the backend dials each in
+  // parallel). Default ON for all three so "vet everywhere" is one
+  // drag-and-drop. Orthogonal to `role`, which drives the package LIST:
+  // the user can read one participant's packages while uploading to a
+  // different subset.
   const [vetTargets, setVetTargets] = useState<Record<Role, boolean>>({
     "app-user": true,
     "app-provider": true,
@@ -71,19 +65,17 @@ export function DARScreen() {
     | { kind: "err"; error: string }
   >({ kind: "loading" });
   const [selectedHash, setSelectedHash] = useState<string | null>(null);
-  // Diff mode: when a "compare with" target is picked, the right
-  // drawer renders the DARDiff component instead of the inspect
-  // tree. Compare hashes are kept separately so the user can
-  // toggle the comparison off without losing their primary
-  // selection.
+  // Diff mode: a picked "compare with" target flips the right drawer
+  // from the inspect tree to DARDiff. Kept separate from selectedHash
+  // so the user can toggle the comparison off without losing their
+  // primary selection.
   const [compareHash, setCompareHash] = useState<string | null>(null);
   const [upload, setUpload] = useState<UploadState>({ kind: "idle" });
   const [dragOver, setDragOver] = useState(false);
   const [filter, setFilter] = useState<"all" | "app">("all");
   const [tick, setTick] = useState(0); // bump to refetch after upload
-  // vetting — per-participant vetting state for each listed DAR, keyed
-  // by main package id. Populated lazily by a bounded batch fetch after
-  // the list loads (see effect below).
+  // Per-participant vetting per listed DAR, keyed by main package id;
+  // populated lazily by the batch-fetch effect below.
   const [vetting, setVetting] = useState<Record<string, VetState>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -138,10 +130,9 @@ export function DARScreen() {
       });
       return;
     }
-    // Client-side size cap mirrors the backend's multipart cap in
-    // internal/ui/handlers/dar.go (darUploadMax = 64 MiB). Reject
-    // here so a 100 MiB DAR doesn't start uploading and fail
-    // server-side after a wasted progress bar.
+    // Mirrors the backend's multipart cap (darUploadMax = 64 MiB in
+    // internal/ui/handlers/dar.go); reject client-side so an oversized
+    // DAR doesn't upload just to fail server-side.
     const MAX_DAR_BYTES = 64 * 1024 * 1024;
     const tooBig = arr.find((f) => f.size > MAX_DAR_BYTES);
     if (tooBig) {
@@ -181,8 +172,7 @@ export function DARScreen() {
     if (state.kind !== "ok") return [] as DARRow[];
     let list = state.data.dars;
     if (filter === "app") {
-      // "app DARs only" filter — exclude the canton-builtin /
-      // splice system packages so the user sees just their stuff.
+      // Hide the canton/splice/daml system packages.
       list = list.filter(
         (d) =>
           !d.name.startsWith("canton-builtin-") &&
@@ -193,28 +183,23 @@ export function DARScreen() {
     return list;
   }, [state, filter]);
 
-  // Reset the vetting cache whenever the instance changes or the list
-  // is refetched (after an upload). Keying the cache by main id means a
-  // role switch — which doesn't change which DARs exist, only which
-  // participant's list we read — reuses already-fetched verdicts.
+  // Reset the vetting cache when the instance changes or the list is
+  // refetched. Keyed by main id, so a role switch — same DARs,
+  // different participant's list — reuses already-fetched verdicts.
   useEffect(() => {
     setVetting({});
   }, [name, tick]);
 
-  // Lazily fetch REAL per-participant vetting for each visible row. We
-  // probe per DAR (the vetting endpoint fans out to all three
-  // participants server-side) so the list column reflects ledger
-  // state, not a hardcoded badge. Bounded: at most one in-flight fetch
-  // per main id, marked "loading" before dispatch so we never
-  // double-fetch on re-render.
+  // Lazily fetch real per-participant vetting for each visible row (the
+  // endpoint fans out to all three participants server-side) so the
+  // list column reflects ledger state. Rows are marked "loading" in one
+  // batch before dispatch so re-renders never double-fetch.
   const visibleMains = useMemo(() => rows.map((d) => d.main).join(","), [rows]);
   useEffect(() => {
     if (!name || state.kind !== "ok") return;
     let cancelled = false;
     const toFetch = rows.filter((d) => vetting[d.main] === undefined);
     if (toFetch.length === 0) return;
-    // Mark all pending rows loading in one batch so the cells show "…"
-    // immediately and the guard above stops re-dispatch.
     setVetting((prev) => {
       const next = { ...prev };
       for (const d of toFetch) next[d.main] = { kind: "loading" };
@@ -549,16 +534,13 @@ export function DARScreen() {
   );
 }
 
-// WatchModeCard subscribes to the DAR watch SSE stream and renders
-// the latest lifecycle event as a live "watching" badge with a
-// last-rebuild ago timer. When no event has arrived (no `dar watch`
-// running, or the UI server isn't bridged), it stays in the
-// "idle — start `dpm localnet dar watch` to enable hot deploy" state.
+// WatchModeCard subscribes to the DAR watch SSE stream and renders the
+// latest lifecycle event as a "Watching" badge with a last-rebuild
+// timer. With no events (no `dar watch` running) it stays "Idle".
 function WatchModeCard({ instance }: { instance: string }) {
   const [last, setLast] = useState<DARWatchEvent | null>(null);
   const [active, setActive] = useState(false);
-  // tick — bumped every 10s so the "ago" label refreshes without a
-  // useless full re-render every second.
+  // Re-render every 10s so the "ago" label stays fresh.
   const [, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -635,10 +617,9 @@ function WatchModeCard({ instance }: { instance: string }) {
   );
 }
 
-// formatAgo renders a "X ago" label for a unix-second delta. Tuned
-// for human-perceptible bands; finer than 5s is noise for this card.
+// formatAgo renders a "X ago" label for a unix-second delta; bands
+// finer than 5s read as noise on this card.
 function formatAgo(deltaSec: number): string {
-  if (deltaSec < 0) return "just now";
   if (deltaSec < 5) return "just now";
   if (deltaSec < 60) return `${Math.floor(deltaSec)}s ago`;
   if (deltaSec < 3600) return `${Math.floor(deltaSec / 60)}m ago`;
@@ -646,9 +627,7 @@ function formatAgo(deltaSec: number): string {
   return `${Math.floor(deltaSec / 86400)}d ago`;
 }
 
-// VetState is the per-row vetting cell state: "loading" while the
-// vetting probe is in flight, "ok" with the resolved per-participant
-// rows, or "err" when the probe failed. Undefined means not yet
+// VetState is the per-row vetting cell state; undefined means not yet
 // requested.
 type VetState =
   | { kind: "loading" }
@@ -717,11 +696,10 @@ function PkgRow({
   );
 }
 
-// VettingCell renders the per-participant vetting state for one DAR as
-// a compact "U P S" trio of dots — green vetted, grey unvetted, amber
-// "?" when that participant couldn't be probed. A package unvetted via
-// `dar remove` shows grey here, matching the CLI `dar list --vetting`
-// column and the per-participant toggles in the inspect drawer.
+// VettingCell renders per-participant vetting for one DAR as a compact
+// "U P S" trio of dots — green vetted, grey unvetted, amber "?" when
+// that participant couldn't be probed. Matches the CLI `dar list
+// --vetting` column and the inspect-drawer toggles.
 function VettingCell({ vet }: { vet: VetState | undefined }) {
   if (!vet || vet.kind === "loading") {
     return (
@@ -1110,11 +1088,9 @@ function UploadProgress({
 }
 
 // UploadResultBanner renders the per-participant outcome of a
-// multi-target upload. "success" = every role succeeded;
-// "partial" = at least one role failed but others succeeded
-// (the backend still returns 200 — partial failures land here,
-// not in the error banner — so the user sees what landed and
-// what didn't).
+// multi-target upload. Partial failures still return 200 from the
+// backend, so they land here (not the error banner) and the user sees
+// what landed and what didn't.
 function UploadResultBanner({
   kind,
   total,

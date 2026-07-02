@@ -15,22 +15,14 @@ import (
 )
 
 // buildInfo wires `dar info`. The command auto-routes on the single
-// positional argument:
+// positional argument: a 64-hex package ID queries the participant's
+// Admin API (GetPackageContents + GetPackageReferences); anything else
+// is treated as a local .dar path and parsed offline (`internal/dar`),
+// which keeps the file path useful for CI / on-disk validation flows.
 //
-// - if the arg looks like a 64-hex package ID, we query the
-// participant's Admin API (PackageService.GetPackageContents +
-// GetPackageReferences) to surface module names, language version,
-// and which DARs reference the package.
-// - otherwise, the arg is treated as a path to a local .dar file
-// and we use the offline parser (`internal/dar`).
-//
-// This matches the proposal's signature `dar info <package-id|package-name>`
-// while keeping the offline file path useful for CI / on-disk
-// validation flows.
-//
-// Deep template/choice/interface inspection from local DARs // is available on the offline path via --deep, which parses Daml-LF
-// directly. The participant path still surfaces only what Canton's
-// Admin API returns (module names).
+// --deep (offline path only) parses Daml-LF directly for
+// template/choice/interface detail; the participant path surfaces only
+// what Canton's Admin API returns (module names).
 func buildInfo() *cobra.Command {
 	var (
 		format  string
@@ -294,7 +286,7 @@ func printParticipantInfoText(out io.Writer, pkgID string, contents *adminproto.
 			_, _ = fmt.Fprintf(out, "  Uploaded at:      %s\n", t.AsTime().Format("2006-01-02T15:04:05Z"))
 		}
 	}
-	_, _ = fmt.Fprintf(out, "  Daml-LF version:  %s\n", orDashS(v.LanguageVersion))
+	_, _ = fmt.Fprintf(out, "  Daml-LF version:  %s\n", orDash(v.LanguageVersion))
 	_, _ = fmt.Fprintf(out, "  Utility package:  %t\n", v.IsUtilityPackage)
 	_, _ = fmt.Fprintf(out, "  Modules:          %d\n", v.ModuleCount)
 
@@ -320,18 +312,6 @@ func printParticipantInfoText(out io.Writer, pkgID string, contents *adminproto.
 	}
 }
 
-// orDashS returns "-" for empty strings; mirrors diff.go's orDash so
-// the two output paths render placeholders identically.
-func orDashS(s string) string {
-	if s == "" {
-		return "-"
-	}
-	return s
-}
-
-// truncate returns s clipped to width with an ellipsis when shortened.
-// Used by the offline-path text renderer (dependency table) and by
-// list.go's row printer.
 // printDeep renders the Daml-LF deep view for one package:
 // each module's templates (+ choices), interfaces (+ choices/methods),
 // and data types. No-op when the package couldn't be deep-parsed (LF1).
@@ -368,6 +348,7 @@ func printDeep(out io.Writer, p *cdkdar.PackageMeta) {
 	}
 }
 
+// truncate returns s clipped to width with an ellipsis when shortened.
 func truncate(s string, width int) string {
 	if len(s) <= width {
 		return s

@@ -34,9 +34,8 @@ import (
 //   <CacheRoot()>/resolved-versions.json
 // so subsequent invocations don't re-hit GitHub or re-prompt.
 //
-// Why this exists: previously `--version` was strictly limited to the
-// catalogue. This adds an escape hatch for prereleases / alphas while
-// keeping the curated path the safe default.
+// Layer 2 is the escape hatch for prereleases / alphas; the curated
+// path stays the safe default.
 
 // ErrUncuratedTag is returned by Resolve when the requested tag is
 // not in the curated catalogue. Callers that want the uncurated
@@ -60,8 +59,6 @@ var tagMajorRE = regexp.MustCompile(`^v?(\d+\.\d+)`)
 
 // majorFromTag returns the "0.N" prefix used to route to an adapter,
 // or an empty string if the tag doesn't follow Splice's convention.
-// Exported as a regex-driven helper so the resolver and the catalogue
-// loader can both rely on the same parse.
 func majorFromTag(tag string) string {
 	m := tagMajorRE.FindStringSubmatch(tag)
 	if len(m) < 2 {

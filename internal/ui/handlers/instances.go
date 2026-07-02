@@ -1,27 +1,10 @@
 // Package handlers implements the REST endpoints mounted at /api/*.
-//
-// Each file in this package owns one resource:
-//
-//	instances.go — registry-backed instance list + detail (this file)
-//	jwt.go, appconfig.go — auth/credential surfaces
-//	packages.go — DAR list
-//	metrics.go — Prometheus passthrough
-//	logs.go — last-N docker logs
-//	acs.go, tx.go — ledger views
-//
-// # Why "registry-backed" lands first
-//
-// The instance list and detail responses can be built from on-disk
-// registry state alone — no docker calls, no ledger client, no
-// JWT signer. That's the cheapest meaningful slice to land and review;
-// it also gives the frontend something to consume on day one.
-//
-// # Why detail delegates to localnet.CollectStatus
+// Each file in this package owns one resource.
 //
 // The CLI status command and Web UI detail endpoint share
 // localnet.CollectStatus so JSON shape, Docker soft-fail handling,
-// endpoint projection, and JWT redaction do not drift. See AGENTS.md
-// "CLI ↔ Web UI parity".
+// endpoint projection, and JWT redaction do not drift. See
+// CONTRIBUTING.md "CLI ↔ Web UI parity".
 package handlers
 
 import (
@@ -53,25 +36,16 @@ import (
 const upBodyMax = 4 << 10 // 4 KiB
 
 // upJobTimeout is the hard ceiling on a single create-instance
-// goroutine. Sized to comfortably outlast the internal docker
-// readinessTimeout (25 min, see internal/docker/compose.go
-// WaitForHealthy) plus slack for Splice fetch + compose up.
-//
-// First-run Splice 0.6.4 with no cached images was observed
-// taking 18+ minutes — splice container in `health: starting`
-// long after canton/participants reached healthy. The earlier
-// 10/20-minute caps fired before WaitForHealthy's own deadline
-// and surfaced a misleading "Timed out waiting for services"
-// while containers were actually still progressing.
-//
-// 30 minutes total outer cap accommodates: fetch (~1 min cached
-// / ~5 min fresh) + docker up (~30s) + WaitForHealthy (~25 min
-// worst case) + capture JWTs (~5s) + slack.
+// goroutine. It must outlast the internal docker readinessTimeout
+// (25 min, see internal/docker/compose.go WaitForHealthy) plus
+// Splice fetch (~5 min fresh) and compose up — a first-run bring-up
+// with no cached images can take 18+ minutes; a shorter cap fires
+// before WaitForHealthy's own deadline and surfaces a misleading
+// timeout while containers are still progressing.
 //
 // This is NOT the HTTP request timeout — the POST returns 202
-// immediately; the goroutine runs on its own context, independent
-// of the request. Cancellation passes a CancelFunc
-// into the goroutine's context that DELETE invokes.
+// immediately; the goroutine runs on its own context, cancellable
+// via DELETE.
 const upJobTimeout = 30 * time.Minute
 
 // progressBufferCap is the per-instance topic ring size. Sized
@@ -167,7 +141,7 @@ func handlePauseInstance(pause bool) http.HandlerFunc {
 		}
 		cause := firstNonWarningLine(errBuf.String())
 		if cause == "" {
-			cause = "operation failed with exit code " + uintToString(uint64(exit))
+			cause = "operation failed with exit code " + strconv.FormatUint(uint64(exit), 10)
 		}
 		writeErrorWithCode(w, status, "PAUSE_FAILED", cause)
 	}
@@ -196,10 +170,8 @@ func handleList(w http.ResponseWriter, _ *http.Request) {
 			SpliceVersion: e.SpliceVersion,
 			StartedAgo:    "", // computed by the renderer, not the API
 		}
-		// Per-row state.json read for the port range. Same "best-
-		// effort" semantics as `localnet list`: a corrupt state
-		// file is reported in the response warning, not as a
-		// fatal error.
+		// Best-effort, matching `localnet list`: a corrupt state
+		// file becomes a response warning, not a fatal error.
 		if s, err := registry.Read(e.Name); err == nil {
 			row.Ports = formatPortRange(s.Ports)
 		} else {
@@ -213,7 +185,7 @@ func handleList(w http.ResponseWriter, _ *http.Request) {
 	})
 	if len(unreadable) > 0 {
 		resp.Warning = "unreadable per-instance state files: " +
-			joinComma(unreadable)
+			strings.Join(unreadable, ", ")
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -245,9 +217,6 @@ func handleDetail(w http.ResponseWriter, r *http.Request) {
 // "min–max" shape the dashboard expects. Mirrors
 // internal/cli/localnet/list.go's formatPortRange — see the godoc
 // there for the allowlist rationale.
-//
-// future: extract to a shared helper rather than duplicating across the
-// CLI and handler surfaces.
 func formatPortRange(ports map[string]int) string {
 	if len(ports) == 0 {
 		return "—"
@@ -275,65 +244,19 @@ func formatPortRange(ports map[string]int) string {
 		return "—"
 	}
 	if lo == hi {
-		return jsonInt(lo)
+		return strconv.Itoa(lo)
 	}
-	return jsonInt(lo) + "–" + jsonInt(hi)
-}
-
-// jsonInt is a tiny stringer used by formatPortRange. We don't
-// pull strconv for a one-liner.
-func jsonInt(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	negative := n < 0
-	if negative {
-		n = -n
-	}
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if negative {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
-}
-
-// joinComma is a tiny strings.Join replacement that keeps this file
-// strings-package-free. Used once for the warning string.
-func joinComma(ss []string) string {
-	if len(ss) == 0 {
-		return ""
-	}
-	n := len(ss) - 1
-	for _, s := range ss {
-		n += len(s)
-	}
-	b := make([]byte, 0, n)
-	for i, s := range ss {
-		if i > 0 {
-			b = append(b, ',', ' ')
-		}
-		b = append(b, s...)
-	}
-	return string(b)
+	return strconv.Itoa(lo) + "–" + strconv.Itoa(hi)
 }
 
 // writeJSON is the shared JSON-response helper. Indented for
-// human-readability (browsers and `curl | jq` both prefer it);
-// the gzip middleware (future) will erase the size cost.
+// human-readability (browsers and `curl | jq` both prefer it).
 //
-// Every API JSON response carries no-store. Without it, browsers and
+// Every API JSON response carries no-store: without it, browsers and
 // HTTP proxies can cache responses that include credentials (the
 // JWT endpoint, app-config) or that change frequently (instance
-// list). The Vite bundle (handled in assets.go) opts INTO
-// hashed-file caching separately; this default applies only to
-// /api/* responses written through this helper.
+// list). The Vite bundle (assets.go) opts into hashed-file caching
+// separately.
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
@@ -453,12 +376,12 @@ type upRequest struct {
 	PortBase       int      `json:"port_base,omitempty"`       // >0 → deterministic ports from this base (CLI --port-base parity)
 }
 
-// allowedProfiles caps what the HTTP surface will accept. DERIVED
-// from localnet.KnownProfiles() so it can never drift from the CLI's
-// set — the create handler validates through localnet.ValidateProfiles
-// directly; this map is retained as a lookup the handler-package tests
-// pin the accepted set against. A single source of truth lives in
-// internal/localnet (AGENTS.md "mirror the guards").
+// allowedProfiles is derived from localnet.KnownProfiles() so it can
+// never drift from the CLI's set — the create handler validates through
+// localnet.ValidateProfiles directly; this map is a lookup the
+// handler-package tests pin the accepted set against. A single source
+// of truth lives in internal/localnet (CONTRIBUTING.md "mirror the
+// guards").
 var allowedProfiles = func() map[string]bool {
 	m := make(map[string]bool, len(localnet.KnownProfiles()))
 	for _, p := range localnet.KnownProfiles() {
@@ -479,31 +402,14 @@ type upAcceptedResponse struct {
 
 // handleCreate: POST /api/instances → 202 + spawns goroutine.
 //
-// Validation order (cheapest first; each rejection fails the
-// request before any work):
+// Validation runs cheapest-first (body decode + size cap, DNS-label
+// name, duplicate-name check against both the registry and in-flight
+// jobs) before any work; then the handler enables SSE buffering,
+// registers a cancellable job context, spawns the RunUp goroutine,
+// and returns 202 with {instance, events_url}.
 //
-//  1. body decode + size cap
-//  2. RFC 1123 DNS-label name validation
-//  3. duplicate-name check (registry has an entry OR jobs
-//     registry has an in-flight goroutine)
-//
-// Then:
-//
-//  4. hub.EnableBuffering(topic, 128)
-//  5. context.WithCancel — cancel stored in jobs registry for
-//     the future DELETE handler; context.WithTimeout
-//     wraps that with the 10-minute job ceiling
-//  6. spawn goroutine → RunUp(ctx, SSEProgress, opts)
-//  7. return 202 with {instance, events_url}
-//
-// The goroutine's deferred cleanup:
-//
-//	defer jobs.Unregister(name)
-//	defer hub.ClearBuffer(topic)
-//	defer ctxCancel() (releases context resources)
-//
-// Order matters: Unregister BEFORE ClearBuffer so a fast-
-// reconnecting browser that races the cleanup sees either
+// The goroutine's deferred cleanup runs Unregister BEFORE ClearBuffer
+// so a fast-reconnecting browser that races the cleanup sees either
 // (a) the buffer still present and replays final events, or
 // (b) the registry already cleared and gets a fresh 404 from
 // the SSE endpoint — never an inconsistent state where the
@@ -566,13 +472,11 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 		// gate uses the same Splice version RunUp will. Curated tags
 		// resolve offline; uncurated tags (allow_uncurated) resolve
 		// against upstream so the gate can apply the Major-aware
-		// memory floor (see splice.MinMemoryFor) — previously the
-		// uncurated path skipped this gate entirely and deferred to
-		// RunUp's in-stream check with the weakened 4 GiB default,
-		// letting the Web UI 202 a host that then OOM-loops mid
-		// bring-up. If upstream resolution itself fails (network blip,
-		// bad tag) we DON'T fail the create here — RunUp surfaces that
-		// in-stream with the proper error code.
+		// memory floor (see splice.MinMemoryFor) — otherwise the Web
+		// UI could 202 a host that then OOM-loops mid bring-up. If
+		// upstream resolution itself fails (network blip, bad tag) we
+		// DON'T fail the create here — RunUp surfaces that in-stream
+		// with the proper error code.
 		if gateVersion, ok := resolveForGate(r.Context(), req.Version, req.AllowUncurated); ok {
 			report := runPreflightForVersion(r.Context(), gateVersion)
 			if !report.OK {
@@ -595,9 +499,7 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 
 		// Detached context: the request returns 202 immediately,
 		// but the goroutine runs until RunUp completes (or the
-		// 10-minute ceiling fires). WithCancel comes outside
-		// WithTimeout so the DELETE handler's cancel wins
-		// regardless of the timeout's state.
+		// upJobTimeout ceiling fires).
 		jobCtx, cancelJob := context.WithTimeout(context.Background(), upJobTimeout)
 		// Register BEFORE spawning so a racing second POST
 		// loses (sees the entry already present).
@@ -614,10 +516,10 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 
 		// Validate any caller-supplied profiles against the shared
 		// allowlist (localnet.ValidateProfiles — the SAME guard RunUp
-		// enforces, so the two surfaces can't drift; AGENTS.md "mirror
-		// the guards"). Unknown profiles are an explicit 400 rather
-		// than a silent drop — a typo'd "observabilty" should NOT
-		// quietly produce an instance without Prometheus.
+		// enforces, so the two surfaces can't drift; CONTRIBUTING.md
+		// "mirror the guards"). Unknown profiles are an explicit 400
+		// rather than a silent drop — a typo'd "observabilty" should
+		// NOT quietly produce an instance without Prometheus.
 		if err := localnet.ValidateProfiles(req.Profiles); err != nil {
 			cancelJob()
 			hub.ClearBuffer(topic)
@@ -943,11 +845,9 @@ func handleRecreateInstance(hub *stream.Hub) http.HandlerFunc {
 
 // recreateWork runs the down→up cycle for a restart. It's a package
 // var, not an inline closure, so tests can substitute a deterministic
-// fake and assert the jobs.Register idempotency contract
-// (TestRestart_AlreadyInFlight409) without the detached goroutine
-// shelling out to a real `docker compose`. That shell-out outlived the
-// test, raced t.TempDir cleanup, and made the test flaky under the full
-// `./...` run on a docker host. Production wiring is realRecreateWork.
+// fake and assert the jobs.Register idempotency contract without the
+// detached goroutine shelling out to a real `docker compose`.
+// Production wiring is realRecreateWork.
 var recreateWork = realRecreateWork
 
 // realRecreateWork is the production restart worker: RunDown then RunUp,
@@ -1061,41 +961,18 @@ func handleDownInstance() http.HandlerFunc {
 		}
 		cause := errBuf.String()
 		if cause == "" {
-			cause = "down failed with exit code " + uintToString(uint64(exit))
+			cause = "down failed with exit code " + strconv.FormatUint(uint64(exit), 10)
 		}
 		log.Printf("down instance %q: exit=%d err=%s", name, exit, cause)
-		// RunDown writes multiple lines to errw — `Warning:`
-		// notices about non-fatal side issues (e.g. "could not
-		// reconstruct compose context") followed by the actual
-		// fatal cause. The plain `firstLine` helper grabbed the
-		// first line which was often the Warning, making the
-		// surfaced "Stop failed: …" misleading. firstNonWarningLine
-		// skips lines starting with "Warning:" / "warning:" so the
-		// summary always reflects the actual failure. The full
-		// output is still in the server log for diagnostic
-		// triangulation.
+		// RunDown emits non-fatal `Warning:` lines before the actual
+		// fatal cause; firstNonWarningLine skips them so the summary
+		// reflects the real failure. Full output stays in the server log.
 		writeErrorWithCode(w, status,
 			"DOWN_FAILED",
 			"failed to stop "+name+": "+firstNonWarningLine(cause),
 			"the docker compose down output is in the server log; "+
 				"try `dpm localnet down --name "+name+"` from a terminal for full output")
 	}
-}
-
-// uintToString — stdlib-free integer to ASCII. Duplicated here
-// to keep this file's strconv-free convention.
-func uintToString(n uint64) string {
-	if n == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[i:])
 }
 
 // firstLine returns just the first line of s. Used to keep error
@@ -1111,22 +988,11 @@ func firstLine(s string) string {
 
 // firstNonWarningLine returns the first line of s that does not
 // look like a `Warning:` / `WARN:` notice. RunDown emits warning
-// lines for non-fatal side issues (orphan-registry cleanup, state
-// persistence, compose-context reconstruction) before the actual
-// fatal cause, so a naive firstLine would surface a Warning as
-// the failure summary.
-//
-// Match is on a small fixed set of case variants (Warning, warning,
-// WARNING, WARN, warn, Warn) rather than truly case-insensitive
-// — sufficient for the patterns RunDown actually emits and avoids
-// a unicode.ToLower allocation per line on a hot path. New variants
-// slot into looksLikeWarningLine without changing this function.
-//
-// CRLF safe: a trailing \r left by docker-compose on Windows stderr
-// is trimmed per-line before the prefix check.
-//
-// If every line is a warning OR the string is empty, returns the
-// raw first line so the caller still has *something* to show.
+// lines for non-fatal side issues before the actual fatal cause,
+// so a naive firstLine would surface a Warning as the failure
+// summary. CRLF safe. If every line is a warning OR the string is
+// empty, returns the raw first line so the caller still has
+// *something* to show.
 func firstNonWarningLine(s string) string {
 	start := 0
 	for i := 0; i <= len(s); i++ {
@@ -1144,24 +1010,13 @@ func firstNonWarningLine(s string) string {
 			start = i + 1
 		}
 	}
-	// Fallthrough: every line was a warning. Surface the first
-	// raw line — the user still gets a hint, just not the ideal
-	// one.
 	return firstLine(s)
 }
 
-// looksLikeWarningLine matches lines that should be skipped when
-// looking for the surfaced failure cause. Recognizes the case
-// variants RunDown actually emits (in internal/localnet/down.go):
-//
-//	Warning:    docker-compose / docker stderr convention
-//	warning:    lowercase fmt.Errorf wrappers
-//	WARNING:    occasional ALL-CAPS from system logs
-//	WARN:       short form some upstream tools use
-//	warn:       lowercase short form
-//	Warn:       title-case short form
-//
-// Defensive whitespace trim for indented continuation lines.
+// looksLikeWarningLine matches lines to skip when looking for the
+// surfaced failure cause. Recognizes the fixed set of case variants
+// RunDown and docker actually emit (Warning/warning/WARNING/WARN/
+// warn/Warn) rather than matching truly case-insensitively.
 func looksLikeWarningLine(line string) bool {
 	// Trim leading whitespace defensively — docker-compose's
 	// formatted output sometimes indents continuation lines.
@@ -1189,11 +1044,9 @@ func looksLikeWarningLine(line string) bool {
 //	Health   = docker healthcheck verdict — healthy, unhealthy,
 //	           starting, "" (no healthcheck defined)
 //
-// The user's frustration we're addressing: registry's hard-coded
-// `running|stopped|failed|...` enum hides truth like "canton is
-// in a restart loop while postgres is healthy and splice is
-// stuck waiting on canton's admin API." With this list the UI
-// can render the per-container truth.
+// The registry's hard-coded `running|stopped|failed|...` enum hides
+// truth like "canton is in a restart loop while postgres is healthy";
+// this list lets the UI render the per-container truth.
 type ContainerHealth struct {
 	Name    string `json:"name"`
 	Service string `json:"service"`
@@ -1297,7 +1150,7 @@ func handleInstanceContainers() http.HandlerFunc {
 // both the CLI's `dpm localnet container list` and this handler)
 // and re-shapes Info → ContainerHealth so the API responses keep
 // their stable JSON tags. The docker-side logic lives once in
-// internal/localnet/containers — see AGENTS.md "CLI ↔ Web UI
+// internal/localnet/containers — see CONTRIBUTING.md "CLI ↔ Web UI
 // parity" rule.
 func containersList(ctx context.Context, project string) ([]ContainerHealth, error) {
 	infos, err := containers.List(ctx, project)
@@ -1566,37 +1419,18 @@ func parseClampedInt(s string, lo, hi int) (int, error) {
 	return n, nil
 }
 
-// dockerComposePsEntry was the in-package JSON decoder for the
-// `docker compose ps --format json` output. Moved to
-// internal/localnet/containers/containers.go so the CLI and HTTP
-// handlers share one parser — see AGENTS.md "CLI ↔ Web UI parity"
-// rule. The wrapper containersList re-shapes the shared Info into
-// the API-stable ContainerHealth shape.
-
 // handleScrubInstance: DELETE /api/instances/{name}.
 //
-// Removes the registry entry for an instance. The narrower
-// /api/instances/{name}/up cancels an in-flight goroutine but
-// leaves the registry entry alone (the goroutine writes its own
-// status=failed before exit). This endpoint is the registry-level
-// cleanup — for orphaned `creating` entries left by a server
-// restart, or for instances that finished badly and the user
-// wants to retry the name.
+// Registry-level cleanup: removes the per-instance state.json + dir
+// and the index entry — for orphaned `creating` entries left by a
+// server restart, or for instances that finished badly and the user
+// wants to retry the name. 204 on success; honest 404 for an
+// unknown name.
 //
-// Safety: refuses to scrub a `running` instance — that path
-// belongs to a future DELETE /api/instances/{name}/down (which
-// would do `docker compose down` + state cleanup). 409 in that
-// case with a remediation hint.
+// Refuses (409) to scrub a `running` instance (stop it via POST
+// /down first) and refuses while a create job is in flight (that
+// would race the goroutine; cancel via DELETE /up first).
 //
-// Also refuses to scrub if a job is actively creating — that
-// would race the goroutine. 409 with a hint to call /up cancel
-// first.
-//
-// 204 on success; the entry is gone from /api/instances next
-// poll. Idempotent against a non-existent name (404 → success
-// would be misleading; we keep the honest 404).
-//
-// Files on disk: removes the per-instance state.json + dir.
 // Does NOT remove docker resources — the up may have crashed
 // before docker got involved (the common zombie case is exactly
 // this), and trying `docker compose down` against an unknown
@@ -1707,11 +1541,11 @@ func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
 // receives the events that were published before its connection
 // completed.
 //
-// Returns 404 if no buffer exists for the topic — meaning either
-// the up finished (and ClearBuffer ran) OR the name was never
-// the target of a POST. The frontend distinguishes "instance
-// finished" from "instance never existed" via the registry.Read
-// followup.
+// When no buffer exists for the topic — the up finished (and
+// ClearBuffer ran) OR the name was never the target of a POST —
+// the stream simply opens with nothing to replay. The frontend
+// distinguishes "instance finished" from "instance never existed"
+// via a registry.Read follow-up.
 //
 // 30s heartbeat (matches the global /events handler). On the
 // goroutine's done event the client closes the EventSource;
@@ -1821,46 +1655,11 @@ func writeInstanceEventFrame(w http.ResponseWriter, e stream.Event) {
 		_, _ = w.Write([]byte("data:\n\n"))
 		return
 	}
-	body := string(e.Data)
-	body = trimRight(body, "\n")
-	for _, line := range splitLines(body) {
+	body := strings.TrimRight(string(e.Data), "\n")
+	for _, line := range strings.Split(body, "\n") {
 		_, _ = fmt.Fprintf(w, "data: %s\n", line)
 	}
 	_, _ = w.Write([]byte("\n"))
-}
-
-// trimRight / splitLines — tiny stdlib-free helpers used by
-// writeInstanceEventFrame. Keeps this file strings-package-free
-// for symmetry with the existing helpers (jsonInt etc).
-func trimRight(s, cutset string) string {
-	for len(s) > 0 {
-		r := s[len(s)-1]
-		found := false
-		for i := 0; i < len(cutset); i++ {
-			if r == cutset[i] {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return s
-		}
-		s = s[:len(s)-1]
-	}
-	return s
-}
-
-func splitLines(s string) []string {
-	var out []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			out = append(out, s[start:i])
-			start = i + 1
-		}
-	}
-	out = append(out, s[start:])
-	return out
 }
 
 // ── cancel an in-flight create-instance goroutine ─────────
@@ -1985,11 +1784,8 @@ func (r observabilityToggleRequest) resolveTargets() (prom, graf bool, ok bool) 
 // status` (internal/cli/localnet/observability.go) — both surfaces call
 // the SAME neutral localnet.SetObservability, so there is no per-surface
 // docker-compose drift. The sidecars are still PER-INSTANCE rather than
-// a single host-level stack; the host-shared rework is a documented
-// follow-up (see docs/limitations.md "Shared observability stack").
-// TODO: shared observability stack — migrate the per-instance Prometheus
-// + Grafana to one host-level stack with file_sd target discovery (the
-// neutral SetObservability seam makes this additive).
+// a single host-level stack (see docs/limitations.md "Shared
+// observability stack").
 //
 // Body: {"enabled": true|false}
 //
@@ -2077,11 +1873,9 @@ func handleObservabilityToggle() http.HandlerFunc {
 		// Delegate the docker-compose orchestration + port persistence
 		// to the NEUTRAL localnet.SetObservability so the CLI verb
 		// (`dpm localnet observability`) and this handler share one
-		// code path (AGENTS.md "share the business logic"). We hold the
-		// per-instance lock for the whole handler, satisfying
-		// SetObservability's caller contract. A nil log writer routes
-		// the overlay drift notices to the package's own logger via the
-		// captured buffer below.
+		// code path (CONTRIBUTING.md "share the business logic"). We
+		// hold the per-instance lock for the whole handler, satisfying
+		// SetObservability's caller contract.
 		var logBuf bytes.Buffer
 		res, err := localnet.SetObservability(ctx, state, wantProm, wantGraf, &logBuf)
 		if logBuf.Len() > 0 {

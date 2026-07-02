@@ -4,16 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 	"github.com/spf13/cobra"
 )
 
-// buildBalances is the god-mode `token balances` (plural) command: the
-// party × instrument matrix over the whole instance, in one ACS scan.
-// Sibling to the single-party `token balance`. CLI counterpart of the
-// Web UI HoldingsMatrix lens .
+// buildBalances is `token balances` (plural): the party × instrument
+// matrix over the whole instance, in one ACS scan. Sibling to the
+// single-party `token balance`; CLI counterpart of the Web UI
+// HoldingsMatrix lens.
 func buildBalances() *cobra.Command {
 	var opts token.BalanceOptions
 	var format string
@@ -100,10 +101,8 @@ are included.
 // shortParty trims a fingerprinted party id to its readable prefix for
 // table display: `bob::1220fa…` → `bob`.
 func shortParty(p string) string {
-	for i := 0; i < len(p)-1; i++ {
-		if p[i] == ':' && p[i+1] == ':' {
-			return p[:i]
-		}
+	if i := strings.Index(p, "::"); i >= 0 {
+		return p[:i]
 	}
 	return p
 }

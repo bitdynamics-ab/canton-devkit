@@ -14,21 +14,19 @@ import (
 
 // On-ledger V2 transfer for the bundled splice-test-token-v2 instrument.
 //
-// Why this exists (the bug it fixes): the off-ledger path in
-// run_transfer.go POSTs to the LocalNet scan registry's
-// /registry/transfer-instruction/v2/transfer-factory, which is served
-// by the Splice scan app and returns the *Amulet* TransferFactory whose
-// admin is the DSO party. Exercising that factory for an
-// issuer-administered instrument trips
-// TestTokenV2's `token_transferFactory_transferImpl`:
+// Why this exists: the off-ledger path in run_transfer.go POSTs to the
+// LocalNet scan registry, which returns the *Amulet* TransferFactory
+// whose admin is the DSO party. TestTokenV2's
+// `token_transferFactory_transferImpl` requires
 //
-//	require' transfer.instrumentId.admin == transferFactory.admin
+//	transfer.instrumentId.admin == transferFactory.admin
 //
-// → "AssertionFailed: Expected admin 'issuer::…' matches actual admin
-// 'DSO::…'". For the test token the issuer's own TokenRules contract IS
-// the V2 TransferFactory (it implements the interface, admin = issuer),
-// so we exercise THAT on-ledger — no off-ledger HTTP call — exactly as
-// mint/burn already do for the same instrument (ref.Status=="on-ledger").
+// so exercising the Amulet factory for an issuer-administered
+// instrument fails with an admin-mismatch assertion. For the test
+// token the issuer's own TokenRules contract IS the V2 TransferFactory
+// (it implements the interface, admin = issuer), so we exercise THAT
+// on-ledger — no off-ledger HTTP call — exactly as mint/burn do for
+// the same instrument (ref.Status=="on-ledger").
 //
 // Flow (sender → receiver, both controlled on LocalNet):
 //
@@ -58,8 +56,8 @@ var runAcceptOnLedgerFn = runAcceptOnLedgerIfTestToken
 // runTransferOffLedgerFn / runAcceptOffLedgerFn are the off-ledger
 // (Amulet / external-registry) dispatch seams. Package vars so the
 // dispatch tests can assert that on-ledger instruments never reach the
-// off-ledger scan-registry path (the original bug) without standing up a
-// participant or an HTTP registry.
+// off-ledger scan-registry path without standing up a participant or
+// an HTTP registry.
 var runTransferOffLedgerFn = runTransferOffLedger
 
 var runAcceptOffLedgerFn = runAcceptLive

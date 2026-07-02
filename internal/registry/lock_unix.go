@@ -12,10 +12,7 @@ import (
 // Lock acquires an exclusive advisory lock on the per-instance lock file,
 // blocking concurrent `localnet up`/`down` against the same instance from
 // the same host. The returned release function must be called via defer.
-//
-// On non-Unix platforms (Windows) the lock is a no-op — Windows builds use
-// the stub in lock_windows.go. Cross-platform robust locking would require
-// `golang.org/x/sys/windows`, which we deliberately avoid to stay zero-dep.
+// The Windows counterpart (LockFileEx) lives in lock_windows.go.
 func Lock(name string) (release func(), err error) {
 	if err := ValidateName(name); err != nil {
 		return nil, err

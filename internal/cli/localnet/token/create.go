@@ -14,21 +14,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildCreate returns the `dpm localnet token create` subcommand.
-//
-// Two modes:
-//
-//   - **Interactive** (default): prompts the user through the six wizard
-//     steps using plain stdin/stdout reads. Suitable for terminals;
-//     refuses non-tty input so it fails fast in a CI pipeline.
-//
-//   - **--non-interactive**: takes every wizard value as a flag and
-//     skips the prompts. Required when called from CI or from the
-//     Web UI's POST /api/tokens handler (which doesn't have a stdin).
-//
-// Both paths converge on token.RunCreate, which validates the inputs,
-// persists the instrument under the per-instance flock, and prints the
-// resulting TokenRef.
+// buildCreate returns `token create`: an interactive six-step wizard by
+// default, or fully flag-driven with --non-interactive (for CI and the
+// Web UI's POST /api/tokens handler, which has no stdin). Both paths
+// converge on token.RunCreate.
 func buildCreate() *cobra.Command {
 	var (
 		nonInteractive bool
@@ -112,14 +101,13 @@ POST /api/tokens.`,
 	return cmd
 }
 
-// errUserAbort is sentinel so the cobra RunE call surface returns a
-// non-zero exit code but suppresses the usual usage-and-stack dump
-// (the user already saw a focused message).
+// errUserAbort exits cobra non-zero while suppressing the usual
+// usage-and-error dump (the user already saw a focused message).
 var errUserAbort = errors.New("create aborted")
 
-// runWizard does the six-step interactive prompt. Refuses non-tty
-// input so a piped invocation falls back to (or surfaces) the
-// --non-interactive flag rather than silently hanging.
+// runWizard does the six-step interactive prompt. Refuses non-tty input
+// so a piped invocation is pointed at --non-interactive rather than
+// silently hanging.
 func runWizard(in io.Reader, out io.Writer, opts *token.CreateOptions) error {
 	if f, ok := in.(*os.File); ok {
 		st, err := f.Stat()

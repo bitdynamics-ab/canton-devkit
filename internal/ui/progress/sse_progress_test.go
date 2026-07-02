@@ -81,7 +81,7 @@ func TestSSEProgress_IDsMonotonic(t *testing.T) {
 
 	p := New(hub, "demo")
 	for i := 0; i < 20; i++ {
-		p.Warn("msg" + fmt.Sprintf("%d", i))
+		p.Warn(fmt.Sprintf("msg%d", i))
 	}
 
 	ch, cancel := hub.SubscribeWithReplay(TopicFor("demo"))
@@ -208,10 +208,7 @@ func TestSSEProgress_TopicNamespaced(t *testing.T) {
 }
 
 // TestSSEProgress_SatisfiesProgressInterface is a compile-time
-// proof that SSEProgress is a valid localnet.Progress impl. A
-// missing method here means the handler refactor would
-// break the build, not just the runtime — caught at compile, not
-// at SSE-trace-time.
+// proof that SSEProgress is a valid localnet.Progress impl.
 func TestSSEProgress_SatisfiesProgressInterface(t *testing.T) {
 	var _ localnet.Progress = (*SSEProgress)(nil)
 }

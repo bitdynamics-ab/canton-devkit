@@ -18,19 +18,8 @@ import { TX_KIND_COLOR, W, wMono } from "../tokens";
 import { ContractDetailDrawer } from "./ContractDetailDrawer";
 import { TxReplayDrawer } from "./TxReplayDrawer";
 
-// ExplorerScreen — production layout.
-//
-//   - ProjectionBar at top: participant + party pills, view toggle
-//     (Contracts/Transactions/Timeline), live status + count strip
-//   - 3-column body grid:
-//       LEFT (232px)  filter sidebar — Templates + Parties chips
-//                     with counts, plus a manual snapshot refresh
-//       CENTER (1fr)  ACS table with custom AcsRow layout
-//                     (template · cid · party · amount · age · sig·obs)
-//                     + search box with "/" hotkey + active row +
-//                     archived dimming
-//       RIGHT (380px) detail drawer — pills, template+version,
-//                     CID, payload, witnesses
+// ExplorerScreen — live Active Contract Set, transaction history, and
+// per-party visibility for the selected instance.
 //
 // The ACS table is a live snapshot + SSE delta stream: an initial
 // snapshot fills it, an EventSource applies create/archive deltas, and
@@ -63,25 +52,19 @@ export function ExplorerScreen() {
   const [activeParties, setActiveParties] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [selectedCid, setSelectedCid] = useState<string | null>(null);
-  // Live-stream connection status. "live" once the
-  // EventSource has fired at least one frame; "reconnecting" when
-  // the browser has dropped the connection and is retrying;
-  // "truncated" when the backend hit its 10k event cap.
+  // Live-stream status: "live" after the first frame, "reconnecting"
+  // while the browser retries a dropped connection, "truncated" when
+  // the backend hit its event cap.
   const [streamStatus, setStreamStatus] = useState<
     "idle" | "live" | "reconnecting" | "truncated"
   >("idle");
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // refreshSnapshot is the single chokepoint for "fill the table
-  // from the snapshot endpoint." Used by:
-  //   - the initial mount effect
-  //   - the 30-second reconciliation timer
-  //   - the SSE error / truncated recovery path
-  //
-  // Callers signal `quiet=true` for background refreshes so we
-  // don't flash the loading panel; the table is repopulated
-  // in-place. The initial mount uses `quiet=false` so users see
-  // "Snapshotting ACS…" before the first paint.
+  // refreshSnapshot fills the table from the snapshot endpoint.
+  // Background callers (the 30s reconciliation timer, SSE recovery)
+  // pass quiet=true so the table repopulates in place without
+  // flashing the loading panel; the initial mount uses quiet=false
+  // so users see "Snapshotting ACS…" before the first paint.
   const refreshSnapshot = useCallback(
     async (instance: string, asRole: Role, quiet: boolean) => {
       if (!quiet) {
@@ -126,9 +109,8 @@ export function ExplorerScreen() {
             error: e instanceof ApiError ? e.message : "failed to load ACS",
           });
         }
-        // Quiet background reconciliation failures are swallowed —
-        // the user keeps the last-known good state, and the next
-        // tick (or SSE event) will try again.
+        // Quiet background failures are swallowed — the user keeps
+        // the last-known good state and the next tick retries.
       }
     },
     [],
@@ -136,36 +118,23 @@ export function ExplorerScreen() {
 
   useEffect(() => {
     if (!name) return;
-    let cancelled = false;
     setSelectedCid(null);
-    void (async () => {
-      if (cancelled) return;
-      await refreshSnapshot(name, role, false);
-    })();
-    return () => {
-      cancelled = true;
-    };
+    void refreshSnapshot(name, role, false);
   }, [name, role, refreshSnapshot]);
 
-  // Live SSE subscription. Mounted once the snapshot has
-  // loaded; tears down when the instance / role changes or the
-  // screen unmounts. The EventSource browser primitive auto-
-  // reconnects on transient failures (3s default backoff); we
-  // detect the dropped-connection by listening for `error` and do
-  // a snapshot refetch to recover any missed events.
+  // Live SSE subscription, mounted once the snapshot has loaded;
+  // tears down when the instance/role changes or the screen unmounts.
+  // EventSource auto-reconnects on transient failures; the `error`
+  // listener triggers a snapshot refetch to recover missed events.
   //
-  // Events are applied via a Map<contract_id, row> in setState,
-  // which dedupes create-then-archive races: if an archive arrives
-  // before the matching create, the archive removes nothing
-  // (the row isn't in the table); if create arrives first, the
-  // archive then removes it. Either ordering converges to the same
-  // final state.
+  // Deltas are applied via a Map<contract_id, row>, which dedupes
+  // create-then-archive races: an archive arriving before its create
+  // removes nothing, so either ordering converges to the same state.
   useEffect(() => {
     if (!name) return;
     if (state.kind !== "ok") return;
-    // Resume from the snapshot's `ledger_end` so the handoff is a
-    // single atomic offset boundary — no events get skipped between
-    // the snapshot fetch and the stream open.
+    // Resume from the snapshot's `ledger_end` so no events are
+    // skipped between the snapshot fetch and the stream open.
     const es = openContractsStream(name, role, state.data.ledger_end);
     let opened = false;
     const onMessage = (raw: MessageEvent) => {
@@ -216,10 +185,9 @@ export function ExplorerScreen() {
     };
     es.addEventListener("contracts", onMessage as EventListener);
     es.onerror = () => {
-      // EventSource auto-reconnects unless we close it. Surface
-      // the visible reconnecting state and trigger a snapshot
-      // reconciliation so any missed events backfill — the
-      // browser may have been suspended (lid-close) for minutes.
+      // EventSource auto-reconnects unless closed. Show the
+      // reconnecting state and reconcile via snapshot — the browser
+      // may have been suspended (lid-close) for minutes.
       setStreamStatus("reconnecting");
       if (opened) {
         void refreshSnapshot(name, role, true);
@@ -230,15 +198,13 @@ export function ExplorerScreen() {
       es.close();
       setStreamStatus("idle");
     };
-    // We intentionally depend on state.kind (not state) so the
-    // subscription is set up exactly once per "we have a snapshot"
-    // transition and not torn down on every contract-list change.
+    // Depend on state.kind (not state) so the subscription is set up
+    // once per snapshot transition, not on every contract-list change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, role, state.kind, refreshSnapshot]);
 
-  // Periodic reconciliation. Every 30s we re-pull the
-  // snapshot to correct any drift the SSE deltas missed (network
-  // hiccups, browser suspend, backend restart). Quiet — no UI flash.
+  // Every 30s, quietly re-pull the snapshot to correct any drift the
+  // SSE deltas missed (network hiccups, browser suspend, restarts).
   useEffect(() => {
     if (!name) return;
     if (state.kind !== "ok") return;
@@ -249,10 +215,8 @@ export function ExplorerScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, role, state.kind, refreshSnapshot]);
 
-  // Keyboard: / focuses search; Esc clears selection. The "/"
-  // shortcut must NOT trigger when the user is typing into any
-  // editable surface — INPUT, TEXTAREA, or a contenteditable
-  // element.
+  // Keyboard: "/" focuses search (unless typing in an editable
+  // element); Esc clears the selection.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
@@ -324,10 +288,9 @@ export function ExplorerScreen() {
     [state, selectedCid],
   );
 
-  // J/K navigation between rows. Driven over the
-  // currently *filtered* view so the user follows what they see,
-  // not the underlying ACS order. The drawer registers its own
-  // keydown listener (Esc + j/k) and invokes these callbacks.
+  // j/k navigation over the *filtered* view so the user follows what
+  // they see, not the underlying ACS order. The drawer registers its
+  // own keydown listener (Esc + j/k) and invokes these callbacks.
   const goPrev = useCallback(() => {
     if (!selectedCid) return;
     const i = filtered.findIndex((c) => c.contract_id === selectedCid);
@@ -431,11 +394,6 @@ export function ExplorerScreen() {
               ))}
             </Card>
             <Card title="Snapshot">
-              {/* The ACS is a point-in-time snapshot kept live by the
-                  SSE delta stream + a 30s reconciliation timer. A
-                  manual refresh re-pulls it immediately — there is no
-                  time-range to pick (the dead Live/5m/1h/24h buttons
-                  were removed). */}
               <button
                 onClick={() => void refreshSnapshot(name, role, false)}
                 style={{
@@ -616,7 +574,7 @@ export function ExplorerScreen() {
               onNext={goNext}
             />
           ) : (
-            <DetailDrawer row={null} />
+            <EmptyDetailPanel />
           )}
         </div>
       )}
@@ -949,133 +907,32 @@ function AcsRow({
   );
 }
 
-function DetailDrawer({ row }: { row: ContractRow | null }) {
-  if (!row) {
-    return (
-      <div
-        style={{
-          background: W.surface,
-          border: `1px solid ${W.border}`,
-          borderRadius: 10,
-          padding: 32,
-          textAlign: "center",
-          color: W.dim,
-          fontSize: 13,
-        }}
-      >
-        Select a contract to inspect.
-      </div>
-    );
-  }
+// EmptyDetailPanel is the right-column placeholder shown until a
+// contract is selected; ContractDetailDrawer takes over after that.
+function EmptyDetailPanel() {
   return (
     <div
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
         borderRadius: 10,
-        overflow: "hidden",
+        padding: 32,
+        textAlign: "center",
+        color: W.dim,
+        fontSize: 13,
       }}
     >
-      <header style={{ padding: "14px 16px", borderBottom: `1px solid ${W.border}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Pill color={W.brand}>active</Pill>
-          <Pill color="#7CB5F7">
-            visible to {row.signatories.length + row.observers.length}
-          </Pill>
-        </div>
-        <div
-          style={{
-            marginTop: 8,
-            display: "flex",
-            alignItems: "baseline",
-            gap: 8,
-            flexWrap: "wrap",
-          }}
-        >
-          <span style={{ fontWeight: 600, fontSize: 14, color: W.text }}>
-            {row.template_id.split(":").slice(1).join(":")}
-          </span>
-          {row.package_name && (
-            <span
-              style={{ color: W.dim, fontSize: 11.5, fontFamily: wMono }}
-            >
-              {row.package_name}
-            </span>
-          )}
-        </div>
-        <div style={{ marginTop: 6, color: "#C4A8F5", fontFamily: wMono, fontSize: 11.5, wordBreak: "break-all" }}>
-          {row.contract_id}
-        </div>
-      </header>
-      <Section label="Payload">
-        <pre
-          style={{
-            margin: 0,
-            color: W.text2,
-            fontFamily: wMono,
-            fontSize: 11.5,
-            lineHeight: 1.55,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            background: W.border,
-            padding: 10,
-            borderRadius: 6,
-            maxHeight: 240,
-            overflow: "auto",
-          }}
-        >
-          {JSON.stringify(row.payload ?? {}, null, 2)}
-        </pre>
-      </Section>
-      <Section label="Signatories">
-        {row.signatories.length === 0 ? (
-          <Hint>None</Hint>
-        ) : (
-          row.signatories.map((p) => (
-            <div
-              key={p}
-              style={{ fontFamily: wMono, fontSize: 11, color: W.text2, marginBottom: 3, wordBreak: "break-all" }}
-            >
-              {p}
-            </div>
-          ))
-        )}
-      </Section>
-      {row.observers.length > 0 && (
-        <Section label="Observers">
-          {row.observers.map((p) => (
-            <div
-              key={p}
-              style={{ fontFamily: wMono, fontSize: 11, color: W.text2, marginBottom: 3, wordBreak: "break-all" }}
-            >
-              {p}
-            </div>
-          ))}
-        </Section>
-      )}
-      {row.created_at && (
-        <Section label="Created">
-          <div style={{ fontFamily: wMono, fontSize: 11.5, color: W.text }}>
-            {row.created_at}
-          </div>
-          <div style={{ color: W.dim, fontSize: 11, marginTop: 3 }}>
-            {ago(row.created_at)}
-          </div>
-        </Section>
-      )}
+      Select a contract to inspect.
     </div>
   );
 }
 
 // TransactionsView — table of recent ledger updates (transactions,
-// reassignments, topology events) projected from
-// UpdateService.GetUpdates. Each transaction row expands inline to
-// show its event tree and can be replayed as a per-party visibility
-// projection. The filter bar mirrors the CLI `tx ls --party /
-// --template / --from / --to`: filters are applied server-side
-// over the offset window, so a contract outside the row cap can still
-// be found by narrowing the query — not just hidden by a client-side
-// filter over an already-truncated snapshot.
+// reassignments, topology events). Each row expands inline to show
+// its event tree and can be replayed as a per-party visibility
+// projection. The filter bar mirrors the CLI `tx ls` flags; filters
+// are applied server-side over the offset window, so narrowing the
+// query can find contracts beyond the row cap.
 function TransactionsView({ name, role }: { name: string; role: Role }) {
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -1087,8 +944,8 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [replayId, setReplayId] = useState<string | null>(null);
   // Draft filter inputs (raw strings) vs the applied filters used in
-  // the fetch effect. Applying on submit (not keystroke) avoids a
-  // round-trip per character and a focus-stealing re-render storm.
+  // the fetch effect; applying on submit avoids a round-trip per
+  // keystroke.
   const [draft, setDraft] = useState<TxFilterDraft>(emptyDraft);
   const [applied, setApplied] = useState<TransactionFilters>({});
 
@@ -1326,9 +1183,8 @@ interface TxFilterDraft {
 const emptyDraft: TxFilterDraft = { party: "", template: "", from: "", to: "" };
 
 // parseDraft converts the raw inputs into the typed TransactionFilters
-// the API client forwards. Blank fields drop out; non-numeric
-// from/to are ignored (the input is type=number, so this is belt +
-// braces).
+// the API client forwards. Blank fields drop out; non-numeric from/to
+// are ignored.
 function parseDraft(d: TxFilterDraft): TransactionFilters {
   const split = (s: string) =>
     s
@@ -1462,7 +1318,6 @@ function TxRowComponent({
   onToggle: () => void;
   onReplay?: () => void;
 }) {
-  const kindColor = TX_KIND_COLOR;
   return (
     <>
       <div
@@ -1480,7 +1335,7 @@ function TxRowComponent({
       >
         <span
           style={{
-            color: kindColor[tx.kind],
+            color: TX_KIND_COLOR[tx.kind],
             fontFamily: wMono,
             fontSize: 11,
             fontWeight: 600,
@@ -1630,9 +1485,8 @@ function EventTreeNode({
 }
 
 // TimelineView — time-axis strip showing every update as a coloured
-// glyph along the offset/time axis. Clicking a glyph highlights it +
-// shows quick metadata in a side card. Useful for "what happened in
-// the last minute" debugging.
+// glyph. Clicking a glyph highlights it and shows quick metadata in
+// a side card — useful for "what happened in the last minute".
 function TimelineView({ name, role }: { name: string; role: Role }) {
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -1641,9 +1495,8 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
     | { kind: "port-missing"; remediation: string }
     | { kind: "err"; error: string }
   >({ kind: "loading" });
-  // Click = persistent selection. Hover = preview (only renders
-  // detail when nothing is selected). Click again to clear, Esc
-  // also clears.
+  // Click = persistent selection; hover = preview when nothing is
+  // selected. Click again or Esc clears.
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
@@ -1718,12 +1571,10 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
   const txs = state.data.transactions;
   // Bucket updates into time slots for the strip — newest on the right.
   const buckets = bucketByTime(txs, 60);
-  // Selection wins over hover: once a glyph is clicked, the right
+  // Selection wins over hover: once a glyph is clicked, the side
   // panel sticks to that update so the user can read the events
-  // without keeping the cursor over the strip. Hover is preview-
-  // only when nothing is selected.
-  const focusedIdx =
-    selectedIdx !== null ? selectedIdx : hoverIdx;
+  // without keeping the cursor over the strip.
+  const focusedIdx = selectedIdx ?? hoverIdx;
   const focused = focusedIdx !== null ? txs[focusedIdx] ?? null : null;
 
   return (

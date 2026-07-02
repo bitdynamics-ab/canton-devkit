@@ -7,23 +7,22 @@ import (
 
 // safeBasename strips a participant-supplied string of any path
 // component so it can't be used to escape the caller's CWD when
-// composed into an output filename. Used by `dar download` ( // review fix) to neutralise hostile `data.name` / `data.version`
-// values from a compromised participant.
+// composed into an output filename. `dar download` uses it to
+// neutralise hostile `data.name` / `data.version` values from a
+// compromised participant.
 //
 // Rules:
-// - filepath.Base reduces any directory traversal to the leaf
-// ("../../etc/passwd" → "passwd").
-// - Empty/dot/separator-only results become "" so the caller
-// falls back to the package-id default.
-// - Forward slashes, backslashes, NUL, and control chars are
-// replaced with "_" — defence in depth in case Base() lets
-// something through on a non-Unix path (Windows paths can
-// mix `\` and `/` and filepath.Base on Linux doesn't split
-// on `\`).
+//   - filepath.Base reduces any directory traversal to the leaf
+//     ("../../etc/passwd" → "passwd").
+//   - Empty/dot/separator-only results become "" so the caller falls
+//     back to the package-id default.
+//   - Forward slashes, backslashes, NUL, and control chars become "_"
+//     — defence in depth for separators Base() doesn't split on
+//     (filepath.Base on Linux doesn't split `\`, which Windows paths
+//     can mix with `/`).
 //
-// We deliberately don't truncate length here — that's a separate
-// concern handled at the OS layer. We just refuse to be the path-
-// composer for a participant-controlled string.
+// Length is deliberately not truncated here — that's the OS layer's
+// concern.
 func safeBasename(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -34,8 +33,7 @@ func safeBasename(s string) string {
 	if s == "." || s == ".." || s == string(filepath.Separator) {
 		return ""
 	}
-	// Now scrub any remaining metacharacters. We rebuild via a
-	// strings.Builder to avoid mutating allocs on the happy path.
+	// Scrub any remaining metacharacters.
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range s {

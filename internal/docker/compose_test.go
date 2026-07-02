@@ -70,13 +70,10 @@ func shellQuote(s string) string {
 }
 
 // runnerForWiring builds a ComposeRunner with realistic config and a
-// recorder factory whose returned cmd.Run() succeeds (so multi-call
-// methods like Up() — which now invokes `create` then `start` — don't
-// short-circuit on a non-existent WorkDir's chdir failure).
-//
-// Takes a *testing.T so we can use t.TempDir() for an always-existing
-// WorkDir. The Dir assertion in TestEveryMethodPropagatesWorkDirAndEnv
-// uses the same value rather than hard-coding a path.
+// recorder factory whose returned cmd.Run() succeeds. WorkDir is an
+// always-existing t.TempDir() so no method short-circuits on a chdir
+// failure; the Dir assertion in TestEveryMethodPropagatesWorkDirAndEnv
+// compares against the same value rather than a hard-coded path.
 func runnerForWiring(t *testing.T, rec *recorder) *ComposeRunner {
 	t.Helper()
 	return &ComposeRunner{
@@ -190,7 +187,7 @@ func TestDownArgvShape(t *testing.T) {
 // (exit 0) and leaves every container running. The `-p`-only form reads
 // the running project from the engine by label and is profile-agnostic.
 // Re-adding `-f` here would resurrect that data-stranding bug. See
-// AGENTS.md "Docker Compose teardown must be `-p`-only".
+// CONTRIBUTING.md "Docker Compose teardown must be `-p`-only".
 func TestStopTeardownIsProjectLabelOnly(t *testing.T) {
 	for _, removeVolumes := range []bool{false, true} {
 		rec := &recorder{}
@@ -343,7 +340,7 @@ func TestClassifyHealth(t *testing.T) {
 		},
 		{
 			// Splice's containers report unhealthy mid-onboarding;
-			// the 15-min WaitForHealthy timeout is the actual gate.
+			// the WaitForHealthy timeout is the actual gate.
 			// classifyHealth should keep polling, not fail fast.
 			name:      "unhealthy_keeps_polling",
 			raw:       "canton\trunning\thealthy\nsplice\trunning\tunhealthy\n",
@@ -422,9 +419,9 @@ func skipIfNoShell(t *testing.T) {
 
 func TestWaitForHealthyReturnsOnFatal(t *testing.T) {
 	skipIfNoShell(t)
-	// Use a genuinely fatal state — exited — since unhealthy is no
-	// longer fatal (Splice flips unhealthy briefly during onboarding;
-	// the 15-min WaitForHealthy timeout is the real gate for that).
+	// Use a genuinely fatal state — exited — since unhealthy is not
+	// fatal (Splice flips unhealthy briefly during onboarding; the
+	// WaitForHealthy timeout is the real gate for that).
 	rec := &scriptedRecorder{
 		script: func(args []string) (string, int) {
 			return "canton\trunning\thealthy\npostgres\texited\t\n", 0
@@ -611,7 +608,7 @@ func TestPsUsesComposeRunnerCommandSeam(t *testing.T) {
 }
 
 // Confirm scripted commands also receive WorkDir/Env — covers the
-// previously buggy Endpoints / Down paths end-to-end.
+// Endpoints / healthSnapshot / DiscoverPort paths end-to-end.
 func TestScriptedCommandsAlsoPropagateDirAndEnv(t *testing.T) {
 	skipIfNoShell(t)
 	rec := &scriptedRecorder{

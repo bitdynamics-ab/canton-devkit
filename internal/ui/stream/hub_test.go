@@ -102,7 +102,7 @@ func TestHub_DropOldestUnderBackpressure(t *testing.T) {
 // successful delivery is preceded by a synthetic Event{Topic:
 // "dropped"} so the client knows to refetch.
 //
-// the deterministic shape is:
+// The deterministic shape:
 //
 //  1. Publish two events to fill the buf=2 buffer.
 //  2. Publish a third → drop-oldest fires, droppedSinceWarn=1.
@@ -111,10 +111,6 @@ func TestHub_DropOldestUnderBackpressure(t *testing.T) {
 //     the synthetic "dropped" event into the freed slot, then
 //     the fourth real event.
 //  5. Drain — must see "dropped" before reaching the fourth.
-//
-// The old test publish-5-then-read-5 was racy: the dropped warning
-// only fits when there's free space at the time of the next
-// publish, which depends on consumer scheduling.
 func TestHub_DroppedEventPrependedAfterBackpressure(t *testing.T) {
 	h := NewWithBuffer(2)
 	ch, cancel := h.Subscribe()
@@ -256,14 +252,13 @@ func TestEvent_CarriesSchemaVersion(t *testing.T) {
 	}
 }
 
-// TestHub_NoSendOnClosedChannelAcrossCancelRace pins that
-// cancel() closes the subscriber's channel; a
-// concurrent Publish that already picked up the subscription
-// could panic on send-to-closed. The fix (closeMu RWMutex)
-// serialises close with deliverTo. This test drives the race
-// hard: N goroutines publishing while M goroutines cancel and
-// re-subscribe. Without the fix, the race detector AND the panic
-// trip within a few iterations.
+// TestHub_NoSendOnClosedChannelAcrossCancelRace pins that cancel()
+// closing the subscriber's channel cannot race a concurrent Publish
+// into a send-to-closed panic — the per-subscription mutex
+// serialises close with deliverTo. The test drives the race hard:
+// N goroutines publishing while M goroutines cancel and
+// re-subscribe. Without the serialisation, the race detector AND
+// the panic trip within a few iterations.
 func TestHub_NoSendOnClosedChannelAcrossCancelRace(t *testing.T) {
 	h := New()
 	const rounds = 500
@@ -297,13 +292,11 @@ func TestHub_NoSendOnClosedChannelAcrossCancelRace(t *testing.T) {
 	wg.Wait()
 }
 
-// TestHub_DropAccountingUnderConcurrentLoad pins that
-// the Load + Store pair in deliverTo's
-// dropped-event prepend was racy — a concurrent increment
-// between the Load and the Store would be lost. The fix uses
-// Swap(0). This test publishes faster than the subscriber
-// reads, then asserts the total accounted drops match the
-// (published - delivered) gap exactly.
+// TestHub_DropAccountingUnderConcurrentLoad pins the atomic Swap(0)
+// drop accounting in deliverTo: a Load + Store pair would lose a
+// concurrent increment between the Load and the Store. The test
+// publishes faster than the subscriber reads, then asserts the
+// accounted drops cover the (published - delivered) gap.
 func TestHub_DropAccountingUnderConcurrentLoad(t *testing.T) {
 	h := NewWithBuffer(8)
 	ch, cancel := h.Subscribe()
@@ -356,16 +349,11 @@ func TestHub_DropAccountingUnderConcurrentLoad(t *testing.T) {
 	}
 }
 
-// TestHub_NoGoroutineLeakAfterDisconnects pins the invariant that
-// subscribe + cancel N times MUST leave the goroutine count
-// unchanged. Catches the leak
-// class where cancel() forgets to remove from h.subs or to
-// close the channel, leaving the deliverTo path holding state
-// for dead subscribers.
-//
-// The hub itself doesn't spawn goroutines, but a leak in the
-// cancel path would manifest as accumulated subscriptions in
-// h.subs (visible via Stats().Subscribers).
+// TestHub_NoGoroutineLeakAfterDisconnects pins that subscribe +
+// cancel N times leaves no state behind. Catches the leak class
+// where cancel() forgets to remove from h.subs or to close the
+// channel — accumulated subscriptions are visible via
+// Stats().Subscribers.
 func TestHub_NoGoroutineLeakAfterDisconnects(t *testing.T) {
 	h := New()
 	const cycles = 200
@@ -433,13 +421,12 @@ func TestHub_SlowClientDoesNotBlockOthers(t *testing.T) {
 	}
 }
 
-// TestHub_NoGoroutineLeakAfterChurn is the instead of asserting just Subscribers count
-// returns to 0 (TestHub_NoGoroutineLeakAfterDisconnects),
-// take a runtime.NumGoroutine baseline before the churn and
-// assert it returns to within a small tolerance after. Catches
-// the leak class where a subscribe/cancel pair leaves a stray
-// goroutine alive (would not affect Subscribers count but would
-// leak memory).
+// TestHub_NoGoroutineLeakAfterChurn complements
+// TestHub_NoGoroutineLeakAfterDisconnects: instead of asserting the
+// Subscribers count returns to 0, it takes a runtime.NumGoroutine
+// baseline before the churn and asserts it returns to within a small
+// tolerance after. Catches a subscribe/cancel pair leaving a stray
+// goroutine alive — invisible to the Subscribers count but a leak.
 func TestHub_NoGoroutineLeakAfterChurn(t *testing.T) {
 	// Settle pre-existing goroutines from earlier tests.
 	for i := 0; i < 5; i++ {
@@ -471,9 +458,9 @@ func TestHub_NoGoroutineLeakAfterChurn(t *testing.T) {
 	}
 }
 
-// TestHub_CloseDisconnectsActiveSubscribers pins // Hub.Close must close every active
-// subscriber's channel so a downstream reader (the SSE handler's
-// for-range loop) unblocks and exits cleanly.
+// TestHub_CloseDisconnectsActiveSubscribers pins that Hub.Close
+// closes every active subscriber's channel so a downstream reader
+// (the SSE handler's for-range loop) unblocks and exits cleanly.
 func TestHub_CloseDisconnectsActiveSubscribers(t *testing.T) {
 	h := New()
 	chA, cancelA := h.Subscribe()
@@ -517,17 +504,13 @@ func TestHub_CloseIsIdempotent(t *testing.T) {
 	h.Close()
 }
 
-// TestHub_MultiPublisherSerialisedDeliveryNoDoubleDrop pins the invariant —
-// with the per-subscription
-// Mutex (replacing the previous RWMutex), concurrent publishers
-// to the same subscriber serialise on s.mu. Two simultaneous
-// deliverTo calls can no longer both drain and double-count
-// drops.
+// TestHub_MultiPublisherSerialisedDeliveryNoDoubleDrop pins that
+// concurrent publishers to the same subscriber serialise on s.mu, so
+// two simultaneous deliverTo calls cannot both drain the channel and
+// double-count drops.
 //
-// Test: 4 publishers × 250 events into buf=4 with a slow
-// consumer. Total published = 1000. Asserts
-// delivered + dropped == 1000 (no double-accounting; pre-fix
-// the count could exceed published).
+// Test: 4 publishers × 250 events into buf=4 with a slow consumer;
+// asserts the accounting never exceeds the 1000 published events.
 func TestHub_MultiPublisherSerialisedDeliveryNoDoubleDrop(t *testing.T) {
 	h := NewWithBuffer(4)
 	ch, cancel := h.Subscribe()
@@ -568,17 +551,14 @@ func TestHub_MultiPublisherSerialisedDeliveryNoDoubleDrop(t *testing.T) {
 	d := delivered.Load()
 	// Safety invariants under concurrent publish load:
 	//   - Published equals the inputs (no lost publish call).
-	//   - Dropped ≤ Published. The pre-fix double-drain could
-	//     push Dropped above Published (each drain in two
-	//     racing deliverTo calls incremented the same counter).
+	//   - Dropped ≤ Published — a double-drain would push Dropped
+	//     above Published.
 	//   - Real-event delivered count ≤ Published (no synthesised
 	//     real events).
-	// The exact arithmetic (delivered + dropped == published) is
-	// NOT a clean invariant — synthetic "dropped" warning
-	// events can themselves be drained by the next drop, which
-	// over-counts h.dropped by 1 per drained-warning. The above
-	// three are the regression-catching invariants; the double-
-	// drain bug shows up as Dropped > Published.
+	// Exact arithmetic (delivered + dropped == published) is NOT a
+	// clean invariant: synthetic "dropped" warnings can themselves
+	// be drained by the next drop, over-counting h.dropped by 1 per
+	// drained warning.
 	if stats.Published != total {
 		t.Errorf("Published = %d, want %d", stats.Published, total)
 	}

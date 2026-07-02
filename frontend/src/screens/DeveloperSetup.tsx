@@ -9,24 +9,19 @@ import {
 } from "../api";
 import { W, wMono } from "../tokens";
 
-// DeveloperSetup — the "Developer setup" card from the 2026-05-25
-// webui-dashboard.jsx refresh. Two sub-panels:
+// DeveloperSetup — the "Developer setup" card. Two sub-panels:
 //
-//  1. JWT generator: role/audience picker + a usable token preview
-//     + copy button. LocalNet is loopback-only with dev-secret
-//     tokens (the dev-secret warning renders below), so the raw
-//     token is surfaced directly — no redaction toggle. Mirrors the
-//     mockup's chip-row controls and the colored token-segment
-//     display.
+//  1. JWT generator: role/audience picker + a usable token preview +
+//     copy button. LocalNet is loopback-only with dev-secret tokens
+//     (the dev-secret warning renders below), so the raw token is
+//     surfaced directly — no redaction toggle.
 //
-//  2. App config exporter: format tabs (env / json / yaml) +
-//     monospace preview + copy button. Each format hits the
-//     same /api/instances/{name}/app-config endpoint with the
-//     ?format= query.
+//  2. App config exporter: format tabs (env / json / yaml) + monospace
+//     preview + copy button, all backed by
+//     /api/instances/{name}/app-config?format=.
 //
-// Both panels operate on the currently-selected instance. The
-// Dashboard owns the instance selection; this component just
-// receives `name` as a prop.
+// The Dashboard owns instance selection; this component just receives
+// `name` as a prop.
 
 const ROLES = ["app-provider", "app-user", "sv"] as const;
 type Role = (typeof ROLES)[number];
@@ -226,10 +221,8 @@ function AppConfigPanel({ name }: { name: string }) {
 
 // ──────────────────────── shared primitives ─────────────────────────
 //
-// Kept inline here while the frontend has one consumer; promote to
-// frontend/src/shell/primitives.tsx when the second screen needs
-// them. Premature shared component lib is the classic over-abstraction
-// trap — wait for the second use.
+// Kept inline while this screen is the only consumer; promote to a
+// shared module when a second screen needs them.
 
 interface CardProps {
   title: string;
@@ -323,8 +316,8 @@ function ChipRow({ options, value, onChange }: ChipRowProps) {
 
 function TokenBox({ token, revealed }: { token: string; revealed: boolean }) {
   // Split the JWT into header.payload.signature for the colored
-  // preview from the mockup. Placeholders ("—", "…") aren't 3-part
-  // tokens, so they render as plain text.
+  // preview. Placeholders ("—", "…") aren't 3-part tokens, so they
+  // render as plain text.
   const parts = token.split(".");
   const isJwt = parts.length === 3 && revealed;
   return (

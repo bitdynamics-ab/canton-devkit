@@ -83,20 +83,11 @@ export function createErrorText(e: unknown): string {
   return e instanceof ApiError ? e.message : "create failed";
 }
 
-// TokensScreen — .
-//
-// V2 Token Standard surface: lists every instrument recorded on the
-// selected instance, exposes Mint / Transfer / Burn / Accept actions
-// on each, and the Create wizard for a brand-new instrument. The
+// TokensScreen — the V2 Token Standard surface: lists every
+// instrument on the selected instance, exposes Mint / Transfer /
+// Burn / Faucet / Accept actions on each, and a Create wizard. The
 // holdings table for the selected instrument refreshes whenever the
 // user picks a row or completes a mutation.
-//
-// Errors:
-//   • 409 SYMBOL_IN_USE → surfaced in the create modal as a focused
-//     "pick a different symbol" hint.
-//   • 412 NEEDS_V2_LOCALNET → big yellow remediation banner with the
-//     command to bring up the V2 LocalNet.
-//   • everything else → red alert with the server message.
 export function TokensScreen() {
   const sel = useInstanceSelection();
   const instance = sel.selected;
@@ -116,11 +107,7 @@ export function TokensScreen() {
   const [holdingsSource, setHoldingsSource] = useState<HoldingSource>("ledger");
   const [expanded, setExpanded] = useState<string | null>(null); // party whose UTXOs are shown
   const [contracts, setContracts] = useState<HoldingContract[]>([]);
-  // expandSeqRef is the monotonic counter behind toggleExpand's
-  // latest-click guard: if the user clicks a new party while a fetch
-  // is still in flight, the stale resolution bails before clobbering
-  // the newer state. Same pattern as the `cancelled` flags in the
-  // useEffect fetches above.
+  // Monotonic counter behind toggleExpand's latest-click guard.
   const expandSeqRef = useRef(0);
   const [matrix, setMatrix] = useState<BalanceMatrix | null>(null);
   const [matrixErr, setMatrixErr] = useState<string | null>(null);
@@ -291,12 +278,10 @@ export function TokensScreen() {
     [list, activeSymbol],
   );
 
-  // Expand a party's balance into its individual Holding contracts (UTXOs).
-  // The latest-click guard mirrors the `cancelled` pattern used by the
-  // useEffect fetches above: if the user clicks a different party while
-  // a fetch is still in flight, the stale resolution must not overwrite
-  // the newer state. expandSeq increments on every click; the in-flight
-  // closure captures its own seq and bails when it no longer matches.
+  // Expand a party's balance into its individual Holding contracts
+  // (UTXOs). expandSeq increments on every click; the in-flight
+  // closure captures its own seq and bails when it no longer matches,
+  // so a stale fetch can't overwrite a newer click's state.
   function toggleExpand(party: string) {
     if (expanded === party) {
       setExpanded(null);
@@ -336,10 +321,8 @@ export function TokensScreen() {
     return { tone: "err", text: e instanceof ApiError ? e.message : fallback };
   }
 
-  // launchDemo provisions a live, transferable demo token in one click —
+  // launchDemo provisions a live, transferable demo token in one click:
   // the server composes issuer-party → create → mint → faucet-a-holder.
-  // A 412 (no live V2) surfaces via renderActionError's NEEDS_V2_LOCALNET
-  // branch ("bring up a V2 LocalNet first") rather than a generic error.
   async function launchDemo() {
     if (!instance) return;
     setDemoBusy(true);
@@ -717,10 +700,10 @@ export function TokensScreen() {
   );
 }
 
-// TransferModal — From/To/Amount + a live coin-selection preview
-//. As the user fills From + Amount, it dry-runs the transfer
-// (planTransfer) and shows which Holding contracts would be consumed and
-// the change returned — the Canton UTXO reality, before any submit.
+// TransferModal — From/To/Amount plus a live coin-selection preview:
+// as the user fills From + Amount, it dry-runs the transfer
+// (planTransfer) and shows which Holding contracts would be consumed
+// and the change returned — the Canton UTXO reality, before any submit.
 function TransferModal({
   instance, symbol, parties, onPartiesChanged, onClose, onDone, onError,
 }: {
@@ -842,9 +825,9 @@ function TransferModal({
   );
 }
 
-// KpiRow — the instrument-first KPI strip. Supply,
-// circulating (= supply on a UTXO ledger), holder count, and the number
-// of Holding contracts backing it. All derived from one ACS scan.
+// KpiRow — the instrument KPI strip: supply, circulating (= supply on
+// a UTXO ledger), holder count, and the number of Holding contracts
+// backing it. All derived from one ACS scan.
 function KpiRow({ s }: { s: InstrumentSummary }) {
   const cards: Array<{ label: string; value: string; hint?: string }> = [
     { label: "Total supply", value: s.total_supply },
@@ -882,9 +865,9 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
   );
 }
 
-// HolderDistribution — per-holder stake table: balance,
-// share of supply (with an inline bar), and how many Holding contracts
-// back each holder. Sorted biggest-first by the backend.
+// HolderDistribution — per-holder stake table: balance, share of
+// supply (with an inline bar), and how many Holding contracts back
+// each holder. Sorted biggest-first by the backend.
 function HolderDistribution({ s, aliases }: { s: InstrumentSummary; aliases: AliasMap }) {
   return (
     <>
@@ -935,9 +918,9 @@ function HolderDistribution({ s, aliases }: { s: InstrumentSummary; aliases: Ali
   );
 }
 
-// ActivityFeed — the instrument's transfer/mint/burn history (
-// Activity tab), reconstructed from the ledger transaction stream. Each
-// row is one netted transaction: kind, amount, and who sent → received.
+// ActivityFeed — the instrument's transfer/mint/burn history,
+// reconstructed from the ledger transaction stream. Each row is one
+// netted transaction: kind, amount, and who sent → received.
 function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null; err: string | null; aliases: AliasMap }) {
   if (err) return <div role="alert" style={{ color: W.err, fontSize: 13, marginTop: 12 }}>{err}</div>;
   if (events === null) return <div style={{ color: W.dim, fontSize: 13, marginTop: 12 }}>Scanning ledger history…</div>;
@@ -994,9 +977,9 @@ function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null
   );
 }
 
-// MatrixLens — the god-mode party × instrument balance table (/
-// #2). One ACS scan; rows = parties, columns = instruments,
-// plus a totals row. Only the parties the role's JWT can read appear.
+// MatrixLens — the party × instrument balance table. One ACS scan;
+// rows = parties, columns = instruments, plus a totals row. Only the
+// parties the role's JWT can read appear.
 function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; err: string | null; aliases: AliasMap }) {
   if (err) return <div role="alert" style={{ color: W.err, fontSize: 13 }}>{err}</div>;
   if (!matrix) return <div style={{ color: W.dim, fontSize: 13 }}>Loading matrix…</div>;
@@ -1061,10 +1044,10 @@ function Header({ right }: { right?: React.ReactNode }) {
   );
 }
 
-// PartyManagerModal — the god-mode party registry: list the
-// instance's aliased parties, allocate a new one by name, or forget an
-// alias. New parties immediately become visible in the matrix / activity
-// (the scan grants read-as for every registered party).
+// PartyManagerModal — list the instance's aliased parties, allocate a
+// new one by name, or forget an alias. New parties immediately become
+// visible in the matrix / activity (the scan grants read-as for every
+// registered party).
 function PartyManagerModal({
   instance,
   parties,
@@ -1301,13 +1284,12 @@ function ActionModal({
   );
 }
 
-// PartyPicker — alias-aware party selector. Replaces the raw
-// fingerprinted-party-id text inputs across the token modals: pick a
-// registered alias, create one inline (POST /api/parties), or fall back
-// to typing a raw id. Always emits the resolved party_id, which the
-// backend's ResolveAlias passes through unchanged — so it's correct for
-// create (no alias resolution) and the mint/transfer/burn/faucet paths
-// (which do resolve) alike.
+// PartyPicker — alias-aware party selector for the token modals: pick
+// a registered alias, create one inline (POST /api/parties), or fall
+// back to typing a raw id. Always emits the resolved party_id, which
+// the backend's ResolveAlias passes through unchanged — correct for
+// both the create path (no alias resolution) and the
+// mint/transfer/burn/faucet paths (which do resolve).
 function PartyPicker({
   instance,
   parties,

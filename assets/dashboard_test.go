@@ -30,10 +30,10 @@ func TestDashboardJSONIsValid(t *testing.T) {
 }
 
 // TestDashboardHasACSAndThroughputPanels pins the two live-audited
-// panels added to satisfy the completeness review. Stock Splice
-// 0.6.4 does not expose exact ACS cardinality or template-grain
-// submission counters via Prometheus, so these panel titles and
-// queries must stay honest about the signals they actually show.
+// ACS and throughput panels. Stock Splice 0.6.4 does not expose
+// exact ACS cardinality or template-grain submission counters via
+// Prometheus, so these panel titles and queries must stay honest
+// about the signals they actually show.
 func TestDashboardHasACSAndThroughputPanels(t *testing.T) {
 	raw, err := FS.ReadFile("grafana/dashboards/canton-localnet.json")
 	if err != nil {

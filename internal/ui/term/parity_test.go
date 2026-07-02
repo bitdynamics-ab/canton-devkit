@@ -9,21 +9,15 @@ import (
 	"testing"
 )
 
-// TestPalette_MatchesTerminalJSX pins
-// the color tokens in color.go MUST match the JSX TERM.* constants
-// in docs/design/mockups/terminal.jsx, otherwise the rendered CLI
-// drifts from the mockup and acceptance becomes "I'll just eyeball
-// it" — exactly the failure mode the mockup-as-spec model is
-// supposed to prevent.
+// TestPalette_MatchesTerminalJSX pins that the color tokens in
+// color.go match the JSX TERM.* constants in
+// docs/design/mockups/terminal.jsx — otherwise the rendered CLI
+// drifts from the mockup-as-spec. It parses each `KEY: '#HEX'` line
+// from the JSX and compares it against the corresponding Go
+// `lipgloss.Color("#HEX")` assignment.
 //
-// We parse the JSX file (regex; the file is hand-edited) and
-// compare each `KEY:  '#HEX'` line against the corresponding Go
-// `lipgloss.Color("#HEX")` assignment. Drift on either side fails
-// here loud + obvious.
-//
-// JSX → Go name mapping (only entries that have a Go counterpart;
-// the JSX file also has tokens we don't surface like `chrome` and
-// `selBg` because they're only relevant to the React shell):
+// jsxToGo maps JSX token names to Go identifiers (only entries with
+// a Go counterpart; tokens like `selBg` are React-shell-only):
 var jsxToGo = map[string]string{
 	"bg":          "Background",
 	"panel":       "PanelBg",
@@ -108,12 +102,10 @@ func TestBoxKinds_DecisionTable(t *testing.T) {
 		if !strings.Contains(got, "x") {
 			t.Errorf("Box(%v) lost body content: %q", label, got)
 		}
-		// All kinds use the same ┃ left border; presence verifies
-		// the renderer ran. Color difference can't be asserted
-		// without ANSI inspection — we save that for the
-		// integration tests.
-		// Structural assertion via BoxLeftBorderRune lets a future Windows ASCII profile
-		// substitute the rune without rewriting this assertion.
+		// All kinds use the same left border; presence verifies the
+		// renderer ran. Asserting via BoxLeftBorderRune (not the
+		// literal glyph) lets a future ASCII profile substitute the
+		// rune without rewriting this test.
 		if !strings.ContainsRune(got, BoxLeftBorderRune) {
 			t.Errorf("Box(%v) missing left border (rune=%q): %q",
 				label, BoxLeftBorderRune, got)
@@ -143,10 +135,8 @@ func TestStepKinds_DecisionTable(t *testing.T) {
 	}
 }
 
-// TestSpinnerFrames_NonEmpty pins the Braille rotation. A future
-// "let's use a different spinner" change needs to update this AND
-// the SpinnerFrames docstring's reference to the @keyframes
-// term-spin output in terminal.jsx.
+// TestSpinnerFrames_NonEmpty pins the Braille rotation: at least 4
+// non-empty frames for a visible spin.
 func TestSpinnerFrames_NonEmpty(t *testing.T) {
 	if len(SpinnerFrames) < 4 {
 		t.Errorf("SpinnerFrames too short (%d) — at least 4 frames needed for visible rotation",

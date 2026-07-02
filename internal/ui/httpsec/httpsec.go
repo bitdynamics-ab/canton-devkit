@@ -1,13 +1,9 @@
 // Package httpsec holds the browser-facing security checks shared by
 // the Web UI router (package ui) and the per-instance handlers
-// (package ui/handlers).
-//
-// It exists to satisfy the CLI↔Web UI parity rule the other way round:
-// the two HTTP surfaces (package ui's middleware + /events, and package
-// handlers' /api/instances/{name}/events) must apply the SAME CSRF and
-// DNS-rebinding guards. Package handlers cannot import package ui (that
-// would be an import cycle — ui imports handlers in NewRouter), so the
-// checks live in this neutral leaf package both can depend on.
+// (package ui/handlers). Both surfaces must apply the SAME CSRF and
+// DNS-rebinding guards, and handlers cannot import ui (ui imports
+// handlers in NewRouter), so the checks live in this neutral leaf
+// package both can depend on.
 //
 // Two distinct browser threats are covered here:
 //
@@ -30,33 +26,25 @@ import (
 
 // CheckOriginAgainstHost validates that the request's Origin (or
 // Referer, fallback) header host matches the supplied Host header
-// (r.Host). Treats missing Origin+Referer as a failure (browsers
-// always send one on cross-origin fetch; curl users can opt-in by
-// setting Origin to the server's URL).
+// (r.Host). Missing Origin+Referer is a failure: browsers always send
+// one on cross-origin fetch; curl users can opt in by setting Origin
+// to the server's URL.
 //
-// Returns nil on match, an explanatory error otherwise. The error
-// text is safe to return to the client as a 403 body — useful for
-// debugging during dev, deliberately vague about the comparison
-// (no "expected X got Y" so a fuzzer can't binary-search).
-//
-// origin is the value of the Origin header (or "" — the caller may
-// pass the Referer fallback itself, but the empty-Origin→Referer
-// fallback is handled here for convenience). host is r.Host.
+// Returns nil on match, an explanatory error otherwise. The error text
+// is safe to return to the client as a 403 body — deliberately vague
+// about the comparison (no "expected X got Y" so a fuzzer can't
+// binary-search).
 func CheckOriginAgainstHost(origin, referer, host string) error {
 	if host == "" {
 		return ErrMissingHost
 	}
-	// Origin header wins if present (per RFC 6454). Falls back to
-	// Referer (still useful but easier to spoof in older browsers).
+	// Origin wins if present (per RFC 6454); Referer is the fallback.
 	if origin == "" {
 		origin = referer
 	}
 	if origin == "" {
 		return ErrMissingOrigin
 	}
-	// Extract host from the Origin URL. We don't pull net/url for
-	// this — we already strip the scheme and any path so a string-
-	// match against host is correct and faster.
 	originHost := StripOriginToHost(origin)
 	if originHost == "" {
 		return ErrMalformedOrigin
@@ -83,25 +71,14 @@ func StripOriginToHost(origin string) string {
 	return rest
 }
 
-// HostsMatch compares two host strings, tolerating an implicit
-// port (Origin without ":port" vs r.Host with ":port"). Strict
-// otherwise — we don't normalise case (hosts are case-insensitive
-// but loopback IPs are ASCII numerics, so case is a non-issue).
+// HostsMatch compares two host strings, tolerating an implicit port on
+// either side ("127.0.0.1" matches "127.0.0.1:7777"). Strict otherwise
+// — case is not normalised (hosts are case-insensitive but loopback
+// IPs are ASCII numerics, so case is a non-issue).
 func HostsMatch(a, b string) bool {
-	if a == b {
-		return true
-	}
-	// Allow "127.0.0.1" to match "127.0.0.1:7777" only if the
-	// HOST side carries the port. Origin without port → port 80
-	// (HTTP default), which we'd never bind for the UI; this
-	// fallback is for the rare curl case.
-	if strings.HasPrefix(b, a+":") {
-		return true
-	}
-	if strings.HasPrefix(a, b+":") {
-		return true
-	}
-	return false
+	return a == b ||
+		strings.HasPrefix(b, a+":") ||
+		strings.HasPrefix(a, b+":")
 }
 
 // IsLoopbackHost reports whether the host-part of a Host header value

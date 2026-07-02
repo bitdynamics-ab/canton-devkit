@@ -1,13 +1,9 @@
-// DAR structural diff viewer.
-//
-// Renders /api/instances/:name/dar/diff between two DARs as a set
-// of expandable sections: modules added/removed, templates
-// added/removed/changed, interfaces added/removed/changed. No
-// dependency on a third-party diff library — the JSON shape is
-// small enough that a hand-rolled list-with-colour reads cleanly.
-//
-// Embedded as a sidebar drawer inside DARScreen when the user
-// picks two DARs to compare.
+// DAR structural diff viewer. Renders /api/instances/:name/dar/diff
+// between two DARs as expandable sections: modules / templates /
+// interfaces added/removed/changed. No third-party diff library — the
+// JSON shape is small enough that a hand-rolled list-with-colour reads
+// cleanly. Embedded as a drawer inside DARScreen when the user picks
+// two DARs to compare.
 import { useEffect, useState } from "react";
 import {
   fetchDARDiff,

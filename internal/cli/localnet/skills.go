@@ -10,12 +10,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildSkills wires `dpm localnet skills <list|install>` — .
-//
-// Ships editor-agnostic AI-agent skill docs (safe `dpm localnet`
-// workflows) and installs them into an agent's skills directory. The
-// same embedded docs back the Web UI Agent Skills screen ,
-// so the two surfaces never drift.
+// buildSkills wires `dpm localnet skills <list|install>`: ships
+// editor-agnostic AI-agent skill docs (safe `dpm localnet` workflows)
+// and installs them into an agent's skills directory. The same
+// embedded docs back the Web UI Agent Skills screen, so the two
+// surfaces never drift.
 func buildSkills() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "skills",

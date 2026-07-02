@@ -1,15 +1,11 @@
-// wire-stable error codes → localized remediation copy.
+// Wire-stable error codes → remediation copy.
 //
-// Pure function: each known ErrorCode maps to a remediation
-// block (title + step list); unknown / undefined / explicit
-// PREFLIGHT_FAILED returns null so the renderer falls back to the
-// generic cause-text without an empty panel.
-//
-// Extracted from CreateLocalNetModal.tsx so it can be unit-tested.
-// The default-null case is most at risk of drifting silently — a
-// future contributor adds a new code to the Go side, frontend tests
-// would still pass against the unknown→null fallback. Hence
-// Remediation.test.ts pins the 9 known codes individually.
+// Pure function: each known ErrorCode maps to a remediation block
+// (title + step list); unknown / undefined / PREFLIGHT_FAILED return
+// null so the renderer falls back to the generic cause-text without
+// an empty panel. The default-null case can drift silently when a new
+// code lands on the Go side, so remediation.test.ts pins every known
+// code individually.
 
 import type { ErrorCode } from "../api";
 
@@ -72,12 +68,10 @@ export function remediationForCode(code?: ErrorCode): Remediation | null {
         ],
       };
     case "CANTON_OOM":
-      // Thresholds are NOT hard-coded in copy.
-      // The per-version minimum + recommended bytes live
-      // in `internal/splice/versions.json` (and surface in the
-      // pre-flight report's Docker-memory check detail string).
-      // Pointing the user at "what the pre-flight panel said"
-      // keeps the displayed numbers and the catalogue in sync.
+      // Memory thresholds are NOT hard-coded in copy: the per-version
+      // numbers live in internal/splice/versions.json and surface in
+      // the pre-flight panel, so pointing the user there keeps the
+      // displayed numbers and the catalogue in sync.
       return {
         title: "Canton was OOM-killed by the kernel",
         steps: [

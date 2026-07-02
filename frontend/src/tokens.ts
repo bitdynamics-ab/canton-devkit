@@ -35,9 +35,8 @@ export const wMono =
 export const wSans =
   "'IBM Plex Sans', 'Inter Tight', system-ui, sans-serif";
 
-// Role-to-color map. Was duplicated as inline ternaries in
-// WalletScreen.tsx + ExplorerScreen.tsx (yellow Y13); centralised
-// so a future role addition or palette swap is a one-line change.
+// Role-to-color map shared by every screen so a role addition or
+// palette swap is a one-line change.
 export const ROLE_COLOR: Record<"app-user" | "app-provider" | "sv", string> = {
   "app-user": W.info,
   "app-provider": W.brand,

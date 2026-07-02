@@ -101,7 +101,7 @@ func pumpStream[Resp any](
 				// the consumer (typically context.Canceled or
 				// DeadlineExceeded — context.Cause if a custom
 				// reason was attached) so they can distinguish a
-				// natural EOF from a forced shutdown. (Yellow Y4.)
+				// natural EOF from a forced shutdown.
 				cause := context.Cause(ctx)
 				if cause == nil {
 					cause = ctx.Err()

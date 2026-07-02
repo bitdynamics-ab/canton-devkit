@@ -25,8 +25,8 @@ func TestBuild_AllSubcommandsRegistered(t *testing.T) {
 			t.Errorf("dar subcommand %q missing from Build()", w)
 		}
 	}
-	// Allow extras (a new subcommand is non-breaking), but if the
-	// count drops below the proposal-mandated 8 we want to know.
+	// Allow extras (a new subcommand is non-breaking), but flag it
+	// if the count drops below the expected 8.
 	if len(got) < len(want) {
 		t.Errorf("got %d subcommands, want at least %d (%v)",
 			len(got), len(want), want)

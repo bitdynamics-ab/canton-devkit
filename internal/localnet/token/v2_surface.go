@@ -1,58 +1,46 @@
 package token
 
-// V2 Token Standard interface IDs + asset-specific choice names used
-// when the live ledger wiring lands on top of .
-//
-// These constants are the single source of truth for *every* exercise
-// the token CLI / Web UI submits. They mirror the upstream Splice
-// CLI's `cli/src/constants.ts`:
+// Token Standard interface IDs + asset-specific choice names — the
+// single source of truth for every exercise the token CLI / Web UI
+// submits. They mirror the upstream Splice CLI's
+// `cli/src/constants.ts`:
 // https://github.com/canton-network/splice/blob/token-standard-v2-upcoming/token-standard/cli/src/constants.ts
 //
-// V1 vs V2 — what each verb actually uses
-// --------------------------------------
+// What each verb uses:
 //
-//	balance → ACS query filtered by HoldingInterfaceV2.
-//	                 (V2 holdings implement BOTH V1 and V2 Holding
-//	                 interfaces; querying V2 is the V2-native path
-//	                 and gives us HoldingViewV2 directly — no downcast.)
+//	balance → ACS query filtered by the vetted Holding interfaces
+//	          (V1 and/or V2; see discoverTokenSurfaces).
 //
-//	create → asset-specific: TokenRules.create on the issuer
-//	                 party for splice-test-token-v2. No standard
-//	                 "instrument create" interface exists in V2.
+//	create  → asset-specific: TokenRules.create on the issuer party
+//	          for splice-test-token-v2. No standard "instrument
+//	          create" interface exists in V2.
 //
-//	mint → asset-specific: TokenRules_OfferMint choice on the
-//	                 issuer's TokenRules contract. The test token does
-//	                 NOT implement BurnMintFactoryV1 — and V2 has no
-//	                 burn-mint package at all — so mint here is purely
-//	                 asset-specific. Real tokens (e.g. Amulet) may
-//	                 choose to expose mint through their own choice or
-//	                 by implementing BurnMintFactoryV1.
+//	mint    → asset-specific: TokenRules_OfferMint on the issuer's
+//	          TokenRules contract. The test token does NOT implement
+//	          BurnMintFactoryV1 — and V2 has no burn-mint package at
+//	          all — so mint is purely asset-specific. Real tokens may
+//	          expose mint through their own choice or by implementing
+//	          BurnMintFactoryV1.
 //
-//	transfer → TransferFactoryInterface (V2). Off-ledger flow:
-//	                 registry POST /transfer-factory → exercise the
-//	                 returned factory choice on the ledger with the
-//	                 disclosed contracts the registry handed back.
-//	                 (See internal/canton/registry.GetTransferFactory.)
+//	transfer → TransferFactory interface (V1 or V2). Off-ledger flow:
+//	          registry POST /transfer-factory → exercise the returned
+//	          factory choice on the ledger with the disclosed
+//	          contracts the registry handed back.
 //
-//	transfer accept → AcceptTransferInstruction on TransferInstructionInterface
-//	                 (V2). Off-ledger flow: registry POST
-//	                 /choice-contexts/accept → exercise on the ledger.
-//	                 (See internal/canton/registry.GetAcceptChoiceContext.)
+//	transfer accept → TransferInstruction_Accept on the
+//	          TransferInstruction interface. Off-ledger flow: registry
+//	          POST /choice-contexts/accept → exercise on the ledger.
 //
-//	burn → no generic V2 burn interface; splice-test-token-v2
-//	                 does not implement BurnMintFactoryV1 either, so a
-//	                 burn against the test token has no path. Real
-//	                 tokens that want burn typically implement
-//	                 BurnMintFactoryV1.BurnMint or expose an asset-
-//	                 specific archive choice on the holding. RunBurn
-//	                 surfaces ErrNeedsAssetSpecificBurn when invoked
-//	                 against an instrument with no burn path.
+//	burn    → no generic burn interface; splice-test-token-v2 does
+//	          not implement BurnMintFactoryV1 either. RunBurn archives
+//	          test-token holdings directly, and surfaces
+//	          ErrUnsupportedOnInstrument for instruments with no burn
+//	          path.
 //
 // Interface IDs use the package-name form (`#<package-name>:<module>:
 // <entity>`) accepted by the Ledger API's EventFormat — same as the
-// upstream CLI. They are template-package-relative so they keep
-// resolving across V2 alpha snapshot rotations without us editing
-// the constants every week.
+// upstream CLI. They are package-name-relative so they keep resolving
+// across V2 alpha snapshot rotations without editing the constants.
 
 const (
 	// HoldingInterfaceV2 is what `balance` ACS-queries against. V2
@@ -60,12 +48,10 @@ const (
 	// implementations) all show up under this filter.
 	HoldingInterfaceV2 = "#splice-api-token-holding-v2:Splice.Api.Token.HoldingV2:Holding"
 
-	// HoldingInterfaceV1 is intentionally exported too: a V2 LocalNet
-	// may also carry V1-only legacy holdings, and the upstream
-	// transfer CLI uses V1 to gather input holdings (it works because
-	// V2 holdings implement V1 for backward query compat). DevKit
-	// stays V2-first; this constant exists so a future "show me both
-	// generations" UI toggle is a one-liner.
+	// HoldingInterfaceV1 covers V1 (CIP-0056) holdings — the
+	// generation real tokens like Amulet implement on stable Splice
+	// releases. The read paths query it alongside V2 whenever the V1
+	// package is vetted.
 	HoldingInterfaceV1 = "#splice-api-token-holding-v1:Splice.Api.Token.HoldingV1:Holding"
 
 	// TransferFactoryInterfaceV2 is the on-ledger interface a sender
@@ -158,7 +144,7 @@ const (
 	// the UTXO unit. Its signatory is the account parties + the
 	// instrument admin, so the built-in Archive choice is authorizable
 	// by those parties together (all operator-controlled on LocalNet).
-	// This is the "archive path" burn : archive a holder's
-	// holdings to remove them from circulation.
+	// This is the archive-path burn: archive a holder's holdings to
+	// remove them from circulation.
 	TestTokenV2HoldingTemplateID = "#splice-test-token-v2:Splice.Testing.Tokens.TestTokenV2.Holding:Token"
 )

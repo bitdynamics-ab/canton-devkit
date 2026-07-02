@@ -29,19 +29,17 @@ func NewPgStore(ctx context.Context, dsn string) (*PgStore, error) {
 func (s *PgStore) Close() { s.pool.Close() }
 
 // UpsertCounters writes every (chart, bucket) of one period in a single
-// transaction. The fleet is MANY machines reporting the same period (no
-// machine identifier exists — telemetry is zero-PII), so ON CONFLICT
-// ADDS to the running total rather than replacing it: machine A's up=5
-// and machine B's up=3 for the same day sum to 8. period_date /
-// granularity / received_at are refreshed on each submission.
+// transaction. Many machines report the same period (telemetry is
+// zero-PII, so no machine identifier exists), so ON CONFLICT ADDS to the
+// running total rather than replacing it: machine A's up=5 and machine
+// B's up=3 for the same day sum to 8. period_date / granularity /
+// received_at are refreshed on each submission.
 //
 // Tradeoff: there is no per-upload dedup key (a persistent one would be a
 // pseudo-identifier and break the zero-PII boundary), so a machine whose
-// upload committed but whose response was lost will over-count that one
-// period by one cycle on its deferred retry. This is rare, bounded, and
-// negligible for the adoption *trends* this feeds. (A future random,
-// per-period-file nonce — non-persistent, so not a machine id — could
-// dedup exact retries while still summing across machines.)
+// upload committed but whose response was lost over-counts that one
+// period by one cycle on its retry — rare, bounded, and negligible for
+// the adoption trends this feeds.
 func (s *PgStore) UpsertCounters(ctx context.Context, period, granularity string, periodStart *time.Time, counters map[string]map[string]int) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -58,14 +56,16 @@ DO UPDATE SET count = counter_period.count + EXCLUDED.count,
               period_date = EXCLUDED.period_date,
               granularity = EXCLUDED.granularity,
               received_at = now()`
+	queued := 0
 	for chart, buckets := range counters {
 		for bucket, n := range buckets {
 			batch.Queue(q, period, periodStart, granularity, chart, bucket, n)
+			queued++
 		}
 	}
 	br := tx.SendBatch(ctx, batch)
 	// Drain every queued result; the first error aborts.
-	for range countItems(counters) {
+	for range queued {
 		if _, err := br.Exec(); err != nil {
 			_ = br.Close()
 			return fmt.Errorf("exec upsert: %w", err)
@@ -81,11 +81,10 @@ DO UPDATE SET count = counter_period.count + EXCLUDED.count,
 }
 
 // RecordInstall notes that the install identified by the opaque random
-// token was active in `period`. Idempotent on (install_id, period_date):
-// the same token re-reporting the same period collapses to one row (only
-// last_seen advances), so count(DISTINCT install_id) per period is a true
-// unique-active-install count. The token is stored ALONE — never joined
-// to or stored beside any counter — so usage can't be traced to a host.
+// token was active in `period`. Idempotent on (install_id, period_date),
+// so count(DISTINCT install_id) per period is a true unique-active-install
+// count. The token is stored ALONE — never joined to or stored beside any
+// counter — so usage can't be traced to a host.
 //
 // When periodStart is nil (unparseable key) the row is skipped: the date
 // is the dedup key, and the counters were already committed regardless.
@@ -103,12 +102,4 @@ DO UPDATE SET last_seen = now()`
 		return fmt.Errorf("record install: %w", err)
 	}
 	return nil
-}
-
-func countItems(counters map[string]map[string]int) []struct{} {
-	n := 0
-	for _, b := range counters {
-		n += len(b)
-	}
-	return make([]struct{}, n)
 }

@@ -9,11 +9,10 @@ import type { ReactNode } from "react";
 
 // useInstanceSelection — auto-pick rules + URL authority.
 //
-// The auto-pick rule is the one piece of derived logic worth
-// testing: URL value wins if it maps to a known instance,
-// otherwise first running, otherwise null. Pre-lift this lived
-// in Dashboard local state; now it serves every screen, so
-// regressions become cross-cutting.
+// The auto-pick rule is the one piece of derived logic worth testing:
+// URL value wins if it maps to a known instance, otherwise first
+// running, otherwise null. The hook serves every screen, so
+// regressions are cross-cutting.
 
 function wrap(initialEntries: string[] = ["/"]): React.FC<{ children: ReactNode }> {
   return function Wrapper({ children }) {
@@ -124,11 +123,9 @@ describe("useInstanceSelection auto-pick", () => {
   });
 
   it("re-polls every 15s so externally-killed containers update the dashboard", async () => {
-    // Repro for the user-reported bug: stop containers via Docker
-    // Desktop → registry status flips (backend reconciler) but the
-    // Dashboard was rendering the mount-time snapshot forever.
-    // After the fix, the hook polls /api/instances on a 15s timer
-    // and the next snapshot replaces the stale view.
+    // Stopping containers via Docker Desktop flips the registry status
+    // (backend reconciler); without the 15s poll the Dashboard would
+    // render the mount-time snapshot forever.
     vi.useFakeTimers();
     let callCount = 0;
     vi.stubGlobal(
@@ -204,9 +201,8 @@ describe("useInstanceSelection background refresh resilience", () => {
   }
 
   it("does NOT flip to loading on background ticks (no table flash)", async () => {
-    // Repro: every 15s tick set loading:true, so the whole table +
-    // topbar switcher flashed out for the fetch duration. After the
-    // fix, only the first fetch shows loading; refreshes stay quiet.
+    // Only the first fetch may show loading; a background refresh that
+    // set loading:true would flash out the table + topbar switcher.
     vi.useFakeTimers();
     let resolveSecond: ((r: Response) => void) | null = null;
     let call = 0;

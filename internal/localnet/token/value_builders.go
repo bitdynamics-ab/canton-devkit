@@ -204,11 +204,9 @@ func choiceContextValues(ctxData map[string]any) map[string]any {
 // `{"AV_Text": "hello"}`) round-trip directly; legacy registries that
 // hand us bare scalars get sniffed into the closest matching variant.
 func buildChoiceContextRecord(data map[string]any) (*lapiv2.Value, error) {
-	// The registry hands back the choice context as a full
-	// ChoiceContext JSON (`{"values": {...}}`), so unwrap the inner
-	// `values` map before building the TextMap — otherwise we'd
-	// double-wrap and the Daml choice's context lookups
-	// (e.g. "amulet-rules", "open-round") would miss.
+	// Unwrap the inner `values` map (see choiceContextValues) before
+	// building the TextMap — double-wrapping would make the Daml
+	// choice's context lookups (e.g. "amulet-rules") miss.
 	values, err := anyValueTextMap(choiceContextValues(data))
 	if err != nil {
 		return nil, err

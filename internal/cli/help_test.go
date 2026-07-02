@@ -49,9 +49,7 @@ func TestLocalnetHelp_RendersMockupShape(t *testing.T) {
 // helpCategories() list to the live cobra tree in BOTH directions:
 //
 //   - every visible command registered in localnet.Build() must have
-//     a help row, or users can't discover it from --help (restart,
-//     clean, skills, and token shipped without rows and were
-//     invisible until this test existed);
+//     a help row, or users can't discover it from --help;
 //   - every help row must correspond to a registered command, so the
 //     help never advertises commands that aren't wired yet.
 //
@@ -160,33 +158,24 @@ func TestDynamicBox_AutoSizesToContent(t *testing.T) {
 }
 
 // TestLocalnetHelp_LazyRenderRespectsLatePaletteChange covers the
-// "ANSI cached at install time" hazard: if a user sets NO_COLOR
-// after process start (e.g. a wrapper script that rewrites env
-// between subcommand invocations), the help output MUST honor it.
-// Caching the ANSI at applyHelp time would ignore later env changes.
-//
-// We assert by toggling the term renderer to ASCII via the
-// test helper, then snapshotting the output. If the render were
-// cached, the snapshot would still contain ANSI; with lazy
-// render it doesn't.
+// "ANSI cached at install time" hazard: if NO_COLOR is set after
+// process start (e.g. a wrapper script that rewrites env between
+// subcommand invocations), the help output must honor it. Caching the
+// render at applyHelp time would ignore later env changes.
 func TestLocalnetHelp_LazyRenderRespectsLatePaletteChange(t *testing.T) {
 	// First call with default profile to ensure the lazy path
 	// is exercised at least once.
 	var out1, errBuf1 bytes.Buffer
 	_ = New(&out1, &errBuf1, "test", "").Run([]string{"localnet", "--help"})
 
-	// Now set NO_COLOR and call again. term.ShouldColor honors
-	// this; lipgloss in our package reads it on every render
-	// because we don't cache.
 	t.Setenv("NO_COLOR", "1")
 	var out2, errBuf2 bytes.Buffer
 	_ = New(&out2, &errBuf2, "test", "").Run([]string{"localnet", "--help"})
 
-	// The first output may or may not contain ANSI depending on
-	// the test environment's TTY detection. We don't pin that.
-	// What we DO pin: after NO_COLOR is set, the output must NOT
-	// contain ANSI CSI sequences. (If the render were cached at
-	// install time, out2 would equal out1 byte-for-byte
+	// The first output may or may not contain ANSI depending on the
+	// test environment's TTY detection; we only pin that after
+	// NO_COLOR is set the output has no ANSI CSI sequences. (A render
+	// cached at install time would make out2 equal out1 byte-for-byte
 	// regardless of NO_COLOR.)
 	if strings.Contains(out2.String(), "\x1b[") {
 		t.Errorf("NO_COLOR=1 should produce ANSI-free output, got:\n%s", out2.String())
@@ -194,10 +183,9 @@ func TestLocalnetHelp_LazyRenderRespectsLatePaletteChange(t *testing.T) {
 }
 
 // TestLocalnetHelp_NarrowTerminalFallsBackToSingleLine pins width
-// adaptation: setting COLUMNS to a value under narrowFallbackCols
-// must produce the single-line fallback (no box, no "Usage ", no
-// Section titles). The boxed layout overflows at narrow widths and
-// wraps to garbage otherwise.
+// adaptation: COLUMNS under narrowFallbackCols must produce the plain
+// fallback (no box, no "Usage ", no Section titles) — the boxed layout
+// wraps to garbage at narrow widths.
 func TestLocalnetHelp_NarrowTerminalFallsBackToSingleLine(t *testing.T) {
 	t.Setenv("COLUMNS", "30")
 	var out, errBuf bytes.Buffer
@@ -218,11 +206,9 @@ func TestLocalnetHelp_NarrowTerminalFallsBackToSingleLine(t *testing.T) {
 	}
 }
 
-// TestLocalnetHelp_WideTerminalClampsBoxToMax verifies that when
-// COLUMNS is generous (>= narrowFallbackCols) the boxed layout
-// renders — the inverse of the narrow case. Pins the symmetric
-// behaviour so a future regression doesn't make the wide branch
-// fall back too.
+// TestLocalnetHelp_WideTerminalClampsBoxToMax verifies that a generous
+// COLUMNS (>= narrowFallbackCols) renders the boxed layout — the
+// inverse of the narrow case.
 func TestLocalnetHelp_WideTerminalClampsBoxToMax(t *testing.T) {
 	t.Setenv("COLUMNS", "120")
 	var out, errBuf bytes.Buffer
@@ -331,8 +317,7 @@ func TestLocalnetSubcommandHelp_UsesCobraDefault(t *testing.T) {
 	}
 }
 
-// utf8RuneCount is a tiny helper inlined so the test file doesn't
-// need to import unicode/utf8 just for one call.
+// utf8RuneCount avoids importing unicode/utf8 for one call.
 func utf8RuneCount(s string) int {
 	n := 0
 	for range s {

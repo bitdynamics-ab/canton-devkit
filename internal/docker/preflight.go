@@ -16,12 +16,8 @@ const preflightCheckTimeout = 10 * time.Second
 // `localnet doctor`. They MUST be equal across the two surfaces —
 // the `doctor && up` shell-gating contract ("doctor must not fail
 // on a host where `up` would pass") relies on it.
-// TestThresholdParity_DoctorMatchesUp pins the equality.
-//
-// Values chosen to match the current `up` defaults (the
-// historical authority — `up` shipped these before `doctor`
-// existed). If the proposal requires a bump, edit ONCE here and
-// the gate stays consistent.
+// TestThresholdParity_DoctorMatchesUp pins the equality. To change
+// a threshold, edit it ONCE here so the gate stays consistent.
 const (
 	DefaultMinDiskBytes   uint64 = 10_000_000_000 // 10 GB
 	DefaultMinMemoryBytes uint64 = 4_000_000_000  // 4 GB

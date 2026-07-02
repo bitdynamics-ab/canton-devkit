@@ -9,23 +9,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// narrowFallbackCols is the width below which the help template
-// abandons its boxed/sectioned layout and prints a single-line
-// summary. The 50-col threshold is the boxed layout's minimum
-// visible content width (45 cols box + 5 cols slack).
+// narrowFallbackCols is the width below which the help abandons its
+// boxed/sectioned layout for a plain per-command listing: the boxed
+// layout needs ~45 visible cols plus slack.
 const narrowFallbackCols = 50
 
-// helpDefaultCols is the assumed terminal width when COLUMNS is
-// unset and we can't measure (e.g. piped output). 80 cols is the
-// long-standing CLI default.
+// helpDefaultCols is the assumed terminal width when COLUMNS is unset
+// (e.g. piped output).
 const helpDefaultCols = 80
 
-// helpCols resolves the terminal width for the help-template only.
-// We read $COLUMNS (test-controllable, also set by `tput`) and fall
-// back to helpDefaultCols if absent or unparseable. We deliberately
-// keep this private to the cli package rather than putting it in
-// internal/ui/term — pulling golang.org/x/term just to measure one
-// command's layout adds dependency surface for no other consumer.
+// helpCols resolves the terminal width for the help template from
+// $COLUMNS, falling back to helpDefaultCols if absent or unparseable.
+// Kept private rather than in internal/ui/term: pulling golang.org/x/term
+// just to measure one command's layout isn't worth the dependency.
 func helpCols() int {
 	v := os.Getenv("COLUMNS")
 	if v == "" {
@@ -44,71 +40,39 @@ func helpCols() int {
 	return n
 }
 
-// applyHelp swaps Cobra's default help template on the `localnet`
-// subcommand for a custom ASCII-box + sectioned listing.
+// applyHelp swaps Cobra's default help on the `localnet` subcommand for
+// a custom ASCII-box + sectioned listing. Only the `localnet` subgroup is
+// overridden — the root command keeps Cobra's canonical help.
 //
-// We only override the `localnet` subgroup (not the root) because the
-// root command's help is overwhelmingly Cobra-canonical and most users
-// reach it via `--version`; the custom layout is specifically the
-// `localnet --help` shape (lifecycle vs developing sections).
+// Cobra inherits help templates and help funcs from parent to child, so
+// each direct child is pinned to its currently-inherited default first;
+// otherwise `localnet up --help` would render the parent's section
+// listing instead of `up`'s own flags help.
 //
-// Cobra inherits help templates from parent to child unless the
-// child has its own — so before overriding `localnet`'s template
-// we explicitly pin each direct child to the inherited default.
-// Without this, `localnet up --help` would render the parent's
-// section listing instead of `up`'s detailed flags help.
-//
-// Render is LAZY (per-call HelpFunc) rather than baked at install
-// time, so NO_COLOR / --no-color set after startup (a real CI
-// pattern) is honored. The box width is dynamic so a longer title
-// or subtitle can't overflow it.
-//
-// Categories are intentionally hand-listed rather than scraped
-// from the cobra tree — they group by intent, not alphabetically,
-// and unshipped commands must not appear until they land. New
-// commands need one new line each in helpCategories below.
+// Render is lazy (per-call HelpFunc) rather than baked at install time,
+// so NO_COLOR set after startup (a real CI pattern) is honored.
 func applyHelp(localnet *cobra.Command) {
-	// Pin each child's template + helpFunc so the parent's overrides
-	// below don't bleed down via cobra's parent-walk. Both fields are
-	// inherited — without the explicit pin, `localnet up --help` would
-	// render the parent's section listing instead of `up`'s own
-	// detailed flags help.
 	for _, child := range localnet.Commands() {
 		child.SetHelpTemplate(child.HelpTemplate())
-		fn := child.HelpFunc() // currently-inherited (cobra default)
-		child.SetHelpFunc(fn)  // pin it to the child explicitly
+		child.SetHelpFunc(child.HelpFunc())
 	}
-	// Parent: lazy render via SetHelpFunc so palette state at
-	// INVOCATION time (not init time) drives the output.
 	localnet.SetHelpFunc(func(c *cobra.Command, _ []string) {
-		out := c.OutOrStdout()
-		_, _ = out.Write([]byte(renderLocalnetHelp(out)))
+		_, _ = c.OutOrStdout().Write([]byte(renderLocalnetHelp()))
 	})
 }
 
-// renderLocalnetHelp is called per --help invocation. Cheap (one
-// builder, ~30 writes) so caching would buy us nothing measurable
-// while costing the lazy-palette correctness.
-//
-// w is the destination writer — used only to derive the terminal
-// width (via $COLUMNS or fallback) for box layout. On narrow
-// terminals (<50 cols) the boxed layout overflows and wraps ugly, so
-// we fall back to a single-line summary in that case.
-func renderLocalnetHelp(w interface {
-	Write([]byte) (int, error)
-}) string {
-	_ = w
-	cols := helpCols()
-	if cols < narrowFallbackCols {
+// renderLocalnetHelp renders per --help invocation (cheap, so no caching
+// — caching would break the lazy-palette behavior). Terminals narrower
+// than narrowFallbackCols get a plain listing; a clipped box is worse.
+func renderLocalnetHelp() string {
+	if helpCols() < narrowFallbackCols {
 		return renderNarrowHelp()
 	}
 	return renderBoxedHelp()
 }
 
-// renderNarrowHelp is the <50-col fallback: a single bold title
-// line + one line per command. No boxes, no sections, no padding
-// math — terminals this narrow can't render the boxed layout
-// faithfully and a clipped box is worse than a plain list.
+// renderNarrowHelp is the narrow-terminal fallback: a bold title line
+// plus one line per command — no boxes, no sections, no padding math.
 func renderNarrowHelp() string {
 	var b strings.Builder
 	b.WriteString(term.Brandc(helpTitle()))
@@ -124,13 +88,11 @@ func renderNarrowHelp() string {
 	return b.String()
 }
 
-// helpCategories returns the canonical hand-list shared by the
-// boxed and narrow renderers. Hand-listed (not scraped from cobra)
-// because the listing groups by intent, and unshipped commands must
-// NOT appear until they land. The inverse also holds: every command
-// wired in localnet.Build() must be listed here, or users can't
-// discover it. TestLocalnetHelp_MatchesWiredCommandSet enforces both
-// directions.
+// helpCategories returns the canonical hand-list shared by the boxed
+// and narrow renderers. Hand-listed (not scraped from cobra) because
+// the listing groups by intent, not alphabetically. It must stay in
+// sync with the commands wired in localnet.Build();
+// TestLocalnetHelp_MatchesWiredCommandSet enforces both directions.
 func helpCategories() []helpCategory {
 	return []helpCategory{
 		{
@@ -176,8 +138,6 @@ func renderBoxedHelp() string {
 
 	var b strings.Builder
 
-	// Dynamic-width ASCII box: auto-sizes so a longer title can't
-	// overflow it.
 	boxBody := []string{
 		helpTitle(),
 		"manage Canton LocalNets like a normal",
@@ -221,12 +181,10 @@ func renderBoxedHelp() string {
 	return b.String()
 }
 
-// boxGlyphs is the rune set used for one box-drawing pass. We pick
-// either Unicode (default) or pure ASCII (LANG=C, NO_COLOR, or
-// non-TTY where the renderer can't safely emit U+2500-range glyphs).
-// CI logs with LANG=C and many Windows terminals print Unicode
-// box-drawing chars as `???` or `~~`; the ASCII fallback keeps the
-// structure readable when those glyphs can't render.
+// boxGlyphs is the rune set for one box-drawing pass: Unicode by
+// default, pure ASCII when the terminal likely can't render
+// U+2500-range glyphs (CI logs with LANG=C and many Windows terminals
+// print them as garbage).
 type boxGlyphs struct {
 	tl, tr, bl, br, h, v string
 }
@@ -236,9 +194,9 @@ var (
 	asciiBox   = boxGlyphs{tl: "+", tr: "+", bl: "+", br: "+", h: "-", v: "|"}
 )
 
-// pickBoxGlyphs returns asciiBox when color is off OR when LANG/
-// LC_ALL signals a C / POSIX locale (no UTF-8). Either signal
-// suggests the terminal probably can't render U+2500-range glyphs.
+// pickBoxGlyphs returns asciiBox when color is off or when LANG/LC_ALL
+// signals a non-UTF-8 locale — either suggests the terminal can't
+// render Unicode box glyphs.
 func pickBoxGlyphs() boxGlyphs {
 	if !term.ShouldColor(os.Stderr) || localeForcesASCII() {
 		return asciiBox
@@ -299,12 +257,9 @@ func indentHelp(s string, n int) string {
 	return strings.Join(lines, "\n")
 }
 
-// dynamicBox renders a box-drawing frame around `lines`, auto-sized
-// to the widest line + 6 cells of padding (3 on each side). Returns
-// the 2 frame lines +
-// N body lines + 1 frame line, in order. Glyph set is chosen by
-// pickBoxGlyphs (Unicode normally, ASCII when the terminal can't
-// render U+2500-range).
+// dynamicBox renders a box-drawing frame around `lines`, auto-sized to
+// the widest line plus 3 cells of padding on each side, so a longer
+// title can't overflow the frame.
 func dynamicBox(lines []string) []string {
 	g := pickBoxGlyphs()
 	inner := 0
@@ -338,13 +293,13 @@ type helpRow struct {
 	name, desc string
 }
 
-// renderHelpRow pads the command name out to nameWidth visible
-// cells so two rows in the same section align. Uses term.VisibleLen
-// (runes after stripping ANSI) rather than len(name): a multi-byte
-// name (e.g. an i18n alias) would otherwise over-count bytes and
-// misalign the column.
+// nameWidth is the visible-cell width the command-name column is
+// padded to so rows in the same section align.
 const nameWidth = 12
 
+// renderHelpRow pads via term.VisibleLen (runes after stripping ANSI)
+// rather than len(name): a multi-byte name would otherwise over-count
+// bytes and misalign the column.
 func renderHelpRow(name, desc string) string {
 	pad := nameWidth - term.VisibleLen(name)
 	if pad < 1 {

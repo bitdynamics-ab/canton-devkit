@@ -20,22 +20,19 @@ const (
 )
 
 // BoxLeftBorderRune is the glyph Box uses for its left accent bar.
-// Exported as a constant so tests can assert presence structurally
-// (`strings.Count(out, string(BoxLeftBorderRune))`) instead of hard-
-// coding the literal "┃" — lets a future Windows ASCII profile
+// Exported so tests can assert presence structurally instead of
+// hard-coding the literal "┃" — a future ASCII profile can
 // substitute "|" without breaking tests.
 const BoxLeftBorderRune = '┃'
 
 // Box renders a left-accented, padded block — the "READY" /
-// "BREAKING" callout style from the mockups. Equivalent to:
+// "BREAKING" callout style from the mockups:
 //
 //	┃  ✓  LocalNet "hubble" is ready.
 //	┃     Run `dpm localnet env --name hubble` to export config.
 //
-// The left bar uses a single-cell border so the box doesn't waste
-// horizontal space on a wide terminal. Per the JSX Box pattern, we
-// keep the right edge open — content flows naturally and we don't
-// have to compute terminal width.
+// The right edge is left open so content flows naturally and the
+// renderer never needs to know the terminal width.
 func Box(kind BoxKind, body string) string {
 	var accent lipgloss.Color
 	switch kind {
@@ -60,9 +57,7 @@ func Box(kind BoxKind, body string) string {
 		PaddingRight(0).
 		PaddingTop(0).
 		PaddingBottom(0)
-	// lipgloss will pad each line of body to its longest line so the
-	// border is consistent — that's what we want for a multi-line
-	// box. Trim trailing newlines so callers can chain Box() with
+	// Trim trailing newlines so callers can chain Box() with
 	// fmt.Fprintln without doubling the gap.
 	return style.Render(strings.TrimRight(body, "\n"))
 }

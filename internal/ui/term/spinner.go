@@ -8,13 +8,9 @@ import (
 
 // Spinner is a self-contained bubbletea Model rendering a single
 // rotating ⠹ glyph followed by a label. Plug it into a parent Model
-// for in-progress steps in long-running commands (up, restore,
-// dar watch) — the parent forwards spinner.Tick to Update.
-//
-// We don't pull charmbracelet/bubbles/spinner because the only thing
-// we need is "advance a frame on a tick"; ~25 lines of state machine
-// here keeps the dependency surface small and the behaviour
-// inspectable from tests.
+// for in-progress steps in long-running commands. Hand-rolled rather
+// than charmbracelet/bubbles/spinner because all we need is "advance
+// a frame on a tick" — this keeps the dependency surface small.
 type Spinner struct {
 	Frames []string // defaults to SpinnerFrames if zero-value
 	Label  string
@@ -40,17 +36,10 @@ type SpinnerTickMsg = spinnerTickMsg
 // Unknown messages pass through unchanged — embedding parents stay
 // free to dispatch on their own message types.
 //
-// **Value receiver — MUST reassign.** Spinner is a value type
-// (not pointer); the frame field only advances on the returned
-// copy. Embedding parents MUST capture the return:
+// Value receiver — the frame only advances on the RETURNED copy, so
+// callers MUST reassign:
 //
-// Example:
-//
-//	var cmd tea.Cmd
-//	m.spinner, cmd = m.spinner.Update(msg) // MUST reassign — value receiver
-//
-// TestSpinner_ReassignmentContract pins this so a future "let's
-// switch to a pointer receiver" PR fails loudly here first.
+//	m.spinner, cmd = m.spinner.Update(msg)
 func (s Spinner) Update(msg tea.Msg) (Spinner, tea.Cmd) {
 	if _, ok := msg.(spinnerTickMsg); !ok {
 		return s, nil

@@ -10,8 +10,8 @@
 //	<name>/overlay.env            — generated env-file overlay (written by up)
 //	<name>/containers.yaml        — generated container-rename overlay
 //
-// All writes are atomic (tmp + rename), state.json is mode 0600 (JWTs land
-// here in the future), and concurrent up/down on the same instance is
+// All writes are atomic (tmp + rename), state.json is mode 0600 (it
+// holds captured JWTs), and concurrent up/down on the same instance is
 // rejected by the lock.
 package registry
 
@@ -37,12 +37,9 @@ type Status string
 const (
 	StatusCreating Status = "creating"
 	StatusRunning  Status = "running"
-	// StatusStopping is the transitional state RunDown persists BEFORE
-	// it invokes `docker compose down`. Without it, a crash or SIGKILL
-	// mid-teardown would leave the registry reporting `running` while
-	// the containers may be partially torn down — `localnet status`
-	// would then lie to the user. Lives here so list.go's statusGlyph
-	// and the types projection test can both reference the constant.
+	// StatusStopping is persisted BEFORE `docker compose down` runs, so
+	// a crash or SIGKILL mid-teardown can't leave the registry reporting
+	// `running` while containers are partially torn down.
 	StatusStopping Status = "stopping"
 	StatusStopped  Status = "stopped"
 	StatusFailed   Status = "failed"
@@ -68,14 +65,13 @@ type State struct {
 	ContainerPrefix string   `json:"container_prefix"`
 
 	// Profiles is the exact set of `docker compose --profile` names
-	// enabled at `up` time (adapter base profiles + the user's
-	// `--profile` opt-ins). Every Splice LocalNet service is
-	// profile-gated, so any compose subcommand that operates on the
-	// service model (`restart`, `pause`, `ps`) MUST replay this set or
-	// it targets zero services. Teardown (`down`/`clean`) does NOT need
-	// it — it tears down by project label (`-p`-only). Additive: older
-	// state.json files without this key decode with Profiles == nil;
-	// callers fall back to re-deriving from the version adapter.
+	// enabled at `up` time (adapter base profiles + user opt-ins).
+	// Every Splice LocalNet service is profile-gated, so compose
+	// subcommands that operate on the service model (`restart`,
+	// `pause`, `ps`) MUST replay this set or they target zero services;
+	// teardown (`down`/`clean`) works by project label and does not
+	// need it. Additive: older state.json files decode with
+	// Profiles == nil and callers re-derive from the version adapter.
 	Profiles []string `json:"profiles,omitempty"`
 
 	// Filesystem locations
@@ -89,40 +85,32 @@ type State struct {
 	// Feature flags from the version adapter
 	AlphaProtocolEnabled bool `json:"alpha_protocol_enabled"`
 
-	// Captured JWTs (empty for now).
+	// Credentials holds the per-role JWTs captured at `up` time.
 	Credentials map[string]Credential `json:"credentials,omitempty"`
 
-	// Tokens is the per-instance V2 instrument registry.
-	// Each entry is a TokenRef indexed by symbol — created via
-	// `localnet token create`, consumed by `mint/transfer/burn/
-	// balance` and the Web UI Tokens screen. Persisted so users
-	// don't have to retype the (admin, instrument_id) pair on every
-	// command. Keyed by symbol; symbols must be unique within an
-	// instance. Additive — older state.json files without this key
-	// decode cleanly with Tokens == nil.
+	// Tokens is the per-instance V2 instrument registry, keyed by
+	// symbol (unique within an instance). Created via `localnet token
+	// create`; consumed by mint/transfer/burn/balance and the Web UI
+	// Tokens screen. Additive — older state.json files without this
+	// key decode cleanly with Tokens == nil.
 	Tokens map[string]TokenRef `json:"tokens,omitempty"`
 
-	// Parties is the per-instance party alias registry.
-	// Keyed by alias (a human-readable name like "bob"), each entry
-	// maps to an allocated on-ledger party id. On LocalNet there is no
-	// trust boundary between parties — the `unsafe` dev secret signs for
-	// every role — so the token tooling treats the instance as one
-	// god-mode workspace and lets developers refer to parties by alias
-	// anywhere a party id is accepted. Auto-seeded with the role parties
-	// on first scan; extended via `localnet party new <alias>`.
-	// Additive — older state.json files without this key decode cleanly
-	// with Parties == nil.
+	// Parties maps a human-readable alias (e.g. "bob") to an allocated
+	// on-ledger party id. On LocalNet the `unsafe` dev secret signs for
+	// every role, so there is no trust boundary between parties and the
+	// tooling accepts an alias anywhere a party id is accepted.
+	// Auto-seeded with the role parties on first scan; extended via
+	// `localnet party new <alias>`. Additive — older state.json files
+	// without this key decode cleanly with Parties == nil.
 	Parties map[string]PartyRef `json:"parties,omitempty"`
 
-	// ImageDigests records the content digest (image ID, sha256:…) of
-	// each Splice container image that was actually pulled and run, keyed
-	// by "<repository>:<tag>". Captured post-up from `docker compose
-	// images`. The catalogue pins the source TREE (commit + ContentSHA)
-	// but the ghcr image tags are mutable; recording the resolved digests
-	// lets a later `up`/`restart` WARN if a republished tag changed what
-	// actually runs — the strongest verification otherwise covers only
-	// the least-dangerous artifact. Additive — older state.json files
-	// without this key decode cleanly with ImageDigests == nil.
+	// ImageDigests records the content digest (sha256:…) of each Splice
+	// container image actually pulled and run, keyed by
+	// "<repository>:<tag>" and captured post-up from `docker compose
+	// images`. The catalogue pins the source tree but ghcr image tags
+	// are mutable; recording resolved digests lets a later up/restart
+	// WARN if a republished tag changed what actually runs. Additive —
+	// older state.json files decode cleanly with ImageDigests == nil.
 	ImageDigests map[string]string `json:"image_digests,omitempty"`
 
 	// Current lifecycle status.
@@ -131,13 +119,10 @@ type State struct {
 }
 
 // TokenRef is the on-disk shape of a registered V2 token instrument.
-// MIRRORS internal/api/types.TokenRef byte-for-byte (same JSON tags);
-// we redeclare it here rather than import api/types so the registry
-// package stays free of an upward dependency on api/types (which
-// could otherwise cause cycles via shared-types growth). The
-// single-source-of-truth is the api/types declaration — registry
-// just round-trips it through state.json. Adding a field requires
-// updating both.
+// MIRRORS internal/api/types.TokenRef (same JSON tags); redeclared here
+// rather than imported so registry stays free of an upward api/types
+// dependency (a cycle risk). api/types is the source of truth — adding
+// a field requires updating both.
 type TokenRef struct {
 	Name          string `json:"name"`
 	Symbol        string `json:"symbol"`
@@ -180,55 +165,34 @@ var ErrNotFound = errors.New("instance not registered")
 // failure.
 var ErrInvalidName = errors.New("invalid instance name")
 
-// validInstanceName matches names that are safe to use as a path
-// component AND as a DNS label. We require DNS label form (RFC 1123)
-// because the future hostname-routing model — Splice publishes
-// {service}.{instance}.localhost endpoints — would otherwise break
-// for names containing uppercase or underscores. Keeping a single
-// rule across registry, CLI and downstream hostname construction is
-// cheaper than wiring two policies that drift.
-//
-// RFC 1123 label format:
-//   - lowercase a-z, 0-9, hyphen
-//   - must start AND end with [a-z0-9] (no leading/trailing hyphen)
-//   - 1-63 characters
-//
-// Rejects: uppercase ("MyStack"), underscores ("my_stack"), leading
-// hyphen ("-flag"), trailing hyphen ("name-"), empty, anything Unicode
-// or with path separators / shell metacharacters.
-//
-// Migration: instances previously named with uppercase or underscores
-// (e.g. "my_stack") need to be re-created under a DNS-label name.
-// Documented in docs/limitations.md.
+// validInstanceName matches names that are safe both as a path
+// component and as a DNS label (RFC 1123: 1-63 chars of [a-z0-9-],
+// starting and ending with [a-z0-9]). DNS-label form matters because
+// Splice's hostname-routing model publishes
+// {service}.{instance}.localhost endpoints, which would break for
+// names with uppercase or underscores. One rule shared by registry,
+// CLI and hostname construction is cheaper than two policies that
+// drift. See docs/limitations.md for the migration note.
 var validInstanceName = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 
 // ValidateName rejects instance names that could escape the registry
 // root or break tooling. Called from every public entry point that
 // accepts a name (PathFor, DataDirFor, Read, Write, Delete, Lock).
+// The check is deliberately conservative — it's far easier to widen
+// later than to narrow after users depend on quirky names.
 //
-// The check is conservative — it's far easier to widen later than to
-// narrow after users depend on quirky names. Specifically rejected:
-//
-//   - empty string
-//   - leading or trailing hyphen
-//   - any byte outside [a-z0-9-] (uppercase and underscore rejected
-//     to keep DNS-label compatibility for future hostname routing)
-//   - longer than 63 bytes (DNS label maximum)
-//
-// After the regex passes, we belt-and-suspenders: confirm
-// filepath.Clean(name) == name and that the resulting Root()/name path
-// stays under Root() once joined. That catches platform-specific
-// edge cases the regex might miss (e.g. NTFS short names).
+// After the regex passes, belt-and-suspenders checks confirm
+// filepath.Clean(name) == name and that Root()/name stays under Root()
+// once joined, catching platform-specific edge cases the regex might
+// miss (e.g. NTFS short names).
 func ValidateName(name string) error {
 	if !validInstanceName.MatchString(name) {
 		return fmt.Errorf("%w: %q must be a DNS label: 1-63 chars of [a-z0-9-], starting and ending with [a-z0-9]",
 			ErrInvalidName, name)
 	}
 	if filepath.Clean(name) != name {
-		// Should be impossible after the regex, but the cost of an
-		// extra check is essentially zero and catches future
-		// regressions (e.g. someone widening the regex without
-		// re-thinking containment).
+		// Should be impossible after the regex; guards against the
+		// regex being widened without re-thinking containment.
 		return fmt.Errorf("%w: %q changes under filepath.Clean", ErrInvalidName, name)
 	}
 	root := Root()
@@ -260,13 +224,10 @@ func Root() string {
 
 // PathFor returns the state.json path for the named instance.
 //
-// Callers should call ValidateName first if `name` is user-supplied;
-// PathFor itself panics on an invalid name rather than silently
-// returning a path outside the registry root. The panic is intentional:
-// returning a "safe-looking but wrong" path would defeat the purpose
-// of validation. Read/Write/Delete (the on-disk entry points) validate
-// before invoking PathFor so the panic path is unreachable in normal
-// flow — it exists only to catch programmer error.
+// Panics on an invalid name rather than returning a "safe-looking but
+// wrong" path outside the registry root. Read/Write/Delete validate
+// before invoking PathFor, so the panic only catches programmer error;
+// callers with user-supplied names should call ValidateName first.
 func PathFor(name string) string {
 	if err := ValidateName(name); err != nil {
 		panic(fmt.Sprintf("registry.PathFor called with invalid name: %v", err))
@@ -302,14 +263,10 @@ func NewState(name, spliceVersion string) *State {
 // the instance whose ComposeProject matches. Returns ErrNotFound
 // when no match is found.
 //
-// Added for handlers/metrics.go: the previous reverse
-// lookup did strings.TrimPrefix(project, "canton-"), which broke if
-// the naming convention ever changed or an instance was renamed.
-// This walks the authoritative ground truth instead.
-//
-// Cost: O(N) reads where N = number of instances. With at most a
-// handful of instances per dev box this is trivial; metrics handler
-// caches the result with a 5s TTL on top.
+// Walks the authoritative registry rather than reverse-engineering the
+// project name, so it survives naming-convention changes and renames.
+// Cost is O(N) reads over the handful of instances on a dev box; the
+// metrics handler caches the result with a 5s TTL on top.
 func LookupByComposeProject(project string) (*State, error) {
 	idx, err := ReadIndex()
 	if err != nil {
@@ -355,8 +312,7 @@ func Read(name string) (*State, error) {
 }
 
 // Write persists the state atomically. Creates the per-instance directory
-// if missing. Updates the index. Mode 0600 because future versions of the
-// struct hold JWTs.
+// if missing. Updates the index. Mode 0600 because the struct holds JWTs.
 func Write(s *State) error {
 	if err := ValidateName(s.Name); err != nil {
 		return err
@@ -391,10 +347,7 @@ func Write(s *State) error {
 //
 // Validates the name up-front so an attacker-controlled --name (e.g.
 // `../../home/victim`) can never make os.RemoveAll target a path
-// outside the registry root. The defense-in-depth check inside
-// ValidateName re-resolves the joined path via filepath.Rel; if the
-// regex were ever widened by mistake, that check still catches
-// containment violations.
+// outside the registry root.
 func Delete(name string) error {
 	if err := ValidateName(name); err != nil {
 		return err
@@ -409,41 +362,26 @@ func Delete(name string) error {
 	return nil
 }
 
-// forceFailBeforeRename is a test-only fault-injection seam. When set,
-// it is called inside atomicWrite between the temp file's Close() and
-// the os.Rename(). A test can panic() inside the hook to simulate a
-// process crash at the worst possible moment — after the temp file is
-// fully written but before it's promoted to the canonical path.
-//
-// In production code paths this is nil (zero overhead). Tests set it
-// per-call and clear it on defer.
-//
-// Together with the `committed` flag's deferred cleanup, this lets us
-// prove the actual atomicity guarantee: a crash between write and
-// rename leaves the on-disk state untouched and no temp files behind.
+// forceFailBeforeRename is a test-only fault-injection seam, called
+// inside atomicWrite between the temp file's Close() and the
+// os.Rename(). Tests panic() inside the hook to simulate a process
+// crash after the temp file is fully written but before it's promoted.
+// Nil in production paths; tests set it per-call and clear on defer.
 var forceFailBeforeRename func()
 
 // atomicWrite writes data to a temp sibling then renames over path so a
-// crashed write never produces a half-written state file.
+// crashed write never produces a half-written state file. The deferred
+// cleanup removes the temp file on any error path — including panic
+// unwinding (see TestAtomicWriteSurvivesPanicBeforeRename); once the
+// rename succeeds, `committed = true` short-circuits it.
 //
-// On any error path, the temp file is removed in the deferred cleanup;
-// on the success path, `committed = true` short-circuits the cleanup
-// because the rename has already promoted the temp to `path`.
-//
-// The defer runs through panic unwinding as well, so even a panic
-// between write and rename (simulated via forceFailBeforeRename) leaves
-// no leftover temp file — see TestAtomicWriteSurvivesPanicBeforeRename.
-//
-// Durability: the temp file's contents are fsync'd BEFORE the rename,
-// and the containing directory is fsync'd AFTER the rename. Without
-// the data fsync, a power loss shortly after the rename can persist
-// the directory entry (the rename) before the file's data blocks on
-// ext4 and other journaled filesystems without strict ordering —
-// leaving a zero-length or partially-written state.json/index.json,
-// exactly the corruption the temp+rename dance exists to prevent. The
-// dir fsync makes the rename itself durable. The panic-injection test
-// only proves process-crash safety; these barriers add power-loss
-// safety on top.
+// Durability: the temp file's contents are fsync'd BEFORE the rename
+// and the containing directory AFTER. Without the data fsync, a power
+// loss shortly after the rename can persist the directory entry before
+// the file's data blocks (on ext4 and other journaled filesystems
+// without strict ordering), leaving a truncated state.json — exactly
+// the corruption the temp+rename dance exists to prevent. The dir
+// fsync makes the rename itself durable.
 func atomicWrite(path string, data []byte, mode os.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".tmp-state-*")

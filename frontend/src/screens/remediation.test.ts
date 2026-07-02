@@ -3,20 +3,17 @@ import { describe, it, expect } from "vitest";
 import type { ErrorCode } from "../api";
 import { remediationForCode } from "./remediation";
 
-// Pins the silent-default regression risk.
-// The default-null fallback is the dangerous case: a future
-// contributor adds a new code to the Go side (`internal/localnet/
-// coded_error.go`), and without explicit coverage on the FE side
-// the new code silently renders as "no remediation panel" — the
-// user gets the generic cause-text with no targeted help.
+// Pins the silent-default regression risk: a new code added on the Go
+// side (internal/localnet/coded_error.go) without a frontend mapping
+// silently renders "no remediation panel" — the user gets the generic
+// cause-text with no targeted help.
 //
 // Two layers of pinning:
-//   1. EVERY known ErrorCode (the 9-member union) maps to either
-//      a non-null Remediation OR an explicit null. No "default" case
-//      reachable in normal operation.
-//   2. The 7 codes that SHOULD render a panel are individually
-//      tested for shape + content keywords (title + step list non-empty,
-//      titles unique, steps contain the actionable verb).
+//   1. EVERY known ErrorCode maps to either a non-null Remediation OR
+//      an explicit null — no "default" case reachable in normal
+//      operation.
+//   2. The codes that SHOULD render a panel are individually tested
+//      for shape + content keywords.
 
 describe("remediationForCode", () => {
   // The full set of wire-stable codes, in sync with frontend/src/api.ts
@@ -112,20 +109,12 @@ describe("remediationForCode", () => {
   });
 
   it("every known code is handled — guards against the silent-default regression", () => {
-    // This test guards that behavior. If a contributor
-    // adds a new code to the ErrorCode union in api.ts but
-    // forgets to extend remediationForCode, the new code maps
-    // to the `default:` arm returning null — silently no
-    // remediation panel. We enforce the contract by walking the
-    // explicit list and asserting EVERY entry maps to one of the
-    // two intended outcomes (Remediation OR explicit null), and
-    // that the count matches the wire-stable union.
-    //
-    // Stale-list canary: the list above MUST be updated when
-    // ErrorCode changes — a TS-level check for exhaustiveness
-    // would be even better, but it requires turning the switch
-    // into an exhaustive `assertNever` pattern. Coverage by test
-    // is the lighter alternative.
+    // A code added to the ErrorCode union without extending
+    // remediationForCode falls through to the `default:` arm — no
+    // remediation panel. Walk the explicit list and assert every
+    // entry maps to one of the two intended outcomes (Remediation OR
+    // explicit null). The list above MUST be updated when ErrorCode
+    // changes — that's the stale-list canary.
     for (const code of allKnownCodes) {
       const r = remediationForCode(code);
       // Either a real remediation OR explicit null — never undefined.

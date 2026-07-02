@@ -184,11 +184,6 @@ func TestTokens_CreateDuplicateIsConflict(t *testing.T) {
 // ErrUnsupportedOnInstrument. The Web UI uses this to render
 // "this asset doesn't support mint via the V2 standard — use the
 // asset's wallet UI" instead of a generic error.
-//
-// (Previously this test asserted 412 / NEEDS_V2_LOCALNET; that was the
-// transitional shape while V2 wasn't wired. Now that mint is wired to
-// a precise "unsupported on this asset" verdict, 422 is the right
-// surface and what the UI's TokensScreen handles.)
 func TestTokens_MintUnsupportedOnInstrument(t *testing.T) {
 	seedForTokens(t, "demo")
 	srv := tokensSrv(t)

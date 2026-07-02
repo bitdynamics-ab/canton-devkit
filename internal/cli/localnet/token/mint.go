@@ -19,14 +19,11 @@ underlying Daml choice (BurnMintV1.Mint) refuses non-issuer submitters.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			err := token.RunMint(cmd.Context(), cmd.OutOrStdout(), opts)
-			if err != nil && !errors.Is(err, token.ErrNeedsV2LocalNet) {
-				return err
-			}
 			if errors.Is(err, token.ErrNeedsV2LocalNet) {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
 				return errSilent
 			}
-			return nil
+			return err
 		},
 	}
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")

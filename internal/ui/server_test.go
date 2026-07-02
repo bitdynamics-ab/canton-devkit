@@ -36,14 +36,10 @@ func TestServer_BindsToLoopbackByDefault(t *testing.T) {
 	}
 }
 
-// TestConfig_WithDefaultsKeepsPortZero is the lock-in for the
-// Port=0 contract: Port has NO default substitution in
-// withDefaults(). 0 means "OS-assigned" and is used by `--port 0`,
-// tests, and CI smoke checks. Without this pin, a contributor who
-// adds `if c.Port == 0 { c.Port = 7777 }` would silently break
-// every Port=0 caller (test pool collisions, "port already in
-// use" on `--port 0`, etc.). The CLI flag owns the 7777 human
-// default — see internal/cli/localnet/ui.go.
+// TestConfig_WithDefaultsKeepsPortZero pins the Port=0 contract: Port
+// has NO default substitution in withDefaults() — 0 means "OS-assigned"
+// and defaulting it to 7777 would break every Port=0 caller. The CLI
+// flag owns the 7777 human default.
 func TestConfig_WithDefaultsKeepsPortZero(t *testing.T) {
 	got := Config{Port: 0}.withDefaults()
 	if got.Port != 0 {
@@ -159,13 +155,11 @@ func TestServer_HealthzReturnsOK(t *testing.T) {
 	}
 }
 
-// TestServer_IdleTimeoutSet pins:
-// every server
-// MUST have a non-zero IdleTimeout. Without it, keep-alive
-// connections from sleeping browser tabs pin server-side
-// goroutines indefinitely; over hours of use that accumulates
-// into a leak. 60s is the chosen value (twice the SSE heartbeat
-// so a healthy stream's keepalives reset the timer cleanly).
+// TestServer_IdleTimeoutSet: every server MUST have a non-zero
+// IdleTimeout — without it, keep-alive connections from sleeping
+// browser tabs pin server-side goroutines indefinitely. 60s is the
+// chosen value (twice the SSE heartbeat so a healthy stream's
+// keepalives reset the timer cleanly).
 func TestServer_IdleTimeoutSet(t *testing.T) {
 	srv := New(Config{Port: 0, Router: http.NewServeMux()})
 	if srv.http.IdleTimeout == 0 {

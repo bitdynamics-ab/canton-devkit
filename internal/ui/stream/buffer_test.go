@@ -2,6 +2,7 @@ package stream
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -112,8 +113,7 @@ func TestHub_EnableBuffering_RingEvictsOldest(t *testing.T) {
 
 	const topic = "instance:long"
 	h.EnableBuffering(topic, 4)
-	for i, id := range []string{"a", "b", "c", "d", "e", "f"} {
-		_ = i
+	for _, id := range []string{"a", "b", "c", "d", "e", "f"} {
 		h.Publish(Event{SchemaVersion: 1, Topic: topic, ID: id})
 	}
 
@@ -267,11 +267,9 @@ func TestHub_SubscribeWithReplay_RaceWithPublisher(t *testing.T) {
 			case <-ctx.Done():
 				return
 			default:
-				// fmt.Sprintf("%d", i) gives a monotonic unique ID.
-				// An earlier two-byte scheme wrapped around at 260
-				// iterations, making the "no duplicates" assertion
-				// fire spuriously when the publisher hit "A0" twice.
-				id := uintToString(i)
+				// Monotonic unique IDs — the "no duplicates"
+				// assertion below depends on IDs never repeating.
+				id := strconv.FormatUint(i, 10)
 				h.Publish(Event{SchemaVersion: 1, Topic: topic, ID: id})
 				publishedIDs.Store(id, i)
 				i++
@@ -341,22 +339,6 @@ func drainN(t *testing.T, ch <-chan Event, n int, timeout time.Duration) []Event
 		}
 	}
 	return got
-}
-
-// uintToString — strconv.FormatUint without the strconv import.
-// Used by the race test for monotonic unique IDs.
-func uintToString(n uint64) string {
-	if n == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[i:])
 }
 
 func idsOf(events []Event) []string {

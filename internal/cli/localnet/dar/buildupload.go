@@ -3,6 +3,7 @@ package dar
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,9 +15,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// dar build-upload — shell out to `dpm build` (or `daml build`)
-// and then upload the resulting DAR. DevKit deliberately delegates the
-// compilation step; we never reimplement damlc / dpm.
+// dar build-upload — shell out to `dpm build` (or `daml build`), then
+// upload the resulting DAR. Compilation is deliberately delegated to
+// the user's toolchain; DevKit never reimplements damlc / dpm.
 func buildBuildUpload() *cobra.Command {
 	var (
 		conn     connectFlags
@@ -70,7 +71,7 @@ Exit codes:
 			}
 
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Building %s with %s...\n", proj, tool)
-			darPath, err := runBuild(cmd.Context(), tool, proj, cmd.ErrOrStderr())
+			darPath, err := runBuild(tool, proj, cmd.ErrOrStderr())
 			if err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dar build-upload: build failed: %s\n", err)
 				return localnet.AsExitError(localnet.ExitUserError)
@@ -81,7 +82,6 @@ Exit codes:
 				return nil
 			}
 
-			// bounded read via cdkdar.ReadDARFile.
 			data, err := cdkdar.ReadDARFile(darPath)
 			if err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dar build-upload: read %s: %s\n", darPath, err)
@@ -162,9 +162,8 @@ func pickBuilder(pref string) (string, error) {
 // resulting .dar. Both dpm and daml put the DAR in .daml/dist/ by
 // convention; we glob for the freshest .dar there after the build
 // finishes.
-func runBuild(ctx interface{}, tool, project string, stderr interface{ Write([]byte) (int, error) }) (string, error) {
-	args := []string{"build"}
-	c := exec.Command(tool, args...)
+func runBuild(tool, project string, stderr io.Writer) (string, error) {
+	c := exec.Command(tool, "build")
 	c.Dir = project
 	var stderrBuf bytes.Buffer
 	c.Stderr = &stderrBuf

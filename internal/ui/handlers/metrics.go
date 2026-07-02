@@ -20,11 +20,10 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// MountMetrics wires 's Web UI face: a per-instance
-// Prometheus passthrough so the future Metrics screen can render
-// live charts without the browser scraping Prometheus directly
-// (avoids CORS + lets the handler enforce auth/JWT once that
-// lands).
+// MountMetrics wires the metrics Web UI face: a per-instance
+// Prometheus passthrough so the Metrics screen can render live
+// charts without the browser scraping Prometheus directly (avoids
+// CORS + lets the handler enforce auth/JWT once that lands).
 //
 //	GET /api/instances/{name}/metrics?query=<PromQL>
 //
@@ -33,7 +32,7 @@ import (
 // the observability profile isn't running for the instance —
 // frontend renders a "raise observability" remediation panel.
 //
-// Per AGENTS.md "CLI ↔ Web UI parity": this handler shares the
+// Per CONTRIBUTING.md "CLI ↔ Web UI parity": this handler shares the
 // scrape config and PromQL grammar with `dpm localnet metrics`.
 // Adding a new built-in panel updates both surfaces.
 func MountMetrics(mux *http.ServeMux) {
@@ -406,9 +405,8 @@ func secondsToMs(v *float64) *float64 {
 // When found we hit it via 127.0.0.1:<host-port>.
 //
 // Defence:
-//   - dedicated http.Client with Timeout = metricsTimeout (no longer
-//     leaks http.DefaultClient's unbounded behaviour on a misbehaving
-//     upstream)
+//   - dedicated http.Client with Timeout = metricsTimeout, so a
+//     misbehaving upstream can't hold the request open unboundedly
 //   - response body bounded by io.LimitReader so a runaway Prometheus
 //     cannot OOM the devkit. 16 MiB is well above the largest range
 //     response we observe in practice (a 24h × 5s step × 50-series
@@ -447,14 +445,13 @@ func proxyPrometheus(ctx context.Context, project, path string) ([]byte, error) 
 // discoverPrometheus resolves the per-instance Prometheus address.
 // 9090 is the CONTAINER-internal port; the host port is whatever
 // Docker ephemerally assigned, captured into state.Ports["prometheus_ui"]
-// during `localnet up` .
+// during `localnet up`.
 //
-// Yellow Y6+Y7: project→state reverse lookup goes through the
-// authoritative registry index (instead of brittle "canton-<name>"
-// TrimPrefix), and the whole result is cached for 5s. With the
-// Metrics screen polling 9 charts every 5s, that previously fired
-// 9 × `docker compose ps` subprocesses per second per instance.
-// One cached lookup per 5s is enough — the host:port pair doesn't
+// The project→state reverse lookup goes through the authoritative
+// registry index (not a brittle "canton-<name>" prefix trim), and the
+// whole result is cached for 5s — without the cache, the Metrics
+// screen polling 9 charts every 5s would fire 9 `docker compose ps`
+// subprocesses per second per instance. The host:port pair doesn't
 // change between Prometheus restarts.
 func discoverPrometheus(ctx context.Context, project string) (string, int, error) {
 	if host, port, err, ok := lookupPromCache(project); ok {

@@ -13,29 +13,20 @@ import {
 import { W, wMono } from "../tokens";
 import { BackupRestore } from "./BackupRestore";
 
-// InstanceDetail — the per-instance detail card the dashboard
-// pops above the Developer setup card when a row is selected.
-//
-// Surfaces the fields that GET /api/instances/:name returns
-// beyond the summary row (compose project, docker network,
-// data dir, container prefix, uptime, live-probe state). The
-// summary table only carries name/status/version/ports/started
-// — the rest is hidden behind this fetch.
-//
-// Pure-frontend slice: this wires the existing detail endpoint
-// into a screen without changing the backend.
+// InstanceDetail — the per-instance detail card the dashboard shows
+// when a row is selected. Surfaces the fields GET /api/instances/:name
+// returns beyond the summary row (compose project, docker network,
+// data dir, container prefix, uptime, live-probe state).
 interface Props {
   name: string;
-  // statusHint comes from sel.instances (the always-fresh list)
-  // and gates which action button renders. Falls back to the
-  // status in the fetched-instance state if omitted — but the
-  // dashboard should pass it so the button reflects the latest
-  // list state immediately after onChanged, not the stale copy
-  // from this component's own mount-time fetch.
+  // statusHint comes from the dashboard's always-fresh instance list
+  // and gates which action button renders. Falls back to this card's
+  // own fetched status if omitted — but the dashboard should pass it
+  // so the button reflects the latest list state immediately after
+  // onChanged, not the stale copy from this card's mount-time fetch.
   statusHint?: string;
-  // Optional: refresh the dashboard's instance list after a Stop
-  // succeeds so the row's status updates (running → stopped) and
-  // the DeveloperSetup panel hides.
+  // Refresh the dashboard's instance list after an action succeeds so
+  // the row's status updates.
   onChanged?: () => void;
 }
 
@@ -45,9 +36,8 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
     | { kind: "ok"; instance: Instance }
     | { kind: "err"; error: string }
   >({ kind: "loading" });
-  // Bumped to force a refetch after a successful Stop/Remove so
-  // the cached instance.status doesn't lie about the post-action
-  // state.
+  // Bumped after an action so the cached instance.status doesn't lie
+  // about the post-action state.
   const [refetchTick, setRefetchTick] = useState(0);
   const [stopping, setStopping] = useState<
     | { kind: "idle" }
@@ -63,9 +53,8 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
     try {
       await stopInstance(name);
       setStopping({ kind: "idle" });
-      // Bump our own refetch tick so this card's status field
-      // updates from running → stopped, then notify the parent
-      // so the dashboard's row + ActionButton catch up too.
+      // Refetch our own status, then notify the parent so the
+      // dashboard's row + ActionButton catch up too.
       setRefetchTick((n) => n + 1);
       onChanged?.();
     } catch (e) {
@@ -116,10 +105,9 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
     setStopping({ kind: "running" });
     try {
       await recreateInstance(name);
-      // 202 — recreate is async (down → up). The dashboard's 15s
-      // poll will pick up the transitional `creating` status when
-      // the goroutine reaches the up phase; refresh both surfaces
-      // eagerly so the user sees movement within the next tick.
+      // 202 — recreate is async (down → up). Refresh both surfaces
+      // eagerly so the user sees the transitional status before the
+      // dashboard's next poll.
       setStopping({ kind: "idle" });
       setRefetchTick((n) => n + 1);
       onChanged?.();
@@ -135,10 +123,8 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
     setStopping({ kind: "running" });
     try {
       await resumeInstance(name);
-      // 202 — bring-up is in progress. The dashboard's 15s
-      // poll will pick up the running status when the
-      // reconciler sees it. Refresh both surfaces eagerly so
-      // the user sees "creating" within the next tick.
+      // 202 — bring-up is in progress. Refresh both surfaces eagerly
+      // so the user sees "creating" before the dashboard's next poll.
       setStopping({ kind: "idle" });
       setRefetchTick((n) => n + 1);
       onChanged?.();
@@ -162,9 +148,8 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
       await scrubInstance(name);
       setStopping({ kind: "idle" });
       onChanged?.();
-      // No setRefetchTick — the entry is gone, the parent's
-      // refresh will drop this whole card via sel.selected
-      // changing or the conditional render hiding it.
+      // No setRefetchTick — the entry is gone; the parent's refresh
+      // drops this whole card.
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "failed to remove";
       setStopping({ kind: "err", message: msg });
@@ -174,11 +159,9 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    // Only show the loading placeholder on a true name-change
-    // mount, not on a refetchTick bump — the latter is a
-    // background refresh and the cached data is still valid
-    // until the new fetch resolves. Without this guard, every
-    // Stop/Remove would briefly blank the detail card.
+    // Show the loading placeholder only on a true name-change mount,
+    // not on a refetchTick bump — without this guard, every action
+    // would briefly blank the detail card.
     if (refetchTick === 0) {
       setState({ kind: "loading" });
     }
@@ -227,12 +210,9 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
           </span>
         )}
         <span style={{ marginLeft: "auto" }} />
-        {/* Status source priority:
-           1. statusHint from parent (always-fresh sel.instances row)
-           2. state.instance.status (this card's own fetch)
-           This keeps the action button accurate the instant the
-           dashboard refreshes after Stop, without waiting for
-           this card's own refetch to settle. */}
+        {/* Prefer statusHint (parent's fresh list) over this card's
+           own fetch so the action button updates the instant the
+           dashboard refreshes. */}
         {(statusHint || state.kind === "ok") && (
           <ActionButton
             status={statusHint ?? (state.kind === "ok" ? state.instance.status : "")}
@@ -271,18 +251,15 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
         <div style={{ color: W.err, fontSize: 13 }}>{state.error}</div>
       )}
       {state.kind === "ok" && <DetailGrid instance={state.instance} />}
-      {/* Backup & restore lives inside the detail card so
-          the instance-name context is implicit. Renders even on
-          loading/error so the user can still take a snapshot of a
-          mostly-broken instance for support tickets. */}
+      {/* Rendered even on loading/error so the user can still take a
+          snapshot of a mostly-broken instance for support tickets. */}
       <BackupRestore instanceName={name} />
     </section>
   );
 }
 
 function DetailGrid({ instance }: { instance: Instance }) {
-  // Field order mirrors the mockup's "About this instance" card:
-  // identity first, then runtime, then on-disk locations.
+  // Identity first, then runtime, then on-disk locations.
   const rows: Array<[string, React.ReactNode]> = [
     ["splice", instance.splice_version],
     ["status", instance.status],
@@ -318,24 +295,18 @@ function DetailGrid({ instance }: { instance: Instance }) {
 }
 
 // ActionButton dispatches the right verb(s) per instance status.
-// Registry status alone isn't enough — docker truth may diverge
-// (the ContainerHealth panel shows this). Specifically:
+// Registry status alone isn't enough — docker truth may diverge:
 //
-//   - running        → Stop  (containers are live by definition)
-//   - failed/partial → Stop + Remove (containers MAY still be up
-//                       — the orchestrator gave up but docker
-//                       compose down is the right cleanup; if no
-//                       project exists docker no-ops cleanly)
-//   - stopped        → Remove only (containers definitely gone)
-//   - creating       → no button (CreatingPanel owns that surface)
-//   - other          → no button (defensive)
+//   - running/paused → Pause/Resume + Recreate + Stop
+//   - failed/partial → Recreate + Stop + Remove (containers MAY still
+//                      be up even though the orchestrator gave up;
+//                      compose down no-ops cleanly if not)
+//   - stopped        → Start + Remove
+//   - creating/other → no button (CreatingPanel owns that surface)
 //
-// The Stop variant on failed/partial is labeled "Stop containers"
-// (distinct from "Stop" on running) so the user knows it's a
-// force-cleanup rather than a graceful shutdown of a healthy
-// instance. The wording difference also matters because docker
-// compose down with --volumes is destructive — surface it
-// explicitly when the registry's been lying.
+// The failed/partial Stop is labeled "Stop containers" (distinct from
+// "Stop" on running) to signal a force-cleanup rather than a graceful
+// shutdown of a healthy instance.
 function ActionButton({
   status,
   busy,
@@ -355,12 +326,6 @@ function ActionButton({
   onRemove: () => void;
   onRecreate: () => void;
 }) {
-  // Recreate is offered alongside the existing controls on every
-  // non-transitional status: running, paused, failed, partial. The
-  // `creating` and `stopping` statuses are in-flight transitions
-  // where ActionButton renders nothing (the CreatingPanel and the
-  // disabled-by-busy guard cover those), so the Recreate button is
-  // implicitly hidden during those phases.
   if (status === "running") {
     return (
       <div style={{ display: "flex", gap: 6 }}>
@@ -422,11 +387,9 @@ function ActionButton({
     );
   }
   if (status === "failed" || status === "partial") {
-    // Both Stop and Remove — docker may still have live containers
-    // even though the registry gave up. Recreate is also offered:
-    // failed/partial often comes from a transient compose hiccup
-    // that a clean down + up sequence resolves without losing the
-    // instance metadata.
+    // Recreate is offered because failed/partial often comes from a
+    // transient compose hiccup that a clean down + up resolves
+    // without losing the instance metadata.
     return (
       <div style={{ display: "flex", gap: 6 }}>
         <button
@@ -457,11 +420,8 @@ function ActionButton({
     );
   }
   if (status === "stopped") {
-    // Start sits next to Remove so a user who came back to a
-    // stopped instance can resume it without bouncing to the
-    // terminal. The Start path is the dedicated POST /up
-    // endpoint — reuses the recorded version + ports, won't
-    // silently upgrade.
+    // Start goes through POST /up — it reuses the recorded version +
+    // ports and won't silently upgrade.
     return (
       <div style={{ display: "flex", gap: 6 }}>
         <button

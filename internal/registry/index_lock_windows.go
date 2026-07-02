@@ -12,17 +12,12 @@ import (
 
 // withIndexLock serialises the read-modify-write of index.json across
 // processes on Windows — the counterpart to the blocking flock in
-// index_lock_unix.go. It takes a process-wide cross-process lock on
-// .index.lock via windows.LockFileEx (LOCKFILE_EXCLUSIVE_LOCK, *without*
+// index_lock_unix.go. It takes a cross-process lock on .index.lock via
+// windows.LockFileEx (LOCKFILE_EXCLUSIVE_LOCK, *without*
 // FAIL_IMMEDIATELY, so it blocks like the Unix LOCK_EX), runs fn, then
-// releases.
-//
-// This replaces the previous sync.Mutex stub, which protected only
-// within a single canton-devkit process and let the long-running
-// `localnet ui` reconciler (which rewrites index.json every ~15s) race
-// concurrent CLI commands and lose entries. golang.org/x/sys/windows is
-// already a direct dependency, so the historical "stay zero-dep"
-// justification no longer applies.
+// releases. Cross-process locking matters here: the long-running
+// `localnet ui` reconciler rewrites index.json every ~15s and would
+// otherwise race concurrent CLI commands and lose entries.
 func withIndexLock(fn func() error) error {
 	if err := os.MkdirAll(Root(), 0o755); err != nil {
 		return fmt.Errorf("mkdir registry root: %w", err)

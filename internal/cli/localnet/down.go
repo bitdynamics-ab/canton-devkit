@@ -29,8 +29,6 @@ import (
 // The transitional StatusStopping is critical: if we SIGKILL during
 // compose-down without it, `localnet status` keeps reporting
 // `running` while containers are partially gone.
-//
-// Output: three Step rows + a brand-accented Box.
 func buildDown() *cobra.Command {
 	var (
 		name  string
@@ -94,19 +92,13 @@ type DownOptions struct {
 	Force bool
 }
 
-// stopperFn is the seam tests use to bypass docker. Production
-// callers leave it nil; production builds a real
-// docker.ComposeRunner and calls Stop(ctx, false). A test sets
-// stopperFn to a fake that records the call and returns whatever
-// the test wants.
-//
-// Modelled as a package var rather than a parameter on RunDown
-// because RunDown is also called by the Web UI handler — neither
-// caller wants a fake-runner argument in production. RunDown is
-// reachable from concurrent goroutines (one per HTTP request), so
-// the read of stopperFn is guarded by stopperMu to avoid a data
-// race. Tests use installStopper (below) which swaps under the mutex
-// and restores via t.Cleanup.
+// stopperFn is the seam tests use to bypass docker; nil (production)
+// means "build a real docker.ComposeRunner". It is a package var
+// rather than a RunDown parameter because the Web UI handler calls
+// RunDown too, and RunDown is reachable from concurrent goroutines
+// (one per HTTP request) — so reads go through stopperMu. Tests must
+// swap it via installStopper, which honours the mutex and restores
+// on t.Cleanup.
 var (
 	stopperMu sync.RWMutex
 	stopperFn func(ctx context.Context, state *registry.State) error
@@ -119,10 +111,9 @@ func getStopper() func(ctx context.Context, state *registry.State) error {
 	return stopperFn
 }
 
-// installStopper is the test-only helper that swaps stopperFn under
-// the write lock and registers the restore via t.Cleanup. Tests
-// MUST use this rather than `stopperFn = ...` directly so the
-// mutex contract holds.
+// installStopper swaps stopperFn under the write lock and restores
+// it via t.Cleanup. Tests MUST use this rather than assigning
+// stopperFn directly so the mutex contract holds.
 func installStopper(t interface {
 	Cleanup(func())
 }, fn func(ctx context.Context, state *registry.State) error) {
@@ -161,13 +152,10 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 		return localnet.ExitRuntimeFailure
 	}
 
-	// Lock-ordering matters here: reading state, branching on
-	// StatusStopped, THEN acquiring the lock would be racy if a
-	// concurrent `down` (or Web UI POST) flipped status between the
-	// Read and the Lock. So: take the lock first, re-Read inside the
-	// critical section, and branch on the authoritative state. The
-	// early `state` Read above stays only to provide a friendly
-	// ErrNotFound message before we even attempt to lock.
+	// Branching on status before locking would race a concurrent
+	// `down` (or Web UI POST), so: lock first, re-read inside the
+	// critical section, branch on the authoritative state. The early
+	// Read above exists only for the friendly ErrNotFound message.
 	release, err := registry.Lock(opts.Name)
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "%s\n", err)
@@ -214,13 +202,10 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 		"Draining ledger", "in-flight commands", ""))
 
 	if err := stop(ctx, state); err != nil {
-		// Two distinct outcomes here:
-		// ctx.Err() != nil → interrupted, exit 3, status partial.
-		// compose may still be running on the host;
-		// user retries when the host is idle.
-		// ctx.Err() == nil → genuine compose failure, exit 4, status failed.
-		// registry entry + data dir preserved so user
-		// can retry.
+		// Interrupted (ctx.Err() != nil) → exit 3, status partial:
+		// compose may still be running on the host. Genuine compose
+		// failure → exit 4, status failed: registry entry + data dir
+		// preserved so the user can retry.
 		if ctx.Err() != nil {
 			_, _ = fmt.Fprintln(errw, term.Errorc(
 				"Interrupted during docker compose down — retry once the host is idle"))
