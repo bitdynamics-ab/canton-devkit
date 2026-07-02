@@ -1,25 +1,16 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { W, wMono } from "../tokens";
 
-// ErrorBoundary — catches render-time exceptions from any
-// descendant and renders a friendly fallback rather than letting
-// the white-screen-of-React eat the whole UI.
+// ErrorBoundary — catches render-time exceptions from descendants and
+// renders a fallback so one crashed screen doesn't take the whole UI
+// down. Wrapped per-route so the shell stays interactive and sibling
+// routes stay renderable. Class component because React's
+// error-boundary API has no hook equivalent.
 //
-// Wraps each <Route>'s element separately so a crash in /explorer
-// doesn't kill /overview. The shell + topbar stay rendered, the
-// user can keyboard-navigate to another screen, and the offending
-// stack trace lands in console.error for the dev-tools tab.
-//
-// Class component (not hooks) — React's error-boundary API still
-// requires componentDidCatch / getDerivedStateFromError, no hook
-// equivalent has shipped.
-//
-// We deliberately don't try to recover automatically (e.g. via
-// a setTimeout retry). A render that threw once will almost
-// certainly throw again on the same state; auto-retry would
-// busy-loop the user. The "Retry" button forces a re-mount via
-// a reset key so transient state corruption (a stale fetch, a
-// torn closure) gets a fresh shot.
+// No automatic recovery: a render that threw once will almost
+// certainly throw again on the same state, so auto-retry would
+// busy-loop. The "Retry" button instead forces a re-mount via a reset
+// key so transient state corruption gets a fresh shot.
 
 interface Props {
   // routeKey lets the parent force a reset when navigating to a
@@ -45,18 +36,16 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Surface to dev-tools — the prod fallback shows only the
-    // .message + .name; the full stack stays in console where
-    // a bug-report screenshot can capture it. Don't ship to a
-    // remote telemetry endpoint without explicit user consent.
+    // The fallback shows only .name/.message; the full stack goes to
+    // the console. Don't ship to a remote telemetry endpoint without
+    // explicit user consent.
     // eslint-disable-next-line no-console
     console.error("ErrorBoundary caught a render error:", error, info);
   }
 
   componentDidUpdate(prev: Props) {
-    // Route change → drop the error so the new screen renders
-    // fresh. Without this, navigating away from a crashed
-    // screen keeps showing the fallback.
+    // Route change → drop the error; otherwise navigating away from a
+    // crashed screen keeps showing the fallback.
     if (prev.routeKey !== this.props.routeKey && this.state.error) {
       this.setState({ error: null });
     }

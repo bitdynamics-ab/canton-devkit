@@ -11,18 +11,15 @@ import { W, wMono } from "../tokens";
 
 // DoctorScreen — the Web UI surface for `dpm localnet doctor`.
 //
-// It calls GET /api/doctor, which runs the SAME shared
-// localnet.CollectDoctor collector the CLI verb uses. That collector
-// layers two advisory checks (platform-support matrix + host-port
-// availability) on top of the resource/Docker gate that
-// /api/preflight already exposes — advisories a Web UI operator
-// previously could not see. The report shape is
-// types.PreflightReport, identical to the create-modal preflight panel,
-// so the two surfaces can't drift.
+// GET /api/doctor runs the same shared localnet.CollectDoctor collector
+// as the CLI verb: the resource/Docker gate /api/preflight exposes,
+// plus two advisory checks (platform-support matrix + host-port
+// availability). The report shape is types.PreflightReport — identical
+// to the create-modal preflight panel — so the two surfaces can't
+// drift.
 //
-// Not instance-scoped: doctor diagnoses the HOST, independent of any
-// running instance — so it sits in the nav alongside Overview rather
-// than under an instance selector.
+// Not instance-scoped: doctor diagnoses the HOST, so it sits in the nav
+// alongside Overview rather than under an instance selector.
 
 export function DoctorScreen() {
   const [report, setReport] = useState<PreflightReport | null>(null);

@@ -226,10 +226,10 @@ func transferInstructionTxFormat(actAs string, gen Generation) *lapiv2.Transacti
 }
 
 // splitInterfaceID parses our `#package-name:Module:Entity` form into
-// the proto Identifier shape. Mirrors parseInterfaceID in ledger.go
-// but returns the `#package-name`-prefixed form for the Identifier
-// PackageId field (Canton uses that to resolve package-name references
-// at submit time, surviving the V2 alpha's weekly snapshot rotation).
+// the proto Identifier shape, keeping the `#package-name` prefix on
+// the PackageId field: Canton resolves that package-name reference to
+// whichever vetted package satisfies it at submit time, surviving the
+// V2 alpha's weekly snapshot rotation.
 func splitInterfaceID(qual string) (pkg, module, entity string) {
 	q := strings.TrimPrefix(qual, "#")
 	parts := strings.Split(q, ":")

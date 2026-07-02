@@ -6,11 +6,11 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
 )
 
-// The party + template filter construction now lives in the neutral
+// Party + template filter construction lives in the neutral
 // internal/canton/ledger package so the CLI and the Web UI Explorer
 // handlers share one decoder and `--party`/`--template` behave
-// identically on both surfaces. These thin wrappers preserve the
-// package-local names the CLI commands and tests already call.
+// identically on both surfaces. These thin wrappers give the CLI
+// commands and tests package-local names.
 
 // buildEventFormat — see ledger.BuildEventFormat.
 func buildEventFormat(parties, templates []string, verbose bool) *lapiv2.EventFormat {

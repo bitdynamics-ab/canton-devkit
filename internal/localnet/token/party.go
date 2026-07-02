@@ -15,14 +15,15 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// Party registry orchestration . On LocalNet there is no
-// trust boundary between parties — the `unsafe` dev secret signs for
-// every role — so the token tool treats the instance as one god-mode
+// Party registry orchestration. On LocalNet there is no trust
+// boundary between parties — the `unsafe` dev secret signs for every
+// role — so the token tool treats the instance as one god-mode
 // workspace: a developer allocates a party by alias, the participant
 // grants the role's user act/read-as for it, and the alias is recorded
 // so every later command (and the matrix / activity scan) can refer to
-// it by name. Both the CLI (`localnet party …`) and the Web UI call into
-// these functions, so the two surfaces stay in lock-step (AGENTS.md).
+// it by name. Both the CLI (`localnet party …`) and the Web UI call
+// into these functions, so the two surfaces stay in lock-step (see
+// the CLI ↔ Web UI parity rule in CONTRIBUTING.md).
 
 // validAlias keeps aliases readable and collision-free with party-id
 // syntax: a letter followed by letters/digits/hyphens. Rejects empty,

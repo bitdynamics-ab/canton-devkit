@@ -7,7 +7,7 @@
 //
 // These tests render the template exactly the way the workflow does and
 // assert the output is valid YAML with the structure DPM requires, for
-// every platform in the build matrix. AGENTS.md: new code must be tested.
+// every platform in the build matrix.
 package packaging
 
 import (

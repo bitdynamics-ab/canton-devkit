@@ -14,19 +14,13 @@ import { CreatingPanel } from "./CreatingPanel";
 import { DeveloperSetup } from "./DeveloperSetup";
 import { InstanceDetail } from "./InstanceDetail";
 
-// Dashboard — Overview screen. Mirrors the LocalNet table at the
-// top of docs/design/mockups/webui-dashboard.jsx. Renders the
-// list of registered instances pulled from GET /api/instances.
+// Dashboard — the Overview screen. Renders the registered-instance
+// table from GET /api/instances.
 //
 // Selection state lives in the URL (?instance=<name>) via
-// useInstanceSelection so the topbar switcher and Dashboard
-// agree on a single source of truth — and so shared links
-// preserve the user's pick. Pre-lift this lived in local
-// useState; the topbar couldn't see it.
-//
-// SSE wiring for live updates is deferred to a follow-on slice
-// (publishes "instances" topic events when an instance's
-// status flips — needs a producer in internal/localnet first).
+// useInstanceSelection so the topbar switcher and Dashboard agree on a
+// single source of truth — and so shared links preserve the user's
+// pick.
 export function Dashboard() {
   const sel = useInstanceSelection();
   const [createOpen, setCreateOpen] = useState(false);
@@ -66,14 +60,10 @@ export function Dashboard() {
         onClose={useCallback(() => setCreateOpen(false), [])}
         onCreated={useCallback(
           (name: string) => {
-            // After a successful create, refresh the list and
-            // promote the new instance to the URL-driven selection
-            // so the detail card pops the moment the modal closes.
-            //
-            // useCallback'd so the modal's done-effect doesn't
-            // see this as a new identity each render and refire.
-            // Deps cover both sel.refresh + sel.select since
-            // they come from the context value.
+            // Refresh the list and promote the new instance to the
+            // URL-driven selection so the detail card pops when the
+            // modal closes. useCallback'd so the modal's done-effect
+            // doesn't see a new identity each render and refire.
             sel.refresh();
             sel.select(name);
           },
@@ -131,10 +121,9 @@ export function Dashboard() {
       )}
 
       {sel.selected && (() => {
-        // When the selected instance is mid-bring-up, surface
-        // the live progress panel above the static detail. The
-        // JWT generator is hidden while creating — no point
-        // signing tokens for an instance that's not running yet.
+        // Mid-bring-up: show the live progress panel above the static
+        // detail and hide the JWT generator — no point signing tokens
+        // for an instance that isn't running yet.
         const selectedRow = sel.instances.find((i) => i.name === sel.selected);
         const isCreating = selectedRow?.status === "creating";
         return (
@@ -322,11 +311,9 @@ function ErrorPanel({ error }: { error: string }) {
 // RecentActivity — instance-scoped ledger activity on the Overview.
 // Reuses GET /api/instances/{name}/transactions (the same offset-window
 // scan the Explorer and CLI `tx ls` use), flattened to one row per
-// ledger event and projected through the app-provider participant. It's
-// a snapshot with a manual refresh for v1 — an honest label, since the
-// transactions endpoint is a window scan, not an SSE stream. A live feed
-// and a cross-instance workspace timeline (folding in DAR uploads + CLI
-// commands) are deferred follow-ups.
+// ledger event and projected through the app-provider participant. A
+// snapshot with manual refresh — the transactions endpoint is a window
+// scan, not an SSE stream.
 function RecentActivity({ name }: { name: string }) {
   const [tick, setTick] = useState(0);
   const [state, setState] = useState<

@@ -2,9 +2,8 @@
 // telemetry. It accepts the CLI's per-period counter payload
 // ({schema_version, period, granularity, counters}) over HTTP POST and
 // upserts it into a relational store (Postgres in production, a fake in
-// tests). It is operationally separate from the CLI — a server-side
-// service you self-host — so it lives in its own Go module and its
-// Postgres driver never enters the CLI's dependency graph.
+// tests). It is a self-hosted server-side service in its own Go module,
+// so its Postgres driver never enters the CLI's dependency graph.
 //
 // Zero-PII contract: the payload carries only counters keyed by
 // chart/bucket plus a coarse period string. The collector stores exactly
@@ -40,10 +39,10 @@ type Payload struct {
 	Granularity   string                    `json:"granularity"`
 	Counters      map[string]map[string]int `json:"counters"`
 	// InstallID is an optional anonymous dedup token (random UUIDv4 minted
-	// client-side, hardware-independent). When present it lets the store
-	// count DISTINCT installs; it is recorded only as (token, active-date)
-	// in a separate table and never linked to a counter row. Absent for CI
-	// hosts and pre-installid clients.
+	// client-side, hardware-independent). It lets the store count DISTINCT
+	// installs; it is recorded only as (token, active-date) in a separate
+	// table and never linked to a counter row. Absent for CI hosts and
+	// pre-installid clients.
 	InstallID string `json:"install_id"`
 }
 
@@ -61,10 +60,9 @@ type Store interface {
 	RecordInstall(ctx context.Context, installID, period string, periodStart *time.Time) error
 }
 
-// installIDRe bounds the optional dedup token to a UUID shape. The token
-// is opaque to us; this is a sanity/injection gate (it reaches a
-// parameterized query, but we reject anything that isn't a UUIDv4-shaped
-// string early). An empty token means "not provided" and is skipped.
+// installIDRe bounds the optional dedup token to a UUID shape — a sanity
+// gate before the (opaque) value reaches a parameterized query. An empty
+// token means "not provided" and is skipped.
 var installIDRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // Handler is the HTTP ingest handler. Construct with New.
@@ -93,10 +91,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "ok")
 		return
 	}
-	// Ingest lives at exactly /v1/counters. Reject any other path with a
-	// 404 so the only real endpoint is a single fixed path — an edge
+	// Ingest lives at exactly /v1/counters; 404 anything else so an edge
 	// rate-limit rule scoped to that path can't be sidestepped by POSTing
-	// to /anything-else, and scanners probing other paths get nothing.
+	// elsewhere, and scanners probing other paths get nothing.
 	if r.URL.Path != "/v1/counters" {
 		http.NotFound(w, r)
 		return
@@ -112,8 +109,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	p, err := decode(r)
 	if err != nil {
-		// 400s carry a terse reason (never the body) so a misconfigured
-		// client can self-diagnose without us echoing arbitrary input.
+		// Terse reason only, never the body: a misconfigured client can
+		// self-diagnose without us echoing arbitrary input.
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

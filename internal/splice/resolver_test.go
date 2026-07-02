@@ -228,7 +228,7 @@ func TestResolveOrUpstream_CuratedTagSkipsNetwork(t *testing.T) {
 	}
 }
 
-// TestResolveForOperation_ThreeTiers pins the operability fix: an
+// TestResolveForOperation_ThreeTiers pins the operability contract: an
 // already-running instance must stay operable from a fresh shell across
 // all three resolution tiers — curated catalogue, resolved cache, and
 // bare Major-from-tag inference — where Resolve alone would reject the

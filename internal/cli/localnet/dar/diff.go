@@ -133,6 +133,8 @@ func printDiffText(out io.Writer, d *cdkdar.Diff) {
 	}
 }
 
+// orDash returns "-" for empty strings so every text renderer in the
+// package prints placeholders identically.
 func orDash(s string) string {
 	if s == "" {
 		return "-"

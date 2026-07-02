@@ -20,10 +20,9 @@ import (
 // several Step/KV/Table lines.
 //
 // width controls the underline length in cells. Pass 0 for the
-// auto-size default (VisibleLen(title)+len(right)+4, capped at 80).
-// the previous fixed-60-rune separator
-// silently truncated for long titles or wasted space for short
-// ones. TestSection_SeparatorMatchesWidthArg locks this in.
+// auto-size default (VisibleLen(title)+len(right)+4, clamped to
+// 20..80) so the separator tracks the header instead of truncating
+// long titles or wasting space on short ones.
 func Section(title, right, children string, width int) string {
 	var head strings.Builder
 	head.WriteString(S().

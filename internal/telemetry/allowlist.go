@@ -1,5 +1,7 @@
 package telemetry
 
+import "strings"
+
 // allowedCounters is the CLOSED allow-list of telemetry counters.
 // Format is "<chart>": {set of allowed "<bucket>"}.
 //
@@ -37,11 +39,9 @@ var commandVerbs = []string{
 }
 
 // tokenActions is the bucket space for dpm/token_action — the direct
-// subcommands of `localnet token`. Recorded so the CIP-0112 flow
-// (create → mint → transfer → burn → balance) is measurable on its own;
-// without it, token usage only showed as the single "token" command
-// verb. Mirrors the children registered in
-// internal/cli/localnet/token/token.go.
+// subcommands of `localnet token`. Recorded so the CIP-0112 flow is
+// measurable beyond the single "token" command verb. Mirrors the children
+// registered in internal/cli/localnet/token/token.go.
 var tokenActions = []string{
 	"create", "mint", "transfer", "burn", "balance",
 	"balances", "summary", "activity", "party", "faucet",
@@ -87,15 +87,14 @@ func allowed(chart, bucket string) bool {
 
 func validCommandExit(bucket string) bool {
 	// "<verb>/<ok|fail>"
-	for i := len(bucket) - 1; i >= 0; i-- {
-		if bucket[i] == '/' {
-			verb, outcome := bucket[:i], bucket[i+1:]
-			if outcome != "ok" && outcome != "fail" {
-				return false
-			}
-			_, ok := allowedCounters["dpm/command"][verb]
-			return ok
-		}
+	i := strings.LastIndexByte(bucket, '/')
+	if i < 0 {
+		return false
 	}
-	return false
+	verb, outcome := bucket[:i], bucket[i+1:]
+	if outcome != "ok" && outcome != "fail" {
+		return false
+	}
+	_, ok := allowedCounters["dpm/command"][verb]
+	return ok
 }

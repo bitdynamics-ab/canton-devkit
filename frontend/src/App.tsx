@@ -15,18 +15,9 @@ import { AgentSkillsScreen } from "./screens/AgentSkillsScreen";
 import { TokensScreen } from "./screens/TokensScreen";
 import { W } from "./tokens";
 
-// App boots by doing the schema-version handshake against the
-// backend. Until the handshake completes (or fails) we render a
-// minimal loading panel — we never want to render UI that
-// silently mis-decodes a v2 backend.
-//
-// Handshake outcomes:
-//   - match: render the shell + routed screens
-//   - mismatch: refuse to render, tell the user to restart
-//   - network error: refuse to render, suggest the binary isn't running
-//
-// All three outcomes show the same loopback-only / dev-binary
-// guidance so the user knows what's expected of their host.
+// App boots with a schema-version handshake against the backend and
+// renders the shell only on a match — a UI bundle must never silently
+// mis-decode responses from a backend with a different schema.
 export function App() {
   const [status, setStatus] = useState<"loading" | "ready" | "mismatch" | "offline">(
     "loading",
@@ -62,15 +53,9 @@ export function App() {
   );
 }
 
-// RoutedSurface lives inside the Router so it can use
-// useLocation() — its pathname becomes the boundary's reset key,
-// so a crash in /explorer doesn't follow you to /overview when
-// you navigate away.
-//
-// One boundary per route element (rather than one around all
-// Routes) so a crash in /explorer keeps the topbar interactive
-// AND keeps the sibling /metrics route renderable when the user
-// navigates to it.
+// RoutedSurface wraps each route element in its own ErrorBoundary,
+// keyed by pathname, so a crash on one screen neither follows the
+// user to the next route nor takes down the shell around it.
 function RoutedSurface() {
   const loc = useLocation();
   return (

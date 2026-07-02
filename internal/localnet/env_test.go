@@ -205,7 +205,7 @@ func TestBuildEnvExport_AuthFileRewriteTightensPerms(t *testing.T) {
 
 // TestBuildEnvExport_ScanUIURL pins that the scan UI is surfaced under
 // an explicit, self-describing key carrying the scan.localhost vhost
-// hint — the proposal lists "scan UI" as a distinct value.
+// hint.
 func TestBuildEnvExport_ScanUIURL(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedEnvState(t, "demo")

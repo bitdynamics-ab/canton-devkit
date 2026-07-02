@@ -2,6 +2,7 @@ package localnet
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/signal"
 	"syscall"
@@ -97,7 +98,7 @@ identifiers and is not designed for LAN-wide exposure.`,
 				// Listen failures: bind-refused (--host non-loopback
 				// without flag) is ExitUserError; everything else
 				// (port in use, EACCES) is ExitRuntimeFailure.
-				if errIsNonLoopback(err) {
+				if errors.Is(err, ui.ErrNonLoopbackBind) {
 					return localnet.AsExitError(localnet.ExitUserError)
 				}
 				return localnet.AsExitError(localnet.ExitRuntimeFailure)
@@ -144,14 +145,10 @@ identifiers and is not designed for LAN-wide exposure.`,
 					}
 					return localnet.AsExitError(localnet.ExitRuntimeFailure)
 				}
-				// Explicitly close the SSE hub so any lingering
-				// subscriber goroutines unblock
-				// on their channel close. http.Server.Shutdown
-				// doesn't drain SSE streams — the loop sits in
-				// `case ev, ok := <-eventCh`, which only returns
-				// when the channel closes (cancel) OR ctx.Done
-				// fires on the request. Without Hub.Close the
-				// goroutine can outlive the server briefly.
+				// Close the SSE hub explicitly: http.Server.Shutdown
+				// doesn't drain SSE streams, so without Hub.Close a
+				// subscriber goroutine blocked on its event channel
+				// can outlive the server.
 				hub.Close()
 
 				// Wait for Serve to return after Shutdown.
@@ -178,25 +175,4 @@ identifiers and is not designed for LAN-wide exposure.`,
 			"(JWTs, party IDs) on the network. Use only with an SSH "+
 			"tunnel or a firewall in front. Default: refused.")
 	return cmd
-}
-
-// errIsNonLoopback unwraps to ui.ErrNonLoopbackBind so the CLI
-// can choose ExitUserError (user picked a bad --host) over
-// ExitRuntimeFailure (port-in-use / EACCES / etc.).
-func errIsNonLoopback(err error) bool {
-	if err == nil {
-		return false
-	}
-	for e := err; e != nil; {
-		if e == ui.ErrNonLoopbackBind {
-			return true
-		}
-		type unwrap interface{ Unwrap() error }
-		u, ok := e.(unwrap)
-		if !ok {
-			return false
-		}
-		e = u.Unwrap()
-	}
-	return false
 }

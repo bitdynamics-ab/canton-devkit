@@ -15,19 +15,15 @@ import (
 
 // buildRefresh wires `dpm localnet refresh` — the CLI mirror of
 // the background docker→registry reconciler that runs inside
-// `dpm localnet ui`. Per AGENTS.md "CLI ↔ Web UI parity": users
-// who never start the Web UI shouldn't be stuck with a stale
-// `failed`/`partial` status forever after fixing the underlying
-// cause (Docker memory bump, manual container restart, etc.).
+// `dpm localnet ui` (CLI ↔ Web UI parity, see CONTRIBUTING.md):
+// users who never start the Web UI shouldn't be stuck with a stale
+// `failed`/`partial` status after fixing the underlying cause
+// (Docker memory bump, manual container restart, etc.).
 //
-// Behaviour mirrors handlers.StartReconciler's per-instance pass:
-// for each registered instance (or just `--name <inst>` if given),
-// probe docker via `compose ps`, evaluate the aggregate status,
-// and write back to the registry if it changed.
-//
-// Logs each flip to stdout so the user sees the catch-up; silent
-// when nothing changed (no `everything was already correct, OK`
-// noise on healthy systems).
+// For each registered instance (or just `--name <inst>`), probe
+// docker via `compose ps`, evaluate the aggregate status, and write
+// back to the registry if it changed. Each flip is logged to stdout;
+// nothing is printed for instances already in sync.
 func buildRefresh() *cobra.Command {
 	var (
 		name   string
@@ -41,7 +37,7 @@ func buildRefresh() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := localnet_validateFormat(format, "text", "json"); err != nil {
+			if err := ValidateFormat(format, "text", "json"); err != nil {
 				return err
 			}
 			ctx, cancel := context.WithTimeout(cmd.Context(), 60*time.Second)

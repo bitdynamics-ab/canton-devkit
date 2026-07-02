@@ -41,18 +41,10 @@ Supported Splice versions: %s
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
-			// TextProgress wraps the Cobra writers so RunUp's typed
-			// step events render as terminal lines for CLI users.
-			// The Web UI's POST handler passes an SSEProgress impl
-			// instead so browsers see the full typed event stream.
-			//
-			// NewTextProgress auto-detects whether the writer is a
-			// TTY and switches between the styled rendering (Section
-			// headers, brand-accented Box for the success marker)
-			// and plain text (pipes, CI, golden-byte tests). The
-			// literal struct form is kept for backward
-			// compatibility — tests that constructed TextProgress
-			// directly still get the plain bytes they assert on.
+			// TextProgress renders RunUp's typed step events as
+			// terminal lines (the Web UI handler passes an
+			// SSEProgress instead). NewTextProgress auto-detects
+			// TTY vs plain output (pipes, CI).
 			prog := localnet.NewTextProgress(
 				cmd.OutOrStdout(), cmd.ErrOrStderr())
 			return localnet.AsExitError(

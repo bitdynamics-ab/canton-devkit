@@ -82,11 +82,10 @@ func MountSpliceVersions(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/splice/versions", handleSpliceVersions)
 }
 
-// SpliceVersionEntry is the per-row shape the webui-create.jsx
-// version picker renders. Mirrors the columns visible in the
-// mockup: Tag · Status · Major · Commit · Note.
+// SpliceVersionEntry is the per-row shape the create modal's
+// version picker renders: Tag · Status · Major · Commit · Note.
 //
-// Status taxonomy (matches the mock's color-coded badges):
+// Status taxonomy:
 //
 //	"supported"        — in the curated catalogue; safe default
 //	"latest"           — supported AND the current LatestAlias
@@ -96,13 +95,6 @@ func MountSpliceVersions(mux *http.ServeMux) {
 //	                     longer matches the upstream tag (re-review)
 //	"catalogued-only"  — in the catalogue but no longer present
 //	                     upstream (upstream deleted the tag)
-//
-// This first slice only surfaces "supported" + "latest"
-// because the available/drifted/catalogued-only states require a
-// live GitHub API call from the handler — that's deferred to
-// (needs caching + rate-limit + network-error handling).
-// The shape is forward-compatible: when the upstream check lands,
-// it just sets Status on entries that need it.
 type SpliceVersionEntry struct {
 	Tag    string `json:"tag"`
 	Status string `json:"status"`
@@ -140,11 +132,9 @@ type SpliceVersionsResponse struct {
 
 // handleSpliceVersions: GET /api/splice/versions → SpliceVersionsResponse.
 //
-// enriched with upstream cross-reference data. The
-// handler now calls splice.CrossReferenceUpstream (cached for
-// upstreamCacheTTL) to surface the four-way status taxonomy from
-// the JSX mockup: supported / latest / drifted / available /
-// catalogued-only.
+// Calls splice.CrossReferenceUpstream (cached for upstreamCacheTTL)
+// to surface the status taxonomy: supported / latest / drifted /
+// available / catalogued-only.
 //
 // Query parameters:
 //

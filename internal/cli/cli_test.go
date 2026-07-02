@@ -71,9 +71,9 @@ func TestRunRejectsUnknownCommand(t *testing.T) {
 	}
 }
 
-// TestRunLocalnetClean_RequiresTarget pins that `clean` is a real
-// command now: invoked with no --name/--all it exits non-zero with
-// guidance (not the old "not implemented yet" placeholder).
+// TestRunLocalnetClean_RequiresTarget pins that `clean` invoked with
+// no --name/--all exits non-zero with guidance rather than a
+// placeholder message.
 func TestRunLocalnetClean_RequiresTarget(t *testing.T) {
 	var out, errb bytes.Buffer
 	code := New(&out, &errb, "test", "").Run([]string{"localnet", "clean"})
@@ -94,10 +94,9 @@ func TestRunLocalnetClean_RequiresTarget(t *testing.T) {
 // The CLI core must dispatch correctly from that argv slice with no
 // reliance on argv[0] or env.
 //
-// We assert on the dispatch shape rather than the final exit code,
-// because `localnet up` now actually runs preflight + fetch + compose
-// — its result depends on whether Docker is available on this host.
-// `--help` short-circuits before any of that, so it's deterministic.
+// We assert on the dispatch shape rather than the final exit code:
+// a real `localnet up` depends on whether Docker is available on this
+// host, while `--help` short-circuits and is deterministic.
 func TestRunIsArgvOnly(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer

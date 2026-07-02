@@ -124,8 +124,6 @@ func Fetch(ctx context.Context, v Version, cacheRoot string, progress io.Writer)
 	}
 	gotSHA, err := downloadAndExtract(ctx, url, v.ContentSHA, maxBytes, stagingDir)
 	if err != nil {
-		// Staging dir is cleaned by the deferred RemoveAll above; nothing
-		// extra needed here.
 		return "", err
 	}
 
@@ -226,8 +224,7 @@ func recordTOFUContentSHA(tag, contentSHA string) {
 //     computed hash is returned (not refused) so the caller can record
 //     it for later verification. ResolveUpstream synthesises uncurated
 //     versions with an empty ContentSHA precisely so this path can fill
-//     it in; refusing here is what made --allow-uncurated fail end to
-//     end.
+//     it in.
 //
 // Single-layer integrity model: the URL itself encodes a git commit
 // SHA (immutable, content-addressable — see tarballURL); GitHub's

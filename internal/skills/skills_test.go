@@ -12,7 +12,7 @@ func TestListReturnsAllSixSkills(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
-	// The proposal commits to six skill docs.
+	// The bundled catalogue ships exactly these six skill docs.
 	want := map[string]bool{
 		"localnet-lifecycle.md": false,
 		"dar-upload.md":         false,

@@ -1,7 +1,7 @@
 # Prometheus scrape config for the SHARED, host-level observability
 # stack (canton-devkit-observability project). Unlike the per-instance
-# observability.yaml — which ran a Prometheus INSIDE each instance's
-# network and scraped canton:10013/splice:10013 by service-name DNS —
+# observability.yaml — which runs a Prometheus INSIDE each instance's
+# network and scrapes canton:10013/splice:10013 by service-name DNS —
 # this single Prometheus lives in its own project/network and cannot
 # resolve those service names (and they collide: every instance has a
 # `canton`). Instead each instance publishes its canton/splice :10013

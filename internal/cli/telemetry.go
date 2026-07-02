@@ -9,9 +9,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildTelemetryCmd is the ROOT-level `canton-devkit telemetry …` command
-// (sibling of `localnet` and `version`) — telemetry is tool-wide, not a
-// LocalNet concern.
+// buildTelemetryCmd is the root-level `canton-devkit telemetry …` command
+// — telemetry is tool-wide, not a LocalNet concern.
 func buildTelemetryCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "telemetry",
@@ -80,9 +79,8 @@ func buildTelemetryRecordInstallSurface() *cobra.Command {
 			// survives even if the install process exits before a normal
 			// runtime command.
 			telemetry.Persist()
-			// Best-effort immediate ship. Errors are swallowed so package
-			// installation never fails on telemetry transport or collector
-			// state.
+			// Best-effort ship; errors are swallowed so package
+			// installation never fails on telemetry transport.
 			_, _ = telemetry.FlushNow()
 			return nil
 		},

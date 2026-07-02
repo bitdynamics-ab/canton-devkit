@@ -46,8 +46,7 @@ func main() {
 	defer store.Close()
 
 	h := collector.New(store, os.Getenv("INGEST_TOKEN"))
-	// Wrap with the in-process rate limiter (defense-in-depth; the edge
-	// does the heavy DDoS absorption — see DEPLOY.md).
+	// Defense-in-depth; the edge does the heavy DDoS absorption (DEPLOY.md).
 	handler := collector.RateLimit(h, collector.RateLimitConfigFromEnv())
 	mux := http.NewServeMux()
 	mux.Handle("/", handler) // handler serves POST /v1/counters + /healthz; 404s the rest

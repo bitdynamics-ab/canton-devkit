@@ -1,6 +1,9 @@
 package dar
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // Tiny in-memory Info fixtures so we can exercise Compare without a
 // real DAR file. Build helpers keep the test cases declarative.
@@ -72,7 +75,7 @@ func TestCompare_VersionBumpedAndDepChange(t *testing.T) {
 	// SCU signals: should include INFO bump, INFO deps changed.
 	foundBump := false
 	for _, s := range d.SCUSignals {
-		if s.Severity == "info" && contains(s.Message, "bumped") {
+		if s.Severity == "info" && strings.Contains(s.Message, "bumped") {
 			foundBump = true
 		}
 	}
@@ -159,8 +162,7 @@ func TestVersionDelta(t *testing.T) {
 		{"0.1.8", "0.1.5", "downgraded"},
 		{"", "0.1.0", "incomparable"},
 		// Promoting a snapshot/pre-release build to its release version
-		// is an UPGRADE, not a downgrade — this is the canonical Daml
-		// SCU flow and was previously inverted.
+		// is an UPGRADE, not a downgrade — the canonical Daml SCU flow.
 		{"1.0.0-snapshot", "1.0.0", "bumped"},
 		{"1.0.0", "1.0.0-snapshot", "downgraded"},
 		{"3.3.0-snapshot.20250502.13767.0", "3.3.0", "bumped"},
@@ -175,8 +177,8 @@ func TestVersionDelta(t *testing.T) {
 
 // TestCompare_SnapshotToRelease_NotBlocked pins the end-to-end signal:
 // promoting a pre-release main package to its release version must NOT
-// surface a "block" SCU signal (the inverted comparison used to flag it
-// as a downgrade, the worst possible false positive for a triage tool).
+// surface a "block" SCU signal — flagging it as a downgrade would be
+// the worst possible false positive for a triage tool.
 func TestCompare_SnapshotToRelease_NotBlocked(t *testing.T) {
 	a := infoFixture("a.dar", "splice-wallet", "1.0.0-snapshot.123", "id1", "2", "1")
 	b := infoFixture("b.dar", "splice-wallet", "1.0.0", "id2", "2", "1")
@@ -192,20 +194,9 @@ func TestCompare_SnapshotToRelease_NotBlocked(t *testing.T) {
 	}
 }
 
-// --- helpers ---
-
-func contains(haystack, needle string) bool {
-	for i := 0; i+len(needle) <= len(haystack); i++ {
-		if haystack[i:i+len(needle)] == needle {
-			return true
-		}
-	}
-	return false
-}
-
 func hasSignal(d *Diff, severity, substr string) bool {
 	for _, s := range d.SCUSignals {
-		if s.Severity == severity && contains(s.Message, substr) {
+		if s.Severity == severity && strings.Contains(s.Message, substr) {
 			return true
 		}
 	}

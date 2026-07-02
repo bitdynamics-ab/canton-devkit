@@ -3,6 +3,7 @@ package types
 import (
 	"encoding/json"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -196,34 +197,10 @@ func TestSchemaVersion_ConsistentAcrossResponses(t *testing.T) {
 			// All three MUST emit the literal "schema_version":N
 			// shape — anything else (e.g. omitempty hiding the
 			// field, or a renamed JSON tag) is a contract break.
-			want := `"schema_version":` + itoa(c.want)
+			want := `"schema_version":` + strconv.Itoa(c.want)
 			if !strings.Contains(body, want) {
 				t.Errorf("%s: expected %q in JSON, got %s", c.name, want, body)
 			}
 		})
 	}
-}
-
-// itoa avoids strconv import in this small test file.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := false
-	if n < 0 {
-		neg = true
-		n = -n
-	}
-	var digits [20]byte
-	i := len(digits)
-	for n > 0 {
-		i--
-		digits[i] = byte('0' + n%10)
-		n /= 10
-	}
-	out := string(digits[i:])
-	if neg {
-		out = "-" + out
-	}
-	return out
 }

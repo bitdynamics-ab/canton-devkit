@@ -119,10 +119,9 @@ func TestUpload_PastPeriodAndDrop(t *testing.T) {
 	t.Setenv(envEndpoint, srv.URL)
 
 	// Seed a PAST period file directly. Use a leftover WEEKLY-format key
-	// ("2000-W01") on purpose: it regression-guards the pendingPeriodFiles
-	// fix — any file that isn't the current (daily) key must still drain,
-	// even though "2000-W01" sorts AFTER a "2026-..." daily key and the
-	// old lexicographic `< cur` predicate would have stranded it forever.
+	// ("2000-W01") on purpose: any file that isn't the current (daily) key
+	// must still drain, even though "2000-W01" sorts AFTER a "2026-..."
+	// daily key — a lexicographic `< cur` predicate would strand it forever.
 	past := &PeriodAggregate{SchemaVersion: SchemaVersion, Period: "2000-W01", Granularity: "weekly",
 		Counters: map[string]map[string]int{"dpm/command": {"up": 3}}}
 	if err := savePeriod(past); err != nil {

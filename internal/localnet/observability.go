@@ -206,9 +206,6 @@ func syncObservabilityProfiles(existing []string, prom, graf bool) []string {
 // captured combined output (for the error path) and the discovered host
 // port. portInternal is the in-container port to look up via
 // `docker compose port <svc> <port>` after the up succeeds.
-//
-// Moved verbatim (logic-preserving) from internal/ui/handlers so the
-// CLI verb can share it.
 func enableObservabilitySidecar(ctx context.Context, state *registry.State, profile, service string, portInternal int, logw io.Writer) (string, int, error) {
 	// Capture the overlay's "preserving local edits" drift notices so a
 	// caller toggling a sidecar still learns their local dashboard /

@@ -5,12 +5,9 @@
 //
 // # Scope
 //
-// Coverage matches the proposal (docs/original-devkit-proposal.md, line 175):
-// *"Backend uses Ledger API v2: `StateService.GetActiveContracts`,
-// `UpdateService.GetUpdates`, and `EventQueryService`, with
-// `PackageService` + DAR metadata"*, extended to every RPC the M2 Web UI
-// Explorer (contracts watch, tx ls/replay, contract detail drawer) and the
-// M3 token CLI (`token create/mint/transfer/burn`) need:
+// Coverage is every RPC the Web UI Explorer (contracts watch, tx ls/replay,
+// contract detail drawer) and the token CLI (`token create/mint/transfer/burn`)
+// need:
 //
 //	StateService              — GetLedgerEnd, GetActiveContracts (stream),
 //	                            GetConnectedSynchronizers

@@ -11,11 +11,8 @@ import (
 // MaxDARBytes caps a single DAR file read at 512 MiB. Realistic
 // DARs are 100 KB - 50 MiB (sdk-config + dependencies); 512 MiB is
 // 10× headroom above the largest reasonable real-world DAR while
-// still small enough to protect against the OOM-on-read class of
-// bug closed for Zip Slip.
-//
-// Exceeding this returns ErrDARTooLarge — caller surfaces it to
-// the user with a friendly remediation pointing at the file size.
+// still small enough to prevent OOM-on-read. Exceeding this returns
+// ErrDARTooLarge.
 const MaxDARBytes int64 = 512 * 1024 * 1024
 
 // MaxEntryDecompressedBytes caps how many bytes a single zip entry
@@ -50,20 +47,16 @@ var ErrDARTooLarge = errors.New("DAR file exceeds maximum size cap")
 var ErrDARBomb = errors.New("DAR decompresses past the decompressed-size cap (possible zip bomb)")
 
 // ReadDARFile reads path into memory with the MaxDARBytes ceiling.
-// Stat-first so we refuse oversize files BEFORE allocating their
-// buffer (avoids the foot-gun where a 4 GiB file briefly succeeds
-// in os.ReadFile on a 16 GiB host, only to OOM somewhere later).
-//
-// Replaces every os.ReadFile call site in internal/dar/ and
-// internal/cli/localnet/dar/ — single read primitive, single
-// place to revisit if the cap ever needs to move.
+// Stat-first so oversize files are refused BEFORE allocating their
+// buffer. It is the single read primitive for every DAR read in the
+// codebase, so the cap lives in one place.
 func ReadDARFile(path string) ([]byte, error) {
 	return readWithCap(path, MaxDARBytes)
 }
 
-// readWithCap is the parameterised variant ReadDARFile delegates
-// to. Exported package-private so tests can pin behavior with a
-// tiny cap without materializing a 512 MiB fixture on disk.
+// readWithCap is the parameterised variant ReadDARFile delegates to,
+// kept separate so tests can pin behavior with a tiny cap without
+// materializing a 512 MiB fixture on disk.
 func readWithCap(path string, cap int64) ([]byte, error) {
 	st, err := os.Stat(path)
 	if err != nil {

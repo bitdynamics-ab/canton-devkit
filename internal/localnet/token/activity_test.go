@@ -152,10 +152,9 @@ func TestConsumeActivityStream_BelowCapNotTruncated(t *testing.T) {
 	}
 }
 
-// TestNetTransaction_ExactDecimalNetting pins the big.Rat fix:
-// netTransaction must net base-10 decimal amounts exactly. With big.Float
-// (the old code), 0.1 + 0.2 - 0.3 surfaced as "5.55e-17" / a tiny non-zero
-// drift — the same class of bug that selectInputHoldings fixed.
+// TestNetTransaction_ExactDecimalNetting pins that netTransaction nets
+// base-10 decimal amounts exactly (big.Rat, not big.Float — Float
+// would surface 0.1 + 0.2 - 0.3 as a tiny non-zero drift).
 func TestNetTransaction_ExactDecimalNetting(t *testing.T) {
 	// Net: alice +0.1 +0.2 -0.3 = 0 (skipped). To prove the math is
 	// exact, give alice +0.3 and bob -(0.1+0.2) so the event surfaces

@@ -15,11 +15,10 @@ import (
 // dar upload — push a DAR to one or all participants of a
 // named LocalNet via PackageService.UploadDar.
 //
-// `--all-participants` is the proposal-mandated fan-out: when set
-// alongside `--instance`, DevKit reaches every known participant role
-// (sv, app-provider, app-user) on that instance and uploads in
-// sequence. Errors on one role don't abort the others; the command's
-// final exit code reflects the worst observed outcome.
+// `--all-participants` (with `--instance`) fans out to every known
+// participant role (sv, app-provider, app-user) in sequence. Errors on
+// one role don't abort the others; the command's final exit code
+// reflects the worst observed outcome.
 func buildUpload() *cobra.Command {
 	var (
 		conn   connectFlags
@@ -59,9 +58,8 @@ Exit codes:
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
-			// bounded read (replaces
-			// os.ReadFile) — refuses DARs over MaxDARBytes
-			// before allocating the buffer.
+			// Bounded read — refuses DARs over MaxDARBytes before
+			// allocating the buffer.
 			data, err := cdkdar.ReadDARFile(path)
 			if err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dar upload: %s\n", err)
@@ -111,9 +109,6 @@ Exit codes:
 // uploadOnce performs one upload (or validate) against the configured
 // target. Returns 0 on success or one of the localnet.Exit* codes on
 // failure. Errors are written to errw; success messages to out.
-//
-// Separating this out makes the fan-out loop in RunE simple: call
-// uploadOnce per role, accumulate the worst exit code, exit with that.
 func uploadOnce(
 	ctx context.Context,
 	out, errw io.Writer,

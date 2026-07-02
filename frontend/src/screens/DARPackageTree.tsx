@@ -1,13 +1,8 @@
-// DAR package-tree explorer.
-//
-// Renders a /api/instances/:name/dar/:id/inspect response as an
-// expandable tree: package → module → (template | interface | data
-// type). Choices and methods are leaf-level nodes shown as inline
-// chips.
-//
-// The component is deliberately self-contained — it fetches its own
-// data, owns its expand/collapse state, and renders without any
-// shared layout primitive. Embedded as a drawer inside DARScreen.
+// DAR package-tree explorer. Renders a /api/instances/:name/dar/:id/
+// inspect response as an expandable tree: package → module → (template
+// | interface | data type), with choices and methods as inline chips.
+// Self-contained — fetches its own data and owns its expand/collapse
+// state. Embedded as a drawer inside DARScreen.
 import { useEffect, useState } from "react";
 import {
   fetchDARInspect,
@@ -30,8 +25,6 @@ export function DARPackageTree({ instance, mainID, role }: Props) {
     | { kind: "ok"; data: DARInspectResponse }
     | { kind: "err"; msg: string }
   >({ kind: "loading" });
-  // Expanded package ids — start with the main package expanded so
-  // the most useful tree is visible on first render.
   const [expandedPkgs, setExpandedPkgs] = useState<Set<string>>(new Set());
   const [expandedModules, setExpandedModules] = useState<Set<string>>(
     new Set(),
@@ -44,7 +37,8 @@ export function DARPackageTree({ instance, mainID, role }: Props) {
       .then((data) => {
         if (cancelled) return;
         setState({ kind: "ok", data });
-        // Auto-expand the main package.
+        // Auto-expand the main package so the most useful tree is
+        // visible on first render.
         const main = data.packages.find((p) => p.is_main);
         if (main) setExpandedPkgs(new Set([main.package_id]));
       })

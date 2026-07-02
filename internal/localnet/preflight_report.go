@@ -73,8 +73,7 @@ func PreflightReportFromDocker(dockerRep *docker.Report) types.PreflightReport {
 	return rep
 }
 
-// preflightPluralS is a tiny pluraliser inlined here until sibling command
-// branches settle on a shared text-formatting helper.
+// preflightPluralS returns "s" when n != 1.
 func preflightPluralS(n int) string {
 	if n == 1 {
 		return ""

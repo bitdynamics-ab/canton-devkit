@@ -15,9 +15,9 @@ type Column struct {
 // Table renders a header row + body rows in the dense, uppercased
 // header style of the mockups (terminal.jsx::Table). Cells are
 // plain strings — color the cell content before passing it in if you
-// want per-cell coloring; see status.go for the standard pattern.
+// want per-cell coloring.
 //
-// We do NOT word-wrap. Cells that are wider than their column overflow
+// Cells are NOT word-wrapped: a cell wider than its column overflows
 // to the right, since wrapping mid-row would scramble the table.
 // Callers that need wrapping should split the content into separate
 // rows.

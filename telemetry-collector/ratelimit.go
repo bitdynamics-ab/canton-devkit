@@ -176,8 +176,6 @@ func (rl *rateLimiter) allowIP(ip string) bool {
 }
 
 func (rl *rateLimiter) reject(w http.ResponseWriter, ip, reason string) {
-	// Sampled log so an attack is visible without flooding the log under
-	// sustained abuse. The 1st, 101st, 201st… rejection is logged.
 	if n := rl.blocked.Add(1); n%rejectLogSample == 1 {
 		log.Printf("collector: rate limited ip=%s reason=%s (sampled 1/%d, cumulative=%d)",
 			ip, reason, rejectLogSample, n)

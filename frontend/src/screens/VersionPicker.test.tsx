@@ -4,18 +4,16 @@ import userEvent from "@testing-library/user-event";
 import type { SpliceVersionEntry } from "../api";
 import { VersionPicker, compareSpliceTags } from "./CreateLocalNetModal";
 
-// VersionPicker — the curated Splice catalogue picker that used to be
-// a custom button-list and briefly regressed to a free-text <input>
-// fallback when the API call returned empty. These tests pin the
-// "always a <select> dropdown, never a textbox" invariant a user
-// explicitly requested.
+// VersionPicker — pins the "always a <select> dropdown, never a
+// free-text <input>" invariant for the curated Splice catalogue
+// picker (an earlier build regressed to an <input> fallback when the
+// version list came back empty).
 //
 // Two contracts under test:
 //   1. With versions: native HTML <select> + one <option> per entry,
 //      "latest" first, semver-desc next; onChange fires onSelect.
 //   2. Without versions (loading / API-error): still a <select>,
-//      disabled, with a single placeholder option. We MUST NOT render
-//      an <input> in this state — that's the regression we're guarding.
+//      disabled, with a single placeholder option — never an <input>.
 
 const FIXTURES: SpliceVersionEntry[] = [
   { tag: "0.6.4", status: "latest", major: "0.6", commit: "abc1234567890" },
@@ -33,10 +31,9 @@ describe("VersionPicker — curated catalogue dropdown", () => {
       />,
     );
 
-    // Accessible-name lookup is the right shape: a future refactor
-    // that swaps the element type (e.g. to a custom combobox) would
-    // need to preserve role="combobox" / aria-label for screen-reader
-    // parity. The "must be a <select>" pin enforces native semantics.
+    // Accessible-name lookup plus a tagName pin: a refactor to a
+    // custom combobox must preserve the aria-label, and the "must be
+    // a <select>" assertion enforces native semantics.
     const select = screen.getByLabelText(/splice version/i);
     expect(select.tagName).toBe("SELECT");
     expect(select).not.toBeDisabled();
@@ -50,7 +47,6 @@ describe("VersionPicker — curated catalogue dropdown", () => {
         onSelect={() => {}}
       />,
     );
-    // The earlier implementation had a fallback `<input>` branch.
     // Whatever the picker renders, it must NOT be a text input.
     expect(container.querySelector("input")).toBeNull();
   });
@@ -120,10 +116,8 @@ describe("VersionPicker — curated catalogue dropdown", () => {
     const select = screen.getByLabelText(/splice version/i);
     expect(select.tagName).toBe("SELECT");
     expect(select).toBeDisabled();
-    // The regression: empty-state must not fall back to a free-text
-    // input. Pinning this is the entire point of this test file —
-    // users reported the textbox felt like a regression from the
-    // previous dropdown UX.
+    // The empty state must not fall back to a free-text input —
+    // pinning this is the entire point of this test file.
     expect(container.querySelector("input")).toBeNull();
   });
 

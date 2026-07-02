@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -134,12 +135,11 @@ func ValidateName(name string) error {
 	return nil
 }
 
-// RunUp orchestrates the full bring-up sequence. The Step taxonomy
-// (StepResolveVersion through StepCaptureJWTs in progress.go) matches
-// the eight phases the webui-create.jsx mockup renders; each phase
-// calls into the `prog` Progress interface so the CLI's TextProgress
-// emits today's terminal lines while the Web UI's SSEProgress impl
-// ships typed step events to the browser.
+// RunUp orchestrates the full bring-up sequence. Each phase calls into
+// the `prog` Progress interface (StepResolveVersion through
+// StepCaptureJWTs in progress.go): the CLI's TextProgress emits
+// terminal lines while the Web UI's SSEProgress impl ships typed step
+// events to the browser.
 //
 //  1. Resolve --version against the curated list + look up the per-major
 //     adapter for that Splice tag.
@@ -158,31 +158,22 @@ func ValidateName(name string) error {
 //
 // SIGINT/SIGTERM cancel the in-flight `docker compose` call. RunUp never
 // modifies the host outside ~/.canton/.
-//
-// CLI byte-equivalence: the CLI caller passes `&TextProgress{OutW:
-// cmd.OutOrStdout(), ErrW: cmd.ErrOrStderr()}`. TextProgress filters
-// StartStep to a three-step allowlist (preflight / start_services /
-// wait_healthy) so today's terminal output is unchanged; the five
-// silent steps become non-silent only when SSEProgress is wired in.
 func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Reject unknown --profile values up front. Shared with the
-	// Web UI create handler via ValidateProfiles so a typo'd
-	// `--profile observabilty` fails fast with a user error here
-	// instead of silently producing a metric-less instance — the
-	// exact failure the UI's allowlist already prevents with a 400.
-	// A pure input check: runs before the lock / any side effect.
+	// Reject unknown --profile values up front (pure input check —
+	// before the lock / any side effect). Shared with the Web UI create
+	// handler via ValidateProfiles so a typo'd `--profile observabilty`
+	// fails fast instead of silently producing a metric-less instance.
 	if err := ValidateProfiles(opts.Profiles); err != nil {
 		prog.FailStep(StepResolveVersion, err.Error(), nil)
 		return ExitUserError
 	}
 
 	// Wall-clock start for the welcome screen's "ready in Nm Ns" line.
-	// Captured at the top of RunUp so it includes resolve+preflight
-	// time, not just compose-up time — gives the user a realistic
-	// "cold start cost" expectation for their next dev cycle.
+	// Captured here so it includes resolve+preflight time, not just
+	// compose-up time — a realistic cold-start cost.
 	startedAt := time.Now()
 
 	// 1. Resolve version + adapter. Layer-1 (curated) is the default;
@@ -219,10 +210,8 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	prog.FinishStep(StepResolveVersion,
 		fmt.Sprintf("splice %s · adapter %s", version.Tag, adapter.MajorVersion()))
 
-	// The "Starting Canton LocalNet ... " header preserves the
-	// existing CLI line. TextProgress writes it verbatim; SSEProgress
-	// gets it as a console-style event so the browser sees the same
-	// banner.
+	// Banner line. TextProgress writes it verbatim; SSEProgress gets it
+	// as a console-style event so the browser sees the same banner.
 	_, _ = fmt.Fprintf(prog.Out(), "Starting Canton LocalNet %q (Splice %s, adapter %s)...\n",
 		opts.Name, version.Tag, adapter.MajorVersion())
 
@@ -236,7 +225,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	defer release()
 	prog.FinishStep(StepAcquireLock, "")
 
-	// Re-up profile continuity (#161). On a plain `down` → `up` with no
+	// Re-up profile continuity. On a plain `down` → `up` with no
 	// explicit --profile, re-enable the opt-in profiles the instance was
 	// last brought up with, so observability / tokens-v2 don't silently
 	// vanish on a CLI restart (the Web UI Restart already preserves them).
@@ -244,7 +233,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	// subtract the adapter base to recover just the opt-ins — enabledProfiles
 	// re-adds the base below, so there's no double-counting. An explicit
 	// --profile still wins (overrides, never merges). Best-effort: a
-	// missing/old state.json leaves opts.Profiles empty (pre-#161 behavior).
+	// missing/old state.json leaves opts.Profiles empty.
 	if len(opts.Profiles) == 0 {
 		if prior, rerr := registry.Read(opts.Name); rerr == nil {
 			if optIns := subtractProfiles(prior.Profiles, adapter.Profiles()); len(optIns) > 0 {
@@ -380,13 +369,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	// V2 snapshot (alpha catalogue entry); a stable Splice version
 	// with this profile on is harmless — it just injects an env that
 	// the stable Canton ignores.
-	hasTokensV2Profile := false
-	for _, p := range opts.Profiles {
-		if p == TokensV2ProfileName {
-			hasTokensV2Profile = true
-			break
-		}
-	}
+	hasTokensV2Profile := slices.Contains(opts.Profiles, TokensV2ProfileName)
 	if hasTokensV2Profile {
 		overlay, err := MaterializeTokensV2Overlay(dataDir, prog.Err())
 		if err != nil {
@@ -617,13 +600,13 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	}
 	prog.FinishStep(StepWaitHealthy, "")
 
-	// 8. Capture Canton participant ports. The Canton
-	// container exposes Ledger/Admin/JSON APIs per party role on
-	// Docker-ephemeral host ports — we ask docker what they ended
-	// up as and persist them so the Web UI (Explorer, DAR Manager,
-	// future M3 token surfaces) can dial without a manual
-	// `--admin-host=localhost:<port>` flag. Best-effort: any port
-	// that fails to query is silently omitted, not stamped as 0.
+	// 8. Capture Canton participant ports. The Canton container
+	// exposes Ledger/Admin/JSON APIs per party role on Docker-ephemeral
+	// host ports — ask docker what they ended up as and persist them so
+	// consumers (Web UI Explorer, DAR Manager, token tooling) can dial
+	// without a manual `--admin-host=localhost:<port>` flag.
+	// Best-effort: any port that fails to query is silently omitted,
+	// not stamped as 0.
 	for key, port := range CaptureCantonPorts(ctx, state.ComposeProject) {
 		state.Ports[key] = port
 	}
@@ -676,11 +659,9 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		}
 	}
 
-	// Welcome screen — replaces the old inline brand Box + plain
-	// endpoint listing with a single composable view (lockup +
-	// primary CTA + grouped endpoint cards + try-next cheat sheet).
-	// The renderer auto-degrades to a plain text variant on non-TTY
-	// writers so `localnet up | tee log` still grep-cleanly.
+	// Welcome screen (endpoints + try-next cheat sheet). The renderer
+	// auto-degrades to a plain-text variant on non-TTY writers so
+	// `localnet up | tee log` stays grep-clean.
 	renderWelcome(prog.Out(), opts.Name, version.Tag, state, time.Since(startedAt))
 
 	// Emit the terminal `done` event. On the CLI (TextProgress) Done("")
@@ -845,22 +826,19 @@ func diagnoseUnhealthy(ctx context.Context, project string) string {
 	return ""
 }
 
-// PreflightCodeFromReport (exported variant of the same logic
-// used by RunUp internally) extracts the most specific error code
-// from a failed docker.Report. Priority order matches
-// "what's the most actionable diagnosis the user can fix first":
+// PreflightCodeFromReport extracts the most specific error code from a
+// failed docker.Report. Priority order matches "what's the most
+// actionable diagnosis the user can fix first":
 //
-//	Docker CLI missing       → ErrCodeDockerNotInstalled (install Docker)
-//	Docker daemon down       → ErrCodeDockerDown        (start Docker)
-//	Docker Compose v1/missing → ErrCodeComposeMissing    (install compose v2)
-//	Docker memory below floor → ErrCodeMemoryLow        (raise Resources → Memory)
-//	Disk space low           → ErrCodeDiskLow           (free space)
-//	anything else            → ErrCodePreflightFailed   (catch-all)
+//	Docker CLI missing        → ErrCodeDockerNotInstalled (install Docker)
+//	Docker daemon down        → ErrCodeDockerDown         (start Docker)
+//	Docker Compose v1/missing → ErrCodeComposeMissing     (install compose v2)
+//	Docker memory below floor → ErrCodeMemoryLow          (raise Resources → Memory)
+//	Disk space low            → ErrCodeDiskLow            (free space)
+//	anything else             → ErrCodePreflightFailed    (catch-all)
 //
-// Exported so internal/ui/handlers/preflight.go can call it for
-// the HTTP-422 response — single source of truth. The lowercase
-// wrapper below preserves the local callsite for compatibility
-// within this file.
+// Exported so internal/ui/handlers/preflight.go can call it for the
+// HTTP-422 response — single source of truth.
 func PreflightCodeFromReport(r *docker.Report) string {
 	// Walk in priority order — the first FAIL we hit wins.
 	for _, c := range r.Results {

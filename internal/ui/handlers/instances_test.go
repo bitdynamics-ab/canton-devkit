@@ -15,9 +15,7 @@ import (
 )
 
 // seedInstance writes a minimal registry state.json so the handlers
-// have something to read. Mirrors the helper in list_test.go on the
-// p1-08 branch; duplicated here because that branch hasn't merged
-// yet. TODO: consolidate.
+// have something to read.
 func seedInstance(t *testing.T, name, version string, ports map[string]int, status registry.Status) {
 	t.Helper()
 	s := registry.NewState(name, version)

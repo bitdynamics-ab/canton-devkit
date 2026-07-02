@@ -16,18 +16,13 @@ import (
 )
 
 // SchemaVersion is the handlers-package mirror of
-// internal/api/types.SchemaVersion. Inlined to keep handlers free
-// of an upward api/types import. A parity test in
-// handlers_schema_test.go asserts the two stay equal.
-//
-// every top-level response in this
-// package now carries this version (jwtResponse). The app-config
-// endpoint emits the shared apitypes.EnvExport, which carries its own
-// SchemaVersion from the api/types package.
+// internal/api/types.SchemaVersion; a parity test in
+// schema_pin_test.go asserts the two stay equal. Every top-level
+// response in this package carries this version.
 const SchemaVersion = 1
 
-// MountAuth installs the auth/credential routes — the surfaces the
-// 2026-05-25 dashboard refresh added as a "Developer setup" card:
+// MountAuth installs the auth/credential routes backing the
+// dashboard's "Developer setup" card:
 //
 //	POST /api/instances/{name}/jwt        — issue a JWT for a role
 //	GET  /api/instances/{name}/app-config — export endpoints + JWT
@@ -53,17 +48,13 @@ func MountAuth(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/instances/{name}/app-config", handleAppConfig)
 }
 
-// jwtRequest is the POST body the dashboard sends. Mirrors the
-// chip-button shape in webui-dashboard.jsx's Developer setup card:
-// the user picks a party/role from a dropdown, a ttl from a chip
-// row, and an audience.
-//
-// The handler validates the role against splice.AllRoles() and
-// falls back to RoleAppProvider if absent — that's the dashboard's
-// default selection. ttl_seconds is read from the request but
-// currently NOT propagated into SignToken (which doesn't yet take
-// an expiry); marked as TODO so a future signer change picks it up
-// without a request-shape break.
+// jwtRequest is the POST body the dashboard's Developer setup card
+// sends. The handler validates the role against splice.AllRoles()
+// and falls back to RoleAppProvider (the dashboard's default) if
+// absent. ttl_seconds is read from the request but currently NOT
+// propagated into SignToken (which doesn't yet take an expiry);
+// marked as TODO so a future signer change picks it up without a
+// request-shape break.
 type jwtRequest struct {
 	Role       string `json:"role,omitempty"`
 	TTLSeconds int    `json:"ttl_seconds,omitempty"`
@@ -71,17 +62,13 @@ type jwtRequest struct {
 }
 
 // jwtResponse is what the dashboard renders into the monospace token
-// preview.
+// preview. SchemaVersion is carried so a frontend bundled for v1
+// refuses a v2 backend cleanly.
 //
-// SchemaVersion is the schema-pin reflection
-// test's anchor — every top-level response carries it so a frontend
-// bundled for v1 refuses a v2 backend cleanly. Mirrors the patterns
-// in api/types/{Instance,ListResponse,PreflightReport,Snapshot}.
-//
-// Token is REDACTED by default — the raw
-// JWT only returns when ?include_jwt=true is set. Mirrors the existing // `--include-jwt` convention. Default-redacted keeps CI logs,
-// screenshot-shares, and "look at the response" demos from leaking
-// a usable signing token.
+// Token is REDACTED by default — the raw JWT only returns when
+// ?include_jwt=true is set, mirroring the CLI's --include-jwt
+// convention. Default-redacted keeps CI logs, screenshot-shares,
+// and "look at the response" demos from leaking a usable token.
 type jwtResponse struct {
 	SchemaVersion int    `json:"schema_version"`
 	Token         string `json:"token"`
@@ -102,7 +89,6 @@ const jwtRedactionPlaceholder = "<redacted>"
 // payload is at most a few hundred bytes (role + ttl + audience);
 // 4 KiB is generous and catches the regression class where a bug
 // (or malicious client) sends an unbounded body and exhausts memory.
-// .
 const maxAuthBodyBytes = 4 * 1024
 
 // handleIssueJWT signs a fresh JWT for the given instance + role.
@@ -126,9 +112,8 @@ func handleIssueJWT(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req jwtRequest
-	// cap the body. http.MaxBytesReader
-	// returns a 413 error on Read once the cap is exceeded, which
-	// json.Decoder surfaces as a decode error we treat as 400.
+	// http.MaxBytesReader errors on Read once the cap is exceeded,
+	// which json.Decoder surfaces as a decode error we treat as 400.
 	r.Body = http.MaxBytesReader(w, r.Body, maxAuthBodyBytes)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
 		writeError(w, http.StatusBadRequest, "invalid request body", err)
@@ -168,21 +153,19 @@ func handleIssueJWT(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// default-redact. Mirrors the existing // --include-jwt convention. The dashboard MUST pass
-	// ?include_jwt=true on the fetch when it actually wants to
-	// render the token; default-redacted keeps screenshot shares
-	// and logs from leaking a usable signer.
+	// Default-redact (the CLI's --include-jwt convention): the
+	// dashboard must pass ?include_jwt=true when it actually wants
+	// to render the token, so screenshot shares and logs don't leak
+	// a usable signer.
 	includeJWT := r.URL.Query().Get("include_jwt") == "true"
 	respToken := jwtRedactionPlaceholder
 	if includeJWT {
 		respToken = token
 	}
 
-	// audit log. JWT issuance is a
-	// security-relevant event — every issue gets a stderr line
-	// with the role, party, audience, and whether the raw token
-	// was returned. Routes through log.Default so callers can
-	// redirect at the slog/log.Output layer.
+	// JWT issuance is a security-relevant event — every issue gets
+	// an audit line with the role, party, audience, and whether the
+	// raw token was returned.
 	auditJWTIssued(name, string(role), user, audience, includeJWT)
 
 	writeJSON(w, http.StatusOK, jwtResponse{
@@ -232,23 +215,19 @@ const (
 // handleAppConfig: GET /api/instances/{name}/app-config?format=env
 //
 // Returns the credentials + endpoints needed to point an external
-// dApp at this LocalNet instance. The 2026-05-25 dashboard refresh
-// renders this on the Developer setup card with format-switching
-// chip buttons.
+// dApp at this LocalNet instance, rendered on the dashboard's
+// Developer setup card.
 //
 // The payload is the SHARED apitypes.EnvExport built by
 // localnet.BuildEnvExport — the exact same shape and value set the
-// CLI's `dpm localnet env` emits, so the two surfaces can't drift.
-// That means the participant Ledger / Admin / JSON API ports a dApp
-// needs (which the old hand-rolled endpointsFromPorts hid), the scan
-// UI URL, and the real on-ledger party ids all appear here too. See
-// AGENTS.md "CLI ↔ Web UI parity".
+// CLI's `dpm localnet env` emits, so the two surfaces can't drift:
+// participant Ledger / Admin / JSON API ports, the scan UI URL, and
+// the real on-ledger party ids. See CONTRIBUTING.md "CLI ↔ Web UI
+// parity".
 //
 // JWTs are redacted by default (matching the CLI's --include-jwt
 // convention and the jwt endpoint above); pass ?include_jwt=true to
-// emit raw tokens.
-//
-// Defaults to format=env (the most-clicked tab in the mockup).
+// emit raw tokens. Defaults to format=env.
 func handleAppConfig(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := registry.ValidateName(name); err != nil {

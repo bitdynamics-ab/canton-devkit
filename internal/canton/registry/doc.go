@@ -1,9 +1,6 @@
-// Package registry is canton-devkit's typed client for the Splice
-// HTTP surface — the validator-app and scan-app REST APIs that
-// collectively serve as the "Splice Registry API" the proposal refers
-// to (docs/original-devkit-proposal.md line 207: "DevKit will use the
-// LocalNet Ledger API, wallet UI/API, and registry APIs where
-// available").
+// Package registry is canton-devkit's typed client for the Splice HTTP
+// surface — the validator-app and scan-app REST APIs that collectively
+// make up the Splice "registry" APIs a LocalNet exposes.
 //
 // # Surface map (Splice 0.6.4, verified via cached nginx routes)
 //
@@ -26,7 +23,7 @@
 //
 // This package ships the wiring (typed Client, auth-header injection,
 // JSON decode shape, error wrapping) plus one canonical smoke endpoint
-// (`GET /api/scan/v0/dso`) so M3 consumers have a working pattern to
+// (`GET /api/scan/v0/dso`) so consumers have a working pattern to
 // extend. Per-endpoint methods land alongside the CLI / Web UI consumer
 // that needs them — adding a method here without a caller would be
 // premature work against an evolving Splice API. See README.md inside

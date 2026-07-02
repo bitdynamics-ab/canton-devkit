@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"strings"
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
@@ -20,11 +22,10 @@ const observabilityToggleTimeout = 90 * time.Second
 
 // buildObservability wires `dpm localnet observability <verb>` — the
 // CLI mirror of the Web UI's POST /api/instances/{name}/observability
-// toggle (and a read-only `status`). Per AGENTS.md "CLI ↔ Web UI
-// parity": the runtime observability toggle is a per-instance operation
-// a user wants from either surface. Both this command and the HTTP
-// handler call the SAME neutral localnet.SetObservability — no
-// duplicated docker orchestration.
+// toggle (and a read-only `status`), per the CLI ↔ Web UI parity rule
+// in CONTRIBUTING.md. Both this command and the HTTP handler call the
+// SAME neutral localnet.SetObservability — no duplicated docker
+// orchestration.
 //
 // Sub-verbs:
 //
@@ -264,7 +265,7 @@ func observabilityStatusJSON(state *registry.State, cur localnet.ObservabilitySt
 
 // renderObservabilityResult prints the post-toggle summary in the
 // CLI's Section style.
-func renderObservabilityResult(out cobraWriter, instance string, res localnet.ObservabilityResult) {
+func renderObservabilityResult(out io.Writer, instance string, res localnet.ObservabilityResult) {
 	rows := []string{
 		term.KV("Prometheus", onOff(res.Prometheus), 14),
 		term.KV("Grafana", onOff(res.Grafana), 14),
@@ -277,7 +278,7 @@ func renderObservabilityResult(out cobraWriter, instance string, res localnet.Ob
 		rows = append(rows, term.KV("Prometheus URL",
 			fmt.Sprintf("http://localhost:%d", res.PrometheusPort), 14))
 	}
-	body := joinLines(rows)
+	body := strings.Join(rows, "\n")
 	_, _ = fmt.Fprintln(out, term.Section("observability · "+instance, "applied", body, 0))
 	if res.Warning != "" {
 		_, _ = fmt.Fprintln(out, term.Warnc("warning: "+res.Warning))
@@ -285,7 +286,7 @@ func renderObservabilityResult(out cobraWriter, instance string, res localnet.Ob
 }
 
 // renderObservabilityStatus prints the read-only status report.
-func renderObservabilityStatus(out cobraWriter, state *registry.State, cur localnet.ObservabilityState) {
+func renderObservabilityStatus(out io.Writer, state *registry.State, cur localnet.ObservabilityState) {
 	rows := []string{
 		term.KV("Instance status", string(state.Status), 16),
 		term.KV("Prometheus", onOff(cur.Prometheus), 16),
@@ -302,7 +303,7 @@ func renderObservabilityStatus(out cobraWriter, state *registry.State, cur local
 		rows = append(rows, "",
 			term.Dimc("enable with `dpm localnet observability enable --name "+state.Name+"`"))
 	}
-	body := joinLines(rows)
+	body := strings.Join(rows, "\n")
 	_, _ = fmt.Fprintln(out, term.Section("observability · "+state.Name, "status", body, 0))
 }
 
@@ -311,17 +312,4 @@ func onOff(b bool) string {
 		return term.Successc("on")
 	}
 	return term.Dimc("off")
-}
-
-// joinLines concatenates rows with newlines without pulling strings
-// just for one Join — keeps this file's import list tight.
-func joinLines(rows []string) string {
-	out := ""
-	for i, r := range rows {
-		if i > 0 {
-			out += "\n"
-		}
-		out += r
-	}
-	return out
 }

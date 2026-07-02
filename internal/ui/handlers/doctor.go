@@ -18,11 +18,8 @@ import (
 // GET /api/preflight already exposes the resource/Docker gate, but
 // `localnet doctor` layers two extra advisory checks on top of it
 // (platform-support matrix + host-port availability) via the neutral
-// localnet.CollectDoctor collector. Those advisories were CLI-only —
-// a Web UI operator could never see whether their OS/arch is in the
-// tested release matrix or whether the ephemeral/fixed port block is
-// free. This endpoint closes that parity gap by calling the
-// SAME collector the CLI uses, so the two surfaces can't drift.
+// localnet.CollectDoctor collector. This endpoint calls the SAME
+// collector the CLI uses, so the two surfaces can't drift.
 //
 // Like the CLI verb, the report is purely diagnostic: it always
 // returns 200 with a types.PreflightReport body whose `ok` field is

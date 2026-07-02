@@ -18,10 +18,9 @@ import (
 //
 // RunDown always calls Stop(ctx, false): `down` — and the Web UI Stop /
 // Restart actions that route through RunDown — MUST preserve the named
-// volumes that hold the ledger (Postgres) state so a later `up` resumes.
-// Volume removal is `clean`'s job only. Passing removeVolumes=true here
-// was a data-loss bug: the UI confirm dialog promised preservation while
-// `docker compose down --volumes` wiped the ledger.
+// volumes that hold the ledger (Postgres) state so a later `up`
+// resumes. Volume removal is `clean`'s job only; passing
+// removeVolumes=true here would wipe the ledger.
 type composeDowner interface {
 	Stop(ctx context.Context, removeVolumes bool) error
 }
@@ -115,8 +114,7 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 		}
 	}
 	// removeVolumes=false: `down` and the Web UI Stop/Restart that call
-	// this MUST preserve the ledger volumes. Passing --volumes here wiped
-	// Postgres while the UI promised "Data volumes are preserved".
+	// this MUST preserve the ledger volumes (see composeDowner).
 	if err := runner.Stop(ctx, false); err != nil {
 		// A compose-down failure must NOT silently fall through to
 		// registry.Delete — doing so would scrub the retry metadata

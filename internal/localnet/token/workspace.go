@@ -12,18 +12,13 @@ import (
 )
 
 // The token "workspace" is the god-mode, ACS-derived view of an
-// instance's token state : every instrument, every
-// party's balance, and the individual Holding contracts behind each
-// balance. One ACS scan feeds three lenses:
+// instance's token state: every instrument, every party's balance, and
+// the individual Holding contracts behind each balance. One read-only
+// ACS scan feeds three lenses:
 //
 // - instruments → on-chain instrument discovery (no state.Tokens seed)
 // - balance matrix → parties × instruments → summed amount
 // - party UTXOs → a balance expanded into its Holding contracts
-//
-// All of it is read-only and backable today: we already query HoldingV2
-// for balance; the workspace just keeps the per-contract rows instead of
-// collapsing straight to a sum, and scans every locally-hosted party
-// rather than one.
 
 // HoldingContract is one HoldingV2 contract — the UTXO unit. A party's
 // balance of an instrument is the sum of these.
@@ -112,9 +107,9 @@ func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error)
 	}
 
 	// Per-instrument generation: query every token-standard holding
-	// surface the participant has vetted (V1 and/or V2). A participant can
-	// carry both during the V1→V2 transition; querying only V2 would hide
-	// V1 tokens like Amulet (which is why 0.6.4 shows 0 instruments today).
+	// surface the participant has vetted (V1 and/or V2). A participant
+	// can carry both during the V1→V2 transition; querying only V2
+	// would hide V1 tokens like Amulet on stable releases.
 	surfaces, err := discoverTokenSurfaces(ctx, client)
 	if err != nil {
 		return nil, err
@@ -403,9 +398,9 @@ type HolderRow struct {
 	PctOfSupply   string `json:"pct_of_supply"` // e.g. "99.4"
 }
 
-// InstrumentSummary is the instrument-first KPI view :
-// total supply (= circulating, on a UTXO ledger), holder + contract
-// counts, and the per-holder distribution.
+// InstrumentSummary is the instrument-first KPI view: total supply
+// (= circulating, on a UTXO ledger), holder + contract counts, and
+// the per-holder distribution.
 type InstrumentSummary struct {
 	InstrumentID  string      `json:"instrument_id"`
 	Admin         string      `json:"admin"`

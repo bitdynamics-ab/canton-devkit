@@ -7,34 +7,20 @@ import {
 } from "../api";
 import { W, wMono } from "../tokens";
 
-// Backup & restore card.
-//
-// Two actions in one card:
-//   1. Download snapshot — POST /api/instances/:name/snapshot;
-//      browser saves the tar via Content-Disposition. Single click,
-//      no extra dialog; the server picks a stable filename.
-//   2. Restore from snapshot — drag-drop OR file picker, with an
+// Backup & restore card. Two actions:
+//   1. Download snapshot — POST /api/instances/:name/snapshot; the
+//      browser saves the tar via Content-Disposition.
+//   2. Restore from snapshot — drag-drop or file picker, with an
 //      optional target-name override and a `--force` checkbox for
 //      cross-version restores.
 //
-// The card lives inside InstanceDetail so the "current instance"
-// context is already known. Restore-from-here uploads to /restore
-// with name=currentInstance by default, but the user can type a
-// different name (unblocks the cross-name case properly;
-// today it works modulo the volume-rename limitation documented
-// in that ticket).
-//
-// # CLI ↔ UI parity (AGENTS.md)
-//
-// Mirrors `localnet snapshot --name X --to <path>` and
-// `localnet restore --name X --from <path> [--force]`. Same
-// server-side validation, same error taxonomy (the toast text
-// comes from the same ErrorCode list).
+// CLI ↔ UI parity (CONTRIBUTING.md): mirrors `localnet snapshot --name
+// X --to <path>` and `localnet restore --name X --from <path>
+// [--force]` — same server-side validation, same error taxonomy.
 
 interface Props {
-  // The instance this card lives under. Snapshot downloads
-  // ALWAYS use this name. Restore defaults to this name but lets
-  // the user override.
+  // Snapshot downloads always use this name; restore defaults to it
+  // but lets the user override.
   instanceName: string;
 }
 
@@ -53,14 +39,9 @@ export function BackupRestore({ instanceName }: Props) {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync targetName when the user navigates between instances.
-  // Without this, the card mounted under "dev" keeps the initial
-  // value forever — clicking into "pebble" still shows "dev" in
-  // the target-name input. useState only honors its initial value
-  // on first mount; the parent's prop change must be reflected
-  // explicitly. Also resets the result banner on switch so a
-  // success message from a previous restore doesn't bleed across
-  // instances.
+  // useState only honors its initial value on first mount, so switching
+  // instances must resync targetName explicitly — and reset the result
+  // banner/options so state doesn't bleed across instances.
   useEffect(() => {
     setTargetName(instanceName);
     setRestore({ kind: "idle" });
@@ -69,19 +50,18 @@ export function BackupRestore({ instanceName }: Props) {
   }, [instanceName]);
 
   async function onDownload() {
-    // The snapshot is application-consistent on both surfaces: the backend
-    // pauses the instance's node containers for the duration of the dump
-    // (the same quiesce the CLI does), so there is no crash-consistency
-    // caveat for this card to surface.
+    // The snapshot is application-consistent: the backend pauses the
+    // instance's node containers for the duration of the dump (the same
+    // quiesce the CLI does), so there is no crash-consistency caveat to
+    // surface.
     setDownloading(true);
     setDownloadError(null);
     try {
       await downloadSnapshot(instanceName);
     } catch (e) {
       // downloadSnapshot rejects when the server returned an error
-      // document instead of a file (instance gone, docker failure,
-      // 5xx). Without surfacing it the button would just flash and
-      // the user would assume the download succeeded.
+      // document instead of a file; without surfacing it the button
+      // would just flash and the user would assume success.
       setDownloadError(
         e instanceof ApiError ? e.message : "snapshot download failed",
       );
@@ -92,10 +72,9 @@ export function BackupRestore({ instanceName }: Props) {
 
   async function onFileChosen(file: File | null) {
     if (!file) return;
-    // Yellow Y15: client-side size cap. Snapshots can be large but
-    // 4 GiB is the practical ceiling for an XHR upload (browsers
-    // buffer the whole body in memory). Refuse client-side rather
-    // than OOM the tab on a stray drop.
+    // 4 GiB is the practical ceiling for an XHR upload (browsers buffer
+    // the whole body in memory) — refuse client-side rather than OOM
+    // the tab on a stray drop.
     const MAX_TARBALL_BYTES = 4 * 1024 * 1024 * 1024;
     if (file.size > MAX_TARBALL_BYTES) {
       setRestore({

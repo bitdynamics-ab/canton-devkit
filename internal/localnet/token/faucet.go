@@ -5,10 +5,10 @@ import (
 	"io"
 )
 
-// FaucetOptions funds a party from a well-known source . It's
-// a thin wrapper over the transfer engine: move `Amount` of `Instrument`
-// from a funded source party to `To`, auto-accepted, so a fresh party is
-// funded in one step with no instruction id to hand off.
+// FaucetOptions funds a party from a well-known source. A thin wrapper
+// over the transfer engine: move `Amount` of `Instrument` from a funded
+// source party to `To`, auto-accepted, so a fresh party is funded in
+// one step with no instruction id to hand off.
 type FaucetOptions struct {
 	Instance   string
 	Instrument string

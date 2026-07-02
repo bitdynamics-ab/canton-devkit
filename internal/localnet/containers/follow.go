@@ -8,28 +8,25 @@ import (
 	"strconv"
 )
 
-// Follow streams a container's log lines into the returned channel
-// until ctx is cancelled or the container exits. Runs
-// `docker logs --follow [--since DUR] [--tail N] <container>` and
-// scans the merged stdout+stderr line-by-line.
-//
-// Used by the CLI's bubbletea logs TUI . The HTTP layer
-// uses Logs() instead (one-shot tail) because SSE-streaming logs
-// over HTTP is a separate ticket — when that lands it can call
-// Follow() too.
-//
-// Channel semantics:
-// - Lines arrive in order.
-// - Channel closes when ctx is done OR docker exits.
-// - Error channel sees at most one error (the cause of close)
-// then closes.
+// FollowLine is one log line emitted by Follow.
 type FollowLine struct {
 	Text   string
 	Stream string // "stdout" or "stderr" — we merge so this is informational only
 }
 
-// Follow launches docker logs and returns line + error channels.
-// Caller MUST drain both — leaking either channel will block the
+// Follow streams a container's log lines into the returned channel
+// until ctx is cancelled or the container exits. Runs
+// `docker logs --follow [--since DUR] [--tail N] <container>` and
+// scans the merged stdout+stderr line-by-line. Used by the CLI's
+// logs TUI; the HTTP layer uses Logs (one-shot tail).
+//
+// Channel semantics:
+//   - Lines arrive in order.
+//   - The line channel closes when ctx is done OR docker exits.
+//   - The error channel sees at most one error (the cause of close),
+//     then closes.
+//
+// Caller MUST drain both channels — leaking either will block the
 // reader goroutines.
 func Follow(ctx context.Context, container string, opts LogsOptions) (<-chan FollowLine, <-chan error) {
 	lines := make(chan FollowLine, 256)

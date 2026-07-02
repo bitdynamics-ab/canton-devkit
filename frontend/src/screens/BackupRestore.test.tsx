@@ -76,10 +76,9 @@ describe("BackupRestore card", () => {
   });
 
   it("surfaces a download-failure banner when the server returns an error instead of a file", async () => {
-    // Regression: the hidden-iframe download swallowed server errors
-    // (instance gone, docker failure, 5xx) — the button just flashed
-    // and the user assumed success. The iframe navigates to the JSON
-    // error body and fires `load`; the card must show an alert.
+    // The hidden-iframe download must not swallow server errors
+    // (instance gone, docker failure, 5xx): the iframe navigates to the
+    // JSON error body and fires `load`; the card must show an alert.
     vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(
       function (this: HTMLFormElement) {
         const frame = document.querySelector(
@@ -194,10 +193,8 @@ describe("BackupRestore card", () => {
   });
 
   it("resyncs target name when the parent switches instances", async () => {
-    // Repro for the user-reported bug: open the UI on "dev", click
-    // pebble, BackupRestore's targetName state was stuck at "dev"
-    // because useState only honors its initial value on first mount.
-    // After the fix, switching instances must update the input.
+    // useState only honors its initial value on first mount, so
+    // switching instances must update the input explicitly.
     const { rerender } = render(<BackupRestore instanceName="dev" />);
     const input = screen.getByLabelText(
       /restore target instance name/i,

@@ -51,7 +51,7 @@ func TestPickGeneration(t *testing.T) {
 
 // TestInterfaceGeneration_ClassifiesInstructionAndHolding pins that the
 // shared classifier recognizes BOTH the Holding interfaces (read path)
-// and the TransferInstruction interfaces. The accept now routes by the
+// and the TransferInstruction interfaces. The accept routes by the
 // instruction's OWN interface (instructionGeneration), not the
 // participant's vetted surfaces — so misclassifying a TransferInstruction
 // would misroute a V1 instruction on a dual-surface participant and

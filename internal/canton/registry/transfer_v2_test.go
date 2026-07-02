@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -169,7 +170,7 @@ func TestGetAcceptChoiceContext_EmptyIDRejected(t *testing.T) {
 	}
 }
 
-// TestGetAcceptChoiceContext_EscapesReservedChars pins C3: an
+// TestGetAcceptChoiceContext_EscapesReservedChars pins that an
 // instruction id containing URL-reserved chars ('#', '?', ' ') is
 // url.PathEscape'd so the registry sees the literal id, not a
 // fragment / query string. Without the escape, '#' truncates the
@@ -223,7 +224,7 @@ func TestGetTransferFactory_PropagatesAPIError(t *testing.T) {
 		t.Fatal("want error, got nil")
 	}
 	var apiErr *APIError
-	if !errorsAs(err, &apiErr) {
+	if !errors.As(err, &apiErr) {
 		t.Fatalf("want APIError, got %T: %v", err, err)
 	}
 	if apiErr.StatusCode != http.StatusBadRequest {
@@ -313,23 +314,4 @@ func TestTransferFactoryChoiceArgs_V2Encoding(t *testing.T) {
 	if _, ok := transfer["sender"].(map[string]any); !ok {
 		t.Errorf("V2 transfer.sender must be an Account object, got %T", transfer["sender"])
 	}
-}
-
-// errorsAs is a small helper so this test file doesn't have to import
-// "errors" just for one call site — the file already deals with HTTP
-// + JSON and we want to keep the import set tight.
-func errorsAs(err error, target **APIError) bool {
-	for e := err; e != nil; {
-		if a, ok := e.(*APIError); ok {
-			*target = a
-			return true
-		}
-		type unwrapper interface{ Unwrap() error }
-		u, ok := e.(unwrapper)
-		if !ok {
-			return false
-		}
-		e = u.Unwrap()
-	}
-	return false
 }

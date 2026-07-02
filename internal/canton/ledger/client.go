@@ -130,13 +130,8 @@ func Dial(ctx context.Context, opts DialOptions) (*Client, error) {
 	//   - PlainText=true  → we inject WithTransportCredentials(insecure).
 	//   - PlainText=false → we add NOTHING here; the caller MUST supply a
 	//     real credentials.NewTLS(...) via ExtraDialOptions. If they
-	//     forget, grpc.NewClient will fail at Dial time with "no
-	//     transport security set (use grpc.WithTransportCredentials
-	//     (insecure.NewCredentials()) explicitly or set credentials)" —
-	//     which is the fail-closed behaviour we want. The previous code
-	//     called hasCredentials() which always returned false and so
-	//     silently fell back to insecure even when PlainText was false,
-	//     defeating the TLS contract.
+	//     forget, grpc.NewClient fails at Dial time with "no transport
+	//     security set" — the fail-closed behaviour we want.
 	//
 	// The grpc rule that "last creds option wins" still applies if the
 	// caller wants to override our insecure default (rare; mostly tests).
@@ -229,20 +224,8 @@ func withBearerToken(ctx context.Context, src TokenSource) (context.Context, err
 	if tok == "" {
 		return ctx, nil
 	}
-	md := metadata.Pairs("authorization", "Bearer "+tok)
 	// AppendToOutgoingContext composes cleanly if the caller already set
 	// metadata via context (e.g. tracing); replacing via NewOutgoingContext
 	// would clobber that.
-	return metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+tok), withMetadataForTests(ctx, md)
+	return metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+tok), nil
 }
-
-// withMetadataForTests exists so the test fake can extract the auth header
-// via context.Value rather than relying on gRPC's incoming-metadata
-// extraction. In production the gRPC stack handles the metadata copy; this
-// is a no-op there. The function is a no-op stub; the real test seam is
-// metadata.FromIncomingContext on the server side. Keeping the second
-// return signature for future test instrumentation.
-//
-// Returns nil error always; signature lets the caller use a single-return
-// idiom in withBearerToken.
-func withMetadataForTests(_ context.Context, _ metadata.MD) error { return nil }

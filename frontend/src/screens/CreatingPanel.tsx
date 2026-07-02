@@ -13,61 +13,43 @@ import {
   useCreateProgress,
 } from "./useCreateProgress";
 
-// CreatingPanel — shown above the InstanceDetail/DeveloperSetup
-// cards when the selected instance is in status="creating".
-// Subscribes to /api/instances/{name}/events and renders the
-// same step rows the create modal uses, so a user who clicks
-// an in-flight instance sees what step the bring-up is on.
+// CreatingPanel — shown above the InstanceDetail/DeveloperSetup cards
+// when the selected instance is status="creating". Subscribes to
+// /api/instances/{name}/events and renders the same step rows as the
+// create modal (both consume the shared useCreateProgress state).
 //
 // Two scenarios:
-//
-//   1. Live up in progress (goroutine still publishing): the
-//      SSE stream replays buffered events + live ones; the
-//      panel shows real-time progress just like the modal.
-//
-//   2. Zombie creating (registry says creating but no goroutine
-//      is publishing — e.g. server restart killed the goroutine
-//      mid-flight, leaving the registry entry orphaned): no
-//      events arrive. After a grace period the panel surfaces
-//      a "looks stalled" hint with a cleanup CTA.
-//
-// We deliberately re-use useCreateProgress so the step-render
-// logic stays in one place; CreateLocalNetModal and this panel
-// both consume the same state shape.
+//   1. Live bring-up: the SSE stream replays buffered events + live
+//      ones — real-time progress just like the modal.
+//   2. Zombie creating: the registry says creating but no goroutine is
+//      publishing (e.g. a server restart killed it mid-flight). No
+//      events arrive; after a grace period the panel surfaces a "looks
+//      stalled" hint with a cleanup CTA.
 
 const ZOMBIE_GRACE_MS = 3000; // wait this long before showing "stalled" hint
 
 interface Props {
   name: string;
-  // Called when the user clicks "Refresh list" after a cancel or
-  // a stalled-state detection — the Dashboard re-fetches so the
-  // row's status updates.
+  // Called after a cancel or stalled-state cleanup so the Dashboard
+  // re-fetches and the row's status updates.
   onRefresh: () => void;
 }
 
 export function CreatingPanel({ name, onRefresh }: Props) {
-  // EventSource URL is per-instance; the hook handles subscribe
-  // + unsubscribe on name change.
   const eventsUrl = `/api/instances/${encodeURIComponent(name)}/events`;
   const progress = useCreateProgress(eventsUrl);
 
-  // Zombie detection: if no event has arrived by ZOMBIE_GRACE_MS
-  // we surface the "stalled" affordance. Derived freshly on every
-  // render rather than via setTimeout — a setTimeout closure
-  // captures progress.startedAt at effect-setup time and never
-  // re-checks it, so events arriving 4 seconds later (slow
-  // network, slow first publish) would leave the panel
-  // permanently "stalled" even though the stream is flowing.
-  //
-  // The mountedAt ref pegs the start time once per (name); we
-  // re-render every second via the elapsed-time ticker, so the
-  // derived check stays current without any timer of its own.
+  // Zombie detection: no event by ZOMBIE_GRACE_MS surfaces the
+  // "stalled" affordance. Derived freshly on every render rather than
+  // via setTimeout — a timeout closure would capture progress.startedAt
+  // at setup time and never re-check it, so events arriving late (slow
+  // network, slow first publish) would leave the panel permanently
+  // "stalled". mountedAtRef pegs the start time per name; the 1s ticker
+  // below keeps the derived check current.
   const mountedAtRef = useRef<number>(Date.now());
   useEffect(() => {
     mountedAtRef.current = Date.now();
   }, [name]);
-  // Tick once per second so the zombie-grace check + the elapsed
-  // counter both re-evaluate. Cheap; clearInterval on unmount.
   const [, forceTick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => forceTick((n) => n + 1), 1000);
@@ -77,9 +59,9 @@ export function CreatingPanel({ name, onRefresh }: Props) {
     progress.startedAt === null &&
     Date.now() - mountedAtRef.current > ZOMBIE_GRACE_MS;
 
-  // Cancel in the LIVE path: ask the goroutine to stop.
-  // Backend publishes kind=cancelled, then the goroutine sees
-  // ctx.Done() and writes status=failed via its existing path.
+  // Live path: ask the goroutine to stop. The backend publishes
+  // kind=cancelled, then the goroutine sees ctx.Done() and writes
+  // status=failed via its existing path.
   async function onCancelLive() {
     try {
       await cancelInstanceUp(name);
@@ -89,18 +71,15 @@ export function CreatingPanel({ name, onRefresh }: Props) {
     }
   }
 
-  // Cancel in the ZOMBIE path: there is no live goroutine, so
-  // /up cancel would 404. Scrub the registry entry instead so the
-  // row disappears from the list. The user explicitly asked for
-  // cleanup; we honor it.
+  // Zombie path: no live goroutine, so /up cancel would 404 — scrub the
+  // registry entry instead so the row disappears from the list.
   async function onScrub() {
     try {
       await scrubInstance(name);
       onRefresh();
     } catch {
-      // If scrub fails (e.g. 409 because the backend decided the
-      // entry is now running), refresh anyway so the user sees
-      // current state.
+      // Even if scrub fails (e.g. 409 because the entry is now
+      // running), refresh so the user sees current state.
       onRefresh();
     }
   }

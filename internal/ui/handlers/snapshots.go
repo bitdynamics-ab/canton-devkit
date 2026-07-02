@@ -51,12 +51,6 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// contextWithTimeout adapts context.WithTimeout so handler bodies stay
-// flat and a future test can swap in a shorter clock.
-func contextWithTimeout(parent context.Context, d time.Duration) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(parent, d)
-}
-
 // restoreUploadMax is the hard ceiling on the multipart body for a
 // restore upload. 4 GiB sits above realistic snapshots (sub-200 MB for
 // a healthy pebble-class instance) and below a disk-filling payload on
@@ -142,7 +136,7 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	// audit log captures the rest. Capturing errw lets us surface
 	// a sensible 500 detail in the server log.
 	var errBuf bytes.Buffer
-	ctx, cancel := contextWithTimeout(r.Context(), snapshotTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), snapshotTimeout)
 	defer cancel()
 	exit := snapshot.RunSnapshot(ctx, io.Discard, &errBuf, name, tmpPath)
 	if exit != localnet.ExitSuccess {
@@ -266,7 +260,7 @@ func handleRestore(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = os.Remove(tmpPath) }()
 
 	var errBuf bytes.Buffer
-	ctx, cancel := contextWithTimeout(r.Context(), restoreTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), restoreTimeout)
 	defer cancel()
 	exit := snapshot.RunRestore(ctx, io.Discard, &errBuf, name, tmpPath, force)
 	if exit != localnet.ExitSuccess {

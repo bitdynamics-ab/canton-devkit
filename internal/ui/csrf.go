@@ -6,47 +6,25 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/httpsec"
 )
 
-// withOriginCheck is the CSRF-protection middleware for credential-
-// issuing routes. For state-changing methods (POST/PUT/PATCH/DELETE),
-// the request MUST carry an Origin (or Referer) header whose host
-// matches the server's own Host header. Mismatches return 403.
+// withOriginCheck is the CSRF-protection middleware: state-changing
+// methods (POST/PUT/PATCH/DELETE) MUST carry an Origin (or Referer)
+// header whose host matches the server's own Host header; mismatches
+// return 403.
 //
-// # Why we need this on a loopback server
+// A loopback bind is NOT a CSRF defence: any unrelated website open in
+// a local browser can fetch() http://127.0.0.1:7777/... and reach this
+// server. The check lives in router-level middleware, not per-handler,
+// because per-handler checks drift and one forgotten handler is one
+// credential leak.
 //
-// "loopback-only" is NOT a CSRF defence.
-// A browser running on the same machine — visiting any unrelated
-// website — can issue a POST to http://127.0.0.1:7777/api/instances/
-// demo/jwt and the request reaches the loopback server unless we
-// validate the Origin. Without this middleware, "open a JWT for
-// alice and exfiltrate it" is one fetch() from a malicious tab.
+// GET/HEAD/OPTIONS are intentionally exempt — they don't trigger CSRF
+// in the browser security model, and gating them would 403 innocuous
+// reads. That also exempts SSE (EventSource only sends GET); sse.go
+// does its own Origin check.
 //
-// # Why this is in middleware, not per-handler
-//
-// Every state-changing handler in /api/* needs this. Per-handler
-// checks drift; one forgotten handler is one credential leak.
-// Single chokepoint at the router level is the right shape.
-//
-// # GET is intentionally exempt
-//
-// GET / HEAD / OPTIONS don't trigger CSRF in the browser security
-// model (they're "simple" requests). Skipping them keeps innocuous
-// reads cheap and removes a class of false-positive 403s from
-// inline-image fetches.
-//
-// # The DNS-rebinding gap is covered separately
-//
-// Origin==Host alone does NOT stop DNS rebinding (attacker rebinds
-// evil.example.com → 127.0.0.1, so Origin and Host are BOTH
-// evil.example.com and this check passes). That hole is closed by
-// withHostCheck, which runs on ALL methods including GET. See that
-// middleware's godoc.
-//
-// # SSE caveat
-//
-// EventSource (the browser SSE client) only sends GET, so SSE is
-// covered by the GET-exempt rule. If a future handler issues
-// credentials via GET (don't), this middleware won't gate it —
-// that would be an anti-pattern.
+// Origin==Host alone does NOT stop DNS rebinding (Origin and Host are
+// then BOTH the attacker's name). That hole is closed by withHostCheck,
+// which runs on ALL methods including GET.
 func withOriginCheck(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isStateChanging(r.Method) {
@@ -66,27 +44,17 @@ func withOriginCheck(next http.Handler) http.Handler {
 // the operator explicitly allowed via --allow-non-loopback). Runs on
 // EVERY method, including GET — unlike withOriginCheck.
 //
-// # Why a Host allowlist is required
+// It exists to defeat DNS rebinding, which neither the Origin check nor
+// the loopback bind stops: the attacker rebinds evil.example.com's A
+// record to 127.0.0.1, so the victim's browser sends BOTH Origin and
+// Host as evil.example.com:7777 — Origin == Host passes, and the
+// browser itself makes the loopback connection. The blast radius is
+// real: token mint/transfer/burn move value, instance endpoints tear
+// down LocalNets, and GET app-config leaks party IDs. A Host allowlist
+// is the standard mitigation (webpack-dev-server, Grafana, etc.).
 //
-// The CSRF middleware checks Origin == Host, and the listener binds to
-// loopback. Neither stops DNS rebinding:
-//
-//	attacker controls evil.example.com → initially their server,
-//	then rebinds the A record to 127.0.0.1. The victim's browser
-//	loads evil.example.com:7777 and its fetch()es now hit OUR
-//	loopback server with Origin: http://evil.example.com:7777 and
-//	Host: evil.example.com:7777. Origin == Host, so withOriginCheck
-//	passes; the loopback bind doesn't help because the browser (on
-//	the victim's box) makes the loopback connection itself.
-//
-// The blast radius is real: token mint/transfer/burn move value, the
-// instance create/delete endpoints stand up and tear down LocalNets,
-// and GET /api/instances/{name}/app-config leaks party IDs +
-// endpoints. The standard mitigation (webpack-dev-server allowedHosts,
-// Grafana, etc.) is a Host allowlist; this is ours.
-//
-// We deliberately fail closed on a missing Host header too — a real
-// browser always sends one; its absence is anomalous.
+// A missing Host header fails closed too — real browsers always send
+// one; its absence is anomalous.
 func withHostCheck(allowedExtra []string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !httpsec.IsLoopbackHost(r.Host, allowedExtra...) {
@@ -111,16 +79,13 @@ func isStateChanging(method string) bool {
 
 // checkOriginAgainstHost validates that the request's Origin (or
 // Referer, fallback) header host matches r.Host. Thin wrapper over
-// httpsec.CheckOriginAgainstHost so the package-ui middleware and the
+// httpsec.CheckOriginAgainstHost so this middleware and the
 // package-handlers SSE endpoint share one implementation.
-//
-// Returns nil on match, an explanatory error otherwise.
 func checkOriginAgainstHost(r *http.Request) error {
 	return httpsec.CheckOriginAgainstHost(
 		r.Header.Get("Origin"), r.Header.Get("Referer"), r.Host)
 }
 
-// hostsMatch is retained as a package-local alias of the shared helper
-// so the existing TestCSRF_HostsMatch unit test (csrf_test.go) keeps
+// hostsMatch aliases the shared helper so TestCSRF_HostsMatch keeps
 // exercising the comparison rules from this package.
 func hostsMatch(a, b string) bool { return httpsec.HostsMatch(a, b) }

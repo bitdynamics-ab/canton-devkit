@@ -41,15 +41,11 @@ type CreateOptions struct {
 	InitialSupply string
 	Issuer        string
 
-	// Submit toggles the actual ledger submission of the instrument
-	// creation. Currently always false at this layer — the V2
-	// instrument-creation submission lands when wires the
-	// ledger client against the live V2 splice-test-token-v2
-	// templates. For now RunCreate records the intent into the
-	// instance's registry.State.Tokens so subsequent commands can
-	// resolve `--instrument <symbol>` and the UI can render the
-	// instrument card. Status field on the resulting TokenRef
-	// reflects this: "recorded" until a real submission happens.
+	// Submit toggles actual ledger submission of the instrument
+	// creation. Unused at this layer: RunCreate records the instrument
+	// into the instance's registry.State.Tokens (Status "recorded") so
+	// subsequent commands can resolve `--instrument <symbol>`; the
+	// on-ledger path is driven by Endpoint below.
 	Submit bool
 
 	// Endpoint, when set (host:port), makes RunCreate create the
@@ -222,11 +218,10 @@ func validateCreate(opts CreateOptions) error {
 	if opts.InitialSupply == "" {
 		return errors.New("initial supply is required (decimal string)")
 	}
-	// Surface-level decimal validation — Daml-side accepts a
-	// fixed-precision decimal; here we just guard against obvious
-	// garbage so the user gets a friendly local error rather than a
-	// confusing on-ledger one. looksLikeDecimal already rejects a
-	// lone "." / digit-less input, signs, and exponents.
+	// Guard against obvious garbage locally so the user gets a
+	// friendly error rather than a confusing on-ledger one.
+	// looksLikeDecimal rejects a lone "." / digit-less input, signs,
+	// and exponents.
 	if !looksLikeDecimal(opts.InitialSupply) {
 		return fmt.Errorf("initial supply %q is not a valid decimal number",
 			opts.InitialSupply)
@@ -240,8 +235,8 @@ func validateCreate(opts CreateOptions) error {
 	}
 	// Daml's Numeric tops out at 38 significant digits and at most
 	// `Decimals` fractional digits. Enforce both locally so an
-	// oversized or over-precise supply fails with a clear message now
-	// instead of an opaque on-ledger rejection once submission wires up.
+	// oversized or over-precise supply fails with a clear message
+	// instead of an opaque on-ledger rejection.
 	intDigits, fracDigits := countDecimalDigits(opts.InitialSupply)
 	if intDigits+fracDigits > damlNumericMaxDigits {
 		return fmt.Errorf(
@@ -269,8 +264,8 @@ func validateCreate(opts CreateOptions) error {
 // that a bare non-empty check let through.
 var partyIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:_#./-]*$`)
 
-// validatePartyID is the shared party-id guard reused by the create
-// issuer and (post-merge) the mint/transfer/burn party flags.
+// validatePartyID is the shared party-id guard used by the create
+// issuer and the mint/transfer/burn party flags.
 func validatePartyID(field, v string) error {
 	if !partyIDPattern.MatchString(v) {
 		return fmt.Errorf(

@@ -227,12 +227,12 @@ func TestRunAccept_PrefersOnLedgerThenFallsBack(t *testing.T) {
 	})
 }
 
-// TestRunAccept_ResolvesPartyAlias pins the fix for a bug found in E2E:
-// `transfer accept --party <alias>` must resolve the alias to a full
-// party id before dispatch. The on-ledger accept puts the receiver into
-// an ACS party filter, and an unresolved alias is not a valid filter key
-// — it poisoned the lookup, the on-ledger detection bailed, and the
-// instruction wrongly fell through to the off-ledger registry.
+// TestRunAccept_ResolvesPartyAlias pins that `transfer accept --party
+// <alias>` resolves the alias to a full party id before dispatch. The
+// on-ledger accept puts the receiver into an ACS party filter, and an
+// unresolved alias is not a valid filter key — it would poison the
+// lookup, make the on-ledger detection bail, and wrongly send the
+// instruction to the off-ledger registry.
 func TestRunAccept_ResolvesPartyAlias(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo")

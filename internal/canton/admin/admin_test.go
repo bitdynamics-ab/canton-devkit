@@ -14,14 +14,13 @@ import (
 )
 
 // stubPackageService is an in-memory PackageServiceServer used by every
-// test in this file. Each method returns canned responses recorded
-// against the calls observed. Tests inspect the recorded calls to
-// assert that the Cobra-side commands wired the right request fields.
+// test in this file. Each method returns canned responses and records
+// the requests it saw; tests inspect the recordings to assert the right
+// request fields were wired.
 //
-// We deliberately don't implement every method on the proto interface
-// — only the ones the Track-B commands exercise. The embedded
-// UnimplementedPackageServiceServer makes the others return
-// grpc.Unimplemented, which is exactly what should happen if a
+// Only the methods the CLI dar/package commands exercise are
+// implemented. The embedded UnimplementedPackageServiceServer makes the
+// others return codes.Unimplemented — exactly what should happen if a
 // command starts calling a method it shouldn't.
 type stubPackageService struct {
 	adminproto.UnimplementedPackageServiceServer

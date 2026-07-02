@@ -23,11 +23,9 @@ func (c *Client) ListPackages(ctx context.Context) (*lapiv2.ListPackagesResponse
 
 // GetPackage fetches the bytes of a specific Daml-LF package by its
 // package ID. Used by the package explorer to decode contract payloads
-// into typed form (per proposal line 175: "with PackageService + DAR
-// metadata ... to decode payloads into typed form").
-//
-// The response Payload is the raw archive bytes; the explorer's decoder
-// passes them to the daml-lf reader for module/template extraction.
+// into typed form: the response Payload is the raw archive bytes, which
+// the explorer's decoder passes to the daml-lf reader for
+// module/template extraction.
 func (c *Client) GetPackage(ctx context.Context, packageId string) (*lapiv2.GetPackageResponse, error) {
 	resp, err := c.pkg.GetPackage(ctx, &lapiv2.GetPackageRequest{PackageId: packageId})
 	if err != nil {

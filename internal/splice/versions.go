@@ -21,10 +21,9 @@ import (
 // code. After extraction, ContentSHA verifies the actual files match
 // what was reviewed when this entry was added.
 //
-// The previous catalogue (pre-2026-05) also pinned the raw gzip SHA-256,
-// but GitHub regenerates source-tarballs lazily and the gzip metadata
-// can drift — so the gzip hash was unreliable. The commit-SHA URL +
-// post-extract ContentSHA combo replaces it cleanly.
+// We hash the extracted tree rather than the raw tarball because
+// GitHub regenerates source-tarballs lazily and the gzip metadata can
+// drift, making a raw-gzip hash unreliable.
 //
 // Container images: this catalogue pins the source TREE, but the ghcr
 // images Splice's compose pulls are referenced by mutable tags (a single
@@ -174,9 +173,9 @@ func Resolve(req string) (Version, error) {
 // MinMemoryFor returns the version-specific Docker daemon memory
 // floor for v. Called from both `dpm localnet up` (CLI gate) and the
 // Web UI's GET /api/preflight handler so the two surfaces enforce
-// identical numbers (see AGENTS.md "CLI ↔ Web UI parity"). The
-// fallback constant is duplicated as a runtime value below to avoid
-// an import cycle with internal/docker.
+// identical numbers (see CONTRIBUTING.md "CLI ↔ Web UI parity"). The
+// fallback constant is duplicated below to avoid an import cycle with
+// internal/docker.
 //
 // Resolution order:
 //  1. v.MinMemoryBytes when the entry sets it (curated entries).
@@ -255,14 +254,12 @@ func strictestRecommendedForMajor(major string) uint64 {
 	return max
 }
 
-// defaultMinMemoryBytesFallback mirrors docker.DefaultMinMemoryBytes.
-// Duplicated as a constant here so this package can compute the
-// effective min without importing internal/docker (which would
-// create a cycle: docker → splice ← splice already imports nothing
-// from docker, but a docker import here would also be ugly layering).
-//
-// TestThresholdParity_VersionMinAtLeastDefault asserts equality
-// with docker.DefaultMinMemoryBytes so this never drifts.
+// defaultMinMemoryBytesFallback mirrors docker.DefaultMinMemoryBytes,
+// duplicated so this package can compute the effective min without
+// importing internal/docker (docker imports splice — importing back
+// would create a cycle). TestThresholdParity_VersionMinAtLeastDefault
+// asserts equality with docker.DefaultMinMemoryBytes so this never
+// drifts.
 const defaultMinMemoryBytesFallback uint64 = 4_000_000_000
 
 // Supported returns the supported tags sorted ascending. Stable order

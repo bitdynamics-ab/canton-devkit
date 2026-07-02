@@ -59,10 +59,6 @@ func TestSummaryQueries_LiveProm(t *testing.T) {
 	t.Cleanup(cancel)
 
 	for headline, query := range SummaryQueries {
-		// Capture loop vars for the parallel subtests. (Go 1.22+
-		// fixes this implicitly but the repo still pins 1.26 and
-		// being explicit costs nothing.)
-		headline, query := headline, query
 		t.Run(string(headline), func(t *testing.T) {
 			t.Parallel()
 			n, err := queryResultCount(ctx, base, query)

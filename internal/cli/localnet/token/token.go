@@ -1,15 +1,12 @@
-// Package token wires the `dpm localnet token` cobra subtree. Mirrors
-// the dar subtree's layout (one file per verb, shared parent in
-// token.go).
+// Package token wires the `dpm localnet token` cobra subtree, one file
+// per verb.
 package token
 
 import (
 	"github.com/spf13/cobra"
 )
 
-// Build returns the `token` parent command. Adds subcommands inline
-// so the call site (internal/cli/localnet/localnet.go) just does
-// `AddCommand(token.Build())`.
+// Build returns the assembled `token` parent command.
 func Build() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "token",
@@ -53,11 +50,9 @@ Quick start (on a running instance):
 	return cmd
 }
 
-// errSilent is returned by mint/transfer/burn when the orchestration
-// surfaced ErrNeedsV2LocalNet — cobra exits non-zero, but the user
-// already saw the friendly remediation on stderr so we suppress the
-// usual usage-and-stack dump. Implements `error` with an empty string
-// so cobra's default error renderer is a no-op.
+// errSilent makes cobra exit non-zero without the usual usage-and-error
+// dump: the user already saw the friendly remediation on stderr. Its
+// empty Error() string makes cobra's default error renderer a no-op.
 var errSilent silentError
 
 type silentError struct{}

@@ -14,6 +14,7 @@
 //	          created_at, package_name, package_version
 //	        }]}
 //	  → 503 PARTICIPANT_PORT_NOT_RECORDED if state.json predates
+//	    participant-port capture.
 //	An ACS snapshot at ledger end. limit defaults to 100; cap is 1000
 //	(server-side defence). No filters by template/party — the JWT's
 //	claim already filters server-side.
@@ -126,34 +127,8 @@ func handleContractsList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	state, err := registry.Read(name)
-	if err != nil {
-		if errors.Is(err, registry.ErrNotFound) {
-			writeErrorWithCode(w, http.StatusNotFound,
-				ErrCodeNotFound,
-				"instance "+name+" not registered")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "read state", err)
-		return
-	}
-
-	portKey := "participant_ledger_" + role
-	ledgerPort, hasPort := state.Ports[portKey]
-	if !hasPort || ledgerPort == 0 {
-		writeErrorWithCode(w, http.StatusServiceUnavailable,
-			"PARTICIPANT_PORT_NOT_RECORDED",
-			"instance "+name+" was started before participant ports were recorded",
-			"restart the instance with `dpm localnet down --name "+name+
-				"` followed by `dpm localnet up --name "+name+
-				"` — the new up flow captures all Canton API ports")
-		return
-	}
-	cred, hasCred := state.Credentials[role]
-	if !hasCred {
-		writeError(w, http.StatusInternalServerError,
-			"no JWT recorded for role "+role,
-			fmt.Errorf("missing credential for role %q", role))
+	endpoint, tok, ok := resolveLedgerForRole(w, name, role)
+	if !ok {
 		return
 	}
 
@@ -161,8 +136,8 @@ func handleContractsList(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	client, err := ledger.Dial(ctx, ledger.DialOptions{
-		Endpoint:  "localhost:" + strconv.Itoa(ledgerPort),
-		Token:     ledger.StaticToken(cred.JWT),
+		Endpoint:  endpoint,
+		Token:     tok,
 		PlainText: true, // Splice LocalNet
 	})
 	if err != nil {
@@ -770,9 +745,7 @@ func handleContractDetail(w http.ResponseWriter, r *http.Request) {
 		detail.ArchivedOffset = ae.GetOffset()
 		// ArchivedEvent has no record_time / update_id directly;
 		// the wrapping Archived envelope carries the synchronizer
-		// but not the tx id. We surface offset + a follow-up note
-		// to wire the full archive transaction lookup once the
-		// drawer needs it.
+		// but not the tx id, so only the offset is surfaced here.
 		if detail.TemplateID == "" {
 			detail.TemplateID = formatTemplateID(ae.GetTemplateId())
 		}

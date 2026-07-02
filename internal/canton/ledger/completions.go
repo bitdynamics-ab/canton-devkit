@@ -12,7 +12,7 @@ import (
 // when (and whether) it was committed. CompletionStream emits one
 // `Completion` per command ack/nack, filtered by (UserId, Parties).
 //
-// For the M3 token CLI (`token mint`/`burn`/`transfer`), the pattern is
+// For the token CLI (`token mint`/`burn`/`transfer`), the pattern is
 //  1. Subscribe to Completions for the actAs parties with BeginExclusive
 //     = current ledger end.
 //  2. Submit the command via [Client.Submit].

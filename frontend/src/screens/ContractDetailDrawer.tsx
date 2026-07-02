@@ -8,26 +8,17 @@ import {
 } from "../api";
 import { W, wMono } from "../tokens";
 
-// ContractDetailDrawer
+// ContractDetailDrawer slides in from the right of the ACS table when
+// a row is clicked. Fetches the deep view from
+// /api/instances/{name}/contracts/{cid}
+// (EventQueryService.GetEventsByContractId) for the create event's full
+// payload, signatories, observers, and archive metadata. While that
+// loads it shows the row-level ACS fields so the user always has
+// something to read.
 //
-// Slides in from the right of the ACS table when a row is clicked.
-// Fetches the deep view from /api/instances/{name}/contracts/{cid}
-// (EventQueryService.GetEventsByContractId behind the scenes) so the
-// drawer can show the create event's full payload, signatories,
-// observers, and — if the contract has been archived — the archive
-// offset.
-//
-// While the deep view is loading the drawer immediately shows the
-// row-level fields that came from the ACS snapshot so the user
-// always has something to read.
-//
-// Keyboard behaviour (parent wires the handlers, the drawer renders
-// the help line):
-//   - Esc    → close the drawer
-//   - J / K  → next / previous row in the underlying table
-//
-// The parent owns row navigation because it owns the filtered table
-// state. The drawer itself only owns the deep-view fetch lifecycle.
+// Keyboard: Esc closes, J/K move to the next/previous row. The parent
+// owns row navigation because it owns the filtered table state; the
+// drawer only owns the deep-view fetch lifecycle.
 
 export interface ContractDetailDrawerProps {
   instance: string;
@@ -78,11 +69,9 @@ export function ContractDetailDrawer({
     };
   }, [instance, role, row.contract_id]);
 
-  // Keyboard: Esc / J / K. We add to window so the drawer responds
-  // to keystrokes from anywhere on the page, mirroring the
-  // ExplorerScreen's "/" shortcut. INPUT/TEXTAREA/contenteditable
-  // are ignored so users typing in the search box don't trigger
-  // navigation.
+  // Esc / J / K, listened on window so keystrokes work from anywhere
+  // on the page. INPUT/TEXTAREA/contenteditable are ignored so typing
+  // in the search box doesn't trigger navigation.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
@@ -275,7 +264,7 @@ export function ContractDetailDrawer({
         </Section>
       )}
       <Section label="Payload">
-        <PayloadRenderer value={detail.payload ?? {}} />
+        <PayloadNode value={detail.payload ?? {}} depth={0} />
       </Section>
       {detail.created_at && (
         <Section label="Created">
@@ -450,15 +439,10 @@ function PartyChip({ party, kind }: { party: string; kind: "sig" | "obs" }) {
   );
 }
 
-// PayloadRenderer — recursive JSON-like view for the contract's
-// payload. Renders objects as label : value pairs, arrays as
-// bracketed lists, primitives in place. Each level indents by 12 px
-// — enough to see structure without burning horizontal space in
-// the 380 px drawer.
-function PayloadRenderer({ value }: { value: unknown }): JSX.Element {
-  return <PayloadNode value={value} depth={0} />;
-}
-
+// PayloadNode — recursive JSON-like view for the contract payload:
+// objects as label:value pairs, arrays as indexed lists, primitives in
+// place. Each level indents 12px — enough to see structure without
+// burning horizontal space in the 380px drawer.
 function PayloadNode({
   value,
   depth,

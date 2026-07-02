@@ -85,11 +85,9 @@ func periodFilePath(period string) string {
 
 // inferGranularity recovers the bucket size from a period key's shape so a
 // pre-v2 file (no Granularity field) lands on the correct tag — ISO-week
-// keys look like "YYYY-Wnn" and dates look like "YYYY-MM-DD". Without this,
-// an upgrade-time leftover weekly file would be reported to the collector
-// (and, on a deferred re-save, persisted) tagged as the current
-// aggregationPeriod, which is exactly the cross-format inconsistency the
-// granularity field was added to prevent.
+// keys look like "YYYY-Wnn", dates like "YYYY-MM-DD". Otherwise a leftover
+// weekly file would be uploaded (and, on a deferred re-save, persisted)
+// tagged with the current aggregationPeriod.
 func inferGranularity(period string) periodKind {
 	if strings.Contains(period, "-W") {
 		return periodWeekly
@@ -118,20 +116,16 @@ func loadPeriod(period string) (*PeriodAggregate, error) {
 	if err := json.Unmarshal(b, &w); err != nil {
 		return newPeriodAggregate(period), nil
 	}
-	// The filename is authoritative for the period key. v1 files used a
-	// "week" JSON field that doesn't bind to v2's "period" tag; trusting
-	// the filename means a v1→v2 upgrade doesn't need a field-level
-	// migration step and keeps Period consistent regardless of what's
-	// inside the body.
+	// The filename is authoritative for the period key: v1 files used a
+	// "week" JSON field that doesn't bind to v2's "period" tag, so trusting
+	// the filename avoids a field-level migration.
 	w.Period = period
 	if w.Counters == nil {
 		w.Counters = map[string]map[string]int{}
 	}
 	if w.Granularity == "" {
-		// v1 files had no Granularity field; infer from the key shape so
-		// a leftover weekly file uploaded after the daily switch ships
-		// the correct tag (and a Deferred re-save doesn't bake the wrong
-		// one into disk).
+		// v1 files had no Granularity field; infer from the key shape so a
+		// leftover weekly file ships (and re-saves) with the correct tag.
 		w.Granularity = string(inferGranularity(w.Period))
 	}
 	return &w, nil
@@ -143,9 +137,8 @@ func savePeriod(w *PeriodAggregate) error {
 	}
 	w.SchemaVersion = SchemaVersion
 	if w.Granularity == "" {
-		// Same migration safety as loadPeriod: infer from key shape so a
-		// missing-Granularity in-memory aggregate (e.g. one a caller
-		// hand-built) doesn't get persisted with the wrong tag.
+		// Same migration safety as loadPeriod: a hand-built aggregate with
+		// no Granularity must not persist the wrong tag.
 		w.Granularity = string(inferGranularity(w.Period))
 	}
 	b, err := json.MarshalIndent(w, "", "  ")

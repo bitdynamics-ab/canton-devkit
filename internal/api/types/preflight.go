@@ -1,9 +1,8 @@
 package types
 
 // PreflightReport is the JSON-emitted shape from `localnet doctor
-// --json` (P1-05) and the structured progress feed `localnet up`
-// streams (P1-03 --json mode). It mirrors the Sections + Steps
-// rendered visually by ScreenDoctor / ScreenUp in the JSX mockups.
+// --json` and the structured progress feed `localnet up --json`
+// streams.
 type PreflightReport struct {
 	SchemaVersion int                `json:"schema_version"`
 	OK            bool               `json:"ok"`
@@ -19,7 +18,7 @@ type PreflightReport struct {
 }
 
 // PreflightSection groups related checks under a header (System,
-// Resources, Network, Splice). Matches Section in the mockup.
+// Resources, Network, Splice).
 type PreflightSection struct {
 	Title  string           `json:"title"`
 	Checks []PreflightCheck `json:"checks"`

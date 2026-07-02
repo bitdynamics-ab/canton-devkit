@@ -54,14 +54,11 @@ Exit codes:
 
 			outPath := out
 			if outPath == "" {
-				// the participant-supplied
-				// name/version are untrusted — a compromised or
-				// hostile participant could return
-				// name="../../etc/passwd" and we'd happily write
-				// the DAR bytes there. Sanitize via
-				// safeBasename before composing the output path
-				// so any path separators get stripped and the
-				// caller's CWD is the worst-case write target.
+				// The participant-supplied name/version are untrusted —
+				// a hostile participant could return
+				// name="../../etc/passwd". safeBasename strips path
+				// separators so the caller's CWD is the worst-case
+				// write target.
 				name := safeBasename(resp.GetData().GetName())
 				ver := safeBasename(resp.GetData().GetVersion())
 				switch {
@@ -73,12 +70,10 @@ Exit codes:
 					outPath = safeBasename(id) + ".dar"
 				}
 			}
-			// Second defence layer: even when --out was passed
-			// explicitly, resolve to an absolute path and refuse
-			// if the result contains a `..` segment. Explicit
-			// --out is mostly trusted (the user typed it) but a
-			// shell-expansion mistake shouldn't silently land
-			// the DAR in /etc.
+			// Second defence layer: even for an explicit --out,
+			// resolve to an absolute path and refuse `..` segments —
+			// a shell-expansion mistake shouldn't silently land the
+			// DAR in /etc.
 			abs, err := filepath.Abs(outPath)
 			if err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),

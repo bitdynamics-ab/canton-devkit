@@ -24,10 +24,9 @@ import (
 
 // dar watch — rebuild on source change, re-upload on success.
 //
-// V1 uses a polling watcher (modtime sweep) rather than fsnotify so
-// it works portably without an OS-specific dependency. For dev hot-
-// deploy this is more than fast enough; if anyone needs sub-second
-// reaction, swapping in fsnotify is an opt-in follow-up.
+// Uses a polling watcher (modtime sweep) rather than fsnotify so it
+// works portably without an OS-specific dependency; for dev hot-deploy
+// that is more than fast enough.
 func buildWatch() *cobra.Command {
 	var (
 		conn      connectFlags
@@ -295,12 +294,10 @@ func runBuildCtx(ctx context.Context, tool, project string, stderr io.Writer) (s
 // Cheap change detector. Excludes generated dirs (.daml, .git) so a
 // successful build doesn't immediately re-trigger.
 //
-// Build-relevant means *.daml AND *.yaml: daml.yaml is the file you
-// edit to bump the package `version` (the canonical SCU loop) or to
-// change name/dependencies/build-options, and multi-package projects
-// keep additional daml/*.yaml manifests. Hashing only *.daml would
-// silently ignore the most upgrade-relevant edits, leaving the user in
-// a hot-deploy loop that never rebuilds on a version bump.
+// Build-relevant means *.daml AND *.yaml: daml.yaml is where the
+// package `version` is bumped (the canonical SCU loop), so hashing
+// only *.daml would leave a hot-deploy loop that never rebuilds on a
+// version bump.
 func hashSources(root string) (string, error) {
 	h := sha256.New()
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
@@ -331,9 +328,8 @@ func hashSources(root string) (string, error) {
 }
 
 // isWatchedSource reports whether a filename is a build input the
-// watch loop should hash. Daml source plus YAML build manifests
-// (daml.yaml and any *.yaml the project layout uses); the generated
-// .daml/ tree is already pruned in hashSources so a .yaml emitted
+// watch loop should hash: Daml source plus YAML build manifests. The
+// generated .daml/ tree is pruned in hashSources, so a .yaml emitted
 // there can't re-trigger.
 func isWatchedSource(name string) bool {
 	return strings.HasSuffix(name, ".daml") ||

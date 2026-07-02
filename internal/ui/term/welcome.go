@@ -13,33 +13,16 @@ import (
 // and so non-TTY consumers (CI logs, `up | tee build.log`) capture a
 // single coherent block.
 //
-// # Design (one place, one read)
+// The renderer composes vertical bands separated by blank lines:
+// lockup, one-line ✦ summary, primary CTA (exactly one — secondary
+// actions belong in "Try next"), endpoint cards grouped by Category,
+// try-next cheat sheet (keep ≤6 rows; glance-and-scan, not help),
+// and a dim state-path footer.
 //
-// The renderer composes three vertical bands separated by blank lines:
-//
-//  1. Lockup        — multi-line ASCII title in brand colour.
-//  2. One-line ✦ summary  — instance name, Splice version, elapsed time.
-//  3. Primary CTA   — "Open dashboard" in brand colour with the
-//     `localnet ui` URL on the same line. ONE call-to-
-//     action lives here; secondary actions go in
-//     "Try next" below.
-//  4. Endpoint cards — grouped by purpose: Web UIs (interactive),
-//     Infrastructure (sockets/DBs). Each row uses
-//     `↗` to signal an external link; modern
-//     terminals honour OSC 8 to make the URL
-//     clickable.
-//  5. Try next      — 5 high-value commands every user should know
-//     after their first `up`. Keep small (≤6 rows);
-//     this is a glance-and-scan, not exhaustive help.
-//  6. State path    — single dim line at the bottom; out-of-the-way
-//     anchor for support tickets and snapshots.
-//
-// # Non-TTY behaviour
-//
-// On non-TTY writers (CI, pipes), the function still emits the same
-// structural content but without ANSI styling, OSC 8 hyperlinks, or
-// the ASCII lockup (replaced by a one-line `=== canton-devkit ===`
-// header). This keeps `localnet up > log.txt` greppable.
+// On non-TTY writers the same structural content is emitted without
+// ANSI styling, OSC 8 hyperlinks, or the ASCII lockup (replaced by a
+// one-line `=== canton-devkit ===` header), keeping
+// `localnet up > log.txt` greppable.
 type WelcomeScreen struct {
 	// InstanceName — the registry-registered `--name` value.
 	InstanceName string
@@ -154,7 +137,8 @@ func (s WelcomeScreen) renderEndpoints(w io.Writer) {
 	if len(s.Endpoints) == 0 {
 		return
 	}
-	// First pass: max label width per Category, for column alignment.
+	// First pass: max label width across all endpoints, for column
+	// alignment.
 	labelW := 0
 	for _, e := range s.Endpoints {
 		if n := VisibleLen(e.Label); n > labelW {
@@ -237,12 +221,9 @@ func (s WelcomeScreen) renderPlain(w io.Writer) {
 }
 
 // osc8 wraps text in an OSC 8 hyperlink escape sequence. Modern
-// terminals (iTerm2, Kitty, WezTerm, Ghostty, Terminal.app ≥ 14.4,
-// VS Code's integrated terminal) render this as a clickable link;
-// terminals that don't support it print the text verbatim because the
-// escape sequences are non-printing bytes (or, on truly ancient ones,
-// printed as garbled glyphs — but that population is now rounding
-// error). We emit unconditionally on the rich path.
+// terminals render this as a clickable link; terminals that don't
+// support it print the text verbatim because the escape sequences are
+// non-printing bytes, so we emit unconditionally on the rich path.
 //
 // Spec: https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
 func osc8(url, text string) string {
@@ -250,8 +231,7 @@ func osc8(url, text string) string {
 }
 
 // humanDuration formats a Duration as a compact two-unit string:
-// `1m 47s`, `12s`, `2h 5m`. Keeps the welcome line readable without
-// importing time/format.
+// `1m 47s`, `12s`, `2h 5m`.
 func humanDuration(d time.Duration) string {
 	if d < time.Second {
 		return "<1s"

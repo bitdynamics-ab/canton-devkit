@@ -30,7 +30,7 @@ func writeFile(t *testing.T, root, rel, content string, mtime time.Time) string 
 // hot-deploy loop that never rebuilt on a version bump. daml.yaml is
 // the file edited to bump the package `version` (the canonical SCU
 // loop); a change to it MUST change the source hash so the watch loop
-// triggers a rebuild. Previously hashSources only hashed *.daml.
+// triggers a rebuild.
 func TestHashSources_DetectsDamlYamlChange(t *testing.T) {
 	root := t.TempDir()
 	base := time.Unix(1_700_000_000, 0)
@@ -56,8 +56,8 @@ func TestHashSources_DetectsDamlYamlChange(t *testing.T) {
 	}
 }
 
-// TestHashSources_StillDetectsDamlChange is the symmetric pin: the
-// original .daml trigger keeps working after the filter widened.
+// TestHashSources_StillDetectsDamlChange is the symmetric pin: .daml
+// edits must also change the source hash.
 func TestHashSources_StillDetectsDamlChange(t *testing.T) {
 	root := t.TempDir()
 	base := time.Unix(1_700_000_000, 0)
