@@ -9,12 +9,8 @@ import (
 )
 
 // ListKnownParties enumerates the parties allocated on the participant.
-// Used by:
-//   - `localnet env --name foo` to surface the per-role party IDs (Alice,
-//     Bob, etc. — proposal line 110).
-//   - Web UI Explorer's party-picker dropdown.
-//   - `localnet status --name foo` if/when we surface "this participant
-//     hosts: ..." details.
+// Used by `localnet env` to surface the per-role party IDs and by the
+// Web UI Explorer's party-picker dropdown.
 func (c *Client) ListKnownParties(ctx context.Context) (*adminv2.ListKnownPartiesResponse, error) {
 	resp, err := c.partyMgmt.ListKnownParties(ctx, &adminv2.ListKnownPartiesRequest{})
 	if err != nil {
@@ -23,14 +19,11 @@ func (c *Client) ListKnownParties(ctx context.Context) (*adminv2.ListKnownPartie
 	return resp, nil
 }
 
-// AllocateParty creates a new party on the participant. Used by the M3
-// token wizard (`token create` — proposal line 209) when a new test
-// identity is needed, and by future `localnet party allocate <hint>`
-// CLI if we ship one.
+// AllocateParty creates a new party on the participant. Used by the
+// token CLI (`token create`) when a new test identity is needed.
 //
 // The participant assigns the canonical party ID; the request's
 // PartyIdHint is advisory (the participant appends a fingerprint).
-// LocalServer's allocation latency is sub-second.
 func (c *Client) AllocateParty(ctx context.Context, req *adminv2.AllocatePartyRequest) (*adminv2.AllocatePartyResponse, error) {
 	resp, err := c.partyMgmt.AllocateParty(ctx, req)
 	if err != nil {
@@ -52,12 +45,8 @@ func (c *Client) GetParticipantId(ctx context.Context) (*adminv2.GetParticipantI
 // UploadDarFile uploads a DAR archive to the participant. The participant
 // validates, extracts, and registers the contained packages — they
 // become available for command submission immediately on success.
-//
-// Used by:
-//   - `dpm localnet dar upload <path>` (proposal line 131) — the CLI
-//     reads the .dar file into req.DarFile bytes.
-//   - DAR Web UI drag-and-drop (proposal line 261) — the handler
-//     streams the upload body into req.DarFile then calls this.
+// Used by `dpm localnet dar upload <path>` and the DAR Web UI
+// drag-and-drop; both read the .dar bytes into req.DarFile.
 //
 // For multi-participant uploads, the caller dials each participant's
 // admin port and calls this once per participant. The CLI's --all-participants

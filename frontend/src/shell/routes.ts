@@ -1,12 +1,7 @@
-// Shared sidebar / palette route table. Single source of truth for
-// (a) the order of the left nav and (b) which routes read
-// `?instance=` from the URL.
-//
-// Both Shell.tsx (sidebar NavLinks) and CommandPalette.tsx (⌘K
-// navigation actions) read from this list so they stay in lockstep.
-// Centralising here means a future tab addition can't drop the
-// `?instance=` thread because the palette and sidebar carried
-// separate copies of the route list.
+// Shared route table: single source of truth for the left-nav order
+// and for which routes read `?instance=` from the URL. Both Shell.tsx
+// (sidebar NavLinks) and CommandPalette.tsx (⌘K navigation) read from
+// this list so they can't drift on routes, labels, or instance scoping.
 
 export interface NavEntry {
   to: string;

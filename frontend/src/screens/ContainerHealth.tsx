@@ -9,18 +9,12 @@ import { W, wMono } from "../tokens";
 import { ContainerLogsModal } from "./ContainerLogsModal";
 
 // ContainerHealth — live per-container status panel. Polls
-// /api/instances/{name}/containers every POLL_MS so the user
-// sees real-time docker truth (e.g. "canton: Up 27 seconds
-// (healthy)" — recently restarted) instead of the coarse
-// registry status enum (running / failed / etc).
+// /api/instances/{name}/containers every POLL_MS so the user sees
+// real-time docker truth ("is canton in a restart loop, or did
+// postgres crash?") instead of the coarse registry status enum.
 //
-// Answers the user's question: "is canton in a restart loop,
-// or is splice just slow on first init, or did postgres crash?"
-// The registry can't tell you any of that — docker can.
-//
-// Renders nothing when the instance has no docker project
-// (returns 503 from the backend) — the InstanceDetail card
-// stays usable; the panel just doesn't show.
+// Renders nothing when the instance has no docker project (backend
+// returns 503) — the InstanceDetail card stays usable.
 
 const POLL_MS = 3000;
 
@@ -33,10 +27,8 @@ export function ContainerHealth({ name }: { name: string }) {
   >({ kind: "loading" });
   // Selected container for the logs modal. Null = closed.
   const [logsOpen, setLogsOpen] = useState<string | null>(null);
-  // Tracks which container restart is in flight (one at a time
-  // is fine — UI disables that row's button + shows spinner).
-  // Inline string-set so multiple rapid clicks on different
-  // rows can each show their own pending state.
+  // Containers with a restart in flight; a Set so rapid clicks on
+  // different rows each show their own pending state.
   const [restarting, setRestarting] = useState<Set<string>>(new Set());
   const [restartErr, setRestartErr] = useState<string | null>(null);
 
@@ -48,8 +40,7 @@ export function ContainerHealth({ name }: { name: string }) {
     setRestartErr(null);
     try {
       await restartContainer(name, container);
-      // Poll loop picks up the new "Up X seconds" automatically;
-      // no manual refresh needed.
+      // The poll loop picks up the new status; no manual refresh needed.
     } catch (e) {
       setRestartErr(
         `Restart ${container} failed: ` +
@@ -64,8 +55,6 @@ export function ContainerHealth({ name }: { name: string }) {
     }
   }
 
-  // Poll loop. Restarts when name changes; tears down on
-  // unmount via the cleanup closure.
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -205,11 +194,8 @@ function ContainersTable({
       </div>
     );
   }
-  // Stable sort: unhealthy/restarting first, then starting, then
-  // healthy/running. Makes the failure-mode rows pop to the top.
-  const sorted = [...containers].sort((a, b) => {
-    return severity(a) - severity(b);
-  });
+  // Failure-mode rows sort to the top.
+  const sorted = [...containers].sort((a, b) => severity(a) - severity(b));
   return (
     <div
       style={{
@@ -239,9 +225,8 @@ function ContainersTable({
       {sorted.map((c) => {
         const { color, glyph } = signalFor(c);
         const onLogs = (e: React.MouseEvent) => {
-          // Stop propagation so the click that opens the modal can't
-          // also be interpreted as a backdrop click on the modal's
-          // overlay (which would close it immediately).
+          // Don't let the opening click double as a backdrop click on
+          // the modal overlay (which would close it immediately).
           e.stopPropagation();
           onPickLogs(c.name);
         };
@@ -250,10 +235,9 @@ function ContainersTable({
           onRestart(c.name);
         };
         const isRestarting = restarting.has(c.name);
-        // display:contents rows can't carry click handlers, so
-        // each cell gets its own onClick + cursor:pointer. The
-        // restart button cell stops propagation so clicking the
-        // button doesn't ALSO open the logs modal.
+        // display:contents rows can't carry click handlers, so each
+        // cell gets its own onClick; the restart cell stops propagation
+        // so the button doesn't also open the logs modal.
         const cellBase: React.CSSProperties = {
           cursor: "pointer",
           padding: "2px 0",
@@ -334,8 +318,8 @@ function SummaryPills({ counts }: { counts: ContainersResponse }) {
   );
 }
 
-// severity orders rows so failure-mode containers come first.
-// Lower number = higher priority (sorts earlier).
+// severity orders rows so failure-mode containers come first
+// (lower sorts earlier).
 function severity(c: { state: string; health?: string }): number {
   if (c.state === "restarting") return 0;
   if (c.state === "dead" || c.state === "exited") return 1;

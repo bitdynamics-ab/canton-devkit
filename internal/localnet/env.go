@@ -13,13 +13,9 @@ import (
 
 // Shared env export. Both the CLI (`dpm localnet env`) and the Web UI
 // (`GET /api/instances/{name}/app-config`) MUST surface the same
-// endpoint + credential + party set so an operator who learns the
-// "point a dApp at this LocalNet" workflow on one surface finds the
-// identical values on the other. The two surfaces used to be
-// independent re-implementations with divergent shapes — the UI hid
-// the participant Ledger/Admin/JSON API ports a dApp actually needs —
-// so the builder below is the single source of truth they both call.
-// See AGENTS.md "CLI ↔ Web UI parity".
+// endpoint + credential + party set, so the builder below is the single
+// source of truth they both call. See CONTRIBUTING.md
+// "CLI ↔ Web UI parity".
 
 // EnvJWTRedaction is the placeholder that replaces a captured JWT when
 // the caller does not opt into raw tokens. Format chosen so a
@@ -34,10 +30,9 @@ const EnvJWTRedaction = "<redacted>"
 // (`splice:5012` inside the docker network) is exposed on the host
 // behind the SV UI port under `server_name scan.localhost` (see
 // cluster/compose/localnet/conf/nginx/sv.conf, mirrored by
-// internal/localnet/token.scanVHost). The proposal lists "scan UI" as
-// a distinct env value, so we emit an explicit CANTON_SCAN_UI_URL that
-// carries this host hint rather than leaving operators to derive it
-// from the bare sv_ui port.
+// internal/localnet/token.scanVHost). We emit an explicit
+// CANTON_SCAN_UI_URL carrying this host hint rather than leaving
+// operators to derive it from the bare sv_ui port.
 const scanUIVHost = "scan.localhost"
 
 // BuildEnvExport assembles the shared apitypes.EnvExport for an
@@ -49,23 +44,19 @@ const scanUIVHost = "scan.localhost"
 //  1. A small set of stable convenience keys (CANTON_INSTANCE,
 //     CANTON_SPLICE_VERSION, CANTON_AUTH_FILE) so scripts can branch
 //     without re-reading state.json.
-//  2. state.Ports -> CANTON_<UPPER>_PORT for every logical name. This
-//     deliberately includes the participant_ledger/admin/json_<role>
-//     ports captured by CaptureCantonPorts AND the sv_ui (scan UI)
-//     port — exactly the endpoints an external dApp needs and which
-//     the old UI export hid.
+//  2. state.Ports -> CANTON_<UPPER>_PORT for every logical name,
+//     including the participant_ledger/admin/json_<role> ports captured
+//     by CaptureCantonPorts and the sv_ui (scan UI) port — exactly the
+//     endpoints an external dApp needs.
 //  3. A derived CANTON_SCAN_UI_URL when the sv_ui port is recorded,
-//     carrying the scan.localhost vhost hint (the proposal names the
-//     scan UI as a distinct value).
+//     carrying the scan.localhost vhost hint.
 //  4. state.Credentials -> CANTON_<ROLE>_JWT (redacted unless
 //     includeJWT) plus the user/audience pair that signed it.
 //  5. state.Parties -> CANTON_<ROLE>_PARTY for the role parties
 //     (app-user/app-provider/sv), carrying the REAL on-ledger party
-//     ids. These are distinct from the ledger-api user name in
-//     Credentials — conflating the two (as the old UI did) is the
-//     defect this fixes. Empty until `up`/token tooling has scanned
-//     the participants, so a key is only emitted when a party id is
-//     actually recorded.
+//     ids — distinct from the ledger-api user name in Credentials.
+//     Empty until `up`/token tooling has scanned the participants, so
+//     a key is only emitted when a party id is actually recorded.
 func BuildEnvExport(name string, includeJWT bool) (apitypes.EnvExport, error) {
 	state, err := registry.Read(name)
 	if err != nil {

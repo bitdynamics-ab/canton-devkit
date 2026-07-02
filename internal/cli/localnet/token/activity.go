@@ -10,11 +10,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildActivity is `token activity` — the instrument's transfer / mint /
-// burn history , reconstructed from the ledger
-// transaction stream (HoldingV2 create/archive events), no off-ledger
-// transfer-events registry required. CLI counterpart of the Web UI
-// activity feed (CLI <-> UI parity).
+// buildActivity is `token activity` — the instrument's transfer/mint/burn
+// history, reconstructed from HoldingV2 create/archive events on the
+// ledger transaction stream (no off-ledger transfer-events registry).
+// CLI counterpart of the Web UI activity feed.
 func buildActivity() *cobra.Command {
 	var opts token.BalanceOptions
 	var format string

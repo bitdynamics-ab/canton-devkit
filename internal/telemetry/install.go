@@ -3,28 +3,17 @@ package telemetry
 import "runtime"
 
 // RecordInstallOnce increments dpm/install exactly once per machine — the
-// first time the CLI records telemetry on a real (non-CI) host. It is the
-// privacy-preserving device-count proxy: a count of DISTINCT installs,
-// bucketed by platform, with NO identifier and NO cross-invocation
-// linkage. Each install contributes exactly one increment, ever — so the
-// collector can answer "how many devices/installs" without ever being
-// able to single out or follow a device.
+// first time the CLI records telemetry on a real (non-CI) host. It is a
+// privacy-preserving device-count proxy: distinct installs bucketed by
+// platform, with no identifier and no cross-invocation linkage.
 //
-// Gated to NON-CI on purpose. CI runners are ephemeral: each job starts
-// from a fresh container/image, so the once-flag in the config never
-// persists between runs — counting first-runs there would make every CI
-// job look like a brand-new install and inflate the device count for what
-// is really one pipeline. CI usage is already captured (truthfully) by
-// dpm/ci, so gating loses nothing.
+// Gated to non-CI because CI runners are ephemeral: the once-flag never
+// persists between jobs, so every job would look like a fresh install.
+// CI usage is already captured by dpm/ci.
 //
-// Caveats this CANNOT fix (documented for honesty):
-//   - It counts TOTAL installs, not ACTIVE devices — a host that installed
-//     once and never returned still counts once.
-//   - It cannot dedupe re-installs / config wipes / new OS images: with no
-//     persistent identifier (the very thing that keeps this zero-PII),
-//     wiping ~/.config/canton-devkit and re-running counts as a new
-//     install. So the number is a slight over-estimate / directional
-//     proxy, not an exact unique-device count.
+// It counts total installs, not active devices, and cannot dedupe
+// re-installs or config wipes (there is deliberately no persistent
+// identifier) — a directional over-estimate, not an exact device count.
 //
 // Call once per process, inside the telemetry-enabled path, alongside
 // RecordContext.

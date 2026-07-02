@@ -31,10 +31,8 @@ reduced. The command asks for confirmation before proceeding; pass --yes
 to skip the prompt (required when running non-interactively / in CI).`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// Confirmation gate: burn is destructive and irreversible.
-			// Without --yes we require an interactive "yes"; in a
-			// non-interactive context we refuse rather than silently
-			// proceeding or hanging on a read that never returns.
+			// Burn is destructive and irreversible: require explicit
+			// confirmation unless --yes.
 			if !assumeYes {
 				ok, err := confirmBurn(cmd.InOrStdin(), cmd.ErrOrStderr(), opts)
 				if err != nil {
@@ -71,15 +69,10 @@ to skip the prompt (required when running non-interactively / in CI).`,
 	return cmd
 }
 
-// confirmBurn gates the irreversible burn behind an explicit acknowledgement.
-//
-//   - Interactive (stdin is a TTY): prints what's about to be burned and
-//     waits for the user to type "yes".
-//   - Non-interactive (piped/redirected stdin, e.g. CI): refuses with a
-//     clear error pointing at --yes, rather than reading EOF and treating
-//     it as "no" silently or — worse — hanging.
-//
-// Mirrors the TTY guard the create wizard uses (create.go).
+// confirmBurn gates the irreversible burn behind an explicit typed "yes".
+// Non-TTY stdin (piped/redirected, e.g. CI) is refused with an error
+// pointing at --yes, rather than reading EOF as a silent "no" — or,
+// worse, hanging. Same TTY guard as the create wizard.
 func confirmBurn(in io.Reader, errw io.Writer, opts token.BurnOptions) (bool, error) {
 	if f, ok := in.(*os.File); ok {
 		if st, err := f.Stat(); err == nil && (st.Mode()&os.ModeCharDevice) == 0 {

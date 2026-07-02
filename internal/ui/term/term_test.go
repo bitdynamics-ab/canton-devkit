@@ -90,7 +90,6 @@ func TestBox_RendersLeftAccentAndBody(t *testing.T) {
 	if !strings.Contains(got, "ready.") {
 		t.Errorf("body missing: %q", got)
 	}
-	// Structural assertion via BoxLeftBorderRune .
 	if !strings.ContainsRune(got, BoxLeftBorderRune) {
 		t.Errorf("expected left border (rune=%q), got %q", BoxLeftBorderRune, got)
 	}
@@ -223,9 +222,9 @@ func TestSpinner_ReassignmentContract(t *testing.T) {
 
 // ── Prompt defaults ────────────────────────────────
 
-// TestPrompt_DefaultsWhenFieldsEmpty pins the L83-92 default
-// substitution contract — empty user/host/dir must be replaced
-// with dev / devnet / ~/canton-app respectively.
+// TestPrompt_DefaultsWhenFieldsEmpty pins the default substitution
+// contract — empty user/host/dir must be replaced with
+// dev / devnet / ~/canton-app respectively.
 func TestPrompt_DefaultsWhenFieldsEmpty(t *testing.T) {
 	forcePlain(t)
 	got := Prompt("", "", "", "ls")
@@ -238,10 +237,10 @@ func TestPrompt_DefaultsWhenFieldsEmpty(t *testing.T) {
 
 // ── KV rune-count ──────────────────────────────────
 
-// TestKV_MultiByteKeyAlignment pins the rune-count fix: "日本"
-// (6 bytes / 2 runes) and "abcd" (4 runes) must align in the
-// value column when padded to the same key width. Without the
-// fix, len() over-pads "日本" by 4 spaces because bytes ≠ runes.
+// TestKV_MultiByteKeyAlignment pins the rune-count contract: "日本"
+// (6 bytes / 2 runes) and "abcd" (4 runes) must align in the value
+// column when padded to the same key width — byte-based padding
+// would over-pad the multi-byte key.
 func TestKV_MultiByteKeyAlignment(t *testing.T) {
 	forcePlain(t)
 	jp := KV("日本", "value", 4)
@@ -302,11 +301,10 @@ func TestSection_SeparatorMatchesWidthArg(t *testing.T) {
 
 // ── Box border structural assertion ────────────────
 
-// TestBox_LeftBorderUsesExportedRune asserts presence
-// structurally via BoxLeftBorderRune rather than the literal
-// glyph. Lets a future Windows ASCII profile substitute the rune
-// without breaking this test (or the Box decision-table tests
-// that previously hard-coded "┃").
+// TestBox_LeftBorderUsesExportedRune asserts the border presence
+// structurally via BoxLeftBorderRune rather than the literal glyph,
+// so a future ASCII profile can substitute the rune without breaking
+// this test.
 func TestBox_LeftBorderUsesExportedRune(t *testing.T) {
 	forcePlain(t)
 	got := Box(BoxBrand, "line1\nline2\nline3")

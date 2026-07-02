@@ -2,10 +2,10 @@ package token
 
 import "testing"
 
-// TestAddDecimal covers the big.Int-aligned fractional addition used to
-// sum holdings per party — previously untested. The cases pin
-// scale-alignment (operands with different fractional lengths), carries
-// across the decimal point, and the empty-as-zero contract.
+// TestAddDecimal covers the big.Int-aligned fractional addition used
+// to sum holdings per party. The cases pin scale-alignment (operands
+// with different fractional lengths), carries across the decimal
+// point, and the empty-as-zero contract.
 func TestAddDecimal(t *testing.T) {
 	cases := []struct {
 		a, b, want string
@@ -57,6 +57,3 @@ func TestValidateAmount(t *testing.T) {
 		}
 	}
 }
-
-// (TestValidatePartyID lives in validate_test.go, which owns
-// validatePartyID; removed the duplicate here on merge to main.)

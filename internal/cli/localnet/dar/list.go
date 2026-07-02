@@ -27,9 +27,8 @@ import (
 // per-package view (useful when chasing down a missing transitive dep).
 //
 // `--enrich` adds Daml-LF version + module count to each row by calling
-// GetPackageContents once per package. Surfaces what the proposal
-// specifies as the default `dar list` output but kept behind a flag
-// since the per-row RPCs add latency proportional to the package count.
+// GetPackageContents once per package. Kept behind a flag since the
+// per-row RPCs add latency proportional to the package count.
 func buildListUploaded() *cobra.Command {
 	var (
 		conn       connectFlags
@@ -278,9 +277,9 @@ func vettingSummary(parts []types.DARVettingRow) string {
 
 // --- enrichment via GetPackageContents -------------------------------
 
-// enrichedDarRow mirrors DarDescription + the extra columns the
-// proposal asks for. Kept as a struct (rather than wrapping the proto)
-// so JSON output is stable across upstream proto changes.
+// enrichedDarRow mirrors DarDescription plus the enrichment columns.
+// Kept as a struct (rather than wrapping the proto) so JSON output is
+// stable across upstream proto changes.
 type enrichedDarRow struct {
 	MainPackageID    string `json:"main_package_id"`
 	Name             string `json:"name"`
@@ -304,10 +303,10 @@ type enrichedPackageRow struct {
 	EnrichError      string `json:"enrich_error,omitempty"`
 }
 
-// enrichDars loops over each DAR description and fetches its main
-// package's contents to surface LF version + module count. A failed
-// per-row enrich is recorded as `enrich_error` rather than aborting
-// the whole listing — proposal-level fields are best-effort.
+// enrichDars fetches each DAR's main-package contents to surface LF
+// version + module count. A failed per-row enrich is recorded as
+// `enrich_error` rather than aborting the whole listing — enrichment
+// is best-effort.
 func enrichDars(ctx context.Context, client *admin.Client, dars []*adminproto.DarDescription) []*enrichedDarRow {
 	out := make([]*enrichedDarRow, 0, len(dars))
 	for _, d := range dars {
@@ -369,7 +368,7 @@ func printEnrichedDars(out io.Writer, rows []*enrichedDarRow) {
 			truncate(r.MainPackageID, 32),
 			truncate(r.Name, 30),
 			truncate(r.Version, 10),
-			orDashS(r.LanguageVersion),
+			orDash(r.LanguageVersion),
 			r.ModuleCount,
 			r.Description)
 	}
@@ -387,7 +386,7 @@ func printEnrichedPackages(out io.Writer, rows []*enrichedPackageRow) {
 			truncate(r.PackageID, 32),
 			truncate(r.Name, 30),
 			truncate(r.Version, 10),
-			orDashS(r.LanguageVersion),
+			orDash(r.LanguageVersion),
 			r.ModuleCount,
 			r.Size,
 			r.UploadedAt)

@@ -21,10 +21,6 @@ import (
 // LOCK_EX|LOCK_NB behaviour on Unix. The OS releases the lock byte-range
 // automatically when the handle is closed or the process exits, so there
 // is no stale-lock file to recover after a crash.
-//
-// golang.org/x/sys/windows is already a direct module dependency (used by
-// internal/localnet/snapshot for GetDiskFreeSpaceEx), so this no longer
-// adds a dependency the project was previously avoiding.
 func Lock(name string) (release func(), err error) {
 	if err := ValidateName(name); err != nil {
 		return nil, err

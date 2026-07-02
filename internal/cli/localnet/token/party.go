@@ -9,11 +9,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildParty is the `token party` command group : the party
-// alias registry. On LocalNet you own every party, so the workspace lets
-// you allocate one by a readable alias and refer to it everywhere instead
-// of pasting 130-char party ids. CLI counterpart of the Web UI party
-// manager (CLI <-> UI parity).
+// buildParty is the `token party` command group: the party alias
+// registry. On LocalNet you own every party, so the workspace lets you
+// allocate one by a readable alias and refer to it everywhere instead of
+// pasting 130-char party ids. CLI counterpart of the Web UI party manager.
 func buildParty() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "party",

@@ -20,24 +20,12 @@ import {
   type Series,
 } from "../components/charts/types";
 
-// MetricsScreen — production layout.
-//
-// Matches docs/design/mockups/webui-metrics-agent.jsx:
-//   - 4-up MetricCard strip (Throughput, Command completion p99,
-//     Active contracts, Errors) with delta vs prior window +
-//     inline sparkline
-//   - Six chart cards in a 2-col grid:
-//       Latency by phase · Per-template throughput
-//       Active contracts trend · Ledger errors
-//       Resource usage · Submit-to-commit heatmap
-//   - "Top error sources" full-width bar chart at the bottom
-//
-// Every card hits a real PromQL query via /api/instances/:name/
-// metrics/range. Loading / empty / error states are first-class.
-// Auto-refresh every 5 s (cheap — the cards run in parallel).
-//
-// When the observability profile isn't enabled the screen renders
-// the same friendly empty-state panel as before.
+// MetricsScreen — live Canton + Splice metrics for the selected
+// instance: a 4-up MetricCard strip with deltas + sparklines, six
+// PromQL-backed chart cards, and a full-width "Top error sources"
+// bar chart. Auto-refreshes every 5 s (the cards load in parallel).
+// When the observability profile isn't enabled, a friendly
+// empty-state panel offers to turn it on.
 
 interface CardState<T> {
   kind: "loading" | "ok" | "err";
@@ -46,20 +34,14 @@ interface CardState<T> {
 }
 
 // PromQL queries. Sourced from internal/metricsq for parity with the
-// CLI's `localnet metrics` headline. Per-template / phase / heatmap
-// queries are extensions specific to this screen.
+// CLI's `localnet metrics` headline; the per-template / phase /
+// heatmap queries are extensions specific to this screen.
 //
-// All metric names are the daml_* / db_client_* family the Splice
-// OTel reporter actually emits (verified against a live obs profile).
-// The earlier `canton_*` names were aspirational and silently
-// returned no data. See queries.go + docs/observability.md for the
-// substitute mapping rationale.
-//
-// A handful of the per-screen extensions below (errors rate, per-
-// template throughput) do not have a direct daml_* equivalent on
-// Splice 0.6.4 — substitutes are the closest functional analogue,
-// marked inline. A focused follow-up (see docs/observability.md
-// "Metric-name follow-ups") will revisit when those exposures land.
+// All metric names are the daml_* / db_client_* / jvm_* families the
+// Splice OTel reporter actually emits (verified against a live obs
+// profile). Some per-screen extensions have no direct daml_*
+// equivalent on Splice 0.6.4 — the closest functional analogue is
+// used instead, marked inline (see docs/observability.md).
 const Q = {
   // Substitute: indexer-update counter, same as HeadlineLedgerTPS.
   throughputSeries:
@@ -153,20 +135,15 @@ export function MetricsScreen() {
 
   useEffect(() => {
     if (!name) return;
-    // AbortController. The previous `cancelled` boolean was passed BY
-    // VALUE to each loader, so flipping it on unmount didn't reach
-    // in-flight loaders that had already started — they would resolve
-    // and setState on a dead component. AbortSignal solves both:
+    // An AbortSignal (not a boolean flag) reaches in-flight loaders:
     // fetch aborts mid-flight and loaders short-circuit on
-    // signal.aborted.
-    //
-    // We also gate polling on document.visibilityState: no point
+    // signal.aborted, so nothing setStates on an unmounted component.
+    // Polling is gated on document.visibilityState — no point
     // hammering Prometheus when the tab is hidden.
     let outer: AbortController | null = null;
     const tick = async () => {
-      // Abort the prior tick's in-flight requests before starting a
-      // new one — otherwise a slow Prometheus query from t=0 could
-      // resolve after the t=5s query and clobber it.
+      // Abort the prior tick's in-flight requests — a slow query from
+      // t=0 must not resolve after the t=5s query and clobber it.
       outer?.abort();
       outer = new AbortController();
       const signal = outer.signal;
@@ -250,12 +227,9 @@ export function MetricsScreen() {
     };
   }, [name]);
 
-  // Memoize the 4 delta calls. MUST sit ABOVE every conditional
-  // return below so hook order is stable across the
-  // (!name) and (observabilityOff) early-exit paths — rules of
-  // hooks. Without memo the body of deltaFromSeries (walks the
-  // series, computes time deltas, runs comparisons) ran four times
-  // per render and we re-render at least every 5s when polling.
+  // These memos MUST sit above every conditional return below so hook
+  // order is stable across the (!name) and (observabilityOff)
+  // early-exit paths — rules of hooks.
   const tpsDelta = useMemo(() => deltaFromSeries(throughputSeries.data), [throughputSeries.data]);
   const p99Delta = useMemo(() => deltaFromSeries(p99Series.data, 1000), [p99Series.data]);
   const acsDelta = useMemo(() => deltaFromSeries(acsSeries.data), [acsSeries.data]);
@@ -278,10 +252,8 @@ export function MetricsScreen() {
         <ObservabilityOffPanel
           name={name}
           onEnabled={() => {
-            // Clearing the empty-state re-runs the effect via the
-            // `observabilityOff` dependency; the next tick will
-            // start pulling metrics from the newly-running
-            // Prometheus.
+            // Clearing the empty state lets the ongoing 5s poll
+            // repopulate from the newly-running Prometheus.
             setObservabilityOff(null);
           }}
         />
@@ -470,18 +442,16 @@ export function MetricsScreen() {
         )}
       </ChartCard>
 
-      {/* Dashboards — deep link to the bundled Grafana view. Same
-          UID the CLI's text output prints; per AGENTS.md CLI ↔ UI
-          parity rule the two surfaces must point at the same view. */}
+      {/* Dashboards — deep link to the bundled Grafana view. Same UID
+          the CLI's text output prints, so both surfaces point at the
+          same view (CLI ↔ UI parity, see CONTRIBUTING.md). */}
       <DashboardsBlock url={summary.data?.dashboards?.grafana_url} />
     </section>
   );
 }
 
-// LatencyStrip is the in-page reminder of the three quantiles
-// `dpm localnet metrics` also prints. The 4-up MetricCard row shows
-// p99 specifically; surfacing p50/p95 next to it makes the SLA
-// shape visible at a glance.
+// LatencyStrip surfaces the same three quantiles `dpm localnet
+// metrics` prints, making the SLA shape visible at a glance.
 function LatencyStrip(props: {
   p50?: number;
   p95?: number;
@@ -526,10 +496,9 @@ function LatencyStrip(props: {
   );
 }
 
-// DashboardsBlock surfaces the Grafana deep link returned by the
-// summary handler. When the observability profile is off the URL
-// is empty — we render the same hint as the CLI rather than hiding
-// the section, so users learn the profile exists.
+// DashboardsBlock surfaces the Grafana deep link from the summary
+// handler. When the URL is empty we render the same hint as the CLI
+// rather than hiding the section, so users learn the profile exists.
 function DashboardsBlock(props: { url?: string }) {
   const wrap: CSSProperties = {
     marginTop: 14,
@@ -633,12 +602,8 @@ function ObservabilityOffPanel({
     setBusy(true);
     setErr(null);
     try {
-      // Per-component fields are the canonical shape on the server;
-      // we send BOTH because the Metrics screen needs Prometheus
-      // (for data) AND Grafana (for the embedded dashboards). Routed
-      // through the typed setObservability helper so the apiFetch
-      // chokepoint's envelope decoding + ApiError mapping apply,
-      // instead of a hand-rolled fetch that re-implemented them.
+      // Send BOTH: the Metrics screen needs Prometheus (for data)
+      // AND Grafana (for the dashboards link).
       await setObservability(name, { prometheus: true, grafana: true });
       onEnabled();
     } catch (e) {

@@ -25,20 +25,11 @@ func TestReadDARFile_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestReadDARFile_RejectsOversize pins: a file over MaxDARBytes
-// must be refused BEFORE the buffer allocation. We test the refusal via a stub MaxDARBytes override
-// (the real cap is 512 MiB which would be slow + flaky to materialize
-// in a unit test).
-//
-// Strategy: write a 1KB file, then run ReadDARFile in a context
-// where MaxDARBytes is effectively 100 bytes. Since MaxDARBytes is
-// a package-level const, we instead test by exposing the size-check
-// pattern via a fixture that's larger than a small custom cap.
+// TestReadDARFile_RejectsOversize pins: a file over the cap must be
+// refused BEFORE the buffer allocation. Exercised via readWithCap
+// with a tiny cap — the real 512 MiB MaxDARBytes would be slow and
+// flaky to materialize in a unit test.
 func TestReadDARFile_RejectsOversize(t *testing.T) {
-	// We can't override MaxDARBytes (it's a const). So this test
-	// exercises the stat-fail path instead — a 1-byte file with a
-	// cap of 0 would always fail. Use the testCap helper for a
-	// version that takes the cap as a param.
 	dir := t.TempDir()
 	path := filepath.Join(dir, "small.dar")
 	if err := os.WriteFile(path, []byte("hi"), 0o600); err != nil {

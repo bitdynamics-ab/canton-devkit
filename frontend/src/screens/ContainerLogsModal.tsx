@@ -3,13 +3,10 @@ import { ApiError, fetchContainerLogs } from "../api";
 import { W, wMono, wSans } from "../tokens";
 
 // ContainerLogsModal — opens when the user clicks a row in
-// ContainerHealth. Polls docker logs for the selected container
-// at LOG_POLL_MS, renders in a terminal-styled <pre>.
-//
-// Tail size + since duration are user-tunable via the toolbar.
-// Auto-scroll-to-bottom is on by default but disabled if the
-// user scrolls up (so manual review of older lines isn't
-// disrupted by the next poll).
+// ContainerHealth. Polls docker logs for the selected container at
+// LOG_POLL_MS and renders them in a terminal-styled <pre>. Tail size
+// and since duration are toolbar-tunable; auto-scroll-to-bottom is on
+// by default but disabled once the user scrolls up.
 
 const LOG_POLL_MS = 3000;
 
@@ -28,14 +25,12 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
   const [loading, setLoading] = useState(false);
   const preRef = useRef<HTMLPreElement>(null);
   const autoScrollRef = useRef(true);
-  // Track whether mousedown started on the overlay itself. Without
-  // this, the click that opened the modal (mousedown on a row cell,
-  // mouseup after the modal mounted) can land on the overlay and
-  // immediately close it. Only close when mousedown AND click both
-  // originated on the overlay.
+  // Only close when both mousedown AND click originated on the overlay;
+  // otherwise the click that opened the modal (mousedown on a row cell,
+  // mouseup after the modal mounted) would immediately close it.
   const downOnOverlayRef = useRef(false);
 
-  // Esc closes — same gate as the other modals.
+  // Esc closes.
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
@@ -45,8 +40,6 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // Poll. Restarts when any input (instance/container/tail/since)
-  // changes; clears on close/unmount.
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -78,9 +71,8 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
     };
   }, [open, instance, container, tail, since]);
 
-  // Auto-scroll to bottom on body change, unless the user has
-  // scrolled up. Tracking via a ref so we don't add a state
-  // update for every scroll event.
+  // Auto-scroll to bottom on new content unless the user scrolled up;
+  // tracked via a ref to avoid a state update per scroll event.
   useEffect(() => {
     if (!preRef.current || !autoScrollRef.current) return;
     preRef.current.scrollTop = preRef.current.scrollHeight;

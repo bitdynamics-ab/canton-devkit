@@ -125,10 +125,10 @@ type TransactionsListResponse struct {
 
 // TxReplayEvent is one event of a replayed transaction, projected
 // with the LEDGER_EFFECTS shape so exercised choices (not just the
-// ACS delta) are visible. This is the per-party visibility projection
-// the proposal commits to: querying the same transaction as different
-// parties yields different event sets. Emitted by the CLI `tx replay`
-// and the Web UI `GET .../transactions/{update_id}/replay`.
+// ACS delta) are visible. The projection is per-party: querying the
+// same transaction as different parties yields different event sets.
+// Emitted by the CLI `tx replay` and the Web UI
+// `GET .../transactions/{update_id}/replay`.
 type TxReplayEvent struct {
 	Kind          string   `json:"kind"` // "created" | "exercised" | "archived"
 	NodeID        int32    `json:"node_id"`

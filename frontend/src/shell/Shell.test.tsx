@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -18,8 +18,7 @@ import { InstanceSelectionProvider } from "./useInstanceSelection";
 // What we DO test:
 //   1. InstanceSwitcher renders the selected instance
 //   2. InstanceSwitcher: open → click another instance →
-//      selection changes (the onMouseDown-beats-onBlur race
-//      noted in the PR description)
+//      selection changes (the onMouseDown-beats-onBlur race)
 //   3. CommandPalette: ⌘K opens, Esc closes
 //   4. SkipLink targets the #main-content element
 
@@ -109,10 +108,10 @@ describe("Shell — InstanceSwitcher", () => {
     const listbox = await screen.findByRole("listbox");
     const hubbleOpt = within(listbox).getByRole("option", { name: /hubble/ });
 
-    // The onMouseDown-beats-onBlur race the PR called out: if
-    // the menu closes on blur before the click fires, this would
-    // never register. userEvent.click does mouseDown+mouseUp+click,
-    // so this exercises the real path.
+    // The onMouseDown-beats-onBlur race: if the menu closed on blur
+    // before the click fired, this would never register.
+    // userEvent.click does mouseDown+mouseUp+click, so this exercises
+    // the real path.
     await userEvent.click(hubbleOpt);
 
     // The trigger's strong tag now shows "hubble" — the new
@@ -125,10 +124,6 @@ describe("Shell — InstanceSwitcher", () => {
 });
 
 describe("Shell — CommandPalette hotkey", () => {
-  beforeEach(() => {
-    // Fresh user-event instance per test so the keyboard state
-    // (meta down, etc.) doesn't bleed between tests.
-  });
   afterEach(() => vi.unstubAllGlobals());
 
   it("⌘K opens the palette; Esc closes it", async () => {

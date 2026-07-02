@@ -1,21 +1,13 @@
-// Screen-level smoke tests (yellow Y16).
+// Screen-level smoke tests.
 //
 // Each screen is mounted with a stubbed `fetch` and the
 // InstanceSelectionProvider primed via an /api/instances seed. The
 // asserts are deliberately narrow — "did the screen render without
-// throwing and surface the expected heading/empty-state" — because
-// the heavy lifting (chart shapes, filter logic) lives in
-// component-level tests already. The smoke tests exist as a tripwire
-// against the kind of regression that yellow B1 was: a stale
-// reference that compiles fine but throws at runtime when its code
-// path is hit (TimelineView's `hovered` → `focused` rename). A render
-// smoke test of TimelineView would have caught that on the first
-// run.
-//
-// We do NOT test the screens' interactive behaviour here — they
-// already get a lot of coverage via the component tests
-// (charts.test.tsx, BackupRestore.test.tsx, etc.). This is the
-// "won't blow up on first paint" guard.
+// throwing and surface the expected heading/empty-state" — a tripwire
+// for stale references that compile fine but throw at runtime when
+// their code path is hit. Interactive behaviour is covered by the
+// component-level tests; this is the "won't blow up on first paint"
+// guard.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";

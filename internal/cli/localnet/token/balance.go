@@ -63,9 +63,8 @@ row came from. With --party, filter to a single party; with
 					Truncated:     truncated,
 				})
 			}
-			// Text: simple aligned table via term. The SOURCE column makes
-			// a registry pseudo-balance visibly distinct from a real
-			// on-ledger holding.
+			// The SOURCE column makes a registry pseudo-balance visibly
+			// distinct from a real on-ledger holding.
 			cols := []term.Column{
 				{Label: "INSTRUMENT"},
 				{Label: "PARTY"},
@@ -104,8 +103,7 @@ row came from. With --party, filter to a single party; with
 
 // toHoldings converts the neutral token.BalanceRow slice into the
 // shared api/types.TokenHolding wire shape so the CLI's --format json
-// emits the exact same body as the Web UI's holdings endpoint. The two
-// structs mirror each other field-for-field.
+// emits the exact same body as the Web UI's holdings endpoint.
 func toHoldings(rows []token.BalanceRow) []types.TokenHolding {
 	out := make([]types.TokenHolding, 0, len(rows))
 	for _, r := range rows {

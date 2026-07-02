@@ -19,27 +19,22 @@ const (
 func consentPath() string { return filepath.Join(telemetryDir(), "config.json") }
 
 // consent is the persisted state. The only thing resembling an identifier
-// is InstallID — a random, opaque, hardware-independent token (see
-// installid.go) used solely so the collector can de-duplicate unique
-// installs. It is NOT derived from any machine attribute and never tags an
-// individual counter, so it cannot single out, locate, or profile a host.
+// is InstallID — a random, hardware-independent token (see installid.go)
+// used solely so the collector can de-duplicate unique installs; it never
+// tags an individual counter, so it cannot single out or profile a host.
 type consent struct {
 	SchemaVersion int   `json:"schema_version"`
 	Enabled       *bool `json:"enabled,omitempty"` // nil = never chosen (use default)
 	NoticeShown   bool  `json:"notice_shown"`
-	// InstallCounted records that this machine has already contributed its
+	// InstallCounted marks that this machine already contributed its
 	// one-per-install increment to dpm/install. A boolean, never an
-	// identifier — it only ensures the install counter fires once per host.
+	// identifier.
 	InstallCounted bool `json:"install_counted,omitempty"`
-	// InstallSurfaceCounted records which install surfaces have already
-	// contributed their once-per-host ping (for example the APT postinst
-	// hook). Append-only per surface; never an identifier.
+	// InstallSurfaceCounted marks which install surfaces (e.g. the APT
+	// postinst hook) already sent their once-per-host ping.
 	InstallSurfaceCounted map[string]bool `json:"install_surface_counted,omitempty"`
-	// InstallID is a random UUIDv4 minted once per config file (see
-	// installid.go). Sent alongside counter uploads so the collector can
-	// count DISTINCT installs without us ever learning anything about the
-	// host. Regenerates on a fresh container/VM/reinstall — by design, so
-	// each environment counts once. Empty until first generated.
+	// InstallID is the anonymous install-dedup token (see installid.go).
+	// Empty until first minted.
 	InstallID string `json:"install_id,omitempty"`
 	UpdatedAt string `json:"updated_at,omitempty"`
 }

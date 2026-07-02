@@ -18,17 +18,10 @@ import (
 
 // LedgerClient is the narrow slice of *ledger.Client that the live-ACS
 // orchestration paths (runBalanceLive, scanWorkspace) actually use.
-// Exists because the live-ACS orchestration paths had no unit coverage
-// for their error branches (PermissionDenied, no-parties, stream-error)
-// — *ledger.Client is a concrete struct wrapping grpc.ClientConn, so
-// there was no seam to inject a fake without going through a real
-// participant.
-//
-// The interface is deliberately small: only the methods the two
-// orchestration paths invoke (directly or via the resolveReadableParties
-// helper chain). Widening to mirror the whole Client API would defeat
-// the point — Add methods here as new orchestration paths come under
-// test, not preemptively.
+// *ledger.Client is a concrete struct wrapping grpc.ClientConn, so this
+// interface is the seam that lets tests inject a fake without a real
+// participant. Deliberately small — add methods as new orchestration
+// paths come under test, not preemptively.
 type LedgerClient interface {
 	LedgerEnd(ctx context.Context) (ledger.LedgerEnd, error)
 	ActiveContracts(ctx context.Context, req ledger.ActiveContractsRequest) (<-chan ledger.StreamItem[*lapiv2.GetActiveContractsResponse], error)
@@ -46,20 +39,14 @@ type LedgerClient interface {
 // the seam stays invisible to CLI / HTTP callers. The token package's
 // tests run sequentially, so the package-level mutation is safe.
 //
-// dialLedger itself keeps its concrete *ledger.Client return so the
-// other eight callers (instrument_v2, run_transfer, activity, plan,
-// party) — which need methods outside this narrow interface — compile
-// unchanged.
+// dialLedger itself keeps its concrete *ledger.Client return for the
+// callers that need methods outside this narrow interface.
 var dialLedgerFn = func(ctx context.Context, conn LedgerConn) (LedgerClient, func(), error) {
 	return dialLedger(ctx, conn)
 }
 
 // LedgerConn captures everything a live ledger call needs: the gRPC
 // endpoint and the Bearer JWT the participant accepts.
-//
-// Resolved by the CLI / Web UI from --endpoint + --token (or via
-// state.Endpoints once the participant gRPC port surfacing follow-up
-// lands; tracked in "endpoint auto-discovery" item).
 type LedgerConn struct {
 	Endpoint string // host:port, e.g. "localhost:61169"
 	Token    string // Bearer JWT; empty allowed when the participant runs unauthenticated
@@ -101,21 +88,19 @@ func ResolveLedgerEndpoint(instance, role string) string {
 	return ""
 }
 
-// dialLedger opens a ledger client against the given endpoint. Mirrors
-// the helper in internal/cli/localnet/contracts.go but lives here so
-// the action layer (which the HTTP handler also calls) can dial without
-// pulling cli/localnet into the import graph. Caller MUST defer the
-// returned cleanup.
+// dialLedger opens a ledger client against the given endpoint. Lives
+// here (not in cli/localnet) so the action layer — which the HTTP
+// handler also calls — can dial without pulling cli/localnet into the
+// import graph. Caller MUST defer the returned cleanup.
 //
-// Token resolution order (the follow-up that drove this):
+// Token resolution order:
 // 1. conn.Token explicit (`--token` flag wins).
 // 2. registry.State.Credentials[Role] — populated by `localnet up`'s
-// captureCredentials when the alpha boot is clean. The CLI mints
-// against this via `localnet creds --role <role> --format raw`.
+// captureCredentials when the alpha boot is clean.
 // 3. splice.SignToken fallback — issues a fresh user-token from the
-// project's env/<role>-auth-on.env files. Same shape as path #2;
-// used when creds-capture races / fails (the V2 alpha is wobbly
-// on cold boots and step (2) may be empty even after up succeeds).
+// project's env/<role>-auth-on.env files; used when creds-capture
+// races / fails (the V2 alpha is wobbly on cold boots and step (2)
+// may be empty even after up succeeds).
 // 4. error pointing at `localnet creds --raw` for the user to override.
 func dialLedger(ctx context.Context, conn LedgerConn) (*ledger.Client, func(), error) {
 	if conn.Endpoint == "" {
@@ -317,24 +302,6 @@ func resolveLedgerTokenRaw(conn LedgerConn) (string, error) {
 		role, conn.Instance, conn.Instance, role)
 }
 
-// parseInterfaceID splits the upstream `#package-name:Module:Entity`
-// form into the Identifier shape the Ledger API takes. The `#`-prefix
-// is the package-name reference that the participant resolves to
-// whichever vetted package satisfies the name at exercise time —
-// keeps us robust against the V2 alpha's weekly snapshot rotation.
-func parseInterfaceID(qual string) (pkg, module, entity string) {
-	q := strings.TrimPrefix(qual, "#")
-	parts := strings.Split(q, ":")
-	switch len(parts) {
-	case 3:
-		return "#" + parts[0], parts[1], parts[2]
-	case 2:
-		return "", parts[0], parts[1]
-	default:
-		return "", "", ""
-	}
-}
-
 // Generation identifies a token-standard interface generation.
 type Generation int
 
@@ -389,7 +356,7 @@ func discoverTokenSurfaces(ctx context.Context, client LedgerClient) (Surfaces, 
 
 // interfaceFilterEntry builds one interface-view CumulativeFilter.
 func interfaceFilterEntry(interfaceID string) *lapiv2.CumulativeFilter {
-	pkg, mod, entity := parseInterfaceID(interfaceID)
+	pkg, mod, entity := splitInterfaceID(interfaceID)
 	return &lapiv2.CumulativeFilter{
 		IdentifierFilter: &lapiv2.CumulativeFilter_InterfaceFilter{
 			InterfaceFilter: &lapiv2.InterfaceFilter{
@@ -401,18 +368,18 @@ func interfaceFilterEntry(interfaceID string) *lapiv2.CumulativeFilter {
 	}
 }
 
-// holdingInterfaceFilter builds the EventFormat matching every Holding of
-// the available generations. Only the vetted generations' interface
-// filters are included, so we never reference an unvetted package (which
-// the participant would reject). Parties: empty → wildcard
+// generationInterfaceFilter builds the EventFormat matching the given
+// per-generation interface ids. Only the vetted generations' filters
+// are included, so we never reference an unvetted package (which the
+// participant would reject). Parties: empty → wildcard
 // (FiltersForAnyParty); non-empty → per-party.
-func holdingInterfaceFilter(surfaces Surfaces, parties []string) *lapiv2.EventFormat {
+func generationInterfaceFilter(surfaces Surfaces, v1ID, v2ID string, parties []string) *lapiv2.EventFormat {
 	var cumulative []*lapiv2.CumulativeFilter
 	if surfaces.HasV1 {
-		cumulative = append(cumulative, interfaceFilterEntry(HoldingInterfaceV1))
+		cumulative = append(cumulative, interfaceFilterEntry(v1ID))
 	}
 	if surfaces.HasV2 {
-		cumulative = append(cumulative, interfaceFilterEntry(HoldingInterfaceV2))
+		cumulative = append(cumulative, interfaceFilterEntry(v2ID))
 	}
 	filter := &lapiv2.Filters{Cumulative: cumulative}
 	if len(parties) == 0 {
@@ -425,28 +392,20 @@ func holdingInterfaceFilter(surfaces Surfaces, parties []string) *lapiv2.EventFo
 	return &lapiv2.EventFormat{FiltersByParty: byParty, Verbose: true}
 }
 
+// holdingInterfaceFilter builds the EventFormat matching every Holding
+// of the vetted generations.
+func holdingInterfaceFilter(surfaces Surfaces, parties []string) *lapiv2.EventFormat {
+	return generationInterfaceFilter(surfaces, HoldingInterfaceV1, HoldingInterfaceV2, parties)
+}
+
 // transferInstructionInterfaceFilter builds the EventFormat matching a
-// pending TransferInstruction of either vetted generation, so a contract
-// can be classified by the interface it actually implements (used to
-// route accept by the instruction's own generation rather than the
-// participant's surfaces). Same shape as holdingInterfaceFilter.
+// pending TransferInstruction of either vetted generation, so a
+// contract can be classified by the interface it actually implements
+// (used to route accept by the instruction's own generation rather
+// than the participant's surfaces).
 func transferInstructionInterfaceFilter(surfaces Surfaces, parties []string) *lapiv2.EventFormat {
-	var cumulative []*lapiv2.CumulativeFilter
-	if surfaces.HasV1 {
-		cumulative = append(cumulative, interfaceFilterEntry(TransferInstructionInterfaceV1))
-	}
-	if surfaces.HasV2 {
-		cumulative = append(cumulative, interfaceFilterEntry(TransferInstructionInterfaceV2))
-	}
-	filter := &lapiv2.Filters{Cumulative: cumulative}
-	if len(parties) == 0 {
-		return &lapiv2.EventFormat{FiltersForAnyParty: filter, Verbose: true}
-	}
-	byParty := make(map[string]*lapiv2.Filters, len(parties))
-	for _, p := range parties {
-		byParty[p] = filter
-	}
-	return &lapiv2.EventFormat{FiltersByParty: byParty, Verbose: true}
+	return generationInterfaceFilter(surfaces,
+		TransferInstructionInterfaceV1, TransferInstructionInterfaceV2, parties)
 }
 
 // holdingView is the generation-agnostic structured form of a Holding

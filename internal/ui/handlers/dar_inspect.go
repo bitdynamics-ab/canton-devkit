@@ -181,11 +181,6 @@ func handleDARInspect(w http.ResponseWriter, r *http.Request) {
 // buildInspectTree decodes the DAR bytes into a JSON-ready tree. The
 // shape matches the contract documented at the top of this file.
 func buildInspectTree(payload []byte) (map[string]any, error) {
-	// internal/dar.Open expects a path; the bytes-variant lives a
-	// layer down. We use OpenBytes when available — fall back to a
-	// tempfile is overkill for the loopback UI. Parse via Open
-	// equivalent: re-use the same Reader internals through a
-	// public bytes entrypoint.
 	info, err := cdkdar.OpenBytes(payload)
 	if err != nil {
 		return nil, err
@@ -679,10 +674,8 @@ func handleDARVettingToggle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Lock+re-read on the registry. Writes to state
-	// are limited to recording the toggled state, NOT to fields the
-	// reconciler is responsible for; the lock is still the canonical
-	// guard against torn reads with a concurrent up/down.
+	// Hold the per-instance lock — the canonical guard against torn
+	// reads with a concurrent up/down.
 	releaseLock, err := registry.Lock(name)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {

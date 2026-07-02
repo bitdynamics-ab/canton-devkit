@@ -7,12 +7,10 @@ import {
 } from "../api";
 import { W, wMono } from "../tokens";
 
-// AgentSkillsScreen — .
-//
-// Browses the bundled AI-agent skill docs (served by /api/skills,
-// the SAME embedded markdown the CLI `localnet skills` command
-// ships) and offers one-click install into ~/.claude/skills or
-// ~/.codex/skills. CLI ↔ UI parity: both surfaces read internal/skills.
+// AgentSkillsScreen browses the bundled AI-agent skill docs (served by
+// /api/skills — the same embedded markdown the CLI `localnet skills`
+// command ships) and offers one-click install into ~/.claude/skills or
+// ~/.codex/skills. Both surfaces read internal/skills.
 export function AgentSkillsScreen() {
   const [state, setState] = useState<
     | { kind: "loading" }

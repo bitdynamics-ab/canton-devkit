@@ -15,8 +15,6 @@
 //	    port capture landed; re-`up` to capture)
 //
 // Role defaults to "app_user" since that's the common dev target.
-// Upload + diff endpoints are deferred to a follow-up — the MVP is
-// "show me what's already on the participant".
 package handlers
 
 import (
@@ -195,8 +193,8 @@ func handleDARList(w http.ResponseWriter, r *http.Request) {
 //
 // VetAllPackages + SynchronizeVetting are forced ON: the dev-flow
 // expectation is "I dropped this DAR, please make it usable on
-// every participant I picked". Per-package vetting toggles are a
-// separate, deeper screen (tracked as a follow-up).
+// every participant I picked". Per-package vetting toggles are
+// served by the …/dar/{id}/vetting endpoints.
 func handleDARUpload(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := registry.ValidateName(name); err != nil {

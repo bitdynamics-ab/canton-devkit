@@ -14,10 +14,7 @@ import (
 // Error-path coverage for the Explorer handlers
 // (handlers/contracts.go + handlers/transactions.go). These
 // exercise every validation/lookup branch above the gRPC dial
-// without needing a real Canton ledger.
-//
-// The full happy-path test requires a ledger.Client interface +
-// fake — tracked as a follow-up. What we cover here:
+// without needing a real Canton ledger:
 //
 //   - 400 on invalid instance name
 //   - 404 on unknown registered instance
@@ -26,10 +23,6 @@ import (
 //     participant_ledger_<role> port (the capture didn't
 //     run yet for this instance)
 //   - 500 when state.json has a port but no JWT for the role
-//
-// AGENTS.md "all new code must be tested" — these guard the
-// dispatch logic that 90% of error-mode users will hit before
-// they ever see a gRPC failure.
 
 func contractsTxMux(t *testing.T) *httptest.Server {
 	t.Helper()

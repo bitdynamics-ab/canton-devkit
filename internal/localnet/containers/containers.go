@@ -2,15 +2,14 @@
 // between the CLI (`dpm localnet container …` subcommands) and the
 // Web UI's HTTP handlers (POST /api/instances/{name}/containers/…).
 //
-// Two surfaces, one set of docker-side functions. Mirrors the
-// AGENTS.md "CLI ↔ Web UI parity" rule: validation lives at the
-// edge (HTTP handler for query-params, cobra command for flags),
-// the docker work itself lives here exactly once.
+// Two surfaces, one set of docker-side functions, per the
+// CONTRIBUTING.md "CLI ↔ Web UI parity" rule: validation lives at
+// the edge (HTTP handler for query-params, cobra command for
+// flags), the docker work itself lives here exactly once.
 //
 // Functions in this package never read the registry directly —
-// callers pass the resolved compose project + container name in.
-// That keeps this package free of registry locking concerns and
-// avoids importing internal/registry from a leaf utility.
+// callers pass the resolved compose project + container name in,
+// keeping this package free of registry locking concerns.
 package containers
 
 import (
@@ -30,11 +29,8 @@ import (
 // Fields mirror what `docker compose ps --format json` emits;
 // unknown columns (ExitCode, RunningFor, …) are deliberately
 // dropped so a docker version bump that adds fields doesn't break
-// the JSON decoder.
-//
-// Same shape as the HTTP handler's ContainerHealth — the handler
-// wraps each Info into its API type. CLI consumers use Info
-// directly.
+// the JSON decoder. The HTTP handler wraps each Info into its API
+// type; CLI consumers use Info directly.
 type Info struct {
 	Name    string `json:"name"`
 	Service string `json:"service"`
@@ -82,7 +78,7 @@ func List(ctx context.Context, project string) ([]Info, error) {
 			return nil, fmt.Errorf("parse compose ps JSON array: %w", err)
 		}
 		for _, e := range arr {
-			infos = append(infos, e.toInfo())
+			infos = append(infos, Info(e))
 		}
 		return infos, nil
 	}
@@ -100,7 +96,7 @@ func List(ctx context.Context, project string) ([]Info, error) {
 			// failing the whole probe.
 			continue
 		}
-		infos = append(infos, e.toInfo())
+		infos = append(infos, Info(e))
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("scan compose ps NDJSON: %w", err)
@@ -230,8 +226,4 @@ type dockerComposePsEntry struct {
 	Health  string `json:"Health"`
 	Status  string `json:"Status"`
 	Image   string `json:"Image"`
-}
-
-func (e dockerComposePsEntry) toInfo() Info {
-	return Info(e)
 }

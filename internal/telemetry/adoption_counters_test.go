@@ -2,9 +2,9 @@ package telemetry
 
 import "testing"
 
-// TestAllowlist_TokenAndUIFeature pins the new adoption counters: the
-// CIP-0112 token actions (M3) and the Web UI features (M2) are
-// recordable, and a bogus bucket is still dropped.
+// TestAllowlist_TokenAndUIFeature pins the adoption counters: the
+// CIP-0112 token actions and the Web UI features are recordable, and a
+// bogus bucket is still dropped.
 func TestAllowlist_TokenAndUIFeature(t *testing.T) {
 	good := [][2]string{
 		{"dpm/token_action", "create"},

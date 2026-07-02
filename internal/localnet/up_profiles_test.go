@@ -129,7 +129,7 @@ func TestRunUp_RejectsUnknownProfile(t *testing.T) {
 
 // TestRunUp_InheritsOptInProfilesOnReup: a plain `down` -> `up` with no
 // --profile re-enables the opt-in profiles the instance was last brought
-// up with (#161). state.Profiles persists the FULL set (adapter base +
+// up with. state.Profiles persists the FULL set (adapter base +
 // opt-ins); the re-up recovers just the opt-ins by subtracting the base,
 // and enabledProfiles re-adds the base — so the persisted set is the same
 // full set, with no double-counting.

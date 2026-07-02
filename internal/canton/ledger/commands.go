@@ -33,7 +33,7 @@ func (c *Client) Submit(ctx context.Context, req *lapiv2.SubmitRequest) (*lapiv2
 // resulting transaction. Blocks until commit or the request ctx
 // deadline expires.
 //
-// Used by the M3 token CLI (`token create`, `token mint`, etc.) where
+// Used by the token CLI (`token create`, `token mint`, etc.) where
 // the typical UX is: submit, wait, render the resulting contract IDs.
 //
 // Caveat: this blocks the gRPC call for the full commit latency

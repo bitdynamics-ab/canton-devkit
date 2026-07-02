@@ -22,9 +22,8 @@ type UpstreamTag struct {
 // upstreamTagsEndpoint is the GitHub REST URL the discovery layer hits.
 // Package var so tests can point it at an httptest server.
 //
-// Public anonymous endpoint; rate-limited to 60 req/hour per IP. We
-// honour Last-Modified / ETag in callers if/when that becomes an
-// issue, but a single CLI session never approaches the budget.
+// Public anonymous endpoint, rate-limited to 60 req/hour per IP — a
+// single CLI session never approaches the budget.
 var upstreamTagsEndpoint = "https://api.github.com/repos/canton-network/splice/tags"
 
 // upstreamHTTPTimeout caps the total round trip. Discovery is best-

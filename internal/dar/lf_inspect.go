@@ -43,11 +43,13 @@ type ModuleContents struct {
 	DataTypes  []string           `json:"data_types,omitempty"`
 }
 
+// TemplateContents is one template and its choice names.
 type TemplateContents struct {
 	Name    string   `json:"name"`
 	Choices []string `json:"choices,omitempty"`
 }
 
+// IfaceContents is one interface with its choice and method names.
 type IfaceContents struct {
 	Name    string   `json:"name"`
 	Choices []string `json:"choices,omitempty"`

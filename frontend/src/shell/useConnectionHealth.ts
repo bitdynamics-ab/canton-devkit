@@ -1,28 +1,20 @@
 import { useEffect, useState } from "react";
 import { SCHEMA_VERSION, fetchVersion } from "../api";
 
-// useConnectionHealth polls /api/version every `intervalMs` ms
-// after a successful initial handshake. Surfaces three states the
-// topbar pill renders distinctly:
+// useConnectionHealth polls /api/version every `intervalMs` ms and
+// surfaces three states for the topbar pill:
 //
-//   - "ok"        : last poll succeeded and schema matched
-//   - "mismatch"  : server is up but speaks a different schema
-//                   (a binary swap mid-session — uncommon but
-//                    real; bundle stays loaded but every fetch
-//                    is now unsafe to interpret)
-//   - "offline"   : last poll errored (network / server gone)
+//   - "ok"       : last poll succeeded and schema matched
+//   - "mismatch" : server up but speaks a different schema (binary
+//                  swapped mid-session; every fetch is now unsafe
+//                  to interpret)
+//   - "offline"  : last poll errored (network / server gone)
 //
-// We deliberately keep the BootGate's hard schema-version refusal
-// for first paint; this hook just colour-codes the topbar after
-// the app is already running. Tearing the whole UI down on a
-// transient blip would be more disruptive than the colored dot
-// the user can ignore until the next deliberate reload.
-//
-// 10s default poll matches the SSE heartbeat cadence — same
-// "is the binary alive" question, different transport. We do NOT
-// use SSE here because that would mask the case where the SSE
-// stream stays open but /api/version 5xx's (separate handler,
-// separate failure mode worth surfacing).
+// The BootGate keeps its hard schema refusal for first paint; this
+// hook only colour-codes the topbar afterwards — tearing the UI down
+// on a transient blip would be more disruptive than a coloured dot.
+// Polling (not SSE) so a 5xx from /api/version surfaces even while an
+// SSE stream stays open — separate handler, separate failure mode.
 export type ConnectionHealth = "ok" | "mismatch" | "offline";
 
 export interface ConnectionState {

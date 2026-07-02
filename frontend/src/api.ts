@@ -57,14 +57,11 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     },
   });
   const text = await resp.text();
-  // A proxy or a panicking server can return a non-empty body that
-  // is NOT our JSON envelope (an HTML 502 page, a plain-text stack
-  // trace). Parsing must not throw a raw SyntaxError here — that
-  // would escape every screen's `e instanceof ApiError` branch and
-  // surface as an opaque "failed to load" with no status/code. Fall
-  // back to `undefined` so the !resp.ok branch still emits a proper
-  // ApiError (carrying the HTTP status), and a malformed 2xx body
-  // surfaces as `undefined` rather than crashing the caller.
+  // A proxy or panicking server can return a non-JSON body (HTML 502
+  // page, plain-text stack trace). A raw SyntaxError here would escape
+  // every screen's `e instanceof ApiError` branch, so fall back to
+  // `undefined`: !resp.ok still throws a proper ApiError with the HTTP
+  // status, and a malformed 2xx decodes to `undefined` without crashing.
   let body: unknown;
   try {
     body = text ? (JSON.parse(text) as unknown) : undefined;
@@ -474,43 +471,24 @@ export const fetchDoctor = (version?: string) =>
       : "/api/doctor",
   );
 
-// stopInstance invokes POST /api/instances/{name}/down — runs
-// `docker compose down` against the named instance, preserving
-// Docker volumes and the registry entry (status=stopped).
-// Synchronous on the wire (down is fast, ~10-30s on the happy
-// path); the call blocks until the server returns 204 or 5xx.
+// ── snapshot / restore ─────────────────────────────────────
+
+// downloadSnapshot POSTs to /api/instances/:name/snapshot via a
+// hidden-iframe form submit instead of fetch()+Blob: a snapshot can be
+// 100s of MB, and the form submit keeps the body entirely in the
+// browser's download pipeline instead of JS memory.
 //
-// On failure, the server's error envelope includes a one-line
-// summary the modal shows to the user; the full output goes to
-// the server log.
-// snapshot / restore.
+// Error detection relies on an asymmetry: on success the server sends
+// Content-Disposition: attachment, the body goes to the download
+// manager, and the iframe never navigates (no `load` event). On
+// failure the server sends an inline JSON error document, the iframe
+// navigates to it, and `load` fires — we can't read the cross-document
+// body, so we reject with a generic ApiError. Success is detected by
+// absence: a settle timeout resolves once no `load` arrived.
 //
-// downloadSnapshot triggers POST /api/instances/:name/snapshot and
-// hands the gzipped tar to the browser via an <a download> click. We
-// don't use fetch() + Blob here for one reason: a snapshot can be
-// 100s of MB, and putting the whole body into JS memory just to hand
-// it back to the browser is wasteful. The form-submit trick keeps the
-// response entirely in the browser's download pipeline.
-//
-// Error surfacing: on success the server replies with
-// Content-Disposition: attachment, so the browser hands the body to
-// the download manager and the hidden iframe never navigates — no
-// `load` event fires. On failure (instance not found, docker error,
-// 5xx) the server replies with an inline JSON error body and NO
-// Content-Disposition, so the iframe DOES navigate to it and fires a
-// `load` event. We listen for that asymmetry: a `load` on the iframe
-// means the download did not happen and an error document was
-// rendered instead, so we reject with an ApiError the caller can
-// toast. A successful download is detected by absence (a settle
-// timeout resolves once the dispatch is clean), since we cannot read
-// the cross-document iframe body.
-//
-// Returns a Promise that REJECTS with an ApiError when the server
-// returned an error instead of a download, and otherwise resolves
-// once the request has been dispatched (not when the download
-// completes — the browser owns that). The hidden iframe is reused
-// across downloads (one per document), and each call attaches a
-// one-shot `load` listener so handlers don't accumulate.
+// Resolves once the request is dispatched (the browser owns download
+// completion). The iframe is reused across downloads; each call
+// attaches a one-shot `load` listener so handlers don't accumulate.
 const DOWNLOAD_SETTLE_MS = 1200;
 
 export function downloadSnapshot(name: string): Promise<void> {
@@ -518,10 +496,6 @@ export function downloadSnapshot(name: string): Promise<void> {
     const form = document.createElement("form");
     form.method = "POST";
     form.action = `/api/instances/${encodeURIComponent(name)}/snapshot`;
-    // Hidden iframe target avoids navigating away from the SPA on
-    // success. Browsers attach the download attribute on the response
-    // headers (Content-Disposition), so the iframe never actually
-    // renders anything — the file goes straight to the downloads bar.
     form.target = "_dpm_dl";
     let frame = document.querySelector(
       'iframe[name="_dpm_dl"]',
@@ -536,13 +510,9 @@ export function downloadSnapshot(name: string): Promise<void> {
     let settled = false;
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
     const onLoad = () => {
-      // The iframe navigated → the server returned an inline
-      // document (the JSON error body) rather than an attachment.
-      // A successful download hands the body to the download
-      // manager and never navigates the iframe, so a `load` here
-      // means the snapshot did NOT download. We can't read the
-      // cross-document body safely, so surface a generic-but-honest
-      // error instead of failing silently.
+      // Iframe navigated → the server returned an inline error
+      // document rather than an attachment; the snapshot did NOT
+      // download.
       if (settled) return;
       settled = true;
       if (settleTimer !== undefined) clearTimeout(settleTimer);
@@ -608,7 +578,7 @@ export function restoreSnapshot(
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           resolve(JSON.parse(xhr.responseText) as RestoreResponse);
-        } catch (e) {
+        } catch {
           reject(
             new ApiError(xhr.status, {
               code: "UNKNOWN",
@@ -737,11 +707,7 @@ export interface MetricsSummary {
   };
 }
 
-// fetchMetricsSummary returns the headline panel data. The
-// caller MUST handle ApiError with body.code === "OBSERVABILITY_PROFILE_OFF"
-// to render the "raise observability" empty state — that's not
-// a hard failure, just a missing profile.
-// DAR Manager.
+// ── DAR Manager ─────────────────────────────────────────
 //
 // The Web UI lists DARs uploaded to a participant. Role defaults
 // to app-user (the common dev target). The backend reads the
@@ -823,7 +789,7 @@ export function uploadDARs(
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           resolve(JSON.parse(xhr.responseText) as DARUploadResponse);
-        } catch (e) {
+        } catch {
           reject(
             new ApiError(xhr.status, {
               code: "UNKNOWN",
@@ -1026,10 +992,8 @@ export function subscribeDARWatch(
       const ev = JSON.parse(e.data) as DARWatchEvent;
       onEvent(ev);
     } catch {
-      // Drop malformed payloads silently — the backend pins the
-      // event-enum on the publish side, so a parse failure here
-      // would indicate a wire-format change worth surfacing in
-      // the network tab, not the UI.
+      // Drop malformed payloads — a parse failure indicates a
+      // wire-format change, visible in the network tab, not the UI.
     }
   });
   return es;
@@ -1263,6 +1227,9 @@ export const fetchTxReplay = (
   );
 };
 
+// fetchMetricsSummary returns the headline panel data. Callers MUST
+// handle ApiError code "OBSERVABILITY_PROFILE_OFF" as the "raise
+// observability" empty state — a missing profile, not a hard failure.
 export const fetchMetricsSummary = (name: string, signal?: AbortSignal) =>
   apiFetch<MetricsSummary>(
     `/api/instances/${encodeURIComponent(name)}/metrics/summary`,
@@ -1333,6 +1300,10 @@ export const fetchMetricsRange = (
   );
 };
 
+// stopInstance invokes POST /api/instances/{name}/down — runs
+// `docker compose down`, preserving Docker volumes and the registry
+// entry (status=stopped). Synchronous on the wire: blocks until the
+// server returns 204 or 5xx.
 export async function stopInstance(name: string): Promise<void> {
   const resp = await fetch(
     `/api/instances/${encodeURIComponent(name)}/down`,
@@ -1516,15 +1487,6 @@ interface OutputEvent {
 interface CancelledEvent {
   kind: "cancelled";
   reason?: string;
-}
-
-// ApiErrorBody is re-exported here because cancelInstanceUp uses
-// it directly (it bypasses apiFetch for the raw fetch path).
-interface ApiErrorBody {
-  code: string;
-  error: string;
-  detail?: string;
-  remediation?: string[];
 }
 
 // ── Agent Skills ─────────────────────────────────────────

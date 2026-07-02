@@ -60,10 +60,8 @@ func ensureTokenRules(opts CreateOptions) error {
 	if existing != "" {
 		return nil // already anchored for this admin
 	}
-	if _, err := createTokenRules(ctx, client, admin); err != nil {
-		return err
-	}
-	return nil
+	_, err = createTokenRules(ctx, client, admin)
+	return err
 }
 
 // runMintLive performs an asset-specific mint of a test-token
@@ -125,7 +123,7 @@ func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regst
 }
 
 // runBurnLive burns `amount` of the holder's tokens by archiving their
-// Holding contracts .
+// Holding contracts.
 //
 // The splice-test-token-v2 example has no protocol-level standalone burn:
 // its transfer state machine unconditionally `create Token`s for the

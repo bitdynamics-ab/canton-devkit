@@ -8,13 +8,12 @@ import (
 var uuidV4Re = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
 // withCleanEnv points the telemetry dir at a temp dir and clears the CI
-// env so installID() is not gated off. Returns nothing; t.Setenv auto-
-// restores.
+// env so installID() is not gated off; t.Setenv auto-restores.
 func withCleanEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv(envDir, t.TempDir())
-	// Defang the CI detector: clear the common signals so the test host's
-	// own CI environment (if any) doesn't suppress the token.
+	// Clear the common CI signals so the test host's own CI environment
+	// (if any) doesn't suppress the token.
 	for _, k := range []string{"CI", "GITHUB_ACTIONS", "GITLAB_CI", "BUILDKITE", "CIRCLECI", "JENKINS_URL", "TF_BUILD"} {
 		t.Setenv(k, "")
 	}

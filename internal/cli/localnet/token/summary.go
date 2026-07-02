@@ -9,10 +9,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildSummary is `token summary` — the instrument-first KPI view
-// . One ACS scan yields total supply, holder + holding-
-// contract counts, and the per-holder distribution with share-of-supply.
-// CLI counterpart of the Web UI TokenDetail KPI strip (CLI ↔ UI parity).
+// buildSummary is `token summary` — the instrument-first KPI view. One
+// ACS scan yields total supply, holder + holding-contract counts, and
+// the per-holder distribution with share-of-supply. CLI counterpart of
+// the Web UI TokenDetail KPI strip.
 func buildSummary() *cobra.Command {
 	var opts token.BalanceOptions
 	var format string

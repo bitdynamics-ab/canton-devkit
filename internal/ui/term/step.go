@@ -26,13 +26,10 @@ const (
 //	✓  Docker daemon                v25.0.5            0.2s
 //
 // label is the principal text; detail is dim trailing text (e.g. the
-// version string); elapsed is the faint right-aligned time. Either
-// detail or elapsed may be empty; they are simply omitted.
-//
-// We don't right-align elapsed with a hard column — terminal width is
-// unknown at this layer and bubbletea's lipgloss would force us to
-// know it. The mockup's right-alignment is visual polish; aligning
-// with two spaces keeps the line scannable without that cost.
+// version string); elapsed is the faint trailing time. Either detail
+// or elapsed may be empty; they are simply omitted. elapsed is not
+// right-aligned to a hard column because terminal width is unknown at
+// this layer — two-space separation keeps the line scannable.
 func Step(kind StepKind, label, detail, elapsed string) string {
 	var icon string
 	switch kind {
@@ -66,7 +63,6 @@ func Step(kind StepKind, label, detail, elapsed string) string {
 //
 // Padding is measured in RUNES (not bytes) so multi-byte keys like
 // "日本" align with ASCII keys of the same visual width.
-// TestKV_MultiByteKeyAlignment locks this in.
 func KV(key string, value string, keyWidth int) string {
 	if keyWidth <= 0 {
 		keyWidth = 14

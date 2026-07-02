@@ -34,14 +34,13 @@ func CacheRoot() string {
 // project for a specific Splice version.
 //
 // The directory name includes BOTH the tag and a short commit prefix
-// (e.g. splice-0.6.4-578b7822). Keying on the tag alone was unsafe for
-// mutable-stream catalogue entries: token-standard-v2 tracks an upstream
-// branch that "can be reset on a weekly cadence", so re-pinning it to a
-// new commit must not silently reuse the old extracted tree while the
-// image tags advance. Folding the commit into the key makes a re-pin
-// land in a fresh directory and forces a re-fetch + re-verify. The
-// commit is empty only in degenerate test fixtures; when empty we fall
-// back to the tag-only name so those paths keep working.
+// (e.g. splice-0.6.4-578b7822): mutable-stream catalogue entries like
+// token-standard-v2 track an upstream branch that can be re-pinned to
+// a new commit, and folding the commit into the key makes a re-pin
+// land in a fresh directory (forcing a re-fetch + re-verify) instead
+// of silently reusing the old extracted tree. The commit is empty only
+// in degenerate test fixtures; when empty we fall back to the tag-only
+// name so those paths keep working.
 func ProjectDir(cacheRoot string, v Version) string {
 	name := "splice-" + v.Tag
 	if c := shortCommit(v.Commit); c != "" {

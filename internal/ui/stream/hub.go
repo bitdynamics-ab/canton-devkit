@@ -3,24 +3,19 @@
 //
 // # The slow-client problem
 //
-// The naive SSE hub — one unbounded channel per subscriber, write blocks
-// the publisher — has a fatal failure mode: a single slow browser tab
-// (network stall, OS suspend, devtools attach) backs the channel up,
-// which backs the publisher up, which blocks the docker poller or the
-// ledger client. One sleeping tab takes down the whole instance.
-//
-// This hub uses **bounded per-subscriber channels with drop-oldest**:
-// when a subscriber's buffer is full, the OLDEST event is discarded
-// (not the newest) and a `dropped` event is queued so the client knows
-// to refetch state. The publisher NEVER blocks on a subscriber. This
-// is the same pattern Grafana Live and CockroachDB's CDC use.
+// A naive SSE hub — write blocks the publisher — lets a single slow
+// browser tab back up the publisher and freeze the docker poller or
+// ledger client. This hub instead uses bounded per-subscriber channels
+// with drop-oldest: when a subscriber's buffer is full, the OLDEST
+// event is discarded and a `dropped` event is queued so the client
+// knows to refetch state. The publisher never blocks on a subscriber.
 //
 // # Topics
 //
 // Subscribers register for one or more named topics ("services",
-// "logs:demo", "metrics", etc.). The publisher names a topic when
-// publishing; only subscribers of that topic receive the event. Topic
-// names are opaque strings — handlers define their own taxonomy.
+// "logs:demo", …); only events published on a matching topic are
+// delivered. Topic names are opaque strings — handlers define their
+// own taxonomy.
 //
 // # Lifecycle
 //
@@ -32,6 +27,7 @@ package stream
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -43,12 +39,10 @@ import (
 // last-event tracking.
 //
 // SchemaVersion mirrors internal/api/types.SchemaVersion. Every
-// wire-level message the Web UI consumes needs a schema-version field so
-// a frontend bundled for v1 can refuse to decode a v2 event with a clear
-// error rather than silently mis-interpreting fields. The
-// router.handleVersion endpoint surfaces the
-// same number; the event-level field lets a long-running EventSource
-// detect a server upgrade mid-session.
+// wire-level message the Web UI consumes carries a schema-version field
+// so a frontend bundled for v1 can refuse to decode a v2 event with a
+// clear error; the event-level field also lets a long-running
+// EventSource detect a server upgrade mid-session.
 type Event struct {
 	SchemaVersion int    `json:"schema_version"`
 	Topic         string `json:"topic"`
@@ -57,18 +51,13 @@ type Event struct {
 }
 
 // EventSchemaVersion is the canonical value Event.SchemaVersion takes
-// today. Mirrors types.SchemaVersion; the parity test in hub_test.go
-// asserts they stay equal. Inlined to avoid an import on api/types
-// for a single integer constant (the dependency direction should
-// stay handlers→types, not stream→types).
+// today. Mirrors types.SchemaVersion (duplicated rather than imported
+// so the dependency direction stays handlers→types, not stream→types).
 const EventSchemaVersion = 1
 
-// defaultBuffer is the per-subscriber channel capacity. 64 events is
-// enough to absorb a few seconds of normal docker-poll traffic
-// (current poll cadence ~3s, payload counts ~10s of events/poll)
-// without losing data, while small enough that drop-oldest kicks in
-// promptly when a client genuinely stalls. Tuned in
-// TestHub_DropOldestUnderBackpressure.
+// defaultBuffer is the per-subscriber channel capacity: large enough
+// to absorb a few seconds of normal docker-poll traffic, small enough
+// that drop-oldest kicks in promptly when a client genuinely stalls.
 const defaultBuffer = 64
 
 // Hub is the publisher. Goroutine-safe; methods are intended to be
@@ -79,26 +68,13 @@ type Hub struct {
 	subs   map[*subscription]struct{}
 	bufLen int
 
-	// Per-topic event buffers for the replay-on-subscribe contract.
-	// Populated only for topics the caller has opted in via
-	// EnableBuffering — the global topic firehose is NOT
-	// buffered, because the only consumer that needs replay today
-	// is the per-instance create-flow SSE stream:
-	//
-	//   POST /api/instances → spawns up goroutine that calls
-	//     hub.EnableBuffering("instance:demo") + publishes the
-	//     first StepStartedevent (the "instance lock" step).
-	//
-	//   Browser opens GET /api/instances/demo/events 50ms later;
-	//     SubscribeWithReplay drains the buffer into the
-	//     subscriber's channel BEFORE the live event flow starts,
-	//     so the user sees step 1 even though the SSE arrived after
-	//     it published.
-	//
-	// Buffers are removed on ClearBuffer(topic) — the up handler
-	// calls that after Done/Fail to free memory eagerly. Without
-	// the call, the buffer leaks at most one capacity's worth of
-	// events per finished instance — annoying but not catastrophic.
+	// Per-topic event buffers for the replay-on-subscribe contract,
+	// populated only for topics opted in via EnableBuffering. The
+	// create-flow SSE stream relies on this: the up goroutine
+	// publishes its first step events before the browser's
+	// EventSource opens, and SubscribeWithReplay drains the buffer
+	// so those events aren't lost. Buffers are removed on
+	// ClearBuffer(topic).
 	topicBuffers map[string]*topicBuffer
 
 	// stats — atomically updated, read by Stats() for observability.
@@ -107,15 +83,9 @@ type Hub struct {
 }
 
 // topicBuffer is a fixed-size ring of recent events for one topic.
-// Capacity is set per-buffer (EnableBuffering's cap parameter); the
-// create-instance flow uses 128, which fits ~16 step starts + step
-// finishes + a few warnings without eviction during a normal up.
-//
-// A full buffer evicts the oldest event silently. SubscribeWithReplay
-// drains whatever's currently in the ring; it doesn't emit a
-// "dropped" sentinel like the live drop-oldest does, because
-// replay losses aren't observable to the live publisher (the lost
-// events were published before the subscriber existed).
+// A full buffer evicts the oldest event silently — unlike the live
+// drop-oldest path there is no "dropped" sentinel, because the lost
+// events were published before the subscriber existed.
 type topicBuffer struct {
 	mu     sync.Mutex
 	events []Event
@@ -132,15 +102,13 @@ func newTopicBuffer(cap int) *topicBuffer {
 	}
 }
 
-// append adds an event to the ring. Evicts the oldest when full.
-// Slice realloc is bounded by `cap` so steady-state memory is flat.
+// append adds an event to the ring, evicting the oldest when full.
+// The shift-left copy is bounded by `cap`, negligible at the
+// human-paced rate of step events.
 func (b *topicBuffer) append(e Event) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if len(b.events) >= b.cap {
-		// Shift left by one. For cap=128 this is a 127-element
-		// copy per publish — negligible at human-paced step
-		// events (~10/sec peak during compose-up).
 		copy(b.events, b.events[1:])
 		b.events = b.events[:len(b.events)-1]
 	}
@@ -160,18 +128,12 @@ func (b *topicBuffer) snapshot() []Event {
 // subscription is the per-subscriber state the publisher writes to.
 // One per active /events HTTP request.
 //
-// mu serialises BOTH close(ch) (in cancel) AND the deliverTo body
-// per subscription. A plain Mutex (not RWMutex) is deliberate: allowing
-// concurrent deliverTo calls would let two publishers both drain from
-// the same channel, double-counting drops and racing the retry. A single
-// Mutex per subscription serialises sends to one subscriber — many
-// subscribers still proceed in parallel because the Mutex is
-// per-subscription, not per-hub. The hub-level RWMutex (h.mu) keeps the
-// SET of subscribers safe for concurrent iteration.
-//
-// The cost (one publisher per subscriber at a time) is tiny: each
-// deliverTo is a non-blocking channel op + at most one drain + one
-// send.
+// mu serialises BOTH close(ch) (in cancel) AND the deliverTo body.
+// A plain Mutex (not RWMutex) is deliberate: concurrent deliverTo
+// calls could both drain the same channel, double-counting drops and
+// racing the retry. The Mutex is per-subscription, so other
+// subscribers still proceed in parallel; the hub-level RWMutex (h.mu)
+// keeps the SET of subscribers safe for concurrent iteration.
 type subscription struct {
 	topics map[string]struct{} // empty = subscribe-all
 	ch     chan Event
@@ -194,9 +156,8 @@ func New() *Hub {
 	}
 }
 
-// NewWithBuffer is the variant tests use to dial buffer size up or
-// down without touching defaultBuffer. Production callers should
-// stay on New().
+// NewWithBuffer is the variant tests use to dial the per-subscriber
+// buffer size. Production callers should stay on New().
 func NewWithBuffer(buf int) *Hub {
 	if buf < 1 {
 		buf = 1
@@ -209,19 +170,13 @@ func NewWithBuffer(buf int) *Hub {
 }
 
 // EnableBuffering opts a topic into the replay buffer. Subsequent
-// Publish calls for `topic` append to a fixed-size ring (cap
-// events). SubscribeWithReplay drains the ring into new
-// subscribers before live event flow begins.
+// Publish calls for `topic` append to a fixed-size ring of `cap`
+// events (clamped to at least 1); SubscribeWithReplay drains the ring
+// into new subscribers before live event flow begins.
 //
-// Idempotent — calling it twice for the same topic with the same
-// cap is a no-op. A different cap on a re-enable resizes the
-// existing buffer (truncates if the new cap is smaller).
-//
-// The create-instance handler calls this with cap=128 right after
-// the POST is accepted, before spawning the up goroutine. The
-// matching ClearBuffer call frees the ring when the up finishes.
-//
-// cap < 1 is clamped to 1.
+// Idempotent — re-enabling with the same cap is a no-op; a different
+// cap resizes the existing buffer (truncating oldest-first if
+// smaller). The matching ClearBuffer call frees the ring.
 func (h *Hub) EnableBuffering(topic string, cap int) {
 	if cap < 1 {
 		cap = 1
@@ -247,13 +202,10 @@ func (h *Hub) EnableBuffering(topic string, cap int) {
 	}
 }
 
-// ClearBuffer removes the topic's replay buffer. Called by the
-// create-instance handler after the up finishes (success or
-// failure) to free memory eagerly.
-//
-// Subsequent Publish calls for `topic` are still delivered to
-// live subscribers — they just no longer accumulate in any
-// replay ring. Safe to call on a topic that was never buffered.
+// ClearBuffer removes the topic's replay buffer, freeing memory
+// eagerly. Subsequent Publish calls for `topic` still reach live
+// subscribers — they just no longer accumulate in a replay ring.
+// Safe to call on a topic that was never buffered.
 func (h *Hub) ClearBuffer(topic string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -266,8 +218,7 @@ func (h *Hub) ClearBuffer(topic string) {
 //
 // Returns a receive-only channel and a cancel func. The handler
 // MUST call cancel when the client disconnects, otherwise the
-// subscription leaks and back-pressures the publisher's drop-
-// oldest scan.
+// subscription leaks.
 func (h *Hub) Subscribe(topics ...string) (<-chan Event, func()) {
 	s := &subscription{
 		topics: make(map[string]struct{}, len(topics)),
@@ -291,12 +242,10 @@ func (h *Hub) Subscribe(topics ...string) (<-chan Event, func()) {
 		delete(h.subs, s)
 		h.mu.Unlock()
 
-		// Then close the channel under the subscription's own
-		// mutex — serialises with deliverTo, guaranteeing no
-		// in-flight Publish is still trying to send when close()
-		// runs. Without this, a Publish that picked up the sub
-		// before our delete-from-h.subs could race close → panic
-		// on send-to-closed-channel.
+		// Then close the channel under the subscription's own mutex
+		// so it serialises with deliverTo. Without this, a Publish
+		// that picked up the sub before the delete could race close
+		// → panic on send-to-closed-channel.
 		s.mu.Lock()
 		s.closed = true
 		close(s.ch)
@@ -345,11 +294,11 @@ func (h *Hub) Publish(e Event) int {
 }
 
 // SubscribeWithReplay is the variant the per-instance SSE handler
-// uses. It atomically:
+// uses. Under a single hub lock it:
 //
 //  1. Snapshots each requested topic's replay buffer
-//  2. Registers the subscription so live events start flowing
-//  3. Pre-fills the subscription's channel with the snapshot
+//  2. Pre-fills the subscription's channel with the snapshot
+//  3. Registers the subscription so live events start flowing
 //
 // The pre-fill happens BEFORE the subscription enters h.subs, so
 // no publisher can interleave a live event into the channel during
@@ -357,35 +306,18 @@ func (h *Hub) Publish(e Event) int {
 // publish-order, immediately followed by any live events published
 // after Subscribe returns.
 //
-// The subscription channel must be large enough to hold the entire
-// snapshot without blocking. We size it to max(h.bufLen,
-// sum-of-buffer-sizes) to keep that promise; in practice the
-// per-instance topic ring is 128 and h.bufLen is 64, so the
-// channel is 128.
+// The channel is sized max(h.bufLen, total replay events) so the
+// pre-fill can never block.
 //
 // Returns the channel + cancel func, same as Subscribe.
 func (h *Hub) SubscribeWithReplay(topics ...string) (<-chan Event, func()) {
-	// Snapshot each topic's buffer first — outside the hub lock so
-	// we don't hold writers off. A concurrent Publish during the
-	// snapshot may add an event to the topic buffer; we hold
-	// h.mu.Lock below before registering the subscription, so
-	// that event either:
-	//   (a) lands in the snapshot we already took (we win the race)
-	//   (b) lands ONLY in the buffer (we lose the race AND the
-	//       subscriber isn't registered yet, so the live publisher
-	//       doesn't see it) — caught on a SECOND snapshot under
-	//       the lock below
-	//
-	// The "two-snapshot under lock" pattern is the simplest
-	// correctness proof. Doing one snapshot before the lock is
-	// premature optimisation; tests will catch it if it matters.
+	// Everything happens under h.mu.Lock: Publish holds h.mu.RLock,
+	// so no event can land in a topic buffer between our snapshot
+	// and the subscription becoming visible — each event ends up in
+	// either the snapshot or the live channel, never both or neither.
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// Compute channel size: enough to hold every replay event plus
-	// the usual live buffer. Without this, prefilling N replay
-	// events into a chan of capacity bufLen<N would deadlock on
-	// the prefill sends.
 	totalReplay := 0
 	snapshots := make(map[string][]Event, len(topics))
 	for _, t := range topics {
@@ -440,35 +372,31 @@ func (h *Hub) SubscribeWithReplay(topics ...string) (<-chan Event, func()) {
 // Tries a non-blocking send; if the buffer is full, drains the
 // oldest event, increments droppedSinceWarn, and retries.
 //
-// Holds s.mu for the entire duration so the cancel path can't close(s.ch)
-// between our fullness check and the send. If the subscription was
-// already closed by the time we acquire the lock, the function is a no-op
-// — the event simply doesn't reach the dead subscriber.
+// Holds s.mu for the entire duration: it serialises with the cancel
+// path (no close(s.ch) between our fullness check and the send) and
+// with other publishers (two concurrent drains on the same channel
+// would double-count drops). If the subscription is already closed,
+// the function is a no-op.
 //
 // Drop accounting uses Swap(0): a Load + Store pair would be racy — a
 // concurrent Publish could increment droppedSinceWarn between the Load
-// and Store, losing the increment. Swap is atomic.
+// and Store, losing the increment.
 func (h *Hub) deliverTo(s *subscription, e Event) {
-	// Serialise deliveries to THIS subscriber. Multiple publishers
-	// may call deliverTo concurrently; without the lock, two
-	// drains can race the same channel and double-count drops.
-	// Per-subscription Mutex keeps the lock surface tiny — other
-	// subscribers proceed in parallel via their own mutexes.
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
 		return
 	}
 
-	// Prepend the dropped-warning event if we owe one. Try
-	// non-blocking; if it doesn't fit either, restore the count
-	// and let the next call handle it.
+	// Prepend the dropped-warning event if we owe one. The payload
+	// is just the count, for the client to decide whether to
+	// refetch. Try non-blocking; if it doesn't fit either, restore
+	// the count and let the next call handle it.
 	if lost := s.droppedSinceWarn.Swap(0); lost > 0 {
 		select {
 		case s.ch <- Event{SchemaVersion: EventSchemaVersion,
-			Topic: "dropped", Data: countBytes(lost)}:
+			Topic: "dropped", Data: []byte(strconv.FormatUint(lost, 10))}:
 		default:
-			// Restore the count — we owe the warning still.
 			s.droppedSinceWarn.Add(lost)
 		}
 	}
@@ -496,23 +424,6 @@ func (h *Hub) deliverTo(s *subscription, e Event) {
 	h.dropped.Add(1)
 }
 
-// countBytes encodes a small integer as ASCII bytes without
-// pulling strconv. The "dropped" event carries just a number for
-// the client to decide whether to refetch.
-func countBytes(n uint64) []byte {
-	if n == 0 {
-		return []byte("0")
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return append([]byte(nil), buf[i:]...)
-}
-
 // Stats returns counters useful for /healthz-style introspection
 // and tests. NOT atomic across fields — callers shouldn't rely on
 // a coherent snapshot.
@@ -538,10 +449,9 @@ func (h *Hub) Stats() Stats {
 // the hub's set is cleared, and subsequent Publish calls become
 // no-ops returning 0. Idempotent — calling Close twice is safe.
 //
-// Without a mass-disconnect, `dpm localnet ui` SIGINT would shut down the
-// HTTP server but leave the hub's subscriptions (held by in-flight
-// EventSource connections) leaked until each connection itself died.
-// Hub.Close, called from ui.go's shutdown path, closes the loop.
+// The server's shutdown path calls this so in-flight EventSource
+// connections disconnect immediately instead of leaking until each
+// connection dies on its own.
 func (h *Hub) Close() {
 	h.mu.Lock()
 	subs := make([]*subscription, 0, len(h.subs))
@@ -561,13 +471,9 @@ func (h *Hub) Close() {
 }
 
 // WaitForSubscribers polls Stats().Subscribers until it reaches
-// n or ctx expires. Returns true when the count is reached.
-// Tests use this instead of time.Sleep to deterministically
+// n or ctx expires, returning true when the count is reached.
+// Tests use this instead of a flaky time.Sleep to deterministically
 // wait for an SSE handler to register its subscription.
-//
-// time.Sleep in tests is the classic flakiness vector — 50ms works
-// locally, fails on a slow CI runner. A predicate-based wait converts
-// "sleep enough" into "wait until the actual condition holds."
 func (h *Hub) WaitForSubscribers(ctx context.Context, n int) bool {
 	tick := time.NewTicker(time.Millisecond)
 	defer tick.Stop()

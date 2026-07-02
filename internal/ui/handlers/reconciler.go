@@ -248,10 +248,9 @@ func ReconcileOne(ctx context.Context, name string) (old, neu registry.Status, c
 	// reconciler at `partial` forever (see assets/compose/tokens-v2.yml).
 	// Those are the instances where canton most often restarts AND
 	// the screens most need a working port set; gating on `running`
-	// alone would never fire for them.
-	// `refreshCantonPorts` itself is best-effort — missing probes
-	// leave cached values intact — so calling it during `partial`
-	// is safe (probe failure ⇒ no diff ⇒ no write).
+	// alone would never fire for them. The capture is best-effort —
+	// missing probes leave cached values intact — so probing during
+	// `partial` is safe (probe failure ⇒ no diff ⇒ no write).
 	// Probe ports OUTSIDE the registry lock — the docker subprocesses
 	// can take seconds, and we don't want to block concurrent writers
 	// (e.g. `localnet down`) on a slow daemon. We only diff against
@@ -332,10 +331,9 @@ func portMapDiffers(cached, live map[string]int) bool {
 // applyPortDelta writes only the changed keys from `live` into
 // fresh.Ports, preserving every other key (including non-canton
 // ports like app_user_ui). Returns true when at least one port
-// changed. Mirrors the original refreshCantonPorts semantics but
-// operates on the freshly-re-read state held under the registry
-// lock — so a concurrent down's Credentials/DSO/Tokens writes are
-// preserved rather than clobbered by our stale snapshot.
+// changed. It operates on the freshly-re-read state held under the
+// registry lock — so a concurrent down's Credentials/DSO/Tokens
+// writes are preserved rather than clobbered by a stale snapshot.
 func applyPortDelta(fresh *registry.State, live map[string]int, name string) bool {
 	if len(live) == 0 {
 		return false
@@ -368,10 +366,10 @@ func applyPortDelta(fresh *registry.State, live map[string]int, name string) boo
 // alone, matching that contract — better to render stale than to
 // blank out ports on a transient docker hiccup.
 //
-// NOTE: ReconcileOne no longer calls this — it splits the probe and
-// the in-place write so the write can happen under the registry
-// lock against a freshly-re-read state. The function survives as a
-// stable unit-test seam for the in-place diff/merge logic.
+// ReconcileOne does not call this — it splits the probe and the
+// in-place write so the write can happen under the registry lock
+// against a freshly-re-read state. This function is a stable
+// unit-test seam for the in-place diff/merge logic.
 func refreshCantonPorts(ctx context.Context, state *registry.State, name string) bool {
 	live := captureCantonPorts(ctx, state.ComposeProject)
 	return applyPortDelta(state, live, name)

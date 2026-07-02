@@ -62,7 +62,7 @@ func TestSchemaVersion_NonZero(t *testing.T) {
 }
 
 // TestPreflight_OmitsRemediationOnPass is the negative space of the
-// friendly-error renderer (P1-12): a passing check must not carry a
+// friendly-error renderer: a passing check must not carry a
 // remediation list, or the CLI will helpfully suggest fixes for
 // non-problems.
 func TestPreflight_OmitsRemediationOnPass(t *testing.T) {

@@ -5,8 +5,7 @@ import (
 	"testing"
 )
 
-// TestValidatePartyID guards the issuer-party check RunCreate now applies
-// (previously it accepted any non-empty string).
+// TestValidatePartyID guards the issuer-party check RunCreate applies.
 func TestValidatePartyID(t *testing.T) {
 	good := []string{"alice", "alice::1220abcd", "app_provider", "sv-1", "Bob#2"}
 	for _, s := range good {
@@ -23,10 +22,9 @@ func TestValidatePartyID(t *testing.T) {
 }
 
 // TestLooksLikeDecimal pins the grammar both the create wizard and the
-// mint/transfer/burn amount guard share. The load-bearing regression is
-// the lone "." case: it previously returned true (no digit required), so
-// `token create --initial-supply .` persisted a bogus "." supply that
-// breaks the holdings renderer and addDecimal's big.Int parse.
+// mint/transfer/burn amount guard share. The load-bearing case is the
+// lone ".": accepting it would persist a bogus "." supply that breaks
+// the holdings renderer and addDecimal's big.Int parse.
 func TestLooksLikeDecimal(t *testing.T) {
 	good := []string{"0", "123", "0.5", "123.456", "1000000", "00.10"}
 	for _, s := range good {
@@ -34,8 +32,8 @@ func TestLooksLikeDecimal(t *testing.T) {
 			t.Errorf("looksLikeDecimal(%q) = false, want true", s)
 		}
 	}
-	// "." and ".." carry no digit; the rest are the previously-rejected
-	// sign / exponent / multi-dot shapes we keep rejecting.
+	// "." and ".." carry no digit; the rest are rejected sign /
+	// exponent / multi-dot shapes.
 	bad := []string{"", ".", "..", "-5", "+5", "1.2e3", "1.2.3", "abc", "1,000"}
 	for _, s := range bad {
 		if looksLikeDecimal(s) {
@@ -44,8 +42,8 @@ func TestLooksLikeDecimal(t *testing.T) {
 	}
 }
 
-// TestValidateCreate_InitialSupplyBounds pins the supply guards added so
-// a lone dot, a zero supply, an over-precision (>38-digit) supply, and a
+// TestValidateCreate_InitialSupplyBounds pins the supply guards: a lone
+// dot, a zero supply, an over-precision (>38-digit) supply, and a
 // supply whose fractional width exceeds the declared decimals are all
 // rejected at the local gate rather than failing opaquely on-ledger.
 func TestValidateCreate_InitialSupplyBounds(t *testing.T) {

@@ -378,7 +378,7 @@ describe("TokensScreen", () => {
 // createErrorText: the on-ledger create 412 (TEST_TOKEN_DAR_UNAVAILABLE)
 // must surface the actionable token-standard-v2 remedy in the create
 // modal, not the raw backend message — matching the NEEDS_V2_LOCALNET
-// remediation pattern (#169 UI-parity fix).
+// remediation pattern.
 describe("createErrorText", () => {
   it("maps the on-ledger DAR 412 to the token-standard-v2 remedy", () => {
     const e = new ApiError(412, {

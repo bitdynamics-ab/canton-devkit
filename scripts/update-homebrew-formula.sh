@@ -16,7 +16,7 @@
 #      Formula/canton-devkit.rb.
 #   4. Prints a diff and the proposed commit message.
 #
-# NOTE: release.yml now bumps the public formula automatically on every
+# NOTE: release.yml bumps the public formula automatically on every
 # tag (via the GitHub contents API), so this script is a break-glass /
 # manual-recovery path — use it when the automated step failed or to
 # re-pin an existing tag. It does NOT commit or push: review the public
@@ -44,8 +44,7 @@ fi
 # Pull SHA256SUMS from the release. `gh release view --json` doesn't
 # include asset contents, so download via the asset URL directly. The
 # release workflow publishes a single GNU sha256sum manifest named
-# SHA256SUMS (release.yml: `sha256sum * > SHA256SUMS`); it used to be
-# called checksums.txt.
+# SHA256SUMS (release.yml: `sha256sum * > SHA256SUMS`).
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 

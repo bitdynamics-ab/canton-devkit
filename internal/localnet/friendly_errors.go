@@ -9,23 +9,14 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 )
 
-// Package localnet (this file): the friendly-error wrapper.
+// Friendly-error wrapper: ErrorCode + Remediation list +
+// RenderFriendly(), which produces a boxed callout with remediation
+// steps when stderr is a TTY, and a one-line machine-readable form
+// otherwise so CI logs stay grep-able.
 //
-// Today the orchestrators (RunUp / RunDown / future RunDoctor) return
-// raw error strings and the caller prints them to stderr. That's
-// good for `--json` consumers and CI logs but loses the chance to
-// surface remediation steps for the small set of failures users hit
-// repeatedly (ports in use, docker daemon down, instance lock held).
-//
-// This file adds a tiny taxonomy: ErrorCode + Remediation list +
-// RenderFriendly() that produces the boxed callout from
-// docs/design/mockups/screens-tokens-help.jsx (ScreenError) when
-// stderr is a TTY. On non-TTY stderr we fall back to a one-line
-// machine-readable form so CI logs stay grep-able.
-//
-// The wrapper is opt-in: a caller wraps a raw error with one of the
-// FriendlyErr* constructors at the failure site; everything else
-// keeps using plain fmt.Errorf and gets unchanged behaviour.
+// The wrapper is opt-in: a caller wraps a raw error with NewFriendly
+// at the failure site; everything else keeps using plain fmt.Errorf
+// and gets unchanged behaviour.
 
 // ErrorCode is the stable identifier scripts can branch on. Known code
 // constants live next to CodedError in coded_error.go; codes are NEVER
@@ -67,8 +58,7 @@ type FriendlyError struct {
 
 // Error returns a one-line machine-readable form suitable for
 // non-TTY stderr or wrapped log lines: `error · code PORTS_IN_USE ·
-// summary…`. Mirrors the dim/bold tokenisation of ScreenError but
-// without ANSI codes so grep/CI parsers see stable text.
+// summary…`. No ANSI codes, so grep/CI parsers see stable text.
 //
 // The cause is appended only when IncludeCause is set — see the
 // field comment for why default-off is the safer posture.
@@ -176,13 +166,12 @@ func RenderFriendly(w io.Writer, f *FriendlyError) {
 // trust that an upstream ExitTimeout still surfaces as 3.
 //
 // Box gating delegates to term.IsTerminal (NOT term.ShouldColor):
-// using ShouldColor would conflate "is a TTY" with "should emit
-// ANSI" — so a user
-// with NO_COLOR=1 on a real terminal (a common CI pattern) lost
-// the box STRUCTURE too. The box's value is the left ┃ accent +
-// the indented remediation list; both work without color. We now
-// gate the box on TTY only, and let the per-token Errc/Brandc/etc.
-// inside RenderFriendly respect ShouldColor for the ANSI sequences.
+// ShouldColor would conflate "is a TTY" with "should emit ANSI",
+// stripping the box STRUCTURE for a NO_COLOR=1 user on a real
+// terminal. The box's value is the left ┃ accent + the indented
+// remediation list — both work without color — so the box is gated
+// on TTY only, and the per-token Errorc/Brandc/etc. inside
+// RenderFriendly respect ShouldColor for the ANSI sequences.
 func FriendlyExit(errw io.Writer, err error, fallback int) int {
 	if err == nil {
 		return 0 // success regardless of fallback; nil means nothing to report

@@ -25,11 +25,10 @@
 //	  }
 //	}
 //
-// V1 of this package deliberately does NOT decode the inner DamlLf{1,2}
-// payload — the schemas are not publicly published in the digital-asset/daml
-// repo's `main` branch and a faithful pure-Go re-implementation is a
-// months-long subproject. Templates / choices / fields with types are
-// covered by the follow-up issue. What V1 surfaces:
+// The envelope parser does not fully decode the inner DamlLf{1,2}
+// payload — the schemas are not publicly published in the
+// digital-asset/daml repo's `main` branch and a faithful pure-Go
+// re-implementation would be a large subproject. What it surfaces:
 //
 //   - package id (from the .dalf filename hash and verified against the
 //     archive envelope's `hash` field)
@@ -40,7 +39,7 @@
 //   - SHA256 of each .dalf for tamper detection
 //   - SDK version (from MANIFEST.MF's `Sdk-Version`)
 //
-// That set is enough for `dar info`, `dar diff` (with SCU-relevant
-// signals at the package level), and the dependency surfaces that
-// future DAR tooling will need.
+// That set is enough for `dar info` and `dar diff` (with SCU-relevant
+// signals at the package level). Deep LF2 inspection — modules,
+// templates, choices, interfaces, data types — lives in lf_inspect.go.
 package dar

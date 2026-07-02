@@ -194,8 +194,6 @@ func checkHostPrereqs() CheckResult {
 	}
 }
 
-// --- helpers --------------------------------------------------------------
-
 func firstLine(s string) string {
 	s = strings.TrimSpace(s)
 	if i := strings.IndexByte(s, '\n'); i >= 0 {

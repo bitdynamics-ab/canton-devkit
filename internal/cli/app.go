@@ -20,9 +20,9 @@ type App struct {
 	err     io.Writer
 	version string
 	commit  string
-	// telemetry, when true, installs the real counter sink and records the
-	// per-invocation counters. OFF by default so tests never touch the real
-	// config dir or the network. main() turns it on.
+	// telemetry, when true, installs the real counter sink. Off by default
+	// so tests never touch the real config dir or the network; main() turns
+	// it on.
 	telemetry bool
 }
 
@@ -31,7 +31,7 @@ func New(out io.Writer, err io.Writer, version, commit string) *App {
 }
 
 // versionString renders the version, appending the short git commit hash in
-// parentheses when one is known (omitted for builds without VCS info).
+// parentheses when one is known.
 func (a *App) versionString() string {
 	if a.commit == "" {
 		return a.version
@@ -48,8 +48,8 @@ func (a *App) WithTelemetry() *App {
 
 func (a *App) Run(args []string) int {
 	// Install the real sink only when telemetry is on AND effectively
-	// enabled. Disabled / DO_NOT_TRACK / off-by-config → the package's
-	// no-op sink stays installed, so even a stray Inc records nothing.
+	// enabled; otherwise the package's no-op sink stays installed, so even
+	// a stray Inc records nothing.
 	if a.telemetry && telemetry.IsEnabled() {
 		telemetry.Install(telemetry.NewSink(telemetry.Channel()))
 		// One-time opt-out notice — only for an interactive, operational
@@ -64,9 +64,8 @@ func (a *App) Run(args []string) int {
 	code := 0
 	if err != nil {
 		// Subcommands that need a specific process exit code (e.g. 2 for
-		// preflight failure, 3 for timeout) wrap it in localnet.ExitCodeError
-		// via localnet.AsExitError. Extract and propagate without printing —
-		// those subcommands own their stderr already.
+		// preflight failure) wrap it in localnet.ExitCodeError. Propagate
+		// without printing — those subcommands own their stderr already.
 		var ece localnet.ExitCodeError
 		if errors.As(err, &ece) {
 			code = int(ece)
@@ -77,17 +76,11 @@ func (a *App) Run(args []string) int {
 	}
 
 	if a.telemetry && telemetry.IsEnabled() {
-		// Record aggregate counters for this run — the verb (a closed
-		// allow-list bucket, never args/flags), its ok/fail outcome, and
-		// the cheap context counters (channel/os/arch/ci/llm_agent). Deep
-		// code (preflight/doctor) adds docker_engine / compose / doctor_fail
-		// via telemetry.Inc directly. Then persist + run the weekly upload.
-		//
-		// Everything here is gated on a REAL localnet verb, so META
-		// commands — `version`, `telemetry status/preview/flush/on/off`,
-		// `help`, shell completion — do NOT count toward adoption. Running
-		// `telemetry status` repeatedly is auditing, not usage; counting
-		// its os/arch/install context would inflate the adoption picture.
+		// Counters are gated on a REAL localnet verb: meta commands
+		// (`version`, `telemetry …`, `help`, completion) must not count
+		// toward adoption — auditing the telemetry config repeatedly would
+		// otherwise inflate the adoption picture. The verb is a closed
+		// allow-list bucket, never args or flags.
 		verb := localnetVerb(cmd)
 		if verb != "" {
 			telemetry.Inc("dpm/command", verb)
@@ -96,33 +89,29 @@ func (a *App) Run(args []string) int {
 				outcome = "fail"
 			}
 			telemetry.Inc("dpm/command_exit", verb+"/"+outcome)
-			// CIP-0112 flow visibility (M3 adoption): record which token
-			// subcommand ran. The verb above only says "token"; this
-			// distinguishes create / mint / transfer / burn / balance.
+			// The verb only says "token"; record which token subcommand
+			// ran (create / mint / transfer / burn / balance).
 			if verb == "token" {
 				if act := tokenAction(cmd); act != "" {
 					telemetry.Inc("dpm/token_action", act)
 				}
 			}
-			// Context + the install proxy are recorded ONLY alongside a
-			// real localnet command, for the same anti-inflation reason.
 			telemetry.RecordContext()
 			// dpm/install: once per machine (first non-CI run) — the
 			// privacy-preserving device-count proxy. No-op on later runs.
 			telemetry.RecordInstallOnce()
 		}
-		// Persist + run the upload window regardless, so a `telemetry
-		// flush` (a meta command) can still ship already-recorded counters.
+		// Persist + run the upload window regardless, so `telemetry flush`
+		// (a meta command) can still ship already-recorded counters.
 		telemetry.Persist()
 	}
 	return code
 }
 
 // localnetVerb extracts the first localnet subcommand (e.g. "token" for
-// `localnet token mint`, "up" for `localnet up`) — the bucket for the
-// dpm/command counter. Returns "" for root/version/telemetry/help so
-// those don't pollute the command counter. Derived from the cobra command
-// chain, never from raw args, so no flag value can leak.
+// `localnet token mint`) — the bucket for the dpm/command counter. Returns
+// "" for root/version/telemetry/help. Derived from the cobra command chain,
+// never from raw args, so no flag value can leak.
 func localnetVerb(cmd interface{ CommandPath() string }) string {
 	if cmd == nil {
 		return ""
@@ -136,11 +125,10 @@ func localnetVerb(cmd interface{ CommandPath() string }) string {
 	return ""
 }
 
-// tokenAction returns the direct subcommand of `localnet token` (e.g.
-// "mint" for `localnet token mint`, "party" for `localnet token party
-// new`), or "" when the command isn't under `localnet token`. The bucket
-// for dpm/token_action. Derived from the cobra command chain, never raw
-// args, so no flag or instrument name can leak.
+// tokenAction returns the direct subcommand of `localnet token` (the
+// bucket for dpm/token_action), or "" when the command isn't under
+// `localnet token`. Derived from the cobra command chain, never raw args,
+// so no flag or instrument name can leak.
 func tokenAction(cmd interface{ CommandPath() string }) string {
 	if cmd == nil {
 		return ""

@@ -175,9 +175,8 @@ func TestBuildTemplateFilters_ParseShapes(t *testing.T) {
 }
 
 // TestBuildUpdateFormat_HasACSDeltaShape pins that `tx ls` and
-// `contracts watch` request the flat ACS-delta transaction shape
-// (per proposal line — those commands' use case is the
-// ACS table, not the tree-shaped replay view).
+// `contracts watch` request the flat ACS-delta transaction shape —
+// their use case is the ACS table, not the tree-shaped replay view.
 func TestBuildUpdateFormat_HasACSDeltaShape(t *testing.T) {
 	uf := buildUpdateFormat(nil, nil, true)
 	if uf.IncludeTransactions == nil {
@@ -190,11 +189,10 @@ func TestBuildUpdateFormat_HasACSDeltaShape(t *testing.T) {
 	}
 }
 
-// TestResolveOffsetWindow pins the --from/--to window semantics.
-// Key fixes: the default window is a generous fixed
-// span DECOUPLED from --limit (so filtered queries find sparse
-// matches), and --from is a real offset gated by `Changed` — `--from
-// 0` reads from genesis instead of being a "use --limit" sentinel.
+// TestResolveOffsetWindow pins the --from/--to window semantics:
+// the default window is a generous fixed span DECOUPLED from --limit
+// (so filtered queries find sparse matches), and --from is a real
+// offset gated by `Changed` — `--from 0` reads from genesis.
 func TestResolveOffsetWindow(t *testing.T) {
 	const span = defaultTxWindowSpan
 	cases := []struct {

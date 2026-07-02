@@ -13,12 +13,9 @@ import (
 )
 
 // GitHub adoption signals — release-asset download counts and repo
-// visibility (stars/forks/watchers). These are the install/visibility
-// legs of the proposal's composite adoption measure that telemetry can't
-// provide (telemetry is zero-PII and can't count unique installs). A
-// scheduled run snapshots them daily into Postgres so Metabase can chart
-// the cumulative-download trend toward the Milestone-4 floor and the
-// visibility curve.
+// visibility (stars/forks/watchers). Zero-PII telemetry can't count
+// unique installs, so a scheduled run snapshots these daily into
+// Postgres for Metabase to chart download and visibility trends.
 
 // AssetDownload is one release asset's cumulative download count, as
 // reported by the GitHub API (download_count is cumulative since
@@ -37,7 +34,7 @@ type RepoStats struct {
 	OpenIssues int
 }
 
-// release / repo mirror just the GitHub API fields we read.
+// ghRelease / ghRepo mirror just the GitHub API fields we read.
 type ghRelease struct {
 	TagName string `json:"tag_name"`
 	Assets  []struct {

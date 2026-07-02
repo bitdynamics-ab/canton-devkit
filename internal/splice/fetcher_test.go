@@ -80,9 +80,9 @@ func TestFetchInstallsAndVerifiesContent(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// First pass: empty wantContentSHA now means trust-on-first-use —
+	// First pass: empty wantContentSHA means trust-on-first-use —
 	// downloadAndExtract extracts and RETURNS the computed hash rather
-	// than refusing. (Previously this refused.)
+	// than refusing.
 	scratch := t.TempDir()
 	wantContent, err := downloadAndExtract(context.Background(), srv.URL, "", 1<<20, scratch)
 	if err != nil {
@@ -157,10 +157,10 @@ func TestDownloadAndExtractRejectsContentMismatch(t *testing.T) {
 	}
 }
 
-// TestDownloadAndExtractTOFUOnEmptyContentSHA pins the fix: an empty
-// wantContentSHA (uncurated tag) is trust-on-first-use — the tree is
-// extracted and the computed hash returned, NOT refused. Refusing here
-// is what made `--allow-uncurated` fail end to end at StepFetchSplice.
+// TestDownloadAndExtractTOFUOnEmptyContentSHA pins trust-on-first-use:
+// an empty wantContentSHA (uncurated tag) extracts the tree and returns
+// the computed hash, NOT a refusal — refusing here would break
+// `--allow-uncurated` end to end.
 func TestDownloadAndExtractTOFUOnEmptyContentSHA(t *testing.T) {
 	tarball := buildTestTarball(t, map[string]string{
 		"splice-x/cluster/compose/localnet/compose.yaml": "services: {}\n",
@@ -420,14 +420,12 @@ func TestFetchHandlesConcurrentRenameRace(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(got, "SENTINEL")); err != nil {
 		t.Errorf("Fetch clobbered the race winner's cache (SENTINEL gone): %v", err)
 	}
-	// Avoid unused-var warning on tarball/sum in this path.
-	_ = tarball
 }
 
-// TestProjectDirIncludesCommit pins the cache-key change: the cache
-// directory folds in the short commit so a mutable-stream tag re-pinned
-// to a new commit lands in a DIFFERENT directory (forcing a re-fetch)
-// rather than silently reusing the stale tree.
+// TestProjectDirIncludesCommit pins the cache key: the cache directory
+// folds in the short commit so a mutable-stream tag re-pinned to a new
+// commit lands in a DIFFERENT directory (forcing a re-fetch) rather
+// than silently reusing the stale tree.
 func TestProjectDirIncludesCommit(t *testing.T) {
 	root := "/cache"
 	a := ProjectDir(root, Version{Tag: "token-standard-v2", Commit: "aaaaaaaabbbb"})
@@ -495,8 +493,7 @@ func TestFetchRejectsTamperedCacheMarker(t *testing.T) {
 // ResolveUpstream synthesises an uncurated Version with an empty
 // ContentSHA; Fetch must extract it (trust-on-first-use), record the
 // computed hash into resolved-versions.json, and a second Fetch must
-// then verify the cached tree against that recorded hash. Previously
-// Fetch refused the empty ContentSHA, so the whole flow failed.
+// then verify the cached tree against that recorded hash.
 func TestResolveUpstreamThenFetch_RecordsTOFU(t *testing.T) {
 	withTempCache(t)
 
@@ -528,7 +525,7 @@ func TestResolveUpstreamThenFetch_RecordsTOFU(t *testing.T) {
 	cacheRoot := t.TempDir()
 	projectDir, err := Fetch(context.Background(), v, cacheRoot, nil)
 	if err != nil {
-		t.Fatalf("Fetch (TOFU) failed — the #68 bug: %v", err)
+		t.Fatalf("Fetch (TOFU) failed: %v", err)
 	}
 
 	// The resolved cache must now carry the computed ContentSHA.
@@ -588,12 +585,9 @@ func buildTestTarball(t *testing.T, entries map[string]string) []byte {
 	return buf.Bytes()
 }
 
-// TestCacheHitIsValid pins cacheHitIsValid's branches — in particular the
-// uncurated trust-on-first-use cache-HIT path (wantContentSHA=="" with a
-// marker present), which had no coverage: every pre-seeded-cache Fetch
-// test passes a non-empty ContentSHA (the curated EqualFold branch), and
-// the only empty-ContentSHA Fetch is a cache MISS. That gap let the
-// uncurated hit behaviour drift untested.
+// TestCacheHitIsValid pins cacheHitIsValid's branches — in particular
+// the uncurated trust-on-first-use cache-HIT path (wantContentSHA==""
+// with a marker present), which no Fetch-level test exercises.
 func TestCacheHitIsValid(t *testing.T) {
 	writeMarker := func(dir, sha string) {
 		if err := os.WriteFile(filepath.Join(dir, contentSHAMarker), []byte(sha+"\n"), 0o644); err != nil {

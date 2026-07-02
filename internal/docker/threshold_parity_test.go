@@ -7,18 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
-	"strings"
 	"testing"
 )
 
-// TestThresholdParity_DoctorMatchesUp pins the regression: the
-// `doctor && up` shell-gating contract requires BOTH surfaces to
-// use the same Min* threshold numbers. An earlier fix introduced
-// an 8-GiB doctor vs 4-GiB up drift that broke the gate. The
-// DefaultMin*Bytes constants in this package are shared by both
-// sites, and this test enforces that nobody re-introduces the
-// drift by hand-rolling literals on either site.
+// TestThresholdParity_DoctorMatchesUp pins the `doctor && up`
+// shell-gating contract: BOTH surfaces must use the same Min*
+// threshold numbers. The DefaultMin*Bytes constants in this package
+// are shared by both sites, and this test enforces that nobody
+// re-introduces drift by hand-rolling literals on either site.
 //
 // Strategy: parse up.go and localnet/doctor.go for the docker.Options
 // struct literals they pass to RunPreflight; any MinMemoryBytes / MinDiskBytes
@@ -61,14 +57,10 @@ func TestThresholdParity_DoctorMatchesUp(t *testing.T) {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			body, err := os.ReadFile(path)
 			if err != nil {
-				// Per-ticket PR flow: some target files live on
-				// a different branch and won't be on the current
-				// HEAD until merge. Skip rather than fail so the
-				// test stays portable across branches; once both
-				// land on main, both files exist and the parity
-				// check fires.
+				// Skip rather than fail when the file is absent on this
+				// branch; the parity check fires once it exists.
 				if os.IsNotExist(err) {
-					t.Skipf("%s not present on this branch (per-ticket flow) — skipping; parity enforced when both files exist", path)
+					t.Skipf("%s not present on this branch — skipping; parity enforced when the file exists", path)
 				}
 				t.Fatalf("read %s: %v", path, err)
 			}
@@ -163,12 +155,3 @@ func exprLiteral(expr ast.Expr) string {
 	}
 	return "<expr>"
 }
-
-// uintCheck is a tiny helper so the test file can avoid an extra
-// strconv import for the error message; kept here for future
-// extension of the regression test set.
-func uintCheck(s string) (uint64, error) { return strconv.ParseUint(strings.TrimSpace(s), 10, 64) }
-
-// _ keeps uintCheck reachable for future tests without lint
-// complaining about it being unused.
-var _ = uintCheck

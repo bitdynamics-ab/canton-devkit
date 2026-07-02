@@ -58,7 +58,7 @@ func TestRenderUpdateStream_PrintsPerEventDetail(t *testing.T) {
 	if !strings.Contains(got, "offset=120") {
 		t.Errorf("missing transaction header; got:\n%s", got)
 	}
-	// The per-event line is the actual fix — kind + template must show.
+	// Each event must get its own line — kind + template must show.
 	if !strings.Contains(got, "created") {
 		t.Errorf("missing create-event line; got:\n%s", got)
 	}
@@ -68,7 +68,7 @@ func TestRenderUpdateStream_PrintsPerEventDetail(t *testing.T) {
 }
 
 // TestRenderUpdateStream_JSONIncludesEvents pins that --format json
-// now carries the projected events (additive to the wire shape).
+// carries the projected events.
 func TestRenderUpdateStream_JSONIncludesEvents(t *testing.T) {
 	var out bytes.Buffer
 	stream := feedUpdates(txnUpdate("tx-1", 7, "cid-1"))

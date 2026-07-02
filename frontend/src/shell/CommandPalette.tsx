@@ -11,23 +11,11 @@ import { W, wMono, wSans } from "../tokens";
 import { useInstanceSelection } from "./useInstanceSelection";
 import { NAV, isInstanceScoped, linkTo } from "./routes";
 
-// CommandPalette — ⌘K (Ctrl+K on non-Mac) launches a centred
-// fuzzy-search modal listing every action the UI knows how to
-// perform. Mirrors the palette pattern from the design canvas;
-// no backend.
-//
-// Action types covered today:
-//   - navigation: jump to a route (Overview, Explorer, …)
-//   - instance switch: select any registered instance by name
-//
-// Future additions (each as its own action factory):
-//   - "issue JWT for <instance>" → opens DeveloperSetup w/ pre-filled
-//   - "upload DAR" → /dar with file picker open
-//   - "stop instance <name>" → POST /api/instances/:name/down
-//
-// Keyboard model is intentionally simple: ↑/↓ to move, Enter to
-// activate, Esc to dismiss. No vim bindings, no multi-modal
-// stickiness — every press has one obvious meaning.
+// CommandPalette — ⌘K (Ctrl+K on non-Mac) launches a centred search
+// modal with two action groups: route navigation and instance
+// switching. Keyboard model is intentionally simple: ↑/↓ to move,
+// Enter to activate, Esc to dismiss — every press has one obvious
+// meaning.
 
 interface Action {
   id: string;
@@ -60,10 +48,8 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const sel = useInstanceSelection();
-  // Read the currently-selected instance off the URL so palette
-  // navigation to instance-scoped routes carries `?instance=`
-  // forward — same fix as the Shell sidebar. Without
-  // this, ⌘K → "Wallet" bounces the user to the empty state even
+  // Carry `?instance=` into instance-scoped routes (same as the Shell
+  // sidebar); otherwise ⌘K → "Wallet" lands on the empty state even
   // though the header still shows an instance.
   const [searchParams] = useSearchParams();
   const instance = searchParams.get("instance");
@@ -268,12 +254,6 @@ function renderGroups(
           role="option"
           aria-selected={isCursor}
           onClick={() => activate(a)}
-          onMouseEnter={() => {
-            // Hover steals the cursor — matches Spotlight / VS Code.
-            // Without this you can keyboard-cursor an item then hover
-            // a different one and the visual disagrees with what
-            // Enter will fire.
-          }}
           style={{
             display: "flex",
             alignItems: "center",
@@ -325,14 +305,9 @@ function Hotkey({ label, hint }: { label: string; hint: string }) {
 }
 
 // filter — case-insensitive substring match across label + hint.
-// Deliberately NOT a full fuzzy matcher (no fzf-style subsequence
-// scoring) because the palette has ~10–20 items today and exact
-// substring is faster to reason about. Upgrade when the corpus
-// grows past ~50.
-//
-// Returned in the input order (NAV first, instances after) so
-// the visual grouping stays stable; "demo" never re-orders the
-// nav items.
+// Deliberately not a fuzzy matcher: the palette has ~10–20 items and
+// exact substring is easier to reason about. Results keep input order
+// (NAV first, instances after) so the visual grouping stays stable.
 export function filter(actions: Action[], query: string): Action[] {
   const q = query.trim().toLowerCase();
   if (!q) return actions;

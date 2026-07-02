@@ -8,12 +8,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildDemo returns the `dpm localnet token demo` subcommand — a
-// one-step "launch a transferable demo token": allocate an issuer party,
-// create a V2 instrument on-ledger, mint the initial supply, and (unless
-// --seed-holder=false) fund a holder party so a transfer works
-// immediately. The Web UI's "Launch demo token" button drives the same
-// token.RunDemo via POST /api/tokens/demo, keeping the surfaces in parity.
+// buildDemo returns `token demo` — a one-step "launch a transferable
+// demo token" (issuer party + on-ledger V2 instrument + minted supply +
+// optional funded holder). The Web UI's "Launch demo token" button drives
+// the same token.RunDemo via POST /api/tokens/demo.
 func buildDemo() *cobra.Command {
 	var (
 		instance   string

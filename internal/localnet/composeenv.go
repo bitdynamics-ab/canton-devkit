@@ -140,7 +140,7 @@ func ComposeProfilesFor(state *registry.State) []string {
 // a's order. RunUp uses it to recover a user's --profile opt-ins from the
 // persisted FULL profile set (state.Profiles = adapter base + opt-ins) by
 // subtracting the adapter's base services — so a no-flag re-up can
-// re-enable just the opt-ins without double-counting the base (#161).
+// re-enable just the opt-ins without double-counting the base.
 func subtractProfiles(a, b []string) []string {
 	if len(a) == 0 {
 		return nil

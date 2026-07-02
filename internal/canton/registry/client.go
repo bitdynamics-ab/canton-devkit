@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -133,6 +134,11 @@ func Dial(opts DialOptions) (*Client, error) {
 	}, nil
 }
 
+// maxResponseBytes caps the success-path JSON body we'll read from the
+// registry. Generous (4 MiB) versus the few-KB choice contexts we
+// actually expect, but a hard ceiling against an unbounded/hostile body.
+const maxResponseBytes = 4 << 20
+
 // doJSON is the centralised request seam for every typed method in this
 // package — keeps auth header injection, JSON decode, error shape
 // consistent across endpoints. New endpoint methods are typically 5 lines:
@@ -147,12 +153,6 @@ func Dial(opts DialOptions) (*Client, error) {
 //   - APIError on non-2xx (with status code + response body for the
 //     caller to surface).
 //   - wrapped non-API error on network / decode failure.
-//
-// maxResponseBytes caps the success-path JSON body we'll read from the
-// registry. Generous (4 MiB) versus the few-KB choice contexts we
-// actually expect, but a hard ceiling against an unbounded/hostile body.
-const maxResponseBytes = 4 << 20
-
 func (c *Client) doJSON(ctx context.Context, method, path string, body, into any) error {
 	var reqBody io.Reader
 	if body != nil {
@@ -160,7 +160,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, into any
 		if err != nil {
 			return fmt.Errorf("registry.doJSON: marshal body: %w", err)
 		}
-		reqBody = strings.NewReader(string(raw))
+		reqBody = bytes.NewReader(raw)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reqBody)

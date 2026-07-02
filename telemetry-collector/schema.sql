@@ -58,14 +58,14 @@ GROUP BY period_date
 ORDER BY period_date;
 
 -- All-time distinct installs ever seen — cumulative unique-environment
--- count toward the adoption floor.
+-- count.
 CREATE OR REPLACE VIEW v_unique_installs_total AS
 SELECT count(DISTINCT install_id) AS unique_installs_all_time
 FROM seen_install;
 
 -- GitHub adoption signals (populated by cmd/github-stats on a daily
--- schedule). These cover the install/visibility legs of the proposal's
--- composite adoption measure that zero-PII telemetry can't provide.
+-- schedule). These cover the install/visibility signals that zero-PII
+-- telemetry can't provide.
 
 CREATE TABLE IF NOT EXISTS github_release_downloads (
     captured_on    date    NOT NULL,            -- snapshot date (UTC)
@@ -83,20 +83,19 @@ CREATE TABLE IF NOT EXISTS github_repo_stats (
     open_issues integer NOT NULL
 );
 
--- Cumulative downloads across all assets at the latest snapshot — the
--- headline number toward the Milestone-4 install floor.
+-- Cumulative downloads across all assets per snapshot date — the
+-- headline install number.
 CREATE OR REPLACE VIEW v_downloads_total AS
 SELECT captured_on, sum(download_count) AS total_downloads
 FROM github_release_downloads
 GROUP BY captured_on
 ORDER BY captured_on;
 
--- Qualitative adoption evidence — the leg neither telemetry (zero-PII)
--- nor GitHub can provide: the named external teams/projects and their
--- proof artifacts that the milestone acceptance bars require (M1: 3
--- teams, M2: 5, M3: 7, M4: 5 apps + case study). Filled by the
--- maintainer (SQL insert or Metabase data entry), surfaced on the
--- dashboard so the adoption story is one place.
+-- Qualitative adoption evidence — the signal neither telemetry (zero-PII)
+-- nor GitHub can provide: named external teams/projects and links to
+-- their proof artifacts. Filled by the maintainer (SQL insert or Metabase
+-- data entry), surfaced on the dashboard so the adoption story is in one
+-- place.
 CREATE TABLE IF NOT EXISTS adoption_evidence (
     id            serial PRIMARY KEY,
     milestone     text NOT NULL,                 -- 'M1' | 'M2' | 'M3' | 'M4'

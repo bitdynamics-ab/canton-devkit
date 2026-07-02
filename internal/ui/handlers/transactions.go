@@ -1,4 +1,4 @@
-// follow-up — Transactions + Timeline view backend.
+// Transactions + Timeline view backend.
 //
 // Wraps the Canton Ledger API v2 UpdateService. The Explorer
 // screen's Transactions and Timeline tabs are projections over
@@ -221,11 +221,8 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Stream context is derived from the request context so we can
-	// cancel mid-iteration when we've reached `limit` without
-	// disturbing the rest of the handler (the parent ctx still
-	// drives writeJSON). Without this we'd churn rows forever on a
-	// busy participant — the original `rows = rows[len(rows)-limit:]`
-	// reslice never broke the loop.
+	// cancel mid-iteration at the streamCap wall without disturbing
+	// the rest of the handler (the parent ctx still drives writeJSON).
 	streamCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
 	stream, err := client.Updates(streamCtx, ledger.UpdatesRequest{
@@ -251,38 +248,23 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 
 	// Fixed-size ring buffer.
 	//
-	// Why we DON'T break at `count >= limit`:
-	// ------------------------------------------------------------
-	// Updates returns rows in ASCENDING offset order. We want the
-	// NEWEST `limit` transactions (that's what the table renders).
-	// Breaking at the first time `count == limit` would give us
-	// the OLDEST `limit` rows in the window, not the newest — a
-	// silent semantic regression the user would notice as "the
-	// Explorer always shows the same ancient transactions, not my
-	// recent ones." (Contracts/ACS doesn't have this trade-off:
-	// ACS is a SNAPSHOT, not a time-ordered stream, so its
-	// `break at limit` is correct.)
+	// Why we DON'T break at `count >= limit`: Updates returns rows in
+	// ASCENDING offset order, and we want the NEWEST `limit`
+	// transactions (that's what the table renders). Breaking at
+	// `count == limit` would return the OLDEST rows in the window.
+	// (Contracts/ACS doesn't have this trade-off: ACS is a snapshot,
+	// not a time-ordered stream, so its break-at-limit is correct.)
 	//
 	// What we DO bound:
 	//   1. Window — BeginExclusive floors the scan at a recent offset
 	//      (see above), so this is O(window) not O(history).
 	//   2. Memory — fixed ring of `limit` rows; new arrivals
-	//      overwrite the oldest. O(limit) regardless of window size.
+	//      overwrite the oldest.
 	//   3. Loop iterations — `streamCap` is a hard wall (sized at
-	//      max(100*limit, 10_000)). With the bounded window it should
-	//      almost never fire; when it does we set windowTruncated so
-	//      the client knows the result is the newest N of a clipped
-	//      scan, not silently-stale data.
-	//   4. Wall clock — `streamCtx` is derived from the request
-	//      ctx (which has a 15s timeout); we poll ctx.Err() on
-	//      every item so a slow upstream surfaces promptly as
-	//      DeadlineExceeded.
-	//
-	// The "stop when we have what we need" approach is
-	// genuinely incompatible with newest-N semantics on a
-	// strictly-ascending stream. If a future Canton release adds
-	// reverse-iteration (or a server-side "latest N" RPC), we can
-	// move to a real early-break path.
+	//      max(100*limit, 10_000)); when it fires we set
+	//      windowTruncated so the client knows the scan was clipped.
+	//   4. Wall clock — `streamCtx` inherits the request's 15s
+	//      timeout; ctx.Err() is polled on every item.
 	streamCap := 100 * limit
 	if streamCap < 10_000 {
 		streamCap = 10_000

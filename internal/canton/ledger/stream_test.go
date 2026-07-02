@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -36,10 +35,6 @@ type fakeStreamServer struct {
 	// Updates stream.
 	updateEvents []*lapiv2.GetUpdatesResponse
 	updateError  error
-	// updatesSent counts how many were actually sent before
-	// the client cancelled / server error. Tests assert against this
-	// for cancellation observability.
-	updatesSent atomic.Int32
 
 	// Completions stream — emit a slow producer (delay between events)
 	// to give cancellation tests a deterministic window.
@@ -61,7 +56,6 @@ func (f *fakeStreamServer) GetUpdates(_ *lapiv2.GetUpdatesRequest, stream grpc.S
 		if err := stream.Send(e); err != nil {
 			return err
 		}
-		f.updatesSent.Add(1)
 		// Respect client cancellation: gRPC propagates this via the
 		// stream's context. Without the check, a "send N then sleep"
 		// fake would block the test goroutine on the post-cancel send.
@@ -201,18 +195,9 @@ func TestActiveContracts_MidStreamErrorDeliveredAsLastItem(t *testing.T) {
 }
 
 // TestUpdates_ContextCancellationStopsConsumer — when the caller cancels
-// ctx, the consumer's channel closes promptly (deterministic timing
-// assertion, not a "server count" race). The contract under test:
-//
-//   - Cancellation propagates from client ctx to server stream within a
-//     bounded window. We don't assert exactly how many events the server
-//     sent before noticing — that's network-buffering-dependent — only
-//     that the channel CLOSES within a bounded time after cancel.
-//
-// The earlier shape of this test asserted `updatesSent != 100` which
-// races: a fast pump can drain all 100 before the goroutine scheduler
-// runs the cancellation observer. The post-cancel close-timing
-// assertion is the right deterministic invariant.
+// ctx, the consumer's channel must close within a bounded window. We
+// deliberately don't assert how many events the server sent before
+// noticing the cancel — that's network-buffering-dependent and racy.
 func TestUpdates_ContextCancellationStopsConsumer(t *testing.T) {
 	client, _, teardown := newStreamTestClient(t)
 	defer teardown()
@@ -225,17 +210,8 @@ func TestUpdates_ContextCancellationStopsConsumer(t *testing.T) {
 		t.Fatalf("Updates: %v", err)
 	}
 
-	// Use a slow producer (delay between sends) so we have a deterministic
-	// window during which cancel can race the next event.
-	// The newStreamTestClient already gives us a fake; reconfigure it
-	// inline for THIS test only via the completion-delay-style pattern:
-	// instead of a tight loop, the server publishes 100 events with a
-	// 10ms sleep between them. cancel during the sleep → server sees
-	// cancellation immediately.
-	//
-	// We achieve the slow producer by simply sending one event, then
-	// cancelling: the channel must close within `closeDeadline` of cancel
-	// regardless of how many more events were queued.
+	// The channel must close within closeDeadline of cancel, regardless
+	// of how many events were queued in flight.
 	const closeDeadline = 2 * time.Second
 
 	cancel()

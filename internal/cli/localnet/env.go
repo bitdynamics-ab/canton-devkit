@@ -108,13 +108,10 @@ raw token values.`,
 	return cmd
 }
 
-// collectEnv builds the export from the registry via the shared
-// localnet.BuildEnvExport builder. The CLI keeps this thin wrapper so
-// the existing callsites + tests read unchanged; the actual shape
-// (ports incl. participant Ledger/Admin/JSON APIs + scan UI, per-role
-// credentials, real party ids) is produced by the same function the
-// Web UI app-config handler calls. See AGENTS.md "CLI ↔ Web UI
-// parity".
+// collectEnv builds the export via the shared localnet.BuildEnvExport
+// — the same builder the Web UI app-config handler calls, so both
+// surfaces emit an identical shape (CLI ↔ Web UI parity, see
+// CONTRIBUTING.md).
 func collectEnv(name string, includeJWT bool) (apitypes.EnvExport, error) {
 	return localnet.BuildEnvExport(name, includeJWT)
 }

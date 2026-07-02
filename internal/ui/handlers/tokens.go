@@ -40,9 +40,9 @@ const tokensBodyMax = 64 << 10 // 64 KiB
 //	POST   /api/tokens/transfers/{id}/accept    receiver-side accept
 //	POST   /api/tokens/{symbol}/burn            burn a holding
 //
-// The hub argument is reserved for future SSE-backed live updates
-// (the proposed `tokens:<instance>` topic); accepted now so callers
-// don't have to refactor their MountTokens call when that lands.
+// The hub argument is reserved for future SSE-backed live updates;
+// accepted now so callers don't have to refactor their MountTokens
+// call when that lands.
 func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	mux.HandleFunc("GET /api/tokens", handleTokensList)
 	mux.HandleFunc("GET /api/tokens/matrix", handleTokenMatrix)
@@ -777,18 +777,6 @@ func decodeJSON(r io.ReadCloser, into any) error {
 	return nil
 }
 
-// mapTokenError converts an orchestration-layer error into the
-// matching HTTP status. Keeps every handler's failure-mapping
-// identical so a future ErrXxx → status mapping change only touches
-// this one function.
-//
-//   - nil                              → 204 No Content (idempotent
-//     success for mutations that don't return a body)
-//   - token.ErrNeedsV2LocalNet         → 412 Precondition Failed
-//   - token.ErrUnsupportedOnInstrument → 422 Unprocessable Entity
-//   - token.ErrSymbolInUse             → 409 Conflict
-//   - other                            → 400 / 500 with the message
-//
 // partyIDFingerprint matches the fingerprint half of a fully-qualified
 // Daml party id (`<hint>::<fingerprint>`). The hint is human-readable;
 // the fingerprint is the unique, enumeration-sensitive identifier.
@@ -803,6 +791,17 @@ func sanitize400(msg string) string {
 	return partyIDFingerprint.ReplaceAllString(msg, "$1…")
 }
 
+// mapTokenError converts an orchestration-layer error into the
+// matching HTTP status. Keeps every handler's failure-mapping
+// identical so an ErrXxx → status mapping change only touches this
+// one function.
+//
+//   - nil                              → 204 No Content (idempotent
+//     success for mutations that don't return a body)
+//   - token.ErrNeedsV2LocalNet         → 412 Precondition Failed
+//   - token.ErrUnsupportedOnInstrument → 422 Unprocessable Entity
+//   - token.ErrSymbolInUse             → 409 Conflict
+//   - other                            → 400 / 500 with the message
 func mapTokenError(w http.ResponseWriter, err error, op string) {
 	switch {
 	case err == nil:

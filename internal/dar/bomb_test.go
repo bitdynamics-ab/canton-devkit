@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -175,7 +176,7 @@ func TestParseManifest_RejectsTooManyLines(t *testing.T) {
 	b.WriteString("Manifest-Version: 1.0\n")
 	for i := 0; i < maxManifestLogicalLines+10; i++ {
 		b.WriteString("X-Pad-")
-		b.WriteString(itoa(i))
+		b.WriteString(strconv.Itoa(i))
 		b.WriteString(": y\n")
 	}
 	_, err := parseManifest(strings.NewReader(b.String()))

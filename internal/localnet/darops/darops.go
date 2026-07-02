@@ -20,14 +20,11 @@ import (
 )
 
 // Roles is the Splice LocalNet participant topology, in the stable
-// order both surfaces iterate. Exported so callers don't re-spell the
-// literals (the prior cause of drift between the CLI's
-// {sv, app-provider, app-user} order and the handler's).
+// order both surfaces iterate. Exported so callers don't re-spell
+// the literals and drift.
 var Roles = []string{"app-user", "app-provider", "sv"}
 
-// validRole is the membership set behind ValidateRole. Mirrors the
-// Web UI handler's `validRole` map and the CLI's --role default so a
-// typo'd role is rejected identically on both surfaces.
+// validRole is the membership set behind ValidateRole.
 var validRole = func() map[string]bool {
 	m := make(map[string]bool, len(Roles))
 	for _, r := range Roles {
@@ -72,9 +69,8 @@ func (e *ErrNoCredential) Error() string {
 }
 
 // ResolveParticipant derives the admin.Config (host + bearer JWT) for
-// one participant role from registry state. This is the single
-// implementation of the port/JWT lookup both surfaces previously
-// duplicated.
+// one participant role from registry state — the single port/JWT
+// lookup shared by both surfaces.
 //
 // insecure is passed through to the returned Config; Splice LocalNet
 // is plaintext so callers pass true. A non-empty token argument
@@ -132,12 +128,10 @@ func DialAdmin(ctx context.Context, cfg admin.Config) (PackageLister, func() err
 }
 
 // isVetted reports whether mainID appears in the participant's
-// ListDars response. We have no native "is this DAR vetted?" RPC; a
+// ListDars response. There is no native "is this DAR vetted?" RPC; a
 // DAR uploaded with vet_all_packages=true is present in ListDars iff
-// it's vetted (the participant prunes unvetted DARs), so membership is
-// a faithful dev-flow signal. This is the same heuristic the UI's
-// handleDARVettingList used inline — now shared so the CLI column and
-// the UI agree.
+// it's vetted (the participant prunes unvetted DARs), so membership
+// is a faithful dev-flow signal.
 func isVetted(dars []*adminproto.DarDescription, mainID string) bool {
 	for _, d := range dars {
 		if d.GetMain() == mainID {
@@ -149,9 +143,8 @@ func isVetted(dars []*adminproto.DarDescription, mainID string) bool {
 
 // ListVetting probes every participant role for whether the given DAR
 // (by main package id) is vetted. Per-role failures are recorded in
-// the row's Error field rather than aborting — a 2-of-3 answer is more
-// useful than none, and "unknown" is honest where the old UI claimed
-// "vetted" unconditionally.
+// the row's Error field rather than aborting — a 2-of-3 answer is
+// more useful than none.
 //
 // Roles are probed in the stable Roles order so output is
 // deterministic regardless of map iteration.

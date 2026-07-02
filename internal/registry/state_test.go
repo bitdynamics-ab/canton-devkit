@@ -85,9 +85,6 @@ func TestStatePerms(t *testing.T) {
 // because `committed` is still false. The canonical state.json is
 // either absent (first write) or contains the prior payload
 // (subsequent write) — never half-written.
-//
-// (Replaces an older "drop a leftover and rewrite" test that didn't
-// actually simulate a crash.)
 func TestAtomicWriteSurvivesPanicBeforeRename(t *testing.T) {
 	useTmpRoot(t)
 
@@ -305,10 +302,9 @@ func TestIndexTracksMultipleInstances(t *testing.T) {
 
 // TestLockExcludesConcurrentOps is the cross-platform lock contract:
 // a second Lock() on a held instance fails immediately, and the lock is
-// re-acquirable after release. This now runs on Windows too — the lock
-// is no longer a no-op there (see lock_windows.go, which uses
-// windows.LockFileEx with LOCKFILE_FAIL_IMMEDIATELY). The earlier
-// `t.Skip` on windows masked the no-op stub and must not come back.
+// re-acquirable after release. It deliberately runs on Windows too
+// (lock_windows.go implements the same fail-fast semantics via
+// LockFileEx) — do not reintroduce a `t.Skip` there.
 func TestLockExcludesConcurrentOps(t *testing.T) {
 	useTmpRoot(t)
 
@@ -363,9 +359,9 @@ func TestConcurrentWritesDifferentInstancesAllSucceed(t *testing.T) {
 // that could let a `--name` value escape the registry root or break
 // downstream tooling. Each case must fail with ErrInvalidName.
 //
-// This is the primary defense against the path-traversal bug: a Delete
-// with --name=../x would have caused os.RemoveAll to target a path
-// outside ~/.canton-devkit/localnet/.
+// This is the primary defense against path traversal: a Delete with
+// --name=../x would otherwise make os.RemoveAll target a path outside
+// ~/.canton-devkit/localnet/.
 func TestValidateName_RejectsUnsafeNames(t *testing.T) {
 	cases := []struct {
 		name string
@@ -434,10 +430,9 @@ func TestValidateName_AcceptsRealisticNames(t *testing.T) {
 	}
 }
 
-// TestDelete_CannotEscapeRegistryRoot is the end-to-end proof of the
-// fix: even attempting Delete with a traversal name returns
-// ErrInvalidName instead of calling os.RemoveAll on a path outside
-// Root().
+// TestDelete_CannotEscapeRegistryRoot is the end-to-end proof:
+// attempting Delete with a traversal name returns ErrInvalidName
+// instead of calling os.RemoveAll on a path outside Root().
 //
 // Verifies behaviourally — a "sentinel" file lives in a sibling
 // directory; if Delete were buggy it would be removed.

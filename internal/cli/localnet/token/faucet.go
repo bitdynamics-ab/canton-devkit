@@ -8,10 +8,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildFaucet is `token faucet <party> <amount>` : fund a
-// party from a well-known source in one step, auto-accepted. A thin
-// wrapper over the transfer engine — no new ledger primitive. CLI
-// counterpart of the Web UI faucet action (CLI <-> UI parity).
+// buildFaucet is `token faucet <party> <amount>`: fund a party from a
+// well-known source in one step, auto-accepted. A thin wrapper over the
+// transfer engine — no new ledger primitive. CLI counterpart of the
+// Web UI faucet action.
 func buildFaucet() *cobra.Command {
 	var opts token.FaucetOptions
 	cmd := &cobra.Command{

@@ -11,7 +11,6 @@ import (
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/registry"
-	regstate "github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
 
@@ -44,12 +43,7 @@ func runTransferLive(ctx context.Context, out io.Writer, opts TransferOptions) (
 	if err != nil {
 		return "", 0, err
 	}
-	ref, err := resolveInstrument(opts.Instance, opts.Instrument)
-	if err != nil {
-		// Treat unresolved symbol as the raw instrument id — Amulet
-		// is on-chain but not always registered via `token create`.
-		ref = regstate.TokenRef{InstrumentID: opts.Instrument, IssuerParty: ""}
-	}
+	ref := instrumentRefOrRaw(opts.Instance, opts.Instrument)
 
 	conn := LedgerConn{
 		Endpoint: opts.Endpoint,
@@ -252,8 +246,8 @@ func contractIDsOf(h []holdingRef) []string {
 }
 
 // pickGeneration returns the generation of the holdings being transferred
-// — they're all the same instrument, so the same generation. Defaults to
-// V2 when unset (the historical behaviour).
+// — they're all the same instrument, so the same generation. Defaults
+// to V2 when unset.
 func pickGeneration(h []holdingRef) Generation {
 	for _, x := range h {
 		if x.Gen != 0 {
@@ -472,17 +466,13 @@ func pickActAsParty(ctx context.Context, client *ledger.Client) (string, error) 
 	return parties[0], nil
 }
 
-// transferTimes returns sensible defaults for requestedAt / executeBefore.
-// The registry rejects requests whose `requestedAt` differs from
-// participant clock by more than ~30s, so we use real wall clock here
-// — context.Now() would also work but pulling clock from time.Now keeps
-// the helper simple for the CLI / handler paths.
-//
-// `executeBefore` gives a 24-hour window (matching the upstream Splice
-// CLI) before the transfer is considered stale. For an Offer-kind
-// transfer this is the window in which the receiver must accept the
-// resulting TransferInstruction — 5 minutes is too tight for a
-// human-driven accept, so we use the upstream default.
+// transferTimes returns defaults for requestedAt / executeBefore. The
+// registry rejects requests whose `requestedAt` differs from the
+// participant clock by more than ~30s, so requestedAt is the current
+// wall clock. `executeBefore` gives a 24-hour window (the upstream
+// Splice CLI default) — for an Offer-kind transfer this is the window
+// in which the receiver must accept the resulting TransferInstruction,
+// and anything much shorter is too tight for a human-driven accept.
 func transferTimes() (time.Time, time.Time) {
 	now := time.Now().UTC()
 	return now, now.Add(24 * time.Hour)

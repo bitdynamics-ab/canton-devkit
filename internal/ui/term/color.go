@@ -49,12 +49,6 @@ var (
 
 // Glyphs is the single source of truth for the Unicode marks used by
 // Step rows, spinners and so on. Mirrors terminal.jsx::Sym.
-//
-// We keep the spinner frames here too rather than reaching for
-// charmbracelet/bubbles/spinner — Step is a non-interactive renderer
-// and pulling in a bubbletea spinner just for a static glyph would be
-// over-engineering. The bubbletea Model in spinner.go handles the
-// animated case.
 var Glyphs = struct {
 	Check, Cross, Warn, Arrow, Dot, Pending, Busy string
 }{
@@ -68,6 +62,5 @@ var Glyphs = struct {
 }
 
 // SpinnerFrames are the Braille rotation used by the animated Spinner.
-// Matches the @keyframes term-spin output in terminal.jsx and the
-// default charmbracelet/bubbles/spinner.Dot set.
+// Matches the @keyframes term-spin output in terminal.jsx.
 var SpinnerFrames = []string{"⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}

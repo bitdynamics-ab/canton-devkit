@@ -15,8 +15,8 @@ import (
 //
 // Goroutine-safe. Lives at package scope (var jobs *jobRegistry)
 // so handler functions don't have to thread it through. Tests
-// reset it explicitly via NewJobRegistry; production callers
-// receive the package-level instance.
+// reset it explicitly via jobsReset; production callers use the
+// package-level instance.
 type jobRegistry struct {
 	mu   sync.Mutex
 	jobs map[string]context.CancelFunc

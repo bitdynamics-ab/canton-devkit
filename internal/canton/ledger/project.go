@@ -13,11 +13,8 @@ import (
 // handler (internal/ui/handlers/transactions.go projectUpdate) need
 // to walk a transaction's events and pull out the create/archive/
 // exercise discriminator, contract id, template id and witnesses.
-// Previously the UI projected this correctly while the CLI threw it
-// away (it printed only the event COUNT), so `contracts watch` was
-// useless as the "live tail of create/archive events" the proposal
-// promised. Extracting the projection here gives both surfaces one
-// decoder so they can never drift on which events they surface.
+// Hosting the projection here gives both surfaces one decoder so they
+// can never drift on which events they surface.
 
 // EventKind is the create/archive/exercise discriminator of a
 // projected ledger event. Stable string values — they are emitted in
@@ -101,10 +98,10 @@ func ProjectTransactionEvents(tx *lapiv2.Transaction) []EventSummary {
 // transaction (TRANSACTION_SHAPE_LEDGER_EFFECTS). Unlike EventSummary
 // — which projects the flat ACS-delta shape `tx ls` / `contracts
 // watch` use — replay carries the NodeID and the exercised-choice
-// detail so the per-party visibility projection (the proposal's `tx
-// replay`) renders the full tree. Both the CLI `tx replay` and the
-// Web UI replay endpoint build their wire rows from this so they can
-// never drift on which fields a replay surfaces.
+// detail so the per-party visibility projection renders the full
+// tree. Both the CLI `tx replay` and the Web UI replay endpoint build
+// their wire rows from this so they can never drift on which fields a
+// replay surfaces.
 type ReplayEvent struct {
 	Kind          EventKind
 	NodeID        int32

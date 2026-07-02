@@ -11,21 +11,15 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 )
 
-// TestFrontend_SchemaVersionMatchesTypes is the cross-language
-// parity pin: the SCHEMA_VERSION constant in frontend/src/api.ts MUST equal
-// types.SchemaVersion. Without this, the frontend's bootstrap
-// handshake reports a v1 client against a v2 server (or vice
-// versa) and the App refuses to render — but only at runtime,
-// after the user has a confused experience. The lint moves that
+// TestFrontend_SchemaVersionMatchesTypes is the cross-language parity
+// pin: the SCHEMA_VERSION constant in frontend/src/api.ts MUST equal
+// types.SchemaVersion, otherwise the frontend's bootstrap handshake
+// refuses to render — but only at runtime. This test moves that
 // failure to CI.
 //
-// Detection: regex-grep the source file for `SCHEMA_VERSION = N`.
-// We don't run a JS parser here; the constant declaration is a
-// stable one-line pattern, and adding a real parser dep just to
-// read one integer is over-engineering.
-//
-// Catch class: someone bumps types.SchemaVersion without
-// updating the frontend constant, or vice versa.
+// Detection: regex-grep the source for `SCHEMA_VERSION = N`. The
+// declaration is a stable one-line pattern; a JS parser dep just to
+// read one integer would be over-engineering.
 func TestFrontend_SchemaVersionMatchesTypes(t *testing.T) {
 	// Resolve relative to the package dir so the test runs
 	// from `go test ./internal/ui/...` regardless of cwd.
@@ -52,12 +46,11 @@ func TestFrontend_SchemaVersionMatchesTypes(t *testing.T) {
 	}
 }
 
-// TestFrontend_DistContainsRealBuildOrPlaceholder pins the invariant —
-// release-mode sanity check: at test time, dist/index.html must
-// either carry the placeholder sentinel (dev / not-yet-built
-// state) OR be the real Vite bundle (post-`make frontend`). A
-// file that's neither suggests something else got written to the
-// embed location.
+// TestFrontend_DistContainsRealBuildOrPlaceholder is a sanity check:
+// dist/index.html must either carry the placeholder sentinel (dev /
+// not-yet-built state) OR be the real Vite bundle (post-`make
+// frontend`). A file that's neither suggests something else got
+// written to the embed location.
 func TestFrontend_DistContainsRealBuildOrPlaceholder(t *testing.T) {
 	body, err := os.ReadFile(filepath.Join("dist", "index.html"))
 	if err != nil {

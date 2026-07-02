@@ -186,11 +186,9 @@ func writeDoctorTable(w io.Writer, rep types.PreflightReport) {
 	_, _ = fmt.Fprintln(w, term.Box(worstKind, body.String()))
 }
 
-// stepGlyph renders a single-cell colored glyph for the column
-// layout: pass=✓ (success), warn=⚠ (warn), fail=✗ (error),
-// skip=○ (dim). Mirrors stepKindFor but emits a one-cell string
-// suitable for term.Table's first column instead of a full Step
-// row.
+// stepGlyph renders a single-cell colored glyph for term.Table's
+// first column: pass=✓ (success), warn=⚠ (warn), fail=✗ (error),
+// skip=○ (dim).
 func stepGlyph(result string) string {
 	switch result {
 	case "pass":

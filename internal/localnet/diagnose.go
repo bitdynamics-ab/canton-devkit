@@ -2,15 +2,11 @@ package localnet
 
 import "strings"
 
-// diagnoseSignal is the pure-function decision layer extracted
-// from diagnoseUnhealthy so the matcher logic is testable without
-// a docker subprocess. Takes one container's observable state +
-// recent log tail and returns the code to stamp (or "" for "no
-// match, fall back to generic").
-//
-// Mirrors the docstring on diagnoseUnhealthy — see there for the
-// rationale on why the JVM "-Xmx exceeds half" warning is NOT a
-// standalone OOM signal.
+// containerObs is one container's observable state + recent log tail,
+// the input to the pure decision layer (diagnoseFromObs) — extracted
+// from diagnoseUnhealthy so the matcher logic is testable without a
+// docker subprocess. See diagnoseUnhealthy for why the JVM "-Xmx
+// exceeds half" warning is NOT a standalone OOM signal.
 type containerObs struct {
 	Service string // compose service name ("canton", "splice", "postgres", ...)
 	State   string // "running" | "restarting" | "exited" | …

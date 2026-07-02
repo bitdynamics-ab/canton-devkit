@@ -22,21 +22,13 @@ import (
 
 var metricsContainersList = containers.List
 
-// buildMetrics wires `dpm localnet metrics` — CLI face.
-// Scrapes the per-instance Prometheus (started by the
-// `--profile observability` compose overlay) and prints a small,
-// curated set of headline values. The richer Grafana view lives
-// at http://127.0.0.1:<grafana-port>/ but the CLI shape is for
-// CI assertions and SSH-only operators who can't open a browser.
-//
-// `--format json` is a one-shot JSON dump suitable for:
-// - `dpm localnet metrics --name demo --format json | jq .ledger.tps`
-// - CI asserts ("after 1k tx upload, p95 < 500ms")
-//
-// Per AGENTS.md "CLI ↔ Web UI parity": the Web UI's Metrics
-// screen will eventually proxy the same
-// Prometheus queries; the two surfaces share the same scrape
-// config (assets/compose/prometheus.yml).
+// buildMetrics wires `dpm localnet metrics`. Scrapes the instance's
+// Prometheus (started by the `--profile observability` compose
+// overlay) and prints a small, curated set of headline values. The
+// richer Grafana view lives at http://127.0.0.1:<grafana-port>/ but
+// the CLI shape is for CI assertions (`--format json | jq`) and
+// SSH-only operators who can't open a browser. The Web UI's Metrics
+// screen shares the same scrape config (assets/compose/prometheus.yml).
 func buildMetrics() *cobra.Command {
 	var (
 		instance string
@@ -119,19 +111,16 @@ func resolveMetricsInstance(name string) (*registry.State, error) {
 	}
 }
 
-// resolvePrometheusEndpoint locates the Prometheus host-published port.
-// The authoritative source is state.Ports["prometheus_ui"], which `up`
-// persists after host-port allocation. We only shell out to docker when
-// that registry entry is absent so we can distinguish "observability is
-// off" from "the instance is old / state is stale".
 // resolvePrometheusEndpoint locates the Prometheus to scrape and reports
 // which instance to scope queries to. It prefers the SHARED host-level
 // stack when this instance is registered with it — returning the
 // instance name so scrapeMetrics filters by instance=<name> across the
 // multi-instance Prometheus. Otherwise it falls back to a per-instance
-// Prometheus (legacy / explicit --prometheus-port), where queries stay
-// unscoped because that Prometheus only holds one instance. The returned
-// scope is "" for the unscoped fallback paths.
+// Prometheus (state.Ports["prometheus_ui"], persisted by `up`, or an
+// explicit --prometheus-port), where queries stay unscoped ("") because
+// that Prometheus only holds one instance. We only shell out to docker
+// when no port is recorded, to distinguish "observability is off" from
+// "state is stale".
 func resolvePrometheusEndpoint(ctx context.Context, state *registry.State, host string, explicitPort int) (rhost string, rport int, scope string, rerr error) {
 	if explicitPort > 0 {
 		return host, explicitPort, "", nil
@@ -205,27 +194,22 @@ type DashboardsBlock struct {
 // the asset at runtime.
 const grafanaDashboardUID = "canton-localnet-v1"
 
-// scrapeMetrics runs the curated Prometheus queries in parallel
-// and assembles them into a MetricsReport. Queries live in
-// internal/metricsq so CLI + handler share one canonical map (no
-// copy-paste drift).
+// scrapeMetrics runs the curated Prometheus queries in parallel and
+// assembles them into a MetricsReport. Queries live in
+// internal/metricsq so CLI + handler share one canonical map.
+// instance scopes the queries to a single LocalNet when non-empty
+// (the shared host-level Prometheus serves many); "" sums across
+// whatever Prometheus holds.
 //
-// Error model: a per-query failure where Prometheus answered
-// but the metric simply has no samples yet (promQuery returns
-// (nil, nil)) must NOT fail the whole call — a fresh instance
-// legitimately has empty headlines. But a TRANSPORT failure
-// (connection refused, wrong port, non-200, malformed body) is a
-// different class of problem: it means we could not ask Prometheus
-// at all. If EVERY query fails that way we return an error so the
-// CLI exits non-zero (ExitRuntimeFailure) instead of printing
-// all-dashes and exiting 0 — the previously-dead failure branch in
-// RunE. We require ALL queries to fail (not just one) so a single
-// flaky query against a healthy Prometheus still yields a report;
-// a real outage takes every query down together.
-// scrapeMetrics queries the curated headline set. instance scopes the
-// queries to a single LocalNet when non-empty (the shared host-level
-// Prometheus serves many); "" sums across whatever Prometheus holds (the
-// per-instance Prometheus only scrapes one).
+// Error model: "Prometheus answered but the metric has no samples
+// yet" (promQuery returns (nil, nil)) must NOT fail the call — a
+// fresh instance legitimately has empty headlines. A TRANSPORT
+// failure (connection refused, non-200, malformed body) means we
+// could not ask Prometheus at all; if EVERY query fails that way we
+// return an error so the CLI exits non-zero instead of printing
+// all-dashes and exiting 0. Requiring ALL queries to fail keeps a
+// single flaky query from sinking a report against a healthy
+// Prometheus — a real outage takes every query down together.
 func scrapeMetrics(ctx context.Context, host string, port int, instance string) (*MetricsReport, error) {
 	base := fmt.Sprintf("http://%s:%d", host, port)
 	queries := metricsq.SummaryQueriesFor(instance)

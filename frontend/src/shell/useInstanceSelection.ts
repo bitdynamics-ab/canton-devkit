@@ -66,13 +66,10 @@ export function InstanceSelectionProvider({ children }: { children: ReactNode })
   }>({ instances: [], loading: true, error: null, stale: false, loaded: false });
 
   const load = useCallback(() => {
-    // Only flip to a loading state on the FIRST fetch. Background
-    // refreshes (the 15s poll below) keep the last-good list on
-    // screen — otherwise the whole instance table + topbar switcher
-    // flash out every 15 s while the fetch is in flight, and an
-    // in-progress CreatingPanel the user is watching unmounts with
-    // it. `loaded` is read fresh from prev so the closure doesn't
-    // capture a stale value.
+    // Only flip to loading on the FIRST fetch. Background refreshes
+    // keep the last-good list on screen — otherwise the instance table
+    // and topbar switcher flash out on every poll. `loaded` is read
+    // fresh from prev so the closure doesn't capture a stale value.
     setState((prev) =>
       prev.loaded ? prev : { ...prev, loading: true },
     );
@@ -91,11 +88,10 @@ export function InstanceSelectionProvider({ children }: { children: ReactNode })
         setState((prev) => {
           const message =
             e instanceof ApiError ? e.message : "failed to load instances";
-          // A transient registry-read hiccup (e.g. while a heavyweight
-          // `up` saturates the machine) must NOT erase the dashboard.
-          // If we already have a good list, keep it and just mark the
-          // data stale; only surface a hard error before the first
-          // successful load, when there is nothing else to show.
+          // A transient registry-read hiccup must NOT erase the
+          // dashboard: keep an existing good list and mark it stale;
+          // only surface a hard error before the first successful
+          // load, when there is nothing else to show.
           if (prev.loaded && prev.instances.length > 0) {
             return {
               ...prev,
@@ -117,17 +113,11 @@ export function InstanceSelectionProvider({ children }: { children: ReactNode })
 
   useEffect(() => {
     load();
-    // Backend reconciler (internal/ui/handlers/reconciler.go) probes
-    // docker every 15s and rewrites status when the registry diverges
-    // from reality (e.g. user killed containers via Docker Desktop).
-    // Without a poll here, the Dashboard would render a stale
-    // "running" until the user manually refreshes the page — which
-    // surprised the first user who hit it. 15 s matches the backend
-    // tick so we're never more than two ticks behind truth. Cheap:
-    // /api/instances is a pure-registry read with no docker call.
-    //
-    // Future: replace with an SSE subscription on a `list:changes`
-    // topic the reconciler publishes to. Tracked separately.
+    // The backend reconciler probes docker every 15s and rewrites
+    // status when the registry diverges from reality (e.g. containers
+    // killed via Docker Desktop). Without a matching poll here the
+    // Dashboard would show a stale "running" until a manual page
+    // refresh. Cheap: /api/instances is a pure-registry read.
     const t = setInterval(load, 15_000);
     return () => clearInterval(t);
   }, [load]);
@@ -140,18 +130,12 @@ export function InstanceSelectionProvider({ children }: { children: ReactNode })
     return state.instances.find((i) => i.status === "running")?.name ?? null;
   }, [state.instances, urlPick]);
 
-  // setParams is stable across renders, but `params` is a fresh
-  // URLSearchParams instance every render (react-router quirk).
-  // If we include `params` in the useCallback deps, `select` gets
-  // a new identity each render — that cascades into the context
-  // `value` memo also being unstable, which causes consumers
-  // that pass `sel.select` to child effects' deps to fire those
-  // effects on every render. Observed as a tight render loop
-  // hammering /api/instances after a successful create flow.
-  //
-  // Fix: capture the live `params` via ref and dereference inside
-  // the callback. useCallback deps are now empty + setParams (a
-  // stable function) — select is rock-stable across renders.
+  // `params` is a fresh URLSearchParams instance every render
+  // (react-router quirk), so listing it in useCallback deps would give
+  // `select` a new identity each render, destabilise the context value
+  // memo, and re-fire every consumer effect that depends on it — a
+  // tight render loop hammering /api/instances. Read the live params
+  // through a ref instead so `select` stays stable.
   const paramsRef = useRef(params);
   useEffect(() => {
     paramsRef.current = params;
