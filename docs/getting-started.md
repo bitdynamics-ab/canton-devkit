@@ -184,14 +184,15 @@ Move-Item canton-devkit-dist\canton-devkit.exe "$env:USERPROFILE\bin\canton-devk
 canton-devkit version
 ```
 
-### Homebrew (when published)
+### Homebrew (macOS arm64 / Linux amd64)
 
 ```bash
-brew install bitdynamics-ab/tap/canton-devkit
+brew tap bitdynamics-ab/canton-devkit
+brew install canton-devkit
 ```
 
-> Homebrew availability is tracked separately; until the tap is
-> published, use the standalone download above.
+> See [homebrew.md](./homebrew.md) for the direct-formula install,
+> the tap layout, and how the formula is kept in sync on each release.
 
 ### From source (Go toolchain)
 

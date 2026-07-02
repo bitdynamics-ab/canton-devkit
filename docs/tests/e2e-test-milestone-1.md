@@ -819,7 +819,6 @@ The test plan assumes command syntax that differs from the actual CLI implementa
 
 **Severity:** Medium
 **Test:** M1-CLN-001
-**Issue:** [`docs/issues/down-clean-orphaned-volumes.md`](../issues/down-clean-orphaned-volumes.md)
 
 `localnet down` (default) deregisters the instance from the registry on success. A subsequent `localnet clean --name X --force` then reports "Nothing to clean" but Docker volumes remain on disk. This is a design gap — both commands work correctly individually but don't compose in the `down` → `clean` sequence.
 
