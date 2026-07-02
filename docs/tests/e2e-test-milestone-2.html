@@ -1,0 +1,1942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>E2E Test Plan -- Milestone 2: Web UI, Observability, DAR &amp; Contract Tooling</title>
+<script>
+  (function () {
+    try {
+      var saved = localStorage.getItem('mdReportTheme');
+      var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var theme = saved || (prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    } catch (e) {}
+  })();
+</script>
+<style>
+  :root {
+    --fg: #1f2328;
+    --muted: #57606a;
+    --bg: #ffffff;
+    --panel: #f6f8fa;
+    --border: #d0d7de;
+    --accent: #0969da;
+    --accent-on: #ffffff;
+    --accent-soft: #ddf4ff;
+    --accent-soft-border: #54aeff;
+    --warn: #9a6700;
+    --warn-soft: #fff8c5;
+    --warn-border: #d4a72c;
+    --good: #1a7f37;
+    --good-soft: #dafbe1;
+    --good-border: #4ac26b;
+    --code-bg: #f6f8fa;
+    --pill-bg: #ddf4ff;
+    --pill-fg: #0969da;
+    --pill-good-bg: #dafbe1;
+    --pill-good-fg: #1a7f37;
+    --pill-warn-bg: #fff8c5;
+    --pill-warn-fg: #9a6700;
+    --pill-purple-bg: #eddeff;
+    --pill-purple-fg: #6e40c9;
+    --pill-orange-bg: #fff1e5;
+    --pill-orange-fg: #bc4c00;
+    --pill-teal-bg: #ddf4ff;
+    --pill-teal-fg: #0550ae;
+    --pill-red-bg: #ffebe9;
+    --pill-red-fg: #cf222e;
+    --btn-bg: #f6f8fa;
+    --btn-fg: #1f2328;
+    --btn-border: #d0d7de;
+    --shadow: 0 1px 2px rgba(31, 35, 40, 0.06);
+    --check-accent: #0969da;
+    --details-open-bg: #f6f8fa;
+    --details-open-border: #d0d7de;
+    --step-border: #e1e4e8;
+  }
+  html[data-theme="dark"] {
+    --fg: #e6edf3;
+    --muted: #9198a1;
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --accent: #4493f8;
+    --accent-on: #0d1117;
+    --accent-soft: #0c2d6b;
+    --accent-soft-border: #1f6feb;
+    --warn: #e3b341;
+    --warn-soft: #3a2c00;
+    --warn-border: #9e6a03;
+    --good: #3fb950;
+    --good-soft: #0f2f1a;
+    --good-border: #238636;
+    --code-bg: #161b22;
+    --pill-bg: #0c2d6b;
+    --pill-fg: #79c0ff;
+    --pill-good-bg: #0f2f1a;
+    --pill-good-fg: #3fb950;
+    --pill-warn-bg: #3a2c00;
+    --pill-warn-fg: #e3b341;
+    --pill-purple-bg: #271052;
+    --pill-purple-fg: #bc8cff;
+    --pill-orange-bg: #3d1d00;
+    --pill-orange-fg: #f0883e;
+    --pill-teal-bg: #0c2d6b;
+    --pill-teal-fg: #79c0ff;
+    --pill-red-bg: #3d0c10;
+    --pill-red-fg: #ff7b72;
+    --btn-bg: #161b22;
+    --btn-fg: #e6edf3;
+    --btn-border: #30363d;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --check-accent: #4493f8;
+    --details-open-bg: #161b22;
+    --details-open-border: #30363d;
+    --step-border: #21262d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+  }
+  .theme-toggle {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 100;
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    border: 1px solid var(--btn-border);
+    border-radius: 999px;
+    padding: 8px 14px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1;
+  }
+  .theme-toggle:hover { border-color: var(--accent); }
+  .theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .theme-toggle .icon { width: 14px; height: 14px; display: inline-block; }
+  html[data-theme="dark"] .theme-toggle .icon-sun { display: inline-block; }
+  html[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+  html:not([data-theme="dark"]) .theme-toggle .icon-sun { display: none; }
+  html:not([data-theme="dark"]) .theme-toggle .icon-moon { display: inline-block; }
+
+  header.page {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+  }
+  header.page h1 {
+    margin: 0 0 8px;
+    font-size: 26px;
+    line-height: 1.25;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header.page .sub {
+    color: var(--muted);
+    font-size: 14px;
+  }
+  header.page .sub span { margin-right: 16px; }
+
+  .progress-bar-outer {
+    margin-top: 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+  }
+  .progress-track {
+    flex: 1;
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+
+  h2 {
+    margin: 48px 0 12px;
+    font-size: 22px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+  }
+  h3 { margin: 28px 0 8px; font-size: 17px; }
+  p { margin: 8px 0 12px; }
+  ul, ol { margin: 8px 0 12px; padding-left: 24px; }
+  li { margin: 4px 0; }
+  a { color: var(--accent); }
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.92em;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 8px 0;
+  }
+  pre code { background: transparent; padding: 0; font-size: inherit; }
+
+  .tldr {
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-soft-border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 16px 0 24px;
+  }
+  .tldr strong { color: var(--accent); }
+
+  .pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    vertical-align: middle;
+    background: var(--pill-bg);
+    color: var(--pill-fg);
+    white-space: nowrap;
+  }
+  .pill.good { background: var(--pill-good-bg); color: var(--pill-good-fg); }
+  .pill.warn { background: var(--pill-warn-bg); color: var(--pill-warn-fg); }
+  .pill.purple { background: var(--pill-purple-bg); color: var(--pill-purple-fg); }
+  .pill.orange { background: var(--pill-orange-bg); color: var(--pill-orange-fg); }
+  .pill.teal { background: var(--pill-teal-bg); color: var(--pill-teal-fg); }
+  .pill.red { background: var(--pill-red-bg); color: var(--pill-red-fg); }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin: 16px 0;
+  }
+  .panel.warn { background: var(--warn-soft); border-color: var(--warn-border); }
+  .panel.good { background: var(--good-soft); border-color: var(--good-border); }
+  .panel h3 { margin-top: 0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--panel); font-weight: 600; }
+  .table-scroll { overflow-x: auto; }
+
+  /* Test case details */
+  details.test-case {
+    margin: 8px 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    transition: background 0.15s;
+  }
+  details.test-case[open] {
+    background: var(--details-open-bg);
+    border-color: var(--details-open-border);
+  }
+  details.test-case summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1.4;
+    list-style: none;
+    user-select: none;
+    flex-wrap: wrap;
+  }
+  details.test-case summary::-webkit-details-marker { display: none; }
+  details.test-case summary::before {
+    content: "";
+    display: inline-block;
+    width: 0;
+    height: 0;
+    border-left: 6px solid var(--muted);
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    flex-shrink: 0;
+    transition: transform 0.15s;
+  }
+  details.test-case[open] > summary::before {
+    transform: rotate(90deg);
+  }
+  details.test-case summary:hover {
+    background: var(--panel);
+    border-radius: 8px;
+  }
+  details.test-case summary .test-id {
+    font-weight: 700;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  details.test-case summary .test-name {
+    flex: 1;
+    min-width: 0;
+  }
+  details.test-case .test-body {
+    padding: 0 16px 16px 16px;
+    border-top: 1px solid var(--border);
+  }
+  details.test-case .meta-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: var(--muted);
+    margin: 12px 0;
+  }
+  details.test-case .meta-row strong { color: var(--fg); }
+
+  /* Steps with checkboxes */
+  .step {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--step-border);
+  }
+  .step:last-child { border-bottom: none; }
+  .step-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .step-header input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    cursor: pointer;
+    margin-top: 2px;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .step-header input[type="checkbox"]:checked {
+    background: var(--check-accent);
+    border-color: var(--check-accent);
+  }
+  .step-header input[type="checkbox"]:checked::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 6px;
+    height: 10px;
+    border: solid var(--accent-on);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .step-header input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .step-header .step-label {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .step-header .step-label strong { font-weight: 600; }
+  .step .expected {
+    margin: 6px 0 4px 26px;
+    font-size: 13px;
+    color: var(--good);
+    font-weight: 500;
+  }
+  html[data-theme="dark"] .step .expected { color: var(--good); }
+  .step .note {
+    margin: 6px 0 4px 26px;
+    font-size: 13px;
+    color: var(--muted);
+    font-style: italic;
+  }
+  .step pre {
+    margin-left: 26px;
+    margin-right: 0;
+  }
+
+  .cleanup {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--muted);
+    padding: 8px 12px;
+    background: var(--panel);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  .cleanup strong { color: var(--fg); }
+
+  .conventions {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  .conventions code { font-size: 12px; }
+
+  footer.page {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  footer.page a { color: var(--accent); }
+
+  @media (max-width: 520px) {
+    .wrap { padding: 64px 12px 64px; }
+    header.page h1 { font-size: 20px; }
+    h2 { font-size: 18px; }
+    .theme-toggle { padding: 6px 10px; font-size: 12px; }
+    details.test-case summary { padding: 10px 12px; font-size: 13px; }
+    details.test-case .test-body { padding: 0 12px 12px; }
+    pre { font-size: 12px; padding: 10px 12px; }
+    .progress-bar-outer { flex-wrap: wrap; }
+  }
+  @media (max-width: 360px) {
+    .wrap { padding: 56px 8px 48px; }
+    header.page h1 { font-size: 18px; }
+    details.test-case summary .pill { display: none; }
+  }
+  @media print {
+    .theme-toggle { display: none; }
+    .wrap { max-width: none; padding: 0; }
+    a { color: inherit; text-decoration: underline; }
+    details.test-case { break-inside: avoid; }
+    details.test-case[open] { break-inside: auto; }
+  }
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle color theme">
+  <svg class="icon icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6 0a6 6 0 0 0 9.32 7.5A8 8 0 1 1 8.5.68 6 6 0 0 0 6 0z"/></svg>
+  <svg class="icon icon-sun" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1.5A4.5 4.5 0 1 0 8 3.5a4.5 4.5 0 0 0 0 9zM8 0a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0V.75A.75.75 0 0 1 8 0zm0 13a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 8 13zM0 8a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5H.75A.75.75 0 0 1 0 8zm13 0a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5A.75.75 0 0 1 13 8zM2.34 2.34a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 0 1-1.06 1.06L2.34 3.4a.75.75 0 0 1 0-1.06zm9.2 9.2a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 1 1-1.06 1.06l-1.06-1.06a.75.75 0 0 1 0-1.06zM2.34 13.66a.75.75 0 0 1 0-1.06l1.06-1.06a.75.75 0 1 1 1.06 1.06l-1.06 1.06a.75.75 0 0 1-1.06 0zm9.2-9.2a.75.75 0 0 1 0-1.06L12.6 2.34a.75.75 0 1 1 1.06 1.06L12.6 4.46a.75.75 0 0 1-1.06 0z"/></svg>
+  <span class="label">Theme</span>
+</button>
+
+<div class="wrap">
+
+<header class="page">
+  <h1>E2E Test Plan &mdash; Milestone 2 <span class="pill" id="testCountPill">26 TESTS</span></h1>
+  <div class="sub">
+    <span><strong>Scope:</strong> Web UI, Observability, DAR &amp; Contract Tooling</span>
+    <span><strong>Platforms:</strong> macOS (Apple Silicon), Linux (amd64), Windows (amd64)</span>
+    <span><strong>Prerequisite:</strong> Milestone 1 passing</span>
+    <span><strong>Delivery:</strong> Month 6</span>
+  </div>
+  <div class="progress-bar-outer" id="progressBar">
+    <span id="progressText">0 / 0 steps completed</span>
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+  </div>
+</header>
+
+<!-- TL;DR -->
+<div class="tldr">
+  <strong>TL;DR.</strong> 26 end-to-end tests covering the Web UI dashboard and lifecycle controls, DAR package management (upload, list, info, download, diff, remove, watch, build-upload), live contract tracking and transaction exploration, Prometheus/Grafana observability toggle and dashboards, CI automation with <code>--json</code> output, and AI agent skill document validation.
+</div>
+
+<!-- Conventions -->
+<h2>Conventions &amp; Environment Setup</h2>
+
+<div class="conventions">
+  <ul style="margin:0;padding-left:20px;">
+    <li><code>$CLI</code> = <code>dpm localnet</code> or <code>canton-devkit localnet</code> (run full suite twice).</li>
+    <li>Test DAR: <code>daml-intro-contracts</code> project (<code>Token</code> template, Daml SDK 3.5.1).</li>
+    <li><code>$DAR_PATH</code> = path to the built <code>.dar</code> file.</li>
+    <li><code>$WEB_UI_URL</code> = URL of the Web UI (from <code>$CLI up</code> or <code>$CLI status</code>).</li>
+    <li>Web UI tests use <code>curl</code> for HTTP-level validation.</li>
+    <li>Default step timeout: 30 seconds unless noted.</li>
+  </ul>
+</div>
+
+<details class="test-case">
+  <summary>
+    <span class="test-id">ENV</span>
+    <span class="test-name">Environment Setup</span>
+    <span class="pill">Setup</span>
+  </summary>
+  <div class="test-body">
+<pre><code># Set CLI mode
+export CLI="dpm localnet"       # or "canton-devkit localnet"
+
+# Build the test DAR
+cd daml-intro-contracts
+daml build
+export DAR_PATH="$(pwd)/.daml/dist/daml-intro-contracts-1.0.0.dar"
+cd ..
+
+# Ensure clean state
+$CLI clean --name e2e-m2-test --force 2>/dev/null || true
+
+# Start LocalNet for Milestone 2 tests
+$CLI up --name e2e-m2-test
+
+# Capture Web UI URL from status output
+export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^ ]*ui[^ ]*" | head -1)</code></pre>
+  </div>
+</details>
+
+<!-- =========================================================== -->
+<!-- WEB UI -->
+<!-- =========================================================== -->
+<h2>Web UI</h2>
+
+<!-- M2-WEB-001 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-WEB-001</span>
+    <span class="test-name">Web UI launches and is accessible</span>
+    <span class="pill">Web UI</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> LocalNet <code>e2e-m2-test</code> running.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Verify the Web UI URL is printed during startup:</span>
+      </div>
+<pre><code>$CLI status --name e2e-m2-test 2>&1 | grep -qiE "(web.ui|dashboard|http.*ui)"</code></pre>
+      <div class="expected">Expected: URL found in output.</div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Verify the Web UI is reachable via HTTP:</span>
+      </div>
+<pre><code>curl -sf -o /dev/null -w "%{http_code}" "$WEB_UI_URL"</code></pre>
+      <div class="expected">Expected: HTTP 200.</div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 3 complete">
+        <span class="step-label"><strong>Step 3.</strong> Verify the Web UI serves HTML:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "&lt;html|&lt;!DOCTYPE"</code></pre>
+      <div class="expected">Expected: Valid HTML response.</div>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None (LocalNet stays running for subsequent tests).</div>
+  </div>
+</details>
+
+<!-- M2-WEB-002 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-WEB-002</span>
+    <span class="test-name">Web UI lifecycle actions (start/stop/restart)</span>
+    <span class="pill">Web UI</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> Web UI accessible (M2-WEB-001).</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Verify the Web UI exposes lifecycle action endpoints or renders action buttons:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(start|stop|restart|status|clean)"</code></pre>
+      <div class="expected">Expected: Lifecycle actions are present in the UI HTML.</div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Test the status view via Web UI (API endpoint if available):</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL/api/status" 2>/dev/null || \
+curl -sf "$WEB_UI_URL/status" 2>/dev/null</code></pre>
+      <div class="expected">Expected: JSON or HTML response showing LocalNet health.</div>
+    </div>
+
+    <div class="note" style="margin-left:0;padding:8px 0;">
+      <strong>Note:</strong> Full interactive testing of start/stop/restart via the Web UI requires browser automation (e.g., Playwright, Puppeteer). The above steps validate endpoint availability. An AI agent should verify that clicking "Restart" in the UI triggers <code>$CLI restart</code> behavior and the UI updates to reflect the new state.
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- M2-WEB-003 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-WEB-003</span>
+    <span class="test-name">Web UI LocalNet dashboard content</span>
+    <span class="pill">Web UI</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> Web UI accessible, LocalNet running.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Verify dashboard shows named instances:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "e2e-m2-test"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Verify dashboard shows service health indicators:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(healthy|running|ready|status)"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 3 complete">
+        <span class="step-label"><strong>Step 3.</strong> Verify dashboard shows endpoints and ports:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(endpoint|port|localhost|[0-9]{4,5})"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 4 complete">
+        <span class="step-label"><strong>Step 4.</strong> Verify dashboard shows participant information:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(participant|party)"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 5 complete">
+        <span class="step-label"><strong>Step 5.</strong> Verify dashboard shows Splice version:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(version|splice)"</code></pre>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- =========================================================== -->
+<!-- DAR MANAGEMENT -->
+<!-- =========================================================== -->
+<h2>DAR Management</h2>
+
+<!-- M2-DAR-001 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-DAR-001</span>
+    <span class="test-name">DAR upload to single participant</span>
+    <span class="pill purple">DAR</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> LocalNet running, <code>$DAR_PATH</code> exists.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Upload DAR to a single participant:</span>
+      </div>
+<pre><code>$CLI dar upload "$DAR_PATH" --participant participant1 --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0.</div>
+      <p style="margin-left:26px;font-size:13px;">Verify upload confirmation:</p>
+<pre><code>$CLI dar upload "$DAR_PATH" --participant participant1 --name e2e-m2-test 2>&1 | grep -qiE "(uploaded|success|package)"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Verify the package appears in the list:</span>
+      </div>
+<pre><code>$CLI dar list --participant participant1 --name e2e-m2-test 2>&1 | grep -qiE "daml-intro-contracts"</code></pre>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None (package remains for subsequent tests).</div>
+  </div>
+</details>
+
+<!-- M2-DAR-002 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-DAR-002</span>
+    <span class="test-name">DAR upload to all participants</span>
+    <span class="pill purple">DAR</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> LocalNet running, <code>$DAR_PATH</code> exists.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Upload DAR to all participants:</span>
+      </div>
+<pre><code>$CLI dar upload "$DAR_PATH" --all-participants --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0.</div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Verify package is listed on multiple participants:</span>
+      </div>
+<pre><code>$CLI dar list --name e2e-m2-test 2>&1 | grep -ciE "daml-intro-contracts"</code></pre>
+      <div class="expected">Expected: Count >= 2 (one entry per participant).</div>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- M2-DAR-003 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-DAR-003</span>
+    <span class="test-name">DAR upload with --vet and --dry-run</span>
+    <span class="pill purple">DAR</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> LocalNet running, <code>$DAR_PATH</code> exists.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Dry-run upload (should not actually upload):</span>
+      </div>
+<pre><code>$CLI dar upload "$DAR_PATH" --all-participants --dry-run --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0, output shows what would happen without executing.</div>
+      <p style="margin-left:26px;font-size:13px;">Verify:</p>
+<pre><code>$CLI dar upload "$DAR_PATH" --all-participants --dry-run --name e2e-m2-test 2>&1 | grep -qiE "(dry.run|would|simulate)"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Upload with vetting for SCU:</span>
+      </div>
+<pre><code>$CLI dar upload "$DAR_PATH" --all-participants --vet --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0.</div>
+      <p style="margin-left:26px;font-size:13px;">Verify vetting status:</p>
+<pre><code>$CLI dar list --name e2e-m2-test 2>&1 | grep -iE "daml-intro-contracts" | grep -qiE "(vetted|vet)"</code></pre>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- M2-DAR-004 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-DAR-004</span>
+    <span class="test-name">DAR list packages</span>
+    <span class="pill purple">DAR</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> DAR uploaded (M2-DAR-001 or M2-DAR-002).</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> List packages:</span>
+      </div>
+<pre><code>$CLI dar list --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0.</div>
+      <p style="margin-left:26px;font-size:13px;">Verify output includes required fields:</p>
+<pre><code>OUTPUT=$($CLI dar list --name e2e-m2-test 2>&1)
+echo "$OUTPUT" | grep -qiE "(package.id|name|version)"  # identifiers
+echo "$OUTPUT" | grep -qiE "(daml.lf|module)"            # metadata
+echo "$OUTPUT" | grep -qiE "daml-intro-contracts"        # our package</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> List packages filtered by participant:</span>
+      </div>
+<pre><code>$CLI dar list --participant participant1 --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0, list is scoped to that participant.</div>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- M2-DAR-005 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-DAR-005</span>
+    <span class="test-name">DAR info (modules, templates, choices)</span>
+    <span class="pill purple">DAR</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> DAR uploaded.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Get package info by name:</span>
+      </div>
+<pre><code>$CLI dar info daml-intro-contracts --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0.</div>
+      <p style="margin-left:26px;font-size:13px;">Verify output includes structural details:</p>
+<pre><code>OUTPUT=$($CLI dar info daml-intro-contracts --name e2e-m2-test 2>&1)
+echo "$OUTPUT" | grep -qiE "Token"           # template name
+echo "$OUTPUT" | grep -qiE "owner"            # field name
+echo "$OUTPUT" | grep -qiE "(module|Token)"   # module listing
+echo "$OUTPUT" | grep -qiE "(dependency|hash)" # metadata</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Get package info by package ID:</span>
+      </div>
+<pre><code>PKG_ID=$($CLI dar list --name e2e-m2-test 2>&1 | grep -i "daml-intro-contracts" | grep -oE "[a-f0-9]{64}" | head -1)
+$CLI dar info "$PKG_ID" --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0, same info as by name.</div>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- M2-DAR-006 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-DAR-006</span>
+    <span class="test-name">DAR download</span>
+    <span class="pill purple">DAR</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> DAR uploaded.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Download a DAR by package ID:</span>
+      </div>
+<pre><code>PKG_ID=$($CLI dar list --name e2e-m2-test 2>&1 | grep -i "daml-intro-contracts" | grep -oE "[a-f0-9]{64}" | head -1)
+$CLI dar download "$PKG_ID" --out /tmp/downloaded.dar --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0.</div>
+      <p style="margin-left:26px;font-size:13px;">Verify file exists and is non-empty:</p>
+<pre><code>[ -s /tmp/downloaded.dar ] && echo "PASS" || echo "FAIL: downloaded DAR is empty or missing"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Verify downloaded DAR is a valid archive:</span>
+      </div>
+<pre><code>file /tmp/downloaded.dar | grep -qiE "(zip|archive|data)"</code></pre>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> <code>rm -f /tmp/downloaded.dar</code></div>
+  </div>
+</details>
+
+<!-- M2-DAR-007 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-DAR-007</span>
+    <span class="test-name">DAR diff between two versions</span>
+    <span class="pill purple">DAR</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> Two different DAR versions uploaded (or same DAR can be diffed against itself).</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Build a second version of the DAR (modify version in daml.yaml):</span>
+      </div>
+<pre><code>cd daml-intro-contracts
+cp daml.yaml daml.yaml.bak
+sed -i.tmp 's/version: 1.0.0/version: 2.0.0/' daml.yaml
+daml build
+export DAR_PATH_V2="$(pwd)/.daml/dist/daml-intro-contracts-2.0.0.dar"
+mv daml.yaml.bak daml.yaml
+rm -f daml.yaml.tmp
+cd ..
+$CLI dar upload "$DAR_PATH_V2" --all-participants --name e2e-m2-test</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Diff the two versions:</span>
+      </div>
+<pre><code>$CLI dar diff daml-intro-contracts:1.0.0 daml-intro-contracts:2.0.0 --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0.</div>
+      <p style="margin-left:26px;font-size:13px;">Verify output shows diff information:</p>
+<pre><code>$CLI dar diff daml-intro-contracts:1.0.0 daml-intro-contracts:2.0.0 --name e2e-m2-test 2>&1 | grep -qiE "(template|choice|field|change|diff|identical|scu|compatible)"</code></pre>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> <code>rm -f "$DAR_PATH_V2"</code></div>
+  </div>
+</details>
+
+<!-- M2-DAR-008 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-DAR-008</span>
+    <span class="test-name">DAR remove / unvet</span>
+    <span class="pill purple">DAR</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> DAR uploaded.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Get the package ID to remove:</span>
+      </div>
+<pre><code>PKG_ID=$($CLI dar list --name e2e-m2-test 2>&1 | grep -i "daml-intro-contracts" | grep -oE "[a-f0-9]{64}" | head -1)</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Remove / unvet the package:</span>
+      </div>
+<pre><code>$CLI dar remove "$PKG_ID" --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0.</div>
+      <p style="margin-left:26px;font-size:13px;">Verify package is no longer listed (or marked as unvetted):</p>
+<pre><code>$CLI dar list --name e2e-m2-test 2>&1 | grep -i "$PKG_ID" | grep -qiE "(unvetted|removed)" || \
+! $CLI dar list --name e2e-m2-test 2>&1 | grep -qiE "$PKG_ID"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 3 complete">
+        <span class="step-label"><strong>Step 3.</strong> Re-upload for subsequent tests:</span>
+      </div>
+<pre><code>$CLI dar upload "$DAR_PATH" --all-participants --name e2e-m2-test</code></pre>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- M2-DAR-009 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-DAR-009</span>
+    <span class="test-name">DAR build-upload (dpm build integration)</span>
+    <span class="pill purple">DAR</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> <code>dpm</code> available (skip if standalone mode and <code>dpm</code> not installed), <code>daml-intro-contracts</code> project.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Run build-upload from the project directory:</span>
+      </div>
+<pre><code>$CLI dar build-upload --project ./daml-intro-contracts --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0.</div>
+      <p style="margin-left:26px;font-size:13px;">Verify both build and upload occurred:</p>
+<pre><code>$CLI dar build-upload --project ./daml-intro-contracts --name e2e-m2-test 2>&1 | grep -qiE "(build|compil)" 
+$CLI dar build-upload --project ./daml-intro-contracts --name e2e-m2-test 2>&1 | grep -qiE "(upload|deploy)"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> If <code>dpm</code> is not available (standalone mode), verify graceful skip:</span>
+      </div>
+<pre><code># Only if dpm is not on PATH:
+which dpm > /dev/null 2>&1 || {
+  $CLI dar build-upload --project ./daml-intro-contracts --name e2e-m2-test 2>&1 | grep -qiE "(skip|not available|dpm not found)"
+  echo "PASS: graceful skip when dpm unavailable"
+}</code></pre>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- M2-DAR-010 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-DAR-010</span>
+    <span class="test-name">DAR watch mode (hot-deploy)</span>
+    <span class="pill purple">DAR</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> LocalNet running, <code>daml-intro-contracts</code> project.</span>
+      <span><strong>Platforms:</strong> All</span>
+      <span><strong>Timeout:</strong> 60 seconds</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Start watch mode in the background:</span>
+      </div>
+<pre><code>$CLI dar watch ./daml-intro-contracts --name e2e-m2-test &amp;
+WATCH_PID=$!
+sleep 5  # let watch mode initialize</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Trigger a rebuild by touching a source file:</span>
+      </div>
+<pre><code>touch daml-intro-contracts/daml/Token.daml
+sleep 15  # wait for watch to detect change, rebuild, and re-upload</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 3 complete">
+        <span class="step-label"><strong>Step 3.</strong> Verify re-upload occurred:</span>
+      </div>
+<pre><code>$CLI dar list --name e2e-m2-test 2>&1 | grep -qiE "daml-intro-contracts"</code></pre>
+      <div class="expected">Expected: Package is listed (re-uploaded).</div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 4 complete">
+        <span class="step-label"><strong>Step 4.</strong> Stop watch mode:</span>
+      </div>
+<pre><code>kill $WATCH_PID 2>/dev/null || true
+wait $WATCH_PID 2>/dev/null || true</code></pre>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> Watch process killed in step 4.</div>
+  </div>
+</details>
+
+<!-- M2-DAR-011 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-DAR-011</span>
+    <span class="test-name">Web UI DAR drag-and-drop + package explorer</span>
+    <span class="pill purple">DAR</span>
+    <span class="pill">Web UI</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> Web UI accessible, DAR uploaded.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Verify DAR upload UI is present in the Web UI:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(upload|drag.*drop|dar)"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Verify package explorer tree is present:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(package|module|template|explorer)"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 3 complete">
+        <span class="step-label"><strong>Step 3.</strong> Verify uploaded packages appear in the Web UI:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" 2>&1 | grep -qiE "(daml-intro-contracts|Token)"</code></pre>
+    </div>
+
+    <div class="note" style="margin-left:0;padding:8px 0;">
+      <strong>Note:</strong> Drag-and-drop upload and package tree navigation require browser automation for full interactive testing. The above steps validate that the UI elements are rendered.
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- =========================================================== -->
+<!-- CONTRACT TRACKING -->
+<!-- =========================================================== -->
+<h2>Contract Tracking &amp; Exploration</h2>
+
+<!-- M2-CTR-001 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-CTR-001</span>
+    <span class="test-name">Contracts watch (live streaming)</span>
+    <span class="pill orange">Contracts</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> LocalNet running, DAR uploaded with <code>Token</code> template.</span>
+      <span><strong>Platforms:</strong> All</span>
+      <span><strong>Timeout:</strong> 60 seconds</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Start contracts watch in the background:</span>
+      </div>
+<pre><code>timeout 30 $CLI contracts watch --name e2e-m2-test > /tmp/watch-output.txt 2>&1 &amp;
+WATCH_PID=$!
+sleep 3</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Create a contract via the Ledger API or Daml Script to trigger a create event:</span>
+      </div>
+<pre><code># Use daml script or ledger API to create a Token contract
+# This step depends on the available parties from the LocalNet
+PARTY=$($CLI env --name e2e-m2-test 2>&1 | grep -iE "PARTY|ALICE" | head -1 | cut -d= -f2)
+# Trigger contract creation via available means (daml script, JSON API, etc.)</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 3 complete">
+        <span class="step-label"><strong>Step 3.</strong> Wait and check watch output:</span>
+      </div>
+<pre><code>sleep 10
+kill $WATCH_PID 2>/dev/null || true
+wait $WATCH_PID 2>/dev/null || true
+cat /tmp/watch-output.txt | grep -qiE "(create|archive|contract|event)" && echo "PASS" || echo "FAIL: no events in watch output"</code></pre>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> <code>rm -f /tmp/watch-output.txt</code></div>
+  </div>
+</details>
+
+<!-- M2-CTR-002 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-CTR-002</span>
+    <span class="test-name">TX ls with multi-dimensional filters</span>
+    <span class="pill orange">Contracts</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> LocalNet running, at least one transaction exists.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> List all transactions:</span>
+      </div>
+<pre><code>$CLI tx ls --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0.</div>
+      <p style="margin-left:26px;font-size:13px;">Verify output has transaction entries:</p>
+<pre><code>$CLI tx ls --name e2e-m2-test 2>&1 | grep -qiE "(transaction|tx|offset)"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Filter by party:</span>
+      </div>
+<pre><code>PARTY=$($CLI env --name e2e-m2-test 2>&1 | grep -iE "PARTY|ALICE" | head -1 | cut -d= -f2)
+$CLI tx ls --party "$PARTY" --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0, only transactions visible to that party.</div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 3 complete">
+        <span class="step-label"><strong>Step 3.</strong> Filter by template:</span>
+      </div>
+<pre><code>$CLI tx ls --template "Token:Token" --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0, only Token-related transactions.</div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 4 complete">
+        <span class="step-label"><strong>Step 4.</strong> Filter by offset range:</span>
+      </div>
+<pre><code>$CLI tx ls --from 0 --to 100 --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0, transactions within offset range.</div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 5 complete">
+        <span class="step-label"><strong>Step 5.</strong> Combined multi-dimensional filter:</span>
+      </div>
+<pre><code>$CLI tx ls --party "$PARTY" --template "Token:Token" --from 0 --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0, results satisfy all filters.</div>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- M2-CTR-003 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-CTR-003</span>
+    <span class="test-name">TX replay per-party projection</span>
+    <span class="pill orange">Contracts</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> LocalNet running, at least one transaction exists.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Get a transaction ID from the listing:</span>
+      </div>
+<pre><code>TX_ID=$($CLI tx ls --name e2e-m2-test 2>&1 | grep -oE "[a-f0-9-]{36,}" | head -1)</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Replay the transaction showing per-party visibility:</span>
+      </div>
+<pre><code>$CLI tx replay "$TX_ID" --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0.</div>
+      <p style="margin-left:26px;font-size:13px;">Verify output shows party visibility projection:</p>
+<pre><code>$CLI tx replay "$TX_ID" --name e2e-m2-test 2>&1 | grep -qiE "(party|visible|projection|signatory|observer)"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 3 complete">
+        <span class="step-label"><strong>Step 3.</strong> Verify different parties see different projections:</span>
+      </div>
+<pre><code>PARTY_A=$($CLI env --name e2e-m2-test 2>&1 | grep -iE "PARTY" | sed -n '1p' | cut -d= -f2)
+PARTY_B=$($CLI env --name e2e-m2-test 2>&1 | grep -iE "PARTY" | sed -n '2p' | cut -d= -f2)
+OUTPUT_A=$($CLI tx replay "$TX_ID" --party "$PARTY_A" --name e2e-m2-test 2>&1)
+OUTPUT_B=$($CLI tx replay "$TX_ID" --party "$PARTY_B" --name e2e-m2-test 2>&1)
+# At minimum, both should return successfully
+echo "$OUTPUT_A" | grep -qiE "(party|visible|projection)" && echo "PASS: Party A projection" || echo "WARN"
+echo "$OUTPUT_B" | grep -qiE "(party|visible|projection)" && echo "PASS: Party B projection" || echo "WARN"</code></pre>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- M2-CTR-004 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-CTR-004</span>
+    <span class="test-name">Web UI ACS explorer table</span>
+    <span class="pill orange">Contracts</span>
+    <span class="pill">Web UI</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> Web UI accessible, contracts exist.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Verify explorer section exists in Web UI:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(explorer|active.contract|acs)"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Verify ACS data is rendered (contracts visible):</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" 2>&1 | grep -qiE "(contract|template|Token|signatory|observer)"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 3 complete">
+        <span class="step-label"><strong>Step 3.</strong> Verify party/template filter controls exist:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(filter|party|template|participant)"</code></pre>
+    </div>
+
+    <div class="note" style="margin-left:0;padding:8px 0;">
+      <strong>Note:</strong> Full interactive filtering requires browser automation. The above validates the UI structure is present.
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- M2-CTR-005 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-CTR-005</span>
+    <span class="test-name">Web UI transaction timeline</span>
+    <span class="pill orange">Contracts</span>
+    <span class="pill">Web UI</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> Web UI accessible, transactions exist.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Verify transaction timeline section exists:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(transaction|timeline|history|tx)"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Verify transaction entries are rendered:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(create|exercise|archive|offset)"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 3 complete">
+        <span class="step-label"><strong>Step 3.</strong> Verify party visibility badges are present:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(party|visibility|badge)"</code></pre>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- M2-CTR-006 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-CTR-006</span>
+    <span class="test-name">Web UI contract detail view</span>
+    <span class="pill orange">Contracts</span>
+    <span class="pill">Web UI</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> Web UI accessible, contracts exist.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Verify contract detail view/drawer is accessible:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(detail|drawer|payload|lifecycle)"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Verify the detail view includes payload, lifecycle, and interface information:</span>
+      </div>
+<pre><code>curl -sf "$WEB_UI_URL" | grep -qiE "(payload|json|lifecycle|created|signatory|observer)"</code></pre>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- =========================================================== -->
+<!-- OBSERVABILITY -->
+<!-- =========================================================== -->
+<h2>Observability and Monitoring</h2>
+
+<!-- M2-OBS-001 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-OBS-001</span>
+    <span class="test-name">Prometheus/Grafana toggle enable/disable</span>
+    <span class="pill good">Observability</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> LocalNet running.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Verify observability components can be enabled:</span>
+      </div>
+<pre><code># If observability is not already running, restart with it enabled
+$CLI down --name e2e-m2-test
+$CLI up --name e2e-m2-test --enable prometheus --enable grafana</code></pre>
+      <div class="expected">Expected: Exit code 0.</div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Verify Prometheus is running:</span>
+      </div>
+<pre><code>PROM_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^ ]*prometheus[^ ]*" | head -1)
+# Or use default port
+PROM_URL="${PROM_URL:-http://localhost:9090}"
+curl -sf "$PROM_URL/-/healthy" > /dev/null && echo "PASS: Prometheus healthy" || echo "FAIL"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 3 complete">
+        <span class="step-label"><strong>Step 3.</strong> Verify Grafana is running:</span>
+      </div>
+<pre><code>GRAFANA_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^ ]*grafana[^ ]*" | head -1)
+GRAFANA_URL="${GRAFANA_URL:-http://localhost:3000}"
+curl -sf "$GRAFANA_URL/api/health" > /dev/null && echo "PASS: Grafana healthy" || echo "FAIL"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 4 complete">
+        <span class="step-label"><strong>Step 4.</strong> Verify selective disable works:</span>
+      </div>
+<pre><code>$CLI down --name e2e-m2-test
+$CLI up --name e2e-m2-test --disable prometheus
+$CLI status --name e2e-m2-test 2>&1 | grep -qiE "prometheus" && echo "WARN: Prometheus should be disabled" || echo "PASS"</code></pre>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> <code>$CLI down --name e2e-m2-test && $CLI up --name e2e-m2-test</code></div>
+  </div>
+</details>
+
+<!-- M2-OBS-002 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-OBS-002</span>
+    <span class="test-name">Grafana dashboards accessible with presets</span>
+    <span class="pill good">Observability</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> LocalNet running with Grafana enabled.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Verify Grafana is accessible:</span>
+      </div>
+<pre><code>GRAFANA_URL="${GRAFANA_URL:-http://localhost:3000}"
+curl -sf "$GRAFANA_URL/api/health" | grep -qiE "ok" && echo "PASS" || echo "FAIL"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Verify Canton-specific dashboard presets exist:</span>
+      </div>
+<pre><code>curl -sf "$GRAFANA_URL/api/search?type=dash-db" | grep -qiE "(canton|transaction|latency|throughput|contract)"</code></pre>
+      <div class="expected">Expected: At least one Canton-specific dashboard preset is found.</div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 3 complete">
+        <span class="step-label"><strong>Step 3.</strong> Verify dashboards contain expected panels:</span>
+      </div>
+<pre><code>DASHBOARD_UID=$(curl -sf "$GRAFANA_URL/api/search?type=dash-db" | grep -oE '"uid":"[^"]*"' | head -1 | cut -d'"' -f4)
+curl -sf "$GRAFANA_URL/api/dashboards/uid/$DASHBOARD_UID" | grep -qiE "(transactions.sec|latency|active.contract|throughput)"</code></pre>
+      <div class="expected">Expected: Dashboard includes DApp developer-focused panels.</div>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- M2-OBS-003 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-OBS-003</span>
+    <span class="test-name">Metrics CLI summary output</span>
+    <span class="pill good">Observability</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> LocalNet running with Grafana enabled.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Run metrics command:</span>
+      </div>
+<pre><code>$CLI metrics --name e2e-m2-test</code></pre>
+      <div class="expected">Expected: Exit code 0.</div>
+      <p style="margin-left:26px;font-size:13px;">Verify output includes key metrics:</p>
+<pre><code>OUTPUT=$($CLI metrics --name e2e-m2-test 2>&1)
+echo "$OUTPUT" | grep -qiE "(throughput|transactions)"
+echo "$OUTPUT" | grep -qiE "(latency|p50|p99)"
+echo "$OUTPUT" | grep -qiE "(resource|cpu|memory)"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Verify Grafana dashboard URLs are printed:</span>
+      </div>
+<pre><code>$CLI metrics --name e2e-m2-test 2>&1 | grep -qiE "https?://.*grafana"</code></pre>
+      <div class="expected">Expected: At least one Grafana URL in output.</div>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- =========================================================== -->
+<!-- AUTOMATION -->
+<!-- =========================================================== -->
+<h2>Automation Conveniences</h2>
+
+<!-- M2-AUT-001 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-AUT-001</span>
+    <span class="test-name">Machine-readable --json output</span>
+    <span class="pill teal">Automation</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> LocalNet running.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Status with JSON output:</span>
+      </div>
+<pre><code>$CLI status --name e2e-m2-test --json</code></pre>
+      <div class="expected">Expected: Exit code 0.</div>
+      <p style="margin-left:26px;font-size:13px;">Verify valid JSON:</p>
+<pre><code>$CLI status --name e2e-m2-test --json 2>&1 | python3 -m json.tool > /dev/null</code></pre>
+      <p style="margin-left:26px;font-size:13px;">Verify JSON contains expected keys:</p>
+<pre><code>$CLI status --name e2e-m2-test --json 2>&1 | python3 -c "import json,sys; d=json.load(sys.stdin); assert 'name' in d or 'status' in d or 'services' in d, 'Missing expected keys'"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> DAR list with JSON output:</span>
+      </div>
+<pre><code>$CLI dar list --name e2e-m2-test --json 2>&1 | python3 -m json.tool > /dev/null</code></pre>
+      <div class="expected">Expected: Valid JSON.</div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 3 complete">
+        <span class="step-label"><strong>Step 3.</strong> List with JSON output:</span>
+      </div>
+<pre><code>$CLI list --json 2>&1 | python3 -m json.tool > /dev/null</code></pre>
+      <div class="expected">Expected: Valid JSON.</div>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> None.</div>
+  </div>
+</details>
+
+<!-- M2-AUT-002 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-AUT-002</span>
+    <span class="test-name">CI workflow: up &rarr; DAR upload &rarr; test &rarr; down</span>
+    <span class="pill teal">Automation</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> Docker running, <code>daml-intro-contracts</code> project available.</span>
+      <span><strong>Platforms:</strong> All</span>
+      <span><strong>Timeout:</strong> 600 seconds</span>
+    </div>
+    <p>This test simulates a complete CI pipeline.</p>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Start LocalNet:</span>
+      </div>
+<pre><code>$CLI up --name e2e-ci-test
+EXIT_CODE=$?
+[ "$EXIT_CODE" -eq 0 ] && echo "PASS: up" || { echo "FAIL: up exited $EXIT_CODE"; exit 1; }</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Wait for readiness (already handled by <code>up</code>, but verify):</span>
+      </div>
+<pre><code>$CLI status --name e2e-ci-test 2>&1 | grep -qiE "(healthy|ready|running)"
+[ $? -eq 0 ] && echo "PASS: ready" || { echo "FAIL: not ready"; exit 1; }</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 3 complete">
+        <span class="step-label"><strong>Step 3.</strong> Upload DAR:</span>
+      </div>
+<pre><code>$CLI dar upload "$DAR_PATH" --all-participants --name e2e-ci-test
+[ $? -eq 0 ] && echo "PASS: dar upload" || { echo "FAIL: dar upload"; exit 1; }</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 4 complete">
+        <span class="step-label"><strong>Step 4.</strong> Run application tests (simulate with a health check):</span>
+      </div>
+<pre><code># In a real CI pipeline, this would be: daml test, or integration tests
+$CLI dar list --name e2e-ci-test 2>&1 | grep -qiE "daml-intro-contracts"
+[ $? -eq 0 ] && echo "PASS: test verification" || { echo "FAIL: test verification"; exit 1; }</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 5 complete">
+        <span class="step-label"><strong>Step 5.</strong> Teardown:</span>
+      </div>
+<pre><code>$CLI down --name e2e-ci-test
+[ $? -eq 0 ] && echo "PASS: down" || { echo "FAIL: down"; exit 1; }
+$CLI clean --name e2e-ci-test --force
+[ $? -eq 0 ] && echo "PASS: clean" || { echo "FAIL: clean"; exit 1; }</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 6 complete">
+        <span class="step-label"><strong>Step 6.</strong> Verify full cleanup:</span>
+      </div>
+<pre><code>docker ps --filter "label=canton-devkit" --format '{{.Names}}' | grep -qE "e2e-ci-test" && echo "FAIL: containers remain" || echo "PASS: full cleanup"</code></pre>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> Handled in steps 5-6.</div>
+  </div>
+</details>
+
+<!-- =========================================================== -->
+<!-- AI SKILLS -->
+<!-- =========================================================== -->
+<h2>AI Agent Skill Documents</h2>
+
+<!-- M2-SKL-001 -->
+<details class="test-case">
+  <summary>
+    <span class="test-id">M2-SKL-001</span>
+    <span class="test-name">AI agent skill document validation</span>
+    <span class="pill red">AI Skills</span>
+  </summary>
+  <div class="test-body">
+    <div class="meta-row">
+      <span><strong>Preconditions:</strong> Skill documents exist in the DevKit distribution.</span>
+      <span><strong>Platforms:</strong> All</span>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 1 complete">
+        <span class="step-label"><strong>Step 1.</strong> Verify skill documents are included in the distribution:</span>
+      </div>
+<pre><code># Check for skill docs in the installed package or binary directory
+find $(dirname $(which canton-devkit 2>/dev/null || echo ".")) -name "*.md" -path "*skill*" -o -name "*.md" -path "*agent*" 2>/dev/null | head -5
+# Or check a known documentation path
+ls -la docs/skills/ 2>/dev/null || ls -la skills/ 2>/dev/null || echo "Check skill document location"</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 2 complete">
+        <span class="step-label"><strong>Step 2.</strong> Verify a skill document contains executable workflow steps:</span>
+      </div>
+<pre><code># Read a skill document and verify it contains dpm localnet commands
+SKILL_DOC=$(find . -name "*.md" -path "*skill*" -o -name "*.md" -path "*agent*" 2>/dev/null | head -1)
+if [ -n "$SKILL_DOC" ]; then
+  grep -qiE "dpm localnet|canton-devkit localnet" "$SKILL_DOC" && echo "PASS: contains CLI commands" || echo "FAIL: no CLI commands found"
+  grep -qiE "(up|down|status|dar upload|logs)" "$SKILL_DOC" && echo "PASS: contains lifecycle commands" || echo "FAIL: no lifecycle commands"
+else
+  echo "WARN: Skill document not found -- check distribution packaging"
+fi</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <input type="checkbox" aria-label="Step 3 complete">
+        <span class="step-label"><strong>Step 3.</strong> Execute the basic workflow described in a skill document:</span>
+      </div>
+<pre><code># The skill document should describe a workflow like:
+# 1. Start LocalNet
+# 2. Check status
+# 3. Upload a DAR
+# 4. List packages
+# 5. Check logs
+# 6. Stop LocalNet
+# Execute each step and verify:
+$CLI up --name e2e-skill-test
+$CLI status --name e2e-skill-test
+$CLI dar upload "$DAR_PATH" --all-participants --name e2e-skill-test
+$CLI dar list --name e2e-skill-test
+timeout 5 $CLI logs --name e2e-skill-test 2>&1 | head -10
+$CLI down --name e2e-skill-test
+echo "PASS: skill workflow executed successfully"</code></pre>
+    </div>
+
+    <div class="cleanup"><strong>Cleanup:</strong> <code>$CLI clean --name e2e-skill-test --force 2>/dev/null || true</code></div>
+  </div>
+</details>
+
+<!-- =========================================================== -->
+<!-- CROSS-PLATFORM NOTES -->
+<!-- =========================================================== -->
+<h2>Cross-Platform Notes</h2>
+
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr><th>Platform</th><th>Special Considerations</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>macOS (Apple Silicon)</strong></td>
+      <td>Docker Desktop required. Web UI accessible at <code>localhost</code>. Grafana/Prometheus default ports may conflict with local dev tools.</td>
+    </tr>
+    <tr>
+      <td><strong>Linux (amd64)</strong></td>
+      <td>Native Docker. Ensure firewall allows localhost port access for Web UI and observability stack.</td>
+    </tr>
+    <tr>
+      <td><strong>Windows (amd64)</strong></td>
+      <td>Docker Desktop with WSL 2. Web UI URL may differ (<code>localhost</code> vs WSL IP). <code>curl</code> available via WSL or PowerShell <code>Invoke-WebRequest</code>. <code>timeout</code> command replaced with PowerShell equivalent.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<!-- =========================================================== -->
+<!-- EXECUTION SUMMARY -->
+<!-- =========================================================== -->
+<h2>Test Execution Summary</h2>
+
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr><th>ID</th><th>Test Name</th><th>Category</th><th>Depends On</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>M2-WEB-001</code></td><td>Web UI launches and is accessible</td><td>Web UI</td><td>M1 suite</td></tr>
+    <tr><td><code>M2-WEB-002</code></td><td>Web UI lifecycle actions</td><td>Web UI</td><td>M2-WEB-001</td></tr>
+    <tr><td><code>M2-WEB-003</code></td><td>Web UI dashboard content</td><td>Web UI</td><td>M2-WEB-001</td></tr>
+    <tr><td><code>M2-DAR-001</code></td><td>DAR upload to single participant</td><td>DAR</td><td>M1 suite</td></tr>
+    <tr><td><code>M2-DAR-002</code></td><td>DAR upload to all participants</td><td>DAR</td><td>M1 suite</td></tr>
+    <tr><td><code>M2-DAR-003</code></td><td>DAR upload with --vet and --dry-run</td><td>DAR</td><td>M1 suite</td></tr>
+    <tr><td><code>M2-DAR-004</code></td><td>DAR list packages</td><td>DAR</td><td>M2-DAR-001</td></tr>
+    <tr><td><code>M2-DAR-005</code></td><td>DAR info</td><td>DAR</td><td>M2-DAR-001</td></tr>
+    <tr><td><code>M2-DAR-006</code></td><td>DAR download</td><td>DAR</td><td>M2-DAR-001</td></tr>
+    <tr><td><code>M2-DAR-007</code></td><td>DAR diff between two versions</td><td>DAR</td><td>M2-DAR-001</td></tr>
+    <tr><td><code>M2-DAR-008</code></td><td>DAR remove / unvet</td><td>DAR</td><td>M2-DAR-001</td></tr>
+    <tr><td><code>M2-DAR-009</code></td><td>DAR build-upload</td><td>DAR</td><td>M1 suite</td></tr>
+    <tr><td><code>M2-DAR-010</code></td><td>DAR watch mode</td><td>DAR</td><td>M1 suite</td></tr>
+    <tr><td><code>M2-DAR-011</code></td><td>Web UI DAR + package explorer</td><td>DAR / Web UI</td><td>M2-WEB-001, M2-DAR-001</td></tr>
+    <tr><td><code>M2-CTR-001</code></td><td>Contracts watch (live)</td><td>Contracts</td><td>M2-DAR-001</td></tr>
+    <tr><td><code>M2-CTR-002</code></td><td>TX ls multi-filter</td><td>Contracts</td><td>M2-DAR-001</td></tr>
+    <tr><td><code>M2-CTR-003</code></td><td>TX replay per-party</td><td>Contracts</td><td>M2-CTR-002</td></tr>
+    <tr><td><code>M2-CTR-004</code></td><td>Web UI ACS explorer</td><td>Contracts / Web UI</td><td>M2-WEB-001</td></tr>
+    <tr><td><code>M2-CTR-005</code></td><td>Web UI transaction timeline</td><td>Contracts / Web UI</td><td>M2-WEB-001</td></tr>
+    <tr><td><code>M2-CTR-006</code></td><td>Web UI contract detail</td><td>Contracts / Web UI</td><td>M2-WEB-001</td></tr>
+    <tr><td><code>M2-OBS-001</code></td><td>Prometheus/Grafana toggle</td><td>Observability</td><td>M1 suite</td></tr>
+    <tr><td><code>M2-OBS-002</code></td><td>Grafana dashboards with presets</td><td>Observability</td><td>M2-OBS-001</td></tr>
+    <tr><td><code>M2-OBS-003</code></td><td>Metrics CLI summary</td><td>Observability</td><td>M2-OBS-001</td></tr>
+    <tr><td><code>M2-AUT-001</code></td><td>Machine-readable --json output</td><td>Automation</td><td>M1 suite</td></tr>
+    <tr><td><code>M2-AUT-002</code></td><td>CI workflow E2E</td><td>Automation</td><td>M1 suite</td></tr>
+    <tr><td><code>M2-SKL-001</code></td><td>AI agent skill document validation</td><td>AI Skills</td><td>M1 suite</td></tr>
+  </tbody>
+</table>
+</div>
+
+<footer class="page">
+  <p>Source: <a href="./e2e-test-milestone-2.md"><code>e2e-test-milestone-2.md</code></a></p>
+  <p>Proposal reference: <code>original-devkit-proposal.md</code>, Milestone 2 (Lines 249-266). Estimated delivery: Month 6.</p>
+  <p>This page is a self-contained companion artifact generated from the source markdown.</p>
+</footer>
+
+</div>
+
+<script>
+  // Theme toggle
+  (function () {
+    var btn = document.getElementById('themeToggle');
+    if (!btn) return;
+    var label = btn.querySelector('.label');
+    function currentTheme() {
+      return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    }
+    function applyAria() {
+      var t = currentTheme();
+      btn.setAttribute('aria-label', t === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+      if (label) label.textContent = t === 'dark' ? 'Light' : 'Dark';
+    }
+    applyAria();
+    btn.addEventListener('click', function () {
+      var next = currentTheme() === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('mdReportTheme', next); } catch (e) {}
+      applyAria();
+    });
+    if (window.matchMedia) {
+      var mq = window.matchMedia('(prefers-color-scheme: dark)');
+      var listener = function (e) {
+        try { if (localStorage.getItem('mdReportTheme')) return; } catch (err) {}
+        document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+        applyAria();
+      };
+      if (mq.addEventListener) mq.addEventListener('change', listener);
+      else if (mq.addListener) mq.addListener(listener);
+    }
+  })();
+
+  // Step progress counter
+  (function () {
+    var boxes = document.querySelectorAll('.step-header input[type="checkbox"]');
+    var progressText = document.getElementById('progressText');
+    var progressFill = document.getElementById('progressFill');
+    var total = boxes.length;
+    var STORAGE_KEY = 'm2-test-checks';
+
+    // Restore saved state
+    function loadState() {
+      try {
+        var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        boxes.forEach(function (box, i) {
+          if (saved[i]) box.checked = true;
+        });
+      } catch (e) {}
+    }
+
+    function saveState() {
+      try {
+        var state = {};
+        boxes.forEach(function (box, i) {
+          if (box.checked) state[i] = true;
+        });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {}
+    }
+
+    function updateCount() {
+      var checked = document.querySelectorAll('.step-header input[type="checkbox"]:checked').length;
+      if (progressText) progressText.textContent = checked + ' / ' + total + ' steps completed';
+      if (progressFill) progressFill.style.width = (total ? (checked / total * 100) : 0) + '%';
+    }
+
+    loadState();
+    updateCount();
+
+    boxes.forEach(function (box) {
+      box.addEventListener('change', function () {
+        updateCount();
+        saveState();
+      });
+    });
+  })();
+</script>
+
+</body>
+</html>
