@@ -31,13 +31,13 @@ paths. Verify before unpacking/installing:
 
 ```sh
 sha256sum --check SHA256SUMS
-tar -xzf canton-devkit_v0.1.0_linux_amd64.tar.gz
+tar -xzf canton-devkit_v0.7.0_linux_amd64.tar.gz
 ./canton-devkit localnet --help
 ```
 
 > **Version-string asymmetry:** the standalone archive filenames keep the
-> `v` prefix (`canton-devkit_v0.1.0_…`), matching the git tag, while the
-> DPM/OCI tag strips it (`…:0.1.0`) because DPM requires a bare-semver
+> `v` prefix (`canton-devkit_v0.7.0_…`), matching the git tag, while the
+> DPM/OCI tag strips it (`…:0.7.0`) because DPM requires a bare-semver
 > tag. Same release, two conventions — chosen to match each ecosystem's
 > norm.
 
@@ -138,7 +138,7 @@ apt policy canton-devkit
 Direct artifact install remains available:
 
 ```sh
-sudo apt install ./canton-devkit_0.9.0_amd64.deb
+sudo apt install ./canton-devkit_0.7.0_amd64.deb
 canton-devkit version
 ```
 
