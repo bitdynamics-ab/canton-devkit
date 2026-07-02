@@ -125,11 +125,9 @@ Optional `--profile observability` adds **Prometheus + Grafana** with a curated 
 > [Troubleshooting](docs/troubleshooting.md) ·
 > [Versions](docs/versions.md) ·
 > [Limitations](docs/limitations.md) ·
-> [Validation checklist](docs/validation-checklist.md) ·
 > [Telemetry](docs/telemetry.md)
 >
-> Demo: [`scripts/demo.sh`](scripts/demo.sh) (guided tour) ·
-> [`scripts/validate-zero-to-localnet.sh`](scripts/validate-zero-to-localnet.sh) (timed M1 check)
+> Demo: [`scripts/demo.sh`](scripts/demo.sh) (guided tour)
 
 ### 1 · Install
 

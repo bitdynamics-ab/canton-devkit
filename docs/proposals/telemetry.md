@@ -44,11 +44,13 @@ de-duplicate install counts (Design #2) — it links to nothing else.
    suppressed in CI, and rotatable via `telemetry reset-id`. Counters
    themselves still merge into a daily aggregate with no per-invocation
    row.
-3. **Counter taxonomy (10 slots).** Closed, compile-time-enforced
+3. **Counter taxonomy (14 slots).** Closed, compile-time-enforced
    allow-list (`internal/telemetry/allowlist.go`): `dpm/command`,
    `dpm/command_exit`, `dpm/channel`, `dpm/os`, `dpm/arch`, `dpm/ci`,
    `dpm/llm_agent`, `dpm/docker_engine`, `dpm/compose_version_bucket`,
-   `dpm/doctor_fail`. See [docs/telemetry.md](../telemetry.md) for buckets.
+   `dpm/doctor_fail`, `dpm/token_action`, `dpm/ui_feature`,
+   `dpm/install`, `dpm/install_surface`. See
+   [docs/telemetry.md](../telemetry.md) for buckets.
 4. **Never collected.** instance/project/compose names · party/contract
    ids · JWT fields · DAR/package/module names · file paths · hostnames ·
    IP/MAC · args beyond the verb · error messages · stack traces · ports ·

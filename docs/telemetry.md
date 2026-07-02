@@ -37,7 +37,7 @@ Precedence (highest first): `DO_NOT_TRACK` → `DPM_TELEMETRY` → config file
 
 ## What is collected — counters only
 
-A closed, compile-time-enforced allow-list of fourteen counters. Each is a
+A closed, compile-time-enforced allow-list of 14 counters. Each is a
 `chart` with a small set of `buckets`; we keep daily **counts** per
 bucket and nothing else:
 
