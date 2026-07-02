@@ -4,7 +4,7 @@ DevKit pins to a **curated** list of Splice versions in
 [`internal/splice/versions.json`](../internal/splice/versions.json) so
 `localnet up` never composes-up an untested upstream tag.
 
-## What we fetch, and from where
+## What DevKit fetches, and from where
 
 > **Upstream repo:** [`canton-network/splice`](https://github.com/canton-network/splice)
 > **Subtree extracted:** `cluster/compose/localnet/`
@@ -23,9 +23,9 @@ is a separate repo that *builds on top of* the same Splice LocalNet to
 provide an App-Provider quickstart with a backend service, frontend,
 Daml workflows, etc. — see its README for context. DevKit deliberately
 fetches the bare LocalNet base from `canton-network/splice` rather than
-the App-Provider layer from cn-quickstart, because we want the minimal
-infrastructure surface for our lifecycle (`up` / `down` / `status` /
-`creds` / `logs`). App-Provider workflows are out of scope for DevKit;
+the App-Provider layer from cn-quickstart, because the lifecycle
+commands (`up` / `down` / `status` / `creds` / `logs`) only need the
+minimal infrastructure surface. App-Provider workflows are out of scope for DevKit;
 users who want them can run cn-quickstart's `make start` on top of a
 DevKit-managed LocalNet.
 
@@ -34,8 +34,8 @@ DevKit-managed LocalNet.
 GitHub may surface this repo as `hyperledger-labs/splice` in older
 documentation (e.g. cn-quickstart's README still uses that name).
 That URL redirects to `canton-network/splice` — GitHub's API resolves
-both to the same canonical `full_name`, and tag SHAs match. We use the
-canonical name in code and docs.
+both to the same canonical `full_name`, and tag SHAs match. DevKit uses
+the canonical name in code and docs.
 
 ## Anatomy of a catalogue entry
 
@@ -52,7 +52,7 @@ canonical name in code and docs.
 | Field | Source of truth | Why it's pinned |
 |---|---|---|
 | `tag` | Upstream git tag (or branch label for pre-releases) | User-facing identifier; what `--version` accepts. |
-| `commit` | `git ls-remote --tags` at catalogue time (or branch HEAD for pre-releases) | Immutable, content-addressable. We fetch via `archive/<commit>.tar.gz` so a force-pushed tag can't quietly change what `localnet up` installs. |
+| `commit` | `git ls-remote --tags` at catalogue time (or branch HEAD for pre-releases) | Immutable, content-addressable. DevKit fetches via `archive/<commit>.tar.gz` so a force-pushed tag can't quietly change what `localnet up` installs. |
 | `content_sha` | `scripts/compute-tree-sha.sh` | SHA-256 over the extracted `cluster/compose/localnet/` subtree (sorted by path). Stable across upstream gzip-envelope rewrites; this is the authoritative integrity check at fetch time. |
 | `size` | byte count of the source-tarball | Informational; used to print a hint before download and to size the in-flight body cap. |
 | `major` | first two segments of `tag` (or set manually for branch tags) | Routes to the per-major adapter in `internal/splice/v0X/`. |
@@ -79,8 +79,8 @@ Status flags per row:
 |---|---|
 | `supported` | Catalogued; upstream pin matches. Safe to use. |
 | `drifted` | Catalogued; upstream tag has been force-moved to a different commit. **Security signal** — re-review the catalogue entry before trusting. |
-| `available` | Upstream has the tag; not yet in our catalogue. A maintainer can add it via the helper below. |
-| `catalogued-only` | We catalogue it, but the online tag listing does not contain the same label. For stable entries this usually means the upstream tag was deleted and should be investigated before removal; branch-backed alpha entries such as `token-standard-v2` can also appear this way until branch/ref-aware status is added. |
+| `available` | Upstream has the tag; not yet in the catalogue. A maintainer can add it via the helper below. |
+| `catalogued-only` | In the catalogue, but the online tag listing does not contain the same label. For stable entries this usually means the upstream tag was deleted and should be investigated before removal; branch-backed alpha entries such as `token-standard-v2` can also appear this way until branch/ref-aware status is added. |
 
 ## Adding a new version (maintainer flow)
 
@@ -96,8 +96,8 @@ The script:
 5. Inserts a new entry into `versions.json` (sorted by tag).
 6. Prints the diff. **Does not commit.**
 
-A reviewer then:
-- Verifies the diff.
+A maintainer then:
+- Reviews the diff.
 - Bumps `latest_alias` if the new tag should become the default
   `--version latest`.
 - Optionally runs the integration test against the new entry before
@@ -106,7 +106,7 @@ A reviewer then:
 
 ## Two-layer resolution
 
-DevKit now exposes the catalogue as the *default* tier of a two-layer
+DevKit exposes the catalogue as the *default* tier of a two-layer
 version model — the curated path stays audited, and an explicit
 opt-in unlocks arbitrary upstream tags for prerelease testing.
 
@@ -121,14 +121,13 @@ DevKit can't promise the bits were tested against this release.
 Orchestrators print a one-line "Using uncurated Splice tag" warning
 on the layer-2 path so the user is never surprised.
 
-Because layer 2 exists, the previous weekly cron that auto-bumped
-the catalogue was removed in this change — it added latency without
-solving the prerelease use case, and the catalogue is now strictly
-the curated-by-humans surface.
+Because layer 2 covers the prerelease use case, the catalogue is
+strictly a curated-by-humans surface — entries are only added by a
+maintainer, never by automation.
 
 ## Why not just point at the latest tag?
 
-Three reasons we curate:
+Three reasons the catalogue is curated:
 
 1. **Reproducibility.** A user running `localnet up --version 0.6.4`
    today must get exactly the bits that were tested when the entry
@@ -137,19 +136,19 @@ Three reasons we curate:
 
 2. **Surface area control.** Splice ships pre-release tags
    (`next-cilr`, etc.) and partial-release tags that aren't intended
-   for downstream consumption. We don't want to support every commit
-   that happens to land in the repo.
+   for downstream consumption. DevKit doesn't aim to support every
+   commit that happens to land in the repo.
 
 3. **Adapter routing.** DevKit ships per-major adapters
    (`internal/splice/v05/`, `v06/`). A new major version (e.g. `0.7.x`)
    needs a corresponding adapter before it can be added — the script
    leaves `major` blank for non-N.N.N tags so a maintainer notices.
 
-## What changed in this refactor
+## Why the content SHA, not the tarball hash
 
-Pre-2026-05, the catalogue lived in `versions.go` as a Go map literal
-and pinned both the gzip-tarball SHA and the ContentSHA. The gzip
-hash was brittle: GitHub regenerates source-tarballs lazily and the
-gzip metadata can drift. The current model drops the gzip hash; the
-commit SHA in the URL + ContentSHA over the extracted tree is the full
-integrity check, and it's stable across gzip envelope rewrites.
+Pinning the gzip-tarball SHA would be brittle: GitHub regenerates
+source-tarballs lazily and the gzip metadata can drift, so the same
+source tree can yield different tarball hashes over time. The catalogue
+therefore pins the commit SHA in the URL plus a ContentSHA over the
+extracted tree — a complete integrity check that is stable across gzip
+envelope rewrites.

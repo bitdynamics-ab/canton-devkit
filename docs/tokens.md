@@ -9,7 +9,7 @@ no JWTs, ports, or 130-char contract ids in your face.
 > **Scope: V2 / CIP-0112 only.** This tooling targets the Token Standard
 > V2 (CIP-0112) surface. V1 / CIP-0056 is **not** supported. V2 is
 > currently an opt-in *alpha* track (see [the alpha caveat](#the-v2-alpha-caveat));
-> it is promoted to the default channel once V2 lands in mainline Splice.
+> it will be promoted to the default channel once V2 lands in mainline Splice.
 
 ---
 
@@ -77,7 +77,7 @@ canton-devkit localnet token mint --instance $INST --endpoint $EP \
 # 4. See everyone's balances at a glance
 canton-devkit localnet token balances --instance $INST --endpoint $EP
 
-# 5. Transfer (─-auto-accept settles in one step on LocalNet)
+# 5. Transfer (--auto-accept settles in one step on LocalNet)
 canton-devkit localnet token transfer --instance $INST --endpoint $EP \
   --instrument RTK --from bob --to alice --amount 250 --auto-accept
 

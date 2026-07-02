@@ -84,7 +84,8 @@ warns when run against a running instance.
 
 - `localnet logs --name <i> [service]` — tail container logs.
 - `localnet doctor --name <i>` — host + instance diagnostics.
-- File an issue with the `doctor` output and the failing command.
+- File a [GitHub issue](https://github.com/bitdynamics-ab/canton-devkit/issues)
+  with the `doctor` output and the failing command.
 
 ## Log lookup implementation note
 

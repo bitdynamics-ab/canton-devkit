@@ -129,7 +129,7 @@ Optional `--profile observability` adds **Prometheus + Grafana** with a curated 
 > [Telemetry](docs/telemetry.md)
 >
 > Demo: [`scripts/demo.sh`](scripts/demo.sh) (guided tour) ·
-> [`scripts/validate-zero-to-localnet.sh`](scripts/validate-zero-to-localnet.sh) (timed M1 check)
+> [`scripts/validate-zero-to-localnet.sh`](scripts/validate-zero-to-localnet.sh) (timed zero-to-LocalNet check)
 
 ### 1 · Install
 
@@ -350,18 +350,21 @@ The `splice` container runs **one Java process** (`SpliceApp daemon`) that hosts
 | **Splice integration** | We download `cluster/compose/localnet/` from upstream [`canton-network/splice`](https://github.com/canton-network/splice) — described by the project as *"reference applications for operating Validators and Super-Validators on the Canton Network"* — pinned by commit SHA (immutable) and verified by SHA-256 post-extract. No forks, no patches. Maintainer flow: [`docs/versions.md`](docs/versions.md) |
 | **Registry** | Every instance has a `state.json` (ports, JWTs, party IDs, compose project name). Single source of truth for CLI + Web UI. Atomic writes + index lock for concurrent ups |
 | **JWT signing** | Splice LocalNet authenticates ledger and app traffic with a **fixed dev secret** — the literal string `unsafe` — applied to HS-256 JWTs (Splice config labels: `unsafe-jwt-hmac-256` / `hs-256-unsafe`). The DevKit signs JWTs locally with that same secret so client code can `Bearer <token>` against the local participant. **Never reuse against MainNet or any non-LocalNet deployment** — warning reprinted on every signing path |
-| **CLI ↔ Web UI parity** | Every user-facing operation lands on both surfaces. Codified in [`AGENTS.md`](AGENTS.md). No UI-only or CLI-only features |
+| **CLI ↔ Web UI parity** | Every user-facing operation lands on both surfaces. Codified in [`CONTRIBUTING.md`](CONTRIBUTING.md). No UI-only or CLI-only features |
 
 ---
 
 ## 🗺️ Roadmap
 
-| Milestone | Status | Highlights |
-|---|---|---|
-| **M1 — LocalNet CLI + packaging** | ✅ Shipped | Lifecycle commands (`up` / `down` / `restart` / `clean` / `status` / `logs`), named instances, version pinning, explicit ports, snapshot/restore, doctor/preflight, deterministic automation output, DPM component, Homebrew/APT, and standalone release artifacts |
-| **M2 — Web UI + observability + DAR + Explorer** | ✅ Shipped | Web UI parity for LocalNet lifecycle, logs, env export, snapshots, and preflight; Prometheus/Grafana with Canton dashboard presets; `metrics`; DAR upload/list/info/download/diff/remove/build-upload/watch; ACS + transaction Explorer; optional agent skill docs |
-| **M3 — CIP-0112 token tooling** | ✅ Shipped | Token workspace for LocalNet: party aliases, `token create`, `mint`, `transfer`, `burn`, `faucet`, `balance(s)`, `summary`, and `activity`, targeting the Token Standard V2 / CIP-0112 path via the `token-standard-v2` catalogue entry and `tokens-v2` profile |
-| **M4 — Ecosystem outreach** | 🚧 Evidence package in progress | Measurement stack is shipped: external smoke-cron kit, privacy-preserving telemetry collector/dashboard, GitHub release-download snapshots, Homebrew/APT install-surface signals, and reviewer kit. Acceptance still depends on documented external usage: 5 apps/projects, 250 cumulative installs/downloads, 2 workshops, and 1 case study/blog post |
+**Shipped today**
+
+- **LocalNet lifecycle CLI + packaging** — lifecycle commands (`up` / `down` / `restart` / `clean` / `status` / `logs`), named instances, version pinning, explicit ports, snapshot/restore, doctor/preflight, deterministic automation output, DPM component, Homebrew/APT, and standalone release artifacts
+- **Web UI + observability + DAR + Explorer** — Web UI parity for LocalNet lifecycle, logs, env export, snapshots, and preflight; Prometheus/Grafana with Canton dashboard presets; `metrics`; DAR upload/list/info/download/diff/remove/build-upload/watch; ACS + transaction Explorer; optional agent skill docs
+- **CIP-0112 token tooling** — token workspace for LocalNet: party aliases, `token create`, `mint`, `transfer`, `burn`, `faucet`, `balance(s)`, `summary`, and `activity`, targeting the Token Standard V2 / CIP-0112 path via the `token-standard-v2` catalogue entry and `tokens-v2` profile
+
+**Planned**
+
+- Intel Mac (`darwin_amd64`) and Linux ARM (`linux_arm64`) release artifacts
 
 Follow progress in [open PRs](https://github.com/bitdynamics-ab/canton-devkit/pulls), or [open an issue](https://github.com/bitdynamics-ab/canton-devkit/issues/new) to weigh in on direction.
 
@@ -372,7 +375,7 @@ Follow progress in [open PRs](https://github.com/bitdynamics-ab/canton-devkit/pu
 <details>
 <summary><b>Is this an official Canton or Digital Asset project?</b></summary>
 
-No. It's a community tool built by [Bit Dynamics AB](https://bitdynamics.me/) under a [Canton Foundation grant](https://github.com/canton-foundation/canton-dev-fund/pull/18). The upstream Splice repo it wraps is governed by the [Canton Network](https://canton.network/).
+No. It's a community tool built by [Bit Dynamics AB](https://bitdynamics.me/). The upstream Splice repo it wraps is governed by the [Canton Network](https://canton.network/).
 </details>
 
 <details>
@@ -449,7 +452,7 @@ For fixtures, snapshot once and check in the `.tgz` (or stash on object storage)
 
 ## 🤝 Contributing
 
-Contributions welcome — see [`AGENTS.md`](AGENTS.md) for the full set of conventions.
+Contributions welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full set of conventions.
 
 **Quick rules**
 
@@ -484,7 +487,7 @@ Manual cut: `git tag v0.1.0 && git push origin v0.1.0`. The [release workflow](.
 
 ## 💛 Acknowledgements
 
-`canton-devkit` wraps the [Splice LocalNet](https://github.com/canton-network/splice) compose project published by the Canton Network community. Splice is [Digital Asset](https://www.digitalasset.com/)'s open-source reference implementation of the Canton Network validator and super-validator apps. The Global Synchronizer that underpins Canton Network is governed by the [Canton Foundation](https://canton.foundation/), which also funds this project via a [developer grant](https://github.com/canton-foundation/canton-dev-fund/pull/18). Daml — the smart-contract language Canton uses — is developed by Digital Asset.
+`canton-devkit` wraps the [Splice LocalNet](https://github.com/canton-network/splice) compose project published by the Canton Network community. Splice is [Digital Asset](https://www.digitalasset.com/)'s open-source reference implementation of the Canton Network validator and super-validator apps. The Global Synchronizer that underpins Canton Network is governed by the [Canton Foundation](https://canton.foundation/). Daml — the smart-contract language Canton uses — is developed by Digital Asset.
 
 <div align="center">
 
