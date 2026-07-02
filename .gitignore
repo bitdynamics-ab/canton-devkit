@@ -12,9 +12,6 @@ dist/
 .idea/
 .vscode/
 
-# Agent runtime state
-.claude/scheduled_tasks.lock
-
 # Vite/React build output for the embedded Web UI. The placeholder
 # index.html is tracked so go:embed has at least one match on a
 # fresh clone; `make frontend` overwrites it with the real bundle.

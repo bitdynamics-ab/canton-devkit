@@ -117,15 +117,15 @@ persisted in the registry (`state.json`'s `profiles` field). A later
 `down` + `up` (or the Web UI **Restart**) **re-enables the same
 profiles automatically**; you do not have to re-pass `--profile`. An
 explicit `--profile` on the re-up still wins (replaces, doesn't merge),
-so you can deliberately drop observability. This closes the prior gap
-where Prometheus/Grafana silently vanished on every restart even though
-the stable-port contract kept the bookmarked Grafana URL alive.
+so you can deliberately drop observability. (Earlier releases did not
+persist profiles, so Prometheus/Grafana silently vanished on every
+restart even though the stable-port contract kept the bookmarked Grafana
+URL alive.)
 
 ## Stack topology — host-shared, with a transitional per-instance overlay
 
-A single **host-level** Prometheus + Grafana (#39) serves every running
-LocalNet, fulfilling the original proposal's shared-observability goal.
-It runs as its own
+A single **host-level** Prometheus + Grafana serves every running
+LocalNet. It runs as its own
 compose project (`canton-devkit-observability`), independent of any
 instance's lifecycle. Each observability-enabled instance publishes its
 canton/splice `:10013` metrics ports on `127.0.0.1:<ephemeral>` and writes
@@ -153,6 +153,6 @@ up, and the per-instance scrape uses in-network service DNS
 platform regardless of the Linux `host-gateway` mapping. Gating the
 per-instance overlay off (to drop the duplication) is deferred until the
 shared-only path can be end-to-end validated on a native Linux Docker host
-— see [docs/limitations.md](limitations.md#shared-observability-stack). The
+— see [docs/limitations.md](limitations.md#observability-transitional-dual-stack). The
 extra resource cost (a second Prometheus+Grafana per instance) is the price
 of that fallback on a dev machine; it carries no correctness impact.

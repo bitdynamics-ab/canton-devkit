@@ -13,9 +13,10 @@ participants, Splice apps) in Docker. It gives you a CLI
 embedded Web UI for the same operations.
 
 **CLI or Web UI — which should I use?**
-Both expose the same operations (CLI ↔ UI parity is a project rule). Use
-the CLI for scripting/CI; `canton-devkit localnet ui` for a dashboard,
-the contract explorer, DAR management, metrics, and the token workspace.
+Both expose the same operations — the two surfaces are kept in parity
+by design. Use the CLI for scripting/CI; `canton-devkit localnet ui`
+for a dashboard, the contract explorer, DAR management, metrics, and
+the token workspace.
 
 **Does it fork or patch Splice?**
 No. It downloads the upstream `cluster/compose/localnet/` tree pinned by

@@ -1,49 +1,42 @@
 # Known limitations
 
-Living list of things DevKit does not (yet) do well, with the rationale
-and links to follow-up tickets where applicable. Updated as we ship.
+Things DevKit does not (yet) do well, with the rationale and
+workarounds where applicable. This list is updated as limitations are
+resolved.
 
 ## Instance naming
 
 - **`--name` must be a DNS label.** Names are validated against RFC 1123:
   1-63 chars of lowercase `[a-z0-9-]`, must start and end with `[a-z0-9]`.
   Uppercase, underscores, and leading/trailing hyphens are rejected.
-  We chose DNS-label form so the same name is safe to embed as a
-  hostname in the future `{service}.{instance}.localhost` routing model
-  without a second translation step. Single source of truth lives in
+  DNS-label form was chosen so the same name is safe to embed as a
+  hostname in a future `{service}.{instance}.localhost` routing model
+  without a second translation step. The single source of truth lives in
   `internal/registry/state.go` (`ValidateName`); the CLI layer delegates.
-  *Migration:* pre-PR-#20 instances created with uppercase or underscore
-  names (e.g. `MyStack`, `my_stack`) must be torn down with the old
-  binary and re-created under a DNS-label name.
+  *Migration:* instances created with an older release that still
+  allowed uppercase or underscore names (e.g. `MyStack`, `my_stack`)
+  must be torn down with that older binary and re-created under a
+  DNS-label name.
 
 ## Concurrency / locking
 
-- **(resolved)** *Earlier the Windows registry lock was a no-op and
-  `withIndexLock` was a process-local `sync.Mutex`, so two concurrent
-  `localnet up --name foo` invocations on Windows could race past the
-  lock.* Both now take real cross-process locks via
-  `windows.LockFileEx` (`internal/registry/lock_windows.go` uses
-  `LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY` for the
-  fail-fast per-instance lock; `internal/registry/index_lock_windows.go`
-  uses the blocking `LOCKFILE_EXCLUSIVE_LOCK` for the index
-  read-modify-write). The OS releases the lock when the handle closes
-  or the process exits, so there is no stale lock file to recover. This
-  uses `golang.org/x/sys/windows`, already a direct dependency (e.g.
-  `internal/localnet/snapshot/diskspace_windows.go`).
-  *Linux/macOS use `syscall.Flock`; behaviour is now equivalent across
-  platforms.*
+- **(resolved)** Registry locking is now a real cross-process lock on
+  every platform. On Windows both the fail-fast per-instance lock and
+  the blocking index read-modify-write lock go through
+  `windows.LockFileEx` (`internal/registry/lock_windows.go`,
+  `internal/registry/index_lock_windows.go`); Linux/macOS use
+  `syscall.Flock`. The OS releases the lock when the handle closes or
+  the process exits, so there is no stale lock file to recover.
 
 ## Splice version pinning
 
-- **(resolved)** *Earlier the catalogue pinned the raw gzip SHA, which
-  could drift if GitHub regenerated the source-tarball.* The catalogue
-  now pins (a) the git commit SHA (immutable, content-addressable —
-  `internal/splice/versions.json`'s `commit` field) and (b) the
-  ContentSHA of the extracted `cluster/compose/localnet/` subtree
-  (`content_sha` field). The tarball-by-commit URL is byte-stable
-  enough; we hash the extracted tree, not the gzip envelope, so a
-  gzip-level rewrite (compression-level change, mtime drift) has no
-  effect. See `docs/versions.md`.
+- **(resolved)** The catalogue pins (a) the git commit SHA (immutable,
+  content-addressable — `internal/splice/versions.json`'s `commit`
+  field) and (b) the ContentSHA of the extracted
+  `cluster/compose/localnet/` subtree (`content_sha` field). The hash
+  covers the extracted tree, not the gzip envelope, so a gzip-level
+  rewrite by GitHub (compression-level change, mtime drift) has no
+  effect. See [versions.md](./versions.md).
 
 ## Container image pinning
 
@@ -53,9 +46,9 @@ and links to follow-up tickets where applicable. Updated as we ship.
   through a single shared `IMAGE_TAG` variable
   (`image: "${IMAGE_REPO}canton:${IMAGE_TAG}"`,
   `${IMAGE_REPO}splice-app:${IMAGE_TAG}`, the web UIs, …). Because one
-  variable addresses ~6 distinct images, we can't inject per-image
-  `@sha256:` digests via the compose env — a single digest can't pin six
-  different images.
+  variable addresses ~6 distinct images, per-image `@sha256:` digests
+  cannot be injected via the compose env — a single digest can't pin
+  six different images.
 
   Instead DevKit VERIFIES post-up: after services are healthy it records
   each running image's content digest (image ID) in `state.json`
@@ -70,19 +63,19 @@ and links to follow-up tickets where applicable. Updated as we ship.
 ## Compose env reconstruction
 
 - **`composeContext` rebuilds env from registry state.**
-  `down` / `logs` / `creds` need the env that was passed to `up`. We
-  reconstruct it from `state.json` so a fresh shell can still operate
-  the instance. Any new env var Splice adds in a future release that
-  we don't capture in state will silently break operations from a
-  fresh shell. Mitigation: integration tests in CI (follow-up ticket).
+  `down` / `logs` / `creds` need the env that was passed to `up`.
+  DevKit reconstructs it from `state.json` so a fresh shell can still
+  operate the instance. Any new env var a future Splice release adds
+  that is not captured in state will silently break operations from a
+  fresh shell.
 
 ## Integration testing
 
 - **No CI integration test for `localnet up` against real Splice.**
   Unit tests cover parsers and orchestration well, but the actual
-  bring-up flow is never exercised end-to-end in CI. The first
-  upstream-contract drift will be found by a user, not by us. Filed
-  separately as a follow-up.
+  bring-up flow is not yet exercised end-to-end in CI, so drift in the
+  upstream Splice compose contract may first surface at runtime rather
+  than in CI.
 
 ## Memory requirements
 
@@ -99,7 +92,8 @@ and links to follow-up tickets where applicable. Updated as we ship.
     `WaitForHealthy` times out at 15 min.
   - **GitHub `ubuntu-latest` runners have 7 GB RAM** — enough for
     `up` to start but Splice's onboarding may not complete. Use a
-    larger runner class or self-hosted for the integration job.
+    larger runner class or a self-hosted runner for CI jobs that
+    bring up LocalNet.
   - **Docker Desktop default on macOS is 8 GB.** Bump via Settings →
     Resources before running multi-instance scenarios.
 
@@ -120,9 +114,9 @@ and links to follow-up tickets where applicable. Updated as we ship.
   rather than DPM until the Windows `.exe` path through DPM is
   verified.
 
-## Observability: transitional dual stack
+## <a name="shared-observability-stack"></a>Observability: transitional dual stack
 
-The host-level shared Prometheus + Grafana stack has shipped — one
+DevKit runs a host-level shared Prometheus + Grafana stack — one
 stack serves every running LocalNet via file-based service discovery,
 refcounted by target file. See
 [docs/observability.md](observability.md#stack-topology--host-shared-with-a-transitional-per-instance-overlay)
@@ -139,7 +133,7 @@ for the topology.
   per-instance scrape uses in-network service DNS (`canton:10013`)
   rather than `host.docker.internal`, so it works on any platform
   regardless of the Linux `host-gateway` mapping.
-- **Follow-up.** Gating the per-instance overlay off (to drop the
+- **Planned.** Gating the per-instance overlay off (to drop the
   duplication) is deferred until the shared-only path is end-to-end
   validated on a native Linux Docker host. The runtime toggle funnels
   through a single neutral function

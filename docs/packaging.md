@@ -77,15 +77,15 @@ the path doesn't include the extension.
 ### Why a single top-level command?
 
 DPM components register top-level commands into a flat namespace shared
-with DPM builtins and every other component. We deliberately register
-only `localnet` to:
+with DPM builtins and every other component. DevKit deliberately
+registers only `localnet` to:
 
 - Avoid collisions with DPM builtins (`install`, `publish`, `versions`,
   `bootstrap`, …) or with future first-party components.
 - Keep the DPM surface minimal — `dpm localnet up`, `dpm localnet dar
   upload`, `dpm localnet contracts ls`, etc. nest naturally.
 
-All DevKit subcommands live inside our binary's own Cobra tree, not in
+All DevKit subcommands live inside the binary's own Cobra tree, not in
 the DPM manifest.
 
 ## Local validation
@@ -167,10 +167,10 @@ The hosted repo is generated on every release by preserving all existing
 rewriting `Packages`, `Packages.gz`, and `Release` metadata under
 `apt/dists/stable/main/binary-amd64/`.
 
-**Current hardening gap:** the APT repo is unsigned and documented with
-`trusted=yes`. This is acceptable for an initial static repository backed
-by HTTPS and release checksums, but a production-grade repo should add a
-GPG-signed `InRelease` file and install instructions using `signed-by=`.
+**Known limitation:** the APT repo is unsigned and documented with
+`trusted=yes`. The repository is backed by HTTPS and release checksums,
+but a GPG-signed `InRelease` file and install instructions using
+`signed-by=` are planned hardening steps.
 
 ## Supply-chain integrity
 
@@ -179,11 +179,10 @@ with `sha256sum --check`) plus the immutability of the GHCR OCI digest.
 The CI pipeline also pins every GitHub Action and the DPM CLI tarball by
 SHA.
 
-**Known gap (follow-up):** the release artifacts are **not yet
+**Known limitation:** the release artifacts are **not yet
 cryptographically signed**. There are no [cosign](https://github.com/sigstore/cosign)/Sigstore
 signatures on `SHA256SUMS` or on the OCI artifact, so consumers can
 verify *integrity* (the bytes match the checksum) but not *provenance*
-(the bytes were produced by our pipeline). Adding keyless cosign signing
-+ a published verification step is tracked as a post-v1 hardening item —
-not blocking the initial release, but required before the artifacts are
-promoted as a trusted distribution channel.
+(the bytes were produced by the project's release pipeline). Keyless
+cosign signing plus a published verification step is a planned
+hardening item.
