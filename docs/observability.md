@@ -124,7 +124,8 @@ the stable-port contract kept the bookmarked Grafana URL alive.
 ## Stack topology — host-shared, with a transitional per-instance overlay
 
 A single **host-level** Prometheus + Grafana (#39) serves every running
-LocalNet, fulfilling the original proposal (line 188). It runs as its own
+LocalNet, fulfilling the original proposal's shared-observability goal.
+It runs as its own
 compose project (`canton-devkit-observability`), independent of any
 instance's lifecycle. Each observability-enabled instance publishes its
 canton/splice `:10013` metrics ports on `127.0.0.1:<ephemeral>` and writes

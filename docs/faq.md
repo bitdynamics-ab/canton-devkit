@@ -23,9 +23,11 @@ immutable commit SHA and verified by SHA-256 after extraction. See
 [versions.md](versions.md).
 
 **Which platforms are supported?**
-macOS (arm64) and Linux (amd64) are the primary, CI-tested targets.
-Windows (amd64) binaries are published; cross-platform coverage is
-tracked under the release matrix.
+macOS (arm64), Linux (amd64), and Windows (amd64) are the released,
+tested targets. Other OS/arch combinations may work (DevKit only
+orchestrates Docker) but are untested — `localnet doctor` warns on
+unsupported platforms. See the compatibility matrix in
+[getting-started.md](getting-started.md#5-compatibility-matrix).
 
 ## Versions
 
