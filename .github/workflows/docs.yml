@@ -53,6 +53,7 @@ jobs:
     needs: build
     runs-on: [self-hosted, Linux]
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
