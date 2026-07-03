@@ -11,7 +11,12 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# AI files
 .cursor/
+.claude/
+AGENTS.md
+CLAUDE.md
 
 # Vite/React build output for the embedded Web UI. The placeholder
 # index.html is tracked so go:embed has at least one match on a
