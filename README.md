@@ -103,7 +103,6 @@ Optional `--profile observability` adds **Prometheus + Grafana** with a curated 
 > [docs/getting-started.md](docs/getting-started.md).
 >
 > **Docs index:** [Getting started](docs/getting-started.md) ·
-> [Web UI](docs/web-ui.md) ·
 > [Tokens (CIP-0112 / V2)](docs/tokens.md) ·
 > [Explorer](docs/explorer.md) ·
 > [Observability](docs/observability.md) ·
@@ -227,8 +226,6 @@ Use `canton-devkit localnet ui` to launch the Web UI with
 - 💾 **Backup & restore** — download a snapshot, drag-drop to restore
 - 🪵 **Per-container logs** — `docker logs --tail` in the browser
 - ⚡ **<kbd>⌘ K</kbd> palette** — fuzzy-jump between instances and routes
-
-Security model, remote access, and flags — [docs/web-ui.md](docs/web-ui.md).
 
 ---
 

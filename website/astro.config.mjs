@@ -30,7 +30,6 @@ export default defineConfig({
 					label: 'Guides',
 					items: [
 						{ slug: 'guides/localnet-lifecycle' },
-						{ slug: 'guides/web-ui' },
 						{ slug: 'guides/explorer' },
 						{ slug: 'guides/observability' },
 						{ slug: 'guides/dashboard-customization' },
