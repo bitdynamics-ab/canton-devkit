@@ -40,15 +40,6 @@
 <circle cx="465.71" cy="360" r="3" fill="#dc2626"/>
 <circle cx="547.86" cy="360" r="3" fill="#dc2626"/>
 <circle cx="630" cy="187.83" r="3" fill="#dc2626"/>
-<polyline points="55,360 137.14,360 219.29,360 301.43,360 383.57,360 465.71,360 547.86,360 630,360" fill="none" stroke="#9333ea" stroke-width="2.5"/>
-<circle cx="55" cy="360" r="3" fill="#9333ea"/>
-<circle cx="137.14" cy="360" r="3" fill="#9333ea"/>
-<circle cx="219.29" cy="360" r="3" fill="#9333ea"/>
-<circle cx="301.43" cy="360" r="3" fill="#9333ea"/>
-<circle cx="383.57" cy="360" r="3" fill="#9333ea"/>
-<circle cx="465.71" cy="360" r="3" fill="#9333ea"/>
-<circle cx="547.86" cy="360" r="3" fill="#9333ea"/>
-<circle cx="630" cy="360" r="3" fill="#9333ea"/>
 <text x="55" y="376" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 55 376)">v0.3</text>
 <text x="137.14" y="376" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 137.14 376)">v0.4</text>
 <text x="219.29" y="376" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 219.29 376)">v0.5</text>
@@ -63,8 +54,6 @@
 <text x="664" y="60" font-size="11" fill="#111827">Linux (amd64)</text>
 <rect x="650" y="71" width="10" height="10" fill="#dc2626"/>
 <text x="664" y="80" font-size="11" fill="#111827">Windows (amd64)</text>
-<rect x="650" y="91" width="10" height="10" fill="#9333ea"/>
-<text x="664" y="100" font-size="11" fill="#111827">Debian (.deb)</text>
 <text x="14" y="195" text-anchor="middle" font-size="11" fill="#6b7280" transform="rotate(-90 14 195)">Downloads</text>
 </svg>
 

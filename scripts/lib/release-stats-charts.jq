@@ -155,11 +155,18 @@ def bar_chart($title; $bars):
     );
 
 ($data) as $d
+# Debian (.deb) downloads are excluded from the charts below — it's a
+# Linux packaging format rather than a distinct platform, and its
+# near-zero counts add legend/bar noise. The underlying data model
+# ($d.platforms, $d.releases[].by_platform, $d.platform_totals) still
+# carries "deb", so the markdown table and any other consumer of this
+# snapshot keep the full breakdown; only chart rendering filters it out.
+| ($d.platforms | map(select(. != "deb"))) as $chartPlatforms
 | ($d.releases | map(.tag)) as $labels
 | (
   if $mode == "by_platform" then
-    ($d.platforms | map({label: display_name, color: color_of}) ) as $meta
-    | ($d.platforms | to_entries | map(
+    ($chartPlatforms | map({label: display_name, color: color_of}) ) as $meta
+    | ($chartPlatforms | to_entries | map(
         .key as $i | .value as $p
         | {label: ($meta[$i].label), color: ($meta[$i].color), values: ($d.releases | map(.by_platform[$p]))}
       )) as $series
@@ -174,7 +181,7 @@ def bar_chart($title; $bars):
     | bar_chart("All-time downloads per release — homebrew-canton-devkit"; $bars)
 
   elif $mode == "totals_by_platform" then
-    ($d.platforms | map({label: display_name, value: $d.platform_totals[.], color: color_of})) as $bars
+    ($chartPlatforms | map({label: display_name, value: $d.platform_totals[.], color: color_of})) as $bars
     | bar_chart("All-time downloads per platform — homebrew-canton-devkit"; $bars)
 
   else
