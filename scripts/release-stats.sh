@@ -8,16 +8,23 @@
 # charts + a markdown fragment, so the numbers can be embedded in a README
 # that cannot execute JavaScript.
 #
+# It also appends a daily snapshot of the current totals to a history file
+# so a download-over-time series accumulates from now on. The GitHub API only
+# exposes CURRENT download counts (no history), so this persisted snapshot is
+# the only way to build a real time series later.
+#
 # Outputs (into docs/assets/):
 #   release-downloads-by-platform.svg  — per-platform downloads over time
 #   release-downloads-by-version.svg   — per-version total downloads over time
 #   release-downloads-totals.svg       — all-time totals per version + per platform (bars)
 #   release-downloads.md               — per-version + per-platform summary tables
+#   release-downloads-history.jsonl    — appended daily snapshot (total + per platform + per version)
 #
 # Environment:
-#   STATS_REPO   target repo (default: bitdynamics-ab/homebrew-canton-devkit)
-#   OUT_DIR      output directory (default: docs/assets)
-#   GITHUB_TOKEN optional; raises the GitHub API rate limit when set
+#   STATS_REPO    target repo (default: bitdynamics-ab/homebrew-canton-devkit)
+#   OUT_DIR       output directory (default: docs/assets)
+#   SNAPSHOT_DATE override snapshot date, UTC YYYY-MM-DD (default: today; for testing)
+#   GITHUB_TOKEN  optional; raises the GitHub API rate limit when set
 #
 # Requires: jq, and either `gh` or `curl`.
 
@@ -357,3 +364,24 @@ rm -f "${OUT_DIR}/.totals-version.svg" "${OUT_DIR}/.totals-platform.svg"
   echo
 } > "${OUT_DIR}/release-downloads.md"
 echo "wrote ${OUT_DIR}/release-downloads.md"
+
+# --- Append today's snapshot to the history file --------------------------
+# One row per UTC day: { date, total, byPlatform, byVersion }. Re-running on
+# the same day replaces that day's row (idempotent), so the file stays clean
+# and ordered. This accumulates the time series the GitHub API can't provide.
+HISTORY_FILE="${OUT_DIR}/release-downloads-history.jsonl"
+snapshot_date="${SNAPSHOT_DATE:-$(date -u +%Y-%m-%d)}"
+
+today_row="$(printf '%s' "${model}" | jq -c --arg d "${snapshot_date}" '
+  { date: $d,
+    total: .grandTotal,
+    byPlatform: .totalsByPlatform,
+    byVersion: ( [ .totalsByVersion[] | { (.tag): .total } ] | add // {} ) }')"
+
+touch "${HISTORY_FILE}"
+{
+  jq -c --arg d "${snapshot_date}" 'select(.date != $d)' "${HISTORY_FILE}" 2>/dev/null || true
+  printf '%s\n' "${today_row}"
+} | jq -s -c 'sort_by(.date) | .[]' > "${HISTORY_FILE}.tmp"
+mv "${HISTORY_FILE}.tmp" "${HISTORY_FILE}"
+echo "updated ${HISTORY_FILE} (snapshot ${snapshot_date})"

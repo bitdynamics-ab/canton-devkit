@@ -33,18 +33,19 @@ jobs:
         # actions/checkout@v7.0.0
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
-      - name: Generate charts
+      - name: Generate charts + append daily snapshot
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash scripts/release-stats.sh
 
-      - name: Commit refreshed charts if changed
+      - name: Commit refreshed charts + snapshot if changed
         run: |
           set -euo pipefail
           git add docs/assets/release-downloads-by-platform.svg \
                   docs/assets/release-downloads-by-version.svg \
                   docs/assets/release-downloads-totals.svg \
-                  docs/assets/release-downloads.md
+                  docs/assets/release-downloads.md \
+                  docs/assets/release-downloads-history.jsonl
           if git diff --cached --quiet; then
             echo "Release stats already up to date."
             exit 0
