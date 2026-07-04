@@ -214,9 +214,8 @@ func RunStart(ctx context.Context, prog Progress, out, errw io.Writer, opts *Sta
 			"Containers for %q were removed — running localnet up to recreate them...\n",
 			state.Name)
 		return runUp(ctx, prog, &UpOptions{
-			Name:     state.Name,
-			Version:  state.SpliceVersion,
-			Profiles: composeProfiles(state),
+			Name:    state.Name,
+			Version: state.SpliceVersion,
 		})
 	}
 
