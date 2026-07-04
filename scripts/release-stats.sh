@@ -275,6 +275,7 @@ by_platform_data="$(printf '%s' "${model}" | jq --argjson pal "$(printf '%s\n' "
   . as $m
   | { labels: [ $m.releases[].tag ],
       series: [ $m.platforms | to_entries[] as $p
+        | select($p.value != "Debian (.deb)")
         | { name: $p.value,
             color: ($pal[$p.key] // "#666666"),
             values: [ $m.releases[] | (.byPlatform[$p.value] // 0) ] } ]
@@ -302,7 +303,7 @@ totals_version_bars="$(printf '%s' "${model}" | jq '
   { bars: [ .totalsByVersion[] | { label: .tag, value: .total } ] }
 ')"
 totals_platform_bars="$(printf '%s' "${model}" | jq '
-  { bars: [ .platforms[] as $p | { label: $p, value: (.totalsByPlatform[$p] // 0) } ] }
+  { bars: [ .platforms[] as $p | select($p != "Debian (.deb)") | { label: $p, value: (.totalsByPlatform[$p] // 0) } ] }
 ')"
 
 # Render two separate bar SVGs, then combine into one file so the README
