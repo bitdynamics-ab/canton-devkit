@@ -57,6 +57,22 @@ func TestRunStop_AlreadyStopped(t *testing.T) {
 	}
 }
 
+func TestRunStop_PausedIsUserError(t *testing.T) {
+	seedRunningInstance(t, "demo")
+	s, _ := registry.Read("demo")
+	s.Status = registry.StatusPaused
+	_ = registry.Write(s)
+
+	opts := &StopOptions{
+		Name:      "demo",
+		NewRunner: fakeStopper(func(context.Context) error { t.Fatal("must not call compose"); return nil }),
+	}
+	var out, errb bytes.Buffer
+	if exit := RunStop(context.Background(), &out, &errb, opts); exit != ExitUserError {
+		t.Fatalf("stopping a paused instance should be ExitUserError, got %d", exit)
+	}
+}
+
 func TestRunStop_UnknownInstance(t *testing.T) {
 	seedRunningInstance(t, "demo") // sets registry root; "ghost" not seeded
 	opts := &StopOptions{Name: "ghost"}

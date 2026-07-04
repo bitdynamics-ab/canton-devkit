@@ -233,6 +233,26 @@ describe("InstanceDetail", () => {
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
   });
 
+  it("does not show Stop for paused instances", async () => {
+    mockInstanceFetch({
+      schema_version: 1,
+      name: "demo",
+      splice_version: "0.4.12",
+      status: "paused",
+      created_at: "2026-05-25T10:00:00Z",
+      compose_project: "cdk-demo",
+      docker_network: "cdk-demo_default",
+      container_prefix: "cdk-demo",
+      project_dir: "/x",
+      data_dir: "/x/data",
+    });
+
+    render(<InstanceDetail name="demo" statusHint="paused" />);
+
+    await screen.findByRole("button", { name: /resume/i });
+    expect(screen.queryByRole("button", { name: /stop/i })).not.toBeInTheDocument();
+  });
+
   it("posts to /start when the Start button is clicked on a stopped instance", async () => {
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (typeof url === "string" && url.endsWith("/start")) {

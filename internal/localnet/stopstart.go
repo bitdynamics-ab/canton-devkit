@@ -57,7 +57,7 @@ type StartOptions struct {
 	runUp func(ctx context.Context, prog Progress, opts *UpOptions) int
 }
 
-// RunStop gracefully stops a running (or paused) instance via
+// RunStop gracefully stops a running instance via
 // `docker compose stop` (SIGTERM→SIGKILL). Unlike RunDown it does NOT
 // remove containers, networks, or volumes — the stopped containers can
 // be restarted cheaply with RunStart (no image pull, no re-create).
@@ -65,7 +65,7 @@ type StartOptions struct {
 // (the processes exit), unlike pause which only freezes them.
 //
 // Exit: ExitSuccess on stop, ExitUserError when the instance isn't
-// registered or isn't running/paused, ExitRuntimeFailure on a compose
+// registered or isn't running, ExitRuntimeFailure on a compose
 // error, ExitTimeout on interruption.
 func RunStop(ctx context.Context, out, errw io.Writer, opts *StopOptions) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
@@ -97,7 +97,13 @@ func RunStop(ctx context.Context, out, errw io.Writer, opts *StopOptions) int {
 		_, _ = fmt.Fprintf(out, "Canton LocalNet %q is already stopped.\n", state.Name)
 		return ExitSuccess
 	}
-	if state.Status != registry.StatusRunning && state.Status != registry.StatusPaused {
+	if state.Status == registry.StatusPaused {
+		_, _ = fmt.Fprintf(errw,
+			"Instance %q is paused, not running. Run `localnet resume %s` (or `unpause`) before stopping it.\n",
+			state.Name, state.Name)
+		return ExitUserError
+	}
+	if state.Status != registry.StatusRunning {
 		_, _ = fmt.Fprintf(errw,
 			"Instance %q is %s, not running — cannot stop it. Use `localnet down %s` to tear it down.\n",
 			state.Name, state.Status, state.Name)

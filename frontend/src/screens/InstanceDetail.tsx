@@ -318,7 +318,8 @@ function DetailGrid({ instance }: { instance: Instance }) {
 // ActionButton dispatches the right verb(s) per instance status.
 // Registry status alone isn't enough — docker truth may diverge:
 //
-//   - running/paused → Pause/Resume + Recreate + Stop + Down
+//   - running        → Pause + Recreate + Stop + Down
+//   - paused         → Resume + Recreate + Down
 //   - failed/partial → Recreate + Down + Remove (containers MAY still
 //                      be up even though the orchestrator gave up;
 //                      compose down no-ops cleanly if not)
@@ -380,14 +381,16 @@ function ActionButton({
         >
           {busy ? "…" : "↻ Recreate"}
         </button>
-        <button
-          onClick={onStop}
-          disabled={busy}
-          title="Gracefully stop (docker compose stop) — processes exit and free CPU/memory, but containers are kept for a fast Start. Data volumes preserved."
-          style={btnStyle(W.warn, busy)}
-        >
-          {busy ? "Stopping…" : "⏹ Stop"}
-        </button>
+        {status === "running" && (
+          <button
+            onClick={onStop}
+            disabled={busy}
+            title="Gracefully stop (docker compose stop) — processes exit and free CPU/memory, but containers are kept for a fast Start. Data volumes preserved."
+            style={btnStyle(W.warn, busy)}
+          >
+            {busy ? "Stopping…" : "⏹ Stop"}
+          </button>
+        )}
         <button
           onClick={onDown}
           disabled={busy}
