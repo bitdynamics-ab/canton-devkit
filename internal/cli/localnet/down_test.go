@@ -237,17 +237,15 @@ func TestDown_InvalidNameRejectedPositional(t *testing.T) {
 	}
 }
 
-// TestDownAliasStop confirms that "stop" is registered as an alias for "down".
-func TestDownAliasStop(t *testing.T) {
+// TestDownHasNoStopAlias confirms `stop` is NOT an alias for `down`:
+// `stop` is now its own command (graceful compose-stop that keeps
+// containers), so aliasing it here would shadow that command.
+func TestDownHasNoStopAlias(t *testing.T) {
 	cmd := buildDown()
-	found := false
 	for _, a := range cmd.Aliases {
 		if a == "stop" {
-			found = true
+			t.Fatal("`down` must not alias 'stop' — it's a standalone command now")
 		}
-	}
-	if !found {
-		t.Fatal("expected 'stop' alias on `down`")
 	}
 }
 

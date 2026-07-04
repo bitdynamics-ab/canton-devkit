@@ -35,16 +35,18 @@ func buildDown() *cobra.Command {
 		force bool
 	)
 	cmd := &cobra.Command{
-		Use:     "down [name]",
-		Aliases: []string{"stop"},
-		Short:   "Stop a Canton LocalNet instance (preserves volumes)",
-		Long: `Stops the named LocalNet instance gracefully and detaches its
-Docker networks. Volumes and the registry entry are preserved so
-a follow-up
+		Use:   "down [name]",
+		Short: "Tear down a Canton LocalNet instance — remove containers (preserves volumes)",
+		Long: `Stops the named LocalNet instance gracefully, removes its
+containers, and detaches its Docker networks. Volumes and the
+registry entry are preserved so a follow-up
 
   dpm localnet up <name>
 
 resumes from the same on-disk state.
+
+For a lighter-weight halt that keeps the containers around for a
+fast restart, use ` + "`dpm localnet stop <name>`" + ` instead.
 
 To remove docker volumes (destructive — drops all ledger state),
 use ` + "`dpm localnet clean --name <name>`" + ` after down.

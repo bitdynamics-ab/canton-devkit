@@ -37,8 +37,9 @@ CPU. Resume with 'localnet resume' — no boot cost, no port changes. The
 func buildResume() *cobra.Command {
 	opts := &localnet.PauseOptions{}
 	cmd := &cobra.Command{
-		Use:   "resume [name]",
-		Short: "Resume a paused LocalNet instance (docker compose unpause)",
+		Use:     "resume [name]",
+		Aliases: []string{"unpause"},
+		Short:   "Resume a paused LocalNet instance (docker compose unpause)",
 		Long: `Resume a paused instance with 'docker compose unpause' (SIGCONT).
 The inverse of 'localnet pause' — containers continue exactly where they
 were frozen, with no readiness wait and unchanged ports.`,
