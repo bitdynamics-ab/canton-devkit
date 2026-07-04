@@ -101,6 +101,14 @@ func TestStart_StoppedNoContainers202(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "pebble", "0.6.4",
 		map[string]int{"app_user_ui": 44440}, registry.StatusStopped)
+	state, err := registry.Read("pebble")
+	if err != nil {
+		t.Fatalf("read seeded state: %v", err)
+	}
+	state.Profiles = []string{"sv", "app-provider", "app-user", "swagger-ui", "prometheus"}
+	if err := registry.Write(state); err != nil {
+		t.Fatalf("write seeded profiles: %v", err)
+	}
 	srv := stopStartMux(t)
 	resp, err := http.Post(srv.URL+"/api/instances/pebble/start", "application/json", nil)
 	if err != nil {
