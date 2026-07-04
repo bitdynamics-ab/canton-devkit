@@ -36,7 +36,7 @@ func TestLocalnetHelp_RendersMockupShape(t *testing.T) {
 		"--name",
 		"--format=json",
 		"NO_COLOR=1",
-		"up", "down", "status", "logs", "snapshot", "dar",
+		"up", "start", "stop", "down", "status", "logs", "snapshot", "dar",
 		"restart", "clean", "skills", "token",
 	} {
 		if !strings.Contains(body, want) {

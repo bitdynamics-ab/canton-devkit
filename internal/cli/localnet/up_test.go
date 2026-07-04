@@ -65,17 +65,15 @@ func TestUpProfileFlagParses(t *testing.T) {
 	}
 }
 
-// TestUpAliasStart confirms that "start" is registered as an alias for "up".
-func TestUpAliasStart(t *testing.T) {
+// TestUpHasNoStartAlias confirms `start` is NOT an alias for `up`:
+// `start` is now its own command (intelligent compose-start with an
+// up fallback), so aliasing it here would shadow that command.
+func TestUpHasNoStartAlias(t *testing.T) {
 	cmd := buildUp()
-	found := false
 	for _, a := range cmd.Aliases {
 		if a == "start" {
-			found = true
+			t.Fatal("`up` must not alias 'start' — it's a standalone command now")
 		}
-	}
-	if !found {
-		t.Fatal("expected 'start' alias on `up`")
 	}
 }
 

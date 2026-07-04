@@ -217,6 +217,47 @@ func TestStopTeardownIsProjectLabelOnly(t *testing.T) {
 	}
 }
 
+// TestStopContainersAndStartAreProjectLabelOnly pins that
+// StopContainers() and Start() (the `localnet stop` / `localnet start`
+// fast paths + the Web UI Stop/Start actions) target the project by
+// LABEL only — no `-f` compose files, `--env-file`, or `--profile`.
+//
+// Same rationale as TestStopTeardownIsProjectLabelOnly: Splice services
+// are profile-gated, so a `-f`-driven `compose stop`/`start` would apply
+// profile filtering and no-op on the whole (empty) profile set. See
+// CONTRIBUTING.md "Docker Compose teardown must be `-p`-only".
+func TestStopContainersAndStartAreProjectLabelOnly(t *testing.T) {
+	cases := []struct {
+		name string
+		run  func(c *ComposeRunner)
+		verb string
+	}{
+		{"StopContainers", func(c *ComposeRunner) { _ = c.StopContainers(context.Background()) }, "stop"},
+		{"Start", func(c *ComposeRunner) { _ = c.Start(context.Background()) }, "start"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := &recorder{}
+			c := runnerForWiring(t, rec)
+			tc.run(c)
+
+			if len(rec.calls) != 1 {
+				t.Fatalf("%s: expected 1 call, got %d", tc.name, len(rec.calls))
+			}
+			argv := argvOf(rec.calls[0])
+			for _, banned := range []string{"-f", "--env-file", "--profile"} {
+				if contains(argv, banned) {
+					t.Errorf("%s argv must not contain %q (profile filtering would no-op)\nfull argv: %v",
+						tc.name, banned, argv)
+				}
+			}
+			assertArgvContains(t, argv, []string{
+				"docker", "compose", "-p", "canton-test", tc.verb,
+			}, tc.name)
+		})
+	}
+}
+
 // TestWorkDirOrFallback pins that a recorded WorkDir which no longer
 // exists (e.g. the shared Splice cache dir was pruned) falls back to a
 // neutral temp dir instead of being chdir'd into — otherwise the

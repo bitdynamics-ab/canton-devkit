@@ -597,3 +597,51 @@ func (c *ComposeRunner) Restart(ctx context.Context, services ...string) error {
 	}
 	return nil
 }
+
+// StopContainers runs `docker compose -p <project> stop` — a graceful
+// SIGTERM→SIGKILL shutdown that leaves the containers, networks, and
+// volumes in place (unlike Stop/Down, which remove them). Reverse with
+// Start: the processes restart from a clean boot, but no image pull or
+// container re-create is needed, so it's cheaper than up.
+//
+// TEARDOWN IS `-p`-ONLY for the same reason Stop is (see Stop's godoc):
+// every Splice service is profile-gated, so a `-f`-driven `compose stop`
+// would apply profile filtering and no-op. Targeting by project label is
+// profile-agnostic and stops the whole project. See CONTRIBUTING.md
+// "Docker Compose teardown must be `-p`-only".
+func (c *ComposeRunner) StopContainers(ctx context.Context) error {
+	cmd := c.command(ctx, "compose", "-p", c.ProjectName, "stop")
+	// Run from a dir guaranteed to exist so a pruned Splice cache dir
+	// (the recorded WorkDir) can't fail the chdir and strand containers.
+	cmd.Dir = workDirOrFallback(c.WorkDir)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("docker compose stop failed: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	if c.LogWriter != nil {
+		_, _ = c.LogWriter.Write(out)
+	}
+	return nil
+}
+
+// Start runs `docker compose -p <project> start` — the inverse of
+// StopContainers. It restarts the existing (stopped) containers of the
+// project without re-creating them. Errors if the containers were
+// removed (e.g. a `down` ran); callers should fall back to `up` in that
+// case.
+//
+// `-p`-only for the same profile-filtering reason as StopContainers.
+// Docker MAY re-assign published host ports on start, so callers should
+// re-capture Canton's ephemeral gRPC ports afterward (as Restart does).
+func (c *ComposeRunner) Start(ctx context.Context) error {
+	cmd := c.command(ctx, "compose", "-p", c.ProjectName, "start")
+	cmd.Dir = workDirOrFallback(c.WorkDir)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("docker compose start failed: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	if c.LogWriter != nil {
+		_, _ = c.LogWriter.Write(out)
+	}
+	return nil
+}

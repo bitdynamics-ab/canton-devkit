@@ -82,6 +82,38 @@ canton-devkit localnet doctor --port-base 20000   # are 20000..20000+services fr
 The same control is available in the Web UI's **New instance** dialog
 under *Advanced → Fixed port base*.
 
+## Pause, stop, or tear down
+
+DevKit gives you three ways to make an instance stop doing work, each
+trading resource savings against restart cost. All three have symmetric
+"undo" commands and identical Web UI buttons on the instance detail card.
+
+| Command | What it does | Containers | Volumes/state | Resume with | Restart cost |
+| --- | --- | --- | --- | --- | --- |
+| `localnet pause` | Freezes containers in place (`docker compose pause`) | Kept, paused | Kept | `localnet resume` (alias `unpause`) | Instant — processes thaw |
+| `localnet stop` | Gracefully stops containers (`docker compose stop`) | Kept, stopped | Kept | `localnet start` | Fast — containers restart |
+| `localnet down` | Stops **and removes** containers (`docker compose down`) | Removed | Kept | `localnet up` | Slow — recreates the stack |
+
+Notes:
+
+- **Pause** holds RAM (containers still resident) but frees CPU — best
+  for a short break where you want to jump straight back in.
+- **Stop** releases both CPU and the container runtime while keeping the
+  containers on disk, so `start` skips image pulls and stack recreation.
+- **Down** frees everything except your data volumes; `up` rebuilds the
+  stack from the recorded version and profiles. `localnet start` on an
+  instance whose containers are already gone transparently falls back to
+  a full `up` for you.
+- `localnet clean` (below) is the only command that removes **data
+  volumes and registry state** — it is not part of the reversible set.
+
+**Most common choices:**
+
+- Stepping away for a few minutes → `pause` / `resume`.
+- Done for the day, want a fast start tomorrow → `stop` / `start`.
+- Freeing the machine or resetting the containers → `down` / `up`.
+- Throwing the instance away entirely → `clean`.
+
 ## Uninstall / clean up
 
 ```bash

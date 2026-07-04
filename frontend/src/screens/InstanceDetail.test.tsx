@@ -180,6 +180,105 @@ describe("InstanceDetail", () => {
     });
   });
 
+  it("posts to /stop (not /down) when the Stop button is clicked on a running instance", async () => {
+    // Gentle Stop = docker compose stop, containers kept. Distinct
+    // from the Down button (docker compose down, removes containers).
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === "string" && url.endsWith("/stop")) {
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            schema_version: 1,
+            name: "demo",
+            splice_version: "0.4.12",
+            status: "running",
+            created_at: "2026-05-25T10:00:00Z",
+            compose_project: "cdk-demo",
+            docker_network: "cdk-demo_default",
+            container_prefix: "cdk-demo",
+            project_dir: "/x",
+            data_dir: "/x/data",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const onChanged = vi.fn();
+    render(
+      <InstanceDetail name="demo" statusHint="running" onChanged={onChanged} />,
+    );
+
+    const stopBtn = await screen.findByRole("button", { name: /^⏹ Stop$/ });
+    fireEvent.click(stopBtn);
+
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls.map((c) => c[0]);
+      expect(
+        calls.some(
+          (u: string) =>
+            typeof u === "string" && u.endsWith("/api/instances/demo/stop"),
+        ),
+      ).toBe(true);
+      // Must NOT have hit /down.
+      expect(
+        calls.some(
+          (u: string) => typeof u === "string" && u.endsWith("/down"),
+        ),
+      ).toBe(false);
+    });
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it("posts to /start when the Start button is clicked on a stopped instance", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === "string" && url.endsWith("/start")) {
+        // 204 fast-start path.
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            schema_version: 1,
+            name: "demo",
+            splice_version: "0.4.12",
+            status: "stopped",
+            created_at: "2026-05-25T10:00:00Z",
+            compose_project: "cdk-demo",
+            docker_network: "cdk-demo_default",
+            container_prefix: "cdk-demo",
+            project_dir: "/x",
+            data_dir: "/x/data",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const onChanged = vi.fn();
+    render(
+      <InstanceDetail name="demo" statusHint="stopped" onChanged={onChanged} />,
+    );
+
+    const startBtn = await screen.findByRole("button", { name: /start/i });
+    fireEvent.click(startBtn);
+
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls.map((c) => c[0]);
+      expect(
+        calls.some(
+          (u: string) =>
+            typeof u === "string" && u.endsWith("/api/instances/demo/start"),
+        ),
+      ).toBe(true);
+    });
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
   it("re-fetches when the name prop changes", async () => {
     // The Dashboard hands a new name when the user switches
     // instances. Without the useEffect dep on `name`, the
