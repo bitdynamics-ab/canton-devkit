@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" role="img" aria-label="All-time downloads per release — homebrew-canton-devkit">
+<rect x="0" y="0" width="760" height="420" fill="#ffffff"/>
+<text x="380" y="20" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">All-time downloads per release — homebrew-canton-devkit</text>
+<line x1="55" y1="320" x2="730" y2="320" stroke="#e5e7eb" stroke-width="1"/>
+<text x="47" y="324" text-anchor="end" font-size="10" fill="#6b7280">0</text>
+<line x1="55" y1="247.5" x2="730" y2="247.5" stroke="#e5e7eb" stroke-width="1"/>
+<text x="47" y="251.5" text-anchor="end" font-size="10" fill="#6b7280">3</text>
+<line x1="55" y1="175" x2="730" y2="175" stroke="#e5e7eb" stroke-width="1"/>
+<text x="47" y="179" text-anchor="end" font-size="10" fill="#6b7280">6</text>
+<line x1="55" y1="102.5" x2="730" y2="102.5" stroke="#e5e7eb" stroke-width="1"/>
+<text x="47" y="106.5" text-anchor="end" font-size="10" fill="#6b7280">9</text>
+<line x1="55" y1="30" x2="730" y2="30" stroke="#e5e7eb" stroke-width="1"/>
+<text x="47" y="34" text-anchor="end" font-size="10" fill="#6b7280">13</text>
+<line x1="55" y1="30" x2="55" y2="320" stroke="#9ca3af" stroke-width="1"/>
+<line x1="55" y1="320" x2="730" y2="320" stroke="#9ca3af" stroke-width="1"/>
+<rect x="73.98" y="297.08" width="46.41" height="22.92" fill="#0d9488"/>
+<text x="97.19" y="292.08" text-anchor="middle" font-size="10" fill="#111827">1</text>
+<text x="97.19" y="336" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 97.19 336)">v0.3</text>
+<rect x="158.36" y="251.23" width="46.41" height="68.77" fill="#0d9488"/>
+<text x="181.56" y="246.23" text-anchor="middle" font-size="10" fill="#111827">3</text>
+<text x="181.56" y="336" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 181.56 336)">v0.4</text>
+<rect x="242.73" y="228.3" width="46.41" height="91.7" fill="#0d9488"/>
+<text x="265.94" y="223.3" text-anchor="middle" font-size="10" fill="#111827">4</text>
+<text x="265.94" y="336" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 265.94 336)">v0.5</text>
+<rect x="327.11" y="297.08" width="46.41" height="22.92" fill="#0d9488"/>
+<text x="350.31" y="292.08" text-anchor="middle" font-size="10" fill="#111827">1</text>
+<text x="350.31" y="336" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 350.31 336)">v0.6</text>
+<rect x="411.48" y="297.08" width="46.41" height="22.92" fill="#0d9488"/>
+<text x="434.69" y="292.08" text-anchor="middle" font-size="10" fill="#111827">1</text>
+<text x="434.69" y="336" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 434.69 336)">v0.7</text>
+<rect x="495.86" y="320" width="46.41" height="0" fill="#0d9488"/>
+<text x="519.06" y="315" text-anchor="middle" font-size="10" fill="#111827">0</text>
+<text x="519.06" y="336" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 519.06 336)">v0.8.1</text>
+<rect x="580.23" y="205.38" width="46.41" height="114.62" fill="#0d9488"/>
+<text x="603.44" y="200.38" text-anchor="middle" font-size="10" fill="#111827">5</text>
+<text x="603.44" y="336" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 603.44 336)">v0.9.0</text>
+<rect x="664.61" y="67.83" width="46.41" height="252.17" fill="#0d9488"/>
+<text x="687.81" y="62.83" text-anchor="middle" font-size="10" fill="#111827">11</text>
+<text x="687.81" y="336" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 687.81 336)">v0.10.1</text>
+<text x="14" y="175" text-anchor="middle" font-size="11" fill="#6b7280" transform="rotate(-90 14 175)">Downloads</text>
+</svg>
+

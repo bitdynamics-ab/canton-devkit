@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="440" viewBox="0 0 820 440" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" role="img" aria-label="Downloads per platform, per release — homebrew-canton-devkit">
+<rect x="0" y="0" width="820" height="440" fill="#ffffff"/>
+<text x="410" y="20" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">Downloads per platform, per release — homebrew-canton-devkit</text>
+<line x1="55" y1="360" x2="630" y2="360" stroke="#e5e7eb" stroke-width="1"/>
+<text x="47" y="364" text-anchor="end" font-size="10" fill="#6b7280">0</text>
+<line x1="55" y1="277.5" x2="630" y2="277.5" stroke="#e5e7eb" stroke-width="1"/>
+<text x="47" y="281.5" text-anchor="end" font-size="10" fill="#6b7280">1</text>
+<line x1="55" y1="195" x2="630" y2="195" stroke="#e5e7eb" stroke-width="1"/>
+<text x="47" y="199" text-anchor="end" font-size="10" fill="#6b7280">3</text>
+<line x1="55" y1="112.5" x2="630" y2="112.5" stroke="#e5e7eb" stroke-width="1"/>
+<text x="47" y="116.5" text-anchor="end" font-size="10" fill="#6b7280">4</text>
+<line x1="55" y1="30" x2="630" y2="30" stroke="#e5e7eb" stroke-width="1"/>
+<text x="47" y="34" text-anchor="end" font-size="10" fill="#6b7280">6</text>
+<line x1="55" y1="30" x2="55" y2="360" stroke="#9ca3af" stroke-width="1"/>
+<line x1="55" y1="360" x2="630" y2="360" stroke="#9ca3af" stroke-width="1"/>
+<polyline points="55,302.61 137.14,245.22 219.29,245.22 301.43,302.61 383.57,302.61 465.71,360 547.86,187.83 630,73.04" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+<circle cx="55" cy="302.61" r="3" fill="#2563eb"/>
+<circle cx="137.14" cy="245.22" r="3" fill="#2563eb"/>
+<circle cx="219.29" cy="245.22" r="3" fill="#2563eb"/>
+<circle cx="301.43" cy="302.61" r="3" fill="#2563eb"/>
+<circle cx="383.57" cy="302.61" r="3" fill="#2563eb"/>
+<circle cx="465.71" cy="360" r="3" fill="#2563eb"/>
+<circle cx="547.86" cy="187.83" r="3" fill="#2563eb"/>
+<circle cx="630" cy="73.04" r="3" fill="#2563eb"/>
+<polyline points="55,360 137.14,302.61 219.29,302.61 301.43,360 383.57,360 465.71,360 547.86,245.22 630,187.83" fill="none" stroke="#16a34a" stroke-width="2.5"/>
+<circle cx="55" cy="360" r="3" fill="#16a34a"/>
+<circle cx="137.14" cy="302.61" r="3" fill="#16a34a"/>
+<circle cx="219.29" cy="302.61" r="3" fill="#16a34a"/>
+<circle cx="301.43" cy="360" r="3" fill="#16a34a"/>
+<circle cx="383.57" cy="360" r="3" fill="#16a34a"/>
+<circle cx="465.71" cy="360" r="3" fill="#16a34a"/>
+<circle cx="547.86" cy="245.22" r="3" fill="#16a34a"/>
+<circle cx="630" cy="187.83" r="3" fill="#16a34a"/>
+<polyline points="55,360 137.14,360 219.29,302.61 301.43,360 383.57,360 465.71,360 547.86,360 630,187.83" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+<circle cx="55" cy="360" r="3" fill="#dc2626"/>
+<circle cx="137.14" cy="360" r="3" fill="#dc2626"/>
+<circle cx="219.29" cy="302.61" r="3" fill="#dc2626"/>
+<circle cx="301.43" cy="360" r="3" fill="#dc2626"/>
+<circle cx="383.57" cy="360" r="3" fill="#dc2626"/>
+<circle cx="465.71" cy="360" r="3" fill="#dc2626"/>
+<circle cx="547.86" cy="360" r="3" fill="#dc2626"/>
+<circle cx="630" cy="187.83" r="3" fill="#dc2626"/>
+<polyline points="55,360 137.14,360 219.29,360 301.43,360 383.57,360 465.71,360 547.86,360 630,360" fill="none" stroke="#9333ea" stroke-width="2.5"/>
+<circle cx="55" cy="360" r="3" fill="#9333ea"/>
+<circle cx="137.14" cy="360" r="3" fill="#9333ea"/>
+<circle cx="219.29" cy="360" r="3" fill="#9333ea"/>
+<circle cx="301.43" cy="360" r="3" fill="#9333ea"/>
+<circle cx="383.57" cy="360" r="3" fill="#9333ea"/>
+<circle cx="465.71" cy="360" r="3" fill="#9333ea"/>
+<circle cx="547.86" cy="360" r="3" fill="#9333ea"/>
+<circle cx="630" cy="360" r="3" fill="#9333ea"/>
+<text x="55" y="376" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 55 376)">v0.3</text>
+<text x="137.14" y="376" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 137.14 376)">v0.4</text>
+<text x="219.29" y="376" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 219.29 376)">v0.5</text>
+<text x="301.43" y="376" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 301.43 376)">v0.6</text>
+<text x="383.57" y="376" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 383.57 376)">v0.7</text>
+<text x="465.71" y="376" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 465.71 376)">v0.8.1</text>
+<text x="547.86" y="376" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 547.86 376)">v0.9.0</text>
+<text x="630" y="376" text-anchor="end" font-size="10" fill="#374151" transform="rotate(-40 630 376)">v0.10.1</text>
+<rect x="650" y="31" width="10" height="10" fill="#2563eb"/>
+<text x="664" y="40" font-size="11" fill="#111827">macOS (arm64)</text>
+<rect x="650" y="51" width="10" height="10" fill="#16a34a"/>
+<text x="664" y="60" font-size="11" fill="#111827">Linux (amd64)</text>
+<rect x="650" y="71" width="10" height="10" fill="#dc2626"/>
+<text x="664" y="80" font-size="11" fill="#111827">Windows (amd64)</text>
+<rect x="650" y="91" width="10" height="10" fill="#9333ea"/>
+<text x="664" y="100" font-size="11" fill="#111827">Debian (.deb)</text>
+<text x="14" y="195" text-anchor="middle" font-size="11" fill="#6b7280" transform="rotate(-90 14 195)">Downloads</text>
+</svg>
+
