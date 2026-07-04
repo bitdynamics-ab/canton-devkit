@@ -3,9 +3,8 @@ title: "Splice Version Catalogue"
 description: "How DevKit pins curated Splice LocalNet versions by commit SHA and content hash, discovers upstream tags, and resolves uncurated versions on opt-in."
 ---
 
-DevKit pins to a **curated** list of Splice versions in
-[`internal/splice/versions.json`](https://github.com/bitdynamics-ab/canton-devkit/blob/main/internal/splice/versions.json) so
-`localnet up` never composes-up an untested upstream tag.
+DevKit pins to a **catalogue** of tested Splice versions embedded in the
+binary so `localnet up` never composes-up an untested upstream tag.
 
 ## What DevKit fetches, and from where
 
@@ -58,7 +57,7 @@ the canonical name in code and docs.
 | `commit` | `git ls-remote --tags` at catalogue time (or branch HEAD for pre-releases) | Immutable, content-addressable. DevKit fetches via `archive/<commit>.tar.gz` so a force-pushed tag can't quietly change what `localnet up` installs. |
 | `content_sha` | `scripts/compute-tree-sha.sh` | SHA-256 over the extracted `cluster/compose/localnet/` subtree (sorted by path). Stable across upstream gzip-envelope rewrites; this is the authoritative integrity check at fetch time. |
 | `size` | byte count of the source-tarball | Informational; used to print a hint before download and to size the in-flight body cap. |
-| `major` | first two segments of `tag` (or set manually for branch tags) | Routes to the per-major adapter in `internal/splice/v0X/`. |
+| `major` | first two segments of `tag` (or set manually for branch tags) | Routes to the per-major Splice adapter for that release line. |
 | `channel` *(optional)* | catalogue maintainer | `""` / `"stable"` → production-ready; `"alpha"` → opt-in pre-release (Token Standard V2 snapshot etc.). `up` prints a one-line warning when an alpha entry is selected. |
 | `image_repo` *(optional)* | catalogue maintainer | Overrides the default Docker image repository. Defaults to `ghcr.io/digital-asset/decentralized-canton-sync/docker`. Set to `ghcr.io/digital-asset/decentralized-canton-sync-dev/docker` for the V2 alpha track. The v06 adapter forwards this as the `IMAGE_REPO` compose env. |
 
@@ -142,8 +141,8 @@ Three reasons the catalogue is curated:
    for downstream consumption. DevKit doesn't aim to support every
    commit that happens to land in the repo.
 
-3. **Adapter routing.** DevKit ships per-major adapters
-   (`internal/splice/v05/`, `v06/`). A new major version (e.g. `0.7.x`)
+3. **Adapter routing.** DevKit ships per-major adapters for each Splice
+   major version. A new major version (e.g. `0.7.x`)
    needs a corresponding adapter before it can be added — the script
    leaves `major` blank for non-N.N.N tags so a maintainer notices.
 

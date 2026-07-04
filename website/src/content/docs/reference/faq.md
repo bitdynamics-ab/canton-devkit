@@ -1,7 +1,10 @@
-# FAQ
+---
+title: FAQ
+description: Common questions about canton-devkit — versions, tokens, multi-instance setups, and snapshots.
+---
 
 Common questions about canton-devkit. See also
-[troubleshooting.md](troubleshooting.md) for failure-mode fixes.
+[Troubleshooting](./troubleshooting/) for failure-mode fixes.
 
 ## General
 
@@ -21,14 +24,14 @@ the token workspace.
 **Does it fork or patch Splice?**
 No. It downloads the upstream `cluster/compose/localnet/` tree pinned by
 immutable commit SHA and verified by SHA-256 after extraction. See
-[versions.md](versions.md).
+[Splice version catalogue](./versions/).
 
 **Which platforms are supported?**
 macOS (arm64), Linux (amd64), and Windows (amd64) are the released,
 tested targets. Other OS/arch combinations may work (DevKit only
 orchestrates Docker) but are untested — `localnet doctor` warns on
 unsupported platforms. See the compatibility matrix in
-[getting-started.md](getting-started.md#5-compatibility-matrix).
+[Getting started](../../getting-started/#compatibility-matrix).
 
 ## Versions
 
@@ -48,7 +51,7 @@ curated.
 
 **V1 or V2?**
 This tool targets **Token Standard V2 (CIP-0112)** only. V1 / CIP-0056 is
-not supported. See [tokens.md](tokens.md).
+not supported. See the [Tokens guide](../guides/tokens/).
 
 **Why is V2 "alpha" and what does `--profile tokens-v2` do?**
 V2 runs on a special upstream Splice build (alpha protocol 35) on the
@@ -96,6 +99,6 @@ is safe; it re-downloads on next `up`.
 **Snapshot / restore — is it crash-consistent?**
 Snapshots capture Docker volumes + registry state. They are **not**
 guaranteed application-consistent for a *running* instance — see the
-warning in [troubleshooting.md](troubleshooting.md#snapshot-consistency)
+warning in [Troubleshooting](./troubleshooting/#snapshot-consistency)
 and `localnet snapshot --help`. Stop the instance for a fully consistent
 snapshot.

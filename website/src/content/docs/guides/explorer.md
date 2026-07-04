@@ -9,9 +9,8 @@ transactions from the participant's gRPC ledger API, so you can
 see what's on the ledger without writing a script.
 
 This guide covers what the Explorer can do today, the equivalent
-CLI commands for scripted workflows, and which features are
-planned but not yet shipped — so you can tell at a glance whether
-the Explorer fits your task.
+CLI commands for scripted workflows, and current limitations — so you can
+tell at a glance whether the Explorer fits your task.
 
 ---
 
@@ -99,7 +98,7 @@ shows:
 - **Payload** as pretty-printed JSON. Records, lists, optionals,
   primitives, parties, and contract IDs all render natively;
   variants/enums/maps fall back to a textual proto form (a typed
-  decoder is planned).
+  decoder using Daml-LF metadata is not yet supported).
 - **Signatories** and **Observers** as separate lists.
 - **Created** with the RFC 3339 timestamp the participant recorded
   and a human-readable "Xs/m/h/d ago".
@@ -273,7 +272,7 @@ Things the Explorer does **not** do today:
 - **Variants, enums, maps fall back to a textual proto form** in
   the payload preview. Records, lists, primitives, parties, and
   contract IDs decode natively. The full typed decoder using
-  Daml-LF metadata is planned.
+  Daml-LF metadata is not yet supported in the payload preview.
 
 If the Explorer can't show what you need, the CLI usually can —
 or the underlying gRPC API directly via the SDK.
