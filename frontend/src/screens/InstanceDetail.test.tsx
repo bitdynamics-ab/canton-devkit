@@ -279,6 +279,47 @@ describe("InstanceDetail", () => {
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
   });
 
+  it("uses a neutral error banner for non-stop action failures", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === "string" && url.endsWith("/start")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ code: "START_FAILED", error: "boom" }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            schema_version: 1,
+            name: "demo",
+            splice_version: "0.4.12",
+            status: "stopped",
+            created_at: "2026-05-25T10:00:00Z",
+            compose_project: "cdk-demo",
+            docker_network: "cdk-demo_default",
+            container_prefix: "cdk-demo",
+            project_dir: "/x",
+            data_dir: "/x/data",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InstanceDetail name="demo" statusHint="stopped" />);
+
+    const startBtn = await screen.findByRole("button", { name: /start/i });
+    fireEvent.click(startBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Action failed: boom");
+    });
+    expect(screen.getByRole("alert")).not.toHaveTextContent("Stop failed");
+  });
+
   it("re-fetches when the name prop changes", async () => {
     // The Dashboard hands a new name when the user switches
     // instances. Without the useEffect dep on `name`, the

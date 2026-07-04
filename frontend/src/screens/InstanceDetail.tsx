@@ -261,7 +261,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
             marginBottom: 10,
           }}
         >
-          Stop failed: {stopping.message}
+          Action failed: {stopping.message}
         </div>
       )}
 
