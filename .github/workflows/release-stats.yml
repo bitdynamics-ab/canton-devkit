@@ -1,0 +1,55 @@
+name: Release stats
+
+# Regenerate the release download-statistics charts embedded in the README.
+# Data source is the public builds repo (bitdynamics-ab/homebrew-canton-devkit),
+# which mirrors the same release assets as this repo. Uses the built-in
+# GITHUB_TOKEN only — no additional secrets required.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Daily at 06:17 UTC (off-peak; avoids the top-of-hour cron surge).
+    - cron: "17 6 * * *"
+  workflow_run:
+    # Refresh promptly after a release publishes new assets.
+    workflows: ["Release"]
+    types:
+      - completed
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-stats
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    name: Regenerate download-stats charts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        # actions/checkout@v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - name: Generate charts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/release-stats.sh
+
+      - name: Commit refreshed charts if changed
+        run: |
+          set -euo pipefail
+          git add docs/assets/release-downloads-by-platform.svg \
+                  docs/assets/release-downloads-by-version.svg \
+                  docs/assets/release-downloads-totals.svg \
+                  docs/assets/release-downloads.md
+          if git diff --cached --quiet; then
+            echo "Release stats already up to date."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+              -c user.email="github-actions[bot]@users.noreply.github.com" \
+              commit -m "chore: refresh release download stats"
+          git push
