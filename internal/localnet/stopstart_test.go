@@ -133,6 +133,7 @@ func TestRunStart_FallsBackToUpWhenContainersGone(t *testing.T) {
 	seedRunningInstance(t, "demo")
 	s, _ := registry.Read("demo")
 	s.Status = registry.StatusStopped
+	s.Profiles = []string{"sv", "app-provider", "app-user", "swagger-ui", "prometheus"}
 	_ = registry.Write(s)
 
 	upCalled := false
@@ -148,6 +149,9 @@ func TestRunStart_FallsBackToUpWhenContainersGone(t *testing.T) {
 			}
 			if o.Version != "0.6.4" {
 				t.Errorf("up reused version = %q, want 0.6.4", o.Version)
+			}
+			if len(o.Profiles) != 0 {
+				t.Errorf("up profiles = %v, want nil/empty so RunUp can recover opt-ins", o.Profiles)
 			}
 			return ExitSuccess
 		},
