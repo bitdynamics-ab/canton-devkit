@@ -9,7 +9,7 @@
 
 # canton-devkit
 
-### The fastest way to run a [Canton](https://canton.network/) network on your laptop.
+### The easiest and fastest way to run a [Canton](https://canton.network/) LocalNet on your laptop.
 
 A single-binary toolkit for spinning up, inspecting, and tearing down a complete Canton developer stack — Canton synchronizer + participant, Splice super-validator apps, three party wallets (app-user, app-provider, SV), Scan explorer, signed JWTs — in **one command**.
 
@@ -34,7 +34,7 @@ A single-binary toolkit for spinning up, inspecting, and tearing down a complete
 
 ## ✨ Why canton-devkit?
 
-[Canton](https://canton.network/) is the public blockchain with built-in privacy, designed for regulated finance — but its local-dev story has historically been a multi-hour expedition: clone [Splice](https://github.com/canton-network/splice), decode docker-compose layers, hunt JWT secrets, copy-paste party IDs. `canton-devkit` collapses that into a single binary built around three convictions:
+[Canton](https://canton.network/) is the public blockchain with built-in privacy, designed for regulated finance — but its local-dev story has historically been a multi-hour expedition: clone [Splice](https://github.com/canton-network/splice), decode docker-compose layers, hunt JWT secrets, copy-paste party IDs. `canton-devkit` collapses that into a single binary:
 
 <table>
 <tr>
@@ -83,11 +83,11 @@ Optional `--profile observability` adds **Prometheus + Grafana** with a curated 
 
 ## 🎯 Who is this for?
 
-| You are… | We've got you because… |
+| You are… | What DevKit provides |
 |---|---|
 | **A Daml/Canton app developer** | Reproducible local stack, signed JWTs, party IDs auto-recorded, hot DAR upload |
 | **A CI engineer** | Pinned versions, `--json` everywhere, exit codes documented, snapshot/restore for fixtures |
-| **An evaluator** | One command to a healthy network. Tear it down with `clean` when you're done |
+| **A first-time user** | One command to a healthy network; tear it down with `clean` when done |
 | **A workshop facilitator** | Same demo on every laptop, regardless of OS or Apple Silicon |
 
 > [!NOTE]
@@ -269,7 +269,7 @@ flowchart LR
       CLI[CLI<br/><i>localnet up / status / …</i>]
       Web[Web UI<br/><i>localhost:7777</i>]
     end
-    Core[internal/localnet<br/><i>orchestrator</i>]
+    Core[LocalNet orchestrator]
     Reg[Registry<br/><i>~/.canton-devkit/</i>]
     Splice[Splice fetch<br/><i>pinned by commit SHA</i>]
     Docker[Docker Compose<br/><i>~12 containers</i>]

@@ -14,8 +14,7 @@ resolved.
   Uppercase, underscores, and leading/trailing hyphens are rejected.
   DNS-label form was chosen so the same name is safe to embed as a
   hostname in a future `{service}.{instance}.localhost` routing model
-  without a second translation step. The single source of truth lives in
-  `internal/registry/state.go` (`ValidateName`); the CLI layer delegates.
+  without a second translation step.
   *Migration:* instances created with an older release that still
   allowed uppercase or underscore names (e.g. `MyStack`, `my_stack`)
   must be torn down with that older binary and re-created under a
@@ -37,7 +36,7 @@ resolved.
   each running image's content digest (image ID) in `state.json`
   (`image_digests`) and, on a later `up`/`restart` of the SAME version,
   WARNs if a digest changed — i.e. a mutable ghcr tag was republished
-  under you. See `internal/localnet/image_digests.go`. This is a warning,
+  under you. This is a warning,
   not a gate (a digest can legitimately change if you manually re-pull),
   and it's best-effort (a capture failure just skips the check). True
   digest-pinning at pull time would need upstream Splice to expose
@@ -116,9 +115,7 @@ for the topology.
   per-instance scrape uses in-network service DNS (`canton:10013`)
   rather than `host.docker.internal`, so it works on any platform
   regardless of the Linux `host-gateway` mapping.
-- **Planned.** Gating the per-instance overlay off (to drop the
-  duplication) is deferred until the shared-only path is end-to-end
-  validated on a native Linux Docker host. The runtime toggle funnels
-  through a single neutral function
-  (`internal/localnet.SetObservability`), so removing the overlay is
-  additive rather than a rewrite of both surfaces.
+- **Removal pending validation.** The per-instance overlay stays enabled
+  until the shared-only path is validated end-to-end on a native Linux
+  Docker host. When that validation completes, the overlay can be gated
+  off without changing the CLI or Web UI observability commands.

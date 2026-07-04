@@ -14,79 +14,25 @@ hero:
       variant: minimal
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
-
 `canton-devkit` is a single-binary toolkit for spinning up, inspecting, and tearing
 down a complete [Canton](https://canton.network/) developer stack — Canton
 synchronizer + participant, Splice super-validator apps, three party wallets
-(app-user, app-provider, SV), Scan explorer, signed JWTs — in **one command**.
+(app-user, app-provider, SV), Scan explorer, and signed JWTs.
 
-## Why Canton DevKit?
+## Getting started
 
-<CardGrid stagger>
-	<Card title="One command" icon="rocket">
-		No YAML editing, no env-file shuffling. `up` downloads Splice, signs JWTs,
-		brings up a dozen containers, prints endpoints. Cold start ~90&nbsp;s.
-	</Card>
-	<Card title="Two surfaces" icon="laptop">
-		Same code, two skins: a polished CLI for terminals &amp; CI, a real
-		Vite/React Web UI for browser-driven inspection. Always at parity.
-	</Card>
-	<Card title="Zero lock-in" icon="approve-check">
-		No forks, no patches. Thin wrapper over upstream
-		[Splice LocalNet](https://github.com/canton-network/splice), pinned to
-		immutable commit SHAs and verified by content hash.
-	</Card>
-	<Card title="Snapshot &amp; restore" icon="seti:db">
-		Save a working state to a `.tgz`, hand it to a teammate, replay it on CI.
-		Disaster recovery in 4 seconds.
-	</Card>
-	<Card title="Single binary" icon="download">
-		`go install` or `dpm install package` — same artefact. macOS arm64, Linux
-		amd64, Windows amd64. No JVM, no Python, no Node at runtime.
-	</Card>
-	<Card title="Observability built-in" icon="magnifier">
-		Optional `--profile observability` adds Prometheus + Grafana with a curated
-		Canton dashboard. The CLI scrapes the same metrics.
-	</Card>
-</CardGrid>
+Start with [Installation & Getting Started](getting-started/) for install paths,
+Docker prerequisites, and a zero-to-running LocalNet walkthrough.
 
-## Quick start
+## Documentation
 
-```sh
-# Verify your host is ready (Docker, RAM, disk, ports)
-canton-devkit localnet doctor
-
-# Bring up a Canton network called "demo"
-canton-devkit localnet up demo
-
-# Inspect from the browser
-canton-devkit localnet ui
-
-# …or stay in the terminal
-canton-devkit localnet status              # ports, health, uptime
-canton-devkit localnet logs canton         # tail Canton's logs
-eval "$(canton-devkit localnet env)"       # export endpoints to your shell
-
-# Snapshot, tear down, restore
-canton-devkit localnet snapshot --to demo.tgz
-canton-devkit localnet clean
-canton-devkit localnet restore --from demo.tgz
-```
-
-:::tip
-Stuck? Run `canton-devkit localnet doctor` — it tells you exactly what's missing
-and how to fix it.
-:::
-
-## Who is this for?
-
-| You are… | We've got you because… |
-| --- | --- |
-| **A Daml/Canton app developer** | Reproducible local stack, signed JWTs, party IDs auto-recorded, hot DAR upload |
-| **A CI engineer** | Pinned versions, `--json` everywhere, exit codes documented, snapshot/restore for fixtures |
-| **An evaluator** | One command to a healthy network. Tear it down with `clean` when you're done |
-| **A workshop facilitator** | Same demo on every laptop, regardless of OS or Apple Silicon |
+- [LocalNet lifecycle](guides/localnet-lifecycle/) — up, inspect, multiple instances, clean up
+- [Tokens (CIP-0112 / V2)](guides/tokens/)
+- [Contract explorer](guides/explorer/)
+- [Observability](guides/observability/)
+- [FAQ](reference/faq/)
+- [Troubleshooting](reference/troubleshooting/)
+- [Known limitations](reference/limitations/)
 
 :::note
 **Not for production.** This is a developer tool. For production Canton
