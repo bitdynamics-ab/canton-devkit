@@ -19,8 +19,6 @@ tree**. Throughout the docs, `dpm localnet <cmd>` and
 > never changes host permissions. It orchestrates the existing Splice
 > LocalNet container stack.
 
----
-
 ## 1. Prerequisites
 
 | Requirement | Why | Check |
@@ -40,8 +38,6 @@ dpm localnet doctor          # or: canton-devkit localnet doctor
 when a check fails, printing copy-pasteable remediation. It's the same
 preflight `localnet up` runs, so a green `doctor` means `up` will pass
 preflight.
-
----
 
 ## 2. Install — DPM component (primary)
 
@@ -69,8 +65,6 @@ DPM registers a single top-level `localnet` command; every DevKit
 subcommand (`up`, `down`, `status`, `dar …`, `contracts …`, `token …`,
 `metrics`, `doctor`, …) lives under it. This keeps the DPM surface
 minimal and conflict-free.
-
----
 
 ## 3. Install — standalone binary
 
@@ -146,7 +140,7 @@ sudo apt install canton-devkit=0.7.0
 The APT repo is currently unsigned and therefore uses `trusted=yes`;
 the release still publishes SHA-256 metadata. Repository signing has
 not been added yet. Package installation records a best-effort anonymous `apt`
-install-surface telemetry ping — see [telemetry.md](./telemetry.md)
+install-surface telemetry ping — see [Telemetry](telemetry.md)
 for what is sent and how to opt out before installing.
 
 Direct `.deb` install also works:
@@ -192,8 +186,9 @@ brew tap bitdynamics-ab/canton-devkit
 brew install canton-devkit
 ```
 
-> See [homebrew.md](./homebrew.md) for the direct-formula install,
-> the tap layout, and how the formula is kept in sync on each release.
+> See the [Homebrew guide](homebrew.md) for the direct-formula
+> install, the tap layout, and how the formula is kept in sync on each
+> release.
 
 ### From source (Go toolchain)
 
@@ -201,79 +196,7 @@ brew install canton-devkit
 go install github.com/bitdynamics-ab/canton-devkit/cmd/canton-devkit@latest
 ```
 
----
-
-## 4. Zero to running LocalNet
-
-```bash
-# 1. Check the host (no changes made)
-canton-devkit localnet doctor
-
-# 2. Start a named LocalNet (downloads Splice on first run; waits for readiness)
-canton-devkit localnet up --name demo
-
-# 3. Inspect it — endpoints, health, credentials
-canton-devkit localnet status --name demo
-
-# 4. Export endpoints for your app/tests
-eval "$(canton-devkit localnet env --name demo)"
-
-# 5. Upload a DAR
-canton-devkit localnet dar upload ./my-app.dar --instance demo
-
-# 6. Watch live contracts. The participant gRPC endpoint isn't
-#    host-published by default, so pass --endpoint host:port
-#    (auto-discovery from --name is not yet supported). Find the
-#    port under "participant_ledger_app-user" in `status` output.
-canton-devkit localnet contracts watch --name demo --endpoint localhost:<ledger-port>
-
-# 7. Tear it down
-canton-devkit localnet down --name demo
-```
-
-Replace `canton-devkit` with `dpm` if you installed via the DPM
-component. `up` waits for the stack to become healthy (Splice
-onboarding can take several minutes on a cold start) and prints the
-service endpoints and credential locations when ready.
-
-### Running two LocalNets at once
-
-```bash
-canton-devkit localnet up --name alpha
-canton-devkit localnet up --name beta
-canton-devkit localnet list           # both instances + their state
-```
-
-Each named instance gets its own deterministic compose project,
-network, and host ports, so they don't collide.
-
-#### Explicit, deterministic ports (`--port-base`)
-
-By default DevKit **auto-allocates** host ports — the simplest path, and
-it never conflicts because the kernel hands out free ports. When you need
-a **fixed, predictable** port map instead — reproducible CI layouts, or
-multiple instances at known offsets — pin a base:
-
-```bash
-canton-devkit localnet up --name alpha --port-base 20000   # services at 20000+N
-canton-devkit localnet up --name beta  --port-base 30000   # services at 30000+N
-```
-
-Each service lands on `base + N`, identically across runs and machines.
-Every derived port must be free or `up` fails fast (no silent fallback) —
-so the layout you asked for is the layout you get. Pre-flight a base
-before bringing anything up:
-
-```bash
-canton-devkit localnet doctor --port-base 20000   # are 20000..20000+services free?
-```
-
-The same control is available in the Web UI's **New instance** dialog
-under *Advanced → Fixed port base*.
-
----
-
-## 5. Compatibility matrix
+## 4. Compatibility matrix
 
 ### Platforms (released, tested)
 
@@ -289,27 +212,25 @@ platforms.
 
 ### Splice LocalNet versions
 
-DevKit pins a **catalogue** of tested Splice versions; `localnet up
+DevKit pins a catalogue of tested Splice versions; `localnet up
 --version <tag>` selects one. List them at runtime:
 
 ```bash
 canton-devkit localnet versions
 ```
 
-See [docs/versions.md](./versions.md) for how the catalogue is fetched
-and verified. Uncurated upstream tags can be used at your own risk via
-`up --version <tag> --allow-uncurated`.
+See the [Splice version catalogue](versions.md) for how the
+catalogue is fetched and verified. Uncurated upstream tags can be used
+at your own risk via `up --version <tag> --allow-uncurated`.
 
----
-
-## 6. Troubleshooting
+## 5. Troubleshooting the install
 
 | Symptom | Cause | Fix |
 |---|---|---|
 | `doctor` says **Docker daemon** ✗ | Docker not running | Start Docker Desktop / `sudo systemctl start docker` |
 | `doctor` says **Compose v2** ✗ | Only Compose v1 present | Upgrade to Docker Compose v2 (`docker compose`, not `docker-compose`) |
 | `up` fails **PORTS_IN_USE** | Another process holds a port | Stop the conflicting process, or use a different `--name` |
-| `up` hangs at "waiting for healthy" | Insufficient Docker memory | Raise Docker memory to ≥ 8 GB; see [docs/limitations.md](./limitations.md) |
+| `up` hangs at "waiting for healthy" | Insufficient Docker memory | Raise Docker memory to ≥ 8 GB; see [Known limitations](limitations.md) |
 | Linux: `permission denied` on the Docker socket | User not in `docker` group | `sudo usermod -aG docker $USER` then re-login |
 | macOS: "cannot be opened because the developer cannot be verified" | Gatekeeper quarantine | `xattr -d com.apple.quarantine $(which canton-devkit)` |
 | Web UI / Explorer shows stale ports after a restart | Docker re-assigned ephemeral ports | DevKit re-captures them within ~15 s; or run `localnet restart --name <n>` |
@@ -318,20 +239,10 @@ For anything else, attach the full `localnet doctor` output to a
 [GitHub issue](https://github.com/bitdynamics-ab/canton-devkit/issues) —
 it includes OS/arch, Docker/Compose versions, and the check results.
 
----
+## 6. Next steps
 
-## 7. Uninstall / clean up
-
-```bash
-# stop + remove a single instance's containers, volumes, and state
-canton-devkit localnet clean --name demo
-
-# remove every DevKit-managed instance
-canton-devkit localnet clean --all
-
-# remove the standalone binary
-sudo rm /usr/local/bin/canton-devkit
-```
-
-`clean` refuses to touch a running instance unless you pass `--force`
-(which tears it down first). Use `--dry-run` to preview.
+- [LocalNet lifecycle](localnet-lifecycle.md) — zero to a running
+  LocalNet, multiple instances, deterministic ports, and clean-up.
+- [Tokens](tokens.md) — CIP-0112 token flows on LocalNet.
+- [Explorer](explorer.md) — browse the Active Contract Set and
+  recent transactions from the Web UI.
