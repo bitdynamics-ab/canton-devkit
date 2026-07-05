@@ -239,6 +239,23 @@ func TestEvalStatus(t *testing.T) {
 			containers: nil,
 			want:       registry.StatusFailed,
 		},
+		{
+			// `localnet stop` leaves exited containers in place; a
+			// cleanly-stopped instance must stay stopped, not flip to
+			// partial (which would look broken + hide the Start button).
+			name:       "cached stopped + all exited → stopped (localnet stop resting state)",
+			cached:     registry.StatusStopped,
+			containers: []ContainerHealth{exited, exited},
+			want:       registry.StatusStopped,
+		},
+		{
+			// A running container against a cached-stopped instance means
+			// it was started out-of-band; the normal eval should take over.
+			name:       "cached stopped + something running → running (started out-of-band)",
+			cached:     registry.StatusStopped,
+			containers: []ContainerHealth{healthy, healthy},
+			want:       registry.StatusRunning,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

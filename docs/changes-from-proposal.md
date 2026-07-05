@@ -19,6 +19,7 @@ Every deviation listed here is **intentional**, not an oversight or implementati
   - [`--profile` flag (new)](#--profile-flag-new)
   - [`--port-base` flag (new)](#--port-base-flag-new)
 - [`localnet pause` / `resume` (new)](#localnet-pause--resume-new)
+- [`localnet stop` / `start` (new)](#localnet-stop--start-new)
 - [`localnet creds` (new)](#localnet-creds-new)
 - [`localnet versions` (new)](#localnet-versions-new)
 - [`localnet ui` (new)](#localnet-ui-new)
@@ -74,14 +75,15 @@ The following aliases are not in the proposal but are shipped:
 
 | Canonical command | Alias(es) | Notes |
 |---|---|---|
-| `localnet up` | `start` | More intuitive for new users |
-| `localnet down` | `stop` | Pair with `start` |
+| `localnet resume` | `unpause` | Matches `docker compose unpause` terminology |
 | `localnet observability` | `obs` | Shorter for interactive use |
 | `localnet container list` | `ls`, `ps` | Matches Docker CLI conventions |
 | `localnet token party ls` | `list` | Consistency within party subcommand |
 | `localnet token party rm` | `remove` | Consistency within party subcommand |
 
 `localnet list` has **no** `ls` alias despite the pattern above — adding it would shadow `localnet logs` with a common prefix, increasing ambiguity in tab-completion.
+
+**Behaviour change (removed aliases):** earlier builds shipped `start` as an alias for `up` and `stop` as an alias for `down`. These aliases have been **removed** — `start` and `stop` are now standalone commands with distinct behaviour (see [`localnet stop` / `start`](#localnet-stop--start-new)). `localnet stop` no longer removes containers (use `down` for that), and `localnet start` no longer unconditionally recreates the stack (though it converges to a running instance, falling back to `up` when containers are gone).
 
 ---
 
@@ -123,9 +125,26 @@ The following aliases are not in the proposal but are shipped:
 
 **Shipped:** `dpm localnet pause <name>` and `dpm localnet resume <name>`.
 
-`pause` sends SIGSTOP to all containers in the instance (via `docker compose pause`) — they hold in-memory state and published ports but stop using CPU. `resume` sends SIGCONT. No readiness wait is performed on resume.
+`pause` sends SIGSTOP to all containers in the instance (via `docker compose pause`) — they hold in-memory state and published ports but stop using CPU. `resume` sends SIGCONT (alias `unpause`, matching `docker compose unpause`). No readiness wait is performed on resume.
 
 **Why:** Useful when stepping away briefly without wanting to pay the full boot cost of `down`/`up`. Frees CPU and reduces resource consumption without discarding ledger state. Required for CLI ↔ Web UI parity (the UI exposes a pause/resume action on the instance card).
+
+---
+
+## `localnet stop` / `start` (new)
+
+**Proposal said:** not mentioned as standalone commands. Earlier DevKit builds shipped `stop` and `start` only as aliases for `down` and `up`.
+
+**Shipped:** `dpm localnet stop <name>` and `dpm localnet start <name>` are now first-class lifecycle commands sitting between pause/resume and down/up:
+
+- `stop` gracefully stops the instance's containers (`docker compose stop`) but **keeps** them on disk. CPU and the container runtime are freed; ledger state and the containers themselves survive.
+- `start` starts a stopped instance's containers (`docker compose start`), skipping image pulls and stack recreation. If the containers have already been removed (e.g. the instance was `down`ed, or containers were pruned externally), `start` transparently falls back to a full `up` — reusing the recorded Splice version and profiles — with no extra flag or confirmation. `start` accepts `--no-wait` to skip the readiness wait.
+
+The teardown/bring-up ladder is therefore: `pause`/`resume` (freeze, RAM held) → `stop`/`start` (stop containers, kept on disk) → `down`/`up` (remove and recreate containers) → `clean` (remove data volumes and state).
+
+**Why:** `stop`/`start` fill the gap between the instant-but-RAM-heavy pause and the slow-but-clean down: they free container resources while avoiding the cost of recreating the stack on the next start. Making them standalone commands (rather than aliases) gives users the full Docker Compose lifecycle vocabulary. The intelligent `start` fallback means users never have to remember whether an instance was stopped or downed — `start` always converges to a running instance. Required for CLI ↔ Web UI parity (the UI exposes Stop and Start actions on the instance card).
+
+**Behaviour change:** because `stop`/`start` are no longer aliases, `localnet stop` no longer removes containers and `localnet start` no longer unconditionally recreates the stack. Users who relied on the old alias behaviour should use `down`/`up` explicitly.
 
 ---
 

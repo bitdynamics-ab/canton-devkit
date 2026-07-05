@@ -98,7 +98,9 @@ func helpCategories() []helpCategory {
 		{
 			Title: "lifecycle",
 			Commands: []helpRow{
-				{"up", "start a named LocalNet with preflight checks and readiness wait"},
+				{"up", "create and start a named LocalNet with preflight checks and readiness wait"},
+				{"start", "start a stopped LocalNet (creates it if it doesn't exist)"},
+				{"stop", "gracefully stop a running LocalNet, keeping containers (docker compose stop)"},
 				{"down", "stop services and remove runtime containers"},
 				{"restart", "restart services in place without removing containers"},
 				{"pause", "freeze a running LocalNet (docker compose pause)"},

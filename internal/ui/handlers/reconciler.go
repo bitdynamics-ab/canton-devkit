@@ -438,6 +438,26 @@ func evalStatus(cached registry.Status, containers []ContainerHealth, coreServic
 		}
 	}
 
+	// `localnet stop` (docker compose stop) leaves the containers in
+	// place but `exited`. If we already recorded the instance as
+	// `stopped` and NOTHING is running, that's the expected resting
+	// state — keep it `stopped` instead of demoting to `partial`
+	// (which would make a cleanly-stopped instance look broken and
+	// hide the Start button). A running/restarting container means it
+	// was started out-of-band, so fall through to the normal eval.
+	if cached == registry.StatusStopped {
+		anyRunning := false
+		for _, c := range containers {
+			if c.State == "running" || c.State == "restarting" {
+				anyRunning = true
+				break
+			}
+		}
+		if !anyRunning {
+			return registry.StatusStopped
+		}
+	}
+
 	allHealthy := true
 	anyBad := false
 	for _, c := range containers {

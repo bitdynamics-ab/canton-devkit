@@ -1300,11 +1300,11 @@ export const fetchMetricsRange = (
   );
 };
 
-// stopInstance invokes POST /api/instances/{name}/down — runs
-// `docker compose down`, preserving Docker volumes and the registry
-// entry (status=stopped). Synchronous on the wire: blocks until the
-// server returns 204 or 5xx.
-export async function stopInstance(name: string): Promise<void> {
+// downInstance invokes POST /api/instances/{name}/down — runs
+// `docker compose down`, REMOVING containers and networks while
+// preserving Docker volumes and the registry entry (status=stopped).
+// Synchronous on the wire: blocks until the server returns 204 or 5xx.
+export async function downInstance(name: string): Promise<void> {
   const resp = await fetch(
     `/api/instances/${encodeURIComponent(name)}/down`,
     { method: "POST" },
@@ -1319,6 +1319,48 @@ export async function stopInstance(name: string): Promise<void> {
     }
     throw new ApiError(resp.status, body);
   }
+}
+
+// stopInstance invokes POST /api/instances/{name}/stop — runs
+// `docker compose stop`: a graceful halt that KEEPS the containers in
+// place for a fast `startInstance`. Distinct from downInstance (which
+// removes them). Synchronous: 204 on success. Valid only when running
+// or paused.
+export async function stopInstance(name: string): Promise<void> {
+  await postInstanceAction(name, "stop");
+}
+
+// startInstance invokes POST /api/instances/{name}/start — the
+// intelligent "get it running" verb. The backend returns:
+//
+//   - 204 — fast `docker compose start` completed (containers were
+//     present); the caller just refetches.
+//   - 202 + events_url — the containers were gone, so the backend fell
+//     back to a full bring-up; the caller hands events_url to the
+//     progress modal (same shape as resumeInstance).
+//
+// Returns the accepted response on 202, or null on 204.
+export async function startInstance(
+  name: string,
+): Promise<ResumeAcceptedResponse | null> {
+  const resp = await fetch(
+    `/api/instances/${encodeURIComponent(name)}/start`,
+    { method: "POST" },
+  );
+  if (!resp.ok) {
+    const text = await resp.text();
+    let body: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try {
+      body = JSON.parse(text);
+    } catch {
+      /* non-JSON; keep default */
+    }
+    throw new ApiError(resp.status, body);
+  }
+  if (resp.status === 202) {
+    return (await resp.json()) as ResumeAcceptedResponse;
+  }
+  return null;
 }
 
 // pauseInstance / resumeInstance invoke POST /api/instances/{name}/pause

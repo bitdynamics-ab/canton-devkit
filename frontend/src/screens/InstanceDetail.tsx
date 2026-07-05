@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import {
   ApiError,
   type Instance,
+  downInstance,
   fetchInstance,
   pauseInstance,
   recreateInstance,
-  resumeInstance,
   scrubInstance,
+  startInstance,
   stopInstance,
   unpauseInstance,
 } from "../api";
@@ -46,19 +47,36 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
   >({ kind: "idle" });
 
   async function onStop() {
-    if (!confirm(`Stop instance ${name}? Containers will be brought down via docker compose. Data volumes are preserved.`)) {
+    // Gentle stop: `docker compose stop` keeps containers around for a
+    // fast Start. No destructive confirm needed — nothing is removed.
+    setStopping({ kind: "running" });
+    try {
+      await stopInstance(name);
+      setStopping({ kind: "idle" });
+      setRefetchTick((n) => n + 1);
+      onChanged?.();
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "failed to stop";
+      setStopping({ kind: "err", message: msg });
+      setRefetchTick((n) => n + 1);
+      onChanged?.();
+    }
+  }
+
+  async function onDown() {
+    if (!confirm(`Tear down instance ${name}? Containers will be removed via docker compose down. Data volumes are preserved.`)) {
       return;
     }
     setStopping({ kind: "running" });
     try {
-      await stopInstance(name);
+      await downInstance(name);
       setStopping({ kind: "idle" });
       // Refetch our own status, then notify the parent so the
       // dashboard's row + ActionButton catch up too.
       setRefetchTick((n) => n + 1);
       onChanged?.();
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : "failed to stop";
+      const msg = e instanceof ApiError ? e.message : "failed to tear down";
       setStopping({ kind: "err", message: msg });
       setRefetchTick((n) => n + 1);
       onChanged?.();
@@ -122,9 +140,11 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
   async function onStart() {
     setStopping({ kind: "running" });
     try {
-      await resumeInstance(name);
-      // 202 — bring-up is in progress. Refresh both surfaces eagerly
-      // so the user sees "creating" before the dashboard's next poll.
+      // 204 → fast `docker compose start` done; 202 → full bring-up in
+      // progress (containers had been removed). Either way, refresh
+      // both surfaces so the user sees the transitional status before
+      // the dashboard's next poll.
+      await startInstance(name);
       setStopping({ kind: "idle" });
       setRefetchTick((n) => n + 1);
       onChanged?.();
@@ -219,6 +239,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
             busy={stopping.kind === "running"}
             onStart={onStart}
             onStop={onStop}
+            onDown={onDown}
             onPause={onPause}
             onResume={onResume}
             onRemove={onRemove}
@@ -297,21 +318,23 @@ function DetailGrid({ instance }: { instance: Instance }) {
 // ActionButton dispatches the right verb(s) per instance status.
 // Registry status alone isn't enough — docker truth may diverge:
 //
-//   - running/paused → Pause/Resume + Recreate + Stop
-//   - failed/partial → Recreate + Stop + Remove (containers MAY still
+//   - running/paused → Pause/Resume + Recreate + Stop + Down
+//   - failed/partial → Recreate + Down + Remove (containers MAY still
 //                      be up even though the orchestrator gave up;
 //                      compose down no-ops cleanly if not)
-//   - stopped        → Start + Remove
+//   - stopped        → Start + Down + Remove
 //   - creating/other → no button (CreatingPanel owns that surface)
 //
-// The failed/partial Stop is labeled "Stop containers" (distinct from
-// "Stop" on running) to signal a force-cleanup rather than a graceful
-// shutdown of a healthy instance.
+// Stop (docker compose stop) is the gentle halt — containers are kept
+// so Start is fast. Down (docker compose down) removes containers; a
+// following Start recreates them via up. On failed/partial, Down is
+// labeled "Down containers" to signal a force-cleanup.
 function ActionButton({
   status,
   busy,
   onStart,
   onStop,
+  onDown,
   onPause,
   onResume,
   onRemove,
@@ -321,67 +344,57 @@ function ActionButton({
   busy: boolean;
   onStart: () => void;
   onStop: () => void;
+  onDown: () => void;
   onPause: () => void;
   onResume: () => void;
   onRemove: () => void;
   onRecreate: () => void;
 }) {
-  if (status === "running") {
+  if (status === "running" || status === "paused") {
     return (
       <div style={{ display: "flex", gap: 6 }}>
+        {status === "running" ? (
+          <button
+            onClick={onPause}
+            disabled={busy}
+            title="Freeze containers (docker compose pause) — hold state + ports, free CPU. Resume is instant."
+            style={btnStyle(W.warn, busy)}
+          >
+            {busy ? "…" : "⏸ Pause"}
+          </button>
+        ) : (
+          <button
+            onClick={onResume}
+            disabled={busy}
+            title="Resume frozen containers (docker compose unpause) — no boot cost."
+            style={btnStyle(W.brand, busy)}
+          >
+            {busy ? "…" : "▶ Resume"}
+          </button>
+        )}
         <button
-          onClick={onPause}
+          onClick={onRecreate}
           disabled={busy}
-          title="Freeze containers (docker compose pause) — hold state + ports, free CPU. Resume is instant."
+          title="Bring containers down then back up. Splice version, profiles, credentials, and ports preserved."
+          style={btnStyle(W.brand, busy)}
+        >
+          {busy ? "…" : "↻ Recreate"}
+        </button>
+        <button
+          onClick={onStop}
+          disabled={busy}
+          title="Gracefully stop (docker compose stop) — processes exit and free CPU/memory, but containers are kept for a fast Start. Data volumes preserved."
           style={btnStyle(W.warn, busy)}
         >
-          {busy ? "…" : "⏸ Pause"}
-        </button>
-        <button
-          onClick={onRecreate}
-          disabled={busy}
-          title="Bring containers down then back up. Splice version, profiles, credentials, and ports preserved."
-          style={btnStyle(W.brand, busy)}
-        >
-          {busy ? "…" : "↻ Recreate"}
-        </button>
-        <button
-          onClick={onStop}
-          disabled={busy}
-          title="Bring containers down via docker compose. Data volumes preserved."
-          style={btnStyle(W.err, busy)}
-        >
           {busy ? "Stopping…" : "⏹ Stop"}
         </button>
-      </div>
-    );
-  }
-  if (status === "paused") {
-    return (
-      <div style={{ display: "flex", gap: 6 }}>
         <button
-          onClick={onResume}
+          onClick={onDown}
           disabled={busy}
-          title="Resume frozen containers (docker compose unpause) — no boot cost."
-          style={btnStyle(W.brand, busy)}
-        >
-          {busy ? "…" : "▶ Resume"}
-        </button>
-        <button
-          onClick={onRecreate}
-          disabled={busy}
-          title="Bring containers down then back up. Splice version, profiles, credentials, and ports preserved."
-          style={btnStyle(W.brand, busy)}
-        >
-          {busy ? "…" : "↻ Recreate"}
-        </button>
-        <button
-          onClick={onStop}
-          disabled={busy}
-          title="Bring containers down via docker compose. Data volumes preserved."
+          title="Tear down (docker compose down) — remove containers and networks. Data volumes preserved; Start will recreate them."
           style={btnStyle(W.err, busy)}
         >
-          {busy ? "Stopping…" : "⏹ Stop"}
+          {busy ? "…" : "⏏ Down"}
         </button>
       </div>
     );
@@ -401,17 +414,17 @@ function ActionButton({
           {busy ? "…" : "↻ Recreate"}
         </button>
         <button
-          onClick={onStop}
+          onClick={onDown}
           disabled={busy}
           title="Force docker compose down — use if containers are still running. Data volumes preserved."
           style={btnStyle(W.warn, busy)}
         >
-          {busy ? "Stopping…" : "⏹ Stop containers"}
+          {busy ? "…" : "⏏ Down containers"}
         </button>
         <button
           onClick={onRemove}
           disabled={busy}
-          title="Remove the registry entry only. Won't touch docker — run Stop first if containers are live."
+          title="Remove the registry entry only. Won't touch docker — run Down first if containers are live."
           style={btnStyle(W.dim, busy)}
         >
           {busy ? "Removing…" : "✕ Remove entry"}
@@ -420,14 +433,15 @@ function ActionButton({
     );
   }
   if (status === "stopped") {
-    // Start goes through POST /up — it reuses the recorded version +
-    // ports and won't silently upgrade.
+    // Start is intelligent: a fast `docker compose start` when the
+    // containers are still present, or a full up (reusing the recorded
+    // version + profiles) when they were removed by a Down.
     return (
       <div style={{ display: "flex", gap: 6 }}>
         <button
           onClick={onStart}
           disabled={busy}
-          title="Bring containers back up with the recorded Splice version and ports."
+          title="Start the instance. Fast when containers are present; otherwise recreates them with the recorded Splice version and ports."
           style={btnStyle(W.brand, busy)}
         >
           {busy ? "Starting…" : "▶ Start"}

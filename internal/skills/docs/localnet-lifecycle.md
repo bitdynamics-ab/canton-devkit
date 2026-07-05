@@ -27,7 +27,7 @@ if the network is healthy", or "tear it down".
    ```
    Use `--version <tag>` to pin a Splice version (`dpm localnet versions`
    lists curated tags). The instance name isolates instances so several
-   can run. Aliases: `start` works in place of `up`.
+   can run.
 
 3. **Inspect**:
    ```
@@ -36,16 +36,30 @@ if the network is healthy", or "tear it down".
    dpm localnet logs dev --service canton  # tail one service
    ```
 
-4. **Stop** (removes containers + volumes for that instance):
+4. **Pause or stop without removing containers** (fast to resume):
+   ```
+   dpm localnet pause dev              # freeze in place; resume with `resume`
+   dpm localnet resume dev             # thaw a paused instance (also: unpause)
+   dpm localnet stop dev               # graceful stop; restart with `start`
+   dpm localnet start dev              # start a stopped instance
+   ```
+   `pause`/`resume` freeze containers (RAM held, CPU freed).
+   `stop`/`start` stop the containers (CPU and runtime freed) but keep
+   them on disk, so `start` skips stack recreation. `start` on an
+   instance whose containers were already removed falls back to a full
+   `up` automatically.
+
+5. **Tear down** (stops and removes containers; data volumes kept):
    ```
    dpm localnet down dev
    ```
-   Alias: `stop` works in place of `down`.
 
 ## Guardrails
 - Always run `doctor` before `up` if the user reports trouble.
-- Prefer `down` for normal teardown; use `clean --name <n>` only to
-  reclaim orphaned/stopped state (`--force` for a running instance).
+- Reach for the lightest teardown that fits: `pause` for a short break,
+  `stop` for a clean shutdown you'll resume soon, `down` to free
+  container resources, `clean --name <n>` only to reclaim data volumes
+  and registry state (`--force` for a running instance).
 - Never pass secrets on the command line — JWTs come from `localnet env`.
 - The instance name can be passed as a positional arg (`localnet up dev`)
   or via `--name` (`localnet up --name dev`). Both forms are equivalent.
