@@ -307,7 +307,7 @@
 <div class="wrap">
 
 <header class="page">
-  <h1>E2E Test Plan &mdash; Milestone 1: LocalNet Management CLI <span class="pill count">18 Tests</span></h1>
+  <h1>E2E Test Plan &mdash; Milestone 1: LocalNet Management CLI <span class="pill count">19 Tests</span></h1>
   <div class="sub">
     <span><strong>Proposal:</strong> original-devkit-proposal.md, Milestone 1</span>
     <span><strong>Delivery:</strong> Month 3</span>
@@ -321,7 +321,7 @@
 
 <!-- TL;DR -->
 <div class="tldr">
-  <strong>Scope.</strong> 18 end-to-end test cases covering installation (DPM + standalone binary), preflight/doctor checks (Docker presence, resource constraints), full LocalNet lifecycle (<code>up</code>, <code>down</code>, <code>restart</code>, <code>clean</code>, <code>status</code>, <code>logs</code>), snapshot/restore, named instance isolation with port separation, environment variable export, and instance listing. Every test is designed for mechanical execution by an AI agent or CI pipeline. Both CLI modes (<code>dpm localnet</code> and <code>canton-devkit localnet</code>) must be exercised.
+  <strong>Scope.</strong> 19 end-to-end test cases covering installation (DPM + standalone binary), preflight/doctor checks (Docker presence, resource constraints), full LocalNet lifecycle (<code>up</code>, <code>start</code>, <code>stop</code>, <code>down</code>, <code>restart</code>, <code>pause</code>, <code>resume</code>, <code>clean</code>, <code>status</code>, <code>logs</code>), snapshot/restore, named instance isolation with port separation, environment variable export, and instance listing. Every test is designed for mechanical execution by an AI agent or CI pipeline. Both CLI modes (<code>dpm localnet</code> and <code>canton-devkit localnet</code>) must be exercised.
 </div>
 
 <!-- Conventions -->
@@ -374,7 +374,7 @@ $CLI clean --name e2e-test-b --force 2&gt;/dev/null || true</code></pre>
       <pre><code>dpm install package canton-devkit</code></pre>
       <div class="expected"><strong>Expected:</strong> Exit code <code>0</code>.</div>
       <p>Verify <code>dpm localnet --help</code> exits <code>0</code> and output matches:</p>
-      <pre><code>dpm localnet --help 2&gt;&amp;1 | grep -qE "(up|down|restart|clean|status|logs|snapshot|restore)"</code></pre>
+      <pre><code>dpm localnet --help 2&gt;&amp;1 | grep -qE "(up|start|stop|down|restart|pause|resume|clean|status|logs|snapshot|restore)"</code></pre>
     </div>
   </div>
 
@@ -429,7 +429,7 @@ chmod +x canton-devkit
       <p><strong>Step 2.</strong> Verify the binary runs:</p>
       <pre><code>./canton-devkit localnet --help</code></pre>
       <div class="expected"><strong>Expected:</strong> Exit code <code>0</code>, output matches:</div>
-      <pre><code>./canton-devkit localnet --help 2&gt;&amp;1 | grep -qE "(up|down|restart|clean|status|logs|snapshot|restore)"</code></pre>
+      <pre><code>./canton-devkit localnet --help 2&gt;&amp;1 | grep -qE "(up|start|stop|down|restart|pause|resume|clean|status|logs|snapshot|restore)"</code></pre>
     </div>
   </div>
 
@@ -476,15 +476,19 @@ sha256sum -c checksums.txt 2&gt;&amp;1 | grep -qE "canton-devkit.*OK"</code></pr
     <div class="step-content">
       <p><strong>Step 2.</strong> Check help output includes all Milestone 1 commands:</p>
       <pre><code>$CLI --help 2&gt;&amp;1 | grep -qE "up"
+$CLI --help 2&gt;&amp;1 | grep -qE "start"
+$CLI --help 2&gt;&amp;1 | grep -qE "stop"
 $CLI --help 2&gt;&amp;1 | grep -qE "down"
 $CLI --help 2&gt;&amp;1 | grep -qE "restart"
+$CLI --help 2&gt;&amp;1 | grep -qE "pause"
+$CLI --help 2&gt;&amp;1 | grep -qE "resume"
 $CLI --help 2&gt;&amp;1 | grep -qE "clean"
 $CLI --help 2&gt;&amp;1 | grep -qE "status"
 $CLI --help 2&gt;&amp;1 | grep -qE "logs"
 $CLI --help 2&gt;&amp;1 | grep -qE "snapshot"
 $CLI --help 2&gt;&amp;1 | grep -qE "restore"
 $CLI --help 2&gt;&amp;1 | grep -qE "doctor"</code></pre>
-      <div class="expected"><strong>Expected:</strong> All grep commands exit <code>0</code>.</div>
+      <div class="expected"><strong>Expected:</strong> All grep commands exit <code>0</code>. <code>start</code>/<code>stop</code> are first-class lifecycle commands (no longer aliases of <code>up</code>/<code>down</code>), and <code>pause</code>/<code>resume</code> are listed too.</div>
     </div>
   </div>
 
@@ -906,6 +910,67 @@ echo "$OUTPUT" | grep -qiE "(version|splice)"                  # selected versio
   </div>
 
   <div class="cleanup-note"><strong>Cleanup:</strong> <code>$CLI down --name e2e-test-default</code></div>
+</div>
+</details>
+
+<!-- M1-STP-001 -->
+<details class="test-case">
+<summary>
+  <svg class="caret" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06z"/></svg>
+  <span class="test-id">M1-STP-001</span>
+  <span class="test-name">Stop keeps containers; start restores them</span>
+  <span class="cat-pill cat-lifecycle">Lifecycle</span>
+</summary>
+<div class="test-body">
+  <div class="meta-row">
+    <span><strong>Preconditions:</strong> LocalNet <code>e2e-test-default</code> running</span>
+    <span><strong>Platforms:</strong> All</span>
+    <span><strong>Timeout:</strong> 300s</span>
+  </div>
+
+  <p><code>stop</code>/<code>start</code> are first-class lifecycle commands (they were previously aliases for <code>down</code>/<code>up</code>). <code>stop</code> runs <code>docker compose stop</code> — the containers are stopped but <strong>kept on disk</strong> — and <code>start</code> runs <code>docker compose start</code>, reusing the existing containers without recreating the stack. When the containers have already been removed (e.g. after <code>down</code>), <code>start</code> transparently falls back to a full <code>up</code>.</p>
+
+  <div class="step">
+    <input type="checkbox" aria-label="Step 1 complete">
+    <div class="step-content">
+      <p><strong>Step 1.</strong> Start LocalNet if not running:</p>
+      <pre><code>$CLI up --name e2e-test-default</code></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" aria-label="Step 2 complete">
+    <div class="step-content">
+      <p><strong>Step 2.</strong> Stop the instance:</p>
+      <pre><code>$CLI stop --name e2e-test-default</code></pre>
+      <div class="expected"><strong>Expected:</strong> Exit code <code>0</code>.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" aria-label="Step 3 complete">
+    <div class="step-content">
+      <p><strong>Step 3.</strong> Verify containers are stopped but <strong>not</strong> removed:</p>
+      <pre><code># Containers still exist (stopped state)
+docker ps -a --filter "label=com.docker.compose.project=canton-e2e-test-default" --format '{{.Names}}' | grep -qE "e2e-test-default"
+# ...but none are running
+docker ps --filter "label=com.docker.compose.project=canton-e2e-test-default" --format '{{.Names}}' | grep -qE "e2e-test-default" &amp;&amp; echo "FAIL: containers still running" || echo "PASS"</code></pre>
+      <div class="expected"><strong>Expected:</strong> Containers present in <code>docker ps -a</code>, absent from <code>docker ps</code>.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <input type="checkbox" aria-label="Step 4 complete">
+    <div class="step-content">
+      <p><strong>Step 4.</strong> Start the instance again:</p>
+      <pre><code>$CLI start --name e2e-test-default</code></pre>
+      <div class="expected"><strong>Expected:</strong> Exit code <code>0</code>, no image pull / stack recreate (fast compose-start path).</div>
+      <p>Verify readiness after start:</p>
+      <pre><code>$CLI status --name e2e-test-default 2&gt;&amp;1 | grep -qiE "(healthy|ready|running)"</code></pre>
+    </div>
+  </div>
+
+  <div class="cleanup-note"><strong>Cleanup:</strong> <code>$CLI clean --name e2e-test-default --force 2>/dev/null || true</code></div>
 </div>
 </details>
 
@@ -1331,6 +1396,7 @@ $CLI clean --name e2e-test-b --force 2&gt;/dev/null || true</code></pre>
     <tr><td><code>M1-STS-001</code></td><td>Status shows healthy services</td><td>Status</td><td>M1-UP-001</td></tr>
     <tr><td><code>M1-LOG-001</code></td><td>Logs &mdash; full and service-filtered</td><td>Logs</td><td>M1-UP-001</td></tr>
     <tr><td><code>M1-RST-001</code></td><td>Restart full + single service</td><td>Lifecycle</td><td>M1-UP-001</td></tr>
+    <tr><td><code>M1-STP-001</code></td><td>Stop keeps containers; start restores them</td><td>Lifecycle</td><td>M1-UP-001</td></tr>
     <tr><td><code>M1-DWN-001</code></td><td>Down stops instance cleanly</td><td>Lifecycle</td><td>M1-UP-001</td></tr>
     <tr><td><code>M1-CLN-001</code></td><td>Clean removes all resources</td><td>Lifecycle</td><td>M1-DWN-001</td></tr>
     <tr><td><code>M1-SNP-001</code></td><td>Snapshot and restore</td><td>State</td><td>M1-UP-001</td></tr>
