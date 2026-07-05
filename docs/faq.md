@@ -28,7 +28,7 @@ macOS (arm64), Linux (amd64), and Windows (amd64) are the released,
 tested targets. Other OS/arch combinations may work (DevKit only
 orchestrates Docker) but are untested — `localnet doctor` warns on
 unsupported platforms. See the compatibility matrix in
-[getting-started.md](getting-started.md#5-compatibility-matrix).
+[getting-started.md](getting-started.md#4-compatibility-matrix).
 
 ## Versions
 

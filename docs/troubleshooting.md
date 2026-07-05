@@ -71,7 +71,7 @@ no mint/burn surface — create your own token to exercise them.
 re-issues a dev token from the project's env files. The token commands
 also auto-issue per-role tokens when `--token` is empty.
 
-## <a name="snapshot-consistency"></a>Snapshot consistency
+## Snapshot consistency
 
 `localnet snapshot` captures Docker volumes + registry state. For a
 **running** instance this is a crash-consistent (not

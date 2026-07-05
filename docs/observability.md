@@ -149,6 +149,6 @@ up, and the per-instance scrape uses in-network service DNS
 (`canton:10013`) rather than `host.docker.internal`, so it works on any
 platform regardless of the Linux `host-gateway` mapping. The per-instance
 overlay remains enabled until the shared-only path is validated end-to-end
-on a native Linux Docker host — see [docs/limitations.md](limitations.md#observability-transitional-dual-stack). The
+on a native Linux Docker host — see [Known limitations](limitations.md#observability-transitional-dual-stack). The
 extra resource cost (a second Prometheus+Grafana per instance) is the price
 of that fallback on a dev machine; it carries no correctness impact.
