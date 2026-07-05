@@ -4,7 +4,7 @@ canton-devkit ships first-class tooling for the **Canton Token Standard
 V2** (the CIP-0112 path) so you can create an instrument, mint/transfer/
 burn holdings, fund parties, and reconcile balances against a live
 LocalNet — from the CLI **or** the Web UI, by readable party alias, with
-no JWTs, ports, or 130-char contract ids in your face.
+without surfacing raw JWTs, ports, or full contract IDs in every command.
 
 > **Scope: V2 / CIP-0112 only.** This tooling targets the Token Standard
 > V2 (CIP-0112) surface. V1 / CIP-0056 is **not** supported. V2 is
@@ -39,7 +39,7 @@ auto-issues a per-role dev JWT; `--role` defaults to `app-user`.
 
 On LocalNet there is **no trust boundary between parties — you own all of
 them** (the dev secret signs for every role). So the token tool is a
-single *god-mode workspace* over the instance, not a wallet-per-party:
+single operator workspace over the instance, not a wallet-per-party:
 
 - **Party aliases** — `token party new bob` allocates a party and lets
   you say `--to bob` everywhere instead of pasting its id.
@@ -106,7 +106,7 @@ Add `--format json` to any read command (`balance`, `balances`,
 | `token burn` | Burn supply. The example token has no protocol burn, so this archives the holder's `Holding` contracts directly (signatory = account parties + admin, all operator-controlled on LocalNet) and returns change. |
 | `token faucet <party> <amount>` | Fund a party from a well-known source, auto-accepted. `--source` overrides the default funded party. |
 | `token balance` | One party's balances. |
-| `token balances` | Party × instrument balance matrix (god-mode reconciliation). |
+| `token balances` | Party × instrument balance matrix (cross-party reconciliation). |
 | `token summary` | Supply / holder count / holding-contract count + holder distribution for one instrument. |
 | `token activity` | Mint/transfer/burn history for one instrument, reconstructed from the ledger. |
 | `token party new\|ls\|rm` | Manage the party alias registry. |
