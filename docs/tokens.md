@@ -119,7 +119,7 @@ V2 runs only on the upstream **alpha** Splice build (snapshot image on the
 `-dev` ghcr repo, `initial-protocol-version=35`). Consequences to know:
 
 - **The upstream V2 DevNet resets periodically.** The catalogue entry may
-  need refreshing each release cycle — see [docs/versions.md](versions.md).
+  need refreshing each release cycle — see [Splice version catalogue](versions.md).
 - **Use `--profile tokens-v2`.** Selecting the alpha version without it
   brings up a stack that can't run the V2 protocol; `doctor` warns.
 - **Loopback-only dev auth.** Per-role JWTs are signed with a literal
@@ -138,6 +138,6 @@ V2 runs only on the upstream **alpha** Splice build (snapshot image on the
   create → mint → transfer → burn, all on-ledger, no scan registry
   dependency (its `TokenRules` *is* the registry).
 
-See also: [getting-started.md](getting-started.md) ·
+See also: [Getting started](getting-started.md) ·
 [FAQ](faq.md) · [troubleshooting](troubleshooting.md) ·
 [versions](versions.md).

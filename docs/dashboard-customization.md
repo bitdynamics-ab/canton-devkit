@@ -24,7 +24,7 @@ are printed in the same output.
 ## 1. What ships out of the box
 
 The bundled dashboard lives at
-[`assets/grafana/dashboards/canton-localnet.json`](../assets/grafana/dashboards/canton-localnet.json)
+[`assets/grafana/dashboards/canton-localnet.json`](https://github.com/bitdynamics-ab/canton-devkit/blob/main/assets/grafana/dashboards/canton-localnet.json)
 and is titled **Canton LocalNet — DApp Developer Overview**. It
 refreshes every 10s, defaults to a 15-minute window, and exposes a
 single `$instance` template variable backed by
@@ -34,7 +34,7 @@ participant.
 The current bundle ships 10 panels (`id` 1-15 with gaps reserved for
 future inserts). The metric names match the live `daml_*`, `jvm_*`,
 and `db_client_*` families audited in
-[docs/observability.md](observability.md) — not the older
+[Observability](observability.md) — not the older
 non-existent `canton_*` names.
 
 | Panel | Type | PromQL | What it tells you |
@@ -51,7 +51,7 @@ non-existent `canton_*` names.
 | Top 10 gRPC Methods by Throughput | bar gauge | `topk(10, sum by (grpc_method_name) (rate(daml_grpc_server_handled_total{instance=~"$instance"}[5m])))` | API throughput by live gRPC method. Stock Splice 0.6.4 does not expose template-grain submission counters. |
 
 For the full metric-family audit and substitution table, see
-[docs/observability.md](observability.md).
+[Observability](observability.md).
 
 ---
 
@@ -59,7 +59,7 @@ For the full metric-family audit and substitution table, see
 
 The dashboard JSON is mounted into the Grafana container by the
 provisioner configured in
-[`assets/grafana/provisioning/dashboards/canton.yaml`](../assets/grafana/provisioning/dashboards/canton.yaml).
+[`assets/grafana/provisioning/dashboards/canton.yaml`](https://github.com/bitdynamics-ab/canton-devkit/blob/main/assets/grafana/provisioning/dashboards/canton.yaml).
 Grafana re-scans this directory every 30 seconds, so edits take
 effect without a container restart:
 
@@ -231,7 +231,7 @@ If a panel renders as "No data", the fastest debug is to open
 Prometheus directly, type the metric name, and see whether the
 instance is producing it at all. For the full audited substitution
 table from the earlier `canton_*` placeholders to the live names, see
-[docs/observability.md](observability.md).
+[Observability](observability.md).
 
 ---
 
@@ -289,12 +289,12 @@ pool rather than the ledger itself.
 
 ## 8. See also
 
-- [docs/getting-started.md](getting-started.md) — installing DevKit
+- [Getting started](getting-started.md) — installing DevKit
   and starting LocalNet with the observability overlay.
-- [docs/observability.md](observability.md) — audited metric families
+- [Observability](observability.md) — audited metric families
   and the `canton_*` → `daml_*` substitution table.
-- [docs/telemetry.md](telemetry.md) — the anonymous usage counters
+- [Telemetry](telemetry.md) — the anonymous usage counters
   the DevKit CLI itself records (separate from Canton's Prometheus
   metrics).
-- [docs/troubleshooting.md](troubleshooting.md) — common Grafana /
+- [Troubleshooting](troubleshooting.md) — common Grafana /
   Prometheus startup issues.
