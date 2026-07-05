@@ -139,6 +139,7 @@ The following aliases are not in the proposal but are shipped:
 
 - `stop` gracefully stops the instance's containers (`docker compose stop`) but **keeps** them on disk. CPU and the container runtime are freed; ledger state and the containers themselves survive.
 - `start` starts a stopped instance's containers (`docker compose start`), skipping image pulls and stack recreation. If the containers have already been removed (e.g. the instance was `down`ed, or containers were pruned externally), `start` transparently falls back to a full `up` — reusing the recorded Splice version and profiles — with no extra flag or confirmation. `start` accepts `--no-wait` to skip the readiness wait.
+- A paused instance must be resumed/unpaused before `stop`; paused containers remain in the `pause`/`resume` lifecycle lane rather than being sent directly through `docker compose stop`.
 
 The teardown/bring-up ladder is therefore: `pause`/`resume` (freeze, RAM held) → `stop`/`start` (stop containers, kept on disk) → `down`/`up` (remove and recreate containers) → `clean` (remove data volumes and state).
 

@@ -47,7 +47,8 @@ if the network is healthy", or "tear it down".
    `stop`/`start` stop the containers (CPU and runtime freed) but keep
    them on disk, so `start` skips stack recreation. `start` on an
    instance whose containers were already removed falls back to a full
-   `up` automatically.
+   `up` automatically. Resume/unpause a paused instance before stopping
+   it.
 
 5. **Tear down** (stops and removes containers; data volumes kept):
    ```

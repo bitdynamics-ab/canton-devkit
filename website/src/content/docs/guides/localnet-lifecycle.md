@@ -100,6 +100,7 @@ Notes:
   for a short break where you want to jump straight back in.
 - **Stop** releases both CPU and the container runtime while keeping the
   containers on disk, so `start` skips image pulls and stack recreation.
+  If an instance is paused, resume or unpause it before stopping.
 - **Down** frees everything except your data volumes; `up` rebuilds the
   stack from the recorded version and profiles. `localnet start` on an
   instance whose containers are already gone transparently falls back to
