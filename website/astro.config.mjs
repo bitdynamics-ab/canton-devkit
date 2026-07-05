@@ -44,6 +44,7 @@ export default defineConfig({
 						{ slug: 'reference/packaging' },
 						{ slug: 'reference/telemetry' },
 						{ slug: 'reference/limitations' },
+						{ slug: 'reference/faq' },
 						{ slug: 'reference/troubleshooting' },
 					],
 				},
