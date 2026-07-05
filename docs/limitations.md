@@ -113,9 +113,7 @@ for the topology.
   per-instance scrape uses in-network service DNS (`canton:10013`)
   rather than `host.docker.internal`, so it works on any platform
   regardless of the Linux `host-gateway` mapping.
-- **Planned.** Gating the per-instance overlay off (to drop the
-  duplication) is deferred until the shared-only path is end-to-end
-  validated on a native Linux Docker host. The runtime toggle funnels
-  through a single neutral function
-  (`internal/localnet.SetObservability`), so removing the overlay is
-  additive rather than a rewrite of both surfaces.
+- **Removal pending validation.** The per-instance overlay stays enabled
+  until the shared-only path is validated end-to-end on a native Linux
+  Docker host. When that validation completes, the overlay can be gated
+  off without changing the CLI or Web UI observability commands.
