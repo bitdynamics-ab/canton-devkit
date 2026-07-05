@@ -9,7 +9,7 @@
 
 # canton-devkit
 
-### The fastest way to run a [Canton](https://canton.network/) network on your laptop.
+### The easiest and fastest way to run a [Canton](https://canton.network/) LocalNet on your laptop.
 
 A single-binary toolkit for spinning up, inspecting, and tearing down a complete Canton developer stack — Canton synchronizer + participant, Splice super-validator apps, three party wallets (app-user, app-provider, SV), Scan explorer, signed JWTs — in **one command**.
 
@@ -17,6 +17,7 @@ A single-binary toolkit for spinning up, inspecting, and tearing down a complete
   <a href="https://github.com/bitdynamics-ab/canton-devkit/actions/workflows/ci.yml"><img src="https://github.com/bitdynamics-ab/canton-devkit/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://pkg.go.dev/github.com/bitdynamics-ab/canton-devkit"><img src="https://pkg.go.dev/badge/github.com/bitdynamics-ab/canton-devkit.svg" alt="Go Reference" /></a>
   <a href="https://github.com/bitdynamics-ab/canton-devkit/releases/latest"><img src="https://img.shields.io/github/v/release/bitdynamics-ab/canton-devkit?display_name=tag&sort=semver&color=blue" alt="Release" /></a>
+  <a href="https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases"><img src="https://img.shields.io/github/downloads/bitdynamics-ab/homebrew-canton-devkit/total.svg?label=downloads&color=brightgreen" alt="Total downloads" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-blue.svg" alt="License: Apache 2.0" /></a>
 </p>
 
@@ -26,21 +27,8 @@ A single-binary toolkit for spinning up, inspecting, and tearing down a complete
   <a href="#-commands"><b>Commands</b></a> ·
   <a href="#-architecture"><b>Architecture</b></a> ·
   <a href="#-faq"><b>FAQ</b></a> ·
-  <a href="#%EF%B8%8F-roadmap"><b>Roadmap</b></a>
+  <a href="#-adoption"><b>Adoption</b></a>
 </p>
-
-<table align="center"><tr><td>
-
-```sh
-❯ canton-devkit localnet up demo
-  ✓  Splice 0.6.4 cache hit
-  ✓  Compose started · 12 containers
-  ✓  Health checks · canton · splice · postgres
-  ✓  JWTs signed · app-user · app-provider · super-validator
-  ✦  "demo" is ready · Splice 0.6.4 · ready in 1m 24s
-```
-
-</td></tr></table>
 
 </div>
 
@@ -48,7 +36,7 @@ A single-binary toolkit for spinning up, inspecting, and tearing down a complete
 
 ## ✨ Why canton-devkit?
 
-[Canton](https://canton.network/) is the public blockchain with built-in privacy, designed for regulated finance — but its local-dev story has historically been a multi-hour expedition: clone [Splice](https://github.com/canton-network/splice), decode docker-compose layers, hunt JWT secrets, copy-paste party IDs. `canton-devkit` collapses that into a single binary built around three convictions:
+[Canton](https://canton.network/) is the public blockchain with built-in privacy, designed for regulated finance — but its local-dev story has historically been a multi-hour expedition: clone [Splice](https://github.com/canton-network/splice), decode docker-compose layers, hunt JWT secrets, copy-paste party IDs. `canton-devkit` collapses that into a single binary:
 
 <table>
 <tr>
@@ -97,11 +85,11 @@ Optional `--profile observability` adds **Prometheus + Grafana** with a curated 
 
 ## 🎯 Who is this for?
 
-| You are… | We've got you because… |
+| You are… | What DevKit provides |
 |---|---|
 | **A Daml/Canton app developer** | Reproducible local stack, signed JWTs, party IDs auto-recorded, hot DAR upload |
 | **A CI engineer** | Pinned versions, `--json` everywhere, exit codes documented, snapshot/restore for fixtures |
-| **An evaluator** | One command to a healthy network. Tear it down with `clean` when you're done |
+| **A first-time user** | One command to a healthy network; tear it down with `clean` when done |
 | **A workshop facilitator** | Same demo on every laptop, regardless of OS or Apple Silicon |
 
 > [!NOTE]
@@ -233,40 +221,13 @@ canton-devkit localnet restore --from demo.tgz
 
 ## 🖥️ Web UI
 
-`canton-devkit localnet ui` launches a polished Vite/React dashboard, embedded in the binary, **loopback-only by default**.
+Use `canton-devkit localnet ui` to launch the Web UI with
 
-<table>
-<tr>
-  <td valign="top" width="50%">
-
-**What you get**
-
-- 📊 **Live overview** — instance status, container health (SSE)
+- 📊 **Live overview** — instance status, container health 
 - 🔑 **Developer setup** — copy JWTs, export `.env` / `.json` / `.yaml`
 - 💾 **Backup & restore** — download a snapshot, drag-drop to restore
 - 🪵 **Per-container logs** — `docker logs --tail` in the browser
 - ⚡ **<kbd>⌘ K</kbd> palette** — fuzzy-jump between instances and routes
-- 🩺 **Live preflight** — Docker, memory, disk, before every `up`
-
-  </td>
-  <td valign="top" width="50%">
-
-**Security model**
-
-- Bound to `127.0.0.1` — refuses non-loopback hosts unless `--allow-non-loopback`
-- CSRF: same-Origin gate on all state-changing requests
-- JWTs redacted by default in responses; opt-in via explicit query flag
-- Embedded SPA — no external CDN, no analytics, no phone-home
-
-For remote access:
-
-```sh
-ssh -L 7777:127.0.0.1:7777 dev-host
-```
-
-  </td>
-</tr>
-</table>
 
 ---
 
@@ -310,7 +271,7 @@ flowchart LR
       CLI[CLI<br/><i>localnet up / status / …</i>]
       Web[Web UI<br/><i>localhost:7777</i>]
     end
-    Core[internal/localnet<br/><i>orchestrator</i>]
+    Core[LocalNet orchestrator]
     Reg[Registry<br/><i>~/.canton-devkit/</i>]
     Splice[Splice fetch<br/><i>pinned by commit SHA</i>]
     Docker[Docker Compose<br/><i>~12 containers</i>]
@@ -350,22 +311,6 @@ The `splice` container runs **one Java process** (`SpliceApp daemon`) that hosts
 | **Registry** | Every instance has a `state.json` (ports, JWTs, party IDs, compose project name). Single source of truth for CLI + Web UI. Atomic writes + index lock for concurrent ups |
 | **JWT signing** | Splice LocalNet authenticates ledger and app traffic with a **fixed dev secret** — the literal string `unsafe` — applied to HS-256 JWTs (Splice config labels: `unsafe-jwt-hmac-256` / `hs-256-unsafe`). The DevKit signs JWTs locally with that same secret so client code can `Bearer <token>` against the local participant. **Never reuse against MainNet or any non-LocalNet deployment** — warning reprinted on every signing path |
 | **CLI ↔ Web UI parity** | Every user-facing operation lands on both surfaces. Codified in [`CONTRIBUTING.md`](CONTRIBUTING.md). No UI-only or CLI-only features |
-
----
-
-## 🗺️ Roadmap
-
-**Shipped today**
-
-- **LocalNet lifecycle CLI + packaging** — lifecycle commands (`up` / `down` / `restart` / `clean` / `status` / `logs`), named instances, version pinning, explicit ports, snapshot/restore, doctor/preflight, deterministic automation output, DPM component, Homebrew/APT, and standalone release artifacts
-- **Web UI + observability + DAR + Explorer** — Web UI parity for LocalNet lifecycle, logs, env export, snapshots, and preflight; Prometheus/Grafana with Canton dashboard presets; `metrics`; DAR upload/list/info/download/diff/remove/build-upload/watch; ACS + transaction Explorer; optional agent skill docs
-- **CIP-0112 token tooling** — token workspace for LocalNet: party aliases, `token create`, `mint`, `transfer`, `burn`, `faucet`, `balance(s)`, `summary`, and `activity`, targeting the Token Standard V2 / CIP-0112 path via the `token-standard-v2` catalogue entry and `tokens-v2` profile
-
-**Planned**
-
-- Intel Mac (`darwin_amd64`) and Linux ARM (`linux_arm64`) release artifacts
-
-Follow progress in [open PRs](https://github.com/bitdynamics-ab/canton-devkit/pulls), or [open an issue](https://github.com/bitdynamics-ab/canton-devkit/issues/new) to weigh in on direction.
 
 ---
 
@@ -470,6 +415,34 @@ uvx pre-commit install  # install Git hooks (requires uv)
 ```
 
 Open an [issue](https://github.com/bitdynamics-ab/canton-devkit/issues) first for anything non-trivial. PRs against `main` welcomed.
+
+---
+
+## 📈 Adoption
+
+Release download statistics for the public builds repo
+([`bitdynamics-ab/homebrew-canton-devkit`](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases)),
+which mirrors the same release assets published here. Charts refresh daily
+via [`.github/workflows/release-stats.yml`](.github/workflows/release-stats.yml)
+and are regenerated by [`scripts/release-stats.sh`](scripts/release-stats.sh).
+Checksum files (`SHA256SUMS`) are excluded from the counts.
+
+<div align="center">
+
+<img src="docs/assets/release-downloads-by-version.svg" alt="Total downloads per release over time" width="720" />
+
+<img src="docs/assets/release-downloads-by-platform.svg" alt="Downloads per platform per release over time" width="720" />
+
+<img src="docs/assets/release-downloads-totals.svg" alt="All-time downloads per version and per platform" width="640" />
+
+</div>
+
+Exact numbers live in
+[`docs/assets/release-downloads.md`](docs/assets/release-downloads.md). For
+on-demand exploration and CSV export, use the interactive
+[gh-release-stats](https://ramiawar.github.io/gh-release-stats/) tool (enter
+`bitdynamics-ab/homebrew-canton-devkit`) — the download-count logic here is a
+static reimplementation of that tool.
 
 ---
 

@@ -18,10 +18,9 @@ persisted in the registry so re-up preserves bookmarked URLs.
 ## Metric naming convention
 
 The live Splice 0.6.4 Prometheus surfaces **three** metric prefix
-families. Earlier versions of the dashboard and `internal/metricsq`
-used a `canton_*` prefix that does NOT exist upstream — those
-queries silently returned no data. The audit notes below pin the
-current convention so future panels stay aligned.
+families. Earlier versions of the dashboard used a `canton_*` prefix that
+does NOT exist upstream — those queries silently returned no data. The
+audit notes below pin the current convention so future panels stay aligned.
 
 Probe used to ground-truth the names:
 
@@ -61,20 +60,19 @@ metric is emitted by the Daml participant) or `daml_sequencer_*` /
 
 ## Smoke test (drift guard)
 
-`internal/metricsq/smoke_test.go` (build tag `integration`) queries
-every `Headline*` in `SummaryQueries` against a live Prometheus and
-fails if any returns 0 results — the only way to catch silent
-metric-name drift when Splice updates.
+An integration test (build tag `integration`) queries every headline
+metric in the CLI summary against a live Prometheus and fails if any
+returns zero results — the way to catch silent metric-name drift when
+Splice updates.
 
-Run it locally:
+Run it locally against a running observability-enabled instance:
 
 ```
 canton-devkit localnet up --name metric-audit --profile observability
 PROM_PORT=$(canton-devkit localnet status --name metric-audit --format json \
   | jq -r '.endpoints[] | select(.label=="prometheus_ui") | .port')
 METRICSQ_SMOKE_PROM=http://localhost:${PROM_PORT} \
-  go test -tags=integration -run TestSummaryQueries_LiveProm \
-  ./internal/metricsq/
+  go test -tags=integration -run TestSummaryQueries_LiveProm ./...
 canton-devkit localnet clean --name metric-audit --force
 ```
 
@@ -106,8 +104,7 @@ on an already-running instance **without restarting Canton**:
   canton-devkit localnet observability status --name demo --format json
   ```
 
-Both surfaces call the **same** neutral orchestration
-(`internal/localnet.SetObservability`) — there is no second
+Both surfaces call the **same** orchestration path — there is no second
 docker-compose code path that could drift. With neither `--prometheus`
 nor `--grafana`, the verb acts on both sidecars (the legacy umbrella
 semantics); pass one flag to operate on a single component.
@@ -153,9 +150,8 @@ deliberate, kept fallback: both the CLI and the Web UI read **shared-first**
 and fall back to the per-instance Prometheus when the shared stack isn't
 up, and the per-instance scrape uses in-network service DNS
 (`canton:10013`) rather than `host.docker.internal`, so it works on any
-platform regardless of the Linux `host-gateway` mapping. Gating the
-per-instance overlay off (to drop the duplication) is deferred until the
-shared-only path can be end-to-end validated on a native Linux Docker host
-— see [Known limitations](../../reference/limitations/#observability-transitional-dual-stack). The
+platform regardless of the Linux `host-gateway` mapping. The per-instance
+overlay remains enabled until the shared-only path is validated end-to-end
+on a native Linux Docker host — see [Known limitations](../../reference/limitations/#observability-transitional-dual-stack). The
 extra resource cost (a second Prometheus+Grafana per instance) is the price
 of that fallback on a dev machine; it carries no correctness impact.

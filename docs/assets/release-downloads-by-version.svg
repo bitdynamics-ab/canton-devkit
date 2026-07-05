@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="380" viewBox="0 0 760 380" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-label="Total downloads, by release">
+<rect width="760" height="380" fill="#ffffff"/>
+<text x="56" y="26" font-size="16" font-weight="600" fill="#111827">Total downloads, by release</text>
+<line x1="56" y1="316.0" x2="580" y2="316.0" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="320.0" font-size="11" fill="#6b7280" text-anchor="end">0</text>
+<line x1="56" y1="262.4" x2="580" y2="262.4" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="266.4" font-size="11" fill="#6b7280" text-anchor="end">2</text>
+<line x1="56" y1="208.8" x2="580" y2="208.8" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="212.8" font-size="11" fill="#6b7280" text-anchor="end">4</text>
+<line x1="56" y1="155.2" x2="580" y2="155.2" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="159.2" font-size="11" fill="#6b7280" text-anchor="end">6</text>
+<line x1="56" y1="101.6" x2="580" y2="101.6" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="105.6" font-size="11" fill="#6b7280" text-anchor="end">8</text>
+<line x1="56" y1="48.0" x2="580" y2="48.0" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="52.0" font-size="11" fill="#6b7280" text-anchor="end">11</text>
+<line x1="56" y1="48" x2="56" y2="316" stroke="#9ca3af" stroke-width="1"/>
+<line x1="56" y1="316" x2="580" y2="316" stroke="#9ca3af" stroke-width="1"/>
+<text x="56.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">v0.3</text>
+<text x="130.9" y="336" font-size="11" fill="#6b7280" text-anchor="middle">v0.4</text>
+<text x="205.7" y="336" font-size="11" fill="#6b7280" text-anchor="middle">v0.5</text>
+<text x="280.6" y="336" font-size="11" fill="#6b7280" text-anchor="middle">v0.6</text>
+<text x="355.4" y="336" font-size="11" fill="#6b7280" text-anchor="middle">v0.7</text>
+<text x="430.3" y="336" font-size="11" fill="#6b7280" text-anchor="middle">v0.8.1</text>
+<text x="505.1" y="336" font-size="11" fill="#6b7280" text-anchor="middle">v0.9.0</text>
+<text x="580.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">v0.10.1</text>
+<text x="318" y="368" font-size="12" fill="#374151" text-anchor="middle">Release tag (oldest -> newest)</text>
+<polyline points="56.0,291.6 130.9,242.9 205.7,218.5 280.6,291.6 355.4,291.6 430.3,316.0 505.1,194.2 580.0,48.0" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+<circle cx="56.0" cy="291.6" r="3.5" fill="#2563eb"/>
+<circle cx="130.9" cy="242.9" r="3.5" fill="#2563eb"/>
+<circle cx="205.7" cy="218.5" r="3.5" fill="#2563eb"/>
+<circle cx="280.6" cy="291.6" r="3.5" fill="#2563eb"/>
+<circle cx="355.4" cy="291.6" r="3.5" fill="#2563eb"/>
+<circle cx="430.3" cy="316.0" r="3.5" fill="#2563eb"/>
+<circle cx="505.1" cy="194.2" r="3.5" fill="#2563eb"/>
+<circle cx="580.0" cy="48.0" r="3.5" fill="#2563eb"/>
+<rect x="596" y="48" width="14" height="14" rx="2" fill="#2563eb"/>
+<text x="616" y="60" font-size="12" fill="#374151">Total downloads</text>
+</svg>

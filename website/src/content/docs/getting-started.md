@@ -141,8 +141,8 @@ sudo apt install canton-devkit=0.7.0
 ```
 
 The APT repo is currently unsigned and therefore uses `trusted=yes`;
-the release still publishes SHA-256 metadata. A signed repository key
-is planned. Package installation records a best-effort anonymous `apt`
+the release still publishes SHA-256 metadata. Repository signing has
+not been added yet. Package installation records a best-effort anonymous `apt`
 install-surface telemetry ping — see [Telemetry](../reference/telemetry/)
 for what is sent and how to opt out before installing.
 
@@ -215,9 +215,8 @@ platforms.
 
 ### Splice LocalNet versions
 
-DevKit pins a **curated** set of Splice versions in
-[`internal/splice/versions.json`](https://github.com/bitdynamics-ab/canton-devkit/blob/main/internal/splice/versions.json);
-`localnet up --version <tag>` selects one. List them at runtime:
+DevKit pins a **catalogue** of tested Splice versions; `localnet up
+--version <tag>` selects one. List them at runtime:
 
 ```bash
 canton-devkit localnet versions
