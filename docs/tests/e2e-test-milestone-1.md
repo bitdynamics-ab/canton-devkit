@@ -2,7 +2,7 @@
 
 > **Proposal Reference:** `original-devkit-proposal.md`, Milestone 1 (Lines 230–247)
 > **Estimated Delivery:** Month 3
-> **Total Tests:** 18
+> **Total Tests:** 19
 > **Platforms:** macOS (Apple Silicon), Linux (amd64), Windows (amd64)
 
 ---
@@ -131,8 +131,12 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
 2. Check help output includes all Milestone 1 commands:
    ```bash
    $CLI --help 2>&1 | grep -qE "up"
+   $CLI --help 2>&1 | grep -qE "start"
+   $CLI --help 2>&1 | grep -qE "stop"
    $CLI --help 2>&1 | grep -qE "down"
    $CLI --help 2>&1 | grep -qE "restart"
+   $CLI --help 2>&1 | grep -qE "pause"
+   $CLI --help 2>&1 | grep -qE "resume"
    $CLI --help 2>&1 | grep -qE "clean"
    $CLI --help 2>&1 | grep -qE "status"
    $CLI --help 2>&1 | grep -qE "logs"
@@ -140,7 +144,7 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
    $CLI --help 2>&1 | grep -qE "restore"
    $CLI --help 2>&1 | grep -qE "doctor"
    ```
-   - **Expected:** All grep commands exit `0`.
+   - **Expected:** All grep commands exit `0`. (`start`/`stop` are first-class lifecycle commands — no longer aliases of `up`/`down` — and `pause`/`resume` are listed too.)
 
 3. Verify no runtime dependencies required (no Go, Node, Python, Rust):
    ```bash
@@ -440,6 +444,55 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
      ```
 
 **Cleanup:** `$CLI down --name e2e-test-default`
+
+---
+
+### M1-STP-001: Stop keeps containers; start restores them
+
+**Preconditions:** LocalNet `e2e-test-default` running.
+**Platforms:** All
+**Timeout:** 300 seconds
+
+`stop`/`start` are first-class lifecycle commands (they were previously
+aliases for `down`/`up`). `stop` runs `docker compose stop` — the
+containers are stopped but **kept on disk** — and `start` runs
+`docker compose start`, reusing the existing containers without
+recreating the stack. When the containers have already been removed
+(e.g. after `down`), `start` transparently falls back to a full `up`.
+
+**Steps:**
+
+1. Start LocalNet if not running:
+   ```bash
+   $CLI up --name e2e-test-default
+   ```
+
+2. Stop the instance:
+   ```bash
+   $CLI stop --name e2e-test-default
+   ```
+   - **Expected:** Exit code `0`.
+
+3. Verify containers are stopped but **not** removed:
+   ```bash
+   # Containers still exist (stopped state)
+   docker ps -a --filter "label=com.docker.compose.project=canton-e2e-test-default" --format '{{.Names}}' | grep -qE "e2e-test-default"
+   # ...but none are running
+   docker ps --filter "label=com.docker.compose.project=canton-e2e-test-default" --format '{{.Names}}' | grep -qE "e2e-test-default" && echo "FAIL: containers still running" || echo "PASS"
+   ```
+   - **Expected:** Containers present in `docker ps -a`, absent from `docker ps`.
+
+4. Start the instance again:
+   ```bash
+   $CLI start --name e2e-test-default
+   ```
+   - **Expected:** Exit code `0`, no image pull / stack recreate (fast compose-start path).
+   - **Verify readiness after start:**
+     ```bash
+     $CLI status --name e2e-test-default 2>&1 | grep -qiE "(healthy|ready|running)"
+     ```
+
+**Cleanup:** `$CLI clean --name e2e-test-default --force 2>/dev/null || true`
 
 ---
 
@@ -751,6 +804,7 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
 | M1-STS-001 | Status shows healthy services | Status | M1-UP-001 |
 | M1-LOG-001 | Logs — full and service-filtered | Logs | M1-UP-001 |
 | M1-RST-001 | Restart full + single service | Lifecycle | M1-UP-001 |
+| M1-STP-001 | Stop keeps containers; start restores them | Lifecycle | M1-UP-001 |
 | M1-DWN-001 | Down stops instance cleanly | Lifecycle | M1-UP-001 |
 | M1-CLN-001 | Clean removes all resources | Lifecycle | M1-DWN-001 |
 | M1-SNP-001 | Snapshot and restore | State | M1-UP-001 |
@@ -781,7 +835,7 @@ The test plan assumes command syntax that differs from the actual CLI implementa
 | `$CLI snapshot --name X` | `$CLI snapshot --name X --to <path.tgz>` | `--to` is required — output path |
 | `$CLI restore --name X` | `$CLI restore --name X --from <path.tgz>` | `--from` is required — input path |
 | `$CLI --version` → semver | `$CDK --version` → `canton-devkit version dev` | Version is top-level, may be `dev` in local builds |
-| `$CLI --help` shows `clean`, `restart` | Hidden commands; not in `--help` output | Exist and work via `--help` on each subcommand |
+| `$CLI --help` shows lifecycle commands | `up`, `start`, `stop`, `down`, `restart`, `pause`, `resume`, `clean` all listed | `start`/`stop` are now standalone commands (no longer `up`/`down` aliases); `resume` has an `unpause` alias |
 | Docker label `canton-devkit` | `com.docker.compose.project=canton-<name>` | Docker compose project label, not a custom label |
 | `$CLI down` then `$CLI clean` | `$CLI clean --force` on running instance | `down` deregisters the instance; `clean` can't find it after. Use `clean --force` directly |
 
@@ -798,7 +852,7 @@ The test plan assumes command syntax that differs from the actual CLI implementa
 
 | ID | Result | Duration | Notes |
 |---|---|---|---|
-| M1-INST-003 | **PASS** | <1s | Version (`dev`), help (10 visible + 2 hidden commands), Mach-O arm64 |
+| M1-INST-003 | **PASS** | <1s | Version (`dev`), help lists all lifecycle commands (`up`/`start`/`stop`/`down`/`restart`/`pause`/`resume`/`clean`), Mach-O arm64 |
 | M1-DOC-001 | **PASS** | <2s | 0 issues, 1 warning (memory 8.84/12 GB). Exit 0. |
 | M1-DOC-002 | **PASS** | <2s | Exit 2 when Docker hidden from PATH. Remediation: "Install Docker Desktop for Mac" |
 | M1-UP-001 | **PASS** | ~2-4 min | Splice 0.6.4, cached images. Status: healthy. Docker compose project verified. |
@@ -806,6 +860,7 @@ The test plan assumes command syntax that differs from the actual CLI implementa
 | M1-LOG-001 | **PASS** | <10s | Full logs: 308 lines. Service-filtered (`canton`): 20 lines. |
 | M1-ENV-001 | **PASS** | <1s | `export CANTON_*` format. Contains JWT (redacted), audience, port variables. |
 | M1-RST-001 | **PASS** | ~5-8 min | Full restart + single-service (`--service canton`) restart. Readiness wait is slow post-restart. |
+| M1-STP-001 | **NOT RUN** | — | Added after this run (PR #201 standalone `stop`/`start`). Covered by `scripts/e2e-milestone1.sh`. |
 | M1-SNP-001 | **PASS*** | ~10 min | Snapshot: 78 MB .tgz. Restore + re-up works but splice re-sync can exceed 5 min (crash-consistent, not app-consistent). |
 | M1-DWN-001 | **PASS** | ~5s | Containers stopped, non-devkit containers unaffected. |
 | M1-CLN-001 | **PASS*** | ~10 min | See finding below. `clean --force` on running instance removes all resources (containers, volumes, networks). |

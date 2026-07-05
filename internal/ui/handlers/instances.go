@@ -103,6 +103,180 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 	// independent. CLI counterpart: `localnet pause` / `localnet resume`.
 	mux.HandleFunc("POST /api/instances/{name}/pause", handlePauseInstance(true))
 	mux.HandleFunc("POST /api/instances/{name}/resume", handlePauseInstance(false))
+	// Stop — docker compose stop; hub-independent, synchronous
+	// (near-instant, containers kept). CLI counterpart: `localnet stop`.
+	mux.HandleFunc("POST /api/instances/{name}/stop", handleStopInstance())
+	// Start — the fast compose-start path is synchronous (204), but a
+	// fall-through to a full bring-up needs the hub's SSE machinery,
+	// so it's only mounted when the hub is present (stubbed above).
+	if hub != nil {
+		mux.HandleFunc("POST /api/instances/{name}/start", handleStartInstance(hub))
+	} else {
+		mux.HandleFunc("POST /api/instances/{name}/start", func(w http.ResponseWriter, _ *http.Request) {
+			writeErrorWithCode(w, http.StatusServiceUnavailable,
+				"SSE_DISABLED",
+				"start flow disabled (no event hub configured)",
+				"start the server with the default config; --no-hub is a test seam")
+		})
+	}
+}
+
+// handleStopInstance: POST /api/instances/{name}/stop.
+// Synchronous wrapper around localnet.RunStop (docker compose stop) —
+// containers are kept for a fast `start`. 204 on success; mapped error
+// codes on failure. CLI counterpart: `localnet stop`.
+func handleStopInstance() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if err := registry.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), downTimeout)
+		defer cancel()
+
+		var outBuf, errBuf bytes.Buffer
+		exit := localnet.RunStop(ctx, &outBuf, &errBuf, &localnet.StopOptions{Name: name})
+		if exit == localnet.ExitSuccess {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		status := http.StatusInternalServerError
+		switch exit {
+		case localnet.ExitUserError:
+			status = http.StatusBadRequest
+		case localnet.ExitTimeout:
+			status = http.StatusRequestTimeout
+		}
+		cause := firstNonWarningLine(errBuf.String())
+		if cause == "" {
+			cause = "operation failed with exit code " + strconv.FormatUint(uint64(exit), 10)
+		}
+		writeErrorWithCode(w, status, "STOP_FAILED", cause)
+	}
+}
+
+// handleStartInstance: POST /api/instances/{name}/start.
+//
+// Mirrors the CLI's intelligent `localnet start`:
+//
+//   - stopped + containers present → fast `docker compose start`,
+//     synchronous, returns 204
+//   - stopped + containers removed, or failed/partial → falls back to a
+//     full bring-up, returns 202 + an events_url the UI subscribes to
+//     (reusing the resume/create SSE machinery)
+//   - not registered → 404 (the UI's Start button only shows for
+//     registered rows; use POST /api/instances to create)
+//   - running → 204 (idempotent no-op)
+//   - paused → 409 (use /resume)
+//
+// The 204-vs-202 split lets the frontend branch: 204 → just refetch;
+// 202 → open the existing create-progress modal.
+func handleStartInstance(hub *stream.Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if err := localnet.ValidateName(name); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest,
+				"invalid instance name: "+err.Error())
+			return
+		}
+
+		state, err := registry.Read(name)
+		if err != nil {
+			if errors.Is(err, registry.ErrNotFound) {
+				writeErrorWithCode(w, http.StatusNotFound, ErrCodeNotFound,
+					"instance "+name+" not registered",
+					"create it first via POST /api/instances")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "read state", err)
+			return
+		}
+		switch state.Status {
+		case registry.StatusRunning:
+			w.WriteHeader(http.StatusNoContent) // idempotent
+			return
+		case registry.StatusPaused:
+			writeErrorWithCode(w, http.StatusConflict, "INSTANCE_PAUSED",
+				"instance "+name+" is paused",
+				"resume it via POST /api/instances/"+name+"/resume")
+			return
+		}
+
+		// stopped / failed / partial: fast-start iff the containers
+		// still exist; otherwise fall back to a full bring-up.
+		existing, listErr := containers.List(r.Context(), state.ComposeProject)
+		if listErr == nil && len(existing) > 0 {
+			ctx, cancel := context.WithTimeout(r.Context(), downTimeout)
+			defer cancel()
+			var outBuf, errBuf bytes.Buffer
+			// SkipWait: return quickly; the reconciler promotes to
+			// running once healthy (same precedent as restart no-wait).
+			// The Progress sink is only used on RunStart's up-fallback
+			// path, which the containers-present branch can't reach, so
+			// a discard sink is safe here.
+			exit := localnet.RunStart(ctx,
+				localnet.NewTextProgress(io.Discard, io.Discard),
+				&outBuf, &errBuf,
+				&localnet.StartOptions{Name: name, SkipWait: true})
+			if exit == localnet.ExitSuccess {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			status := http.StatusInternalServerError
+			switch exit {
+			case localnet.ExitUserError:
+				status = http.StatusBadRequest
+			case localnet.ExitTimeout:
+				status = http.StatusRequestTimeout
+			}
+			cause := firstNonWarningLine(errBuf.String())
+			if cause == "" {
+				cause = "operation failed with exit code " + strconv.FormatUint(uint64(exit), 10)
+			}
+			writeErrorWithCode(w, status, "START_FAILED", cause)
+			return
+		}
+
+		// Containers gone → full bring-up via the async SSE path.
+		startBringUp(w, name, state.SpliceVersion, state.Profiles, hub)
+	}
+}
+
+// startBringUp kicks off a full `up` for an existing (registered but
+// container-less) instance and returns 202 + events_url. Extracted so
+// handleStartInstance can reuse the same job/SSE machinery the resume
+// and create handlers use.
+func startBringUp(w http.ResponseWriter, name, version string, profiles []string, hub *stream.Hub) {
+	jobCtx, cancelJob := context.WithTimeout(context.Background(), upJobTimeout)
+	if !jobs.Register(name, cancelJob) {
+		cancelJob()
+		writeErrorWithCode(w, http.StatusConflict,
+			"INSTANCE_CREATING",
+			"instance "+name+" is already being brought up",
+			"open /api/instances/"+name+"/events to watch the existing run")
+		return
+	}
+
+	topic := progress.TopicFor(name)
+	hub.EnableBuffering(topic, progressBufferCap)
+
+	opts := &localnet.UpOptions{Name: name, Version: version, Profiles: profiles}
+	go func() {
+		defer cancelJob()
+		defer hub.ClearBuffer(topic)
+		defer jobs.Unregister(name)
+		prog := progress.New(hub, name)
+		exitCode := localnet.RunUp(jobCtx, prog, opts)
+		log.Printf("start (bring-up) instance %q: exit_code=%d", name, exitCode)
+	}()
+
+	writeJSON(w, http.StatusAccepted, upAcceptedResponse{
+		SchemaVersion: types.SchemaVersion,
+		Instance:      name,
+		EventsURL:     "/api/instances/" + name + "/events",
+	})
 }
 
 // handlePauseInstance: POST /api/instances/{name}/pause|resume.

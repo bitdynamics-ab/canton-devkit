@@ -161,15 +161,15 @@ TEST_ID="M1-INST-003"
   # Step 1: version output matches semver or "dev"
   "$CDK" --version 2>&1 | grep -qE "([0-9]+\.[0-9]+\.[0-9]+|dev)"
 
-  # Step 2: help includes all visible M1 commands
-  # Note: 'clean' and 'restart' are hidden commands — not shown in --help but functional.
+  # Step 2: help includes all visible M1 lifecycle + inspection commands.
+  # start/stop are now first-class lifecycle commands (previously up/down
+  # aliases); pause/resume and restart/clean are also listed in --help.
   HELP=$(cli --help 2>&1)
-  for cmd in up down status logs snapshot restore doctor env list creds; do
+  for cmd in up start stop down restart pause resume clean status logs snapshot restore doctor env list creds; do
     echo "$HELP" | grep -qiE "$cmd"
   done
-  # Verify hidden commands exist by checking their --help works
-  cli clean --help >/dev/null 2>&1
-  cli restart --help >/dev/null 2>&1
+  # 'unpause' is an alias of 'resume' — verify its --help resolves.
+  cli unpause --help >/dev/null 2>&1
 
   # Step 3: binary is a compiled executable (platform-specific)
   case "$(uname -s)" in
@@ -367,6 +367,48 @@ if [ $? -eq 0 ]; then
   pass "$TEST_ID: Restart full + single service"
 else
   fail "$TEST_ID: Restart full + single service" "restart or post-restart health check failed"
+fi
+
+# ── M1-STP-001: Stop keeps containers; start brings them back ───────
+# PR #201: `stop`/`start` are standalone commands (no longer up/down
+# aliases). `stop` = docker compose stop (containers preserved on disk),
+# `start` = docker compose start (fast path, no recreate).
+TEST_ID="M1-STP-001"
+echo "  Stop/start cycle (may take a few minutes)..."
+(
+  # Step 1: stop the running instance
+  cli stop e2e-test-default \
+    || { echo "FAIL step 1: stop exited $?" >&2; exit 1; }
+
+  # Allow container processes to exit
+  sleep 5
+
+  # Step 2: containers are stopped but NOT removed — they must still be
+  # present in `docker ps -a` yet absent from the running set (`docker ps`).
+  docker ps -a --filter "label=com.docker.compose.project=canton-e2e-test-default" --format '{{.Names}}' | grep -qE "e2e-test-default" \
+    || { echo "FAIL step 2: containers removed by stop (should be preserved)" >&2; exit 1; }
+  if docker ps --filter "label=com.docker.compose.project=canton-e2e-test-default" --format '{{.Names}}' | grep -qE "e2e-test-default"; then
+    echo "FAIL step 2: containers still running after stop" >&2; exit 1
+  fi
+
+  # Step 3: start brings the instance back to healthy (fast compose-start path)
+  timed 600 "$CDK" localnet start e2e-test-default \
+    || { echo "FAIL step 3: start exited $?" >&2; exit 1; }
+
+  # Canton may need a moment to pass health checks after start
+  ok=false
+  for i in 1 2 3 4 5; do
+    if cli status e2e-test-default 2>&1 | grep -qiE "(healthy|ready|running)"; then
+      ok=true; break
+    fi
+    sleep 5
+  done
+  $ok || { echo "FAIL step 3: not healthy after start" >&2; exit 1; }
+)
+if [ $? -eq 0 ]; then
+  pass "$TEST_ID: Stop keeps containers; start restores them"
+else
+  fail "$TEST_ID: Stop keeps containers; start restores them" "stop/start cycle failed"
 fi
 
 # ── M1-SNP-001: Snapshot and restore ────────────────────────────────

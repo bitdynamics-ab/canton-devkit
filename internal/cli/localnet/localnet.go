@@ -21,8 +21,12 @@ func Build() *cobra.Command {
 		},
 	}
 
-	// Lifecycle.
+	// Lifecycle. The trio start/stop/down mirrors Docker Compose:
+	// stop = graceful halt (containers kept), start = resume them,
+	// down = remove containers. pause/resume freeze without stopping.
 	localnet.AddCommand(buildUp())
+	localnet.AddCommand(buildStart())
+	localnet.AddCommand(buildStop())
 	localnet.AddCommand(buildDown())
 	localnet.AddCommand(buildRestart())
 	localnet.AddCommand(buildPause())
