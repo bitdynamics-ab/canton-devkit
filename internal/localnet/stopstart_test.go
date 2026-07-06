@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"reflect"
 	"testing"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
@@ -149,6 +150,7 @@ func TestRunStart_FallsBackToUpWhenContainersGone(t *testing.T) {
 	seedRunningInstance(t, "demo")
 	s, _ := registry.Read("demo")
 	s.Status = registry.StatusStopped
+	s.Profiles = []string{"sv", "app-provider", "app-user", "swagger-ui", "prometheus"}
 	_ = registry.Write(s)
 
 	upCalled := false
@@ -164,6 +166,9 @@ func TestRunStart_FallsBackToUpWhenContainersGone(t *testing.T) {
 			}
 			if o.Version != "0.6.4" {
 				t.Errorf("up reused version = %q, want 0.6.4", o.Version)
+			}
+			if want := []string{"sv", "app-provider", "app-user", "swagger-ui", "prometheus"}; !reflect.DeepEqual(o.Profiles, want) {
+				t.Errorf("up profiles = %v, want %v", o.Profiles, want)
 			}
 			return ExitSuccess
 		},

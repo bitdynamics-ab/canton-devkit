@@ -11,6 +11,25 @@ export default defineConfig({
 			title: 'Canton DevKit',
 			description:
 				'One command to a full Canton LocalNet — spin up, inspect, and tear down a complete Canton developer stack.',
+			customCss: [
+				// Self-hosted fonts (Fontsource) + typography tuning.
+				'@fontsource-variable/inter',
+				'@fontsource-variable/jetbrains-mono',
+				'./src/styles/custom.css',
+			],
+			expressiveCode: {
+				// Code-block typography is resolved at build time by
+				// Expressive Code — plain CSS overrides don't reach the
+				// inner <pre>, so set it here (this fixes the browser
+				// falling back to its default monospace inside frames).
+				styleOverrides: {
+					codeFontFamily: "'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace",
+					codeFontSize: '0.875rem',
+					codeLineHeight: '1.7',
+					uiFontFamily: "'Inter Variable', ui-sans-serif, system-ui, sans-serif",
+					borderRadius: '0.5rem',
+				},
+			},
 			social: [
 				{
 					icon: 'github',

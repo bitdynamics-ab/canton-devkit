@@ -450,6 +450,14 @@ function ActionButton({
           {busy ? "Starting…" : "▶ Start"}
         </button>
         <button
+          onClick={onDown}
+          disabled={busy}
+          title="Tear down stopped containers (docker compose down) — remove preserved containers and networks. Data volumes preserved; Start will recreate them."
+          style={btnStyle(W.err, busy)}
+        >
+          {busy ? "…" : "⏏ Down"}
+        </button>
+        <button
           onClick={onRemove}
           disabled={busy}
           title="Remove the registry entry + state.json. Docker volumes (if any) untouched."

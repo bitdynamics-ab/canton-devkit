@@ -1,7 +1,4 @@
----
-title: LocalNet Lifecycle
-description: Zero to a running Canton LocalNet — start, inspect, run multiple instances, pin ports, tear down, and answers to common questions.
----
+# LocalNet Lifecycle
 
 Canton DevKit is a single-binary developer tool for running and operating a
 Canton **LocalNet** — a full local Canton Network (sequencers, mediators,
@@ -11,7 +8,7 @@ embedded Web UI for the same operations.
 
 This guide walks the full lifecycle: bring an instance up, inspect it,
 run several at once, and clean up. See
-[Installation & Getting Started](../../getting-started/) first if you
+[Installation & Getting Started](getting-started.md) first if you
 haven't installed DevKit yet.
 
 ## Zero to running LocalNet
@@ -131,8 +128,4 @@ sudo rm /usr/local/bin/canton-devkit
 `clean` refuses to touch a running instance unless you pass `--force`
 (which tears it down first). Use `--dry-run` to preview.
 
-## FAQ
-
-See the [FAQ](../../reference/faq/) for common questions about versions,
-tokens, multi-instance setups, and snapshots. For failure-mode fixes, see
-[Troubleshooting](../../reference/troubleshooting/).
+For common questions, see the [FAQ](faq.md).
