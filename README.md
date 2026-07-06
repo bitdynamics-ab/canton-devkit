@@ -429,16 +429,16 @@ Checksum files (`SHA256SUMS`) are excluded from the counts.
 
 <div align="center">
 
-<img src="docs/assets/release-downloads-by-version.svg" alt="Total downloads per release over time" width="720" />
+<img src="https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-by-version.svg" alt="Total downloads per release over time" width="720" />
 
-<img src="docs/assets/release-downloads-by-platform.svg" alt="Downloads per platform per release over time" width="720" />
+<img src="https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-by-platform.svg" alt="Downloads per platform per release over time" width="720" />
 
-<img src="docs/assets/release-downloads-totals.svg" alt="All-time downloads per version and per platform" width="640" />
+<img src="https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-totals.svg" alt="All-time downloads per version and per platform" width="640" />
 
 </div>
 
 Exact numbers live in
-[`docs/assets/release-downloads.md`](docs/assets/release-downloads.md). For
+[`docs/assets/release-downloads.md`](https://github.com/bitdynamics-ab/canton-devkit/blob/release-stats-data/docs/assets/release-downloads.md). For
 on-demand exploration and CSV export, use the interactive
 [gh-release-stats](https://ramiawar.github.io/gh-release-stats/) tool (enter
 `bitdynamics-ab/homebrew-canton-devkit`) — the download-count logic here is a
