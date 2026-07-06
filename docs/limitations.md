@@ -11,8 +11,8 @@ resolved.
   Uppercase, underscores, and leading/trailing hyphens are rejected.
   DNS-label form was chosen so the same name is safe to embed as a
   hostname in a future `{service}.{instance}.localhost` routing model
-  without a second translation step. The single source of truth lives in
-  `internal/registry/state.go` (`ValidateName`); the CLI layer delegates.
+  without a second translation step. Name validation is centralized so
+  every surface enforces the same rule.
   *Migration:* instances created with an older release that still
   allowed uppercase or underscore names (e.g. `MyStack`, `my_stack`)
   must be torn down with that older binary and re-created under a
@@ -34,7 +34,7 @@ resolved.
   each running image's content digest (image ID) in `state.json`
   (`image_digests`) and, on a later `up`/`restart` of the SAME version,
   WARNs if a digest changed — i.e. a mutable ghcr tag was republished
-  under you. See `internal/localnet/image_digests.go`. This is a warning,
+  under you. This is a warning,
   not a gate (a digest can legitimately change if you manually re-pull),
   and it's best-effort (a capture failure just skips the check). True
   digest-pinning at pull time would need upstream Splice to expose
@@ -94,12 +94,12 @@ resolved.
   rather than DPM until the Windows `.exe` path through DPM is
   verified.
 
-## <a name="shared-observability-stack"></a>Observability: transitional dual stack
+## Observability: transitional dual stack
 
 DevKit runs a host-level shared Prometheus + Grafana stack — one
 stack serves every running LocalNet via file-based service discovery,
 refcounted by target file. See
-[docs/observability.md](observability.md#stack-topology--host-shared-with-a-transitional-per-instance-overlay)
+[Observability](observability.md#stack-topology--host-shared-with-a-transitional-per-instance-overlay)
 for the topology.
 
 - **Each observability-enabled instance still *also* runs a

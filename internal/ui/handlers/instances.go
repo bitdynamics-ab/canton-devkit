@@ -240,7 +240,7 @@ func handleStartInstance(hub *stream.Hub) http.HandlerFunc {
 		}
 
 		// Containers gone → full bring-up via the async SSE path.
-		startBringUp(w, name, state.SpliceVersion, hub)
+		startBringUp(w, name, state.SpliceVersion, state.Profiles, hub)
 	}
 }
 
@@ -248,7 +248,7 @@ func handleStartInstance(hub *stream.Hub) http.HandlerFunc {
 // container-less) instance and returns 202 + events_url. Extracted so
 // handleStartInstance can reuse the same job/SSE machinery the resume
 // and create handlers use.
-func startBringUp(w http.ResponseWriter, name, version string, hub *stream.Hub) {
+func startBringUp(w http.ResponseWriter, name, version string, profiles []string, hub *stream.Hub) {
 	jobCtx, cancelJob := context.WithTimeout(context.Background(), upJobTimeout)
 	if !jobs.Register(name, cancelJob) {
 		cancelJob()
@@ -262,7 +262,7 @@ func startBringUp(w http.ResponseWriter, name, version string, hub *stream.Hub) 
 	topic := progress.TopicFor(name)
 	hub.EnableBuffering(topic, progressBufferCap)
 
-	opts := &localnet.UpOptions{Name: name, Version: version}
+	opts := &localnet.UpOptions{Name: name, Version: version, Profiles: profiles}
 	go func() {
 		defer cancelJob()
 		defer hub.ClearBuffer(topic)
