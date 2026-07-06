@@ -1,4 +1,4 @@
-# Explorer Usage
+# Explorer
 
 The Explorer is the Web UI's window into a running LocalNet's
 ledger. It reads the Active Contract Set (ACS) and recent
@@ -289,10 +289,10 @@ or the underlying gRPC API directly via the SDK.
 
 ## 11. See also
 
-- [docs/getting-started.md](getting-started.md) — starting a
+- [Getting started](getting-started.md) — starting a
   LocalNet and finding its participant ports.
-- [docs/tokens.md](tokens.md) — driving CIP-0112 token flows from
+- [Tokens](tokens.md) — driving CIP-0112 token flows from
   the CLI; useful to populate the ACS with realistic contracts
   while you explore.
-- [docs/troubleshooting.md](troubleshooting.md) — port-recapture
+- [Troubleshooting](troubleshooting.md) — port-recapture
   and JWT-related fixes.
