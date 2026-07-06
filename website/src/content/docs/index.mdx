@@ -14,6 +14,8 @@ hero:
       variant: minimal
 ---
 
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
 `canton-devkit` is a single-binary toolkit for spinning up, inspecting, and tearing
 down a complete [Canton](https://canton.network/) developer stack — Canton
 synchronizer + participant, Splice super-validator apps, three party wallets
@@ -23,6 +25,34 @@ synchronizer + participant, Splice super-validator apps, three party wallets
 
 Start with [Installation & Getting Started](getting-started/) for install paths,
 Docker prerequisites, and a zero-to-running LocalNet walkthrough.
+
+<CardGrid>
+	<Card title="One command" icon="rocket">
+		No YAML editing, no env-file shuffling. `up` downloads Splice, signs JWTs,
+		brings up a dozen containers, prints endpoints. Cold start ~90&nbsp;s.
+	</Card>
+	<Card title="Two surfaces" icon="laptop">
+		Same code, two skins: a CLI for terminals &amp; CI, a
+		Vite/React Web UI for browser-driven inspection. Always at parity.
+	</Card>
+	<Card title="Zero lock-in" icon="approve-check">
+		No forks, no patches. Thin wrapper over upstream
+		[Splice LocalNet](https://github.com/canton-network/splice), pinned to
+		immutable commit SHAs and verified by content hash.
+	</Card>
+	<Card title="Snapshot &amp; restore" icon="seti:db">
+		Save a working state to a `.tgz`, hand it to a teammate, replay it on CI.
+		Restore a captured state in seconds.
+	</Card>
+	<Card title="Single binary" icon="download">
+		`go install` or `dpm install package` — same artefact. macOS arm64, Linux
+		amd64, Windows amd64. No JVM, no Python, no Node at runtime.
+	</Card>
+	<Card title="Observability built-in" icon="magnifier">
+		Optional `--profile observability` adds Prometheus + Grafana with a
+		Canton dashboard. The CLI scrapes the same metrics.
+	</Card>
+</CardGrid>
 
 ## Documentation
 
