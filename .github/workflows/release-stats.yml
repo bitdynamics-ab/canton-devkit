@@ -4,6 +4,11 @@ name: Release stats
 # Data source is the public builds repo (bitdynamics-ab/homebrew-canton-devkit),
 # which mirrors the same release assets as this repo. Uses the built-in
 # GITHUB_TOKEN only — no additional secrets required.
+#
+# Generated files are published to the `release-stats-data` branch (not
+# `main`) and the README embeds them via raw.githubusercontent.com URLs,
+# because the `main` branch ruleset requires all changes to go through a
+# pull request and this bot commit can't satisfy that.
 
 on:
   workflow_dispatch:
@@ -38,14 +43,40 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash scripts/release-stats.sh
 
-      - name: Commit refreshed charts + snapshot if changed
+      - name: Publish charts + snapshot to release-stats-data branch
         run: |
           set -euo pipefail
-          git add docs/assets/release-downloads-by-platform.svg \
-                  docs/assets/release-downloads-by-version.svg \
-                  docs/assets/release-downloads-totals.svg \
-                  docs/assets/release-downloads.md \
-                  docs/assets/release-downloads-history.jsonl
+          files=(
+            docs/assets/release-downloads-by-platform.svg
+            docs/assets/release-downloads-by-version.svg
+            docs/assets/release-downloads-totals.svg
+            docs/assets/release-downloads.md
+            docs/assets/release-downloads-history.jsonl
+          )
+
+          # Stash the freshly generated files before switching branches —
+          # release-stats-data's tree is unrelated to main's, and main's
+          # working copy of these files (modified in place by the generator)
+          # must be reset or the branch switch below will refuse to proceed.
+          tmp="$(mktemp -d)"
+          for f in "${files[@]}"; do
+            mkdir -p "${tmp}/$(dirname "${f}")"
+            cp "${f}" "${tmp}/${f}"
+          done
+          git checkout -- "${files[@]}"
+
+          if git fetch origin release-stats-data:refs/remotes/origin/release-stats-data; then
+            git checkout -B release-stats-data refs/remotes/origin/release-stats-data
+          else
+            git checkout --orphan release-stats-data
+            git reset --hard
+          fi
+
+          for f in "${files[@]}"; do
+            cp "${tmp}/${f}" "${f}"
+          done
+
+          git add "${files[@]}"
           if git diff --cached --quiet; then
             echo "Release stats already up to date."
             exit 0
@@ -53,4 +84,4 @@ jobs:
           git -c user.name="github-actions[bot]" \
               -c user.email="github-actions[bot]@users.noreply.github.com" \
               commit -m "chore: refresh release download stats"
-          git push
+          git push origin release-stats-data
