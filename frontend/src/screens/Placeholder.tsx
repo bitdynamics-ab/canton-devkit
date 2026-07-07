@@ -9,7 +9,7 @@ export function Placeholder({ name }: { name: string }) {
       style={{
         background: W.surface,
         border: `1px dashed ${W.border}`,
-        borderRadius: 8,
+        borderRadius: 4,
         padding: 32,
         textAlign: "center",
         color: W.dim,

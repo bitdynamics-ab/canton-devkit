@@ -35,7 +35,7 @@ export function Heatmap({
   colLabels,
   width = 320,
   height = 160,
-  color = "#7CB5F7",
+  color = "#8FA3EE",
 }: Props) {
   const innerW = Math.max(1, width - PADDING.left - PADDING.right);
   const innerH = Math.max(1, height - PADDING.top - PADDING.bottom);

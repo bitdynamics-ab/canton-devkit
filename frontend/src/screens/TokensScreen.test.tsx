@@ -220,7 +220,7 @@ describe("TokensScreen", () => {
     const user = userEvent.setup();
     stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
     renderTokens();
-    await user.click(await screen.findByRole("button", { name: "→ Transfer" }, { timeout: 4000 }));
+    await user.click(await screen.findByRole("button", { name: "Transfer" }, { timeout: 4000 }));
     await waitFor(
       () => expect(screen.queryByText(/Auto-accept/i)).toBeInTheDocument(),
       { timeout: 4000 },
@@ -231,7 +231,7 @@ describe("TokensScreen", () => {
     const user = userEvent.setup();
     stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
     renderTokens();
-    await user.click(await screen.findByRole("button", { name: "→ Transfer" }, { timeout: 4000 }));
+    await user.click(await screen.findByRole("button", { name: "Transfer" }, { timeout: 4000 }));
     // From is now a PartyPicker dropdown; pick a registered party, then
     // fill Amount → the dry-run plan fires (debounced).
     await user.selectOptions(

@@ -1,6 +1,7 @@
 import type { Point } from "./charts/types";
 import { Sparkline } from "./charts/Sparkline";
-import { W, wMono } from "../tokens";
+import { IcArrowUp } from "./icons";
+import { W, wMono, wideCaps } from "../tokens";
 
 // MetricCard — the 4-up strip at the top of the Metrics screen.
 // One headline number + a delta vs the prior window + an inline
@@ -35,7 +36,7 @@ export function MetricCard({
   delta,
   deltaPolarity = "up-is-good",
   sparkline,
-  sparklineColor = "#7CB5F7",
+  sparklineColor = "#8FA3EE",
   error,
   format = defaultFormat,
 }: MetricCardProps) {
@@ -47,7 +48,7 @@ export function MetricCard({
     const good =
       (deltaSign > 0 && deltaPolarity === "up-is-good") ||
       (deltaSign < 0 && deltaPolarity === "down-is-good");
-    deltaColor = good ? "#62E2A0" : "#F08FB5";
+    deltaColor = good ? W.ok : W.err;
   }
 
   return (
@@ -55,29 +56,28 @@ export function MetricCard({
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 14,
         display: "flex",
         flexDirection: "column",
-        gap: 6,
         minWidth: 0,
       }}
     >
+      {/* Stat label row — label left, delta chip right (>=8px apart). */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           gap: 8,
+          marginBottom: 6,
         }}
       >
         <span
           style={{
+            ...wideCaps,
             color: W.dim,
             fontSize: 11,
-            letterSpacing: 0.4,
-            textTransform: "uppercase",
-            fontWeight: 600,
           }}
         >
           {title}
@@ -89,9 +89,18 @@ export function MetricCard({
               fontSize: 11,
               color: deltaColor,
               fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
             }}
           >
-            {deltaSign > 0 ? "▲" : deltaSign < 0 ? "▼" : "—"}{" "}
+            {deltaSign > 0 ? (
+              <IcArrowUp size={10} />
+            ) : deltaSign < 0 ? (
+              <IcArrowUp size={10} style={{ transform: "rotate(180deg)" }} />
+            ) : (
+              "—"
+            )}
             {format(Math.abs(delta))}
             {unit && <span style={{ color: W.dim }}>{" " + unit}</span>}
           </span>
@@ -99,7 +108,7 @@ export function MetricCard({
       </div>
 
       {error ? (
-        <div style={{ color: "#F08FB5", fontSize: 12 }} role="alert">
+        <div style={{ color: W.err, fontSize: 12 }} role="alert">
           {error}
         </div>
       ) : (
@@ -119,7 +128,7 @@ export function MetricCard({
                 style={{
                   color: W.text,
                   fontSize: 26,
-                  fontWeight: 700,
+                  fontWeight: 600,
                   lineHeight: 1.1,
                   fontFamily: wMono,
                 }}
@@ -145,7 +154,7 @@ export function MetricCard({
               </>
             )}
           </div>
-          <div style={{ marginTop: 4, height: 30 }}>
+          <div style={{ marginTop: 8, height: 30 }}>
             {sparkline ? (
               <Sparkline points={sparkline} color={sparklineColor} />
             ) : (
@@ -172,7 +181,7 @@ function Skeleton({
         width,
         height,
         background: W.border,
-        borderRadius: 4,
+        borderRadius: 2,
         opacity: 0.4,
       }}
     />

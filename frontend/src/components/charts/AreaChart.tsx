@@ -224,7 +224,7 @@ export function AreaChart({
             style={{
               background: W.surface,
               border: `1px solid ${W.border}`,
-              borderRadius: 4,
+              borderRadius: 2,
               padding: "3px 7px",
               fontFamily: wMono,
               fontSize: 10.5,

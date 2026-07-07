@@ -154,7 +154,7 @@ export function CommandPalette() {
           width: "min(560px, 92vw)",
           background: W.surface,
           border: `1px solid ${W.border}`,
-          borderRadius: 12,
+          borderRadius: 8,
           boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
           overflow: "hidden",
         }}
@@ -238,7 +238,7 @@ function renderGroups(
             padding: "10px 12px 4px",
             color: W.dim,
             fontSize: 10.5,
-            textTransform: "uppercase",
+            textTransform: "uppercase", fontStretch: "118%",
             letterSpacing: 1.1,
           }}
         >
@@ -262,7 +262,7 @@ function renderGroups(
             padding: "8px 12px",
             background: isCursor ? `${W.brand}1A` : "transparent",
             border: "none",
-            borderRadius: 6,
+            borderRadius: 2,
             color: W.text,
             textAlign: "left",
             cursor: "pointer",
@@ -290,7 +290,7 @@ function Hotkey({ label, hint }: { label: string; hint: string }) {
         style={{
           background: W.surface2,
           border: `1px solid ${W.border}`,
-          borderRadius: 4,
+          borderRadius: 2,
           padding: "1px 5px",
           fontFamily: wMono,
           fontSize: 10,

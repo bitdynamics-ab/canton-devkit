@@ -14,7 +14,9 @@ import {
   type TransactionsListResponse,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { TX_KIND_COLOR, W, wMono } from "../tokens";
+import { Button } from "../components/Button";
+import { Dot, IcRefresh } from "../components/icons";
+import { TX_KIND_COLOR, W, wMono, tableCaps, wideCaps } from "../tokens";
 import { ContractDetailDrawer } from "./ContractDetailDrawer";
 import { TxReplayDrawer } from "./TxReplayDrawer";
 
@@ -29,9 +31,12 @@ import { TxReplayDrawer } from "./TxReplayDrawer";
 // (the Web UI counterpart of `tx replay`).
 
 const ROLES: Role[] = ["app-user", "app-provider", "sv"];
+// Hash palette for template/party dots — the dataviz ramp ordered so
+// neighbouring indices never share a hue family, and no danger red
+// (red stays reserved for errors).
 const PALETTE = [
-  "#5BD7C5", "#7CB5F7", "#C4A8F5", "#F5BF55",
-  "#E8A14E", "#F08FB5", "#62E2A0", "#E37C7C",
+  "#6480E6", "#7BD2C6", "#DDB25E", "#7CC89A",
+  "#93A7F0", "#C8971F", "#189E8C", "#9BA3B5",
 ];
 
 type View = "contracts" | "transactions" | "timeline";
@@ -355,7 +360,7 @@ export function ExplorerScreen() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "232px 1fr 380px",
+            gridTemplateColumns: "232px minmax(0,1fr)",
             gap: 14,
             alignItems: "start",
           }}
@@ -394,41 +399,50 @@ export function ExplorerScreen() {
               ))}
             </Card>
             <Card title="Snapshot">
-              <button
+              <Button
+                variant="secondary"
+                fullWidth
+                icon={<IcRefresh />}
                 onClick={() => void refreshSnapshot(name, role, false)}
-                style={{
-                  width: "100%",
-                  padding: "6px",
-                  fontSize: 12,
-                  borderRadius: 5,
-                  border: `1px solid ${W.border}`,
-                  background: W.border,
-                  color: W.text,
-                  cursor: "pointer",
-                  fontWeight: 600,
-                }}
               >
                 Refresh snapshot
-              </button>
+              </Button>
               <div
                 style={{
                   marginTop: 8,
-                  color: W.dim,
-                  fontSize: 11,
-                  fontFamily: wMono,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  gap: 12,
+                  padding: "4px 0",
                 }}
               >
-                stream · {streamStatus}
+                <span style={{ color: W.dim, fontSize: 12, fontWeight: 500 }}>
+                  Stream
+                </span>
+                <span
+                  style={{ fontFamily: wMono, fontSize: 11, color: W.text2 }}
+                >
+                  {streamStatus}
+                </span>
               </div>
               <div
                 style={{
-                  marginTop: 4,
-                  color: W.dim,
-                  fontSize: 11,
-                  fontFamily: wMono,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  gap: 12,
+                  padding: "4px 0",
                 }}
               >
-                ledger end · {state.data.ledger_end ?? "—"}
+                <span style={{ color: W.dim, fontSize: 12, fontWeight: 500 }}>
+                  Ledger end
+                </span>
+                <span
+                  style={{ fontFamily: wMono, fontSize: 11, color: W.text2 }}
+                >
+                  {state.data.ledger_end ?? "—"}
+                </span>
               </div>
             </Card>
           </div>
@@ -438,7 +452,7 @@ export function ExplorerScreen() {
             style={{
               background: W.surface,
               border: `1px solid ${W.border}`,
-              borderRadius: 10,
+              borderRadius: 4,
               overflow: "hidden",
             }}
           >
@@ -480,7 +494,7 @@ export function ExplorerScreen() {
                     color: W.text,
                     fontSize: 12,
                     padding: "5px 32px 5px 10px",
-                    borderRadius: 6,
+                    borderRadius: 2,
                     width: 240,
                   }}
                   aria-label="Filter contracts"
@@ -496,7 +510,7 @@ export function ExplorerScreen() {
                     background: W.surface,
                     border: `1px solid ${W.border}`,
                     padding: "0 4px",
-                    borderRadius: 3,
+                    borderRadius: 2,
                   }}
                 >
                   /
@@ -513,9 +527,7 @@ export function ExplorerScreen() {
                 padding: "9px 14px",
                 color: W.dim,
                 fontSize: 10.5,
-                letterSpacing: 1.4,
-                textTransform: "uppercase",
-                fontWeight: 600,
+                ...tableCaps,
                 borderBottom: `1px solid ${W.border}`,
               }}
             >
@@ -562,21 +574,19 @@ export function ExplorerScreen() {
               <span>↑↓ navigate · ↵ open · / focus search · esc close</span>
             </div>
           </div>
-
-          {/* RIGHT — detail drawer */}
-          {selected ? (
-            <ContractDetailDrawer
-              instance={name}
-              role={role}
-              row={selected}
-              onClose={() => setSelectedCid(null)}
-              onPrev={goPrev}
-              onNext={goNext}
-            />
-          ) : (
-            <EmptyDetailPanel />
-          )}
         </div>
+      )}
+
+      {/* Detail drawer — fixed right-side overlay, outside the grid */}
+      {state.kind === "ok" && view === "contracts" && selected && (
+        <ContractDetailDrawer
+          instance={name}
+          role={role}
+          row={selected}
+          onClose={() => setSelectedCid(null)}
+          onPrev={goPrev}
+          onNext={goNext}
+        />
       )}
 
       {state.kind === "ok" && view === "transactions" && (
@@ -612,12 +622,12 @@ function ProjectionBar({
 }) {
   const pillColor =
     streamStatus === "live"
-      ? "#62E2A0"
+      ? "#7CC89A"
       : streamStatus === "reconnecting"
-        ? "#F5BF55"
+        ? "#DDB25E"
         : streamStatus === "truncated"
-          ? "#F08FB5"
-          : "#7A8B95";
+          ? "#7BD2C6"
+          : "#7C8598";
   const pillLabel =
     streamStatus === "live"
       ? "live"
@@ -631,7 +641,7 @@ function ProjectionBar({
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: "12px 16px",
         marginBottom: 14,
         display: "grid",
@@ -643,10 +653,8 @@ function ProjectionBar({
       <span
         style={{
           color: W.dim,
-          fontSize: 10.5,
-          letterSpacing: 1.4,
-          textTransform: "uppercase",
-          fontWeight: 600,
+          fontSize: 12,
+          fontWeight: 500,
         }}
       >
         Projecting through
@@ -660,7 +668,7 @@ function ProjectionBar({
             fontFamily: wMono,
             fontSize: 11.5,
             padding: "5px 10px",
-            borderRadius: 6,
+            borderRadius: 2,
           }}
         >
           <span style={{ color: W.dim }}>participant</span>{" "}
@@ -678,7 +686,7 @@ function ProjectionBar({
             fontFamily: wMono,
             fontSize: 11.5,
             padding: "5px 10px",
-            borderRadius: 6,
+            borderRadius: 2,
             cursor: "pointer",
           }}
         >
@@ -713,7 +721,7 @@ function ProjectionBar({
         style={{
           display: "flex",
           background: W.border,
-          borderRadius: 8,
+          borderRadius: 4,
           padding: 3,
           border: `1px solid ${W.border}`,
         }}
@@ -725,10 +733,10 @@ function ProjectionBar({
             style={{
               padding: "5px 12px",
               fontSize: 12,
-              borderRadius: 5,
+              borderRadius: 2,
               border: "none",
               background: v === view ? W.brand : "transparent",
-              color: v === view ? "#082018" : W.dim,
+              color: v === view ? "#0B0F1A" : W.dim,
               fontWeight: v === view ? 600 : 500,
               cursor: "pointer",
               textTransform: "capitalize",
@@ -764,7 +772,7 @@ function FilterChip({
         alignItems: "center",
         gap: 8,
         padding: "6px 9px",
-        borderRadius: 6,
+        borderRadius: 2,
         cursor: "pointer",
         background: active ? W.border : "transparent",
         borderLeft: active ? `2px solid ${color}` : "2px solid transparent",
@@ -837,15 +845,7 @@ function AcsRow({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: "#62E2A0",
-            flexShrink: 0,
-          }}
-        />
+        <Dot color={W.ok} size={6} />
         <span
           style={{
             fontSize: 12.5,
@@ -862,7 +862,7 @@ function AcsRow({
       </div>
       <code
         style={{
-          color: "#C4A8F5",
+          color: "#93A7F0",
           fontFamily: wMono,
           fontSize: 11,
           overflow: "hidden",
@@ -903,26 +903,6 @@ function AcsRow({
           {row.signatories.length}·{row.observers.length}
         </span>
       </span>
-    </div>
-  );
-}
-
-// EmptyDetailPanel is the right-column placeholder shown until a
-// contract is selected; ContractDetailDrawer takes over after that.
-function EmptyDetailPanel() {
-  return (
-    <div
-      style={{
-        background: W.surface,
-        border: `1px solid ${W.border}`,
-        borderRadius: 10,
-        padding: 32,
-        textAlign: "center",
-        color: W.dim,
-        fontSize: 13,
-      }}
-    >
-      Select a contract to inspect.
     </div>
   );
 }
@@ -1043,7 +1023,7 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
         style={{
           background: W.surface,
           border: `1px solid ${W.border}`,
-          borderRadius: 10,
+          borderRadius: 4,
           overflow: "hidden",
         }}
       >
@@ -1078,9 +1058,7 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
             padding: "9px 14px",
             color: W.dim,
             fontSize: 10.5,
-            letterSpacing: 1.4,
-            textTransform: "uppercase",
-            fontWeight: 600,
+            ...tableCaps,
             borderBottom: `1px solid ${W.border}`,
           }}
         >
@@ -1146,26 +1124,17 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
         onClear={clearFilters}
         active={!!hasFilters}
       />
-      {replayId ? (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 380px",
-            gap: 14,
-            alignItems: "start",
-          }}
-        >
-          {body}
-          <TxReplayDrawer
-            instance={name}
-            role={role}
-            updateId={replayId}
-            partyOptions={partyOptions}
-            onClose={() => setReplayId(null)}
-          />
-        </div>
-      ) : (
-        body
+      {body}
+      {/* Replay drawer — fixed right-side overlay; the table keeps
+          its full width underneath. */}
+      {replayId && (
+        <TxReplayDrawer
+          instance={name}
+          role={role}
+          updateId={replayId}
+          partyOptions={partyOptions}
+          onClose={() => setReplayId(null)}
+        />
       )}
     </div>
   );
@@ -1238,7 +1207,7 @@ function TxFilterBar({
         fontSize: 12,
         fontFamily: wMono,
         padding: "5px 8px",
-        borderRadius: 6,
+        borderRadius: 2,
         width,
       }}
     />
@@ -1248,7 +1217,7 @@ function TxFilterBar({
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: "10px 14px",
         marginBottom: 12,
         display: "flex",
@@ -1260,10 +1229,8 @@ function TxFilterBar({
       <span
         style={{
           color: W.dim,
-          fontSize: 10.5,
-          letterSpacing: 1.4,
-          textTransform: "uppercase",
-          fontWeight: 600,
+          fontSize: 12,
+          fontWeight: 500,
         }}
       >
         Filters
@@ -1272,36 +1239,13 @@ function TxFilterBar({
       {input("template", "Module:Entity (comma-sep)", 200)}
       {input("from", "from offset", 110, true)}
       {input("to", "to offset", 110, true)}
-      <button
-        onClick={onApply}
-        style={{
-          padding: "5px 12px",
-          fontSize: 12,
-          borderRadius: 6,
-          border: "none",
-          background: W.brand,
-          color: "#082018",
-          fontWeight: 600,
-          cursor: "pointer",
-        }}
-      >
+      <Button variant="secondary" onClick={onApply}>
         Apply
-      </button>
+      </Button>
       {active && (
-        <button
-          onClick={onClear}
-          style={{
-            padding: "5px 12px",
-            fontSize: 12,
-            borderRadius: 6,
-            border: `1px solid ${W.border}`,
-            background: "transparent",
-            color: W.dim,
-            cursor: "pointer",
-          }}
-        >
+        <Button variant="ghost" onClick={onClear}>
           Clear
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -1349,7 +1293,7 @@ function TxRowComponent({
         <code
           style={{
             fontFamily: wMono,
-            color: "#C4A8F5",
+            color: "#93A7F0",
             fontSize: 11,
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -1383,27 +1327,24 @@ function TxRowComponent({
         >
           {tx.event_count ?? "—"}
         </span>
-        <span style={{ textAlign: "right" }}>
+        <span
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            alignItems: "center",
+          }}
+        >
           {onReplay ? (
-            <button
+            <Button
+              variant="secondary"
               onClick={(e) => {
                 e.stopPropagation();
                 onReplay();
               }}
               title="Replay this transaction's per-party visibility projection"
-              style={{
-                fontSize: 10.5,
-                fontFamily: wMono,
-                padding: "2px 7px",
-                borderRadius: 5,
-                border: `1px solid ${W.border}`,
-                background: "transparent",
-                color: W.brand,
-                cursor: "pointer",
-              }}
             >
               replay
-            </button>
+            </Button>
           ) : (
             <span style={{ color: W.dim, fontSize: 11 }}>—</span>
           )}
@@ -1434,9 +1375,9 @@ function EventTreeNode({
   last: boolean;
 }) {
   const c: Record<TransactionEvent["kind"], string> = {
-    create: "#62E2A0",
-    archive: "#F08FB5",
-    exercise: "#7CB5F7",
+    create: "#7CC89A",
+    archive: "#7BD2C6",
+    exercise: "#8FA3EE",
   };
   return (
     <div
@@ -1472,7 +1413,7 @@ function EventTreeNode({
       <code
         style={{
           fontFamily: wMono,
-          color: "#C4A8F5",
+          color: "#93A7F0",
           fontSize: 10.5,
           marginLeft: "auto",
         }}
@@ -1578,19 +1519,12 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
   const focused = focusedIdx !== null ? txs[focusedIdx] ?? null : null;
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "1fr 320px",
-        gap: 14,
-        alignItems: "start",
-      }}
-    >
+    <>
       <div
         style={{
           background: W.surface,
           border: `1px solid ${W.border}`,
-          borderRadius: 10,
+          borderRadius: 4,
           overflow: "hidden",
         }}
       >
@@ -1675,10 +1609,10 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
           {txs.map((tx, i) => {
             const color =
               tx.kind === "transaction"
-                ? "#62E2A0"
+                ? TX_KIND_COLOR.transaction
                 : tx.kind === "reassignment"
-                  ? "#7CB5F7"
-                  : "#C4A8F5";
+                  ? TX_KIND_COLOR.reassignment
+                  : TX_KIND_COLOR.topology;
             return (
               <span
                 key={`${tx.offset}-${tx.update_id ?? i}`}
@@ -1732,9 +1666,9 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
           }}
         >
           <span>
-            <LegendDot color="#62E2A0" label="transaction" />
-            <LegendDot color="#7CB5F7" label="reassignment" />
-            <LegendDot color="#C4A8F5" label="topology" />
+            <LegendDot color={TX_KIND_COLOR.transaction} label="transaction" />
+            <LegendDot color={TX_KIND_COLOR.reassignment} label="reassignment" />
+            <LegendDot color={TX_KIND_COLOR.topology} label="topology" />
           </span>
           <span>
             {selectedIdx !== null
@@ -1744,83 +1678,86 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
         </div>
       </div>
 
-      {/* Side panel — hovered detail */}
-      <div
-        style={{
-          background: W.surface,
-          border: `1px solid ${W.border}`,
-          borderRadius: 10,
-          overflow: "hidden",
-        }}
-      >
-        {focused ? (
-          <>
-            <header style={{ padding: "14px 16px", borderBottom: `1px solid ${W.border}` }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Pill
-                  color={
-                    focused.kind === "transaction"
-                      ? "#62E2A0"
-                      : focused.kind === "reassignment"
-                        ? "#7CB5F7"
-                        : "#C4A8F5"
-                  }
-                >
-                  {focused.kind}
-                </Pill>
-                <span style={{ color: W.dim, fontSize: 11.5, fontFamily: wMono }}>
-                  offset {focused.offset.toLocaleString()}
-                </span>
+      {/* Detail overlay — hovered/pinned update, fixed to the right
+          edge so the timeline strip keeps its full width. */}
+      {focused && (
+        <div
+          style={{
+            position: "fixed",
+            top: 52,
+            right: 0,
+            bottom: 0,
+            width: "min(480px, 92vw)",
+            // Raised surface — matches ContractDetailDrawer/TxReplayDrawer.
+            background: W.surface2,
+            borderLeft: `1px solid ${W.borderHi}`,
+            boxShadow:
+              "0 0 0 1px rgba(0,0,0,0.2), -16px 0 40px -12px rgba(0,0,0,0.5)",
+            // A hover preview must not steal hit-testing from the strip
+            // underneath it (hover-in would unhover the glyph and
+            // unmount the panel in a loop); only a pinned selection is
+            // interactive.
+            pointerEvents: selectedIdx !== null ? "auto" : "none",
+            overscrollBehavior: "contain",
+            // Below the CommandPalette (zIndex 100) but above content.
+            zIndex: 40,
+            overflowY: "auto",
+          }}
+        >
+          <header style={{ padding: "14px 16px", borderBottom: `1px solid ${W.border}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Pill
+                color={
+                  focused.kind === "transaction"
+                    ? TX_KIND_COLOR.transaction
+                    : focused.kind === "reassignment"
+                      ? TX_KIND_COLOR.reassignment
+                      : TX_KIND_COLOR.topology
+                }
+              >
+                {focused.kind}
+              </Pill>
+              <span style={{ color: W.dim, fontSize: 11.5, fontFamily: wMono }}>
+                offset {focused.offset.toLocaleString()}
+              </span>
+            </div>
+            {focused.record_time && (
+              <div
+                style={{
+                  color: W.text2,
+                  fontSize: 11,
+                  fontFamily: wMono,
+                  marginTop: 6,
+                }}
+              >
+                {focused.record_time}
               </div>
-              {focused.record_time && (
-                <div
-                  style={{
-                    color: W.text2,
-                    fontSize: 11,
-                    fontFamily: wMono,
-                    marginTop: 6,
-                  }}
-                >
-                  {focused.record_time}
-                </div>
-              )}
-            </header>
-            {focused.command_id && (
-              <Section label="Command ID">
-                <Mono>{focused.command_id}</Mono>
-              </Section>
             )}
-            {focused.workflow_id && (
-              <Section label="Workflow">
-                <Mono>{focused.workflow_id}</Mono>
-              </Section>
-            )}
-            {focused.events && focused.events.length > 0 && (
-              <Section label={`Events (${focused.events.length})`}>
-                {focused.events.map((ev, i) => (
-                  <EventTreeNode
-                    key={i}
-                    ev={ev}
-                    last={i === focused.events!.length - 1}
-                  />
-                ))}
-              </Section>
-            )}
-          </>
-        ) : (
-          <div
-            style={{
-              padding: 32,
-              textAlign: "center",
-              color: W.dim,
-              fontSize: 13,
-            }}
-          >
-            Hover any glyph on the left to inspect it.
-          </div>
-        )}
-      </div>
-    </div>
+          </header>
+          {focused.command_id && (
+            <Section label="Command ID">
+              <Mono>{focused.command_id}</Mono>
+            </Section>
+          )}
+          {focused.workflow_id && (
+            <Section label="Workflow">
+              <Mono>{focused.workflow_id}</Mono>
+            </Section>
+          )}
+          {focused.events && focused.events.length > 0 && (
+            <Section label={`Events (${focused.events.length})`}>
+              {focused.events.map((ev, i) => (
+                <EventTreeNode
+                  key={i}
+                  ev={ev}
+                  last={i === focused.events!.length - 1}
+                />
+              ))}
+            </Section>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1899,7 +1836,7 @@ function Card({
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 10,
       }}
     >
@@ -1931,9 +1868,7 @@ function Section({
         style={{
           color: W.dim,
           fontSize: 10.5,
-          letterSpacing: 1.4,
-          textTransform: "uppercase",
-          fontWeight: 600,
+          ...wideCaps,
           marginBottom: 6,
         }}
       >
@@ -1952,7 +1887,7 @@ function Pill({ color, children }: { color: string; children: React.ReactNode })
         border: `1px solid ${color}44`,
         color,
         padding: "1px 8px",
-        borderRadius: 4,
+        borderRadius: 2,
         fontSize: 10.5,
         fontWeight: 600,
         fontFamily: wMono,
@@ -1969,7 +1904,7 @@ function Status({ children }: { children: React.ReactNode }) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 16,
         color: W.dim,
         fontSize: 13,
@@ -1986,9 +1921,9 @@ function ErrorPanel({ msg }: { msg: string }) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 16,
-        color: "#F08FB5",
+        color: "#7BD2C6",
         fontSize: 13,
       }}
     >
@@ -2011,7 +1946,7 @@ function EmptyPanel({
       style={{
         background: `${W.warn}10`,
         border: `1px solid ${W.warn}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 20,
       }}
     >

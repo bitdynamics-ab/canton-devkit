@@ -26,7 +26,7 @@ export function BarChart({
   bars,
   width = 320,
   height,
-  defaultColor = "#7CB5F7",
+  defaultColor = "#8FA3EE",
   format = (v) => (Math.abs(v) >= 1000 ? v.toFixed(0) : v.toFixed(1)),
 }: Props) {
   // Default height grows with bar count so dense lists don't squish.

@@ -9,6 +9,8 @@ import {
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { W, wMono } from "../tokens";
+import { Button } from "../components/Button";
+import { IcX } from "../components/icons";
 import { MetricCard } from "../components/MetricCard";
 import { AreaChart } from "../components/charts/AreaChart";
 import { MultiLine } from "../components/charts/MultiLine";
@@ -95,10 +97,10 @@ export function scopeQ(query: string, scope: string): string {
   );
 }
 
-const TPS_COLOR = "#7CB5F7";
-const P99_COLOR = "#F5BF55";
-const ACS_COLOR = "#5BD7C5";
-const ERR_COLOR = "#F08FB5";
+const TPS_COLOR = "#8FA3EE";
+const P99_COLOR = "#DDB25E";
+const ACS_COLOR = "#6480E6";
+const ERR_COLOR = "#7BD2C6";
 
 export function MetricsScreen() {
   const sel = useInstanceSelection();
@@ -277,7 +279,7 @@ export function MetricsScreen() {
           display: "grid",
           gridTemplateColumns: "repeat(4, 1fr)",
           gap: 12,
-          marginBottom: 14,
+          marginBottom: 16,
         }}
       >
         <MetricCard
@@ -331,7 +333,7 @@ export function MetricsScreen() {
           display: "grid",
           gridTemplateColumns: "1fr 1fr",
           gap: 12,
-          marginBottom: 14,
+          marginBottom: 16,
         }}
       >
         <ChartCard title="Latency by phase" subtitle="median · p99 — last hour">
@@ -462,7 +464,7 @@ function LatencyStrip(props: {
     padding: "10px 14px",
     background: W.surface,
     border: `1px solid ${W.border}`,
-    borderRadius: 6,
+    borderRadius: 2,
     fontFamily: wMono,
     fontSize: 13,
     color: W.text,
@@ -477,7 +479,7 @@ function LatencyStrip(props: {
         display: "grid",
         gridTemplateColumns: "repeat(3, max-content)",
         gap: 12,
-        marginBottom: 14,
+        marginBottom: 16,
       }}
     >
       <div style={cell}>
@@ -501,11 +503,11 @@ function LatencyStrip(props: {
 // rather than hiding the section, so users learn the profile exists.
 function DashboardsBlock(props: { url?: string }) {
   const wrap: CSSProperties = {
-    marginTop: 14,
+    marginTop: 16,
     padding: "10px 14px",
     background: W.surface,
     border: `1px solid ${W.border}`,
-    borderRadius: 6,
+    borderRadius: 2,
     fontFamily: wMono,
     fontSize: 13,
     color: W.text,
@@ -524,7 +526,7 @@ function DashboardsBlock(props: { url?: string }) {
     <div style={wrap}>
       <strong style={{ marginRight: 8 }}>Dashboards:</strong>
       <a href={props.url} target="_blank" rel="noreferrer" style={{ color: W.brandText }}>
-        Grafana ↗
+        Grafana
       </a>
     </div>
   );
@@ -532,7 +534,7 @@ function DashboardsBlock(props: { url?: string }) {
 
 function Header({ name }: { name: string }) {
   return (
-    <header style={{ marginBottom: 14 }}>
+    <header style={{ marginBottom: 16 }}>
       <h2 style={{ color: W.text, fontSize: 18, margin: 0 }}>
         Metrics —{" "}
         <code style={{ fontFamily: wMono, color: W.brand }}>{name}</code>
@@ -558,14 +560,14 @@ function ChartCard({
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 14,
         display: "flex",
         flexDirection: "column",
         minWidth: 0,
       }}
     >
-      <div style={{ marginBottom: 8 }}>
+      <div style={{ marginBottom: 12 }}>
         <div style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}>
           {title}
         </div>
@@ -582,7 +584,7 @@ function ChartCard({
 
 function ErrLine({ msg }: { msg: string }) {
   return (
-    <div role="alert" style={{ color: "#F08FB5", fontSize: 12, padding: "20px 0" }}>
+    <div role="alert" style={{ color: "#7BD2C6", fontSize: 12, padding: "20px 0" }}>
       {msg}
     </div>
   );
@@ -617,7 +619,7 @@ function ObservabilityOffPanel({
       style={{
         background: `${W.warn}10`,
         border: `1px solid ${W.warn}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 20,
       }}
     >
@@ -632,23 +634,9 @@ function ObservabilityOffPanel({
       </p>
 
       <div style={{ display: "flex", gap: 10, marginTop: 14, alignItems: "center" }}>
-        <button
-          type="button"
-          onClick={enable}
-          disabled={busy}
-          style={{
-            background: busy ? W.surface2 : W.brand,
-            color: busy ? W.dim : "#0B0E13",
-            border: "none",
-            borderRadius: 6,
-            padding: "7px 14px",
-            fontSize: 12.5,
-            fontWeight: 600,
-            cursor: busy ? "wait" : "pointer",
-          }}
-        >
+        <Button variant="primary" size="md" onClick={enable} disabled={busy}>
           {busy ? "Enabling…" : "Enable observability now"}
-        </button>
+        </Button>
         <span style={{ color: W.dim, fontSize: 11.5 }}>
           Brings up Prometheus + Grafana on this instance without
           restarting Canton.
@@ -657,7 +645,11 @@ function ObservabilityOffPanel({
 
       {err && (
         <div role="alert" style={{ color: W.err, fontSize: 12, marginTop: 8 }}>
-          ✗ {err}
+          <span
+            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+          >
+            <IcX size={12} /> {err}
+          </span>
         </div>
       )}
 
@@ -669,7 +661,7 @@ function ObservabilityOffPanel({
             color: W.text,
             background: W.border,
             padding: "1px 6px",
-            borderRadius: 4,
+            borderRadius: 2,
           }}
         >
           {`dpm localnet observability enable --name ${name}`}

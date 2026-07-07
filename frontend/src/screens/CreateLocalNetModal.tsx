@@ -14,6 +14,8 @@ import {
   type SpliceVersionEntry,
 } from "../api";
 import { W, wMono, wSans } from "../tokens";
+import { Button } from "../components/Button";
+import { Dot, IcAlert, IcCheck, IcStop, IcX } from "../components/icons";
 import { remediationForCode } from "./remediation";
 import {
   type ProgressState,
@@ -412,35 +414,28 @@ function ModalFooter({
         </span>
       )}
       {isRunning ? (
-        <button
-          type="button"
-          onClick={onCancelInFlight}
-          style={btnStyle(W.warn, false)}
-        >
+        <Button variant="secondary" size="md" onClick={onCancelInFlight}>
           Cancel bring-up
-        </button>
+        </Button>
       ) : stage.kind === "form" ? (
         <>
-          <button type="button" onClick={onClose} style={btnStyle(W.dim, false)}>
+          <Button variant="ghost" size="md" onClick={onClose}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
             type="submit"
             onClick={onSubmit}
             disabled={!canSubmit}
-            style={btnStyle(W.brand, canSubmit)}
           >
             Create LocalNet
-          </button>
+          </Button>
         </>
       ) : (
-        <button
-          type="button"
-          onClick={onClose}
-          style={btnStyle(W.brand, true)}
-        >
+        <Button variant="primary" size="md" onClick={onClose}>
           Close
-        </button>
+        </Button>
       )}
     </footer>
   );
@@ -505,7 +500,7 @@ function FormBody({
   return (
     <form onSubmit={onSubmit} style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
       <Field
-        label="name"
+        label="Name"
         hint="lowercase DNS label · 1–63 chars · can't start/end with hyphen"
         error={
           !nameValid && name.length > 0
@@ -524,7 +519,7 @@ function FormBody({
         />
       </Field>
 
-      <Field label="splice version" hint="choose from the curated catalogue">
+      <Field label="Splice version" hint="choose from the curated catalogue">
         <VersionPicker
           versions={versions}
           selected={version}
@@ -543,7 +538,7 @@ function FormBody({
           gap: 10,
           padding: "10px 12px",
           background: W.surface2,
-          borderRadius: 8,
+          borderRadius: 4,
           border: `1px solid ${prometheus ? W.brand : W.border}`,
           cursor: "pointer",
         }}
@@ -562,7 +557,7 @@ function FormBody({
               marginLeft: 8,
               fontSize: 10.5,
               padding: "1px 6px",
-              borderRadius: 3,
+              borderRadius: 2,
               background: `${W.brand}1A`,
               color: W.brand,
               fontFamily: wMono,
@@ -588,7 +583,7 @@ function FormBody({
           gap: 10,
           padding: "10px 12px",
           background: W.surface2,
-          borderRadius: 8,
+          borderRadius: 4,
           border: `1px solid ${grafana ? W.brand : W.border}`,
           cursor: "pointer",
         }}
@@ -607,7 +602,7 @@ function FormBody({
               marginLeft: 8,
               fontSize: 10.5,
               padding: "1px 6px",
-              borderRadius: 3,
+              borderRadius: 2,
               background: `${W.brand}1A`,
               color: W.brand,
               fontFamily: wMono,
@@ -630,7 +625,7 @@ function FormBody({
                 padding: "6px 8px",
                 background: `${W.warn}15`,
                 border: `1px solid ${W.warn}`,
-                borderRadius: 6,
+                borderRadius: 2,
                 fontSize: 11.5,
                 color: W.warn,
                 lineHeight: 1.5,
@@ -652,7 +647,7 @@ function FormBody({
           gap: 10,
           padding: "10px 12px",
           background: W.surface2,
-          borderRadius: 8,
+          borderRadius: 4,
           border: `1px solid ${tokensV2 ? W.brand : W.border}`,
           cursor: "pointer",
         }}
@@ -670,7 +665,7 @@ function FormBody({
               marginLeft: 8,
               fontSize: 10.5,
               padding: "1px 6px",
-              borderRadius: 3,
+              borderRadius: 2,
               background: `${W.brand}1A`,
               color: W.brand,
               fontFamily: wMono,
@@ -713,7 +708,7 @@ function FormBody({
             marginTop: 8,
             padding: "8px 12px",
             background: W.surface2,
-            borderRadius: 8,
+            borderRadius: 4,
           }}
         >
           <input
@@ -738,7 +733,7 @@ function FormBody({
             marginTop: 8,
             padding: "8px 12px",
             background: W.surface2,
-            borderRadius: 8,
+            borderRadius: 4,
           }}
         >
           <input
@@ -755,7 +750,7 @@ function FormBody({
               background: W.surface,
               color: W.text,
               border: `1px solid ${W.border}`,
-              borderRadius: 6,
+              borderRadius: 2,
             }}
           />
           <div style={{ flex: 1, fontSize: 12, color: W.text2 }}>
@@ -776,7 +771,7 @@ function FormBody({
           marginTop: 4,
           padding: "8px 10px",
           background: W.surface2,
-          borderRadius: 7,
+          borderRadius: 2,
           fontFamily: wMono,
         }}
       >
@@ -831,13 +826,15 @@ function ProgressBody({
             background: `${W.warn}1A`,
             border: `1px solid ${W.warn}44`,
             color: W.warn,
-            borderRadius: 6,
+            borderRadius: 2,
             padding: "6px 10px",
             fontSize: 11.5,
             margin: "6px 0",
           }}
         >
-          ⚠ {m}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <IcAlert size={12} /> {m}
+          </span>
         </div>
       ))}
       <div style={{ marginTop: 8 }}>
@@ -859,7 +856,7 @@ function ProgressBody({
               margin: "8px 0 0",
               background: W.bg,
               border: `1px solid ${W.border}`,
-              borderRadius: 7,
+              borderRadius: 2,
               padding: "10px 12px",
               fontFamily: wMono,
               fontSize: 10.5,
@@ -941,12 +938,14 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
           background: `${W.brand}10`,
           color: W.brand,
           border: `1px solid ${W.brand}44`,
-          borderRadius: 7,
+          borderRadius: 2,
           fontSize: 12,
           fontFamily: wMono,
         }}
       >
-        ● streaming step events
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Dot color={W.brand} pulse /> streaming step events
+        </span>
       </div>
     );
   }
@@ -958,12 +957,14 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
           background: `${W.ok}1A`,
           color: W.ok,
           border: `1px solid ${W.ok}`,
-          borderRadius: 7,
+          borderRadius: 2,
           fontSize: 13,
           fontWeight: 600,
         }}
       >
-        ✓ {banner.detail || "ready"}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <IcCheck size={12} /> {banner.detail || "ready"}
+        </span>
       </div>
     );
   }
@@ -976,11 +977,15 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
           background: `${W.err}10`,
           color: W.err,
           border: `1px solid ${W.err}`,
-          borderRadius: 7,
+          borderRadius: 2,
           fontSize: 12.5,
         }}
       >
-        <strong>✗ {banner.summary ?? "failed"}</strong>
+        <strong
+          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+        >
+          <IcX size={12} /> {banner.summary ?? "failed"}
+        </strong>
         {banner.cause && (
           <div style={{ color: W.text2, marginTop: 4, fontFamily: wMono, fontSize: 11 }}>
             {banner.cause}
@@ -992,7 +997,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
               marginTop: 8,
               padding: "8px 10px",
               background: W.surface2,
-              borderRadius: 6,
+              borderRadius: 2,
               color: W.text2,
               fontSize: 11.5,
               borderLeft: `3px solid ${W.warn}`,
@@ -1017,11 +1022,13 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
         background: `${W.warn}1A`,
         color: W.warn,
         border: `1px solid ${W.warn}`,
-        borderRadius: 7,
+        borderRadius: 2,
         fontSize: 12.5,
       }}
     >
-      ⏹ cancelled{banner.reason ? ` — ${banner.reason}` : ""}
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <IcStop size={12} /> cancelled{banner.reason ? ` — ${banner.reason}` : ""}
+      </span>
     </div>
   );
 }
@@ -1030,13 +1037,13 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
   const icon = (() => {
     switch (state.status) {
       case "done":
-        return <span style={{ color: W.ok }}>✓</span>;
+        return <IcCheck size={12} style={{ color: W.ok }} />;
       case "active":
-        return <span style={{ color: W.brand }}>●</span>;
+        return <Dot color={W.brand} pulse />;
       case "fail":
-        return <span style={{ color: W.err }}>✕</span>;
+        return <IcX size={12} style={{ color: W.err }} />;
       default:
-        return <span style={{ color: W.faint }}>○</span>;
+        return <Dot color={W.faint} />;
     }
   })();
   const color =
@@ -1057,7 +1064,18 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
         fontSize: 12.5,
       }}
     >
-      <span style={{ width: 14, textAlign: "center" }}>{icon}</span>
+      <span
+        style={{
+          width: 14,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: 18,
+          flexShrink: 0,
+        }}
+      >
+        {icon}
+      </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ color }}>{label}</div>
         {(state.detail || state.summary) && (
@@ -1126,7 +1144,7 @@ export function VersionPicker({
     // endless "Loading…".
     let placeholder = "No curated versions available";
     if (loading) placeholder = "Loading curated versions…";
-    else if (error) placeholder = `⚠ Couldn't load versions — ${error}`;
+    else if (error) placeholder = `Couldn't load versions — ${error}`;
     return (
       <select
         disabled
@@ -1232,7 +1250,7 @@ const selectStyle: React.CSSProperties = {
   background: W.bg,
   color: W.text,
   border: `1px solid ${W.border}`,
-  borderRadius: 6,
+  borderRadius: 2,
   padding: "7px 10px",
   fontSize: 13,
   fontFamily: wMono,
@@ -1256,12 +1274,15 @@ function PreflightPanel({ state }: { state: PreflightState }) {
           background: W.surface2,
           color: W.dim,
           border: `1px solid ${W.border}`,
-          borderRadius: 7,
+          borderRadius: 2,
           fontSize: 11.5,
           fontFamily: wMono,
         }}
       >
-        ⠋ checking system requirements (docker memory · disk · daemon)…
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Dot color={W.dim} pulse /> checking system requirements (docker
+          memory · disk · daemon)…
+        </span>
       </div>
     );
   }
@@ -1273,7 +1294,7 @@ function PreflightPanel({ state }: { state: PreflightState }) {
           background: W.surface2,
           color: W.dim,
           border: `1px solid ${W.border}`,
-          borderRadius: 7,
+          borderRadius: 2,
           fontSize: 11.5,
         }}
       >
@@ -1292,11 +1313,18 @@ function PreflightPanel({ state }: { state: PreflightState }) {
   const warns = allChecks.filter((c) => c.check.result === "warn");
   const blocked = state.kind === "blocked";
   const accent = blocked ? W.err : warns.length > 0 ? W.warn : W.ok;
+  const headingIcon = blocked ? (
+    <IcX size={12} />
+  ) : warns.length > 0 ? (
+    <IcAlert size={12} />
+  ) : (
+    <IcCheck size={12} />
+  );
   const heading = blocked
-    ? "✗ Host doesn't meet this version's requirements"
+    ? "Host doesn't meet this version's requirements"
     : warns.length > 0
-    ? "⚠ Host meets minimums — but raise resources for headroom"
-    : "✓ Host is ready for this version";
+    ? "Host meets minimums — but raise resources for headroom"
+    : "Host is ready for this version";
   if (!blocked && warns.length === 0) {
     // Compact success pill — don't clutter the form.
     return (
@@ -1306,12 +1334,14 @@ function PreflightPanel({ state }: { state: PreflightState }) {
           background: `${W.ok}14`,
           color: W.ok,
           border: `1px solid ${W.ok}44`,
-          borderRadius: 7,
+          borderRadius: 2,
           fontSize: 11.5,
           fontFamily: wMono,
         }}
       >
-        {heading} · {state.report.summary}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          {headingIcon} {heading} · {state.report.summary}
+        </span>
       </div>
     );
   }
@@ -1322,12 +1352,21 @@ function PreflightPanel({ state }: { state: PreflightState }) {
         padding: "10px 12px",
         background: `${accent}10`,
         border: `1px solid ${accent}`,
-        borderRadius: 8,
+        borderRadius: 4,
         fontSize: 12,
       }}
     >
-      <div style={{ color: accent, fontWeight: 600, marginBottom: 6 }}>
-        {heading}
+      <div
+        style={{
+          color: accent,
+          fontWeight: 600,
+          marginBottom: 6,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}
+      >
+        {headingIcon} {heading}
       </div>
       {state.report.summary && (
         <div style={{ color: W.text2, marginBottom: 8, fontSize: 11.5 }}>
@@ -1342,18 +1381,26 @@ function PreflightPanel({ state }: { state: PreflightState }) {
             padding: "6px 8px",
             background: W.bg,
             border: `1px solid ${W.border}`,
-            borderRadius: 6,
+            borderRadius: 2,
           }}
         >
           <div style={{ fontFamily: wMono, fontSize: 11.5 }}>
             <span
               style={{
                 color: check.result === "fail" ? W.err : W.warn,
-                fontWeight: 700,
+                fontWeight: 600,
                 marginRight: 6,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
               }}
             >
-              {check.result === "fail" ? "✗" : "⚠"} {check.label}
+              {check.result === "fail" ? (
+                <IcX size={12} />
+              ) : (
+                <IcAlert size={12} />
+              )}{" "}
+              {check.label}
             </span>
             <span style={{ color: W.dim }}>· {section}</span>
           </div>
@@ -1405,11 +1452,10 @@ function Field({
     <label style={{ display: "block" }}>
       <div
         style={{
-          color: W.text2,
-          fontSize: 11,
+          color: W.dim,
+          fontSize: 12,
+          fontWeight: 500,
           marginBottom: 4,
-          textTransform: "uppercase",
-          letterSpacing: 0.8,
         }}
       >
         {label}
@@ -1456,7 +1502,7 @@ const modalStyle: React.CSSProperties = {
   width: "min(680px, 92vw)",
   background: W.surface,
   border: `1px solid ${W.border}`,
-  borderRadius: 12,
+  borderRadius: 8,
   boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
   overflow: "hidden",
 };
@@ -1466,22 +1512,9 @@ const inputStyle: React.CSSProperties = {
   background: W.bg,
   color: W.text,
   border: `1px solid ${W.border}`,
-  borderRadius: 6,
+  borderRadius: 2,
   padding: "7px 10px",
   fontSize: 13,
   fontFamily: wMono,
   outline: "none",
 };
-
-function btnStyle(color: string, primary: boolean): React.CSSProperties {
-  return {
-    background: primary ? color : "transparent",
-    color: primary ? "#082018" : color,
-    border: `1px solid ${color}`,
-    borderRadius: 6,
-    padding: "6px 14px",
-    fontSize: 12,
-    fontWeight: 600,
-    cursor: "pointer",
-  };
-}
