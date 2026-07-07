@@ -108,7 +108,7 @@ export function DARPackageTree({ instance, mainID, role }: Props) {
 const paneStyle: React.CSSProperties = {
   background: W.surface,
   border: `1px solid ${W.border}`,
-  borderRadius: 8,
+  borderRadius: 4,
   padding: 12,
   fontSize: 12,
   maxHeight: "60vh",
@@ -201,7 +201,7 @@ function ModuleNode({
         <div style={{ marginLeft: 28, marginTop: 3 }}>
           {(mod.templates ?? []).map((t) => (
             <div key={"t-" + t.name} style={leafRow}>
-              <span style={{ color: "#7BB7FF", fontFamily: wMono }}>template</span>{" "}
+              <span style={{ color: "#8FA3EE", fontFamily: wMono }}>template</span>{" "}
               <span style={{ color: W.text, fontFamily: wMono }}>{t.name}</span>
               {t.choices && t.choices.length > 0 && (
                 <span style={{ marginLeft: 8 }}>
@@ -214,7 +214,7 @@ function ModuleNode({
           ))}
           {(mod.interfaces ?? []).map((i) => (
             <div key={"i-" + i.name} style={leafRow}>
-              <span style={{ color: "#C4A8F5", fontFamily: wMono }}>interface</span>{" "}
+              <span style={{ color: "#7BD2C6", fontFamily: wMono }}>interface</span>{" "}
               <span style={{ color: W.text, fontFamily: wMono }}>{i.name}</span>
               {i.choices && i.choices.length > 0 && (
                 <span style={{ marginLeft: 8 }}>
@@ -234,7 +234,7 @@ function ModuleNode({
           ))}
           {(mod.data_types ?? []).map((dt) => (
             <div key={"d-" + dt} style={leafRow}>
-              <span style={{ color: "#62E2A0", fontFamily: wMono }}>data</span>{" "}
+              <span style={{ color: "#7CC89A", fontFamily: wMono }}>data</span>{" "}
               <span style={{ color: W.text2, fontFamily: wMono }}>{dt}</span>
             </div>
           ))}
@@ -274,7 +274,7 @@ function Chip({
   kind: "choice" | "method";
 }) {
   const tone =
-    kind === "choice" ? { bg: `${W.brand}1A`, fg: W.brand } : { bg: "#7BB7FF22", fg: "#7BB7FF" };
+    kind === "choice" ? { bg: `${W.brand}1A`, fg: W.brand } : { bg: "#8FA3EE22", fg: "#8FA3EE" };
   return (
     <span
       style={{
@@ -282,7 +282,7 @@ function Chip({
         padding: "0 6px",
         marginRight: 4,
         marginTop: 2,
-        borderRadius: 4,
+        borderRadius: 2,
         background: tone.bg,
         color: tone.fg,
         fontSize: 10.5,

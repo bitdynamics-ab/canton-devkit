@@ -35,7 +35,7 @@ export function MetricCard({
   delta,
   deltaPolarity = "up-is-good",
   sparkline,
-  sparklineColor = "#7CB5F7",
+  sparklineColor = "#8FA3EE",
   error,
   format = defaultFormat,
 }: MetricCardProps) {
@@ -47,7 +47,7 @@ export function MetricCard({
     const good =
       (deltaSign > 0 && deltaPolarity === "up-is-good") ||
       (deltaSign < 0 && deltaPolarity === "down-is-good");
-    deltaColor = good ? "#62E2A0" : "#F08FB5";
+    deltaColor = good ? "#7CC89A" : "#7BD2C6";
   }
 
   return (
@@ -55,7 +55,7 @@ export function MetricCard({
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 14,
         display: "flex",
         flexDirection: "column",
@@ -76,7 +76,7 @@ export function MetricCard({
             color: W.dim,
             fontSize: 11,
             letterSpacing: 0.4,
-            textTransform: "uppercase",
+            textTransform: "uppercase", fontStretch: "118%",
             fontWeight: 600,
           }}
         >
@@ -99,7 +99,7 @@ export function MetricCard({
       </div>
 
       {error ? (
-        <div style={{ color: "#F08FB5", fontSize: 12 }} role="alert">
+        <div style={{ color: "#7BD2C6", fontSize: 12 }} role="alert">
           {error}
         </div>
       ) : (
@@ -119,7 +119,7 @@ export function MetricCard({
                 style={{
                   color: W.text,
                   fontSize: 26,
-                  fontWeight: 700,
+                  fontWeight: 600,
                   lineHeight: 1.1,
                   fontFamily: wMono,
                 }}
@@ -172,7 +172,7 @@ function Skeleton({
         width,
         height,
         background: W.border,
-        borderRadius: 4,
+        borderRadius: 2,
         opacity: 0.4,
       }}
     />

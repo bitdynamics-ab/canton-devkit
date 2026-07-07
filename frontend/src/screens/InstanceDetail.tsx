@@ -207,7 +207,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
         marginTop: 24,
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 16,
       }}
     >
@@ -222,7 +222,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
               color: W.warn,
               fontSize: 11,
               border: `1px solid ${W.warn}`,
-              borderRadius: 6,
+              borderRadius: 2,
               padding: "2px 8px",
             }}
           >
@@ -255,7 +255,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
             background: `${W.err}10`,
             color: W.err,
             border: `1px solid ${W.err}`,
-            borderRadius: 6,
+            borderRadius: 2,
             padding: "6px 10px",
             fontSize: 12,
             marginBottom: 10,
@@ -473,7 +473,7 @@ function btnStyle(accent: string, busy: boolean): React.CSSProperties {
     background: "transparent",
     color: busy ? W.dim : accent,
     border: `1px solid ${busy ? W.dim : accent}`,
-    borderRadius: 6,
+    borderRadius: 2,
     padding: "4px 12px",
     fontSize: 11.5,
     fontWeight: 600,

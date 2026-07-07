@@ -95,10 +95,10 @@ export function scopeQ(query: string, scope: string): string {
   );
 }
 
-const TPS_COLOR = "#7CB5F7";
-const P99_COLOR = "#F5BF55";
-const ACS_COLOR = "#5BD7C5";
-const ERR_COLOR = "#F08FB5";
+const TPS_COLOR = "#8FA3EE";
+const P99_COLOR = "#DDB25E";
+const ACS_COLOR = "#6480E6";
+const ERR_COLOR = "#7BD2C6";
 
 export function MetricsScreen() {
   const sel = useInstanceSelection();
@@ -462,7 +462,7 @@ function LatencyStrip(props: {
     padding: "10px 14px",
     background: W.surface,
     border: `1px solid ${W.border}`,
-    borderRadius: 6,
+    borderRadius: 2,
     fontFamily: wMono,
     fontSize: 13,
     color: W.text,
@@ -505,7 +505,7 @@ function DashboardsBlock(props: { url?: string }) {
     padding: "10px 14px",
     background: W.surface,
     border: `1px solid ${W.border}`,
-    borderRadius: 6,
+    borderRadius: 2,
     fontFamily: wMono,
     fontSize: 13,
     color: W.text,
@@ -558,7 +558,7 @@ function ChartCard({
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 14,
         display: "flex",
         flexDirection: "column",
@@ -582,7 +582,7 @@ function ChartCard({
 
 function ErrLine({ msg }: { msg: string }) {
   return (
-    <div role="alert" style={{ color: "#F08FB5", fontSize: 12, padding: "20px 0" }}>
+    <div role="alert" style={{ color: "#7BD2C6", fontSize: 12, padding: "20px 0" }}>
       {msg}
     </div>
   );
@@ -617,7 +617,7 @@ function ObservabilityOffPanel({
       style={{
         background: `${W.warn}10`,
         border: `1px solid ${W.warn}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 20,
       }}
     >
@@ -638,9 +638,9 @@ function ObservabilityOffPanel({
           disabled={busy}
           style={{
             background: busy ? W.surface2 : W.brand,
-            color: busy ? W.dim : "#0B0E13",
+            color: busy ? W.dim : "#0B0F1A",
             border: "none",
-            borderRadius: 6,
+            borderRadius: 2,
             padding: "7px 14px",
             fontSize: 12.5,
             fontWeight: 600,
@@ -669,7 +669,7 @@ function ObservabilityOffPanel({
             color: W.text,
             background: W.border,
             padding: "1px 6px",
-            borderRadius: 4,
+            borderRadius: 2,
           }}
         >
           {`dpm localnet observability enable --name ${name}`}

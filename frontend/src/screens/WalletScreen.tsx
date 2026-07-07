@@ -139,7 +139,7 @@ export function WalletScreen() {
         style={{
           background: `${W.brand}10`,
           border: `1px solid ${W.brand}40`,
-          borderRadius: 10,
+          borderRadius: 4,
           padding: "10px 14px",
           display: "flex",
           alignItems: "center",
@@ -158,7 +158,7 @@ export function WalletScreen() {
               color: W.text,
               background: W.border,
               padding: "1px 6px",
-              borderRadius: 4,
+              borderRadius: 2,
             }}
           >
             {LOGIN_USER_FOR[role]}
@@ -174,7 +174,7 @@ export function WalletScreen() {
         style={{
           background: W.surface,
           border: `1px solid ${W.border}`,
-          borderRadius: 10,
+          borderRadius: 4,
           padding: "12px 18px",
           display: "grid",
           alignItems: "center",
@@ -223,7 +223,7 @@ export function WalletScreen() {
           minHeight: 0,
           background: W.surface,
           border: `1px solid ${W.border}`,
-          borderRadius: 10,
+          borderRadius: 4,
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
@@ -270,7 +270,7 @@ export function WalletScreen() {
             // allow-popups-to-escape-sandbox.
             sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
             referrerPolicy="no-referrer"
-            style={{ flex: 1, border: 0, background: "#FAFAF8" }}
+            style={{ flex: 1, border: 0, background: "#FCFCFD" }}
           />
         ) : (
           <div style={{ flex: 1, padding: 24, color: W.dim }}>
@@ -304,7 +304,7 @@ function RoleSwitcher({
         padding: 3,
         background: W.border,
         border: `1px solid ${W.border}`,
-        borderRadius: 9,
+        borderRadius: 2,
       }}
     >
       {ROLES.map((id) => {
@@ -318,7 +318,7 @@ function RoleSwitcher({
               alignItems: "center",
               gap: 8,
               padding: "6px 11px",
-              borderRadius: 6,
+              borderRadius: 2,
               border: "none",
               background: active ? W.surface : "transparent",
               cursor: active ? "default" : "pointer",
@@ -347,11 +347,11 @@ function RoleAvatar({ role }: { role: Role }) {
         height: 36,
         borderRadius: "50%",
         background: `linear-gradient(135deg, ${color}, ${W.brand})`,
-        color: "#0B0E13",
+        color: "#0B0F1A",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        fontWeight: 700,
+        fontWeight: 600,
         fontSize: 13,
       }}
     >
@@ -369,11 +369,11 @@ function RoleAvatarMini({ role }: { role: Role }) {
         height: 16,
         borderRadius: "50%",
         background: `linear-gradient(135deg, ${color}, ${W.brand})`,
-        color: "#0B0E13",
+        color: "#0B0F1A",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        fontWeight: 700,
+        fontWeight: 600,
         fontSize: 9,
       }}
     >
@@ -389,7 +389,7 @@ function Pill({ children }: { children: React.ReactNode }) {
         color: W.dim,
         border: `1px solid ${W.border}`,
         padding: "1px 7px",
-        borderRadius: 4,
+        borderRadius: 2,
         fontSize: 10.5,
         fontFamily: wMono,
         background: `${W.border}40`,
@@ -419,7 +419,7 @@ function btn(color: string): React.CSSProperties {
     background: "transparent",
     color,
     border: `1px solid ${color}`,
-    borderRadius: 6,
+    borderRadius: 2,
     padding: "5px 12px",
     fontSize: 12,
     fontWeight: 600,

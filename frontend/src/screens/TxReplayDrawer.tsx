@@ -16,9 +16,9 @@ import { W, wMono } from "../tokens";
 // as different parties returns different event sets.
 
 const EVENT_COLOR: Record<TxReplayEvent["kind"], string> = {
-  created: "#62E2A0",
-  archived: "#F08FB5",
-  exercised: "#7CB5F7",
+  created: "#7CC89A",
+  archived: "#7BD2C6",
+  exercised: "#8FA3EE",
 };
 
 export function TxReplayDrawer({
@@ -89,7 +89,7 @@ export function TxReplayDrawer({
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         overflow: "hidden",
       }}
     >
@@ -108,7 +108,7 @@ export function TxReplayDrawer({
           </div>
           <code
             style={{
-              color: "#C4A8F5",
+              color: "#93A7F0",
               fontFamily: wMono,
               fontSize: 11,
               wordBreak: "break-all",
@@ -125,7 +125,7 @@ export function TxReplayDrawer({
             background: "transparent",
             border: `1px solid ${W.border}`,
             color: W.dim,
-            borderRadius: 6,
+            borderRadius: 2,
             padding: "3px 8px",
             cursor: "pointer",
             fontSize: 12,
@@ -156,7 +156,7 @@ export function TxReplayDrawer({
             fontFamily: wMono,
             fontSize: 11.5,
             padding: "4px 8px",
-            borderRadius: 6,
+            borderRadius: 2,
             cursor: "pointer",
             maxWidth: 240,
           }}
@@ -176,7 +176,7 @@ export function TxReplayDrawer({
         </div>
       )}
       {state.kind === "err" && (
-        <div style={{ padding: 16, color: "#F08FB5", fontSize: 13 }}>
+        <div style={{ padding: 16, color: "#7BD2C6", fontSize: 13 }}>
           {state.error}
         </div>
       )}
@@ -277,7 +277,7 @@ function ReplayNode({ ev, last }: { ev: TxReplayEvent; last: boolean }) {
       <code
         style={{
           fontFamily: wMono,
-          color: "#C4A8F5",
+          color: "#93A7F0",
           fontSize: 10.5,
           marginLeft: "auto",
         }}

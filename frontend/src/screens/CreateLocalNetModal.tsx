@@ -543,7 +543,7 @@ function FormBody({
           gap: 10,
           padding: "10px 12px",
           background: W.surface2,
-          borderRadius: 8,
+          borderRadius: 4,
           border: `1px solid ${prometheus ? W.brand : W.border}`,
           cursor: "pointer",
         }}
@@ -562,7 +562,7 @@ function FormBody({
               marginLeft: 8,
               fontSize: 10.5,
               padding: "1px 6px",
-              borderRadius: 3,
+              borderRadius: 2,
               background: `${W.brand}1A`,
               color: W.brand,
               fontFamily: wMono,
@@ -588,7 +588,7 @@ function FormBody({
           gap: 10,
           padding: "10px 12px",
           background: W.surface2,
-          borderRadius: 8,
+          borderRadius: 4,
           border: `1px solid ${grafana ? W.brand : W.border}`,
           cursor: "pointer",
         }}
@@ -607,7 +607,7 @@ function FormBody({
               marginLeft: 8,
               fontSize: 10.5,
               padding: "1px 6px",
-              borderRadius: 3,
+              borderRadius: 2,
               background: `${W.brand}1A`,
               color: W.brand,
               fontFamily: wMono,
@@ -630,7 +630,7 @@ function FormBody({
                 padding: "6px 8px",
                 background: `${W.warn}15`,
                 border: `1px solid ${W.warn}`,
-                borderRadius: 6,
+                borderRadius: 2,
                 fontSize: 11.5,
                 color: W.warn,
                 lineHeight: 1.5,
@@ -652,7 +652,7 @@ function FormBody({
           gap: 10,
           padding: "10px 12px",
           background: W.surface2,
-          borderRadius: 8,
+          borderRadius: 4,
           border: `1px solid ${tokensV2 ? W.brand : W.border}`,
           cursor: "pointer",
         }}
@@ -670,7 +670,7 @@ function FormBody({
               marginLeft: 8,
               fontSize: 10.5,
               padding: "1px 6px",
-              borderRadius: 3,
+              borderRadius: 2,
               background: `${W.brand}1A`,
               color: W.brand,
               fontFamily: wMono,
@@ -713,7 +713,7 @@ function FormBody({
             marginTop: 8,
             padding: "8px 12px",
             background: W.surface2,
-            borderRadius: 8,
+            borderRadius: 4,
           }}
         >
           <input
@@ -738,7 +738,7 @@ function FormBody({
             marginTop: 8,
             padding: "8px 12px",
             background: W.surface2,
-            borderRadius: 8,
+            borderRadius: 4,
           }}
         >
           <input
@@ -755,7 +755,7 @@ function FormBody({
               background: W.surface,
               color: W.text,
               border: `1px solid ${W.border}`,
-              borderRadius: 6,
+              borderRadius: 2,
             }}
           />
           <div style={{ flex: 1, fontSize: 12, color: W.text2 }}>
@@ -776,7 +776,7 @@ function FormBody({
           marginTop: 4,
           padding: "8px 10px",
           background: W.surface2,
-          borderRadius: 7,
+          borderRadius: 2,
           fontFamily: wMono,
         }}
       >
@@ -831,7 +831,7 @@ function ProgressBody({
             background: `${W.warn}1A`,
             border: `1px solid ${W.warn}44`,
             color: W.warn,
-            borderRadius: 6,
+            borderRadius: 2,
             padding: "6px 10px",
             fontSize: 11.5,
             margin: "6px 0",
@@ -859,7 +859,7 @@ function ProgressBody({
               margin: "8px 0 0",
               background: W.bg,
               border: `1px solid ${W.border}`,
-              borderRadius: 7,
+              borderRadius: 2,
               padding: "10px 12px",
               fontFamily: wMono,
               fontSize: 10.5,
@@ -941,7 +941,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
           background: `${W.brand}10`,
           color: W.brand,
           border: `1px solid ${W.brand}44`,
-          borderRadius: 7,
+          borderRadius: 2,
           fontSize: 12,
           fontFamily: wMono,
         }}
@@ -958,7 +958,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
           background: `${W.ok}1A`,
           color: W.ok,
           border: `1px solid ${W.ok}`,
-          borderRadius: 7,
+          borderRadius: 2,
           fontSize: 13,
           fontWeight: 600,
         }}
@@ -976,7 +976,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
           background: `${W.err}10`,
           color: W.err,
           border: `1px solid ${W.err}`,
-          borderRadius: 7,
+          borderRadius: 2,
           fontSize: 12.5,
         }}
       >
@@ -992,7 +992,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
               marginTop: 8,
               padding: "8px 10px",
               background: W.surface2,
-              borderRadius: 6,
+              borderRadius: 2,
               color: W.text2,
               fontSize: 11.5,
               borderLeft: `3px solid ${W.warn}`,
@@ -1017,7 +1017,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
         background: `${W.warn}1A`,
         color: W.warn,
         border: `1px solid ${W.warn}`,
-        borderRadius: 7,
+        borderRadius: 2,
         fontSize: 12.5,
       }}
     >
@@ -1232,7 +1232,7 @@ const selectStyle: React.CSSProperties = {
   background: W.bg,
   color: W.text,
   border: `1px solid ${W.border}`,
-  borderRadius: 6,
+  borderRadius: 2,
   padding: "7px 10px",
   fontSize: 13,
   fontFamily: wMono,
@@ -1256,7 +1256,7 @@ function PreflightPanel({ state }: { state: PreflightState }) {
           background: W.surface2,
           color: W.dim,
           border: `1px solid ${W.border}`,
-          borderRadius: 7,
+          borderRadius: 2,
           fontSize: 11.5,
           fontFamily: wMono,
         }}
@@ -1273,7 +1273,7 @@ function PreflightPanel({ state }: { state: PreflightState }) {
           background: W.surface2,
           color: W.dim,
           border: `1px solid ${W.border}`,
-          borderRadius: 7,
+          borderRadius: 2,
           fontSize: 11.5,
         }}
       >
@@ -1306,7 +1306,7 @@ function PreflightPanel({ state }: { state: PreflightState }) {
           background: `${W.ok}14`,
           color: W.ok,
           border: `1px solid ${W.ok}44`,
-          borderRadius: 7,
+          borderRadius: 2,
           fontSize: 11.5,
           fontFamily: wMono,
         }}
@@ -1322,7 +1322,7 @@ function PreflightPanel({ state }: { state: PreflightState }) {
         padding: "10px 12px",
         background: `${accent}10`,
         border: `1px solid ${accent}`,
-        borderRadius: 8,
+        borderRadius: 4,
         fontSize: 12,
       }}
     >
@@ -1342,14 +1342,14 @@ function PreflightPanel({ state }: { state: PreflightState }) {
             padding: "6px 8px",
             background: W.bg,
             border: `1px solid ${W.border}`,
-            borderRadius: 6,
+            borderRadius: 2,
           }}
         >
           <div style={{ fontFamily: wMono, fontSize: 11.5 }}>
             <span
               style={{
                 color: check.result === "fail" ? W.err : W.warn,
-                fontWeight: 700,
+                fontWeight: 600,
                 marginRight: 6,
               }}
             >
@@ -1408,7 +1408,7 @@ function Field({
           color: W.text2,
           fontSize: 11,
           marginBottom: 4,
-          textTransform: "uppercase",
+          textTransform: "uppercase", fontStretch: "118%",
           letterSpacing: 0.8,
         }}
       >
@@ -1456,7 +1456,7 @@ const modalStyle: React.CSSProperties = {
   width: "min(680px, 92vw)",
   background: W.surface,
   border: `1px solid ${W.border}`,
-  borderRadius: 12,
+  borderRadius: 8,
   boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
   overflow: "hidden",
 };
@@ -1466,7 +1466,7 @@ const inputStyle: React.CSSProperties = {
   background: W.bg,
   color: W.text,
   border: `1px solid ${W.border}`,
-  borderRadius: 6,
+  borderRadius: 2,
   padding: "7px 10px",
   fontSize: 13,
   fontFamily: wMono,
@@ -1476,9 +1476,9 @@ const inputStyle: React.CSSProperties = {
 function btnStyle(color: string, primary: boolean): React.CSSProperties {
   return {
     background: primary ? color : "transparent",
-    color: primary ? "#082018" : color,
+    color: primary ? "#0B0F1A" : color,
     border: `1px solid ${color}`,
-    borderRadius: 6,
+    borderRadius: 2,
     padding: "6px 14px",
     fontSize: 12,
     fontWeight: 600,

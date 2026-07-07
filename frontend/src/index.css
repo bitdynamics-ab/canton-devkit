@@ -1,13 +1,53 @@
-/* Base styles. The mockup JSX inlines styles per element; we
-   lift only the body/layout-defaults here and let components
-   own their own styling via the tokens. This keeps the
-   import-graph honest: tokens.ts is the single source of truth,
-   global CSS is just zero-out. */
+/* Base styles. Components own their styling via tokens.ts; this file
+   holds only what CSS must own: font-face, body defaults, focus
+   rings, hover states, and keyframes. tokens.ts stays the single
+   source of truth for the palette. */
+
+/* Canton Infrastructure Design System typefaces, self-hosted so the
+   UI renders identically offline (licenses in src/fonts/). Archivo
+   variable: body at 100% width, wide structural caps at 118%.
+   JetBrains Mono for code and all data values. */
+@font-face {
+  font-family: "Archivo";
+  src: url("./fonts/archivo.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Archivo";
+  src: url("./fonts/archivo-italic.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./fonts/jetbrains-mono.woff2") format("woff2-variations");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./fonts/jetbrains-mono-italic.woff2") format("woff2-variations");
+  font-weight: 100 800;
+  font-style: italic;
+  font-display: swap;
+}
 
 :root {
   color-scheme: dark;
-  --bg: #0B0E13;
-  --text: #E6E9EE;
+  --bg: #0b0f1a;
+  --text: #e9ecf4;
+  /* Motion — quick, damped, no bounce. */
+  --ease-out: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --duration-fast: 120ms;
 }
 
 * {
@@ -22,9 +62,11 @@ body,
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: "IBM Plex Sans", "Inter Tight", system-ui, sans-serif;
+  font-family: "Archivo", -apple-system, "Segoe UI", "Helvetica Neue",
+    Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
 button {
@@ -43,34 +85,61 @@ a {
  * arrow keys) or programmatic .focus(). Mouse clicks don't paint
  * the ring, matching what sighted users expect from native UI.
  *
- * The 2px brand-coloured outline is high-contrast against every
- * surface in the dark palette. Offset 2px so it doesn't merge
- * into the element's own border. */
+ * 2px cobalt outline (blue-500 — identical in light and dark per
+ * the design system), offset 2px so it doesn't merge into the
+ * element's own border. */
 :focus {
   outline: none;
 }
 
 :focus-visible {
-  outline: 2px solid #5BD7C5;
+  outline: 2px solid #3d5bdc;
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 2px;
+}
+
+/* Sidebar nav items (shell/Shell.tsx::Sidebar). Hover/active tints
+ * live here because inline style objects can't express :hover.
+ * Active = accent-subtle fill + accent text at 2px radius — the
+ * design system's "current item" signature. */
+.side-nav-link {
+  display: block;
+  padding: 7px 10px;
+  margin: 1px 0;
+  border-radius: 2px;
+  font-size: 13px;
+  color: #a9b2c6;
+  transition: background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.side-nav-link:hover {
+  background: #171e2c;
+  color: #e9ecf4;
+}
+
+.side-nav-link.active,
+.side-nav-link.active:hover {
+  background: #141c36;
+  color: #93a7f0;
+  font-weight: 500;
 }
 
 /* Skip-to-content link (shell/Shell.tsx::SkipLink). Visually
  * hidden until focused via Tab — first focusable element on the
  * page so a keyboard user can jump past the sidebar to the main
- * content. The .focus state pulls it on-screen as a pill. */
+ * content. The .focus state pulls it on-screen. */
 .skip-link {
   position: absolute;
   top: -100px;
   left: 8px;
-  background: #5BD7C5;
-  color: #082018;
+  background: #6480e6;
+  color: #0b0f1a;
   padding: 8px 14px;
   font-weight: 600;
-  border-radius: 6px;
+  border-radius: 2px;
   z-index: 1000;
-  transition: top 0.15s ease-out;
+  transition: top var(--duration-fast) var(--ease-out);
 }
 
 .skip-link:focus,

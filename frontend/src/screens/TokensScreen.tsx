@@ -396,16 +396,16 @@ export function TokensScreen() {
       )}
 
       {/* Lens switcher */}
-      <div style={{ display: "flex", gap: 4, background: W.surface2, borderRadius: 8, padding: 3, width: "fit-content", border: `1px solid ${W.border}` }}>
+      <div style={{ display: "flex", gap: 4, background: W.surface2, borderRadius: 4, padding: 3, width: "fit-content", border: `1px solid ${W.border}` }}>
         {(["instruments", "matrix"] as const).map((v) => (
           <button
             key={v}
             onClick={() => setView(v)}
             style={{
-              padding: "5px 14px", fontSize: 12, borderRadius: 5, border: "none", cursor: "pointer",
+              padding: "5px 14px", fontSize: 12, borderRadius: 2, border: "none", cursor: "pointer",
               fontWeight: 600,
               background: view === v ? W.brand : "transparent",
-              color: view === v ? "#082018" : W.dim,
+              color: view === v ? "#0B0F1A" : W.dim,
             }}
           >
             {v === "instruments" ? "Instruments" : "Holdings matrix"}
@@ -416,7 +416,7 @@ export function TokensScreen() {
       {view === "matrix" ? (
         <MatrixLens matrix={matrix} err={matrixErr} aliases={aliases} />
       ) : list.length === 0 ? (
-        <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 10, padding: 24, textAlign: "center" }}>
+        <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 4, padding: 24, textAlign: "center" }}>
           <div style={{ color: W.text, fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
             No tokens on <code>{instance}</code> yet
           </div>
@@ -439,7 +439,7 @@ export function TokensScreen() {
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 14 }}>
           {/* Left rail: instrument list (ACS-discovered) */}
-          <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 10, overflow: "hidden" }}>
+          <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 4, overflow: "hidden" }}>
             {list.map((t) => {
               const sym = t.symbol ?? t.instrument_id;
               const isActive = sym === activeSymbol;
@@ -465,7 +465,7 @@ export function TokensScreen() {
           </div>
 
           {/* Right pane: detail + holdings + actions */}
-          <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 10, padding: 16 }}>
+          <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 4, padding: 16 }}>
             {active && (() => {
               const sym = active.symbol ?? active.instrument_id;
               const mintReason = mintDisabledReason(active);
@@ -775,8 +775,8 @@ function TransferModal({
         </label>
 
         {plan && (
-          <div style={{ background: W.surface2, border: `1px solid ${W.border}`, borderRadius: 8, padding: "10px 12px" }}>
-            <div style={{ color: W.dim, fontSize: 10.5, letterSpacing: 1, textTransform: "uppercase", fontWeight: 600, marginBottom: 6 }}>
+          <div style={{ background: W.surface2, border: `1px solid ${W.border}`, borderRadius: 4, padding: "10px 12px" }}>
+            <div style={{ color: W.dim, fontSize: 10.5, letterSpacing: 1, textTransform: "uppercase", fontStretch: "118%", fontWeight: 600, marginBottom: 6 }}>
               Coin selection preview
             </div>
             {plan.sufficient ? (
@@ -850,11 +850,11 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
           style={{
             background: W.bg,
             border: `1px solid ${W.border}`,
-            borderRadius: 8,
+            borderRadius: 4,
             padding: "10px 12px",
           }}
         >
-          <div style={{ color: W.dim, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4 }}>
+          <div style={{ color: W.dim, fontSize: 11, textTransform: "uppercase", fontStretch: "118%", letterSpacing: 0.4 }}>
             {c.label}
           </div>
           <div style={{ color: W.text, fontSize: 20, fontFamily: wMono, marginTop: 4 }}>{c.value}</div>
@@ -893,13 +893,13 @@ function HolderDistribution({ s, aliases }: { s: InstrumentSummary; aliases: Ali
                 <td style={{ ...td, fontFamily: wMono }}>{h.balance}</td>
                 <td style={td}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ flex: 1, height: 6, background: W.surface2, borderRadius: 3, minWidth: 40 }}>
+                    <div style={{ flex: 1, height: 6, background: W.surface2, borderRadius: 2, minWidth: 40 }}>
                       <div
                         style={{
                           width: `${Math.min(100, pct)}%`,
                           height: "100%",
                           background: W.brand,
-                          borderRadius: 3,
+                          borderRadius: 2,
                         }}
                       />
                     </div>
@@ -958,10 +958,10 @@ function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null
                 style={{
                   color: tone[e.kind],
                   border: `1px solid ${tone[e.kind]}`,
-                  borderRadius: 4,
+                  borderRadius: 2,
                   padding: "1px 6px",
                   fontSize: 11,
-                  textTransform: "uppercase",
+                  textTransform: "uppercase", fontStretch: "118%",
                 }}
               >
                 {e.kind}
@@ -996,7 +996,7 @@ function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; er
   const parties = [...matrix.parties].sort();
 
   return (
-    <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 10, padding: 16, overflowX: "auto" }}>
+    <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 4, padding: 16, overflowX: "auto" }}>
       <div style={{ color: W.dim, fontSize: 12, marginBottom: 10 }}>
         {parties.length} {parties.length === 1 ? "party" : "parties"} × {syms.length} {syms.length === 1 ? "instrument" : "instruments"} —
         every readable party's balance of every instrument, in one ACS scan.
@@ -1020,9 +1020,9 @@ function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; er
             </tr>
           ))}
           <tr>
-            <td style={{ ...td, color: W.brand, fontWeight: 700, textTransform: "uppercase", fontSize: 11 }}>Σ total</td>
+            <td style={{ ...td, color: W.brand, fontWeight: 600, textTransform: "uppercase", fontStretch: "118%", fontSize: 11 }}>Σ total</td>
             {syms.map((s) => (
-              <td key={s} style={{ ...td, textAlign: "right", fontFamily: wMono, fontWeight: 700 }}>{totals[s] ?? ""}</td>
+              <td key={s} style={{ ...td, textAlign: "right", fontFamily: wMono, fontWeight: 600 }}>{totals[s] ?? ""}</td>
             ))}
           </tr>
           {parties.length === 0 && (
@@ -1133,7 +1133,7 @@ function PartyManagerModal({
           value={alias}
           onChange={(e) => setAlias(e.target.value)}
           placeholder="new alias (e.g. bob)"
-          style={{ flex: 1, background: W.bg, border: `1px solid ${W.border}`, borderRadius: 6, padding: "8px 10px", color: W.text, fontSize: 13 }}
+          style={{ flex: 1, background: W.bg, border: `1px solid ${W.border}`, borderRadius: 2, padding: "8px 10px", color: W.text, fontSize: 13 }}
         />
         <button type="submit" disabled={busy || !alias.trim()} style={btnStyle(W.brand, busy, true, !alias.trim())}>
           {busy ? "…" : "+ Allocate"}
@@ -1428,7 +1428,7 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
     }}>
       <div style={{
         background: W.surface, border: `1px solid ${W.border}`,
-        borderRadius: 12, padding: 18, width: 420, maxWidth: "92vw",
+        borderRadius: 8, padding: 18, width: 420, maxWidth: "92vw",
       }}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
           <h3 style={{ color: W.text, margin: 0, fontSize: 14 }}>{title}</h3>
@@ -1454,7 +1454,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const input: React.CSSProperties = {
   background: W.surface2, color: W.text, border: `1px solid ${W.border}`,
-  borderRadius: 6, padding: "6px 8px", fontSize: 13,
+  borderRadius: 2, padding: "6px 8px", fontSize: 13,
 };
 const th: React.CSSProperties = { padding: "6px 8px", borderBottom: `1px solid ${W.border}`, fontSize: 11 };
 const td: React.CSSProperties = { padding: "6px 8px", borderBottom: `1px solid ${W.border}`, color: W.text };
@@ -1463,7 +1463,7 @@ function notice(tone: "ok" | "warn" | "err"): React.CSSProperties {
   const c = tone === "ok" ? W.ok : tone === "warn" ? W.warn : W.err;
   return {
     background: `${c}10`, color: c, border: `1px solid ${c}`,
-    borderRadius: 8, padding: "8px 12px", fontSize: 12.5,
+    borderRadius: 4, padding: "8px 12px", fontSize: 12.5,
   };
 }
 
@@ -1471,22 +1471,22 @@ function btnStyle(accent: string, busy: boolean, filled = false, disabled = fals
   if (disabled) {
     return {
       background: "transparent", color: W.dim, border: `1px solid ${W.border}`,
-      borderRadius: 6, padding: filled ? "5px 12px" : "4px 10px",
+      borderRadius: 2, padding: filled ? "5px 12px" : "4px 10px",
       fontSize: filled ? 12 : 11.5, fontWeight: 600, cursor: "not-allowed", opacity: 0.6,
     };
   }
   return filled
     ? {
         background: busy ? W.surface2 : accent,
-        color: busy ? W.dim : "#0B0E13",
-        border: "none", borderRadius: 6, padding: "5px 12px",
+        color: busy ? W.dim : "#0B0F1A",
+        border: "none", borderRadius: 2, padding: "5px 12px",
         fontSize: 12, fontWeight: 600, cursor: busy ? "wait" : "pointer",
       }
     : {
         background: "transparent",
         color: busy ? W.dim : accent,
         border: `1px solid ${busy ? W.dim : accent}`,
-        borderRadius: 6, padding: "4px 10px", fontSize: 11.5,
+        borderRadius: 2, padding: "4px 10px", fontSize: 11.5,
         fontWeight: 600, cursor: busy ? "wait" : "pointer",
       };
 }

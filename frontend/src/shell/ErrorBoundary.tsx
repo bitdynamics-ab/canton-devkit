@@ -80,7 +80,7 @@ function Fallback({ error, onRetry }: FallbackProps) {
       style={{
         background: `${W.err}10`,
         border: `1px solid ${W.err}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 20,
         margin: "8px 0",
         color: W.text,
@@ -104,7 +104,7 @@ function Fallback({ error, onRetry }: FallbackProps) {
         style={{
           background: W.bg,
           border: `1px solid ${W.border}`,
-          borderRadius: 7,
+          borderRadius: 2,
           padding: "10px 12px",
           fontFamily: wMono,
           fontSize: 11.5,
@@ -122,9 +122,9 @@ function Fallback({ error, onRetry }: FallbackProps) {
           onClick={onRetry}
           style={{
             background: W.brand,
-            color: "#082018",
+            color: "#0B0F1A",
             border: `1px solid ${W.brand}`,
-            borderRadius: 6,
+            borderRadius: 2,
             padding: "5px 12px",
             fontSize: 12,
             fontWeight: 600,

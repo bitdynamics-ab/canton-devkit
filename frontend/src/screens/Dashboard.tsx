@@ -42,9 +42,9 @@ export function Dashboard() {
           onClick={() => setCreateOpen(true)}
           style={{
             background: W.brand,
-            color: "#082018",
+            color: "#0B0F1A",
             border: `1px solid ${W.brand}`,
-            borderRadius: 6,
+            borderRadius: 2,
             padding: "6px 14px",
             fontSize: 12,
             fontWeight: 600,
@@ -84,7 +84,7 @@ export function Dashboard() {
                 background: `${W.dim}1A`,
                 border: `1px solid ${W.dim}`,
                 color: W.dim,
-                borderRadius: 8,
+                borderRadius: 4,
                 padding: "6px 12px",
                 marginBottom: 12,
                 fontSize: 12,
@@ -99,7 +99,7 @@ export function Dashboard() {
                 background: `${W.warn}1A`,
                 border: `1px solid ${W.warn}`,
                 color: W.warn,
-                borderRadius: 8,
+                borderRadius: 4,
                 padding: "8px 12px",
                 marginBottom: 16,
                 fontSize: 13,
@@ -160,7 +160,7 @@ function InstanceTable({ instances, selected, onSelect }: InstanceTableProps) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 8,
+        borderRadius: 4,
         overflow: "hidden",
       }}
     >
@@ -257,7 +257,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 8,
+        borderRadius: 4,
         padding: 32,
         color: W.dim,
         textAlign: "center",
@@ -270,9 +270,9 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
         onClick={onCreate}
         style={{
           background: W.brand,
-          color: "#082018",
+          color: "#0B0F1A",
           border: `1px solid ${W.brand}`,
-          borderRadius: 6,
+          borderRadius: 2,
           padding: "8px 18px",
           fontSize: 13,
           fontWeight: 600,
@@ -297,7 +297,7 @@ function ErrorPanel({ error }: { error: string }) {
       style={{
         background: `${W.err}1A`,
         border: `1px solid ${W.err}`,
-        borderRadius: 8,
+        borderRadius: 4,
         padding: 16,
         color: W.err,
       }}
@@ -376,7 +376,7 @@ function RecentActivity({ name }: { name: string }) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 16,
         marginBottom: 16,
       }}
@@ -394,7 +394,7 @@ function RecentActivity({ name }: { name: string }) {
             background: "transparent",
             border: `1px solid ${W.border}`,
             color: W.text2,
-            borderRadius: 6,
+            borderRadius: 2,
             padding: "3px 10px",
             fontSize: 12,
             cursor: "pointer",
@@ -445,10 +445,10 @@ function RecentActivity({ name }: { name: string }) {
                     style={{
                       color: kindColor[e.kind],
                       border: `1px solid ${kindColor[e.kind]}`,
-                      borderRadius: 4,
+                      borderRadius: 2,
                       padding: "1px 6px",
                       fontSize: 11,
-                      textTransform: "uppercase",
+                      textTransform: "uppercase", fontStretch: "118%",
                     }}
                   >
                     {e.kind}

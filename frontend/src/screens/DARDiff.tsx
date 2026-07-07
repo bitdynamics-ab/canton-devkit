@@ -187,7 +187,7 @@ export function DARDiff({ instance, a, b, role }: Props) {
 const paneStyle: React.CSSProperties = {
   background: W.surface,
   border: `1px solid ${W.border}`,
-  borderRadius: 8,
+  borderRadius: 4,
   padding: 12,
   fontSize: 12,
   maxHeight: "60vh",
@@ -232,7 +232,7 @@ type Tone = "add" | "rm" | "chg" | "info";
 function toneColour(t: Tone): { bg: string; fg: string } {
   switch (t) {
     case "add":
-      return { bg: "#62E2A022", fg: "#62E2A0" };
+      return { bg: "#7CC89A22", fg: "#7CC89A" };
     case "rm":
       return { bg: `${W.err}22`, fg: W.err };
     case "chg":
@@ -317,7 +317,7 @@ function ChipGroup({
           key={l}
           style={{
             padding: "0 5px",
-            borderRadius: 3,
+            borderRadius: 2,
             background: c.bg,
             color: c.fg,
             fontSize: 10.5,

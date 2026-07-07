@@ -22,7 +22,7 @@ export function Shell({ children }: ShellProps) {
       style={{
         display: "grid",
         gridTemplateColumns: "240px 1fr",
-        gridTemplateRows: "48px 1fr",
+        gridTemplateRows: "52px 1fr",
         height: "100vh",
         fontFamily: wSans,
       }}
@@ -92,7 +92,7 @@ function TopBar() {
         alignItems: "center",
         gap: 12,
         padding: "0 16px",
-        background: W.surface,
+        background: W.bg,
         borderBottom: `1px solid ${W.border}`,
       }}
     >
@@ -156,7 +156,7 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
             listStyle: "none",
             background: W.surface,
             border: `1px solid ${W.border}`,
-            borderRadius: 8,
+            borderRadius: 4,
             minWidth: 220,
             zIndex: 10,
             boxShadow: "0 6px 24px rgba(0,0,0,0.4)",
@@ -184,7 +184,7 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
                   background:
                     i.name === sel.selected ? W.surface2 : "transparent",
                   border: "none",
-                  borderRadius: 6,
+                  borderRadius: 2,
                   color: W.text,
                   fontFamily: wMono,
                   fontSize: 12,
@@ -252,7 +252,7 @@ function PaletteHint() {
         style={{
           background: W.surface2,
           border: `1px solid ${W.border}`,
-          borderRadius: 4,
+          borderRadius: 2,
           padding: "1px 5px",
           fontFamily: wMono,
           fontSize: 10,
@@ -272,7 +272,7 @@ function pillStyle(color: string): React.CSSProperties {
     alignItems: "center",
     gap: 6,
     padding: "3px 10px",
-    borderRadius: 999,
+    borderRadius: 2,
     border: `1px solid ${color}`,
     color,
     fontFamily: wMono,
@@ -314,7 +314,7 @@ function HealthPill({ conn }: { conn: ConnectionState }) {
         alignItems: "center",
         gap: 6,
         padding: "3px 9px",
-        borderRadius: 999,
+        borderRadius: 2,
         border: `1px solid ${color}`,
         background: `${color}1A`,
         color,
@@ -351,9 +351,9 @@ function Sidebar() {
       style={{
         gridColumn: "1",
         gridRow: "2",
-        background: W.surface,
+        background: W.sunken,
         borderRight: `1px solid ${W.border}`,
-        padding: "16px 8px",
+        padding: "12px 8px",
       }}
     >
       {NAV.map((item) => (
@@ -361,15 +361,9 @@ function Sidebar() {
           key={item.to}
           to={linkTo(item.to, item.instanceScoped, instance)}
           end={item.to === "/"}
-          style={({ isActive }) => ({
-            display: "block",
-            padding: "8px 12px",
-            margin: "2px 0",
-            borderRadius: 6,
-            color: isActive ? W.text : W.text2,
-            background: isActive ? W.surface2 : "transparent",
-            fontWeight: isActive ? 600 : 400,
-          })}
+          // Visuals live in index.css (.side-nav-link) so :hover and
+          // the router-managed .active class can carry the states.
+          className="side-nav-link"
         >
           {item.label}
         </NavLink>
@@ -396,10 +390,12 @@ function LogoLockup() {
       </svg>
       <span
         style={{
-          fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+          // The brand's structural wide caps: 118% width, tracked out.
+          fontFamily: wSans,
+          fontStretch: "118%",
           color: W.text,
           fontWeight: 600,
-          letterSpacing: 1.2,
+          letterSpacing: "0.14em",
           fontSize: 12,
         }}
       >

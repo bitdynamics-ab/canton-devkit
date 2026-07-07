@@ -107,7 +107,7 @@ export function BackupRestore({ instanceName }: Props) {
         marginTop: 16,
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 16,
       }}
       aria-label="Backup and restore"
@@ -154,7 +154,7 @@ export function BackupRestore({ instanceName }: Props) {
             marginTop: 10,
             background: `${W.err}10`,
             border: `1px solid ${W.err}`,
-            borderRadius: 6,
+            borderRadius: 2,
             padding: "8px 12px",
             fontSize: 12,
             color: W.err,
@@ -195,7 +195,7 @@ export function BackupRestore({ instanceName }: Props) {
           style={{
             border: `1.5px dashed ${dragOver ? W.brand : W.border}`,
             background: dragOver ? `${W.brand}10` : "transparent",
-            borderRadius: 8,
+            borderRadius: 4,
             padding: "14px 16px",
             cursor: "pointer",
             color: W.dim,
@@ -252,7 +252,7 @@ export function BackupRestore({ instanceName }: Props) {
                 background: "transparent",
                 color: W.text,
                 border: `1px solid ${W.border}`,
-                borderRadius: 4,
+                borderRadius: 2,
                 padding: "2px 6px",
                 fontSize: 12,
                 fontFamily: wMono,
@@ -290,7 +290,7 @@ export function BackupRestore({ instanceName }: Props) {
               marginTop: 10,
               background: `${W.brand}10`,
               border: `1px solid ${W.brand}`,
-              borderRadius: 6,
+              borderRadius: 2,
               padding: "8px 12px",
               fontSize: 12,
               color: W.text2,
@@ -314,7 +314,7 @@ export function BackupRestore({ instanceName }: Props) {
               marginTop: 10,
               background: `${W.err}10`,
               border: `1px solid ${W.err}`,
-              borderRadius: 6,
+              borderRadius: 2,
               padding: "8px 12px",
               fontSize: 12,
               color: W.err,
@@ -345,7 +345,7 @@ function UploadProgress({
         style={{
           height: 6,
           background: W.border,
-          borderRadius: 3,
+          borderRadius: 2,
           overflow: "hidden",
         }}
       >
@@ -367,7 +367,7 @@ function btn(accent: string, busy: boolean): React.CSSProperties {
     background: "transparent",
     color: busy ? W.dim : accent,
     border: `1px solid ${busy ? W.dim : accent}`,
-    borderRadius: 6,
+    borderRadius: 2,
     padding: "5px 14px",
     fontSize: 12,
     fontWeight: 600,

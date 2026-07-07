@@ -91,7 +91,7 @@ export function DoctorScreen() {
             padding: "12px 14px",
             background: `${W.err}1A`,
             border: `1px solid ${W.err}`,
-            borderRadius: 8,
+            borderRadius: 4,
             color: W.err,
             fontSize: 13,
           }}
@@ -167,7 +167,7 @@ function Header({
               background: W.surface,
               color: W.text,
               border: `1px solid ${W.border}`,
-              borderRadius: 6,
+              borderRadius: 2,
               padding: "5px 8px",
               fontSize: 12,
               fontFamily: wMono,
@@ -189,7 +189,7 @@ function Header({
           background: "transparent",
           color: W.brand,
           border: `1px solid ${W.brand}`,
-          borderRadius: 6,
+          borderRadius: 2,
           padding: "6px 14px",
           fontSize: 12.5,
           fontWeight: 600,
@@ -220,7 +220,7 @@ function SummaryBanner({ report }: { report: PreflightReport }) {
         padding: "12px 14px",
         background: `${accent}14`,
         border: `1px solid ${accent}`,
-        borderRadius: 8,
+        borderRadius: 4,
         color: accent,
         fontSize: 13,
         fontWeight: 600,
@@ -249,7 +249,7 @@ function Section({
           margin: "0 0 8px",
           fontSize: 12,
           fontWeight: 600,
-          textTransform: "uppercase",
+          textTransform: "uppercase", fontStretch: "118%",
           letterSpacing: 0.6,
           color: W.dim,
         }}
@@ -260,7 +260,7 @@ function Section({
         style={{
           background: W.surface,
           border: `1px solid ${W.border}`,
-          borderRadius: 10,
+          borderRadius: 4,
           overflow: "hidden",
         }}
       >

@@ -94,7 +94,7 @@ function JwtPanel({ name }: { name: string }) {
             background: W.bg,
             color: W.text,
             border: `1px solid ${W.border}`,
-            borderRadius: 6,
+            borderRadius: 2,
             padding: "6px 10px",
             fontSize: 13,
             fontFamily: wMono,
@@ -192,7 +192,7 @@ function AppConfigPanel({ name }: { name: string }) {
           margin: "12px 0 0",
           background: W.bg,
           border: `1px solid ${W.border}`,
-          borderRadius: 7,
+          borderRadius: 2,
           padding: "10px 12px",
           fontFamily: wMono,
           fontSize: 11.5,
@@ -236,7 +236,7 @@ function Card({ title, subtitle, children }: CardProps) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 16,
       }}
     >
@@ -298,9 +298,9 @@ function ChipRow({ options, value, onChange }: ChipRowProps) {
           onClick={() => onChange(opt)}
           style={{
             background: opt === value ? W.brand : W.surface2,
-            color: opt === value ? "#082018" : W.text2,
+            color: opt === value ? "#0B0F1A" : W.text2,
             border: `1px solid ${opt === value ? W.brand : W.border}`,
-            borderRadius: 6,
+            borderRadius: 2,
             padding: "4px 10px",
             fontSize: 11.5,
             fontWeight: opt === value ? 600 : 400,
@@ -325,7 +325,7 @@ function TokenBox({ token, revealed }: { token: string; revealed: boolean }) {
       style={{
         background: W.bg,
         border: `1px solid ${W.border}`,
-        borderRadius: 7,
+        borderRadius: 2,
         padding: "10px 12px",
         fontFamily: wMono,
         fontSize: 11,
@@ -352,9 +352,9 @@ function TokenBox({ token, revealed }: { token: string; revealed: boolean }) {
 function btnStyle(accent: string): React.CSSProperties {
   return {
     background: accent === W.brand ? W.brand : "transparent",
-    color: accent === W.brand ? "#082018" : accent,
+    color: accent === W.brand ? "#0B0F1A" : accent,
     border: `1px solid ${accent}`,
-    borderRadius: 6,
+    borderRadius: 2,
     padding: "4px 10px",
     fontSize: 11.5,
     fontWeight: 600,

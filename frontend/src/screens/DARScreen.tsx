@@ -315,7 +315,7 @@ export function DARScreen() {
                 style={{
                   margin: 14,
                   border: `1.5px dashed ${dragOver ? W.brand : `${W.brand}55`}`,
-                  borderRadius: 10,
+                  borderRadius: 4,
                   padding: "22px 16px",
                   textAlign: "center",
                   background: dragOver
@@ -382,7 +382,7 @@ export function DARScreen() {
                     marginTop: 12,
                     padding: "8px 10px",
                     background: W.border,
-                    borderRadius: 6,
+                    borderRadius: 2,
                     fontSize: 11.5,
                     color: selectedRoles.length === 0 ? W.warn : W.text2,
                     lineHeight: 1.5,
@@ -427,7 +427,7 @@ export function DARScreen() {
             style={{
               background: W.surface,
               border: `1px solid ${W.border}`,
-              borderRadius: 10,
+              borderRadius: 4,
               overflow: "hidden",
             }}
           >
@@ -476,7 +476,7 @@ export function DARScreen() {
                 color: W.dim,
                 fontSize: 10.5,
                 letterSpacing: 1.4,
-                textTransform: "uppercase",
+                textTransform: "uppercase", fontStretch: "118%",
                 fontWeight: 600,
                 borderBottom: `1px solid ${W.border}`,
               }}
@@ -575,13 +575,13 @@ function WatchModeCard({ instance }: { instance: string }) {
           <span
             style={{
               padding: "2px 8px",
-              borderRadius: 4,
+              borderRadius: 2,
               fontSize: 10.5,
-              background: active ? "#62E2A022" : W.border,
-              color: active ? "#62E2A0" : W.dim,
+              background: active ? "#7CC89A22" : W.border,
+              color: active ? "#7CC89A" : W.dim,
               fontWeight: 600,
               letterSpacing: 0.8,
-              textTransform: "uppercase",
+              textTransform: "uppercase", fontStretch: "118%",
             }}
           >
             {active ? "Watching" : "Idle"}
@@ -600,7 +600,7 @@ function WatchModeCard({ instance }: { instance: string }) {
               background: W.border,
               padding: "6px 8px",
               marginTop: 4,
-              borderRadius: 4,
+              borderRadius: 2,
               fontFamily: wMono,
               fontSize: 11,
               color: W.text2,
@@ -729,7 +729,7 @@ function VettingCell({ vet }: { vet: VetState | undefined }) {
       {vet.rows.map((r) => {
         const abbr =
           r.role === "app-user" ? "U" : r.role === "app-provider" ? "P" : "S";
-        const color = r.error ? W.warn : r.vetted ? "#62E2A0" : W.dim;
+        const color = r.error ? W.warn : r.vetted ? "#7CC89A" : W.dim;
         const title = r.error
           ? `${r.role}: ${r.error}`
           : `${r.role}: ${r.vetted ? "vetted" : "not vetted"}`;
@@ -780,7 +780,7 @@ function InspectDrawer({
         style={{
           background: W.surface,
           border: `1px solid ${W.border}`,
-          borderRadius: 10,
+          borderRadius: 4,
           padding: 32,
           textAlign: "center",
           color: W.dim,
@@ -796,7 +796,7 @@ function InspectDrawer({
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         overflow: "hidden",
       }}
     >
@@ -816,7 +816,7 @@ function InspectDrawer({
         )}
       </header>
       <Section label="Identity">
-        <KV label="pkg-id" value={row.main} mono color="#C4A8F5" />
+        <KV label="pkg-id" value={row.main} mono color="#93A7F0" />
         <KV label="name" value={row.name} mono />
         <KV label="version" value={row.version} mono />
         {row.description && (
@@ -862,7 +862,7 @@ const smallBtn: React.CSSProperties = {
   background: "transparent",
   border: `1px solid ${W.border}`,
   color: W.text2,
-  borderRadius: 5,
+  borderRadius: 2,
   padding: "3px 10px",
   fontSize: 11.5,
   fontFamily: wMono,
@@ -895,7 +895,7 @@ function CompareSelector({
           background: W.border,
           color: W.text,
           border: `1px solid ${W.border}`,
-          borderRadius: 4,
+          borderRadius: 2,
           padding: "3px 6px",
           fontSize: 11.5,
           fontFamily: wMono,
@@ -1010,15 +1010,15 @@ function VettingPanel({
                 border: "none",
                 padding: 0,
                 cursor: pending === r.role ? "wait" : "pointer",
-                color: r.vetted ? "#62E2A0" : W.dim,
+                color: r.vetted ? "#7CC89A" : W.dim,
               }}
             >
               <span
                 style={{
                   width: 22,
                   height: 12,
-                  background: r.vetted ? "#62E2A0" : "#3A4248",
-                  borderRadius: 6,
+                  background: r.vetted ? "#7CC89A" : "#313B52",
+                  borderRadius: 999,
                   position: "relative",
                   flexShrink: 0,
                 }}
@@ -1070,7 +1070,7 @@ function UploadProgress({
         style={{
           height: 6,
           background: W.border,
-          borderRadius: 3,
+          borderRadius: 2,
           overflow: "hidden",
         }}
       >
@@ -1112,7 +1112,7 @@ function UploadResultBanner({
       style={{
         background: `${accent}10`,
         border: `1px solid ${accent}`,
-        borderRadius: 6,
+        borderRadius: 2,
         padding: "8px 12px",
         fontSize: 12,
         color: W.text2,
@@ -1156,7 +1156,7 @@ function ErrorBanner({ msg }: { msg: string }) {
       style={{
         background: `${W.err}10`,
         border: `1px solid ${W.err}`,
-        borderRadius: 6,
+        borderRadius: 2,
         padding: "8px 12px",
         fontSize: 12,
         color: W.err,
@@ -1181,7 +1181,7 @@ function RoleSwitcher({
         gap: 4,
         padding: 3,
         background: W.border,
-        borderRadius: 9,
+        borderRadius: 2,
       }}
     >
       {ROLES.map((r) => {
@@ -1194,7 +1194,7 @@ function RoleSwitcher({
               background: active ? W.surface : "transparent",
               color: active ? W.text : W.dim,
               border: "none",
-              borderRadius: 6,
+              borderRadius: 2,
               padding: "5px 12px",
               fontSize: 12,
               fontFamily: wMono,
@@ -1234,7 +1234,7 @@ function VetToggle({
         padding: "5px 8px",
         background: W.border,
         border: "none",
-        borderRadius: 6,
+        borderRadius: 2,
         fontSize: 12,
         cursor: "pointer",
         width: "100%",
@@ -1246,8 +1246,8 @@ function VetToggle({
         style={{
           width: 24,
           height: 14,
-          background: on ? W.brand : "#3A4248",
-          borderRadius: 7,
+          background: on ? W.brand : "#313B52",
+          borderRadius: 999,
           position: "relative",
           flexShrink: 0,
           transition: "background 120ms",
@@ -1286,7 +1286,7 @@ function FilterBtn({
       style={{
         padding: "4px 10px",
         fontSize: 11.5,
-        borderRadius: 5,
+        borderRadius: 2,
         border: `1px solid ${active ? W.brand : W.border}`,
         background: active ? `${W.brand}1A` : "transparent",
         color: active ? W.brand : W.dim,
@@ -1316,7 +1316,7 @@ function Card({
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         overflow: "hidden",
       }}
     >
@@ -1364,7 +1364,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
         color: W.dim,
         fontSize: 10.5,
         letterSpacing: 1.4,
-        textTransform: "uppercase",
+        textTransform: "uppercase", fontStretch: "118%",
         fontWeight: 600,
       }}
     >
@@ -1426,7 +1426,7 @@ function Status({ children }: { children: React.ReactNode }) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 16,
         color: W.dim,
         fontSize: 13,
@@ -1443,7 +1443,7 @@ function ErrorPanel({ msg }: { msg: string }) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 16,
         color: W.err,
         fontSize: 13,
@@ -1466,7 +1466,7 @@ function EmptyPanel({
       style={{
         background: `${W.warn}10`,
         border: `1px solid ${W.warn}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 20,
       }}
     >

@@ -93,7 +93,7 @@ function BootGate({ status, serverVersion }: BootGateProps) {
   const cardStyle: React.CSSProperties = {
     background: W.surface,
     border: `1px solid ${W.border}`,
-    borderRadius: 12,
+    borderRadius: 8,
     padding: 24,
     maxWidth: 480,
     color: W.text,

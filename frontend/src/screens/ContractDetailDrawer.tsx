@@ -129,7 +129,7 @@ export function ContractDetailDrawer({
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         overflow: "hidden",
         position: "relative",
       }}
@@ -141,10 +141,10 @@ export function ContractDetailDrawer({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Pill color={detail.archived ? "#F08FB5" : W.brand}>
+          <Pill color={detail.archived ? "#7BD2C6" : W.brand}>
             {detail.archived ? "archived" : "active"}
           </Pill>
-          <Pill color="#7CB5F7">
+          <Pill color="#8FA3EE">
             visible to {detail.signatories.length + detail.observers.length}
           </Pill>
           <span style={{ marginLeft: "auto" }} />
@@ -159,7 +159,7 @@ export function ContractDetailDrawer({
               fontFamily: wMono,
               fontSize: 11,
               padding: "2px 6px",
-              borderRadius: 4,
+              borderRadius: 2,
               cursor: "pointer",
             }}
           >
@@ -199,7 +199,7 @@ export function ContractDetailDrawer({
             display: "flex",
             alignItems: "center",
             gap: 6,
-            color: "#C4A8F5",
+            color: "#93A7F0",
             fontFamily: wMono,
             fontSize: 11.5,
             wordBreak: "break-all",
@@ -217,7 +217,7 @@ export function ContractDetailDrawer({
               fontFamily: wMono,
               fontSize: 10,
               padding: "1px 5px",
-              borderRadius: 3,
+              borderRadius: 2,
               cursor: "pointer",
             }}
           >
@@ -240,7 +240,7 @@ export function ContractDetailDrawer({
           <div
             style={{
               marginTop: 6,
-              color: "#F08FB5",
+              color: "#7BD2C6",
               fontSize: 11,
             }}
           >
@@ -359,7 +359,7 @@ function Section({
           color: W.dim,
           fontSize: 10.5,
           letterSpacing: 1.4,
-          textTransform: "uppercase",
+          textTransform: "uppercase", fontStretch: "118%",
           fontWeight: 600,
           marginBottom: 6,
         }}
@@ -385,7 +385,7 @@ function Pill({
         border: `1px solid ${color}44`,
         color,
         padding: "1px 8px",
-        borderRadius: 4,
+        borderRadius: 2,
         fontSize: 10.5,
         fontWeight: 600,
         fontFamily: wMono,
@@ -405,7 +405,7 @@ function Hint({ children }: { children: React.ReactNode }) {
 }
 
 function PartyChip({ party, kind }: { party: string; kind: "sig" | "obs" }) {
-  const color = kind === "sig" ? "#5BD7C5" : "#7CB5F7";
+  const color = kind === "sig" ? "#6480E6" : "#8FA3EE";
   return (
     <div
       style={{
@@ -504,7 +504,7 @@ function primStyle(kind: "text" | "num" | "dim"): React.CSSProperties {
   return {
     fontFamily: wMono,
     fontSize: 11,
-    color: kind === "dim" ? W.dim : kind === "num" ? "#F5BF55" : W.text2,
+    color: kind === "dim" ? W.dim : kind === "num" ? "#DDB25E" : W.text2,
     wordBreak: "break-all",
   };
 }

@@ -96,7 +96,7 @@ export function ContainerHealth({ name }: { name: string }) {
         marginTop: 16,
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 14,
       }}
     >
@@ -131,7 +131,7 @@ export function ContainerHealth({ name }: { name: string }) {
             color: W.err,
             background: `${W.err}10`,
             border: `1px solid ${W.err}`,
-            borderRadius: 6,
+            borderRadius: 2,
             padding: "6px 10px",
             fontSize: 12,
           }}
@@ -147,7 +147,7 @@ export function ContainerHealth({ name }: { name: string }) {
             color: W.err,
             background: `${W.err}10`,
             border: `1px solid ${W.err}`,
-            borderRadius: 6,
+            borderRadius: 2,
             padding: "6px 10px",
             fontSize: 12,
             marginBottom: 8,
@@ -207,19 +207,19 @@ function ContainersTable({
         alignItems: "center",
       }}
     >
-      <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase" }}>
+      <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase", fontStretch: "118%" }}>
         ●
       </div>
-      <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase" }}>
+      <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase", fontStretch: "118%" }}>
         service
       </div>
-      <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase" }}>
+      <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase", fontStretch: "118%" }}>
         state
       </div>
-      <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase" }}>
+      <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase", fontStretch: "118%" }}>
         status
       </div>
-      <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase", textAlign: "right" }}>
+      <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase", fontStretch: "118%", textAlign: "right" }}>
         actions
       </div>
       {sorted.map((c) => {
@@ -268,7 +268,7 @@ function ContainersTable({
                   background: "transparent",
                   color: isRestarting ? W.dim : W.warn,
                   border: `1px solid ${isRestarting ? W.dim : W.warn}`,
-                  borderRadius: 4,
+                  borderRadius: 2,
                   padding: "2px 8px",
                   fontSize: 10.5,
                   fontWeight: 600,
@@ -303,7 +303,7 @@ function SummaryPills({ counts }: { counts: ContainersResponse }) {
             key={label}
             style={{
               padding: "2px 8px",
-              borderRadius: 999,
+              borderRadius: 2,
               border: `1px solid ${color}`,
               background: `${color}1A`,
               color,

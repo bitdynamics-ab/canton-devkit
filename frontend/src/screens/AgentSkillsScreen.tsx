@@ -109,7 +109,7 @@ export function AgentSkillsScreen() {
           gap: 12,
           background: W.surface,
           border: `1px solid ${W.border}`,
-          borderRadius: 10,
+          borderRadius: 4,
           padding: "10px 14px",
           flexWrap: "wrap",
         }}
@@ -153,7 +153,7 @@ export function AgentSkillsScreen() {
                 background: "transparent",
                 color: W.warn,
                 border: `1px solid ${W.warn}`,
-                borderRadius: 6,
+                borderRadius: 2,
                 padding: "3px 9px",
                 fontSize: 11,
                 fontWeight: 600,
@@ -186,7 +186,7 @@ export function AgentSkillsScreen() {
           style={{
             background: W.surface,
             border: `1px solid ${W.border}`,
-            borderRadius: 10,
+            borderRadius: 4,
             overflow: "auto",
           }}
         >
@@ -221,7 +221,7 @@ export function AgentSkillsScreen() {
           style={{
             background: W.surface,
             border: `1px solid ${W.border}`,
-            borderRadius: 10,
+            borderRadius: 4,
             overflow: "auto",
             padding: "16px 20px",
           }}
@@ -259,7 +259,7 @@ function Header() {
             color: W.dim,
             border: `1px solid ${W.border}`,
             padding: "1px 7px",
-            borderRadius: 4,
+            borderRadius: 2,
             fontSize: 10.5,
             fontFamily: wMono,
           }}
@@ -292,9 +292,9 @@ function InstallButton({
       disabled={busy}
       style={{
         background: busy ? W.surface2 : W.brand,
-        color: busy ? W.dim : "#0B0E13",
+        color: busy ? W.dim : "#0B0F1A",
         border: "none",
-        borderRadius: 6,
+        borderRadius: 2,
         padding: "6px 12px",
         fontSize: 12,
         fontWeight: 600,
