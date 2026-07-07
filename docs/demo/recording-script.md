@@ -31,12 +31,12 @@ organized around.
 - [ ] `make build && make frontend` — release-equivalent binary with the real
       Web UI baked in (a binary built without `make frontend` serves a
       placeholder bundle — don't record that by accident).
-- [ ] `canton-devkit version` — sanity check the binary you're demoing.
-- [ ] `canton-devkit localnet doctor` — confirm the recording machine is
+- [ ] `dpm version` — sanity check the binary you're demoing.
+- [ ] `dpm localnet doctor` — confirm the recording machine is
       healthy (Docker daemon, Compose v2, disk, memory, ports) *before* you're
       on camera.
-- [ ] **Pre-warm the image cache**: run `canton-devkit localnet up demo` once,
-      let it fully finish, then `localnet down demo`. The Splice archive and
+- [ ] **Pre-warm the image cache**: run `dpm localnet up demo` once,
+      let it fully finish, then `dpm localnet down demo`. The Splice archive and
       container images are now cached — the *next* `up` you record will be
       close to the ~90s floor instead of a cold multi-minute pull.
 - [ ] Bring up **two** long-lived instances ahead of time so segments that
@@ -88,7 +88,7 @@ or file is put on screen; "verbal" = stated by the presenter, not a visual.
 ### [00:00] Intro — the problem, the artifact
 - Getting a full local Canton network running used to mean cloning Splice,
   decoding docker-compose layers, hunting JWT secrets, copy-pasting party IDs.
-- canton-devkit collapses that into a single binary, shipped two ways —
+- dpm collapses that into a single binary, shipped two ways —
   a standalone Go binary (macOS arm64, Linux amd64, Windows amd64, checksums
   published per release) **and** a native DPM component
   (`dpm install package canton-devkit` → `dpm localnet up demo`, same
@@ -98,7 +98,7 @@ or file is put on screen; "verbal" = stated by the presenter, not a visual.
 
 ### [01:15] Doctor — host preflight
 ```
-canton-devkit localnet doctor
+dpm localnet doctor
 ```
 - This is the same preflight `up` runs automatically: Docker CLI present,
   daemon reachable, Compose v2 (not v1), required ports free, disk space,
@@ -108,7 +108,7 @@ canton-devkit localnet doctor
 
 ### [02:00] Up — one command
 ```
-canton-devkit localnet up demo
+dpm localnet up demo
 ```
 *(cut/speed-ramp over the boot — narrate over the pre-warmed run)*
 - One command brings up Canton (participant + synchronizer), the Splice
@@ -118,11 +118,11 @@ canton-devkit localnet up demo
 
 ### [03:00] Status, list, env, creds, logs
 ```
-canton-devkit localnet status demo
-canton-devkit localnet list
-eval "$(canton-devkit localnet env demo)"
-canton-devkit localnet creds demo
-canton-devkit localnet logs demo --tail 15
+dpm localnet status demo
+dpm localnet list
+eval "$(dpm localnet env demo)"
+dpm localnet creds demo
+dpm localnet logs demo --tail 15
 ```
 - `status` — health + ports at a glance.
 - `list` — every instance this machine knows about.
@@ -133,8 +133,8 @@ canton-devkit localnet logs demo --tail 15
 
 ### [04:15] JSON output + deterministic exit codes → headless automation
 ```
-canton-devkit localnet status demo --format json
-canton-devkit localnet up bogus-name --port-base 1 ; echo "exit code: $?"
+dpm localnet status demo --format json
+dpm localnet up bogus-name --port-base 1 ; echo "exit code: $?"
 ```
 - Every inspection command has a stable `--format json` output with a
   `schema_version` — built for scripting, not just humans.
@@ -144,7 +144,7 @@ canton-devkit localnet up bogus-name --port-base 1 ; echo "exit code: $?"
 
 ### [05:15] Version pinning + compatibility matrix
 ```
-canton-devkit localnet versions
+dpm localnet versions
 ```
 - Curated Splice version catalogue; call out the STATUS column — `supported`
   vs `drifted` (a security/currency signal) vs `available`.
@@ -155,8 +155,8 @@ canton-devkit localnet versions
 
 ### [06:15] Two isolated instances, explicit ports
 ```
-canton-devkit localnet up demo-b --port-base 31000
-canton-devkit localnet list
+dpm localnet up demo-b --port-base 31000
+dpm localnet list
 ```
 - Each instance gets its own Docker Compose project name, network, and
   explicit non-conflicting port window — no manual bookkeeping.
@@ -164,9 +164,9 @@ canton-devkit localnet list
 
 ### [07:30] Snapshot & restore
 ```
-canton-devkit localnet snapshot demo --to demo.tgz
-canton-devkit localnet clean --name demo
-canton-devkit localnet restore demo --from demo.tgz
+dpm localnet snapshot demo --to demo.tgz
+dpm localnet clean --name demo
+dpm localnet restore demo --from demo.tgz
 ```
 - Snapshot pauses the node, dumps the database, and packages state into one
   tarball — application-consistent, not just crash-consistent.
@@ -183,8 +183,8 @@ canton-devkit localnet restore demo --from demo.tgz
 
 ### [09:15] Close
 ```
-canton-devkit localnet down demo
-canton-devkit localnet down demo-b
+dpm localnet down demo
+dpm localnet down demo-b
 ```
 - Recap: one binary (standalone or DPM component), one command up,
   deterministic exit codes, snapshot/restore, named multi-instance
@@ -228,7 +228,7 @@ are already running from the pre-flight checklist.
 
 ### [00:30] Web UI walkthrough
 ```
-canton-devkit localnet ui
+dpm localnet ui
 ```
 - Loopback-only by default (security: refuses non-loopback bind without an
   explicit flag).
@@ -240,10 +240,10 @@ canton-devkit localnet ui
 
 ### [02:30] Automation conveniences
 ```
-canton-devkit localnet status demo --format json
-canton-devkit localnet env demo --format json
-canton-devkit localnet list --format json
-canton-devkit localnet doctor --format json
+dpm localnet status demo --format json
+dpm localnet env demo --format json
+dpm localnet list --format json
+dpm localnet doctor --format json
 ```
 - Machine-readable status, `env` export for app/test config, named-instance
   discovery via `list`, and the enriched `doctor` output — all `--format
@@ -258,8 +258,8 @@ canton-devkit localnet doctor --format json
 
 ### [04:30] Observability — Prometheus & Grafana
 ```
-canton-devkit localnet observability enable demo --prometheus --grafana
-canton-devkit localnet metrics demo
+dpm localnet observability enable demo --prometheus --grafana
+dpm localnet metrics demo
 ```
 - Sidecars toggle on a *running* instance, no restart needed; Prometheus and
   Grafana are independently enable/disable-able, with lightweight defaults
@@ -274,10 +274,10 @@ canton-devkit localnet metrics demo
 
 ### [07:00] DAR management
 ```
-canton-devkit localnet dar list demo
-canton-devkit localnet dar info <dar-path> --deep
-canton-devkit localnet dar upload <dar-path> --instance demo --role app-provider
-canton-devkit localnet dar diff <old.dar> <new.dar>
+dpm localnet dar list demo
+dpm localnet dar info <dar-path> --deep
+dpm localnet dar upload <dar-path> --instance demo --role app-provider
+dpm localnet dar diff <old.dar> <new.dar>
 ```
 - `list --vetting` — which packages are vetted, per participant
   (multi-participant support).
@@ -294,10 +294,10 @@ canton-devkit localnet dar diff <old.dar> <new.dar>
 
 ### [10:00] Contracts & transactions
 ```
-canton-devkit localnet contracts ls demo
-canton-devkit localnet contracts watch demo
-canton-devkit localnet tx ls demo --limit 10
-canton-devkit localnet tx replay demo --id <updateId>
+dpm localnet contracts ls demo
+dpm localnet contracts watch demo
+dpm localnet tx ls demo --limit 10
+dpm localnet tx replay demo --id <updateId>
 ```
 - `contracts ls` — active contract set snapshot at ledger end (Ledger API v2).
 - `contracts watch` — live tail of create/archive events.
@@ -311,8 +311,8 @@ canton-devkit localnet tx replay demo --id <updateId>
 ### [12:15] Token flows (bonus: CIP-0112 / V2, not a #387 line item but shares the ledger tooling)
 Switch to the `demo-tokens` instance for this segment.
 ```
-canton-devkit localnet token demo --instance demo-tokens --symbol DEMO --supply 1000000 --decimals 6 --seed-holder
-canton-devkit localnet token balances --instance demo-tokens
+dpm localnet token demo --instance demo-tokens --symbol DEMO --supply 1000000 --decimals 6 --seed-holder
+dpm localnet token balances --instance demo-tokens
 ```
 - One command allocates an issuer, creates the instrument, mints, and funds
   a holder. Keep this brief — it's not an #387 deliverable, just a natural
@@ -320,8 +320,8 @@ canton-devkit localnet token balances --instance demo-tokens
 
 ### [13:15] AI agent skill documents
 ```
-canton-devkit localnet skills list
-canton-devkit localnet skills install --target claude
+dpm localnet skills list
+dpm localnet skills install --target claude
 ```
 - Six bundled skill docs covering lifecycle, DAR upload, hot-deploy, contract
   inspection, token flows, and CI usage — safe, scoped workflows an AI coding
@@ -331,8 +331,8 @@ canton-devkit localnet skills install --target claude
 
 ### [14:45] Close
 ```
-canton-devkit localnet down demo
-canton-devkit localnet down demo-tokens
+dpm localnet down demo
+dpm localnet down demo-tokens
 ```
 - Recap against the issue: Web UI at full CLI parity, richer automation
   conveniences, an example CI workflow, built-in observability with Canton
