@@ -328,6 +328,7 @@ types.DARVettingToggleResponse {
 }
 
 types.Endpoint {
+  key string
   label string
   url string
   port int

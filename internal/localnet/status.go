@@ -171,9 +171,11 @@ func endpointsFromPorts(ports map[string]int) []types.Endpoint {
 	}
 	type meta struct{ label, scheme string }
 	known := map[string]meta{
-		"app_user_ui":         {"Wallet · app-user", "http"},
-		"app_provider_ui":     {"Wallet · app-provider", "http"},
-		"sv_ui":               {"Scan UI · sv", "http"},
+		"app_user_ui":     {"Wallet · app-user", "http"},
+		"app_provider_ui": {"Wallet · app-provider", "http"},
+		// The bare sv_ui port serves the sv wallet; Scan UI sits
+		// behind the scan.localhost vhost on the same port.
+		"sv_ui":               {"Wallet · sv", "http"},
 		"swagger_ui":          {"Swagger · JSON API", "http"},
 		"postgres":            {"Postgres", "postgresql"},
 		"app_user_ledger":     {"Ledger API · app-user", "grpc"},
@@ -197,6 +199,7 @@ func endpointsFromPorts(ports map[string]int) []types.Endpoint {
 			m = meta{label: k, scheme: "tcp"}
 		}
 		out = append(out, types.Endpoint{
+			Key:    k,
 			Label:  m.label,
 			Port:   p,
 			Scheme: m.scheme,
