@@ -360,11 +360,39 @@ func TestEndpointsFromPorts(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("got %d endpoints, want 2", len(got))
 	}
-	if got[0].Label != "Wallet · app-user" || got[0].URL != "http://localhost:4485" {
+	if got[0].Key != "app_user_ui" || got[0].Label != "Wallet · app-user" || got[0].URL != "http://localhost:4485" {
 		t.Errorf("known endpoint mapping wrong: %+v", got[0])
 	}
-	if got[1].Label != "weird_service" || got[1].Scheme != "tcp" {
-		t.Errorf("unknown endpoint should fall back to label+tcp: %+v", got[1])
+	if got[1].Key != "weird_service" || got[1].Label != "weird_service" || got[1].Scheme != "tcp" {
+		t.Errorf("unknown endpoint should fall back to key+label+tcp: %+v", got[1])
+	}
+}
+
+// Pins the per-role wallet endpoint keys and labels; the Wallet
+// screen resolves its iframe URL by key.
+func TestEndpointsFromPorts_WalletKeysStablePerRole(t *testing.T) {
+	got := endpointsFromPorts(map[string]int{
+		"app_user_ui":     4485,
+		"app_provider_ui": 4486,
+		"sv_ui":           4487,
+	})
+	byKey := map[string]types.Endpoint{}
+	for _, e := range got {
+		byKey[e.Key] = e
+	}
+	for key, label := range map[string]string{
+		"app_user_ui":     "Wallet · app-user",
+		"app_provider_ui": "Wallet · app-provider",
+		"sv_ui":           "Wallet · sv",
+	} {
+		e, ok := byKey[key]
+		if !ok {
+			t.Errorf("no endpoint with key %q: %+v", key, got)
+			continue
+		}
+		if e.Label != label {
+			t.Errorf("key %q label = %q, want %q", key, e.Label, label)
+		}
 	}
 }
 

@@ -28,13 +28,20 @@ const LOGIN_USER_FOR: Record<Role, string> = {
   sv: "sv",
 };
 
-// walletEndpointFor matches the backend's Endpoint.Label format,
-// "Wallet · <role>", and returns the whole endpoint so callers can
-// read both the URL and the backend's reachability verdict.
+// Per-role wallet endpoint keys — the logical port names from
+// state.json. Endpoints are matched by key; labels are display-only.
+const WALLET_ENDPOINT_KEY: Record<Role, string> = {
+  "app-user": "app_user_ui",
+  "app-provider": "app_provider_ui",
+  sv: "sv_ui",
+};
+
+// walletEndpointFor returns the whole endpoint so callers can read
+// both the URL and the backend's reachability verdict.
 function walletEndpointFor(role: Role, endpoints: Instance["endpoints"]) {
   if (!endpoints) return null;
-  const want = `Wallet · ${role}`;
-  return endpoints.find((e) => e.label === want) ?? null;
+  const want = WALLET_ENDPOINT_KEY[role];
+  return endpoints.find((e) => e.key === want) ?? null;
 }
 
 export function WalletScreen() {
