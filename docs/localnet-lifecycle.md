@@ -3,7 +3,7 @@
 Canton DevKit is a single-binary developer tool for running and operating a
 Canton **LocalNet** — a full local Canton Network (sequencers, mediators,
 participants, Splice apps) in Docker. It gives you a CLI
-(`canton-devkit localnet …`, or `dpm localnet …` under DPM) and an
+(`canton-devkit localnet <command>`, or `dpm localnet <command>` under DPM) and an
 embedded Web UI for the same operations.
 
 This guide walks the full lifecycle: bring an instance up, inspect it,
@@ -29,11 +29,11 @@ eval "$(canton-devkit localnet env --name demo)"
 # 5. Upload a DAR
 canton-devkit localnet dar upload ./my-app.dar --instance demo
 
-# 6. Watch live contracts. The participant gRPC endpoint isn't
-#    host-published by default, so pass --endpoint host:port
-#    (auto-discovery from --name is not yet supported). Find the
-#    port under "participant_ledger_app-user" in `status` output.
-canton-devkit localnet contracts watch --name demo --endpoint localhost:<ledger-port>
+# 6. Watch live contracts. DevKit auto-discovers the participant
+#    endpoint and JWT from the registry (--endpoint host:port only
+#    overrides it; the captured port is shown under
+#    "participant_ledger_app-user" in `status` output).
+canton-devkit localnet contracts watch --name demo
 
 # 7. Tear it down
 canton-devkit localnet down --name demo

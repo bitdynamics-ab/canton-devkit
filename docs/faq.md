@@ -9,7 +9,7 @@ Common questions about canton-devkit. See also
 A single-binary developer tool for running and operating a Canton
 **LocalNet** — a full local Canton Network (sequencers, mediators,
 participants, Splice apps) in Docker. It gives you a CLI
-(`canton-devkit localnet …`, or `dpm localnet …` under DPM) and an
+(`canton-devkit localnet <command>`, or `dpm localnet <command>` under DPM) and an
 embedded Web UI for the same operations.
 
 **CLI or Web UI — which should I use?**
@@ -57,7 +57,8 @@ which requires the alpha track below. See [tokens.md](tokens.md).
 V2 runs on a special upstream Splice build (alpha protocol 35) on the
 `-dev` image repo. `--profile tokens-v2` injects the Canton config that
 enables alpha-version-support + protocol 35. Without it the stack can't
-run the V2 protocol; `doctor` warns.
+run the V2 protocol; `up` warns loudly if you select the alpha version
+without the profile.
 
 **Why can't I mint or burn Amulet?**
 Amulet (Canton Coin) has no developer-facing mint/burn surface — those
@@ -97,8 +98,9 @@ Yes. Each `--name` gets isolated Docker resources and a port block.
 is safe; it re-downloads on next `up`.
 
 **Snapshot / restore — is it crash-consistent?**
-Snapshots capture Docker volumes + registry state. They are **not**
-guaranteed application-consistent for a *running* instance — see the
-warning in [troubleshooting.md](troubleshooting.md#snapshot-consistency)
-and `localnet snapshot --help`. Stop the instance for a fully consistent
-snapshot.
+Snapshots capture a logical PostgreSQL dump (`pg_dumpall`) of the
+instance's database plus its registry state. The instance must be
+**running** — `pg_dumpall` reads from the live Postgres. DevKit pauses
+the node containers for the duration of the dump, so the snapshot is
+application-consistent, not merely crash-consistent. See
+`localnet snapshot --help`.

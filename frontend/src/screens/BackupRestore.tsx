@@ -126,7 +126,7 @@ export function BackupRestore({ instanceName }: Props) {
           Backup &amp; restore
         </div>
         <span style={{ color: W.dim, fontSize: 11.5 }}>
-          tar archive of docker volumes + registry state
+          logical database dump + registry state
         </span>
       </header>
 

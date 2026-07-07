@@ -4,11 +4,12 @@ Canton DevKit is a single Go binary that orchestrates the Splice
 LocalNet Docker stack. It ships two ways:
 
 1. **DPM component** (primary) — install through the Daml Package
-   Manager and invoke as `dpm localnet …`.
+   Manager and invoke as `dpm localnet <command>`.
 2. **Standalone binary** (`canton-devkit`) — a self-contained
    executable for users who don't run DPM (CI, DevOps, workshop
    facilitators), shipped as release archives plus APT convenience
-   packages for Debian/Ubuntu hosts. Invoke as `canton-devkit localnet …`.
+   packages for Debian/Ubuntu hosts. Invoke as
+   `canton-devkit localnet <command>`.
 
 Both paths ship the **same binary** and expose the **same command
 tree**. Throughout the docs, `dpm localnet <cmd>` and
@@ -62,9 +63,9 @@ dpm localnet --help          # confirms the component loaded
 ```
 
 DPM registers a single top-level `localnet` command; every DevKit
-subcommand (`up`, `down`, `status`, `dar …`, `contracts …`, `token …`,
-`metrics`, `doctor`, …) lives under it. This keeps the DPM surface
-minimal and conflict-free.
+subcommand (`up`, `down`, `status`, `dar`, `contracts`, `tx`, `token`,
+`metrics`, `doctor`, and the rest) lives under it. This keeps the DPM
+surface minimal and conflict-free.
 
 ## 3. Install — standalone binary
 
@@ -134,7 +135,7 @@ apt policy canton-devkit
 Install a specific version:
 
 ```bash
-sudo apt install canton-devkit=0.7.0
+sudo apt install canton-devkit=0.12.2   # pick a version from `apt list -a canton-devkit`
 ```
 
 The APT repo is currently unsigned and therefore uses `trusted=yes`;
@@ -146,7 +147,7 @@ for what is sent and how to opt out before installing.
 Direct `.deb` install also works:
 
 ```bash
-VERSION=v0.7
+VERSION=v0.12.2   # replace with the latest release tag
 DEB_VERSION="${VERSION#v}"
 ASSET="canton-devkit_${DEB_VERSION}_amd64.deb"
 base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}"

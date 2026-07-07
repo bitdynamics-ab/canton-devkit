@@ -55,7 +55,8 @@ Then point a CLI at the collector:
 ```bash
 export CANTON_DEVKIT_TELEMETRY_ENDPOINT=http://<this-host>:8080/v1/counters
 export DPM_TELEMETRY=on
-dpm localnet list                          # records + ships counters
+dpm localnet list                          # records counters locally
+dpm telemetry flush                        # ship them to the collector now (normally only completed days upload)
 ```
 
 Open Metabase at `http://<this-host>:3000`, finish its first-run signup,
@@ -78,8 +79,9 @@ The override hardens the dev stack:
 - Binds every published port to `127.0.0.1` only (the host reverse proxy
   is the sole public entrypoint) and stops publishing Postgres to the
   host entirely.
-- Turns on the in-process rate limiter, keyed off `X-Forwarded-For` (set
-  by the front nginx).
+- Configures the always-on in-process rate limiter for a proxied
+  deployment: per-IP keying reads `X-Forwarded-For` (set by the front
+  nginx) and the `RATE_*` knobs become tunable.
 - Exposes the collector on `127.0.0.1:${COLLECTOR_PORT:-8090}` so it can
   sit beside other services on a shared host.
 
@@ -97,8 +99,9 @@ Key production requirements covered in
 
 ## GitHub adoption signals
 
-Telemetry is zero-PII, so it **can't count unique installs**. Install and
-visibility signals come from GitHub instead:
-[`cmd/github-stats`](https://github.com/bitdynamics-ab/canton-devkit/tree/main/telemetry-collector/cmd)
+Usage telemetry counts distinct installs only via an anonymous random
+token (see the [Telemetry reference](../../reference/telemetry/)).
+GitHub adds complementary adoption signals:
+[`cmd/github-stats`](https://github.com/bitdynamics-ab/canton-devkit/tree/main/telemetry-collector/cmd/github-stats)
 snapshots release-asset download counts and repo stars/forks/watchers
 into the same Postgres, alongside the counter data.

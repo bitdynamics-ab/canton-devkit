@@ -44,7 +44,9 @@ the canonical name in code and docs.
   "commit": "578b7822d62947763a48334d556aefebc7ffacec",
   "content_sha": "db1e1336dc4e33abe7011a0df29e5becd141d11c84cdf42849e48bf2106066af",
   "size": 137576613,
-  "major": "0.6"
+  "major": "0.6",
+  "min_memory_bytes": 8000000000,
+  "recommended_memory_bytes": 12000000000
 }
 ```
 
@@ -55,8 +57,11 @@ the canonical name in code and docs.
 | `content_sha` | `scripts/compute-tree-sha.sh` | SHA-256 over the extracted `cluster/compose/localnet/` subtree (sorted by path). Stable across upstream gzip-envelope rewrites; this is the authoritative integrity check at fetch time. |
 | `size` | byte count of the source-tarball | Informational; used to print a hint before download and to size the in-flight body cap. |
 | `major` | first two segments of `tag` (or set manually for branch tags) | Routes to the per-major Splice adapter for that release line. |
+| `min_memory_bytes` | empirically derived per release line (see `versions.go`) | Minimum Docker daemon memory the version needs to start cleanly; the pre-flight memory gate refuses to `up` below it. `0` / absent inherits the strictest catalogued floor for the same major line; the global 4 GB floor applies only when the major has no catalogued entry at all. |
+| `recommended_memory_bytes` | empirically derived per release line (see `versions.go`) | The value at which the version runs without resource warnings; surfaced as the "raise Docker memory to ≥ N" remediation hint when the minimum passes but this threshold is not met. |
 | `channel` *(optional)* | catalogue maintainer | `""` / `"stable"` → production-ready; `"alpha"` → opt-in pre-release (Token Standard V2 snapshot etc.). `up` prints a one-line warning when an alpha entry is selected. |
 | `image_repo` *(optional)* | catalogue maintainer | Overrides the default Docker image repository. Defaults to `ghcr.io/digital-asset/decentralized-canton-sync/docker`. Set to `ghcr.io/digital-asset/decentralized-canton-sync-dev/docker` for the V2 alpha track. The v06 adapter forwards this as the `IMAGE_REPO` compose env. |
+| `image_tag` *(optional)* | catalogue maintainer | Overrides the Docker image tag. Empty falls back to `tag`, which is right for stable releases; the branch-backed `token-standard-v2` alpha entry sets it explicitly to a `0.6.5-snapshot` tag. The adapter forwards it as the `IMAGE_TAG` compose env. |
 
 ### The alpha channel
 
