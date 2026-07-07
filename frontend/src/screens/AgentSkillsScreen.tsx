@@ -6,6 +6,8 @@ import {
   type Skill,
 } from "../api";
 import { W, wMono } from "../tokens";
+import { Button } from "../components/Button";
+import { IcAlert, IcCheck, IcX } from "../components/icons";
 
 // AgentSkillsScreen browses the bundled AI-agent skill docs (served by
 // /api/skills — the same embedded markdown the CLI `localnet skills`
@@ -109,7 +111,7 @@ export function AgentSkillsScreen() {
           gap: 12,
           background: W.surface,
           border: `1px solid ${W.border}`,
-          borderRadius: 10,
+          borderRadius: 4,
           padding: "10px 14px",
           flexWrap: "wrap",
         }}
@@ -128,8 +130,17 @@ export function AgentSkillsScreen() {
           onClick={() => doInstall("codex")}
         />
         {install.kind === "done" && (
-          <span style={{ color: W.ok, fontSize: 12, fontFamily: wMono }}>
-            ✓ {install.count} installed → {install.dir}
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              color: W.ok,
+              fontSize: 12,
+              fontFamily: wMono,
+            }}
+          >
+            <IcCheck size={12} /> {install.count} installed → {install.dir}
           </span>
         )}
         {install.kind === "done" && install.skipped.length > 0 && (
@@ -144,30 +155,28 @@ export function AgentSkillsScreen() {
               fontFamily: wMono,
             }}
           >
-            ⚠ {install.skipped.length} preserved (locally modified):{" "}
-            {install.skipped.join(", ")}
-            <button
-              type="button"
+            <IcAlert size={12} /> {install.skipped.length} preserved (locally
+            modified): {install.skipped.join(", ")}
+            <Button
+              variant="danger"
               onClick={() => doInstall(install.target, true)}
-              style={{
-                background: "transparent",
-                color: W.warn,
-                border: `1px solid ${W.warn}`,
-                borderRadius: 6,
-                padding: "3px 9px",
-                fontSize: 11,
-                fontWeight: 600,
-                fontFamily: wMono,
-                cursor: "pointer",
-              }}
             >
               Overwrite
-            </button>
+            </Button>
           </span>
         )}
         {install.kind === "err" && (
-          <span role="alert" style={{ color: W.err, fontSize: 12 }}>
-            ✗ {install.message}
+          <span
+            role="alert"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              color: W.err,
+              fontSize: 12,
+            }}
+          >
+            <IcX size={12} /> {install.message}
           </span>
         )}
       </div>
@@ -186,7 +195,7 @@ export function AgentSkillsScreen() {
           style={{
             background: W.surface,
             border: `1px solid ${W.border}`,
-            borderRadius: 10,
+            borderRadius: 4,
             overflow: "auto",
           }}
         >
@@ -221,7 +230,7 @@ export function AgentSkillsScreen() {
           style={{
             background: W.surface,
             border: `1px solid ${W.border}`,
-            borderRadius: 10,
+            borderRadius: 4,
             overflow: "auto",
             padding: "16px 20px",
           }}
@@ -259,7 +268,7 @@ function Header() {
             color: W.dim,
             border: `1px solid ${W.border}`,
             padding: "1px 7px",
-            borderRadius: 4,
+            borderRadius: 2,
             fontSize: 10.5,
             fontFamily: wMono,
           }}
@@ -286,23 +295,13 @@ function InstallButton({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="secondary"
       onClick={onClick}
       disabled={busy}
-      style={{
-        background: busy ? W.surface2 : W.brand,
-        color: busy ? W.dim : "#0B0E13",
-        border: "none",
-        borderRadius: 6,
-        padding: "6px 12px",
-        fontSize: 12,
-        fontWeight: 600,
-        fontFamily: wMono,
-        cursor: busy ? "wait" : "pointer",
-      }}
+      style={{ fontFamily: wMono }}
     >
       {busy ? "Installing…" : label}
-    </button>
+    </Button>
   );
 }

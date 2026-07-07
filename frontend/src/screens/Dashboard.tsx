@@ -6,7 +6,9 @@ import {
   type TransactionEvent,
   type TransactionRow,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, tableCaps } from "../tokens";
+import { Button } from "../components/Button";
+import { Dot, IcPlus, IcRefresh } from "../components/icons";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { ContainerHealth } from "./ContainerHealth";
 import { CreateLocalNetModal } from "./CreateLocalNetModal";
@@ -38,21 +40,15 @@ export function Dashboard() {
         <h1 style={{ fontSize: 20, fontWeight: 600, marginTop: 0, marginBottom: 0 }}>
           LocalNet instances
         </h1>
-        <button
+        <Button
+          // The empty-state hero CTA is the primary while the list is
+          // empty — never two cobalt fills for the same action at once.
+          variant={sel.instances.length === 0 ? "secondary" : "primary"}
+          icon={<IcPlus />}
           onClick={() => setCreateOpen(true)}
-          style={{
-            background: W.brand,
-            color: "#082018",
-            border: `1px solid ${W.brand}`,
-            borderRadius: 6,
-            padding: "6px 14px",
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
         >
-          + New instance
-        </button>
+          New instance
+        </Button>
       </header>
 
       <CreateLocalNetModal
@@ -84,7 +80,7 @@ export function Dashboard() {
                 background: `${W.dim}1A`,
                 border: `1px solid ${W.dim}`,
                 color: W.dim,
-                borderRadius: 8,
+                borderRadius: 4,
                 padding: "6px 12px",
                 marginBottom: 12,
                 fontSize: 12,
@@ -99,7 +95,7 @@ export function Dashboard() {
                 background: `${W.warn}1A`,
                 border: `1px solid ${W.warn}`,
                 color: W.warn,
-                borderRadius: 8,
+                borderRadius: 4,
                 padding: "8px 12px",
                 marginBottom: 16,
                 fontSize: 13,
@@ -160,7 +156,7 @@ function InstanceTable({ instances, selected, onSelect }: InstanceTableProps) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 8,
+        borderRadius: 4,
         overflow: "hidden",
       }}
     >
@@ -215,10 +211,9 @@ function InstanceTable({ instances, selected, onSelect }: InstanceTableProps) {
 }
 
 const th: React.CSSProperties = {
+  ...tableCaps,
   padding: "8px 12px",
-  fontWeight: 500,
   fontSize: 11,
-  letterSpacing: 0.6,
 };
 
 const td: React.CSSProperties = {
@@ -227,25 +222,26 @@ const td: React.CSSProperties = {
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const tone = (() => {
+  const color = (() => {
     switch (status) {
       case "running":
-        return { color: W.ok, glyph: "●" };
+        return W.ok;
       case "creating":
       case "stopping":
       case "partial":
-        return { color: W.warn, glyph: "◐" };
+        return W.warn;
       case "failed":
-        return { color: W.err, glyph: "⊗" };
+        return W.err;
       case "stopped":
-        return { color: W.dim, glyph: "○" };
       default:
-        return { color: W.dim, glyph: "·" };
+        return W.dim;
     }
   })();
   return (
-    <span style={{ color: tone.color, display: "inline-flex", gap: 6 }}>
-      <span>{tone.glyph}</span>
+    <span
+      style={{ color, display: "inline-flex", alignItems: "center", gap: 6 }}
+    >
+      <Dot color={color} />
       <span>{status}</span>
     </span>
   );
@@ -257,7 +253,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 8,
+        borderRadius: 4,
         padding: 32,
         color: W.dim,
         textAlign: "center",
@@ -266,22 +262,15 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       <p style={{ marginTop: 0, fontSize: 14, color: W.text }}>
         No LocalNet instances yet.
       </p>
-      <button
+      <Button
+        variant="primary"
+        size="md"
+        icon={<IcPlus />}
         onClick={onCreate}
-        style={{
-          background: W.brand,
-          color: "#082018",
-          border: `1px solid ${W.brand}`,
-          borderRadius: 6,
-          padding: "8px 18px",
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: "pointer",
-          margin: "8px 0 12px",
-        }}
+        style={{ margin: "8px 0 12px" }}
       >
-        + Create your first instance
-      </button>
+        Create your first instance
+      </Button>
       <p style={{ marginBottom: 0, fontSize: 11.5 }}>
         Or run{" "}
         <code style={{ color: W.text2 }}>dpm localnet up --name demo</code>{" "}
@@ -297,7 +286,7 @@ function ErrorPanel({ error }: { error: string }) {
       style={{
         background: `${W.err}1A`,
         border: `1px solid ${W.err}`,
-        borderRadius: 8,
+        borderRadius: 4,
         padding: 16,
         color: W.err,
       }}
@@ -376,7 +365,7 @@ function RecentActivity({ name }: { name: string }) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 16,
         marginBottom: 16,
       }}
@@ -386,22 +375,15 @@ function RecentActivity({ name }: { name: string }) {
         <span style={{ color: W.dim, fontSize: 12 }}>
           ledger events · as seen by the app-provider participant
         </span>
-        <button
+        <Button
+          variant="secondary"
+          icon={<IcRefresh />}
           onClick={() => setTick((t) => t + 1)}
           title="Refresh"
-          style={{
-            marginLeft: "auto",
-            background: "transparent",
-            border: `1px solid ${W.border}`,
-            color: W.text2,
-            borderRadius: 6,
-            padding: "3px 10px",
-            fontSize: 12,
-            cursor: "pointer",
-          }}
+          style={{ marginLeft: "auto" }}
         >
-          ↻ Refresh
-        </button>
+          Refresh
+        </Button>
       </header>
 
       {state.kind === "loading" && (
@@ -445,10 +427,9 @@ function RecentActivity({ name }: { name: string }) {
                     style={{
                       color: kindColor[e.kind],
                       border: `1px solid ${kindColor[e.kind]}`,
-                      borderRadius: 4,
+                      borderRadius: 2,
                       padding: "1px 6px",
                       fontSize: 11,
-                      textTransform: "uppercase",
                     }}
                   >
                     {e.kind}
@@ -481,5 +462,5 @@ function shortTemplate(t?: string): string {
   return parts.length >= 3 ? `${parts[parts.length - 2]}:${parts[parts.length - 1]}` : t;
 }
 
-const actTh: React.CSSProperties = { padding: "6px 10px 6px 0", fontWeight: 500, fontSize: 11, letterSpacing: 0.4 };
+const actTh: React.CSSProperties = { ...tableCaps, padding: "6px 10px 6px 0", fontSize: 11 };
 const actTd: React.CSSProperties = { padding: "8px 10px 8px 0", verticalAlign: "middle" };

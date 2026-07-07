@@ -7,18 +7,22 @@ import {
   type TxReplayResponse,
 } from "../api";
 import { W, wMono } from "../tokens";
+import { Button } from "../components/Button";
+import { IcX } from "../components/icons";
 
 // TxReplayDrawer — the Web UI counterpart of `dpm localnet tx replay
-// --id <id>`. Fetches one transaction with the LEDGER_EFFECTS shape
+// --id <id>`, rendered as a fixed right-side overlay below the topbar
+// so the transactions table keeps its full width.
+// Fetches one transaction with the LEDGER_EFFECTS shape
 // (exercised choices, not just the ACS delta) projected through a
 // party set and renders the event tree. The party selector answers
 // "what did party P see in this transaction?" — the same id queried
 // as different parties returns different event sets.
 
 const EVENT_COLOR: Record<TxReplayEvent["kind"], string> = {
-  created: "#62E2A0",
-  archived: "#F08FB5",
-  exercised: "#7CB5F7",
+  created: "#7CC89A",
+  archived: "#7BD2C6",
+  exercised: "#8FA3EE",
 };
 
 export function TxReplayDrawer({
@@ -86,11 +90,23 @@ export function TxReplayDrawer({
 
   return (
     <div
+      aria-label="Transaction replay"
       style={{
-        background: W.surface,
-        border: `1px solid ${W.border}`,
-        borderRadius: 10,
-        overflow: "hidden",
+        position: "fixed",
+        top: 52,
+        right: 0,
+        bottom: 0,
+        width: "min(480px, 92vw)",
+        // Raised surface — a fixed overlay sits above the page, and
+        // surface-on-page was reading dark-on-dark.
+        background: W.surface2,
+        borderLeft: `1px solid ${W.borderHi}`,
+        boxShadow:
+          "0 0 0 1px rgba(0,0,0,0.2), -16px 0 40px -12px rgba(0,0,0,0.5)",
+        // Below the CommandPalette (zIndex 100) but above page content.
+        zIndex: 40,
+        overscrollBehavior: "contain",
+        overflowY: "auto",
       }}
     >
       <header
@@ -108,7 +124,7 @@ export function TxReplayDrawer({
           </div>
           <code
             style={{
-              color: "#C4A8F5",
+              color: "#93A7F0",
               fontFamily: wMono,
               fontSize: 11,
               wordBreak: "break-all",
@@ -118,21 +134,13 @@ export function TxReplayDrawer({
             {updateId}
           </code>
         </div>
-        <button
-          onClick={onClose}
+        <Button
+          variant="ghost"
+          icon={<IcX />}
           aria-label="Close replay"
-          style={{
-            background: "transparent",
-            border: `1px solid ${W.border}`,
-            color: W.dim,
-            borderRadius: 6,
-            padding: "3px 8px",
-            cursor: "pointer",
-            fontSize: 12,
-          }}
-        >
-          esc
-        </button>
+          title="Close (esc)"
+          onClick={onClose}
+        />
       </header>
 
       <div
@@ -156,7 +164,7 @@ export function TxReplayDrawer({
             fontFamily: wMono,
             fontSize: 11.5,
             padding: "4px 8px",
-            borderRadius: 6,
+            borderRadius: 2,
             cursor: "pointer",
             maxWidth: 240,
           }}
@@ -176,7 +184,7 @@ export function TxReplayDrawer({
         </div>
       )}
       {state.kind === "err" && (
-        <div style={{ padding: 16, color: "#F08FB5", fontSize: 13 }}>
+        <div style={{ padding: 16, color: "#7BD2C6", fontSize: 13 }}>
           {state.error}
         </div>
       )}
@@ -208,7 +216,7 @@ export function TxReplayDrawer({
             {state.data.event_count === 1 ? "event" : "events"} visible
             {state.data.workflow_id ? ` · ${state.data.workflow_id}` : ""}
           </div>
-          <div style={{ padding: "10px 16px", maxHeight: "55vh", overflowY: "auto" }}>
+          <div style={{ padding: "10px 16px" }}>
             {state.data.events.length === 0 ? (
               <div style={{ color: W.dim, fontSize: 12.5 }}>
                 No events in this transaction are visible to the selected
@@ -277,7 +285,7 @@ function ReplayNode({ ev, last }: { ev: TxReplayEvent; last: boolean }) {
       <code
         style={{
           fontFamily: wMono,
-          color: "#C4A8F5",
+          color: "#93A7F0",
           fontSize: 10.5,
           marginLeft: "auto",
         }}

@@ -11,6 +11,11 @@ import {
   type Role,
 } from "../api";
 import { W, wMono } from "../tokens";
+import {
+  IcArrowRight,
+  IcChevronDown,
+  IcChevronRight,
+} from "../components/icons";
 
 interface Props {
   instance: string;
@@ -71,7 +76,16 @@ export function DARDiff({ instance, a, b, role }: Props) {
       <header style={{ marginBottom: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
           <Side label="a" side={d.a ?? null} />
-          <span style={{ color: W.dim, alignSelf: "center" }}>→</span>
+          <span
+            style={{
+              color: W.dim,
+              alignSelf: "center",
+              display: "inline-flex",
+              alignItems: "center",
+            }}
+          >
+            <IcArrowRight size={12} />
+          </span>
           <Side label="b" side={d.b ?? null} />
         </div>
         <div style={{ color: W.dim, fontSize: 11, marginTop: 6 }}>
@@ -187,7 +201,7 @@ export function DARDiff({ instance, a, b, role }: Props) {
 const paneStyle: React.CSSProperties = {
   background: W.surface,
   border: `1px solid ${W.border}`,
-  borderRadius: 8,
+  borderRadius: 4,
   padding: 12,
   fontSize: 12,
   maxHeight: "60vh",
@@ -232,7 +246,7 @@ type Tone = "add" | "rm" | "chg" | "info";
 function toneColour(t: Tone): { bg: string; fg: string } {
   switch (t) {
     case "add":
-      return { bg: "#62E2A022", fg: "#62E2A0" };
+      return { bg: "#7CC89A22", fg: "#7CC89A" };
     case "rm":
       return { bg: `${W.err}22`, fg: W.err };
     case "chg":
@@ -271,9 +285,15 @@ function Section<T>({
           cursor: "pointer",
           padding: "2px 0",
           letterSpacing: 0.6,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
         }}
       >
-        {open ? "▾" : "▸"} {title} ({items.length})
+        {open ? <IcChevronDown size={12} /> : <IcChevronRight size={12} />}
+        <span>
+          {title} ({items.length})
+        </span>
       </button>
       {open && (
         <div style={{ marginLeft: 14, marginTop: 4 }}>
@@ -317,7 +337,7 @@ function ChipGroup({
           key={l}
           style={{
             padding: "0 5px",
-            borderRadius: 3,
+            borderRadius: 2,
             background: c.bg,
             color: c.fg,
             fontSize: 10.5,
