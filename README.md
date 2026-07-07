@@ -33,7 +33,7 @@ For a standalone binary, use the quick-install script:
 curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/homebrew-canton-devkit/main/install.sh | sh
 ```
 
-Homebrew (`brew install bitdynamics-ab/canton-devkit/canton-devkit`), APT for
+Homebrew, APT for
 Debian/Ubuntu, manual platform downloads, and `go install` are also
 supported — the [installation guide](docs/getting-started.md) covers each
 path step by step.
