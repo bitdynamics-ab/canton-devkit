@@ -103,6 +103,13 @@ export interface Endpoint {
   url: string;
   port?: number;
   scheme?: string;
+  /**
+   * Status-time HTTP probe verdict for browser-UI endpoints. Absent
+   * when the endpoint was not probed (non-UI schemes, instance not
+   * running).
+   */
+  reachability?: "ok" | "unreachable";
+  reachability_detail?: string;
 }
 
 export interface Instance {

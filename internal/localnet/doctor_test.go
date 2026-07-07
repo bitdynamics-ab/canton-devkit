@@ -12,6 +12,7 @@ import (
 )
 
 func TestCollectDoctor_UsesVersionAwareUpThresholds(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir()) // hermetic: UI reachability check reads the registry
 	version, err := splice.Resolve(splice.LatestAlias)
 	if err != nil {
 		t.Fatalf("resolve latest: %v", err)
@@ -41,6 +42,7 @@ func TestCollectDoctor_UsesVersionAwareUpThresholds(t *testing.T) {
 }
 
 func TestCollectDoctor_AppendsDoctorAdvisories(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir()) // hermetic: UI reachability check reads the registry
 	rep, err := CollectDoctor(context.Background(), DoctorOptions{
 		GOOS:       "linux",
 		GOARCH:     "amd64",
@@ -72,6 +74,7 @@ func TestCollectDoctor_AppendsDoctorAdvisories(t *testing.T) {
 }
 
 func TestCollectDoctor_UnsupportedPlatformWarnsWithoutFailing(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir()) // hermetic: UI reachability check reads the registry
 	rep, err := CollectDoctor(context.Background(), DoctorOptions{
 		GOOS:       "plan9",
 		GOARCH:     "riscv64",
@@ -96,6 +99,7 @@ func TestCollectDoctor_UnsupportedPlatformWarnsWithoutFailing(t *testing.T) {
 }
 
 func TestCollectDoctor_PortBindFailureWarnsWithoutFailing(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir()) // hermetic: UI reachability check reads the registry
 	rep, err := CollectDoctor(context.Background(), DoctorOptions{
 		GOOS:   "linux",
 		GOARCH: "amd64",
@@ -155,6 +159,7 @@ func (a fakeAddr) String() string  { return string(a) }
 // PortBase set, doctor checks the FIXED port block (and not the ephemeral
 // probe) — and passes when the block is free.
 func TestCollectDoctor_FixedPortBaseReplacesEphemeral(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir()) // hermetic: UI reachability check reads the registry
 	rep, err := CollectDoctor(context.Background(), DoctorOptions{
 		GOOS:       "linux",
 		GOARCH:     "amd64",
@@ -184,6 +189,7 @@ func TestCollectDoctor_FixedPortBaseReplacesEphemeral(t *testing.T) {
 // TestCollectDoctor_FixedPortBaseBusyFails verifies a busy fixed block is
 // a hard FAIL (doctor exits 2) — matching what `up --port-base` would do.
 func TestCollectDoctor_FixedPortBaseBusyFails(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir()) // hermetic: UI reachability check reads the registry
 	rep, err := CollectDoctor(context.Background(), DoctorOptions{
 		GOOS:     "linux",
 		GOARCH:   "amd64",

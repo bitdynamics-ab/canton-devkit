@@ -332,6 +332,8 @@ types.Endpoint {
   url string
   port int
   scheme string
+  reachability string
+  reachability_detail string
 }
 
 types.EnvExport {

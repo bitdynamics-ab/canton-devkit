@@ -28,12 +28,13 @@ const LOGIN_USER_FOR: Record<Role, string> = {
   sv: "sv",
 };
 
-// roleLabel matches the backend's Endpoint.Label format:
-// "Wallet · <role>". Resolves a role to the matching endpoint URL.
-function walletURLFor(role: Role, endpoints: Instance["endpoints"]): string | null {
+// walletEndpointFor matches the backend's Endpoint.Label format,
+// "Wallet · <role>", and returns the whole endpoint so callers can
+// read both the URL and the backend's reachability verdict.
+function walletEndpointFor(role: Role, endpoints: Instance["endpoints"]) {
   if (!endpoints) return null;
   const want = `Wallet · ${role}`;
-  return endpoints.find((e) => e.label === want)?.url ?? null;
+  return endpoints.find((e) => e.label === want) ?? null;
 }
 
 export function WalletScreen() {
@@ -45,6 +46,9 @@ export function WalletScreen() {
     | { kind: "ok"; instance: Instance }
     | { kind: "err"; error: string }
   >({ kind: "loading" });
+  // Bumped by Retry to re-fetch the instance, which re-runs the
+  // backend reachability probe.
+  const [refetchNonce, setRefetchNonce] = useState(0);
 
   useEffect(() => {
     if (!name) return;
@@ -64,39 +68,7 @@ export function WalletScreen() {
     return () => {
       cancelled = true;
     };
-  }, [name]);
-
-  // Reachability probe. An iframe pointed at a dead port renders the
-  // browser's own error page — a gray dead-end with no remediation —
-  // so probe the endpoint ourselves and own the failure state. no-cors
-  // resolves opaque when anything answers HTTP on the port and rejects
-  // on network-level failure (refused, empty reply from a stale
-  // nginx port mapping, host down).
-  const probeURL =
-    state.kind === "ok" ? walletURLFor(role, state.instance.endpoints) : null;
-  const [reach, setReach] = useState<"probing" | "ok" | "down">("probing");
-  const [probeNonce, setProbeNonce] = useState(0);
-  useEffect(() => {
-    if (!probeURL) return;
-    if (import.meta.env.MODE === "test") return; // no real sockets in vitest
-    let cancelled = false;
-    setReach("probing");
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 4000);
-    fetch(probeURL, { mode: "no-cors", signal: ctl.signal, cache: "no-store" })
-      .then(() => {
-        if (!cancelled) setReach("ok");
-      })
-      .catch(() => {
-        if (!cancelled) setReach("down");
-      })
-      .finally(() => clearTimeout(timer));
-    return () => {
-      cancelled = true;
-      ctl.abort();
-      clearTimeout(timer);
-    };
-  }, [probeURL, probeNonce]);
+  }, [name, refetchNonce]);
 
   if (!name) {
     return (
@@ -125,7 +97,12 @@ export function WalletScreen() {
   }
 
   // null when the instance doesn't yet have endpoints surfaced.
-  const walletURL = walletURLFor(role, state.instance.endpoints);
+  const walletEndpoint = walletEndpointFor(role, state.instance.endpoints);
+  const walletURL = walletEndpoint?.url ?? null;
+  // Backend status probe verdict. An iframe pointed at a dead port
+  // renders the browser's own gray error page; own the failure state
+  // instead and point at the fix.
+  const walletUnreachable = walletEndpoint?.reachability === "unreachable";
 
   return (
     <section
@@ -284,30 +261,44 @@ export function WalletScreen() {
             signed in as {role} via DevKit JWT
           </span>
         </div>
-        {walletURL && reach === "down" ? (
-          <div style={{ flex: 1, padding: 24, color: W.text2, fontSize: 13, lineHeight: 1.6 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, color: W.warn, fontWeight: 600, marginBottom: 6 }}>
-              <IcAlert size={14} /> Wallet UI is not responding
+        {walletUnreachable ? (
+          <div
+            role="alert"
+            style={{ flex: 1, padding: 24, color: W.text2, fontSize: 13, lineHeight: 1.6 }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                color: W.warn,
+                fontWeight: 600,
+                marginBottom: 6,
+              }}
+            >
+              <IcAlert size={14} /> Wallet UI is not serving HTTP
             </div>
             <p style={{ margin: "0 0 6px" }}>
-              Nothing answered at{" "}
-              <code style={{ fontFamily: wMono, color: W.text2 }}>{walletURL}</code>{" "}
-              even though the instance is registered. The containers may still
-              be starting — or, if this instance was created by an older
-              devkit, its nginx port mapping is stale.
+              The wallet UI for{" "}
+              <code style={{ fontFamily: wMono, color: W.text2 }}>{role}</code>{" "}
+              accepts connections but returns no HTTP response
+              {walletEndpoint?.reachability_detail
+                ? ` (${walletEndpoint.reachability_detail})`
+                : ""}
+              . This usually means the instance was created by an older DevKit
+              whose generated port overlay is stale.
             </p>
             <p style={{ margin: "0 0 14px", color: W.dim }}>
-              Re-running{" "}
+              Use <strong>Recreate</strong> on the dashboard, or re-run{" "}
               <code style={{ fontFamily: wMono, color: W.text2 }}>
                 dpm localnet up --name {name}
               </code>{" "}
-              (or Recreate on the Overview page) regenerates the instance
-              config and recreates the affected containers.
+              to regenerate the instance's overlays.
             </p>
             <Button
               variant="secondary"
               icon={<IcRefresh />}
-              onClick={() => setProbeNonce((n) => n + 1)}
+              onClick={() => setRefetchNonce((n) => n + 1)}
             >
               Retry
             </Button>
@@ -461,4 +452,3 @@ function Pill({ children }: { children: React.ReactNode }) {
     </span>
   );
 }
-

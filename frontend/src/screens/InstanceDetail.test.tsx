@@ -80,6 +80,77 @@ describe("InstanceDetail", () => {
     });
   });
 
+  it("shows the unreachable-UI banner with the Recreate remediation", async () => {
+    mockInstanceFetch({
+      schema_version: 1,
+      name: "demo",
+      splice_version: "0.4.12",
+      status: "running",
+      created_at: "2026-05-25T10:00:00Z",
+      compose_project: "cdk-demo",
+      docker_network: "cdk-demo_default",
+      container_prefix: "cdk-demo",
+      project_dir: "/x",
+      data_dir: "/x/data",
+      endpoints: [
+        {
+          label: "Wallet · app-user",
+          url: "http://localhost:4485",
+          port: 4485,
+          scheme: "http",
+          reachability: "unreachable",
+          reachability_detail:
+            "connection accepted but no HTTP response (empty reply)",
+        },
+        {
+          label: "Postgres",
+          url: "postgresql://localhost:5432",
+          port: 5432,
+          scheme: "postgresql",
+        },
+      ],
+    });
+
+    render(<InstanceDetail name="demo" />);
+    await waitFor(() => {
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent("Wallet · app-user");
+      expect(alert).toHaveTextContent(/not serving HTTP/i);
+      expect(alert).toHaveTextContent("Recreate");
+      expect(alert).toHaveTextContent("dpm localnet up --name demo");
+    });
+  });
+
+  it("renders no reachability banner when probed endpoints are ok", async () => {
+    mockInstanceFetch({
+      schema_version: 1,
+      name: "demo",
+      splice_version: "0.4.12",
+      status: "running",
+      created_at: "2026-05-25T10:00:00Z",
+      compose_project: "cdk-demo",
+      docker_network: "cdk-demo_default",
+      container_prefix: "cdk-demo",
+      project_dir: "/x",
+      data_dir: "/x/data",
+      endpoints: [
+        {
+          label: "Wallet · app-user",
+          url: "http://localhost:4485",
+          port: 4485,
+          scheme: "http",
+          reachability: "ok",
+        },
+      ],
+    });
+
+    render(<InstanceDetail name="demo" />);
+    await waitFor(() => {
+      expect(screen.getByText("0.4.12")).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/not serving HTTP/i)).not.toBeInTheDocument();
+  });
+
   it("shows em-dash for missing uptime", async () => {
     // Uptime is optional in the type — a freshly-stopped instance
     // may not carry it. The grid uses "—" as the muted fallback.
