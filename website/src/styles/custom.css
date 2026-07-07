@@ -47,6 +47,9 @@
 	--dk-body: #3f4246;
 	--dk-muted: #707377;
 	--dk-ui: #505357;
+	/* Measured hover: 5% neutral wash; text steps to near-black. */
+	--dk-hover: rgba(80, 83, 87, 0.05);
+	--dk-hover-text: #171a1e;
 	--sl-color-text: var(--dk-body);
 	--sl-color-white: var(--dk-heading);
 	--sl-color-gray-1: #25292d;
@@ -73,6 +76,9 @@
 	--dk-body: #9ea2a6;
 	--dk-muted: #82868a;
 	--dk-ui: #9ea2a6;
+	/* Measured hover: 5% light wash; text steps to #CED1D5. */
+	--dk-hover: rgba(222, 226, 230, 0.05);
+	--dk-hover-text: #ced1d5;
 	--sl-color-text: var(--dk-body);
 	--sl-color-white: var(--dk-heading);
 	--sl-color-gray-1: #c8ccd0;
@@ -178,12 +184,38 @@ header.header,
 	color: var(--dk-heading);
 	font-weight: 700;
 }
-/* Search: bordered pill. */
+/* Search: bordered pill with the measured hover wash. */
 button[data-open-modal] {
 	border: 1px solid var(--sl-color-hairline);
 	border-radius: 0.75rem;
 	background-color: transparent;
 	color: var(--dk-muted);
+	transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+button[data-open-modal]:hover {
+	background-color: var(--dk-hover);
+	color: var(--dk-hover-text);
+	border-color: var(--sl-color-hairline);
+}
+button[data-open-modal]:active {
+	background-color: var(--dk-pill);
+	color: var(--sl-color-text-accent);
+}
+
+/* Keyboard focus: accent ring, matching the pointer affordances. */
+:is(a, button, summary):focus-visible {
+	outline: 2px solid var(--dk-accent);
+	outline-offset: 2px;
+	border-radius: 0.5rem;
+}
+
+/* Content links transition their hover-darken; taps show the pill
+ * treatment instead of the mobile gray flash. */
+.sl-markdown-content a:not(:where(.not-content *)) {
+	transition: color 0.15s ease;
+}
+body {
+	-webkit-tap-highlight-color: transparent;
 }
 
 /* ----------------------------- sidebar ----------------------------- */
@@ -203,10 +235,18 @@ nav.sidebar .sidebar-content a {
 	border-radius: 0.75rem;
 	padding: 0.375rem 0.75rem;
 	font-weight: 400;
+	transition: background-color 0.15s ease, color 0.15s ease;
 }
+/* Hover: measured 5% neutral wash, text steps toward heading color. */
 nav.sidebar .sidebar-content a:hover {
-	color: var(--dk-heading);
-	background-color: color-mix(in srgb, var(--dk-heading) 4%, transparent);
+	color: var(--dk-hover-text);
+	background-color: var(--dk-hover);
+}
+/* Press: the accent pill appears immediately under the pointer — the
+ * same treatment the item keeps once it becomes the current page. */
+nav.sidebar .sidebar-content a:active {
+	background-color: var(--dk-pill);
+	color: var(--sl-color-text-accent);
 }
 nav.sidebar .sidebar-content a[aria-current='page'],
 nav.sidebar .sidebar-content a[aria-current='page']:hover {
@@ -221,6 +261,10 @@ starlight-toc a,
 	font-size: 0.875rem;
 	line-height: 1.7;
 	color: var(--dk-muted);
+	transition: color 0.15s ease;
+}
+starlight-toc a:hover {
+	color: var(--dk-hover-text);
 }
 starlight-toc a[aria-current='true'],
 starlight-toc a[aria-current='true']:hover {
