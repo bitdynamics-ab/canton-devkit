@@ -14,7 +14,7 @@ import {
   type Role,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { W, wMono } from "../tokens";
+import { W, wMono, tableCaps } from "../tokens";
 import { Button } from "../components/Button";
 import {
   Dot,
@@ -501,9 +501,7 @@ export function DARScreen() {
                 padding: "9px 14px",
                 color: W.dim,
                 fontSize: 10.5,
-                letterSpacing: 1.4,
-                textTransform: "uppercase", fontStretch: "118%",
-                fontWeight: 600,
+                ...tableCaps,
                 borderBottom: `1px solid ${W.border}`,
               }}
             >

@@ -66,12 +66,23 @@ export const R = { control: 2, card: 4, dialog: 8 } as const;
 export const EASE = "cubic-bezier(0.2, 0.6, 0.2, 1)";
 export const FAST = "120ms";
 
-// Wide structural caps — the brand's label voice (table headers,
-// card labels, the wordmark). Spread where a style object is built.
+// Wide structural caps — the brand's label voice for STRUCTURE:
+// the wordmark, section headers, stat-card labels. Spread where a
+// style object is built.
 export const wideCaps = {
   fontWeight: 600,
   fontStretch: "118%",
   letterSpacing: "0.08em",
+  textTransform: "uppercase",
+} as const;
+
+// Quiet caps for data-table column headers. Uppercase is the table
+// convention, but headers repeat on every table — at 118% width and
+// heavy tracking they read as brand moments instead of chrome, so
+// tables get the toned-down cut.
+export const tableCaps = {
+  fontWeight: 500,
+  letterSpacing: "0.05em",
   textTransform: "uppercase",
 } as const;
 

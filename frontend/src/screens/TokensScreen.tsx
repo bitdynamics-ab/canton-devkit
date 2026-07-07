@@ -31,7 +31,7 @@ import {
   type TokenRef,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { W, wMono, wideCaps } from "../tokens";
+import { W, wMono, tableCaps, wideCaps } from "../tokens";
 import { Button } from "../components/Button";
 import {
   IcArrowRight,
@@ -1507,7 +1507,7 @@ const input: React.CSSProperties = {
 };
 // Table column headers are an allowed wide-caps site; the 10px cell
 // side-padding keeps >=12px of air between adjacent columns.
-const th: React.CSSProperties = { ...wideCaps, padding: "6px 10px", borderBottom: `1px solid ${W.border}`, fontSize: 11 };
+const th: React.CSSProperties = { ...tableCaps, padding: "6px 10px", borderBottom: `1px solid ${W.border}`, fontSize: 11 };
 const td: React.CSSProperties = { padding: "6px 10px", borderBottom: `1px solid ${W.border}`, color: W.text };
 
 function notice(tone: "ok" | "warn" | "err"): React.CSSProperties {

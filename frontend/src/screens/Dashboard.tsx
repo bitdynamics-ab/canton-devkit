@@ -6,7 +6,7 @@ import {
   type TransactionEvent,
   type TransactionRow,
 } from "../api";
-import { W, wMono, wideCaps } from "../tokens";
+import { W, wMono, tableCaps } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcPlus, IcRefresh } from "../components/icons";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
@@ -211,7 +211,7 @@ function InstanceTable({ instances, selected, onSelect }: InstanceTableProps) {
 }
 
 const th: React.CSSProperties = {
-  ...wideCaps,
+  ...tableCaps,
   padding: "8px 12px",
   fontSize: 11,
 };
@@ -462,5 +462,5 @@ function shortTemplate(t?: string): string {
   return parts.length >= 3 ? `${parts[parts.length - 2]}:${parts[parts.length - 1]}` : t;
 }
 
-const actTh: React.CSSProperties = { ...wideCaps, padding: "6px 10px 6px 0", fontSize: 11 };
+const actTh: React.CSSProperties = { ...tableCaps, padding: "6px 10px 6px 0", fontSize: 11 };
 const actTd: React.CSSProperties = { padding: "8px 10px 8px 0", verticalAlign: "middle" };

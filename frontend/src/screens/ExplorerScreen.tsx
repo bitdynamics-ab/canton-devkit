@@ -16,7 +16,7 @@ import {
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { Button } from "../components/Button";
 import { Dot, IcRefresh } from "../components/icons";
-import { TX_KIND_COLOR, W, wMono } from "../tokens";
+import { TX_KIND_COLOR, W, wMono, tableCaps, wideCaps } from "../tokens";
 import { ContractDetailDrawer } from "./ContractDetailDrawer";
 import { TxReplayDrawer } from "./TxReplayDrawer";
 
@@ -527,9 +527,7 @@ export function ExplorerScreen() {
                 padding: "9px 14px",
                 color: W.dim,
                 fontSize: 10.5,
-                letterSpacing: 1.4,
-                textTransform: "uppercase", fontStretch: "118%",
-                fontWeight: 600,
+                ...tableCaps,
                 borderBottom: `1px solid ${W.border}`,
               }}
             >
@@ -1060,9 +1058,7 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
             padding: "9px 14px",
             color: W.dim,
             fontSize: 10.5,
-            letterSpacing: 1.4,
-            textTransform: "uppercase", fontStretch: "118%",
-            fontWeight: 600,
+            ...tableCaps,
             borderBottom: `1px solid ${W.border}`,
           }}
         >
@@ -1692,8 +1688,9 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
             right: 0,
             bottom: 0,
             width: "min(480px, 92vw)",
-            background: W.surface,
-            borderLeft: `1px solid ${W.border}`,
+            // Raised surface — matches ContractDetailDrawer/TxReplayDrawer.
+            background: W.surface2,
+            borderLeft: `1px solid ${W.borderHi}`,
             boxShadow:
               "0 0 0 1px rgba(0,0,0,0.2), -16px 0 40px -12px rgba(0,0,0,0.5)",
             // A hover preview must not steal hit-testing from the strip
@@ -1871,9 +1868,7 @@ function Section({
         style={{
           color: W.dim,
           fontSize: 10.5,
-          letterSpacing: 1.4,
-          textTransform: "uppercase", fontStretch: "118%",
-          fontWeight: 600,
+          ...wideCaps,
           marginBottom: 6,
         }}
       >

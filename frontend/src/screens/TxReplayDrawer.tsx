@@ -97,8 +97,10 @@ export function TxReplayDrawer({
         right: 0,
         bottom: 0,
         width: "min(480px, 92vw)",
-        background: W.surface,
-        borderLeft: `1px solid ${W.border}`,
+        // Raised surface — a fixed overlay sits above the page, and
+        // surface-on-page was reading dark-on-dark.
+        background: W.surface2,
+        borderLeft: `1px solid ${W.borderHi}`,
         boxShadow:
           "0 0 0 1px rgba(0,0,0,0.2), -16px 0 40px -12px rgba(0,0,0,0.5)",
         // Below the CommandPalette (zIndex 100) but above page content.

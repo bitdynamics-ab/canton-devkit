@@ -5,7 +5,7 @@ import {
   fetchContainers,
   restartContainer,
 } from "../api";
-import { W, wMono, wideCaps } from "../tokens";
+import { W, wMono, tableCaps } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcRefresh } from "../components/icons";
 import { ContainerLogsModal } from "./ContainerLogsModal";
@@ -180,10 +180,10 @@ export function ContainerHealth({ name }: { name: string }) {
 
 // Dense-panel micro-labels: sentence case, muted — wide caps are
 // reserved for real table/card headers.
-// Table column headers are an allowed wide-caps site — match every
-// other table in the app.
+// Table column headers use the quiet caps cut — match every other
+// table in the app.
 const colHeader: React.CSSProperties = {
-  ...wideCaps,
+  ...tableCaps,
   color: W.dim,
   fontSize: 11,
 };
