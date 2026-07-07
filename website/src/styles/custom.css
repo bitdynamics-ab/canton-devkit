@@ -1,108 +1,248 @@
-/* Canton DevKit docs — typography & brand.
+/* Canton DevKit docs — design system.
  *
- * Fonts are self-hosted via Fontsource (no CDN): Inter Variable for
- * body/UI, JetBrains Mono Variable for code. Code-block internals are
- * configured in astro.config.mjs (expressiveCode.styleOverrides) because
- * Expressive Code resolves them at build time.
+ * Modeled on a modern API-docs system (measured values, not guesses):
+ * light-first, white surfaces with #EEF1F5 hairlines, blue #0F7FFF
+ * accent with 10%-alpha pill actives (12px radius), 30/700 H1 with
+ * -0.75px tracking, 18px/28 article body, 14px UI text in a 288px
+ * sidebar, near-black #0E1013 dark theme with #25292D hairlines.
  *
- * The accent scale is the product's brand teal (frontend/src/tokens.ts:
- * brand #5BD7C5 on #0B0E13) so the docs and the Web UI share one
- * identity: bright teal in dark mode, deepened for contrast on white. */
+ * Fonts are self-hosted via Fontsource: Inter Variable (body/UI) and
+ * JetBrains Mono Variable (code). Code-block internals are configured
+ * in astro.config.mjs (expressiveCode.styleOverrides). */
 
 :root {
 	--sl-font: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
 	--sl-font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+	--sl-content-width: 45rem;
+	--sl-sidebar-width: 18rem;
 
-	/* Light theme accent — brand teal darkened for WCAG AA on white. */
-	--sl-color-accent-low: #d5f2ec;
-	--sl-color-accent: #0e7c6f;
-	--sl-color-accent-high: #0b4f47;
+	/* Heading scale (Starlight sizes headings from these tokens). */
+	--sl-text-h1: 1.875rem;
+	--sl-text-h2: 1.5rem;
+	--sl-text-h3: 1.1875rem;
+	--sl-text-h4: 1rem;
+
+	/* Accent — identical in both themes. */
+	--dk-accent: #0f7fff;
+	--dk-pill: color-mix(in srgb, #0f7fff 10%, transparent);
 }
 
+/* ------------------------------ light ------------------------------ */
+:root[data-theme='light'] {
+	--sl-color-accent-low: #e7f1ff;
+	--sl-color-accent: var(--dk-accent);
+	--sl-color-accent-high: #0b5fcc;
+	--sl-color-text-accent: var(--dk-accent);
+
+	--sl-color-bg: #ffffff;
+	--sl-color-bg-nav: #ffffff;
+	--sl-color-bg-sidebar: #ffffff;
+	--sl-color-bg-inline-code: #f2f4f7;
+	--sl-color-hairline: #eef1f5;
+	--sl-color-hairline-light: #eef1f5;
+	--sl-color-hairline-shade: #eef1f5;
+
+	--dk-heading: #171a1e;
+	--dk-body: #3f4246;
+	--dk-muted: #707377;
+	--dk-ui: #505357;
+	--sl-color-text: var(--dk-body);
+	--sl-color-white: var(--dk-heading);
+	--sl-color-gray-1: #25292d;
+	--sl-color-gray-2: var(--dk-ui);
+	--sl-color-gray-3: var(--dk-muted);
+}
+
+/* ------------------------------ dark ------------------------------- */
 :root[data-theme='dark'] {
-	/* Dark theme accent — the product's brand teal, verbatim. */
-	--sl-color-accent-low: #16403c;
-	--sl-color-accent: #5bd7c5;
-	--sl-color-accent-high: #7fe9d9;
+	--sl-color-accent-low: #14243a;
+	--sl-color-accent: var(--dk-accent);
+	--sl-color-accent-high: #6db3ff;
+	--sl-color-text-accent: #4d9fff;
+
+	--sl-color-bg: #0e1013;
+	--sl-color-bg-nav: #0e1013;
+	--sl-color-bg-sidebar: #0e1013;
+	--sl-color-bg-inline-code: #1b1f24;
+	--sl-color-hairline: #25292d;
+	--sl-color-hairline-light: #25292d;
+	--sl-color-hairline-shade: #25292d;
+
+	--dk-heading: #dee2e6;
+	--dk-body: #9ea2a6;
+	--dk-muted: #82868a;
+	--dk-ui: #9ea2a6;
+	--sl-color-text: var(--dk-body);
+	--sl-color-white: var(--dk-heading);
+	--sl-color-gray-1: #c8ccd0;
+	--sl-color-gray-2: var(--dk-ui);
+	--sl-color-gray-3: var(--dk-muted);
 }
 
-/* ---------------------------------------------------------------- *
- * Base rendering
- * ---------------------------------------------------------------- */
-
+/* ---------------------------- rendering ---------------------------- */
 body {
 	-webkit-font-smoothing: antialiased;
 	text-rendering: optimizeLegibility;
 	font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
 }
 
-/* ---------------------------------------------------------------- *
- * Headings — Inter tightens as sizes grow; 600 beats 700 at display
- * sizes. Docs-page h1 steps down from Starlight's 40px default.
- * ---------------------------------------------------------------- */
-
-.sl-markdown-content :is(h1, h2, h3, h4) {
-	font-weight: 600;
-	letter-spacing: -0.02em;
-}
-h1[data-page-title] {
-	font-size: clamp(1.75rem, 1.35rem + 1.4vw, 2.25rem);
-	font-weight: 650;
-	letter-spacing: -0.022em;
+/* ---------------------------- type scale --------------------------- */
+/* H1: 30/700/-0.75; H2: 24/600/-0.6; article body: 18/28. */
+/* Starlight's page title renders as <h1 id="_top"> (no data attribute);
+ * the ID selector outranks the component-scoped class rule. */
+main h1#_top,
+main .sl-markdown-content h1 {
+	font-weight: 700;
+	letter-spacing: -0.025em;
 	line-height: 1.2;
+	color: var(--dk-heading);
 }
-.sl-markdown-content h2 {
-	font-size: 1.4375rem;
-	margin-top: 2.25em;
+main .sl-markdown-content h2 {
+	font-weight: 600;
+	letter-spacing: -0.025em;
+	color: var(--dk-heading);
+	margin-top: 2em;
 }
-.sl-markdown-content h3 {
-	font-size: 1.125rem;
+main .sl-markdown-content h3 {
+	font-weight: 600;
+	letter-spacing: -0.015em;
+	color: var(--dk-heading);
+}
+main .sl-markdown-content h4 {
+	font-weight: 600;
+	color: var(--dk-heading);
 }
 
-/* Prose rhythm: technical docs with heavy inline code read better a
- * touch tighter than Starlight's 1.8 default. */
 .sl-markdown-content {
-	line-height: 1.7;
+	font-size: 1.125rem;
+	line-height: 1.556;
+	color: var(--dk-body);
 }
 
-/* ---------------------------------------------------------------- *
- * Code — blocks are handled by Expressive Code (see astro.config);
- * this covers inline code so it sits inside the line rhythm.
- * ---------------------------------------------------------------- */
+/* Content links: accent, underlined, semibold. */
+.sl-markdown-content a:not(:where(.not-content *)) {
+	color: var(--sl-color-text-accent);
+	font-weight: 600;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+.sl-markdown-content a:hover:not(:where(.not-content *)) {
+	color: var(--sl-color-accent-high);
+}
 
-/* The frame's <pre> itself never gets a family from Expressive Code —
- * the UA default (Courier) leaks into prompt glyphs and copy affordances. */
+strong {
+	color: var(--dk-heading);
+}
+
+/* ------------------------------ code ------------------------------- */
+.sl-markdown-content code:not(pre code) {
+	font-size: 0.8125em;
+	font-variant-ligatures: none;
+	background: var(--sl-color-bg-inline-code);
+	padding: 0.15rem 0.4rem;
+	border-radius: 0.375rem;
+	color: var(--dk-heading);
+}
 .expressive-code pre {
 	font-family: var(--sl-font-mono);
 	font-size: 0.875rem;
 }
-
-.sl-markdown-content code:not(pre code) {
-	font-size: 0.855em;
-	font-variant-ligatures: none;
-	padding: 0.125rem 0.375rem;
-	border-radius: 0.25rem;
+/* Frame chrome: hairline border, 12px radius. */
+.expressive-code .frame,
+.expressive-code .frame pre {
+	border-radius: 0.75rem;
+}
+.expressive-code .frame {
+	box-shadow: none;
+	border: 1px solid var(--sl-color-hairline);
 }
 
-/* ---------------------------------------------------------------- *
- * Tables — dense reference content: smaller size, tabular numerals
- * so ports and versions align in columns.
- * ---------------------------------------------------------------- */
-
+/* ----------------------------- tables ------------------------------ */
 .sl-markdown-content table {
-	font-size: 0.9rem;
+	font-size: 0.9375rem;
 	font-variant-numeric: tabular-nums;
 }
 .sl-markdown-content th {
 	font-weight: 600;
-	letter-spacing: 0.01em;
+	color: var(--dk-heading);
 }
 
-/* ---------------------------------------------------------------- *
- * Chrome — sidebar and page-nav UI text sits smaller and calmer.
- * ---------------------------------------------------------------- */
+/* ----------------------------- header ------------------------------ */
+header.header,
+.header {
+	border-bottom: 1px solid var(--sl-color-hairline);
+	background-color: var(--sl-color-bg-nav);
+}
+.site-title {
+	color: var(--dk-heading);
+	font-weight: 700;
+}
+/* Search: bordered pill. */
+button[data-open-modal] {
+	border: 1px solid var(--sl-color-hairline);
+	border-radius: 0.75rem;
+	background-color: transparent;
+	color: var(--dk-muted);
+}
 
-nav.sidebar summary,
-.sidebar-content a {
-	letter-spacing: -0.005em;
+/* ----------------------------- sidebar ----------------------------- */
+/* 14px UI text; group labels bold heading-color; active item is a
+ * 10%-accent pill with 12px radius and accent text. */
+nav.sidebar .sidebar-content {
+	font-size: 0.875rem;
+}
+nav.sidebar summary .group-label,
+nav.sidebar .group-label span {
+	font-size: 0.875rem;
+	font-weight: 700;
+	color: var(--dk-heading);
+}
+nav.sidebar .sidebar-content a {
+	color: var(--dk-ui);
+	border-radius: 0.75rem;
+	padding: 0.375rem 0.75rem;
+	font-weight: 400;
+}
+nav.sidebar .sidebar-content a:hover {
+	color: var(--dk-heading);
+	background-color: color-mix(in srgb, var(--dk-heading) 4%, transparent);
+}
+nav.sidebar .sidebar-content a[aria-current='page'],
+nav.sidebar .sidebar-content a[aria-current='page']:hover {
+	background-color: var(--dk-pill);
+	color: var(--sl-color-text-accent);
+	font-weight: 500;
+}
+
+/* ------------------------------- TOC ------------------------------- */
+starlight-toc a,
+.right-sidebar a {
+	font-size: 0.875rem;
+	line-height: 1.7;
+	color: var(--dk-muted);
+}
+starlight-toc a[aria-current='true'],
+starlight-toc a[aria-current='true']:hover {
+	color: var(--sl-color-text-accent);
+	font-weight: 500;
+}
+.right-sidebar {
+	border-inline-start: none;
+}
+
+/* --------------------------- misc chrome --------------------------- */
+/* Content panels: no heavy divider under the title block. */
+.content-panel + .content-panel {
+	border-top: 1px solid var(--sl-color-hairline);
+}
+/* Asides/notes: soft accent surface, rounded. */
+.starlight-aside {
+	border-radius: 0.75rem;
+	border: 1px solid var(--sl-color-hairline);
+	border-inline-start: 1px solid var(--sl-color-hairline);
+}
+.starlight-aside--note {
+	background-color: var(--sl-color-accent-low);
+	border-color: color-mix(in srgb, var(--dk-accent) 25%, transparent);
+	color: var(--dk-body);
 }
