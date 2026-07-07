@@ -71,20 +71,25 @@ func TestRunRejectsUnknownCommand(t *testing.T) {
 	}
 }
 
-// TestRunLocalnetClean_RequiresTarget pins that `clean` invoked with
-// no --name/--all exits non-zero with guidance rather than a
-// placeholder message.
-func TestRunLocalnetClean_RequiresTarget(t *testing.T) {
-	var out, errb bytes.Buffer
-	code := New(&out, &errb, "test", "").Run([]string{"localnet", "clean"})
-	if code == 0 {
-		t.Fatalf("clean with no target should exit non-zero, got 0")
-	}
-	if strings.Contains(out.String(), "not implemented yet") {
-		t.Fatalf("clean should no longer be a placeholder; got %q", out.String())
-	}
-	if !strings.Contains(errb.String(), "--name") && !strings.Contains(errb.String(), "--all") {
-		t.Fatalf("clean should hint at --name/--all; stderr=%q", errb.String())
+// TestRunLocalnetRemove_RequiresTarget pins that `remove` (and its
+// `clean` alias) invoked with no --name/--all exits non-zero with
+// guidance rather than a placeholder message.
+func TestRunLocalnetRemove_RequiresTarget(t *testing.T) {
+	// Both the canonical verb and the alias must behave identically.
+	for _, verb := range []string{"remove", "clean"} {
+		t.Run(verb, func(t *testing.T) {
+			var out, errb bytes.Buffer
+			code := New(&out, &errb, "test", "").Run([]string{"localnet", verb})
+			if code == 0 {
+				t.Fatalf("%s with no target should exit non-zero, got 0", verb)
+			}
+			if strings.Contains(out.String(), "not implemented yet") {
+				t.Fatalf("%s should no longer be a placeholder; got %q", verb, out.String())
+			}
+			if !strings.Contains(errb.String(), "--name") && !strings.Contains(errb.String(), "--all") {
+				t.Fatalf("%s should hint at --name/--all; stderr=%q", verb, errb.String())
+			}
+		})
 	}
 }
 

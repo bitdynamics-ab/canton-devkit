@@ -358,8 +358,8 @@ function AgentScreen() {
 
             <h3 style={{fontSize:14, fontWeight:600, margin:'14px 0 6px'}}>Stop &amp; clean</h3>
             <pre style={{margin:0, padding:'12px 14px', background:W.surface2, border:`1px solid ${W.border}`, borderRadius:8, fontFamily:wMono, fontSize:12.5, color:W.text, lineHeight:1.6}}>
-{`dpm localnet down  --name `}<span style={{color:W.brand}}>{`<name>`}</span>{`   # keep volumes`}<br/>
-{`dpm localnet clean --name `}<span style={{color:W.brand}}>{`<name>`}</span>{`   # remove volumes (asks confirmation)`}
+{`dpm localnet down   --name `}<span style={{color:W.brand}}>{`<name>`}</span>{`   # keep volumes`}<br/>
+{`dpm localnet remove --name `}<span style={{color:W.brand}}>{`<name>`}</span>{`   # remove volumes (asks confirmation)`}
             </pre>
           </div>
         </Card>

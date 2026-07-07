@@ -98,7 +98,7 @@ jobs:
       - name: Tear down LocalNet
         if: always()
         run: |
-          # always() ensures cleanup even if tests failed. `clean`
+          # always() ensures cleanup even if tests failed. `remove`
           # removes containers, volumes, and registry state for the
           # instance in one shot.
-          canton-devkit localnet clean --name "${INSTANCE}" --force || true
+          canton-devkit localnet remove --name "${INSTANCE}" --force || true

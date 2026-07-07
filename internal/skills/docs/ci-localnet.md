@@ -30,7 +30,7 @@ pipeline", or "run integration tests in GitHub Actions/GitLab".
    ```
 5. **Teardown in an always-run step** so failures still clean up:
    ```
-   canton-devkit localnet clean --name ci --force
+   canton-devkit localnet remove --name ci --force
    ```
 
 ## Guardrails
