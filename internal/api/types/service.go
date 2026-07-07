@@ -26,9 +26,12 @@ const (
 )
 
 // Endpoint is one row under "Endpoints" in status / dashboard.
+// Key is the stable logical port name from state.json; match on it
+// to find a specific endpoint. Label is display-only.
 // Scheme is the URL scheme used to construct a clickable link:
 // http, https, grpc, grpcs, postgresql.
 type Endpoint struct {
+	Key    string `json:"key"`              // "app_user_ui"
 	Label  string `json:"label"`            // "Ledger API · app-provider"
 	URL    string `json:"url"`              // "grpc://localhost:3901"
 	Port   int    `json:"port,omitempty"`   // 3901

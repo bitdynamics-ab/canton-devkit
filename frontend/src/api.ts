@@ -99,6 +99,8 @@ export interface ListResponse {
 // Instance mirrors internal/api/types.Instance (subset; full shape
 // has Services/Endpoints/Parties/Credentials from the live probe).
 export interface Endpoint {
+  /** Stable logical port name from state.json (app_user_ui, sv_ui, …). */
+  key: string;
   label: string;
   url: string;
   port?: number;
