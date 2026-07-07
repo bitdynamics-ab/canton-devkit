@@ -129,7 +129,7 @@ describe("AreaChart", () => {
       <AreaChart
         series={{
           label: "tps",
-          color: "#7CB5F7",
+          color: "#8FA3EE",
           points: [
             { t: 1700000000000, v: 1 },
             { t: 1700000060000, v: 1.5 },
@@ -150,7 +150,7 @@ describe("AreaChart", () => {
   it("renders empty-state message when there are no points", () => {
     render(
       <AreaChart
-        series={{ label: "tps", color: "#7CB5F7", points: [] }}
+        series={{ label: "tps", color: "#8FA3EE", points: [] }}
       />,
     );
     expect(screen.getByText(/no data in this window/i)).toBeTruthy();
@@ -167,12 +167,12 @@ describe("MultiLine", () => {
         series={[
           {
             label: "median",
-            color: "#5BD7C5",
+            color: "#6480E6",
             points: [{ t: 1, v: 100 }, { t: 2, v: 110 }],
           },
           {
             label: "p99",
-            color: "#F5BF55",
+            color: "#DDB25E",
             points: [{ t: 1, v: 200 }, { t: 2, v: 220 }],
           },
         ]}
@@ -237,7 +237,7 @@ describe("Heatmap", () => {
 
 describe("Sparkline", () => {
   it("renders an SVG with width/height even when there's no data", () => {
-    const { container } = render(<Sparkline points={[]} color="#7CB5F7" />);
+    const { container } = render(<Sparkline points={[]} color="#8FA3EE" />);
     const svg = container.querySelector("svg");
     expect(svg).toBeTruthy();
     expect(svg?.getAttribute("width")).toBe("120");
@@ -251,7 +251,7 @@ describe("Sparkline", () => {
           { t: 2, v: 2 },
           { t: 3, v: 3 },
         ]}
-        color="#7CB5F7"
+        color="#8FA3EE"
       />,
     );
     const paths = container.querySelectorAll("svg path");

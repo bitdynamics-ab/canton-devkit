@@ -12,22 +12,22 @@ export default defineConfig({
 			description:
 				'One command to a full Canton LocalNet — spin up, inspect, and tear down a complete Canton developer stack.',
 			customCss: [
-				// Self-hosted fonts (Fontsource) + typography tuning.
-				'@fontsource-variable/inter',
-				'@fontsource-variable/jetbrains-mono',
+				// Self-hosted fonts (see src/fonts/ for licenses) + typography.
+				'./src/styles/fonts.css',
 				'./src/styles/custom.css',
 			],
 			expressiveCode: {
-				// Code-block typography is resolved at build time by
-				// Expressive Code — plain CSS overrides don't reach the
-				// inner <pre>, so set it here (this fixes the browser
-				// falling back to its default monospace inside frames).
+				// Design system: code blocks stay dark ink in BOTH themes
+				// (one dark syntax theme), 4px radius, JetBrains Mono.
+				themes: ['github-dark'],
 				styleOverrides: {
-					codeFontFamily: "'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace",
-					codeFontSize: '0.875rem',
-					codeLineHeight: '1.7',
-					uiFontFamily: "'Inter Variable', ui-sans-serif, system-ui, sans-serif",
-					borderRadius: '0.5rem',
+					codeFontFamily: "'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace",
+					codeFontSize: '0.8125rem',
+					codeLineHeight: '1.6',
+					uiFontFamily: "'Archivo', -apple-system, 'Segoe UI', sans-serif",
+					borderRadius: '4px',
+					codeBackground: '#0B0F1A',
+					frames: { editorBackground: '#0B0F1A', terminalBackground: '#0B0F1A', terminalTitlebarBackground: '#10151F', editorTabBarBackground: '#10151F', shadowColor: 'transparent' },
 				},
 			},
 			social: [

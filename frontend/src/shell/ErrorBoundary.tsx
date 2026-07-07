@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { W, wMono } from "../tokens";
+import { Button } from "../components/Button";
 
 // ErrorBoundary — catches render-time exceptions from descendants and
 // renders a fallback so one crashed screen doesn't take the whole UI
@@ -80,7 +81,7 @@ function Fallback({ error, onRetry }: FallbackProps) {
       style={{
         background: `${W.err}10`,
         border: `1px solid ${W.err}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 20,
         margin: "8px 0",
         color: W.text,
@@ -104,7 +105,7 @@ function Fallback({ error, onRetry }: FallbackProps) {
         style={{
           background: W.bg,
           border: `1px solid ${W.border}`,
-          borderRadius: 7,
+          borderRadius: 2,
           padding: "10px 12px",
           fontFamily: wMono,
           fontSize: 11.5,
@@ -118,21 +119,9 @@ function Fallback({ error, onRetry }: FallbackProps) {
         {error.message || "(no message)"}
       </pre>
       <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-        <button
-          onClick={onRetry}
-          style={{
-            background: W.brand,
-            color: "#082018",
-            border: `1px solid ${W.brand}`,
-            borderRadius: 6,
-            padding: "5px 12px",
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
+        <Button variant="secondary" size="md" onClick={onRetry}>
           Retry
-        </button>
+        </Button>
       </div>
     </div>
   );

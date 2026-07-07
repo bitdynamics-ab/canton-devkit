@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { ApiError, fetchInstance, type Instance, type Role } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { ROLE_COLOR, W, wMono } from "../tokens";
+import { Button } from "../components/Button";
+import { Dot, IcAlert, IcRefresh } from "../components/icons";
 
 // WalletScreen embeds Splice's per-role Wallet UI inside the DevKit
 // shell so users don't juggle three browser tabs (one per party).
@@ -26,9 +28,9 @@ const LOGIN_USER_FOR: Record<Role, string> = {
   sv: "sv",
 };
 
-// roleLabel matches the backend's Endpoint.Label format:
-// "Wallet · <role>". Resolves a role to the matching endpoint (URL +
-// the backend's reachability probe verdict).
+// walletEndpointFor matches the backend's Endpoint.Label format,
+// "Wallet · <role>", and returns the whole endpoint so callers can
+// read both the URL and the backend's reachability verdict.
 function walletEndpointFor(role: Role, endpoints: Instance["endpoints"]) {
   if (!endpoints) return null;
   const want = `Wallet · ${role}`;
@@ -44,6 +46,9 @@ export function WalletScreen() {
     | { kind: "ok"; instance: Instance }
     | { kind: "err"; error: string }
   >({ kind: "loading" });
+  // Bumped by Retry to re-fetch the instance, which re-runs the
+  // backend reachability probe.
+  const [refetchNonce, setRefetchNonce] = useState(0);
 
   useEffect(() => {
     if (!name) return;
@@ -63,7 +68,7 @@ export function WalletScreen() {
     return () => {
       cancelled = true;
     };
-  }, [name]);
+  }, [name, refetchNonce]);
 
   if (!name) {
     return (
@@ -94,7 +99,9 @@ export function WalletScreen() {
   // null when the instance doesn't yet have endpoints surfaced.
   const walletEndpoint = walletEndpointFor(role, state.instance.endpoints);
   const walletURL = walletEndpoint?.url ?? null;
-  // Embedding an unreachable wallet UI would just render a blank iframe.
+  // Backend status probe verdict. An iframe pointed at a dead port
+  // renders the browser's own gray error page; own the failure state
+  // instead and point at the fix.
   const walletUnreachable = walletEndpoint?.reachability === "unreachable";
 
   return (
@@ -143,7 +150,7 @@ export function WalletScreen() {
         style={{
           background: `${W.brand}10`,
           border: `1px solid ${W.brand}40`,
-          borderRadius: 10,
+          borderRadius: 4,
           padding: "10px 14px",
           display: "flex",
           alignItems: "center",
@@ -152,7 +159,6 @@ export function WalletScreen() {
           color: W.text2,
         }}
       >
-        <span style={{ color: W.brand, fontSize: 14 }}>🔑</span>
         <div style={{ lineHeight: 1.5 }}>
           <strong style={{ color: W.text }}>Login:</strong> on the wallet
           landing page, click <em>Log in</em> and enter user name{" "}
@@ -162,7 +168,7 @@ export function WalletScreen() {
               color: W.text,
               background: W.border,
               padding: "1px 6px",
-              borderRadius: 4,
+              borderRadius: 2,
             }}
           >
             {LOGIN_USER_FOR[role]}
@@ -178,7 +184,7 @@ export function WalletScreen() {
         style={{
           background: W.surface,
           border: `1px solid ${W.border}`,
-          borderRadius: 10,
+          borderRadius: 4,
           padding: "12px 18px",
           display: "grid",
           alignItems: "center",
@@ -212,9 +218,10 @@ export function WalletScreen() {
               href={walletURL}
               target="_blank"
               rel="noopener noreferrer"
-              style={btn(W.brand)}
+              className="bd-btn bd-btn--secondary bd-btn--sm"
+              style={{ textDecoration: "none" }}
             >
-              ↗ Open in new tab
+              Open in new tab
             </a>
           )}
         </div>
@@ -227,7 +234,7 @@ export function WalletScreen() {
           minHeight: 0,
           background: W.surface,
           border: `1px solid ${W.border}`,
-          borderRadius: 10,
+          borderRadius: 4,
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
@@ -248,27 +255,53 @@ export function WalletScreen() {
             color: W.text2,
           }}
         >
-          <span style={{ color: W.brand }}>●</span>
+          <Dot color={W.brand} />
           <span style={{ color: W.dim }}>{walletURL ?? "—"}</span>
           <span style={{ marginLeft: "auto", color: W.dim, fontSize: 10.5 }}>
             signed in as {role} via DevKit JWT
           </span>
         </div>
         {walletUnreachable ? (
-          <div role="alert" style={{ flex: 1, padding: 24, color: W.warn }}>
-            The wallet UI for{" "}
-            <code style={{ fontFamily: wMono, color: W.text2 }}>{role}</code>{" "}
-            is not serving HTTP
-            {walletEndpoint?.reachability_detail
-              ? ` (${walletEndpoint.reachability_detail})`
-              : ""}
-            . This usually means the instance was created by an older DevKit
-            whose generated port overlay is stale. Use <strong>Recreate</strong>{" "}
-            on the dashboard, or re-run{" "}
-            <code style={{ fontFamily: wMono, color: W.text2 }}>
-              dpm localnet up --name {name}
-            </code>{" "}
-            to regenerate the instance's overlays.
+          <div
+            role="alert"
+            style={{ flex: 1, padding: 24, color: W.text2, fontSize: 13, lineHeight: 1.6 }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                color: W.warn,
+                fontWeight: 600,
+                marginBottom: 6,
+              }}
+            >
+              <IcAlert size={14} /> Wallet UI is not serving HTTP
+            </div>
+            <p style={{ margin: "0 0 6px" }}>
+              The wallet UI for{" "}
+              <code style={{ fontFamily: wMono, color: W.text2 }}>{role}</code>{" "}
+              accepts connections but returns no HTTP response
+              {walletEndpoint?.reachability_detail
+                ? ` (${walletEndpoint.reachability_detail})`
+                : ""}
+              . This usually means the instance was created by an older DevKit
+              whose generated port overlay is stale.
+            </p>
+            <p style={{ margin: "0 0 14px", color: W.dim }}>
+              Use <strong>Recreate</strong> on the dashboard, or re-run{" "}
+              <code style={{ fontFamily: wMono, color: W.text2 }}>
+                dpm localnet up --name {name}
+              </code>{" "}
+              to regenerate the instance's overlays.
+            </p>
+            <Button
+              variant="secondary"
+              icon={<IcRefresh />}
+              onClick={() => setRefetchNonce((n) => n + 1)}
+            >
+              Retry
+            </Button>
           </div>
         ) : walletURL ? (
           <iframe
@@ -290,7 +323,7 @@ export function WalletScreen() {
             // allow-popups-to-escape-sandbox.
             sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
             referrerPolicy="no-referrer"
-            style={{ flex: 1, border: 0, background: "#FAFAF8" }}
+            style={{ flex: 1, border: 0, background: "#FCFCFD" }}
           />
         ) : (
           <div style={{ flex: 1, padding: 24, color: W.dim }}>
@@ -324,7 +357,7 @@ function RoleSwitcher({
         padding: 3,
         background: W.border,
         border: `1px solid ${W.border}`,
-        borderRadius: 9,
+        borderRadius: 2,
       }}
     >
       {ROLES.map((id) => {
@@ -338,7 +371,7 @@ function RoleSwitcher({
               alignItems: "center",
               gap: 8,
               padding: "6px 11px",
-              borderRadius: 6,
+              borderRadius: 2,
               border: "none",
               background: active ? W.surface : "transparent",
               cursor: active ? "default" : "pointer",
@@ -367,11 +400,11 @@ function RoleAvatar({ role }: { role: Role }) {
         height: 36,
         borderRadius: "50%",
         background: `linear-gradient(135deg, ${color}, ${W.brand})`,
-        color: "#0B0E13",
+        color: "#0B0F1A",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        fontWeight: 700,
+        fontWeight: 600,
         fontSize: 13,
       }}
     >
@@ -389,11 +422,11 @@ function RoleAvatarMini({ role }: { role: Role }) {
         height: 16,
         borderRadius: "50%",
         background: `linear-gradient(135deg, ${color}, ${W.brand})`,
-        color: "#0B0E13",
+        color: "#0B0F1A",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        fontWeight: 700,
+        fontWeight: 600,
         fontSize: 9,
       }}
     >
@@ -409,7 +442,7 @@ function Pill({ children }: { children: React.ReactNode }) {
         color: W.dim,
         border: `1px solid ${W.border}`,
         padding: "1px 7px",
-        borderRadius: 4,
+        borderRadius: 2,
         fontSize: 10.5,
         fontFamily: wMono,
         background: `${W.border}40`,
@@ -418,32 +451,4 @@ function Pill({ children }: { children: React.ReactNode }) {
       {children}
     </span>
   );
-}
-
-function Dot({ color }: { color: string }) {
-  return (
-    <span
-      style={{
-        width: 6,
-        height: 6,
-        borderRadius: "50%",
-        background: color,
-        display: "inline-block",
-      }}
-    />
-  );
-}
-
-function btn(color: string): React.CSSProperties {
-  return {
-    background: "transparent",
-    color,
-    border: `1px solid ${color}`,
-    borderRadius: 6,
-    padding: "5px 12px",
-    fontSize: 12,
-    fontWeight: 600,
-    textDecoration: "none",
-    fontFamily: "inherit",
-  };
 }

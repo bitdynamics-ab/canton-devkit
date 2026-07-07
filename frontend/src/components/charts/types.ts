@@ -73,15 +73,16 @@ export function decodePrometheusRange(
   }));
 }
 
-// Curated chart palette. Keeps a chart with 6+ series readable —
-// neighbouring lines never share the same hue family. Picked to be
-// accessible on the project's dark surface tokens.
+// Curated chart palette — the design system's dataviz ramp (cobalt
+// first, teal second, then supporting hues). Keeps a chart with 6+
+// series readable: neighbouring lines never share the same hue
+// family, and every stop is legible on the dark surface tokens.
 export const CHART_PALETTE = [
-  "#7CB5F7", // blue
-  "#5BD7C5", // teal
-  "#C4A8F5", // purple
-  "#F5BF55", // amber
-  "#F08FB5", // pink
-  "#62E2A0", // green
-  "#E8A14E", // orange
+  "#6480E6", // cobalt
+  "#7BD2C6", // teal
+  "#93A7F0", // cobalt-light
+  "#DDB25E", // amber
+  "#189E8C", // teal-deep
+  "#7CC89A", // green
+  "#C8971F", // amber-deep
 ];

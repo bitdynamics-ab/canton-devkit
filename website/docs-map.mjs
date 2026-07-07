@@ -19,7 +19,7 @@ export const docsMap = [
   { src: 'explorer.md', dest: 'guides/explorer', description: 'Browse the Active Contract Set, recent transactions, and a ledger timeline of a running LocalNet from the Web UI — with CLI equivalents for scripting.' },
   { src: 'observability.md', dest: 'guides/observability', description: 'Enable the observability profile for Prometheus + Grafana, understand the live Splice metric naming convention, and toggle the sidecars at runtime.' },
   { src: 'dashboard-customization.md', dest: 'guides/dashboard-customization', description: 'Extend, replace, or restore the bundled Grafana dashboard for a running LocalNet — panels, template variables, and persistence across down/up cycles.' },
-  { src: 'tokens.md', dest: 'guides/tokens', description: 'Create, mint, transfer, and burn CIP-0112 (Token Standard V2) instruments against a live LocalNet from the CLI or the Web UI.' },
+  { src: 'tokens.md', dest: 'guides/tokens', description: 'Work with Canton Token Standard instruments on a live LocalNet — CIP-0056 assets and Token Standard V2 (CIP-0112) — from the CLI or the Web UI.' },
   { src: 'homebrew.md', dest: 'guides/homebrew', description: 'Install canton-devkit via the Homebrew tap or direct formula, and how the formula is kept in sync on every release.' },
   { src: 'faq.md', dest: 'reference/faq', description: 'Common questions about canton-devkit: what it is, how the CLI and Web UI relate, versions, and day-to-day usage.' },
   { src: 'versions.md', dest: 'reference/versions', description: 'How DevKit pins tested Splice LocalNet versions by commit SHA and content hash, discovers upstream tags, and resolves uncurated versions on opt-in.' },

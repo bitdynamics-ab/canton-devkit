@@ -6,6 +6,8 @@ import {
   type RestoreResponse,
 } from "../api";
 import { W, wMono } from "../tokens";
+import { Button } from "../components/Button";
+import { IcCheck, IcDownload } from "../components/icons";
 
 // Backup & restore card. Two actions:
 //   1. Download snapshot — POST /api/instances/:name/snapshot; the
@@ -107,7 +109,7 @@ export function BackupRestore({ instanceName }: Props) {
         marginTop: 16,
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 10,
+        borderRadius: 4,
         padding: 16,
       }}
       aria-label="Backup and restore"
@@ -130,13 +132,14 @@ export function BackupRestore({ instanceName }: Props) {
 
       {/* Download row */}
       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <button
+        <Button
+          variant="secondary"
+          icon={<IcDownload />}
           onClick={onDownload}
           disabled={downloading}
-          style={btn(W.brand, downloading)}
         >
-          {downloading ? "Preparing…" : "↓ Download snapshot"}
-        </button>
+          {downloading ? "Preparing…" : "Download snapshot"}
+        </Button>
         <span style={{ color: W.dim, fontSize: 12 }}>
           mirrors{" "}
           <code style={{ fontFamily: wMono, color: W.text2 }}>
@@ -154,7 +157,7 @@ export function BackupRestore({ instanceName }: Props) {
             marginTop: 10,
             background: `${W.err}10`,
             border: `1px solid ${W.err}`,
-            borderRadius: 6,
+            borderRadius: 2,
             padding: "8px 12px",
             fontSize: 12,
             color: W.err,
@@ -195,7 +198,7 @@ export function BackupRestore({ instanceName }: Props) {
           style={{
             border: `1.5px dashed ${dragOver ? W.brand : W.border}`,
             background: dragOver ? `${W.brand}10` : "transparent",
-            borderRadius: 8,
+            borderRadius: 4,
             padding: "14px 16px",
             cursor: "pointer",
             color: W.dim,
@@ -252,7 +255,7 @@ export function BackupRestore({ instanceName }: Props) {
                 background: "transparent",
                 color: W.text,
                 border: `1px solid ${W.border}`,
-                borderRadius: 4,
+                borderRadius: 2,
                 padding: "2px 6px",
                 fontSize: 12,
                 fontFamily: wMono,
@@ -290,13 +293,17 @@ export function BackupRestore({ instanceName }: Props) {
               marginTop: 10,
               background: `${W.brand}10`,
               border: `1px solid ${W.brand}`,
-              borderRadius: 6,
+              borderRadius: 2,
               padding: "8px 12px",
               fontSize: 12,
               color: W.text2,
             }}
           >
-            ✓ Restored{" "}
+            <span
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              <IcCheck size={12} /> Restored
+            </span>{" "}
             <code style={{ fontFamily: wMono, color: W.brand }}>
               {restore.response.name}
             </code>
@@ -314,7 +321,7 @@ export function BackupRestore({ instanceName }: Props) {
               marginTop: 10,
               background: `${W.err}10`,
               border: `1px solid ${W.err}`,
-              borderRadius: 6,
+              borderRadius: 2,
               padding: "8px 12px",
               fontSize: 12,
               color: W.err,
@@ -345,7 +352,7 @@ function UploadProgress({
         style={{
           height: 6,
           background: W.border,
-          borderRadius: 3,
+          borderRadius: 2,
           overflow: "hidden",
         }}
       >
@@ -360,17 +367,4 @@ function UploadProgress({
       </div>
     </div>
   );
-}
-
-function btn(accent: string, busy: boolean): React.CSSProperties {
-  return {
-    background: "transparent",
-    color: busy ? W.dim : accent,
-    border: `1px solid ${busy ? W.dim : accent}`,
-    borderRadius: 6,
-    padding: "5px 14px",
-    fontSize: 12,
-    fontWeight: 600,
-    cursor: busy ? "wait" : "pointer",
-  };
 }

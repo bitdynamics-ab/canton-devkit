@@ -324,7 +324,7 @@ describe("InstanceDetail", () => {
       <InstanceDetail name="demo" statusHint="running" onChanged={onChanged} />,
     );
 
-    const stopBtn = await screen.findByRole("button", { name: /^⏹ Stop$/ });
+    const stopBtn = await screen.findByRole("button", { name: /^Stop$/ });
     fireEvent.click(stopBtn);
 
     await waitFor(() => {
@@ -422,7 +422,7 @@ describe("InstanceDetail", () => {
       <InstanceDetail name="demo" statusHint="stopped" onChanged={onChanged} />,
     );
 
-    const downBtn = await screen.findByRole("button", { name: /^⏏ Down$/ });
+    const downBtn = await screen.findByRole("button", { name: /^Down$/ });
     fireEvent.click(downBtn);
 
     await waitFor(() => {
