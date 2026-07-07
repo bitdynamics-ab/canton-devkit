@@ -1,0 +1,38 @@
+/* Canton Infrastructure Design System fonts (preview — uncommitted).
+ * Archivo variable (wght 100-900, wdth 62-125): body at 100%,
+ * display at 104%, structural caps at 118%. JetBrains Mono for all
+ * code and data values. */
+
+@font-face {
+	font-family: 'Archivo';
+	src: url('../fonts/cds/archivo.woff2') format('woff2-variations');
+	font-weight: 100 900;
+	font-stretch: 62% 125%;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Archivo';
+	src: url('../fonts/cds/archivo-italic.woff2') format('woff2-variations');
+	font-weight: 100 900;
+	font-stretch: 62% 125%;
+	font-style: italic;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'JetBrains Mono';
+	src: url('../fonts/cds/jetbrains-mono.woff2') format('woff2-variations');
+	font-weight: 100 800;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'JetBrains Mono';
+	src: url('../fonts/cds/jetbrains-mono-italic.woff2') format('woff2-variations');
+	font-weight: 100 800;
+	font-style: italic;
+	font-display: swap;
+}

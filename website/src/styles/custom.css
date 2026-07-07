@@ -1,173 +1,313 @@
-/* Canton DevKit docs — typography & brand.
+/* Canton Infrastructure Design System — docs skin (preview, uncommitted).
  *
- * Fonts are self-hosted via Fontsource (no CDN): Inter Variable for
- * body/UI, JetBrains Mono Variable for code. Code-block internals are
- * configured in astro.config.mjs (expressiveCode.styleOverrides) because
- * Expressive Code resolves them at build time.
- *
- * The accent scale is the product's brand teal (frontend/src/tokens.ts:
- * brand #5BD7C5 on #0B0E13) so the docs and the Web UI share one
- * identity: bright teal in dark mode, deepened for contrast on white. */
+ * Source: the Bitdynamics design-system package (tokens/, effects,
+ * ui_kits/docs). Cool ink neutrals + one decisive cobalt (#2946CE);
+ * Archivo (variable width+weight) for text with wide caps at 118%
+ * stretch as the structural label; JetBrains Mono for code and data.
+ * Radius 2/4/8, borders not shadows, code blocks stay dark in both
+ * themes, quick damped motion. */
 
 :root {
-	--sl-font: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
-	--sl-font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+	--sl-font: 'Archivo', -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+	--sl-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+	--sl-content-width: 47.5rem; /* 760px prose column per the docs kit */
+	--sl-sidebar-width: 17rem;
 
-	/* Light theme accent — brand teal darkened for WCAG AA on white. */
-	--sl-color-accent-low: #d5f2ec;
-	--sl-color-accent: #0e7c6f;
-	--sl-color-accent-high: #0b4f47;
+	/* Heading scale (docs): H1 28/34, H2 22/28, H3 18/28. */
+	--sl-text-h1: 1.75rem;
+	--sl-text-h2: 1.375rem;
+	--sl-text-h3: 1.125rem;
+	--sl-text-h4: 1rem;
+
+	/* Motion — quick, damped, no bounce. */
+	--cds-ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+	--cds-fast: 120ms;
 }
 
+/* ------------------------------ light ------------------------------ */
+:root[data-theme='light'] {
+	--sl-color-accent-low: #eef1fd;  /* blue-50  / accent-subtle */
+	--sl-color-accent: #2946ce;      /* blue-600 */
+	--sl-color-accent-high: #1d2f85; /* blue-800 */
+	--sl-color-text-accent: #2138a8; /* blue-700 / accent-text */
+
+	--sl-color-bg: #ffffff;
+	--sl-color-bg-nav: #ffffff;
+	--sl-color-bg-sidebar: #ffffff;
+	--sl-color-bg-inline-code: #eff1f5; /* gray-100 */
+	--sl-color-hairline: #e2e5ec;       /* border-default */
+	--sl-color-hairline-light: #eff1f5; /* border-subtle */
+	--sl-color-hairline-shade: #e2e5ec;
+
+	--cds-text: #141a28;      /* gray-900 */
+	--cds-secondary: #4d5567; /* gray-600 */
+	--cds-muted: #6c7488;     /* gray-500 */
+	--cds-hover-tint: #f7f8fa;
+	--cds-active-tint: #eff1f5;
+	--cds-link: #2946ce;
+	--cds-link-hover: #1d2f85;
+	--cds-inline-code-text: #232a39; /* gray-800 */
+
+	--sl-color-text: var(--cds-secondary);
+	--sl-color-white: var(--cds-text);
+	--sl-color-gray-1: #384050;
+	--sl-color-gray-2: var(--cds-secondary);
+	--sl-color-gray-3: var(--cds-muted);
+}
+
+/* ------------------------------ dark ------------------------------- */
 :root[data-theme='dark'] {
-	/* Dark theme accent — the product's brand teal, verbatim. */
-	--sl-color-accent-low: #16403c;
-	--sl-color-accent: #5bd7c5;
-	--sl-color-accent-high: #7fe9d9;
+	--sl-color-accent-low: #141c36;  /* accent-subtle */
+	--sl-color-accent: #6480e6;      /* blue-400 */
+	--sl-color-accent-high: #93a7f0; /* accent-active */
+	--sl-color-text-accent: #93a7f0; /* accent-text */
+
+	--sl-color-bg: #0b0f1a;          /* bg-page */
+	--sl-color-bg-nav: #0b0f1a;
+	--sl-color-bg-sidebar: #0b0f1a;
+	--sl-color-bg-inline-code: #1a2133;
+	--sl-color-hairline: #232b3d;     /* border-default */
+	--sl-color-hairline-light: #171e2c; /* border-subtle */
+	--sl-color-hairline-shade: #232b3d;
+
+	--cds-text: #e9ecf4;
+	--cds-secondary: #a9b2c6;
+	--cds-muted: #7c8598;
+	--cds-hover-tint: #171e2c;
+	--cds-active-tint: #1e2637;
+	--cds-link: #8fa3ee;
+	--cds-link-hover: #b3c1f4;
+	--cds-inline-code-text: #d5dae6;
+
+	--sl-color-text: var(--cds-secondary);
+	--sl-color-white: var(--cds-text);
+	--sl-color-gray-1: #cdd2dd;
+	--sl-color-gray-2: var(--cds-secondary);
+	--sl-color-gray-3: var(--cds-muted);
 }
 
-/* ---------------------------------------------------------------- *
- * Base rendering
- * ---------------------------------------------------------------- */
-
+/* ---------------------------- rendering ---------------------------- */
 body {
 	-webkit-font-smoothing: antialiased;
 	text-rendering: optimizeLegibility;
-	font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+	-webkit-tap-highlight-color: transparent;
 }
 
-/* ---------------------------------------------------------------- *
- * Headings — Inter tightens as sizes grow; 600 beats 700 at display
- * sizes. Docs-page h1 steps down from Starlight's 40px default.
- * ---------------------------------------------------------------- */
-
-.sl-markdown-content :is(h1, h2, h3, h4) {
+/* ---------------------------- type scale --------------------------- */
+/* Headings: quietly extended (104% width), 600 max — 700 is never a
+ * headline weight in this system. Tight tracking at 28px+. */
+main h1#_top,
+main .sl-markdown-content h1 {
 	font-weight: 600;
+	font-stretch: 104%;
 	letter-spacing: -0.02em;
+	line-height: 1.215;
+	color: var(--cds-text);
 }
-h1[data-page-title] {
-	font-size: clamp(1.75rem, 1.35rem + 1.4vw, 2.25rem);
-	font-weight: 650;
-	letter-spacing: -0.022em;
-	line-height: 1.2;
+main .sl-markdown-content h2 {
+	font-weight: 600;
+	font-stretch: 104%;
+	letter-spacing: -0.01em;
+	line-height: 1.28;
+	color: var(--cds-text);
+	margin-top: 2em;
 }
-.sl-markdown-content h2 {
-	font-size: 1.4375rem;
-	margin-top: 2.25em;
-}
-.sl-markdown-content h3 {
-	font-size: 1.125rem;
+main .sl-markdown-content h3,
+main .sl-markdown-content h4 {
+	font-weight: 600;
+	font-stretch: 104%;
+	letter-spacing: -0.01em;
+	color: var(--cds-text);
 }
 
-/* Prose rhythm: technical docs with heavy inline code read better a
- * touch tighter than Starlight's 1.8 default. */
+/* Docs body: 16/26. */
 .sl-markdown-content {
-	line-height: 1.7;
+	font-size: 1rem;
+	line-height: 1.625;
+	color: var(--cds-secondary);
 }
 
-/* ---------------------------------------------------------------- *
- * Code — blocks are handled by Expressive Code (see astro.config);
- * this covers inline code so it sits inside the line rhythm.
- * ---------------------------------------------------------------- */
+strong {
+	color: var(--cds-text);
+}
 
-/* The frame's <pre> itself never gets a family from Expressive Code —
- * the UA default (Courier) leaks into prompt glyphs and copy affordances. */
+/* Content links: cobalt, medium, underlined. */
+.sl-markdown-content a:not(:where(.not-content *)) {
+	color: var(--cds-link);
+	font-weight: 500;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+	transition: color var(--cds-fast) var(--cds-ease);
+}
+.sl-markdown-content a:hover:not(:where(.not-content *)) {
+	color: var(--cds-link-hover);
+}
+
+/* ------------------------------ code ------------------------------- */
+/* Inline code: inset chip, 2px radius. */
+.sl-markdown-content code:not(pre code) {
+	font-size: 0.8125em;
+	background: var(--sl-color-bg-inline-code);
+	color: var(--cds-inline-code-text);
+	padding: 0.125rem 0.375rem;
+	border-radius: 2px;
+}
+/* Blocks: always dark ink (gray-950), 4px radius, hairline in dark. */
 .expressive-code pre {
 	font-family: var(--sl-font-mono);
-	font-size: 0.875rem;
+	font-size: 0.8125rem;
+}
+.expressive-code .frame,
+.expressive-code .frame pre {
+	border-radius: 4px;
+}
+.expressive-code .frame {
+	box-shadow: none;
+	border: 1px solid transparent;
+}
+:root[data-theme='dark'] .expressive-code .frame {
+	border-color: var(--sl-color-hairline);
+}
+/* Frame headers (terminal titlebar, editor tabs) stay on the dark
+ * raised surface in both themes — the light theme otherwise paints
+ * them white above the dark code area. */
+.expressive-code .frame .header,
+.expressive-code .frame.is-terminal .header {
+	background: #10151f;
+	border-color: #232b3d;
+}
+.expressive-code .frame .header .title,
+.expressive-code .frame.is-terminal .header .title {
+	color: #a9b2c6;
+	background: transparent;
 }
 
-.sl-markdown-content code:not(pre code) {
-	font-size: 0.855em;
-	font-variant-ligatures: none;
-	padding: 0.125rem 0.375rem;
-	border-radius: 0.25rem;
-}
-
-/* ---------------------------------------------------------------- *
- * Tables — dense reference content: smaller size, tabular numerals
- * so ports and versions align in columns.
- * ---------------------------------------------------------------- */
-
+/* ----------------------------- tables ------------------------------ */
 .sl-markdown-content table {
-	font-size: 0.9rem;
+	font-size: 0.875rem;
 	font-variant-numeric: tabular-nums;
 }
 .sl-markdown-content th {
 	font-weight: 600;
-	letter-spacing: 0.01em;
+	color: var(--cds-text);
+}
+/* Long unbreakable tokens must not dictate column widths. */
+.sl-markdown-content table code {
+	overflow-wrap: anywhere;
 }
 
-/* ---------------------------------------------------------------- *
- * Landing page (splash template)
- * ---------------------------------------------------------------- */
-
-/* Readable measure: without this the splash prose runs ~1080px wide
- * (~140 chars/line). Cap each block (not the container — Starlight's
- * splash layout collapses a constrained container to zero width); the
- * card grid gets to breathe a little wider. */
-[data-has-hero] .sl-markdown-content > * {
-	max-width: 46rem;
-	margin-inline: auto;
+/* ----------------------------- header ------------------------------ */
+header.header,
+.header {
+	border-bottom: 1px solid var(--sl-color-hairline-light);
+	background-color: var(--sl-color-bg-nav);
 }
-[data-has-hero] .sl-markdown-content > .card-grid {
-	max-width: 52rem;
-}
-
-/* Hero: bring the 64px flat-black title down to a designed scale with
- * a brand gradient; give the tagline real presence. */
-.hero {
-	padding-block: 2.5rem 1.5rem;
-}
-.hero h1 {
-	font-size: clamp(2.5rem, 1.9rem + 2.6vw, 3.5rem);
-	font-weight: 650;
-	letter-spacing: -0.028em;
-	line-height: 1.08;
-	background: linear-gradient(115deg, var(--sl-color-text) 30%, var(--sl-color-accent) 100%);
-	-webkit-background-clip: text;
-	background-clip: text;
-	-webkit-text-fill-color: transparent;
-}
-.hero .tagline {
-	font-size: clamp(1.125rem, 1rem + 0.6vw, 1.375rem);
-	line-height: 1.5;
-	letter-spacing: -0.012em;
-	max-width: 34ch;
-}
-
-/* ---------------------------------------------------------------- *
- * Cards — Starlight's defaults set 24px titles inside 210px cards;
- * rebalance toward the content.
- * ---------------------------------------------------------------- */
-
-article.card {
-	border-radius: 0.75rem;
-}
-article.card .title {
-	font-size: 1.0625rem;
+/* Wordmark: the brand's wide structural caps. */
+.site-title {
+	color: var(--cds-text);
 	font-weight: 600;
-	letter-spacing: -0.01em;
+	font-stretch: 118%;
+	font-size: 0.875rem;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
 }
-article.card .body {
-	font-size: 0.9375rem;
-	line-height: 1.6;
-	color: var(--sl-color-gray-2);
+button[data-open-modal] {
+	border: 1px solid var(--sl-color-hairline);
+	border-radius: 2px;
+	background-color: transparent;
+	color: var(--cds-muted);
+	transition: background-color var(--cds-fast) var(--cds-ease), color var(--cds-fast) var(--cds-ease);
 }
-/* Starlight 0.41 tints each card icon with a rotating pastel background
- * (cream/lavender/mint/pink) — charming for a blog, noise for a brand.
- * One identity: accent glyph on the accent-low tint. */
-article.card svg.icon {
-	color: var(--sl-color-accent);
-	background-color: var(--sl-color-accent-low) !important;
-	border-color: color-mix(in srgb, var(--sl-color-accent) 35%, transparent) !important;
+button[data-open-modal]:hover {
+	background-color: var(--cds-hover-tint);
+	color: var(--cds-secondary);
+}
+button[data-open-modal]:active {
+	background-color: var(--cds-active-tint);
 }
 
-/* ---------------------------------------------------------------- *
- * Chrome — sidebar and page-nav UI text sits smaller and calmer.
- * ---------------------------------------------------------------- */
+/* ----------------------------- sidebar ----------------------------- */
+/* Group labels: wide caps — uppercase, 118% stretch, 0.08em tracking. */
+nav.sidebar summary .group-label,
+nav.sidebar .group-label span {
+	font-size: 0.6875rem;
+	font-weight: 600;
+	font-stretch: 118%;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--cds-muted);
+}
+/* Items: 13/20, 2px radius, cobalt-subtle active per the docs kit. */
+nav.sidebar .sidebar-content {
+	font-size: 0.8125rem;
+}
+nav.sidebar .sidebar-content a {
+	color: var(--cds-secondary);
+	border-radius: 2px;
+	padding: 0.3125rem 0.625rem;
+	font-weight: 400;
+	line-height: 1.54;
+	transition: background-color var(--cds-fast) var(--cds-ease), color var(--cds-fast) var(--cds-ease);
+}
+nav.sidebar .sidebar-content a:hover {
+	color: var(--cds-text);
+	background-color: var(--cds-hover-tint);
+}
+nav.sidebar .sidebar-content a:active {
+	background-color: var(--cds-active-tint);
+}
+nav.sidebar .sidebar-content a[aria-current='page'],
+nav.sidebar .sidebar-content a[aria-current='page']:hover {
+	background-color: var(--sl-color-accent-low);
+	color: var(--sl-color-text-accent);
+	font-weight: 500;
+}
 
-nav.sidebar summary,
-.sidebar-content a {
-	letter-spacing: -0.005em;
+/* ------------------------------- TOC ------------------------------- */
+/* 2px left rule; the current item carries the cobalt rule. */
+starlight-toc a,
+.right-sidebar a {
+	font-size: 0.78125rem;
+	line-height: 1.44;
+	padding-block: 0.25rem;
+	color: var(--cds-muted);
+	border-inline-start: 2px solid var(--sl-color-hairline-light);
+	border-radius: 0;
+	transition: color var(--cds-fast) var(--cds-ease), border-color var(--cds-fast) var(--cds-ease);
+}
+starlight-toc a:hover {
+	color: var(--cds-secondary);
+}
+starlight-toc a[aria-current='true'],
+starlight-toc a[aria-current='true']:hover {
+	color: var(--cds-text);
+	font-weight: 500;
+	border-inline-start-color: var(--sl-color-accent);
+	background: none;
+}
+.right-sidebar {
+	border-inline-start: none;
+}
+
+/* --------------------------- misc chrome --------------------------- */
+.content-panel + .content-panel {
+	border-top: 1px solid var(--sl-color-hairline-light);
+}
+/* Callouts: 4px radius, semantic tint + border. */
+.starlight-aside {
+	border-radius: 4px;
+	border: 1px solid var(--sl-color-hairline);
+	border-inline-start: 1px solid var(--sl-color-hairline);
+}
+.starlight-aside--note {
+	background-color: var(--sl-color-accent-low);
+	border-color: color-mix(in srgb, var(--sl-color-accent) 30%, transparent);
+	color: var(--cds-secondary);
+}
+
+/* Keyboard focus: 2px cobalt outline, identical in both themes. */
+:is(a, button, summary):focus-visible {
+	outline: 2px solid #3d5bdc;
+	outline-offset: 2px;
+	border-radius: 2px;
 }
