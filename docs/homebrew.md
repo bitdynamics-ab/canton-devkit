@@ -18,13 +18,22 @@ tap:
 
 ```sh
 brew tap bitdynamics-ab/canton-devkit
-brew install canton-devkit
+brew install bitdynamics-ab/canton-devkit/canton-devkit
 ```
 
 > Note: the formula's `url` + `sha256` are rewritten automatically by
 > the release workflow on every release tag (see below), so the tap
 > always installs the latest published release. There is no `--HEAD`
 > install path — the formula installs prebuilt release artifacts only.
+
+## Upgrade
+
+After a new release is published and the formula is updated:
+
+```sh
+brew update
+brew upgrade canton-devkit
+```
 
 ## How the formula stays in sync
 
