@@ -1,30 +1,38 @@
-/* Self-hosted webfonts.
- *
- * Switzer (Indian Type Foundry, via Fontshare) — free for commercial
- * use under the Fontshare Free Font License; see src/fonts/switzer/FFL.txt.
- * Paper Mono (Paper Design) — SIL Open Font License; see
- * src/fonts/paper-mono/OFL.txt. Both are variable fonts, one file each. */
+/* Canton Infrastructure Design System fonts (preview — uncommitted).
+ * Archivo variable (wght 100-900, wdth 62-125): body at 100%,
+ * display at 104%, structural caps at 118%. JetBrains Mono for all
+ * code and data values. */
 
 @font-face {
-	font-family: 'Switzer';
-	src: url('../fonts/switzer/Switzer-Variable.woff2') format('woff2-variations');
+	font-family: 'Archivo';
+	src: url('../fonts/cds/archivo.woff2') format('woff2-variations');
 	font-weight: 100 900;
+	font-stretch: 62% 125%;
 	font-style: normal;
 	font-display: swap;
 }
 
 @font-face {
-	font-family: 'Switzer';
-	src: url('../fonts/switzer/Switzer-VariableItalic.woff2') format('woff2-variations');
+	font-family: 'Archivo';
+	src: url('../fonts/cds/archivo-italic.woff2') format('woff2-variations');
 	font-weight: 100 900;
+	font-stretch: 62% 125%;
 	font-style: italic;
 	font-display: swap;
 }
 
 @font-face {
-	font-family: 'Paper Mono';
-	src: url('../fonts/paper-mono/PaperMono-Variable.woff2') format('woff2-variations');
+	font-family: 'JetBrains Mono';
+	src: url('../fonts/cds/jetbrains-mono.woff2') format('woff2-variations');
 	font-weight: 100 800;
 	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'JetBrains Mono';
+	src: url('../fonts/cds/jetbrains-mono-italic.woff2') format('woff2-variations');
+	font-weight: 100 800;
+	font-style: italic;
 	font-display: swap;
 }

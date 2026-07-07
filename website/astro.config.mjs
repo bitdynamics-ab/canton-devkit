@@ -17,16 +17,17 @@ export default defineConfig({
 				'./src/styles/custom.css',
 			],
 			expressiveCode: {
-				// Code-block typography is resolved at build time by
-				// Expressive Code — plain CSS overrides don't reach the
-				// inner <pre>, so set it here (this fixes the browser
-				// falling back to its default monospace inside frames).
+				// Design system: code blocks stay dark ink in BOTH themes
+				// (one dark syntax theme), 4px radius, JetBrains Mono.
+				themes: ['github-dark'],
 				styleOverrides: {
-					codeFontFamily: "'Paper Mono', ui-monospace, 'SF Mono', Menlo, monospace",
-					codeFontSize: '0.875rem',
-					codeLineHeight: '1.7',
-					uiFontFamily: "'Switzer', ui-sans-serif, system-ui, sans-serif",
-					borderRadius: '0.5rem',
+					codeFontFamily: "'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace",
+					codeFontSize: '0.8125rem',
+					codeLineHeight: '1.6',
+					uiFontFamily: "'Archivo', -apple-system, 'Segoe UI', sans-serif",
+					borderRadius: '4px',
+					codeBackground: '#0B0F1A',
+					frames: { editorBackground: '#0B0F1A', terminalBackground: '#0B0F1A', terminalTitlebarBackground: '#10151F', editorTabBarBackground: '#10151F', shadowColor: 'transparent' },
 				},
 			},
 			social: [

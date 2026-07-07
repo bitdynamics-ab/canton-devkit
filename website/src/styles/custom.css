@@ -1,182 +1,197 @@
-/* Canton DevKit docs — design system.
+/* Canton Infrastructure Design System — docs skin (preview, uncommitted).
  *
- * Modeled on a modern API-docs system (measured values, not guesses):
- * light-first, white surfaces with #EEF1F5 hairlines, blue #0F7FFF
- * accent with 10%-alpha pill actives (12px radius), 30/700 H1 with
- * -0.75px tracking, 18px/28 article body, 14px UI text in a 288px
- * sidebar, near-black #0E1013 dark theme with #25292D hairlines.
- *
- * Fonts are self-hosted (src/styles/fonts.css): Switzer for body/UI
- * (Fontshare Free Font License) and Paper Mono for code (SIL OFL).
- * Code-block internals are configured in astro.config.mjs
- * (expressiveCode.styleOverrides). */
+ * Source: the Bitdynamics design-system package (tokens/, effects,
+ * ui_kits/docs). Cool ink neutrals + one decisive cobalt (#2946CE);
+ * Archivo (variable width+weight) for text with wide caps at 118%
+ * stretch as the structural label; JetBrains Mono for code and data.
+ * Radius 2/4/8, borders not shadows, code blocks stay dark in both
+ * themes, quick damped motion. */
 
 :root {
-	--sl-font: 'Switzer', ui-sans-serif, system-ui, -apple-system, sans-serif;
-	--sl-font-mono: 'Paper Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-	--sl-content-width: 45rem;
-	--sl-sidebar-width: 18rem;
+	--sl-font: 'Archivo', -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+	--sl-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+	--sl-content-width: 47.5rem; /* 760px prose column per the docs kit */
+	--sl-sidebar-width: 17rem;
 
-	/* Heading scale (Starlight sizes headings from these tokens). */
-	--sl-text-h1: 1.875rem;
-	--sl-text-h2: 1.5rem;
-	--sl-text-h3: 1.1875rem;
+	/* Heading scale (docs): H1 28/34, H2 22/28, H3 18/28. */
+	--sl-text-h1: 1.75rem;
+	--sl-text-h2: 1.375rem;
+	--sl-text-h3: 1.125rem;
 	--sl-text-h4: 1rem;
 
-	/* Accent — identical in both themes. */
-	--dk-accent: #0f7fff;
-	--dk-pill: color-mix(in srgb, #0f7fff 10%, transparent);
+	/* Motion — quick, damped, no bounce. */
+	--cds-ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+	--cds-fast: 120ms;
 }
 
 /* ------------------------------ light ------------------------------ */
 :root[data-theme='light'] {
-	--sl-color-accent-low: #e7f1ff;
-	--sl-color-accent: var(--dk-accent);
-	--sl-color-accent-high: #0b5fcc;
-	--sl-color-text-accent: var(--dk-accent);
+	--sl-color-accent-low: #eef1fd;  /* blue-50  / accent-subtle */
+	--sl-color-accent: #2946ce;      /* blue-600 */
+	--sl-color-accent-high: #1d2f85; /* blue-800 */
+	--sl-color-text-accent: #2138a8; /* blue-700 / accent-text */
 
 	--sl-color-bg: #ffffff;
 	--sl-color-bg-nav: #ffffff;
 	--sl-color-bg-sidebar: #ffffff;
-	--sl-color-bg-inline-code: #f2f4f7;
-	--sl-color-hairline: #eef1f5;
-	--sl-color-hairline-light: #eef1f5;
-	--sl-color-hairline-shade: #eef1f5;
+	--sl-color-bg-inline-code: #eff1f5; /* gray-100 */
+	--sl-color-hairline: #e2e5ec;       /* border-default */
+	--sl-color-hairline-light: #eff1f5; /* border-subtle */
+	--sl-color-hairline-shade: #e2e5ec;
 
-	--dk-heading: #171a1e;
-	--dk-body: #3f4246;
-	--dk-muted: #707377;
-	--dk-ui: #505357;
-	/* Measured hover: 5% neutral wash; text steps to near-black. */
-	--dk-hover: rgba(80, 83, 87, 0.05);
-	--dk-hover-text: #171a1e;
-	--sl-color-text: var(--dk-body);
-	--sl-color-white: var(--dk-heading);
-	--sl-color-gray-1: #25292d;
-	--sl-color-gray-2: var(--dk-ui);
-	--sl-color-gray-3: var(--dk-muted);
+	--cds-text: #141a28;      /* gray-900 */
+	--cds-secondary: #4d5567; /* gray-600 */
+	--cds-muted: #6c7488;     /* gray-500 */
+	--cds-hover-tint: #f7f8fa;
+	--cds-active-tint: #eff1f5;
+	--cds-link: #2946ce;
+	--cds-link-hover: #1d2f85;
+	--cds-inline-code-text: #232a39; /* gray-800 */
+
+	--sl-color-text: var(--cds-secondary);
+	--sl-color-white: var(--cds-text);
+	--sl-color-gray-1: #384050;
+	--sl-color-gray-2: var(--cds-secondary);
+	--sl-color-gray-3: var(--cds-muted);
 }
 
 /* ------------------------------ dark ------------------------------- */
 :root[data-theme='dark'] {
-	--sl-color-accent-low: #14243a;
-	--sl-color-accent: var(--dk-accent);
-	--sl-color-accent-high: #6db3ff;
-	--sl-color-text-accent: #4d9fff;
+	--sl-color-accent-low: #141c36;  /* accent-subtle */
+	--sl-color-accent: #6480e6;      /* blue-400 */
+	--sl-color-accent-high: #93a7f0; /* accent-active */
+	--sl-color-text-accent: #93a7f0; /* accent-text */
 
-	--sl-color-bg: #0e1013;
-	--sl-color-bg-nav: #0e1013;
-	--sl-color-bg-sidebar: #0e1013;
-	--sl-color-bg-inline-code: #1b1f24;
-	--sl-color-hairline: #25292d;
-	--sl-color-hairline-light: #25292d;
-	--sl-color-hairline-shade: #25292d;
+	--sl-color-bg: #0b0f1a;          /* bg-page */
+	--sl-color-bg-nav: #0b0f1a;
+	--sl-color-bg-sidebar: #0b0f1a;
+	--sl-color-bg-inline-code: #1a2133;
+	--sl-color-hairline: #232b3d;     /* border-default */
+	--sl-color-hairline-light: #171e2c; /* border-subtle */
+	--sl-color-hairline-shade: #232b3d;
 
-	--dk-heading: #dee2e6;
-	--dk-body: #9ea2a6;
-	--dk-muted: #82868a;
-	--dk-ui: #9ea2a6;
-	/* Measured hover: 5% light wash; text steps to #CED1D5. */
-	--dk-hover: rgba(222, 226, 230, 0.05);
-	--dk-hover-text: #ced1d5;
-	--sl-color-text: var(--dk-body);
-	--sl-color-white: var(--dk-heading);
-	--sl-color-gray-1: #c8ccd0;
-	--sl-color-gray-2: var(--dk-ui);
-	--sl-color-gray-3: var(--dk-muted);
+	--cds-text: #e9ecf4;
+	--cds-secondary: #a9b2c6;
+	--cds-muted: #7c8598;
+	--cds-hover-tint: #171e2c;
+	--cds-active-tint: #1e2637;
+	--cds-link: #8fa3ee;
+	--cds-link-hover: #b3c1f4;
+	--cds-inline-code-text: #d5dae6;
+
+	--sl-color-text: var(--cds-secondary);
+	--sl-color-white: var(--cds-text);
+	--sl-color-gray-1: #cdd2dd;
+	--sl-color-gray-2: var(--cds-secondary);
+	--sl-color-gray-3: var(--cds-muted);
 }
 
 /* ---------------------------- rendering ---------------------------- */
 body {
 	-webkit-font-smoothing: antialiased;
 	text-rendering: optimizeLegibility;
-	font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+	-webkit-tap-highlight-color: transparent;
 }
 
 /* ---------------------------- type scale --------------------------- */
-/* H1: 30/700/-0.75; H2: 24/600/-0.6; article body: 18/28. */
-/* Starlight's page title renders as <h1 id="_top"> (no data attribute);
- * the ID selector outranks the component-scoped class rule. */
+/* Headings: quietly extended (104% width), 600 max — 700 is never a
+ * headline weight in this system. Tight tracking at 28px+. */
 main h1#_top,
 main .sl-markdown-content h1 {
-	font-weight: 700;
-	letter-spacing: -0.025em;
-	line-height: 1.2;
-	color: var(--dk-heading);
+	font-weight: 600;
+	font-stretch: 104%;
+	letter-spacing: -0.02em;
+	line-height: 1.215;
+	color: var(--cds-text);
 }
 main .sl-markdown-content h2 {
 	font-weight: 600;
-	letter-spacing: -0.025em;
-	color: var(--dk-heading);
+	font-stretch: 104%;
+	letter-spacing: -0.01em;
+	line-height: 1.28;
+	color: var(--cds-text);
 	margin-top: 2em;
 }
-main .sl-markdown-content h3 {
-	font-weight: 600;
-	letter-spacing: -0.015em;
-	color: var(--dk-heading);
-}
+main .sl-markdown-content h3,
 main .sl-markdown-content h4 {
 	font-weight: 600;
-	color: var(--dk-heading);
+	font-stretch: 104%;
+	letter-spacing: -0.01em;
+	color: var(--cds-text);
 }
 
+/* Docs body: 16/26. */
 .sl-markdown-content {
-	font-size: 1.125rem;
-	line-height: 1.556;
-	color: var(--dk-body);
-}
-
-/* Content links: accent, underlined, semibold. */
-.sl-markdown-content a:not(:where(.not-content *)) {
-	color: var(--sl-color-text-accent);
-	font-weight: 600;
-	text-decoration: underline;
-	text-underline-offset: 3px;
-}
-.sl-markdown-content a:hover:not(:where(.not-content *)) {
-	color: var(--sl-color-accent-high);
+	font-size: 1rem;
+	line-height: 1.625;
+	color: var(--cds-secondary);
 }
 
 strong {
-	color: var(--dk-heading);
+	color: var(--cds-text);
+}
+
+/* Content links: cobalt, medium, underlined. */
+.sl-markdown-content a:not(:where(.not-content *)) {
+	color: var(--cds-link);
+	font-weight: 500;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+	transition: color var(--cds-fast) var(--cds-ease);
+}
+.sl-markdown-content a:hover:not(:where(.not-content *)) {
+	color: var(--cds-link-hover);
 }
 
 /* ------------------------------ code ------------------------------- */
+/* Inline code: inset chip, 2px radius. */
 .sl-markdown-content code:not(pre code) {
 	font-size: 0.8125em;
-	font-variant-ligatures: none;
 	background: var(--sl-color-bg-inline-code);
-	padding: 0.15rem 0.4rem;
-	border-radius: 0.375rem;
-	color: var(--dk-heading);
+	color: var(--cds-inline-code-text);
+	padding: 0.125rem 0.375rem;
+	border-radius: 2px;
 }
+/* Blocks: always dark ink (gray-950), 4px radius, hairline in dark. */
 .expressive-code pre {
 	font-family: var(--sl-font-mono);
-	font-size: 0.875rem;
+	font-size: 0.8125rem;
 }
-/* Frame chrome: hairline border, 12px radius. */
 .expressive-code .frame,
 .expressive-code .frame pre {
-	border-radius: 0.75rem;
+	border-radius: 4px;
 }
 .expressive-code .frame {
 	box-shadow: none;
-	border: 1px solid var(--sl-color-hairline);
+	border: 1px solid transparent;
+}
+:root[data-theme='dark'] .expressive-code .frame {
+	border-color: var(--sl-color-hairline);
+}
+/* Frame headers (terminal titlebar, editor tabs) stay on the dark
+ * raised surface in both themes — the light theme otherwise paints
+ * them white above the dark code area. */
+.expressive-code .frame .header,
+.expressive-code .frame.is-terminal .header {
+	background: #10151f;
+	border-color: #232b3d;
+}
+.expressive-code .frame .header .title,
+.expressive-code .frame.is-terminal .header .title {
+	color: #a9b2c6;
+	background: transparent;
 }
 
 /* ----------------------------- tables ------------------------------ */
 .sl-markdown-content table {
-	font-size: 0.9375rem;
+	font-size: 0.875rem;
 	font-variant-numeric: tabular-nums;
 }
 .sl-markdown-content th {
 	font-weight: 600;
-	color: var(--dk-heading);
+	color: var(--cds-text);
 }
-/* Long unbreakable tokens (PromQL queries, package ids, paths) must not
- * dictate column widths: `anywhere` lowers the min-content width so
- * auto table layout can balance columns instead of overflowing the
- * container and starving the last column into a tall wrap. */
+/* Long unbreakable tokens must not dictate column widths. */
 .sl-markdown-content table code {
 	overflow-wrap: anywhere;
 }
@@ -184,117 +199,115 @@ strong {
 /* ----------------------------- header ------------------------------ */
 header.header,
 .header {
-	border-bottom: 1px solid var(--sl-color-hairline);
+	border-bottom: 1px solid var(--sl-color-hairline-light);
 	background-color: var(--sl-color-bg-nav);
 }
+/* Wordmark: the brand's wide structural caps. */
 .site-title {
-	color: var(--dk-heading);
-	font-weight: 700;
+	color: var(--cds-text);
+	font-weight: 600;
+	font-stretch: 118%;
+	font-size: 0.875rem;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
 }
-/* Search: bordered pill with the measured hover wash. */
 button[data-open-modal] {
 	border: 1px solid var(--sl-color-hairline);
-	border-radius: 0.75rem;
+	border-radius: 2px;
 	background-color: transparent;
-	color: var(--dk-muted);
-	transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+	color: var(--cds-muted);
+	transition: background-color var(--cds-fast) var(--cds-ease), color var(--cds-fast) var(--cds-ease);
 }
 button[data-open-modal]:hover {
-	background-color: var(--dk-hover);
-	color: var(--dk-hover-text);
-	border-color: var(--sl-color-hairline);
+	background-color: var(--cds-hover-tint);
+	color: var(--cds-secondary);
 }
 button[data-open-modal]:active {
-	background-color: var(--dk-pill);
-	color: var(--sl-color-text-accent);
-}
-
-/* Keyboard focus: accent ring, matching the pointer affordances. */
-:is(a, button, summary):focus-visible {
-	outline: 2px solid var(--dk-accent);
-	outline-offset: 2px;
-	border-radius: 0.5rem;
-}
-
-/* Content links transition their hover-darken; taps show the pill
- * treatment instead of the mobile gray flash. */
-.sl-markdown-content a:not(:where(.not-content *)) {
-	transition: color 0.15s ease;
-}
-body {
-	-webkit-tap-highlight-color: transparent;
+	background-color: var(--cds-active-tint);
 }
 
 /* ----------------------------- sidebar ----------------------------- */
-/* 14px UI text; group labels bold heading-color; active item is a
- * 10%-accent pill with 12px radius and accent text. */
-nav.sidebar .sidebar-content {
-	font-size: 0.875rem;
-}
+/* Group labels: wide caps — uppercase, 118% stretch, 0.08em tracking. */
 nav.sidebar summary .group-label,
 nav.sidebar .group-label span {
-	font-size: 0.875rem;
-	font-weight: 700;
-	color: var(--dk-heading);
+	font-size: 0.6875rem;
+	font-weight: 600;
+	font-stretch: 118%;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--cds-muted);
+}
+/* Items: 13/20, 2px radius, cobalt-subtle active per the docs kit. */
+nav.sidebar .sidebar-content {
+	font-size: 0.8125rem;
 }
 nav.sidebar .sidebar-content a {
-	color: var(--dk-ui);
-	border-radius: 0.75rem;
-	padding: 0.375rem 0.75rem;
+	color: var(--cds-secondary);
+	border-radius: 2px;
+	padding: 0.3125rem 0.625rem;
 	font-weight: 400;
-	transition: background-color 0.15s ease, color 0.15s ease;
+	line-height: 1.54;
+	transition: background-color var(--cds-fast) var(--cds-ease), color var(--cds-fast) var(--cds-ease);
 }
-/* Hover: measured 5% neutral wash, text steps toward heading color. */
 nav.sidebar .sidebar-content a:hover {
-	color: var(--dk-hover-text);
-	background-color: var(--dk-hover);
+	color: var(--cds-text);
+	background-color: var(--cds-hover-tint);
 }
-/* Press: the accent pill appears immediately under the pointer — the
- * same treatment the item keeps once it becomes the current page. */
 nav.sidebar .sidebar-content a:active {
-	background-color: var(--dk-pill);
-	color: var(--sl-color-text-accent);
+	background-color: var(--cds-active-tint);
 }
 nav.sidebar .sidebar-content a[aria-current='page'],
 nav.sidebar .sidebar-content a[aria-current='page']:hover {
-	background-color: var(--dk-pill);
+	background-color: var(--sl-color-accent-low);
 	color: var(--sl-color-text-accent);
 	font-weight: 500;
 }
 
 /* ------------------------------- TOC ------------------------------- */
+/* 2px left rule; the current item carries the cobalt rule. */
 starlight-toc a,
 .right-sidebar a {
-	font-size: 0.875rem;
-	line-height: 1.7;
-	color: var(--dk-muted);
-	transition: color 0.15s ease;
+	font-size: 0.78125rem;
+	line-height: 1.44;
+	padding-block: 0.25rem;
+	color: var(--cds-muted);
+	border-inline-start: 2px solid var(--sl-color-hairline-light);
+	border-radius: 0;
+	transition: color var(--cds-fast) var(--cds-ease), border-color var(--cds-fast) var(--cds-ease);
 }
 starlight-toc a:hover {
-	color: var(--dk-hover-text);
+	color: var(--cds-secondary);
 }
 starlight-toc a[aria-current='true'],
 starlight-toc a[aria-current='true']:hover {
-	color: var(--sl-color-text-accent);
+	color: var(--cds-text);
 	font-weight: 500;
+	border-inline-start-color: var(--sl-color-accent);
+	background: none;
 }
 .right-sidebar {
 	border-inline-start: none;
 }
 
 /* --------------------------- misc chrome --------------------------- */
-/* Content panels: no heavy divider under the title block. */
 .content-panel + .content-panel {
-	border-top: 1px solid var(--sl-color-hairline);
+	border-top: 1px solid var(--sl-color-hairline-light);
 }
-/* Asides/notes: soft accent surface, rounded. */
+/* Callouts: 4px radius, semantic tint + border. */
 .starlight-aside {
-	border-radius: 0.75rem;
+	border-radius: 4px;
 	border: 1px solid var(--sl-color-hairline);
 	border-inline-start: 1px solid var(--sl-color-hairline);
 }
 .starlight-aside--note {
 	background-color: var(--sl-color-accent-low);
-	border-color: color-mix(in srgb, var(--dk-accent) 25%, transparent);
-	color: var(--dk-body);
+	border-color: color-mix(in srgb, var(--sl-color-accent) 30%, transparent);
+	color: var(--cds-secondary);
+}
+
+/* Keyboard focus: 2px cobalt outline, identical in both themes. */
+:is(a, button, summary):focus-visible {
+	outline: 2px solid #3d5bdc;
+	outline-offset: 2px;
+	border-radius: 2px;
 }
