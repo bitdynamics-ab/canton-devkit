@@ -37,7 +37,7 @@ func TestLocalnetHelp_RendersMockupShape(t *testing.T) {
 		"--format=json",
 		"NO_COLOR=1",
 		"up", "start", "stop", "down", "status", "logs", "snapshot", "dar",
-		"restart", "clean", "skills", "token",
+		"restart", "remove", "skills", "token",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("help body missing %q\nfull:\n%s", want, body)

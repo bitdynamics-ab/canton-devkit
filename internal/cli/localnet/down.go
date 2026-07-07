@@ -49,7 +49,7 @@ For a lighter-weight halt that keeps the containers around for a
 fast restart, use ` + "`dpm localnet stop <name>`" + ` instead.
 
 To remove docker volumes (destructive — drops all ledger state),
-use ` + "`dpm localnet clean --name <name>`" + ` after down.
+use ` + "`dpm localnet remove --name <name>`" + ` after down.
 
 If a normal down fails (e.g. a container is unhealthy or
 restart-looping after an out-of-memory kill, or the cached compose
@@ -251,7 +251,7 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 			term.Dimc("· state preserved."),
 			term.Dimc(fmt.Sprintf("Run %s to resume, or %s to remove volumes.",
 				term.Textc(fmt.Sprintf("localnet up %s", opts.Name)),
-				term.Textc("localnet clean"))))))
+				term.Textc("localnet remove"))))))
 
 	return localnet.ExitSuccess
 }

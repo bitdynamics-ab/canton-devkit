@@ -70,7 +70,7 @@ PROM_PORT=$(canton-devkit localnet status --name metric-audit --format json \
   | jq -r '.endpoints[] | select(.label=="prometheus_ui") | .port')
 METRICSQ_SMOKE_PROM=http://localhost:${PROM_PORT} \
   go test -tags=integration -run TestSummaryQueries_LiveProm ./...
-canton-devkit localnet clean --name metric-audit --force
+canton-devkit localnet remove --name metric-audit --force
 ```
 
 The test is **skipped** when `METRICSQ_SMOKE_PROM` is unset, so
@@ -130,7 +130,7 @@ a Prometheus **file_sd** target file (`host.docker.internal:<hostport>`,
 labelled `instance` + `component`); the shared Prometheus discovers
 instances from those files. The **number of target files is the refcount**:
 the stack starts on the first instance's `up` and is torn down when the
-last instance's `down`/`clean` removes its target file. Register+ensure and
+last instance's `down`/`remove` removes its target file. Register+ensure and
 deregister+teardown each run under a dedicated **shared-stack lock** so a
 concurrent `up` and `down` of different instances can't race the stack into
 a "registered but torn down" state, and orphaned target files (left by a
