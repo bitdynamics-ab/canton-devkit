@@ -5,7 +5,9 @@ import {
   fetchContainers,
   restartContainer,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, wideCaps } from "../tokens";
+import { Button } from "../components/Button";
+import { Dot, IcRefresh } from "../components/icons";
 import { ContainerLogsModal } from "./ContainerLogsModal";
 
 // ContainerHealth — live per-container status panel. Polls
@@ -176,6 +178,16 @@ export function ContainerHealth({ name }: { name: string }) {
   );
 }
 
+// Dense-panel micro-labels: sentence case, muted — wide caps are
+// reserved for real table/card headers.
+// Table column headers are an allowed wide-caps site — match every
+// other table in the app.
+const colHeader: React.CSSProperties = {
+  ...wideCaps,
+  color: W.dim,
+  fontSize: 11,
+};
+
 function ContainersTable({
   containers,
   onPickLogs,
@@ -207,23 +219,13 @@ function ContainersTable({
         alignItems: "center",
       }}
     >
-      <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase", fontStretch: "118%" }}>
-        ●
-      </div>
-      <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase", fontStretch: "118%" }}>
-        service
-      </div>
-      <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase", fontStretch: "118%" }}>
-        state
-      </div>
-      <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase", fontStretch: "118%" }}>
-        status
-      </div>
-      <div style={{ color: W.dim, fontSize: 10, letterSpacing: 0.5, textTransform: "uppercase", fontStretch: "118%", textAlign: "right" }}>
-        actions
-      </div>
+      <div style={colHeader} aria-hidden />
+      <div style={colHeader}>Service</div>
+      <div style={colHeader}>State</div>
+      <div style={colHeader}>Status</div>
+      <div style={{ ...colHeader, textAlign: "right" }}>Actions</div>
       {sorted.map((c) => {
-        const { color, glyph } = signalFor(c);
+        const color = signalFor(c);
         const onLogs = (e: React.MouseEvent) => {
           // Don't let the opening click double as a backdrop click on
           // the modal overlay (which would close it immediately).
@@ -248,7 +250,17 @@ function ContainersTable({
             style={{ display: "contents" }}
             title={`Click columns to view logs for ${c.name}`}
           >
-            <div onClick={onLogs} style={{ ...cellBase, color, fontSize: 14, textAlign: "center" }}>{glyph}</div>
+            <div
+              onClick={onLogs}
+              style={{
+                ...cellBase,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Dot color={color} />
+            </div>
             <div onClick={onLogs} style={{ ...cellBase, color: W.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: "underline", textDecorationColor: W.faint, textDecorationStyle: "dotted", textUnderlineOffset: 2 }}>
               {c.service}
             </div>
@@ -259,25 +271,17 @@ function ContainersTable({
               )}
             </div>
             <div onClick={onLogs} style={{ ...cellBase, color: W.dim, fontSize: 10.5 }}>{c.status}</div>
-            <div style={{ textAlign: "right" }}>
-              <button
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<IcRefresh />}
                 onClick={onRestartClick}
                 disabled={isRestarting}
                 title={`Restart ${c.name} (docker restart)`}
-                style={{
-                  background: "transparent",
-                  color: isRestarting ? W.dim : W.warn,
-                  border: `1px solid ${isRestarting ? W.dim : W.warn}`,
-                  borderRadius: 2,
-                  padding: "2px 8px",
-                  fontSize: 10.5,
-                  fontWeight: 600,
-                  fontFamily: wMono,
-                  cursor: isRestarting ? "wait" : "pointer",
-                }}
               >
-                {isRestarting ? "↻ restarting…" : "↻ restart"}
-              </button>
+                {isRestarting ? "restarting…" : "restart"}
+              </Button>
             </div>
           </div>
         );
@@ -329,17 +333,16 @@ function severity(c: { state: string; health?: string }): number {
   return 5; // healthy / running with no healthcheck
 }
 
-function signalFor(c: { state: string; health?: string }): {
-  color: string;
-  glyph: string;
-} {
-  if (c.state === "restarting") return { color: W.warn, glyph: "↻" };
-  if (c.state === "dead" || c.state === "exited") return { color: W.err, glyph: "✕" };
-  if (c.state === "paused") return { color: W.dim, glyph: "⏸" };
-  if (c.health === "unhealthy") return { color: W.err, glyph: "⊗" };
-  if (c.health === "starting") return { color: W.brand, glyph: "●" };
-  if (c.health === "healthy") return { color: W.ok, glyph: "✓" };
+// signalFor maps a container's docker state/health to its status-dot
+// color (the state word next to it carries the same color).
+function signalFor(c: { state: string; health?: string }): string {
+  if (c.state === "restarting") return W.warn;
+  if (c.state === "dead" || c.state === "exited") return W.err;
+  if (c.state === "paused") return W.dim;
+  if (c.health === "unhealthy") return W.err;
+  if (c.health === "starting") return W.brand;
+  if (c.health === "healthy") return W.ok;
   // running with no healthcheck
-  if (c.state === "running") return { color: W.ok, glyph: "●" };
-  return { color: W.dim, glyph: "·" };
+  if (c.state === "running") return W.ok;
+  return W.dim;
 }

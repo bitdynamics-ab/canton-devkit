@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, fetchContainerLogs } from "../api";
 import { W, wMono, wSans } from "../tokens";
+import { Button } from "../components/Button";
+import { IcX } from "../components/icons";
 
 // ContainerLogsModal — opens when the user clicks a row in
 // ContainerHealth. Polls docker logs for the selected container at
@@ -118,9 +120,13 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
             since={since}
             setSince={setSince}
           />
-          <button onClick={onClose} style={closeBtnStyle} title="Close (Esc)">
-            ✕
-          </button>
+          <Button
+            variant="ghost"
+            icon={<IcX />}
+            onClick={onClose}
+            title="Close (Esc)"
+            aria-label="Close logs"
+          />
         </header>
 
         {err && (
@@ -238,16 +244,6 @@ const headerStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 12,
-};
-
-const closeBtnStyle: React.CSSProperties = {
-  background: "transparent",
-  color: W.dim,
-  border: `1px solid ${W.border}`,
-  borderRadius: 2,
-  padding: "4px 10px",
-  fontSize: 12,
-  cursor: "pointer",
 };
 
 const selectStyle: React.CSSProperties = {

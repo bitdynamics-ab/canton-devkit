@@ -31,7 +31,20 @@ import {
   type TokenRef,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { W, wMono } from "../tokens";
+import { W, wMono, wideCaps } from "../tokens";
+import { Button } from "../components/Button";
+import {
+  IcArrowRight,
+  IcArrowUp,
+  IcBolt,
+  IcCheck,
+  IcChevronDown,
+  IcChevronRight,
+  IcDroplet,
+  IcFlame,
+  IcPlus,
+  IcX,
+} from "../components/icons";
 
 // shortParty trims a fingerprinted id to its readable prefix for display.
 function shortParty(p: string): string {
@@ -365,29 +378,27 @@ export function TokensScreen() {
     <section style={{ padding: 24, display: "flex", flexDirection: "column", gap: 14 }}>
       <Header right={
         <span style={{ display: "flex", gap: 8 }}>
-          <button
-            type="button"
-            onClick={() => setShowParties(true)}
-            style={btnStyle(W.dim, false)}
-          >
-            ⦿ Parties{parties.length > 0 ? ` (${parties.length})` : ""}
-          </button>
-          <button
-            type="button"
+          <Button variant="secondary" size="sm" onClick={() => setShowParties(true)}>
+            Parties{parties.length > 0 ? ` (${parties.length})` : ""}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<IcPlus />}
             onClick={() => setShowCreate(true)}
-            style={btnStyle(W.brand, false)}
           >
-            + Create token
-          </button>
-          <button
-            type="button"
+            Create token
+          </Button>
+          <Button
+            variant={view !== "matrix" && list.length === 0 ? "secondary" : "primary"}
+            size="sm"
+            icon={<IcBolt />}
             disabled={demoBusy}
             onClick={() => void launchDemo()}
             title="Provision a live, transferable demo token in one click"
-            style={btnStyle(W.brand, demoBusy, true)}
           >
-            {demoBusy ? "Launching…" : "⚡ Launch demo"}
-          </button>
+            {demoBusy ? "Launching…" : "Launch demo"}
+          </Button>
         </span>
       } />
 
@@ -424,12 +435,12 @@ export function TokensScreen() {
             Go from empty to a live, transferable token in one click — no party ids to paste.
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-            <button type="button" disabled={demoBusy} onClick={() => void launchDemo()} style={btnStyle(W.brand, demoBusy, true)}>
-              {demoBusy ? "Launching demo…" : "⚡ Launch demo token"}
-            </button>
-            <button type="button" onClick={() => setShowCreate(true)} style={btnStyle(W.dim, false)}>
-              + Create token manually
-            </button>
+            <Button variant="primary" size="md" icon={<IcBolt />} disabled={demoBusy} onClick={() => void launchDemo()}>
+              {demoBusy ? "Launching demo…" : "Launch demo token"}
+            </Button>
+            <Button variant="secondary" size="md" icon={<IcPlus />} onClick={() => setShowCreate(true)}>
+              Create token manually
+            </Button>
           </div>
           <div style={{ color: W.faint, fontSize: 11.5, marginTop: 14 }}>
             One click provisions an issuer party, a DEMO instrument with supply, and a funded holder.
@@ -477,21 +488,25 @@ export function TokensScreen() {
                     {sym} · {active.standard}
                   </span>
                   <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-                    <button
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={<IcArrowUp />}
                       onClick={() => setModal({ kind: "mint", symbol: sym })}
                       disabled={!!mintReason}
                       title={mintReason ?? "Mint new supply"}
-                      style={btnStyle(W.brand, false, false, !!mintReason)}
-                    >↑ Mint</button>
-                    <button onClick={() => setModal({ kind: "transfer", symbol: sym })} style={btnStyle(W.brand, false)}>→ Transfer</button>
-                    <button onClick={() => setModal({ kind: "faucet", symbol: sym })} title="Fund a party from a funded source (auto-accepted)" style={btnStyle(W.brand, false)}>⛲ Faucet</button>
-                    <button
+                    >Mint</Button>
+                    <Button variant="secondary" size="sm" icon={<IcArrowRight />} onClick={() => setModal({ kind: "transfer", symbol: sym })}>Transfer</Button>
+                    <Button variant="secondary" size="sm" icon={<IcDroplet />} onClick={() => setModal({ kind: "faucet", symbol: sym })} title="Fund a party from a funded source (auto-accepted)">Faucet</Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      icon={<IcFlame />}
                       onClick={() => setModal({ kind: "burn", symbol: sym })}
                       disabled={!!mintReason}
                       title={mintReason ? BURN_DISABLED_REASON : "Burn holdings (archive path)"}
-                      style={btnStyle(W.err, false, false, !!mintReason)}
-                    >🔥 Burn</button>
-                    <button onClick={() => setModal({ kind: "accept" })} style={btnStyle(W.warn, false)}>✓ Accept transfer</button>
+                    >Burn</Button>
+                    <Button variant="secondary" size="sm" icon={<IcCheck />} onClick={() => setModal({ kind: "accept" })}>Accept transfer</Button>
                   </span>
                 </div>
                 <div style={{ color: W.dim, fontSize: 12, marginTop: 4, fontFamily: wMono }}>
@@ -526,7 +541,7 @@ export function TokensScreen() {
                     {summary && <KpiRow s={summary} />}
                     {summary && summary.holders.length > 0 && <HolderDistribution s={summary} aliases={aliases} />}
 
-                    <h4 style={{ color: W.text2, margin: "18px 0 8px" }}>
+                    <h4 style={{ color: W.text2, margin: "16px 0 8px" }}>
                       Holdings <span style={{ color: W.dim, fontWeight: 400, fontSize: 12 }}>· a balance is the sum of its Holding contracts — click a row to expand</span>
                     </h4>
                     {holdingsSource === "registry" && (
@@ -554,8 +569,8 @@ export function TokensScreen() {
                               style={{ cursor: "pointer", background: expanded === h.party ? W.surface2 : "transparent" }}
                             >
                               <td style={td}>
-                                <span style={{ color: W.brand, display: "inline-block", width: 14 }}>
-                                  {expanded === h.party ? "▾" : "▸"}
+                                <span style={{ color: W.brand, display: "inline-flex", alignItems: "center", width: 16, verticalAlign: "middle" }}>
+                                  {expanded === h.party ? <IcChevronDown size={12} /> : <IcChevronRight size={12} />}
                                 </span>
                                 {partyLabel(aliases, h.party)}
                               </td>
@@ -776,7 +791,7 @@ function TransferModal({
 
         {plan && (
           <div style={{ background: W.surface2, border: `1px solid ${W.border}`, borderRadius: 4, padding: "10px 12px" }}>
-            <div style={{ color: W.dim, fontSize: 10.5, letterSpacing: 1, textTransform: "uppercase", fontStretch: "118%", fontWeight: 600, marginBottom: 6 }}>
+            <div style={{ color: W.dim, fontSize: 12, fontWeight: 500, marginBottom: 6 }}>
               Coin selection preview
             </div>
             {plan.sufficient ? (
@@ -811,14 +826,15 @@ function TransferModal({
         )}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
-          <button type="button" onClick={onClose} style={btnStyle(W.dim, false)}>Cancel</button>
-          <button
+          <Button variant="ghost" size="md" onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            size="md"
             type="submit"
             disabled={busy || !from || !to || !amount || (plan ? !plan.sufficient : false)}
-            style={btnStyle(W.brand, busy, true, !from || !to || !amount || (plan ? !plan.sufficient : false))}
           >
             {busy ? "Submitting…" : "Transfer"}
-          </button>
+          </Button>
         </div>
       </form>
     </ModalShell>
@@ -829,9 +845,9 @@ function TransferModal({
 // a UTXO ledger), holder count, and the number of Holding contracts
 // backing it. All derived from one ACS scan.
 function KpiRow({ s }: { s: InstrumentSummary }) {
-  const cards: Array<{ label: string; value: string; hint?: string }> = [
-    { label: "Total supply", value: s.total_supply },
-    { label: "In circulation", value: s.total_supply, hint: "sum of all holdings" },
+  const cards: Array<{ label: string; value: string; full?: string; hint?: string }> = [
+    { label: "Total supply", value: statAmount(s.total_supply), full: s.total_supply },
+    { label: "In circulation", value: statAmount(s.total_supply), full: s.total_supply, hint: "sum of all holdings" },
     { label: "Holders", value: String(s.holder_count) },
     { label: "Holding contracts", value: String(s.contract_count), hint: "UTXOs" },
   ];
@@ -840,7 +856,7 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
       style={{
         display: "grid",
         gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-        gap: 10,
+        gap: 12,
         margin: "16px 0 4px",
       }}
     >
@@ -854,15 +870,29 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
             padding: "10px 12px",
           }}
         >
-          <div style={{ color: W.dim, fontSize: 11, textTransform: "uppercase", fontStretch: "118%", letterSpacing: 0.4 }}>
+          <div style={{ ...wideCaps, color: W.dim, fontSize: 11, marginBottom: 6 }}>
             {c.label}
           </div>
-          <div style={{ color: W.text, fontSize: 20, fontFamily: wMono, marginTop: 4 }}>{c.value}</div>
+          <div
+            title={c.full && c.full !== c.value ? c.full : undefined}
+            style={{ color: W.text, fontSize: 20, fontFamily: wMono }}
+          >
+            {c.value}
+          </div>
           {c.hint && <div style={{ color: W.dim, fontSize: 10, marginTop: 2 }}>{c.hint}</div>}
         </div>
       ))}
     </div>
   );
+}
+
+// A stat headline must fit its card: group thousands, keep at most
+// two decimals, and let the title attribute carry full precision.
+// Non-numeric strings pass through untouched.
+function statAmount(raw: string): string {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return raw;
+  return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
 // HolderDistribution — per-holder stake table: balance, share of
@@ -961,7 +991,6 @@ function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null
                   borderRadius: 2,
                   padding: "1px 6px",
                   fontSize: 11,
-                  textTransform: "uppercase", fontStretch: "118%",
                 }}
               >
                 {e.kind}
@@ -1020,7 +1049,7 @@ function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; er
             </tr>
           ))}
           <tr>
-            <td style={{ ...td, color: W.brand, fontWeight: 600, textTransform: "uppercase", fontStretch: "118%", fontSize: 11 }}>Σ total</td>
+            <td style={{ ...td, color: W.dim, fontWeight: 600, fontSize: 12 }}>Σ total</td>
             {syms.map((s) => (
               <td key={s} style={{ ...td, textAlign: "right", fontFamily: wMono, fontWeight: 600 }}>{totals[s] ?? ""}</td>
             ))}
@@ -1111,15 +1140,15 @@ function PartyManagerModal({
               <td style={{ ...td, fontWeight: 600 }}>{p.alias}</td>
               <td style={{ ...td, color: W.dim }}>{p.role}</td>
               <td style={{ ...td, textAlign: "right" }}>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   disabled={busy}
                   onClick={() => remove(p.alias)}
                   title="Forget this alias (the on-ledger party persists)"
-                  style={{ background: "transparent", border: "none", color: W.err, cursor: "pointer", fontSize: 12 }}
                 >
                   forget
-                </button>
+                </Button>
               </td>
             </tr>
           ))}
@@ -1135,9 +1164,9 @@ function PartyManagerModal({
           placeholder="new alias (e.g. bob)"
           style={{ flex: 1, background: W.bg, border: `1px solid ${W.border}`, borderRadius: 2, padding: "8px 10px", color: W.text, fontSize: 13 }}
         />
-        <button type="submit" disabled={busy || !alias.trim()} style={btnStyle(W.brand, busy, true, !alias.trim())}>
-          {busy ? "…" : "+ Allocate"}
-        </button>
+        <Button variant="primary" size="md" type="submit" icon={<IcPlus />} disabled={busy || !alias.trim()}>
+          {busy ? "…" : "Allocate"}
+        </Button>
       </form>
     </ModalShell>
   );
@@ -1203,8 +1232,8 @@ function CreateTokenModal({
         </Field>
         {err && <div role="alert" style={{ color: W.err, fontSize: 12 }}>{err}</div>}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
-          <button type="button" onClick={onClose} style={btnStyle(W.dim, false)}>Cancel</button>
-          <button type="submit" disabled={busy} style={btnStyle(W.brand, busy, true)}>{busy ? "Creating…" : "Create"}</button>
+          <Button variant="ghost" size="md" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" size="md" type="submit" disabled={busy}>{busy ? "Creating…" : "Create"}</Button>
         </div>
       </form>
     </ModalShell>
@@ -1276,8 +1305,8 @@ function ActionModal({
         ))}
         {err && <div role="alert" style={{ color: W.err, fontSize: 12 }}>{err}</div>}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
-          <button type="button" onClick={onClose} style={btnStyle(W.dim, false)}>Cancel</button>
-          <button type="submit" disabled={busy} style={btnStyle(W.brand, busy, true)}>{busy ? "Submitting…" : "Submit"}</button>
+          <Button variant="ghost" size="md" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" size="md" type="submit" disabled={busy}>{busy ? "Submitting…" : "Submit"}</Button>
         </div>
       </form>
     </ModalShell>
@@ -1321,11 +1350,6 @@ function PartyPicker({
   }, [parties, extra]);
   const known = all.some((p) => p.party_id === value);
 
-  const linkBtn: React.CSSProperties = {
-    background: "transparent", border: "none", color: W.dim,
-    fontSize: 11, cursor: "pointer", justifySelf: "start", padding: 0,
-  };
-
   async function createNew() {
     const a = newAlias.trim();
     if (!a) return;
@@ -1362,19 +1386,24 @@ function PartyPicker({
             placeholder="new alias (e.g. bob)"
             style={{ ...input, flex: 1 }}
           />
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             disabled={busy || !newAlias.trim()}
             onClick={() => void createNew()}
-            style={btnStyle(W.brand, busy, true, !newAlias.trim())}
           >
             {busy ? "…" : "Create"}
-          </button>
+          </Button>
         </div>
         {err && <span role="alert" style={{ color: W.err, fontSize: 11 }}>{err}</span>}
-        <button type="button" onClick={() => { setMode("select"); setErr(null); }} style={linkBtn}>
-          ← back to list
-        </button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => { setMode("select"); setErr(null); }}
+          style={{ justifySelf: "start" }}
+        >
+          back to list
+        </Button>
       </div>
     );
   }
@@ -1389,9 +1418,14 @@ function PartyPicker({
           style={{ ...input, fontFamily: wMono, fontSize: 12 }}
         />
         {all.length > 0 && (
-          <button type="button" onClick={() => { onChange(""); setMode("select"); }} style={linkBtn}>
-            ← pick a registered party
-          </button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { onChange(""); setMode("select"); }}
+            style={{ justifySelf: "start" }}
+          >
+            pick a registered party
+          </Button>
         )}
       </div>
     );
@@ -1432,10 +1466,14 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
       }}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
           <h3 style={{ color: W.text, margin: 0, fontSize: 14 }}>{title}</h3>
-          <button onClick={onClose} aria-label="close" style={{
-            marginLeft: "auto", background: "transparent", color: W.dim,
-            border: "none", cursor: "pointer", fontSize: 18,
-          }}>✕</button>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<IcX />}
+            aria-label="close"
+            onClick={onClose}
+            style={{ marginLeft: "auto" }}
+          />
         </div>
         {children}
       </div>
@@ -1456,8 +1494,10 @@ const input: React.CSSProperties = {
   background: W.surface2, color: W.text, border: `1px solid ${W.border}`,
   borderRadius: 2, padding: "6px 8px", fontSize: 13,
 };
-const th: React.CSSProperties = { padding: "6px 8px", borderBottom: `1px solid ${W.border}`, fontSize: 11 };
-const td: React.CSSProperties = { padding: "6px 8px", borderBottom: `1px solid ${W.border}`, color: W.text };
+// Table column headers are an allowed wide-caps site; the 10px cell
+// side-padding keeps >=12px of air between adjacent columns.
+const th: React.CSSProperties = { ...wideCaps, padding: "6px 10px", borderBottom: `1px solid ${W.border}`, fontSize: 11 };
+const td: React.CSSProperties = { padding: "6px 10px", borderBottom: `1px solid ${W.border}`, color: W.text };
 
 function notice(tone: "ok" | "warn" | "err"): React.CSSProperties {
   const c = tone === "ok" ? W.ok : tone === "warn" ? W.warn : W.err;
@@ -1465,28 +1505,4 @@ function notice(tone: "ok" | "warn" | "err"): React.CSSProperties {
     background: `${c}10`, color: c, border: `1px solid ${c}`,
     borderRadius: 4, padding: "8px 12px", fontSize: 12.5,
   };
-}
-
-function btnStyle(accent: string, busy: boolean, filled = false, disabled = false): React.CSSProperties {
-  if (disabled) {
-    return {
-      background: "transparent", color: W.dim, border: `1px solid ${W.border}`,
-      borderRadius: 2, padding: filled ? "5px 12px" : "4px 10px",
-      fontSize: filled ? 12 : 11.5, fontWeight: 600, cursor: "not-allowed", opacity: 0.6,
-    };
-  }
-  return filled
-    ? {
-        background: busy ? W.surface2 : accent,
-        color: busy ? W.dim : "#0B0F1A",
-        border: "none", borderRadius: 2, padding: "5px 12px",
-        fontSize: 12, fontWeight: 600, cursor: busy ? "wait" : "pointer",
-      }
-    : {
-        background: "transparent",
-        color: busy ? W.dim : accent,
-        border: `1px solid ${busy ? W.dim : accent}`,
-        borderRadius: 2, padding: "4px 10px", fontSize: 11.5,
-        fontWeight: 600, cursor: busy ? "wait" : "pointer",
-      };
 }

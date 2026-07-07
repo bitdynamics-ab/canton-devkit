@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError, fetchInstance, type Instance, type Role } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { ROLE_COLOR, W, wMono } from "../tokens";
+import { Dot } from "../components/icons";
 
 // WalletScreen embeds Splice's per-role Wallet UI inside the DevKit
 // shell so users don't juggle three browser tabs (one per party).
@@ -148,7 +149,6 @@ export function WalletScreen() {
           color: W.text2,
         }}
       >
-        <span style={{ color: W.brand, fontSize: 14 }}>🔑</span>
         <div style={{ lineHeight: 1.5 }}>
           <strong style={{ color: W.text }}>Login:</strong> on the wallet
           landing page, click <em>Log in</em> and enter user name{" "}
@@ -208,9 +208,10 @@ export function WalletScreen() {
               href={walletURL}
               target="_blank"
               rel="noopener noreferrer"
-              style={btn(W.brand)}
+              className="bd-btn bd-btn--secondary bd-btn--sm"
+              style={{ textDecoration: "none" }}
             >
-              ↗ Open in new tab
+              Open in new tab
             </a>
           )}
         </div>
@@ -244,7 +245,7 @@ export function WalletScreen() {
             color: W.text2,
           }}
         >
-          <span style={{ color: W.brand }}>●</span>
+          <Dot color={W.brand} />
           <span style={{ color: W.dim }}>{walletURL ?? "—"}</span>
           <span style={{ marginLeft: "auto", color: W.dim, fontSize: 10.5 }}>
             signed in as {role} via DevKit JWT
@@ -400,30 +401,3 @@ function Pill({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Dot({ color }: { color: string }) {
-  return (
-    <span
-      style={{
-        width: 6,
-        height: 6,
-        borderRadius: "50%",
-        background: color,
-        display: "inline-block",
-      }}
-    />
-  );
-}
-
-function btn(color: string): React.CSSProperties {
-  return {
-    background: "transparent",
-    color,
-    border: `1px solid ${color}`,
-    borderRadius: 2,
-    padding: "5px 12px",
-    fontSize: 12,
-    fontWeight: 600,
-    textDecoration: "none",
-    fontFamily: "inherit",
-  };
-}

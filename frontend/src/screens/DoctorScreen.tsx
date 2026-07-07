@@ -7,7 +7,9 @@ import {
   fetchDoctor,
   fetchSpliceVersions,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, wideCaps } from "../tokens";
+import { Button } from "../components/Button";
+import { Dot, IcAlert, IcCheck, IcRefresh, IcX } from "../components/icons";
 
 // DoctorScreen — the Web UI surface for `dpm localnet doctor`.
 //
@@ -182,23 +184,15 @@ function Header({
           </select>
         </label>
       )}
-      <button
+      <Button
+        variant="secondary"
+        size="sm"
+        icon={<IcRefresh />}
         onClick={onRerun}
         disabled={loading}
-        style={{
-          background: "transparent",
-          color: W.brand,
-          border: `1px solid ${W.brand}`,
-          borderRadius: 2,
-          padding: "6px 14px",
-          fontSize: 12.5,
-          fontWeight: 600,
-          cursor: loading ? "default" : "pointer",
-          opacity: loading ? 0.6 : 1,
-        }}
       >
         {loading ? "Running…" : "Re-run"}
-      </button>
+      </Button>
     </header>
   );
 }
@@ -211,7 +205,13 @@ function SummaryBanner({ report }: { report: PreflightReport }) {
     s.checks.some((c) => c.result === "warn"),
   );
   const accent = !report.ok ? W.err : warned ? W.warn : W.ok;
-  const glyph = !report.ok ? "✗" : warned ? "⚠" : "✓";
+  const glyph = !report.ok ? (
+    <IcX size={13} />
+  ) : warned ? (
+    <IcAlert size={13} />
+  ) : (
+    <IcCheck size={13} />
+  );
   return (
     <div
       role="status"
@@ -229,7 +229,12 @@ function SummaryBanner({ report }: { report: PreflightReport }) {
         alignItems: "center",
       }}
     >
-      <span aria-hidden>{glyph}</span>
+      <span
+        aria-hidden
+        style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}
+      >
+        {glyph}
+      </span>
       <span>{report.summary || (report.ok ? "host is ready" : "host is not ready")}</span>
     </div>
   );
@@ -246,11 +251,9 @@ function Section({
     <section style={{ marginTop: 20 }}>
       <h2
         style={{
+          ...wideCaps,
           margin: "0 0 8px",
           fontSize: 12,
-          fontWeight: 600,
-          textTransform: "uppercase", fontStretch: "118%",
-          letterSpacing: 0.6,
           color: W.dim,
         }}
       >
@@ -285,7 +288,13 @@ function CheckRow({ check, last }: { check: PreflightCheck; last: boolean }) {
     >
       <span
         aria-hidden
-        style={{ width: 14, textAlign: "center", marginTop: 1, flexShrink: 0 }}
+        style={{
+          width: 14,
+          display: "inline-flex",
+          justifyContent: "center",
+          marginTop: 3,
+          flexShrink: 0,
+        }}
       >
         <ResultGlyph result={check.result} />
       </span>
@@ -336,13 +345,22 @@ function CheckRow({ check, last }: { check: PreflightCheck; last: boolean }) {
 }
 
 function ResultGlyph({ result }: { result: PreflightCheck["result"] }) {
-  const map: Record<PreflightCheck["result"], string> = {
-    pass: "✓",
-    warn: "⚠",
-    fail: "✗",
-    skip: "○",
-  };
-  return <span style={{ color: glyphColor(result) }}>{map[result]}</span>;
+  const color = glyphColor(result);
+  const inner =
+    result === "pass" ? (
+      <IcCheck size={12} />
+    ) : result === "warn" ? (
+      <IcAlert size={12} />
+    ) : result === "fail" ? (
+      <IcX size={12} />
+    ) : (
+      <Dot color={color} size={6} />
+    );
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", color }}>
+      {inner}
+    </span>
+  );
 }
 
 function glyphColor(result: PreflightCheck["result"]): string {

@@ -12,6 +12,15 @@ import {
   unpauseInstance,
 } from "../api";
 import { W, wMono } from "../tokens";
+import { Button } from "../components/Button";
+import {
+  IcEject,
+  IcPause,
+  IcPlay,
+  IcRefresh,
+  IcStop,
+  IcX,
+} from "../components/icons";
 import { BackupRestore } from "./BackupRestore";
 
 // InstanceDetail — the per-instance detail card the dashboard shows
@@ -354,48 +363,53 @@ function ActionButton({
     return (
       <div style={{ display: "flex", gap: 6 }}>
         {status === "running" ? (
-          <button
+          <Button
+            variant="secondary"
+            icon={<IcPause />}
             onClick={onPause}
             disabled={busy}
             title="Freeze containers (docker compose pause) — hold state + ports, free CPU. Resume is instant."
-            style={btnStyle(W.warn, busy)}
           >
-            {busy ? "…" : "⏸ Pause"}
-          </button>
+            {busy ? "…" : "Pause"}
+          </Button>
         ) : (
-          <button
+          <Button
+            variant="primary"
+            icon={<IcPlay />}
             onClick={onResume}
             disabled={busy}
             title="Resume frozen containers (docker compose unpause) — no boot cost."
-            style={btnStyle(W.brand, busy)}
           >
-            {busy ? "…" : "▶ Resume"}
-          </button>
+            {busy ? "…" : "Resume"}
+          </Button>
         )}
-        <button
+        <Button
+          variant="secondary"
+          icon={<IcRefresh />}
           onClick={onRecreate}
           disabled={busy}
           title="Bring containers down then back up. Splice version, profiles, credentials, and ports preserved."
-          style={btnStyle(W.brand, busy)}
         >
-          {busy ? "…" : "↻ Recreate"}
-        </button>
-        <button
+          {busy ? "…" : "Recreate"}
+        </Button>
+        <Button
+          variant="secondary"
+          icon={<IcStop />}
           onClick={onStop}
           disabled={busy}
           title="Gracefully stop (docker compose stop) — processes exit and free CPU/memory, but containers are kept for a fast Start. Data volumes preserved."
-          style={btnStyle(W.warn, busy)}
         >
-          {busy ? "Stopping…" : "⏹ Stop"}
-        </button>
-        <button
+          {busy ? "Stopping…" : "Stop"}
+        </Button>
+        <Button
+          variant="danger"
+          icon={<IcEject />}
           onClick={onDown}
           disabled={busy}
           title="Tear down (docker compose down) — remove containers and networks. Data volumes preserved; Start will recreate them."
-          style={btnStyle(W.err, busy)}
         >
-          {busy ? "…" : "⏏ Down"}
-        </button>
+          {busy ? "…" : "Down"}
+        </Button>
       </div>
     );
   }
@@ -405,30 +419,33 @@ function ActionButton({
     // without losing the instance metadata.
     return (
       <div style={{ display: "flex", gap: 6 }}>
-        <button
+        <Button
+          variant="secondary"
+          icon={<IcRefresh />}
           onClick={onRecreate}
           disabled={busy}
           title="Bring containers down then back up. Splice version, profiles, credentials, and ports preserved."
-          style={btnStyle(W.brand, busy)}
         >
-          {busy ? "…" : "↻ Recreate"}
-        </button>
-        <button
+          {busy ? "…" : "Recreate"}
+        </Button>
+        <Button
+          variant="danger"
+          icon={<IcEject />}
           onClick={onDown}
           disabled={busy}
           title="Force docker compose down — use if containers are still running. Data volumes preserved."
-          style={btnStyle(W.warn, busy)}
         >
-          {busy ? "…" : "⏏ Down containers"}
-        </button>
-        <button
+          {busy ? "…" : "Down containers"}
+        </Button>
+        <Button
+          variant="ghost"
+          icon={<IcX />}
           onClick={onRemove}
           disabled={busy}
           title="Remove the registry entry only. Won't touch docker — run Down first if containers are live."
-          style={btnStyle(W.dim, busy)}
         >
-          {busy ? "Removing…" : "✕ Remove entry"}
-        </button>
+          {busy ? "Removing…" : "Remove entry"}
+        </Button>
       </div>
     );
   }
@@ -438,45 +455,35 @@ function ActionButton({
     // version + profiles) when they were removed by a Down.
     return (
       <div style={{ display: "flex", gap: 6 }}>
-        <button
+        <Button
+          variant="primary"
+          icon={<IcPlay />}
           onClick={onStart}
           disabled={busy}
           title="Start the instance. Fast when containers are present; otherwise recreates them with the recorded Splice version and ports."
-          style={btnStyle(W.brand, busy)}
         >
-          {busy ? "Starting…" : "▶ Start"}
-        </button>
-        <button
+          {busy ? "Starting…" : "Start"}
+        </Button>
+        <Button
+          variant="danger"
+          icon={<IcEject />}
           onClick={onDown}
           disabled={busy}
           title="Tear down stopped containers (docker compose down) — remove preserved containers and networks. Data volumes preserved; Start will recreate them."
-          style={btnStyle(W.err, busy)}
         >
-          {busy ? "…" : "⏏ Down"}
-        </button>
-        <button
+          {busy ? "…" : "Down"}
+        </Button>
+        <Button
+          variant="ghost"
+          icon={<IcX />}
           onClick={onRemove}
           disabled={busy}
           title="Remove the registry entry + state.json. Docker volumes (if any) untouched."
-          style={btnStyle(W.dim, busy)}
         >
-          {busy ? "Removing…" : "✕ Remove entry"}
-        </button>
+          {busy ? "Removing…" : "Remove entry"}
+        </Button>
       </div>
     );
   }
   return null;
-}
-
-function btnStyle(accent: string, busy: boolean): React.CSSProperties {
-  return {
-    background: "transparent",
-    color: busy ? W.dim : accent,
-    border: `1px solid ${busy ? W.dim : accent}`,
-    borderRadius: 2,
-    padding: "4px 12px",
-    fontSize: 11.5,
-    fontWeight: 600,
-    cursor: busy ? "wait" : "pointer",
-  };
 }

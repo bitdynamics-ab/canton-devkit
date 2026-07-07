@@ -11,6 +11,11 @@ import {
   type Role,
 } from "../api";
 import { W, wMono } from "../tokens";
+import {
+  IcArrowRight,
+  IcChevronDown,
+  IcChevronRight,
+} from "../components/icons";
 
 interface Props {
   instance: string;
@@ -71,7 +76,16 @@ export function DARDiff({ instance, a, b, role }: Props) {
       <header style={{ marginBottom: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
           <Side label="a" side={d.a ?? null} />
-          <span style={{ color: W.dim, alignSelf: "center" }}>→</span>
+          <span
+            style={{
+              color: W.dim,
+              alignSelf: "center",
+              display: "inline-flex",
+              alignItems: "center",
+            }}
+          >
+            <IcArrowRight size={12} />
+          </span>
           <Side label="b" side={d.b ?? null} />
         </div>
         <div style={{ color: W.dim, fontSize: 11, marginTop: 6 }}>
@@ -271,9 +285,15 @@ function Section<T>({
           cursor: "pointer",
           padding: "2px 0",
           letterSpacing: 0.6,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
         }}
       >
-        {open ? "▾" : "▸"} {title} ({items.length})
+        {open ? <IcChevronDown size={12} /> : <IcChevronRight size={12} />}
+        <span>
+          {title} ({items.length})
+        </span>
       </button>
       {open && (
         <div style={{ marginLeft: 14, marginTop: 4 }}>

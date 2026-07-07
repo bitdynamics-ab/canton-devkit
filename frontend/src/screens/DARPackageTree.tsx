@@ -12,6 +12,7 @@ import {
   type Role,
 } from "../api";
 import { W, wMono } from "../tokens";
+import { IcChevronDown, IcChevronRight } from "../components/icons";
 
 interface Props {
   instance: string;
@@ -137,8 +138,21 @@ function PackageNode({
         aria-expanded={expanded}
         style={treeRowStyle(pkg.is_main)}
       >
-        <span style={{ width: 14, display: "inline-block" }}>
-          {modules.length === 0 ? "·" : expanded ? "▾" : "▸"}
+        <span
+          style={{
+            width: 14,
+            display: "inline-flex",
+            alignItems: "center",
+            flexShrink: 0,
+          }}
+        >
+          {modules.length === 0 ? (
+            "·"
+          ) : expanded ? (
+            <IcChevronDown size={12} />
+          ) : (
+            <IcChevronRight size={12} />
+          )}
         </span>
         <span style={{ fontFamily: wMono, color: pkg.is_main ? W.brand : W.text }}>
           {pkg.name || pkg.package_id.slice(0, 12)}
@@ -189,8 +203,21 @@ function ModuleNode({
         aria-expanded={expanded}
         style={treeRowStyle(false)}
       >
-        <span style={{ width: 14, display: "inline-block" }}>
-          {total === 0 ? "·" : expanded ? "▾" : "▸"}
+        <span
+          style={{
+            width: 14,
+            display: "inline-flex",
+            alignItems: "center",
+            flexShrink: 0,
+          }}
+        >
+          {total === 0 ? (
+            "·"
+          ) : expanded ? (
+            <IcChevronDown size={12} />
+          ) : (
+            <IcChevronRight size={12} />
+          )}
         </span>
         <span style={{ fontFamily: wMono, color: W.text }}>{mod.name}</span>
         <span style={{ marginLeft: 8, color: W.dim, fontSize: 10.5 }}>

@@ -7,9 +7,12 @@ import {
   type Role,
 } from "../api";
 import { W, wMono } from "../tokens";
+import { Button } from "../components/Button";
+import { IcX } from "../components/icons";
 
-// ContractDetailDrawer slides in from the right of the ACS table when
-// a row is clicked. Fetches the deep view from
+// ContractDetailDrawer is a true right-side overlay: position-fixed
+// below the topbar so the ACS table keeps its full width. It opens
+// when a row is clicked. Fetches the deep view from
 // /api/instances/{name}/contracts/{cid}
 // (EventQueryService.GetEventsByContractId) for the create event's full
 // payload, signatories, observers, and archive metadata. While that
@@ -127,11 +130,19 @@ export function ContractDetailDrawer({
     <aside
       aria-label="Contract detail"
       style={{
+        position: "fixed",
+        top: 52,
+        right: 0,
+        bottom: 0,
+        width: "min(480px, 92vw)",
         background: W.surface,
-        border: `1px solid ${W.border}`,
-        borderRadius: 4,
-        overflow: "hidden",
-        position: "relative",
+        borderLeft: `1px solid ${W.border}`,
+        boxShadow:
+          "0 0 0 1px rgba(0,0,0,0.2), -16px 0 40px -12px rgba(0,0,0,0.5)",
+        // Below the CommandPalette (zIndex 100) but above page content.
+        zIndex: 40,
+        overscrollBehavior: "contain",
+        overflowY: "auto",
       }}
     >
       <header
@@ -148,23 +159,13 @@ export function ContractDetailDrawer({
             visible to {detail.signatories.length + detail.observers.length}
           </Pill>
           <span style={{ marginLeft: "auto" }} />
-          <button
-            type="button"
-            onClick={onClose}
+          <Button
+            variant="ghost"
+            icon={<IcX />}
             aria-label="Close detail drawer"
-            style={{
-              background: "transparent",
-              border: `1px solid ${W.border}`,
-              color: W.dim,
-              fontFamily: wMono,
-              fontSize: 11,
-              padding: "2px 6px",
-              borderRadius: 2,
-              cursor: "pointer",
-            }}
-          >
-            esc
-          </button>
+            title="Close (esc)"
+            onClick={onClose}
+          />
         </div>
         <div
           style={{
@@ -206,23 +207,13 @@ export function ContractDetailDrawer({
           }}
         >
           <span>{detail.contract_id}</span>
-          <button
-            type="button"
-            onClick={copyCid}
+          <Button
+            variant="ghost"
             aria-label="Copy contract id"
-            style={{
-              background: "transparent",
-              border: `1px solid ${W.border}`,
-              color: W.dim,
-              fontFamily: wMono,
-              fontSize: 10,
-              padding: "1px 5px",
-              borderRadius: 2,
-              cursor: "pointer",
-            }}
+            onClick={copyCid}
           >
             {copied ? "copied" : "copy"}
-          </button>
+          </Button>
         </div>
         {state.kind === "loading" && (
           <div
@@ -442,7 +433,7 @@ function PartyChip({ party, kind }: { party: string; kind: "sig" | "obs" }) {
 // PayloadNode — recursive JSON-like view for the contract payload:
 // objects as label:value pairs, arrays as indexed lists, primitives in
 // place. Each level indents 12px — enough to see structure without
-// burning horizontal space in the 380px drawer.
+// burning horizontal space in the overlay drawer.
 function PayloadNode({
   value,
   depth,

@@ -15,6 +15,15 @@ import {
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { W, wMono } from "../tokens";
+import { Button } from "../components/Button";
+import {
+  Dot,
+  IcAlert,
+  IcArrowRight,
+  IcCheck,
+  IcUpload,
+  IcX,
+} from "../components/icons";
 import { DARPackageTree } from "./DARPackageTree";
 import { DARDiff } from "./DARDiff";
 
@@ -329,7 +338,16 @@ export function DARScreen() {
                   <UploadProgress state={upload} />
                 ) : (
                   <>
-                    <div style={{ fontSize: 26, color: W.brand, marginBottom: 8 }}>⬆</div>
+                    <div
+                      style={{
+                        color: W.brand,
+                        marginBottom: 8,
+                        display: "flex",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <IcUpload size={22} />
+                    </div>
                     <div
                       style={{
                         fontWeight: 600,
@@ -390,13 +408,21 @@ export function DARScreen() {
                 >
                   {selectedRoles.length === 0 ? (
                     <>
-                      <span style={{ color: W.warn }}>⚠</span> Pick at least one
-                      target. Drops will be refused until a participant is
-                      selected.
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          color: W.warn,
+                        }}
+                      >
+                        <IcAlert size={12} /> Pick at least one target.
+                      </span>{" "}
+                      Drops will be refused until a participant is selected.
                     </>
                   ) : (
                     <>
-                      <span style={{ color: W.brand }}>ⓘ</span> Each dropped DAR
+                      Each dropped DAR
                       uploads in parallel to <strong>{selectedRoles.length}</strong>{" "}
                       participant{selectedRoles.length === 1 ? "" : "s"} with
                       <code style={{ fontFamily: wMono, marginLeft: 4 }}>
@@ -576,12 +602,10 @@ function WatchModeCard({ instance }: { instance: string }) {
             style={{
               padding: "2px 8px",
               borderRadius: 2,
-              fontSize: 10.5,
+              fontSize: 12,
               background: active ? "#7CC89A22" : W.border,
               color: active ? "#7CC89A" : W.dim,
-              fontWeight: 600,
-              letterSpacing: 0.8,
-              textTransform: "uppercase", fontStretch: "118%",
+              fontWeight: 500,
             }}
           >
             {active ? "Watching" : "Idle"}
@@ -739,15 +763,7 @@ function VettingCell({ vet }: { vet: VetState | undefined }) {
             title={title}
             style={{ display: "flex", alignItems: "center", gap: 3, color }}
           >
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                background: color,
-                flexShrink: 0,
-              }}
-            />
+            <Dot color={color} size={6} />
             {abbr}
             {r.error ? "?" : ""}
           </span>
@@ -831,14 +847,15 @@ function InspectDrawer({
       >
         {compareWith ? (
           <>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={onClearCompare}
-              style={smallBtn}
               aria-label="exit diff mode"
+              icon={<IcArrowRight style={{ transform: "rotate(180deg)" }} />}
             >
-              ← back to inspect
-            </button>
+              back to inspect
+            </Button>
             <div style={{ marginTop: 8 }}>
               <DARDiff instance={instance} a={row.main} b={compareWith} role={role} />
             </div>
@@ -857,17 +874,6 @@ function InspectDrawer({
     </div>
   );
 }
-
-const smallBtn: React.CSSProperties = {
-  background: "transparent",
-  border: `1px solid ${W.border}`,
-  color: W.text2,
-  borderRadius: 2,
-  padding: "3px 10px",
-  fontSize: 11.5,
-  fontFamily: wMono,
-  cursor: "pointer",
-};
 
 // CompareSelector renders a small "compare with…" dropdown of every
 // DAR currently visible in the list (excluding the active one).
@@ -1104,8 +1110,8 @@ function UploadResultBanner({
   const accent = kind === "success" ? W.brand : W.warn;
   const heading =
     kind === "success"
-      ? `✓ Uploaded ${total} package${total === 1 ? "" : "s"} to ${okCount} participant${okCount === 1 ? "" : "s"}. Refreshing list…`
-      : `⚠ Partial upload — ${okCount}/${results.length} participant${results.length === 1 ? "" : "s"} succeeded`;
+      ? `Uploaded ${total} package${total === 1 ? "" : "s"} to ${okCount} participant${okCount === 1 ? "" : "s"}. Refreshing list…`
+      : `Partial upload — ${okCount}/${results.length} participant${results.length === 1 ? "" : "s"} succeeded`;
   return (
     <div
       role={kind === "success" ? "status" : "alert"}
@@ -1118,8 +1124,18 @@ function UploadResultBanner({
         color: W.text2,
       }}
     >
-      <div style={{ color: accent, fontWeight: 600, marginBottom: results.length > 0 ? 6 : 0 }}>
-        {heading}
+      <div
+        style={{
+          color: accent,
+          fontWeight: 600,
+          marginBottom: results.length > 0 ? 6 : 0,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}
+      >
+        {kind === "success" ? <IcCheck size={12} /> : <IcAlert size={12} />}
+        <span>{heading}</span>
       </div>
       {results.map((r) => (
         <div
@@ -1134,8 +1150,15 @@ function UploadResultBanner({
             color: r.ok ? W.text2 : W.err,
           }}
         >
-          <span style={{ color: r.ok ? W.brand : W.err, width: 12 }}>
-            {r.ok ? "✓" : "✗"}
+          <span
+            style={{
+              color: r.ok ? W.brand : W.err,
+              width: 12,
+              display: "inline-flex",
+              alignItems: "center",
+            }}
+          >
+            {r.ok ? <IcCheck size={12} /> : <IcX size={12} />}
           </span>
           <span style={{ width: 110 }}>{r.role}</span>
           <span>
@@ -1362,10 +1385,8 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     <div
       style={{
         color: W.dim,
-        fontSize: 10.5,
-        letterSpacing: 1.4,
-        textTransform: "uppercase", fontStretch: "118%",
-        fontWeight: 600,
+        fontSize: 12,
+        fontWeight: 500,
       }}
     >
       {children}
@@ -1386,9 +1407,14 @@ function KV({
 }) {
   return (
     <div
-      style={{ display: "grid", gridTemplateColumns: "70px 1fr", gap: 8, marginBottom: 4 }}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "70px 1fr",
+        gap: 12,
+        padding: "4px 0",
+      }}
     >
-      <span style={{ color: W.dim, fontSize: 11, fontFamily: wMono }}>{label}</span>
+      <span style={{ color: W.dim, fontSize: 12 }}>{label}</span>
       <span
         style={{
           color: color ?? W.text2,
@@ -1413,8 +1439,15 @@ function Row({
   vColor?: string;
 }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between" }}>
-      <span style={{ color: W.dim }}>{k}</span>
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 12,
+        padding: "4px 0",
+      }}
+    >
+      <span style={{ color: W.dim, fontSize: 12 }}>{k}</span>
       <span style={{ color: vColor ?? W.text }}>{v}</span>
     </div>
   );

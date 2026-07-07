@@ -1,6 +1,7 @@
 import { NavLink, useSearchParams } from "react-router-dom";
 import { useState } from "react";
 import { W, wMono, wSans } from "../tokens";
+import { IcChevronDown } from "../components/icons";
 import { type ConnectionState, useConnectionHealth } from "./useConnectionHealth";
 import { type InstanceSelection, useInstanceSelection } from "./useInstanceSelection";
 import { CommandPalette } from "./CommandPalette";
@@ -142,7 +143,7 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
       >
         <span style={{ color: W.brand }}>instance:</span>{" "}
         <strong style={{ color: W.text }}>{sel.selected ?? "—"}</strong>
-        <span style={{ marginLeft: 6, color: W.dim }}>▾</span>
+        <IcChevronDown size={12} style={{ marginLeft: 6, color: W.dim }} />
       </button>
       {open && (
         <ul

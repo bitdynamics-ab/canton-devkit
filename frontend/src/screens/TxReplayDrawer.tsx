@@ -7,9 +7,13 @@ import {
   type TxReplayResponse,
 } from "../api";
 import { W, wMono } from "../tokens";
+import { Button } from "../components/Button";
+import { IcX } from "../components/icons";
 
 // TxReplayDrawer — the Web UI counterpart of `dpm localnet tx replay
-// --id <id>`. Fetches one transaction with the LEDGER_EFFECTS shape
+// --id <id>`, rendered as a fixed right-side overlay below the topbar
+// so the transactions table keeps its full width.
+// Fetches one transaction with the LEDGER_EFFECTS shape
 // (exercised choices, not just the ACS delta) projected through a
 // party set and renders the event tree. The party selector answers
 // "what did party P see in this transaction?" — the same id queried
@@ -86,11 +90,21 @@ export function TxReplayDrawer({
 
   return (
     <div
+      aria-label="Transaction replay"
       style={{
+        position: "fixed",
+        top: 52,
+        right: 0,
+        bottom: 0,
+        width: "min(480px, 92vw)",
         background: W.surface,
-        border: `1px solid ${W.border}`,
-        borderRadius: 4,
-        overflow: "hidden",
+        borderLeft: `1px solid ${W.border}`,
+        boxShadow:
+          "0 0 0 1px rgba(0,0,0,0.2), -16px 0 40px -12px rgba(0,0,0,0.5)",
+        // Below the CommandPalette (zIndex 100) but above page content.
+        zIndex: 40,
+        overscrollBehavior: "contain",
+        overflowY: "auto",
       }}
     >
       <header
@@ -118,21 +132,13 @@ export function TxReplayDrawer({
             {updateId}
           </code>
         </div>
-        <button
-          onClick={onClose}
+        <Button
+          variant="ghost"
+          icon={<IcX />}
           aria-label="Close replay"
-          style={{
-            background: "transparent",
-            border: `1px solid ${W.border}`,
-            color: W.dim,
-            borderRadius: 2,
-            padding: "3px 8px",
-            cursor: "pointer",
-            fontSize: 12,
-          }}
-        >
-          esc
-        </button>
+          title="Close (esc)"
+          onClick={onClose}
+        />
       </header>
 
       <div
@@ -208,7 +214,7 @@ export function TxReplayDrawer({
             {state.data.event_count === 1 ? "event" : "events"} visible
             {state.data.workflow_id ? ` · ${state.data.workflow_id}` : ""}
           </div>
-          <div style={{ padding: "10px 16px", maxHeight: "55vh", overflowY: "auto" }}>
+          <div style={{ padding: "10px 16px" }}>
             {state.data.events.length === 0 ? (
               <div style={{ color: W.dim, fontSize: 12.5 }}>
                 No events in this transaction are visible to the selected

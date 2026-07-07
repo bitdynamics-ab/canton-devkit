@@ -125,6 +125,99 @@ a {
   font-weight: 500;
 }
 
+/* Button system (components/Button.tsx). Hover/active tints live
+ * here because inline style objects can't express :hover. Values
+ * are the dark-console tokens from tokens.ts. */
+.bd-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: inherit;
+  font-weight: 500;
+  border-radius: 2px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.bd-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.bd-btn--sm {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.bd-btn--md {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+.bd-btn--full {
+  width: 100%;
+}
+
+.bd-btn--primary {
+  background: #6480e6;
+  color: #0b0f1a;
+}
+.bd-btn--primary:hover:not(:disabled) {
+  background: #7b93ec;
+}
+.bd-btn--primary:active:not(:disabled) {
+  background: #93a7f0;
+}
+
+.bd-btn--secondary {
+  background: #10151f;
+  border-color: #232b3d;
+  color: #e9ecf4;
+}
+.bd-btn--secondary:hover:not(:disabled) {
+  background: #171e2c;
+  border-color: #313b52;
+}
+.bd-btn--secondary:active:not(:disabled) {
+  background: #1e2637;
+}
+
+.bd-btn--ghost {
+  background: transparent;
+  color: #a9b2c6;
+}
+.bd-btn--ghost:hover:not(:disabled) {
+  background: #171e2c;
+  color: #e9ecf4;
+}
+.bd-btn--ghost:active:not(:disabled) {
+  background: #1e2637;
+}
+
+.bd-btn--danger {
+  background: #d2604b;
+  color: #fff;
+}
+.bd-btn--danger:hover:not(:disabled) {
+  background: #e08d7d;
+}
+.bd-btn--danger:active:not(:disabled) {
+  background: #ba3a29;
+}
+
+.bd-btn__icon {
+  display: inline-flex;
+  flex: none;
+}
+
 /* Skip-to-content link (shell/Shell.tsx::SkipLink). Visually
  * hidden until focused via Tab — first focusable element on the
  * page so a keyboard user can jump past the sidebar to the main

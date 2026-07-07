@@ -7,6 +7,8 @@ import {
   type StepName,
 } from "../api";
 import { W, wMono } from "../tokens";
+import { Button } from "../components/Button";
+import { Dot, IcAlert, IcCheck, IcRefresh, IcX } from "../components/icons";
 import {
   type ProgressState,
   type StepState,
@@ -132,7 +134,15 @@ export function CreatingPanel({ name, onRefresh }: Props) {
                     marginBottom: 4,
                   }}
                 >
-                  ⚠ {m}
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <IcAlert size={12} /> {m}
+                  </span>
                 </div>
               ))}
             </div>
@@ -145,9 +155,9 @@ export function CreatingPanel({ name, onRefresh }: Props) {
                 justifyContent: "flex-end",
               }}
             >
-              <button onClick={onCancelLive} style={cancelBtnStyle}>
+              <Button variant="secondary" onClick={onCancelLive}>
                 Cancel bring-up
-              </button>
+              </Button>
             </div>
           )}
           {progress.terminal.length > 0 && (
@@ -207,13 +217,13 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
   const icon = (() => {
     switch (state.status) {
       case "done":
-        return <span style={{ color: W.ok }}>✓</span>;
+        return <IcCheck size={12} style={{ color: W.ok }} />;
       case "active":
-        return <span style={{ color: W.brand }}>●</span>;
+        return <Dot color={W.brand} pulse />;
       case "fail":
-        return <span style={{ color: W.err }}>✕</span>;
+        return <IcX size={12} style={{ color: W.err }} />;
       default:
-        return <span style={{ color: W.faint }}>○</span>;
+        return <Dot color={W.faint} />;
     }
   })();
   const color =
@@ -234,7 +244,19 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
         fontSize: 12.5,
       }}
     >
-      <span style={{ width: 14, textAlign: "center" }}>{icon}</span>
+      <span
+        style={{
+          width: 14,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          alignSelf: "flex-start",
+          height: 19,
+          flex: "none",
+        }}
+      >
+        {icon}
+      </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ color }}>{label}</div>
         {(state.detail || state.summary) && (
@@ -312,7 +334,7 @@ function Pill({ color, children }: { color: string; children: React.ReactNode })
         fontSize: 11,
       }}
     >
-      ● {children}
+      <Dot color={color} /> {children}
     </span>
   );
 }
@@ -353,24 +375,13 @@ function ZombieHint({
         </li>
       </ul>
       <div style={{ marginTop: 12, display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <button onClick={onRefresh} style={{ ...cancelBtnStyle, color: W.brand, borderColor: W.brand }}>
+        <Button variant="secondary" icon={<IcRefresh />} onClick={onRefresh}>
           Refresh list
-        </button>
-        <button onClick={onScrub} style={{ ...cancelBtnStyle, color: W.err, borderColor: W.err }}>
+        </Button>
+        <Button variant="danger" icon={<IcX />} onClick={onScrub}>
           Remove entry
-        </button>
+        </Button>
       </div>
     </div>
   );
 }
-
-const cancelBtnStyle: React.CSSProperties = {
-  background: "transparent",
-  color: W.warn,
-  border: `1px solid ${W.warn}`,
-  borderRadius: 2,
-  padding: "5px 12px",
-  fontSize: 12,
-  fontWeight: 600,
-  cursor: "pointer",
-};

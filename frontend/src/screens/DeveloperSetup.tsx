@@ -8,6 +8,7 @@ import {
   issueJwt,
 } from "../api";
 import { W, wMono } from "../tokens";
+import { Button } from "../components/Button";
 
 // DeveloperSetup — the "Developer setup" card. Two sub-panels:
 //
@@ -116,13 +117,13 @@ function JwtPanel({ name }: { name: string }) {
             alignItems: "center",
           }}
         >
-          <button
+          <Button
+            variant="ghost"
             onClick={() => token && navigator.clipboard.writeText(token)}
             disabled={!token}
-            style={btnStyle(W.brand)}
           >
             Copy
-          </button>
+          </Button>
         </div>
       </div>
       {jwt?.warning_dev_secret && (
@@ -206,13 +207,13 @@ function AppConfigPanel({ name }: { name: string }) {
         {busy ? "…" : body || "—"}
       </pre>
       <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-        <button
+        <Button
+          variant="ghost"
           onClick={() => navigator.clipboard.writeText(body)}
-          style={btnStyle(W.brand)}
           disabled={!body}
         >
           Copy
-        </button>
+        </Button>
       </div>
       {err && <ErrorLine msg={err} />}
     </Card>
@@ -347,19 +348,6 @@ function TokenBox({ token, revealed }: { token: string; revealed: boolean }) {
       )}
     </div>
   );
-}
-
-function btnStyle(accent: string): React.CSSProperties {
-  return {
-    background: accent === W.brand ? W.brand : "transparent",
-    color: accent === W.brand ? "#0B0F1A" : accent,
-    border: `1px solid ${accent}`,
-    borderRadius: 2,
-    padding: "4px 10px",
-    fontSize: 11.5,
-    fontWeight: 600,
-    cursor: "pointer",
-  };
 }
 
 function ErrorLine({ msg }: { msg: string }) {

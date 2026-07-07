@@ -14,6 +14,8 @@ import {
   type TransactionsListResponse,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
+import { Button } from "../components/Button";
+import { Dot, IcRefresh } from "../components/icons";
 import { TX_KIND_COLOR, W, wMono } from "../tokens";
 import { ContractDetailDrawer } from "./ContractDetailDrawer";
 import { TxReplayDrawer } from "./TxReplayDrawer";
@@ -358,7 +360,7 @@ export function ExplorerScreen() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "232px 1fr 380px",
+            gridTemplateColumns: "232px minmax(0,1fr)",
             gap: 14,
             alignItems: "start",
           }}
@@ -397,41 +399,50 @@ export function ExplorerScreen() {
               ))}
             </Card>
             <Card title="Snapshot">
-              <button
+              <Button
+                variant="secondary"
+                fullWidth
+                icon={<IcRefresh />}
                 onClick={() => void refreshSnapshot(name, role, false)}
-                style={{
-                  width: "100%",
-                  padding: "6px",
-                  fontSize: 12,
-                  borderRadius: 2,
-                  border: `1px solid ${W.border}`,
-                  background: W.border,
-                  color: W.text,
-                  cursor: "pointer",
-                  fontWeight: 600,
-                }}
               >
                 Refresh snapshot
-              </button>
+              </Button>
               <div
                 style={{
                   marginTop: 8,
-                  color: W.dim,
-                  fontSize: 11,
-                  fontFamily: wMono,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  gap: 12,
+                  padding: "4px 0",
                 }}
               >
-                stream · {streamStatus}
+                <span style={{ color: W.dim, fontSize: 12, fontWeight: 500 }}>
+                  Stream
+                </span>
+                <span
+                  style={{ fontFamily: wMono, fontSize: 11, color: W.text2 }}
+                >
+                  {streamStatus}
+                </span>
               </div>
               <div
                 style={{
-                  marginTop: 4,
-                  color: W.dim,
-                  fontSize: 11,
-                  fontFamily: wMono,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  gap: 12,
+                  padding: "4px 0",
                 }}
               >
-                ledger end · {state.data.ledger_end ?? "—"}
+                <span style={{ color: W.dim, fontSize: 12, fontWeight: 500 }}>
+                  Ledger end
+                </span>
+                <span
+                  style={{ fontFamily: wMono, fontSize: 11, color: W.text2 }}
+                >
+                  {state.data.ledger_end ?? "—"}
+                </span>
               </div>
             </Card>
           </div>
@@ -565,21 +576,19 @@ export function ExplorerScreen() {
               <span>↑↓ navigate · ↵ open · / focus search · esc close</span>
             </div>
           </div>
-
-          {/* RIGHT — detail drawer */}
-          {selected ? (
-            <ContractDetailDrawer
-              instance={name}
-              role={role}
-              row={selected}
-              onClose={() => setSelectedCid(null)}
-              onPrev={goPrev}
-              onNext={goNext}
-            />
-          ) : (
-            <EmptyDetailPanel />
-          )}
         </div>
+      )}
+
+      {/* Detail drawer — fixed right-side overlay, outside the grid */}
+      {state.kind === "ok" && view === "contracts" && selected && (
+        <ContractDetailDrawer
+          instance={name}
+          role={role}
+          row={selected}
+          onClose={() => setSelectedCid(null)}
+          onPrev={goPrev}
+          onNext={goNext}
+        />
       )}
 
       {state.kind === "ok" && view === "transactions" && (
@@ -646,10 +655,8 @@ function ProjectionBar({
       <span
         style={{
           color: W.dim,
-          fontSize: 10.5,
-          letterSpacing: 1.4,
-          textTransform: "uppercase", fontStretch: "118%",
-          fontWeight: 600,
+          fontSize: 12,
+          fontWeight: 500,
         }}
       >
         Projecting through
@@ -840,15 +847,7 @@ function AcsRow({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: "#7CC89A",
-            flexShrink: 0,
-          }}
-        />
+        <Dot color={W.ok} size={6} />
         <span
           style={{
             fontSize: 12.5,
@@ -906,26 +905,6 @@ function AcsRow({
           {row.signatories.length}·{row.observers.length}
         </span>
       </span>
-    </div>
-  );
-}
-
-// EmptyDetailPanel is the right-column placeholder shown until a
-// contract is selected; ContractDetailDrawer takes over after that.
-function EmptyDetailPanel() {
-  return (
-    <div
-      style={{
-        background: W.surface,
-        border: `1px solid ${W.border}`,
-        borderRadius: 4,
-        padding: 32,
-        textAlign: "center",
-        color: W.dim,
-        fontSize: 13,
-      }}
-    >
-      Select a contract to inspect.
     </div>
   );
 }
@@ -1149,26 +1128,17 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
         onClear={clearFilters}
         active={!!hasFilters}
       />
-      {replayId ? (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 380px",
-            gap: 14,
-            alignItems: "start",
-          }}
-        >
-          {body}
-          <TxReplayDrawer
-            instance={name}
-            role={role}
-            updateId={replayId}
-            partyOptions={partyOptions}
-            onClose={() => setReplayId(null)}
-          />
-        </div>
-      ) : (
-        body
+      {body}
+      {/* Replay drawer — fixed right-side overlay; the table keeps
+          its full width underneath. */}
+      {replayId && (
+        <TxReplayDrawer
+          instance={name}
+          role={role}
+          updateId={replayId}
+          partyOptions={partyOptions}
+          onClose={() => setReplayId(null)}
+        />
       )}
     </div>
   );
@@ -1263,10 +1233,8 @@ function TxFilterBar({
       <span
         style={{
           color: W.dim,
-          fontSize: 10.5,
-          letterSpacing: 1.4,
-          textTransform: "uppercase", fontStretch: "118%",
-          fontWeight: 600,
+          fontSize: 12,
+          fontWeight: 500,
         }}
       >
         Filters
@@ -1275,36 +1243,13 @@ function TxFilterBar({
       {input("template", "Module:Entity (comma-sep)", 200)}
       {input("from", "from offset", 110, true)}
       {input("to", "to offset", 110, true)}
-      <button
-        onClick={onApply}
-        style={{
-          padding: "5px 12px",
-          fontSize: 12,
-          borderRadius: 2,
-          border: "none",
-          background: W.brand,
-          color: "#0B0F1A",
-          fontWeight: 600,
-          cursor: "pointer",
-        }}
-      >
+      <Button variant="secondary" onClick={onApply}>
         Apply
-      </button>
+      </Button>
       {active && (
-        <button
-          onClick={onClear}
-          style={{
-            padding: "5px 12px",
-            fontSize: 12,
-            borderRadius: 2,
-            border: `1px solid ${W.border}`,
-            background: "transparent",
-            color: W.dim,
-            cursor: "pointer",
-          }}
-        >
+        <Button variant="ghost" onClick={onClear}>
           Clear
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -1386,27 +1331,24 @@ function TxRowComponent({
         >
           {tx.event_count ?? "—"}
         </span>
-        <span style={{ textAlign: "right" }}>
+        <span
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            alignItems: "center",
+          }}
+        >
           {onReplay ? (
-            <button
+            <Button
+              variant="secondary"
               onClick={(e) => {
                 e.stopPropagation();
                 onReplay();
               }}
               title="Replay this transaction's per-party visibility projection"
-              style={{
-                fontSize: 10.5,
-                fontFamily: wMono,
-                padding: "2px 7px",
-                borderRadius: 2,
-                border: `1px solid ${W.border}`,
-                background: "transparent",
-                color: W.brand,
-                cursor: "pointer",
-              }}
             >
               replay
-            </button>
+            </Button>
           ) : (
             <span style={{ color: W.dim, fontSize: 11 }}>—</span>
           )}
@@ -1581,14 +1523,7 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
   const focused = focusedIdx !== null ? txs[focusedIdx] ?? null : null;
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "1fr 320px",
-        gap: 14,
-        alignItems: "start",
-      }}
-    >
+    <>
       <div
         style={{
           background: W.surface,
@@ -1678,10 +1613,10 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
           {txs.map((tx, i) => {
             const color =
               tx.kind === "transaction"
-                ? "#7CC89A"
+                ? TX_KIND_COLOR.transaction
                 : tx.kind === "reassignment"
-                  ? "#8FA3EE"
-                  : "#93A7F0";
+                  ? TX_KIND_COLOR.reassignment
+                  : TX_KIND_COLOR.topology;
             return (
               <span
                 key={`${tx.offset}-${tx.update_id ?? i}`}
@@ -1735,9 +1670,9 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
           }}
         >
           <span>
-            <LegendDot color="#7CC89A" label="transaction" />
-            <LegendDot color="#8FA3EE" label="reassignment" />
-            <LegendDot color="#93A7F0" label="topology" />
+            <LegendDot color={TX_KIND_COLOR.transaction} label="transaction" />
+            <LegendDot color={TX_KIND_COLOR.reassignment} label="reassignment" />
+            <LegendDot color={TX_KIND_COLOR.topology} label="topology" />
           </span>
           <span>
             {selectedIdx !== null
@@ -1747,83 +1682,85 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
         </div>
       </div>
 
-      {/* Side panel — hovered detail */}
-      <div
-        style={{
-          background: W.surface,
-          border: `1px solid ${W.border}`,
-          borderRadius: 4,
-          overflow: "hidden",
-        }}
-      >
-        {focused ? (
-          <>
-            <header style={{ padding: "14px 16px", borderBottom: `1px solid ${W.border}` }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Pill
-                  color={
-                    focused.kind === "transaction"
-                      ? "#7CC89A"
-                      : focused.kind === "reassignment"
-                        ? "#8FA3EE"
-                        : "#93A7F0"
-                  }
-                >
-                  {focused.kind}
-                </Pill>
-                <span style={{ color: W.dim, fontSize: 11.5, fontFamily: wMono }}>
-                  offset {focused.offset.toLocaleString()}
-                </span>
+      {/* Detail overlay — hovered/pinned update, fixed to the right
+          edge so the timeline strip keeps its full width. */}
+      {focused && (
+        <div
+          style={{
+            position: "fixed",
+            top: 52,
+            right: 0,
+            bottom: 0,
+            width: "min(480px, 92vw)",
+            background: W.surface,
+            borderLeft: `1px solid ${W.border}`,
+            boxShadow:
+              "0 0 0 1px rgba(0,0,0,0.2), -16px 0 40px -12px rgba(0,0,0,0.5)",
+            // A hover preview must not steal hit-testing from the strip
+            // underneath it (hover-in would unhover the glyph and
+            // unmount the panel in a loop); only a pinned selection is
+            // interactive.
+            pointerEvents: selectedIdx !== null ? "auto" : "none",
+            overscrollBehavior: "contain",
+            // Below the CommandPalette (zIndex 100) but above content.
+            zIndex: 40,
+            overflowY: "auto",
+          }}
+        >
+          <header style={{ padding: "14px 16px", borderBottom: `1px solid ${W.border}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Pill
+                color={
+                  focused.kind === "transaction"
+                    ? TX_KIND_COLOR.transaction
+                    : focused.kind === "reassignment"
+                      ? TX_KIND_COLOR.reassignment
+                      : TX_KIND_COLOR.topology
+                }
+              >
+                {focused.kind}
+              </Pill>
+              <span style={{ color: W.dim, fontSize: 11.5, fontFamily: wMono }}>
+                offset {focused.offset.toLocaleString()}
+              </span>
+            </div>
+            {focused.record_time && (
+              <div
+                style={{
+                  color: W.text2,
+                  fontSize: 11,
+                  fontFamily: wMono,
+                  marginTop: 6,
+                }}
+              >
+                {focused.record_time}
               </div>
-              {focused.record_time && (
-                <div
-                  style={{
-                    color: W.text2,
-                    fontSize: 11,
-                    fontFamily: wMono,
-                    marginTop: 6,
-                  }}
-                >
-                  {focused.record_time}
-                </div>
-              )}
-            </header>
-            {focused.command_id && (
-              <Section label="Command ID">
-                <Mono>{focused.command_id}</Mono>
-              </Section>
             )}
-            {focused.workflow_id && (
-              <Section label="Workflow">
-                <Mono>{focused.workflow_id}</Mono>
-              </Section>
-            )}
-            {focused.events && focused.events.length > 0 && (
-              <Section label={`Events (${focused.events.length})`}>
-                {focused.events.map((ev, i) => (
-                  <EventTreeNode
-                    key={i}
-                    ev={ev}
-                    last={i === focused.events!.length - 1}
-                  />
-                ))}
-              </Section>
-            )}
-          </>
-        ) : (
-          <div
-            style={{
-              padding: 32,
-              textAlign: "center",
-              color: W.dim,
-              fontSize: 13,
-            }}
-          >
-            Hover any glyph on the left to inspect it.
-          </div>
-        )}
-      </div>
-    </div>
+          </header>
+          {focused.command_id && (
+            <Section label="Command ID">
+              <Mono>{focused.command_id}</Mono>
+            </Section>
+          )}
+          {focused.workflow_id && (
+            <Section label="Workflow">
+              <Mono>{focused.workflow_id}</Mono>
+            </Section>
+          )}
+          {focused.events && focused.events.length > 0 && (
+            <Section label={`Events (${focused.events.length})`}>
+              {focused.events.map((ev, i) => (
+                <EventTreeNode
+                  key={i}
+                  ev={ev}
+                  last={i === focused.events!.length - 1}
+                />
+              ))}
+            </Section>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
