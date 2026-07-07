@@ -173,6 +173,13 @@ strong {
 	font-weight: 600;
 	color: var(--dk-heading);
 }
+/* Long unbreakable tokens (PromQL queries, package ids, paths) must not
+ * dictate column widths: `anywhere` lowers the min-content width so
+ * auto table layout can balance columns instead of overflowing the
+ * container and starving the last column into a tall wrap. */
+.sl-markdown-content table code {
+	overflow-wrap: anywhere;
+}
 
 /* ----------------------------- header ------------------------------ */
 header.header,
