@@ -1,0 +1,30 @@
+/* Self-hosted webfonts.
+ *
+ * Switzer (Indian Type Foundry, via Fontshare) — free for commercial
+ * use under the Fontshare Free Font License; see src/fonts/switzer/FFL.txt.
+ * Paper Mono (Paper Design) — SIL Open Font License; see
+ * src/fonts/paper-mono/OFL.txt. Both are variable fonts, one file each. */
+
+@font-face {
+	font-family: 'Switzer';
+	src: url('../fonts/switzer/Switzer-Variable.woff2') format('woff2-variations');
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Switzer';
+	src: url('../fonts/switzer/Switzer-VariableItalic.woff2') format('woff2-variations');
+	font-weight: 100 900;
+	font-style: italic;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Paper Mono';
+	src: url('../fonts/paper-mono/PaperMono-Variable.woff2') format('woff2-variations');
+	font-weight: 100 800;
+	font-style: normal;
+	font-display: swap;
+}

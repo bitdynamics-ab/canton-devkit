@@ -6,13 +6,14 @@
  * -0.75px tracking, 18px/28 article body, 14px UI text in a 288px
  * sidebar, near-black #0E1013 dark theme with #25292D hairlines.
  *
- * Fonts are self-hosted via Fontsource: Inter Variable (body/UI) and
- * JetBrains Mono Variable (code). Code-block internals are configured
- * in astro.config.mjs (expressiveCode.styleOverrides). */
+ * Fonts are self-hosted (src/styles/fonts.css): Switzer for body/UI
+ * (Fontshare Free Font License) and Paper Mono for code (SIL OFL).
+ * Code-block internals are configured in astro.config.mjs
+ * (expressiveCode.styleOverrides). */
 
 :root {
-	--sl-font: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
-	--sl-font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+	--sl-font: 'Switzer', ui-sans-serif, system-ui, -apple-system, sans-serif;
+	--sl-font-mono: 'Paper Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 	--sl-content-width: 45rem;
 	--sl-sidebar-width: 18rem;
 
