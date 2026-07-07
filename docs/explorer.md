@@ -13,8 +13,8 @@ tell at a glance whether the Explorer fits your task.
 
 ## 1. What you see
 
-Open the Web UI (`canton-devkit localnet ui --name <n>` or whatever
-port the bundled UI is running on) and switch to the **Explorer**
+Open the Web UI (`canton-devkit localnet ui`, default port 7777, or
+whatever port the bundled UI is running on) and switch to the **Explorer**
 tab. The screen has three views, selectable from the toggle in the
 top bar:
 
@@ -59,8 +59,8 @@ against the (live) snapshot already loaded:
 
 - **Templates sidebar.** Click a template chip to restrict the
   table to that template. Click again to clear. Multiple chips
-  combine as OR. Templates are rendered as `Module:Entity`; hover
-  to see the fully-qualified `package_id:Module:Entity` form.
+  combine as OR. Templates are rendered as `Module:Entity`; hover a
+  table row to see the fully-qualified `package_id:Module:Entity` form.
 - **Parties sidebar.** Same pattern, but filters to contracts where
   the chosen party appears as signatory or observer.
 - **Search box** (top-right of the table, focus with `/`). Free-text
@@ -97,13 +97,15 @@ shows:
   variants/enums/maps fall back to a textual proto form (a typed
   decoder using Daml-LF metadata is not yet supported).
 - **Signatories** and **Observers** as separate lists.
-- **Created** with the RFC 3339 timestamp the participant recorded
-  and a human-readable "Xs/m/h/d ago".
+- **Created** with the RFC 3339 timestamp the participant recorded,
+  plus a link to the creating transaction (the table's Created column
+  shows the relative "Xs/m/h/d ago" form).
 
 The detail drawer is read-only — there is no "exercise choice" UI in
-the Explorer. Exercising choices is a CLI / SDK action; see
-`canton-devkit localnet token …` for the prebuilt CIP-0112 flows or
-build a regular Daml/SDK client.
+the Explorer. Exercising choices is a CLI / SDK action; see the
+`canton-devkit localnet token <command>` family (e.g. `token transfer`,
+`token mint`) for the prebuilt CIP-0112 flows, or build a regular
+Daml/SDK client.
 
 ---
 
@@ -162,8 +164,9 @@ renders two strips:
 
 - A **density strip** with bar height proportional to the bucket's
   update count.
-- A **glyph row** with one coloured cell per update (green =
-  transaction, blue = reassignment, purple = topology).
+- A **glyph row** with one coloured cell per update (cobalt =
+  transaction, teal = reassignment, amber = topology — matching the
+  legend under the strip).
 
 Hover a glyph to preview the update in the side panel; click to
 pin the selection so you can read its event tree without keeping
@@ -181,7 +184,7 @@ The **Contracts** view is live:
 1. It first calls `StateService.GetActiveContracts` at the
    participant's current ledger end (the snapshot).
 2. It then opens a server-sent-events stream
-   (`GET .../contracts/stream`) resuming from the snapshot's
+   (`GET /api/instances/{name}/contracts/stream`) resuming from the snapshot's
    `ledger_end`, applying create/archive deltas in place. The
    handoff is a single atomic offset boundary, so no event between
    the snapshot and the stream is missed.

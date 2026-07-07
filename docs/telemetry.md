@@ -20,8 +20,12 @@ Telemetry is **on by default**. The first time you run an operational
 command in an interactive terminal, a one-time notice explains this. The
 Debian package also records a one-time `apt` install-surface ping during
 package installation; because that path is non-interactive, opt out
-**before** install with `DPM_TELEMETRY=off` or `DO_NOT_TRACK=1` if you do
-not want it. Turn telemetry off any time — your choice persists:
+**before** install if you do not want it. The package hook runs in the
+root environment, and `sudo` strips exported shell variables by default,
+so set the variable on the `sudo` command line itself:
+`sudo DO_NOT_TRACK=1 apt install canton-devkit` (or
+`sudo DPM_TELEMETRY=off apt install canton-devkit`). Turn telemetry off
+any time — your choice persists:
 
 ```bash
 canton-devkit telemetry off      # disable (persists)
@@ -104,7 +108,8 @@ construction — the model is counters, not events — no:
 - DAR names/hashes, package/module names
 - JWT audiences/issuers/fingerprints, ports, endpoints, file paths
 - command arguments beyond the verb, error messages, stack traces
-- timestamps finer than the ISO week, environment variables, hostnames
+- timestamps finer than the aggregation period (a calendar day),
+  environment variables, hostnames
 
 There is no per-invocation row to profile, and the one token we send
 correlates only to itself (an install count) — never to your usage.

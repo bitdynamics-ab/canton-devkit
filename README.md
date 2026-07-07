@@ -39,7 +39,7 @@ As a standalone binary, download the archive for your platform (macOS
 arm64, Linux amd64, Windows amd64) from the
 [releases page](https://github.com/bitdynamics-ab/canton-devkit/releases)
 and verify it against the `SHA256SUMS` file published with each release.
-Homebrew (`brew install bitdynamics-ab/tap/canton-devkit`), an APT
+Homebrew (`brew install bitdynamics-ab/canton-devkit/canton-devkit`), an APT
 repository for Debian/Ubuntu, and `go install` are also supported — the
 [installation guide](docs/getting-started.md) covers each path
 step by step.
@@ -111,9 +111,10 @@ ports, party credentials, Splice version) under your user config
 directory. `up` resolves a pinned Splice version from the catalogue,
 materialises compose
 overlays for instance isolation, allocates loopback ports, signs dev
-JWTs, and waits for health checks. `snapshot` tars the instance's
-volumes and registry state into a single archive that `restore` can
-replay on any machine.
+JWTs, and waits for health checks. `snapshot` captures a logical
+PostgreSQL dump (`pg_dumpall`) of the instance's database plus its
+registry state into a single archive that `restore` can replay on any
+machine.
 
 Telemetry is anonymous, aggregate-only, and opt-out — no paths, no
 party IDs, no per-invocation rows. Disable it with

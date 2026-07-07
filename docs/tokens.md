@@ -27,17 +27,20 @@ V2 needs a special Splice build (alpha protocol 35) and a profile overlay:
 # list versions — the V2 entry is tagged channel: alpha
 canton-devkit localnet versions
 
-# bring up a V2-capable instance
+# bring up a V2-capable instance (up warns loudly if you select the
+# alpha version without --profile tokens-v2)
 canton-devkit localnet up --name v2 --version token-standard-v2 --profile tokens-v2
 
-# confirm health (doctor warns if the alpha profile is missing)
-canton-devkit localnet doctor --name v2
+# confirm the instance is healthy
+canton-devkit localnet status --name v2
 ```
 
 All token subcommands take `--instance <name>` and, for on-ledger
 actions, `--endpoint <participant host:port>` (the participant ledger
-gRPC port — `localnet status --name v2` prints it). Empty `--token`
-auto-issues a per-role dev JWT; `--role` defaults to `app-user`.
+gRPC port — `localnet status --name v2` prints it). Where a `--token`
+flag exists it can stay empty — a per-role dev JWT is auto-issued
+(`mint`/`create`/`demo` always auto-issue); `--role` defaults to
+`app-user`.
 
 ---
 
@@ -106,6 +109,7 @@ Add `--format json` to any read command (`balance`, `balances`,
 | Command | What it does |
 |---|---|
 | `token create` | Create an on-ledger V2 instrument (TokenRules) for an issuer. Auto-uploads the bundled `splice-test-token-v2` DARs if not vetted. `--non-interactive` for CI; otherwise a wizard. |
+| `token demo` | One-command demo: allocate an issuer, create a V2 instrument on-ledger, mint the initial supply, and fund a holder so the token is transferable immediately (`--symbol DEMO`, `--supply 1000000` defaults). Same orchestration as the UI's Launch-demo-token button. |
 | `token mint` | Mint new supply to a party (`TokenRules_OfferMint`, controller = issuer). Native CIP-0112 v2 instruments only. |
 | `token transfer` | Sender-initiated transfer. `--auto-accept` chains the receiver-side accept (LocalNet default convenience); `--no-wait` returns the instruction id to hand off. |
 | `token transfer accept` | Receiver accepts a pending `TransferInstruction` by id. |
@@ -127,7 +131,8 @@ V2 runs only on the upstream **alpha** Splice build (snapshot image on the
 - **The upstream V2 DevNet resets periodically.** The catalogue entry may
   need refreshing each release cycle — see [Splice version catalogue](versions.md).
 - **Use `--profile tokens-v2`.** Selecting the alpha version without it
-  brings up a stack that can't run the V2 protocol; `doctor` warns.
+  brings up a stack that can't run the V2 protocol; `up` warns loudly
+  at bring-up.
 - **Loopback-only dev auth.** Per-role JWTs are signed with a literal
   `unsafe` dev secret. They are valid only against your local stack —
   never reuse them against DevNet/TestNet/MainNet.

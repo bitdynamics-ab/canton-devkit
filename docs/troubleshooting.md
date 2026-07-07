@@ -1,16 +1,18 @@
 # Troubleshooting
 
-Failure modes and fixes. Start with `canton-devkit localnet doctor
---name <instance>` — it checks Docker, memory, ports, version channel,
-and the alpha-profile requirement, and prints targeted remediation.
+Failure modes and fixes. Start with `canton-devkit localnet doctor` —
+it runs the same host preflight as `localnet up` (Docker CLI, daemon,
+Compose v2, disk + memory headroom, platform, port availability; pass
+`--version <tag>` to use that version's memory thresholds) and prints
+targeted remediation.
 
 ## `localnet up` fails or containers OOM-loop
 
 **Symptom:** Canton container restarts repeatedly; `up` times out.
 
 **Cause:** Docker memory below the version's floor. Splice 0.6.x needs
-≈8 GiB; the V2 alpha similar. The default Docker Desktop allocation
-(4 GiB) is too low.
+≈8 GiB; the V2 alpha similar. Docker Desktop defaults to allocating
+50% of host memory, which on smaller machines lands below that floor.
 
 **Fix:** Raise Docker memory to the recommended value (`doctor` prints
 it), then `localnet up` again. The per-version preflight gate surfaces
@@ -37,8 +39,13 @@ when functional — and the off-ledger scan registry (behind nginx) isn't
 ready until the Splice app fully boots.
 
 **Fix:**
-- Give the stack more time; `doctor` / `status` reflect real readiness
-  via the readyz fallback, not just the container healthcheck.
+- Give the stack more time; the readiness wait in `up` / `start` /
+  `restart` treats the validator's `/api/validator/readyz` returning
+  200 as ready even while Docker still reports `health: starting`.
+  `localnet status` renders Docker's reported health (a container in
+  `health: starting` shows as `syncing`), so `syncing` there does not
+  necessarily mean broken — and `doctor` checks the host only and
+  never probes instances.
 - The **native test-token** path (your own `splice-test-token-v2`
   instrument) needs **no scan registry** — its `TokenRules` is the
   registry — so create/mint/transfer/burn of your own token work even
@@ -52,10 +59,12 @@ ready until the Splice app fully boots.
 **Symptom:** `token create` errors that `splice-test-token-v2` isn't
 vetted.
 
-**Fix:** `token create --endpoint …` auto-fetches and uploads the
-test-token + burn-mint DARs (pinned to the instance's Splice commit). If
-you're offline or the fetch fails, upload them manually with
-`localnet dar upload <dar>` and retry.
+**Fix:** `token create --instance <i> --endpoint <host:port>`
+auto-fetches and uploads the test-token + burn-mint DARs (pinned to
+the instance's Splice commit). If you're offline or the fetch fails,
+upload them manually with
+`localnet dar upload <dar> --instance <i> --all-participants` and
+retry.
 
 ## Token: mint/burn disabled in the Web UI
 
@@ -68,22 +77,26 @@ no mint/burn surface — create your own token to exercise them.
 **Symptom:** token/ledger commands can't find a JWT for a role.
 
 **Fix:** `localnet creds --name <i> --role <role> --format raw`
-re-issues a dev token from the project's env files. The token commands
-also auto-issue per-role tokens when `--token` is empty.
+prints the JWT captured at `up` time from `state.json`. If no
+credentials were captured (e.g. the `up` failed before JWT capture),
+re-run `localnet up` to completion. The token commands also auto-issue
+per-role tokens when `--token` is empty.
 
 ## Snapshot consistency
 
-`localnet snapshot` captures Docker volumes + registry state. For a
-**running** instance this is a crash-consistent (not
-application-consistent) copy: in-flight transactions or unflushed
-database writes may not be fully captured. For a guaranteed-consistent
-snapshot, `localnet down --name <i>` first, then snapshot. `snapshot`
-warns when run against a running instance.
+`localnet snapshot --to <file.tgz>` captures a logical `pg_dumpall` of
+the instance's Postgres plus registry state. The instance must be
+**running** — the dump reads from live Postgres, so a stopped instance
+cannot be snapshotted. Node containers are paused for the duration of
+the dump, so the snapshot is application-consistent; there is no need
+to `down` first.
 
 ## Still stuck?
 
-- `localnet logs --name <i> [service]` — tail container logs.
-- `localnet doctor --name <i>` — host + instance diagnostics.
+- `localnet logs --name <i> [--service <svc>]` — tail container logs
+  (repeat `--service` to filter to specific services).
+- `localnet doctor` — host readiness diagnostics (docker, resources,
+  network); use `localnet status --name <i>` for per-instance state.
 - File a [GitHub issue](https://github.com/bitdynamics-ab/canton-devkit/issues)
   with the `doctor` output and the failing command.
 

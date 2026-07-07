@@ -36,24 +36,32 @@ tar -xzf canton-devkit_v0.7.0_linux_amd64.tar.gz
 ```
 
 > **Version-string asymmetry:** the standalone archive filenames keep the
-> `v` prefix (`canton-devkit_v0.7.0_…`), matching the git tag, while the
-> DPM/OCI tag strips it (`…:0.7.0`) because DPM requires a bare-semver
-> tag. Same release, two conventions — chosen to match each ecosystem's
-> norm.
+> `v` prefix (`canton-devkit_v0.7.0_linux_amd64.tar.gz`), matching the
+> git tag, while the DPM/OCI tag strips it
+> (`ghcr.io/bitdynamics-ab/canton-devkit:0.7.0`) because DPM requires a
+> bare-semver tag. Same release, two conventions — chosen to match each
+> ecosystem's norm.
 
 ## DPM component
 
 The DPM component is published to GitHub Container Registry on every
 tagged release at `ghcr.io/bitdynamics-ab/canton-devkit:<version>`.
-Install via:
+`dpm install package` reads the component references from the project's
+`daml.yaml`, so declare the component there and then install:
+
+```yaml
+# daml.yaml
+components:
+  - oci://ghcr.io/bitdynamics-ab/canton-devkit:<version>
+```
 
 ```sh
-dpm install package oci://ghcr.io/bitdynamics-ab/canton-devkit:<version>
+dpm install package
 dpm localnet --help
 ```
 
-`<version>` follows semver (no `v` prefix); tag `latest` always points
-at the newest published release.
+`<version>` follows semver (no `v` prefix); tag `latest` points at the
+most recently published final (non-pre-release) release.
 
 ### Manifest
 
@@ -71,7 +79,7 @@ The manifest lives as a template with a `@@BINARY_PATH@@` token: the
 release workflow substitutes `bin/canton-devkit` on Unix platforms and
 `bin/canton-devkit.exe` on Windows. DPM does NOT auto-append `.exe`
 on Windows — empirically verified against DPM 1.0.16, which fails
-manifest validation with `stat ...: no such file or directory` when
+manifest validation with `stat <path>: no such file or directory` when
 the path doesn't include the extension.
 
 ### Why a single top-level command?
@@ -110,9 +118,10 @@ dpm publish component oci://localhost:5000/canton-devkit:0.0.1-dryrun \
     --platform darwin/arm64=/tmp/cdk-component
 ```
 
-`✅ Component manifest is valid` confirms the manifest schema. CI runs
-the same `--dry-run` on every push and the real publish only on `v*`
-tags.
+`✅ Component manifest is valid` confirms the manifest schema. The
+release workflow runs the same `--dry-run` validation on every run
+(tag pushes and manual dispatches); the real publish happens only on
+`v*` tags.
 
 ## Debian / APT package
 
@@ -164,8 +173,9 @@ the collector is unreachable.
 The hosted repo is generated on every release by preserving all existing
 `apt/pool/main/c/canton-devkit/*.deb` files in
 `bitdynamics-ab/homebrew-canton-devkit`, adding the new version, and
-rewriting `Packages`, `Packages.gz`, and `Release` metadata under
-`apt/dists/stable/main/binary-amd64/`.
+rewriting `Packages` and `Packages.gz` under
+`apt/dists/stable/main/binary-amd64/` and the `Release` file at
+`apt/dists/stable/`.
 
 **Known limitation:** the APT repo is unsigned and documented with
 `trusted=yes`. The repository is backed by HTTPS and release checksums,

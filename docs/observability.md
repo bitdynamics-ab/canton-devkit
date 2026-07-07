@@ -14,7 +14,7 @@ persisted in the registry so re-up preserves bookmarked URLs.
 
 ## Metric naming convention
 
-The live Splice 0.6.4 Prometheus surfaces **three** metric prefix
+The live Splice 0.6.4 Prometheus surfaces **five** metric prefix
 families. Earlier versions of the dashboard used a `canton_*` prefix that
 does NOT exist upstream — those queries silently returned no data. The
 audit notes below pin the current convention so future panels stay aligned.

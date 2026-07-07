@@ -50,7 +50,7 @@ When the work spans both:
 
 **Teardown verbs (`docker compose down` / `stop` without an explicit service argument) MUST tear down by Docker project label — `-p <project>` — and MUST NOT pass `-f` compose files, `--env-file`, or `--profile`.**
 
-Every Splice LocalNet service is profile-gated (`profiles: [sv, app-provider, app-user, multi-sync, ...]`). When `-f` compose files are present, `docker compose down`/`stop` apply **profile filtering** and act only on non-profiled + explicitly-enabled-profile services — for Splice that is the **empty set**. The result is a silent no-op (exit 0) that leaves every container running and strands ledger state. This is documented compose behavior (https://docs.docker.com/compose/how-tos/profiles/#stop-application-and-services-with-specific-profiles), not a version bug, and it reproduces on every supported Compose v2.x/v5.x. Tearing down by `-p` label only is profile-agnostic and removes the whole project.
+Every Splice LocalNet service is profile-gated — each declares a `profiles:` list such as `sv`, `app-provider`, `app-user`, or `multi-sync`. When `-f` compose files are present, `docker compose down`/`stop` apply **profile filtering** and act only on non-profiled + explicitly-enabled-profile services — for Splice that is the **empty set**. The result is a silent no-op (exit 0) that leaves every container running and strands ledger state. This is documented compose behavior (https://docs.docker.com/compose/how-tos/profiles/#stop-application-and-services-with-specific-profiles), not a version bug, and it reproduces on every supported Compose v2.x/v5.x. Tearing down by `-p` label only is profile-agnostic and removes the whole project.
 
 Rules:
 
@@ -82,7 +82,7 @@ Rules:
 ### Build
 
 - Build the binary: `make build`
-- Version is injected at build time via `-ldflags -X main.version=...`
+- Version is injected at build time via `-ldflags "-X main.version=$(VERSION)"`
 - Output goes to `bin/`
 
 ### Code Style
@@ -96,12 +96,12 @@ Rules:
 
 - **Entry point:** `cmd/canton-devkit/main.go`
 - **CLI wiring:** `internal/cli/` — root command, version subcommand, localnet subcommands
-- **Localnet subcommands** are partially implemented — check `internal/cli/localnet/` for the current set; commands not yet wired return a "not implemented yet" stub.
+- **Localnet subcommands** live in `internal/cli/localnet/` — run `canton-devkit localnet --help` (or check that package) for the current set.
 - **DPM contract:** The CLI must dispatch correctly from an argv slice with no reliance on `argv[0]` or environment variables. The `TestRunIsArgvOnly` test guards this contract and must not be broken.
 
 ## CI Pipeline
 
-- Both jobs (`test` and `lint`) run on `[self-hosted, Linux]` runners on every PR and push to `main`.
+- All CI jobs (`test`, `mockup-syntax`, `lint`, `frontend`) run on `[self-hosted, Linux]` runners on every PR and push to `main`.
 - macOS / Windows CI was removed in commit `9a0dae1` — cross-platform validation now lives in `.github/workflows/release.yml`.
 - All GitHub Actions must be SHA-pinned (no floating tags like `@v4`)
 
