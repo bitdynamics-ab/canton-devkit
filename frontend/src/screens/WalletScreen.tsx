@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { ApiError, fetchInstance, type Instance, type Role } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { ROLE_COLOR, W, wMono } from "../tokens";
-import { Dot } from "../components/icons";
+import { Button } from "../components/Button";
+import { Dot, IcAlert, IcRefresh } from "../components/icons";
 
 // WalletScreen embeds Splice's per-role Wallet UI inside the DevKit
 // shell so users don't juggle three browser tabs (one per party).
@@ -64,6 +65,38 @@ export function WalletScreen() {
       cancelled = true;
     };
   }, [name]);
+
+  // Reachability probe. An iframe pointed at a dead port renders the
+  // browser's own error page — a gray dead-end with no remediation —
+  // so probe the endpoint ourselves and own the failure state. no-cors
+  // resolves opaque when anything answers HTTP on the port and rejects
+  // on network-level failure (refused, empty reply from a stale
+  // nginx port mapping, host down).
+  const probeURL =
+    state.kind === "ok" ? walletURLFor(role, state.instance.endpoints) : null;
+  const [reach, setReach] = useState<"probing" | "ok" | "down">("probing");
+  const [probeNonce, setProbeNonce] = useState(0);
+  useEffect(() => {
+    if (!probeURL) return;
+    if (import.meta.env.MODE === "test") return; // no real sockets in vitest
+    let cancelled = false;
+    setReach("probing");
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 4000);
+    fetch(probeURL, { mode: "no-cors", signal: ctl.signal, cache: "no-store" })
+      .then(() => {
+        if (!cancelled) setReach("ok");
+      })
+      .catch(() => {
+        if (!cancelled) setReach("down");
+      })
+      .finally(() => clearTimeout(timer));
+    return () => {
+      cancelled = true;
+      ctl.abort();
+      clearTimeout(timer);
+    };
+  }, [probeURL, probeNonce]);
 
   if (!name) {
     return (
@@ -251,7 +284,35 @@ export function WalletScreen() {
             signed in as {role} via DevKit JWT
           </span>
         </div>
-        {walletURL ? (
+        {walletURL && reach === "down" ? (
+          <div style={{ flex: 1, padding: 24, color: W.text2, fontSize: 13, lineHeight: 1.6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: W.warn, fontWeight: 600, marginBottom: 6 }}>
+              <IcAlert size={14} /> Wallet UI is not responding
+            </div>
+            <p style={{ margin: "0 0 6px" }}>
+              Nothing answered at{" "}
+              <code style={{ fontFamily: wMono, color: W.text2 }}>{walletURL}</code>{" "}
+              even though the instance is registered. The containers may still
+              be starting — or, if this instance was created by an older
+              devkit, its nginx port mapping is stale.
+            </p>
+            <p style={{ margin: "0 0 14px", color: W.dim }}>
+              Re-running{" "}
+              <code style={{ fontFamily: wMono, color: W.text2 }}>
+                dpm localnet up --name {name}
+              </code>{" "}
+              (or Recreate on the Overview page) regenerates the instance
+              config and recreates the affected containers.
+            </p>
+            <Button
+              variant="secondary"
+              icon={<IcRefresh />}
+              onClick={() => setProbeNonce((n) => n + 1)}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : walletURL ? (
           <iframe
             key={walletURL}
             src={walletURL}

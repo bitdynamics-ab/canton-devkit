@@ -875,7 +875,18 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
           </div>
           <div
             title={c.full && c.full !== c.value ? c.full : undefined}
-            style={{ color: W.text, fontSize: 20, fontFamily: wMono }}
+            style={{
+              color: W.text,
+              fontSize: 20,
+              fontFamily: wMono,
+              fontVariantNumeric: "tabular-nums",
+              // Belt and braces: a value that still can't fit its card
+              // ellipsizes (full precision lives in the title) rather
+              // than clipping mid-digit.
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
           >
             {c.value}
           </div>
