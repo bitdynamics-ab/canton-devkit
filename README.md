@@ -18,10 +18,32 @@ recommended) and 10 GB of free disk — see the
 
 ## Install
 
-Through the Daml Package Manager, in a project's `daml.yaml`:
-
+Through the dpm ([Daml Package Manager](https://docs.canton.network/sdks-tools/cli-tools/dpm)), in a project's `daml.yaml`. Ensure you remove the sdk-version field from the file. For example, if your current daml.yaml file is:
 ```yaml
+sdk-version: 3.5.2
+name: daml-test-1
+source: daml
+init-script: Main:setup
+version: 0.0.1
+dependencies:
+  - daml-prim
+  - daml-stdlib
+  - daml-script
+```
+
+You should use the following daml.yaml file:
+```yaml
+#sdk-version: 3.5.2
+name: daml-test-1
+source: daml
+init-script: Main:setup
+version: 0.0.1
+dependencies:
+  - daml-prim
+  - daml-stdlib
+  - daml-script
 components:
+  - damlc:3.5.2
   - oci://ghcr.io/bitdynamics-ab/canton-devkit:latest
 ```
 
