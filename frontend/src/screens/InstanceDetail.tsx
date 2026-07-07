@@ -175,7 +175,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
     if (
       !confirm(
         `Remove ${name} from the registry?\n\nThis deletes the instance entry + state.json. ` +
-          `Docker volumes (if any) are NOT touched — for that, use \`dpm localnet clean --name ${name}\` from a terminal.`,
+          `Docker volumes (if any) are NOT touched — for that, use \`dpm localnet remove --name ${name}\` from a terminal.`,
       )
     ) {
       return;

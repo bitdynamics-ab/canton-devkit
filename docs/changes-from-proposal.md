@@ -14,6 +14,7 @@ Every deviation listed here is **intentional**, not an oversight or implementati
   - [Instance name addressing](#instance-name-addressing)
   - [Machine-readable output flag](#machine-readable-output-flag)
   - [Command aliases](#command-aliases)
+- [`localnet remove` (renamed from `clean`)](#localnet-remove-renamed-from-clean)
 - [`localnet up`](#localnet-up)
   - [`--allow-uncurated` flag (new)](#--allow-uncurated-flag-new)
   - [`--profile` flag (new)](#--profile-flag-new)
@@ -51,7 +52,7 @@ Every deviation listed here is **intentional**, not an oversight or implementati
 
 **Shipped:**
 - Most lifecycle/inspection commands (`up`, `down`, `restart`, `pause`, `resume`, `status`, `logs`, `creds`, `snapshot`, `restore`) accept the name as **either** a positional argument **or** `--name` — both are equivalent. Example: `dpm localnet up dev` and `dpm localnet up --name dev` do the same thing.
-- `clean`, `list`, `doctor`, `refresh`, `metrics` are `--name`-only (no positional arg).
+- `remove`, `list`, `doctor`, `refresh`, `metrics` are `--name`-only (no positional arg).
 - `dar` subcommands use `--instance` (alias `--name`).
 - `token` subcommands use required `--instance`.
 
@@ -75,6 +76,7 @@ The following aliases are not in the proposal but are shipped:
 
 | Canonical command | Alias(es) | Notes |
 |---|---|---|
+| `localnet remove` | `clean` | Backward-compatible after the `clean` → `remove` rename (see [`localnet remove`](#localnet-remove-renamed-from-clean)) |
 | `localnet resume` | `unpause` | Matches `docker compose unpause` terminology |
 | `localnet observability` | `obs` | Shorter for interactive use |
 | `localnet container list` | `ls`, `ps` | Matches Docker CLI conventions |
@@ -84,6 +86,16 @@ The following aliases are not in the proposal but are shipped:
 `localnet list` has **no** `ls` alias despite the pattern above — adding it would shadow `localnet logs` with a common prefix, increasing ambiguity in tab-completion.
 
 **Behaviour change (removed aliases):** earlier builds shipped `start` as an alias for `up` and `stop` as an alias for `down`. These aliases have been **removed** — `start` and `stop` are now standalone commands with distinct behaviour (see [`localnet stop` / `start`](#localnet-stop--start-new)). `localnet stop` no longer removes containers (use `down` for that), and `localnet start` no longer unconditionally recreates the stack (though it converges to a running instance, falling back to `up` when containers are gone).
+
+---
+
+## `localnet remove` (renamed from `clean`)
+
+**Proposal said:** the destructive teardown verb — the command that removes an instance's data volumes and registry state — was named `clean`.
+
+**Shipped:** the canonical command is `dpm localnet remove`, with `clean` retained as an alias. Both forms are equivalent: `dpm localnet remove --name dev` and `dpm localnet clean --name dev` do the same thing. Flags are unchanged (`--name`, `--all`, `--force`, `--dry-run`).
+
+**Why:** `remove` names the action plainly — it removes the instance's containers, volumes, and registry state — and reads unambiguously next to the other lifecycle verbs (`down`, `stop`, `remove`), where "clean" could be mistaken for a non-destructive tidy-up. The `clean` alias is kept so existing scripts, CI pipelines, and muscle memory continue to work without a breaking change.
 
 ---
 
@@ -140,7 +152,7 @@ The following aliases are not in the proposal but are shipped:
 - `stop` gracefully stops the instance's containers (`docker compose stop`) but **keeps** them on disk. CPU and the container runtime are freed; ledger state and the containers themselves survive.
 - `start` starts a stopped instance's containers (`docker compose start`), skipping image pulls and stack recreation. If the containers have already been removed (e.g. the instance was `down`ed, or containers were pruned externally), `start` transparently falls back to a full `up` — reusing the recorded Splice version and profiles — with no extra flag or confirmation. `start` accepts `--no-wait` to skip the readiness wait.
 
-The teardown/bring-up ladder is therefore: `pause`/`resume` (freeze, RAM held) → `stop`/`start` (stop containers, kept on disk) → `down`/`up` (remove and recreate containers) → `clean` (remove data volumes and state).
+The teardown/bring-up ladder is therefore: `pause`/`resume` (freeze, RAM held) → `stop`/`start` (stop containers, kept on disk) → `down`/`up` (remove and recreate containers) → `remove` (alias `clean`; removes data volumes and state).
 
 **Why:** `stop`/`start` fill the gap between the instant-but-RAM-heavy pause and the slow-but-clean down: they free container resources while avoiding the cost of recreating the stack on the next start. Making them standalone commands (rather than aliases) gives users the full Docker Compose lifecycle vocabulary. The intelligent `start` fallback means users never have to remember whether an instance was stopped or downed — `start` always converges to a running instance. Required for CLI ↔ Web UI parity (the UI exposes Stop and Start actions on the instance card).
 

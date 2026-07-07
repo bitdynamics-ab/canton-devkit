@@ -33,7 +33,7 @@ var allowedCounters = map[string]map[string]struct{}{
 // internal/cli/localnet. Unknown verbs are dropped (never recorded).
 var commandVerbs = []string{
 	"up", "down", "restart", "status", "list", "doctor", "logs", "env",
-	"creds", "clean", "snapshot", "restore", "versions", "ui", "container",
+	"creds", "remove", "clean", "snapshot", "restore", "versions", "ui", "container",
 	"refresh", "metrics", "contracts", "tx", "dar", "skills", "telemetry",
 	"pause", "resume", "token",
 }

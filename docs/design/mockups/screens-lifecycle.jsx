@@ -151,7 +151,7 @@ function ScreenDown() {
       <Line />
       <Box accent={TERM.brand} bg="#11181A" pad="9px 14px" style={{ borderRadius: 6 }}>
         <Line><span style={{color:TERM.brand, fontWeight:600}}>✦ </span><span style={{color:TERM.text}}>Stopped LocalNet </span><span style={{color:TERM.text, fontWeight:600}}>"hubble"</span><span style={{color:TERM.dim}}> · state preserved.</span></Line>
-        <Line dim style={{marginTop:4}}>Run <span style={{color:TERM.text}}>localnet up --name hubble</span> to resume, or <span style={{color:TERM.text}}>localnet clean</span> to remove volumes.</Line>
+        <Line dim style={{marginTop:4}}>Run <span style={{color:TERM.text}}>localnet up --name hubble</span> to resume, or <span style={{color:TERM.text}}>localnet remove</span> to remove volumes.</Line>
       </Box>
     </Terminal>
   );

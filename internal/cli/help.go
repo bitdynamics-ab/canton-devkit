@@ -105,7 +105,7 @@ func helpCategories() []helpCategory {
 				{"restart", "restart services in place without removing containers"},
 				{"pause", "freeze a running LocalNet (docker compose pause)"},
 				{"resume", "resume a paused LocalNet (docker compose unpause)"},
-				{"clean", "remove instance state, containers, and volumes"},
+				{"remove", "remove instance state, containers, and volumes"},
 				{"snapshot", "capture a database dump and registry state to a tarball"},
 				{"restore", "restore a database dump and registry state from a tarball"},
 				{"status", "services, endpoints, identities, version"},

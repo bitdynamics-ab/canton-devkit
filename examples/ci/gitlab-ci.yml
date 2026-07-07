@@ -52,4 +52,4 @@ localnet-tests:
     - echo "Run your integration tests here against the live LocalNet."
   after_script:
     # Runs even on failure — guaranteed teardown.
-    - canton-devkit localnet clean --name "${INSTANCE}" --force || true
+    - canton-devkit localnet remove --name "${INSTANCE}" --force || true

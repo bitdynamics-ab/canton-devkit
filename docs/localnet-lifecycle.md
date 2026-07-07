@@ -101,30 +101,31 @@ Notes:
   stack from the recorded version and profiles. `localnet start` on an
   instance whose containers are already gone transparently falls back to
   a full `up` for you.
-- `localnet clean` (below) is the only command that removes **data
-  volumes and registry state** — it is not part of the reversible set.
+- `localnet remove` (alias: `clean`, below) is the only command that
+  removes **data volumes and registry state** — it is not part of the
+  reversible set.
 
 **Most common choices:**
 
 - Stepping away for a few minutes → `pause` / `resume`.
 - Done for the day, want a fast start tomorrow → `stop` / `start`.
 - Freeing the machine or resetting the containers → `down` / `up`.
-- Throwing the instance away entirely → `clean`.
+- Throwing the instance away entirely → `remove`.
 
 ## Uninstall / clean up
 
 ```bash
 # stop + remove a single instance's containers, volumes, and state
-canton-devkit localnet clean --name demo
+canton-devkit localnet remove --name demo
 
 # remove every DevKit-managed instance
-canton-devkit localnet clean --all
+canton-devkit localnet remove --all
 
 # remove the standalone binary
 sudo rm /usr/local/bin/canton-devkit
 ```
 
-`clean` refuses to touch a running instance unless you pass `--force`
-(which tears it down first). Use `--dry-run` to preview.
+`remove` (alias: `clean`) refuses to touch a running instance unless you
+pass `--force` (which tears it down first). Use `--dry-run` to preview.
 
 For common questions, see the [FAQ](faq.md).
