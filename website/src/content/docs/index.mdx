@@ -9,21 +9,13 @@ Splice validator and super-validator apps, and three party wallets
 (app-user, app-provider, super-validator), each with signed JWTs. One
 binary, one command, nothing to configure.
 
-```
-$ canton-devkit localnet up demo
-Running preflight checks...
-Starting services...
-Waiting for services to become healthy...
-
-  ✦  "demo" is ready  ·  Splice 0.6.4  ·  ready in 1m 24s
-```
-
 It is a thin wrapper over the upstream
 [Splice LocalNet](https://github.com/canton-network/splice) — pinned to
 immutable commit SHAs, verified by content hash, no forks, no patched
-images. The only prerequisite is Docker with Compose v2; the devkit's
-preflight checks for at least 8 GB of Docker memory (12 GB recommended)
-and 10 GB of free disk.
+images. The only prerequisite is Docker with Compose v2; preflight
+checks require at least 8 GB of Docker memory (12 GB recommended) and
+10 GB of free disk — plan more headroom for images and volumes (see
+[Getting Started](getting-started/)).
 
 ## Install
 
@@ -53,7 +45,7 @@ canton-devkit localnet up demo   # bring up a network named "demo"
   (`--port-base`), and a ready-made
   [GitHub Actions example](https://github.com/bitdynamics-ab/canton-devkit/blob/main/examples/ci/github-actions.yml).
 - **Optional observability** — `--profile observability` adds
-  Prometheus and Grafana with a curated Canton dashboard.
+  Prometheus and Grafana with a bundled Canton dashboard.
 
 ## Guides
 

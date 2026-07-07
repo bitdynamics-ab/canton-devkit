@@ -11,15 +11,6 @@ Splice validator and super-validator apps, and three party wallets
 (app-user, app-provider, super-validator), each with signed JWTs. One
 binary, one command, nothing to configure.
 
-```
-$ canton-devkit localnet up demo
-Running preflight checks...
-Starting services...
-Waiting for services to become healthy...
-
-  ✦  "demo" is ready  ·  Splice 0.6.4  ·  ready in 1m 24s
-```
-
 Setting this up by hand means cloning Splice, working out its
 docker-compose layering, finding the JWT dev secret, and copying party
 IDs around. The devkit automates exactly that and nothing more: it is a
@@ -28,9 +19,10 @@ thin wrapper over the upstream
 immutable commit SHAs and verified by content hash after download. No
 forks, no patched images.
 
-The only prerequisite is Docker (Engine or Desktop) with Compose v2;
-the devkit's preflight checks for at least 8 GB of Docker memory
-(12 GB recommended) and 10 GB of free disk before starting anything.
+The only prerequisite is Docker (Engine or Desktop) with Compose v2.
+Preflight checks require at least 8 GB of Docker memory (12 GB
+recommended) and 10 GB of free disk; plan more headroom for images
+and volumes — see the [installation guide](docs/getting-started.md).
 
 ## Install
 
@@ -57,12 +49,12 @@ Both paths ship the same binary; `dpm localnet <cmd>` and
 
 ## Usage
 
-```
-$ canton-devkit localnet doctor        # check Docker, memory, disk, ports
-$ canton-devkit localnet up demo       # bring up a network named "demo"
-$ canton-devkit localnet status demo   # health, endpoints, credentials
-$ eval "$(canton-devkit localnet env demo)"   # export endpoints for your app
-$ canton-devkit localnet down demo     # stop it; state is kept
+```bash
+canton-devkit localnet doctor
+canton-devkit localnet up demo
+canton-devkit localnet status demo
+eval "$(canton-devkit localnet env demo)"
+canton-devkit localnet down demo
 ```
 
 The command surface covers the full development loop:
@@ -76,7 +68,7 @@ The command surface covers the full development loop:
 | Ledger inspection | `contracts ls / watch` · `tx ls / replay` |
 | Tokens | `token create / mint / transfer / burn / balance` |
 | State | `snapshot` / `restore` — a portable `.tgz` of a network's full state |
-| Versions | `versions` — curated Splice releases, pinned by commit SHA |
+| Versions | `versions` — pinned Splice releases, keyed by commit SHA |
 
 Token commands support both Canton token-standard generations, routed
 per instrument: [CIP-0056](https://github.com/global-synchronizer-foundation/cips/blob/main/cip-0056/cip-0056.md)
@@ -99,16 +91,14 @@ project, network, and ports. Ports are auto-allocated by default;
 
 ## Web UI
 
-`canton-devkit localnet ui` serves a local dashboard (loopback only)
-with the same operations as the CLI: instance lifecycle, live container
-health and logs, a contract explorer with per-party visibility, DAR
-upload and inspection, metrics, and the token workspace. The two
-surfaces are kept in parity by convention — anything you can do in one,
-you can do in the other.
+`canton-devkit localnet ui` serves a local dashboard (loopback only).
+CLI and Web UI expose the same operations: instance lifecycle, live
+container health and logs, a contract explorer with per-party visibility,
+DAR upload and inspection, metrics, and the token workspace.
 
 ## Observability
 
-`up --profile observability` adds Prometheus and Grafana with a curated
+`up --profile observability` adds Prometheus and Grafana with a bundled
 Canton dashboard: transaction rates, mediator latency, per-component
 health. `localnet metrics` prints the headline numbers in the terminal.
 See the [observability guide](docs/observability.md) and
@@ -118,7 +108,8 @@ See the [observability guide](docs/observability.md) and
 
 The devkit keeps a per-instance registry (compose project, allocated
 ports, party credentials, Splice version) under your user config
-directory. `up` resolves a curated Splice version, materialises compose
+directory. `up` resolves a pinned Splice version from the catalogue,
+materialises compose
 overlays for instance isolation, allocates loopback ports, signs dev
 JWTs, and waits for health checks. `snapshot` captures a logical
 PostgreSQL dump (`pg_dumpall`) of the instance's database plus its
@@ -134,9 +125,25 @@ documents every counter collected and the collector you can self-host.
 
 Full documentation is published at
 <https://bitdynamics-ab.github.io/canton-devkit/> and lives in
-[`docs/`](docs/). Start with the
-[getting-started guide](docs/getting-started.md), the
-[FAQ](docs/faq.md), and [known limitations](docs/limitations.md).
+[`docs/`](docs/).
+
+**Guides:** [getting started](docs/getting-started.md) ·
+[explorer](docs/explorer.md) ·
+[observability](docs/observability.md) ·
+[dashboard customization](docs/dashboard-customization.md) ·
+[tokens](docs/tokens.md) ·
+[homebrew](docs/homebrew.md)
+
+**Reference:** [versions](docs/versions.md) ·
+[packaging](docs/packaging.md) ·
+[telemetry](docs/telemetry.md) ·
+[FAQ](docs/faq.md) ·
+[troubleshooting](docs/troubleshooting.md) ·
+[limitations](docs/limitations.md)
+
+This is a developer tool, not a production deployment path. For
+production Canton, see the official
+[Canton documentation](https://docs.daml.com/canton/).
 
 For bugs and usage questions,
 [open an issue](https://github.com/bitdynamics-ab/canton-devkit/issues/new).

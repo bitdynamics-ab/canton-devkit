@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   ApiError,
+  type Endpoint,
   type Instance,
   downInstance,
   fetchInstance,
@@ -22,6 +23,13 @@ import {
   IcX,
 } from "../components/icons";
 import { BackupRestore } from "./BackupRestore";
+
+// UI endpoints the backend probed and found not serving HTTP.
+function unreachableUIs(inst: Instance): Endpoint[] {
+  return (inst.endpoints ?? []).filter(
+    (e) => e.reachability === "unreachable",
+  );
+}
 
 // InstanceDetail — the per-instance detail card the dashboard shows
 // when a row is selected. Surfaces the fields GET /api/instances/:name
@@ -271,6 +279,31 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
           }}
         >
           Action failed: {stopping.message}
+        </div>
+      )}
+
+      {state.kind === "ok" && unreachableUIs(state.instance).length > 0 && (
+        <div
+          role="alert"
+          style={{
+            background: `${W.warn}10`,
+            color: W.warn,
+            border: `1px solid ${W.warn}`,
+            borderRadius: 6,
+            padding: "6px 10px",
+            fontSize: 12,
+            marginBottom: 10,
+          }}
+        >
+          {unreachableUIs(state.instance)
+            .map((e) => e.label)
+            .join(", ")}{" "}
+          not serving HTTP — usually a stale port overlay from an instance
+          created by an older DevKit. Use <strong>Recreate</strong> (or re-run{" "}
+          <code style={{ fontFamily: wMono }}>
+            dpm localnet up --name {name}
+          </code>
+          ) to regenerate its overlays.
         </div>
       )}
 

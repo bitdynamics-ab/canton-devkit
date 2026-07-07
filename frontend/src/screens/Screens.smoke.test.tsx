@@ -10,7 +10,7 @@
 // guard.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
@@ -34,7 +34,15 @@ import { DoctorScreen } from "./DoctorScreen";
 interface InstanceShape {
   name: string;
   status?: string;
-  endpoints?: Array<{ label: string; url: string; port: number; scheme: string }>;
+  endpoints?: Array<{
+    key: string;
+    label: string;
+    url: string;
+    port: number;
+    scheme: string;
+    reachability?: "ok" | "unreachable";
+    reachability_detail?: string;
+  }>;
 }
 
 // stubFetch wires the minimum set of endpoints each screen probes.
@@ -212,6 +220,7 @@ describe("WalletScreen smoke", () => {
       name: "demo",
       endpoints: [
         {
+          key: "app_user_ui",
           label: "Wallet · app-user",
           url: "http://wallet.localhost:60470",
           port: 60470,
@@ -227,6 +236,66 @@ describe("WalletScreen smoke", () => {
     // The login hint is the most distinctive WalletScreen artefact.
     await waitFor(() => {
       expect(screen.getByText(/Login:/i)).toBeTruthy();
+    });
+  });
+
+  it("replaces the iframe with remediation when the wallet UI is unreachable", async () => {
+    stubFetch({
+      name: "demo",
+      endpoints: [
+        {
+          key: "app_user_ui",
+          label: "Wallet · app-user",
+          url: "http://localhost:4485",
+          port: 4485,
+          scheme: "http",
+          reachability: "unreachable",
+          reachability_detail:
+            "connection accepted but no HTTP response (empty reply)",
+        },
+      ],
+    });
+    render(
+      <Providers>
+        <WalletScreen />
+      </Providers>,
+    );
+    await waitFor(() => {
+      const alert = screen.getByRole("alert");
+      expect(alert.textContent).toMatch(/not serving HTTP/i);
+      expect(alert.textContent).toContain("Recreate");
+      expect(alert.textContent).toContain("dpm localnet up --name demo");
+    });
+    expect(document.querySelector("iframe")).toBeNull();
+  });
+
+  // The fixture label is deliberately not "Wallet · <role>" — wallet
+  // resolution must match on the stable key, not the display label.
+  it("resolves the sv wallet by endpoint key, not label", async () => {
+    stubFetch({
+      name: "demo",
+      endpoints: [
+        {
+          key: "sv_ui",
+          label: "Some Future Label · sv",
+          url: "http://wallet.localhost:60472",
+          port: 60472,
+          scheme: "http",
+        },
+      ],
+    });
+    const { container } = render(
+      <Providers>
+        <WalletScreen />
+      </Providers>,
+    );
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /sv$/ })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /sv$/ }));
+    await waitFor(() => {
+      const iframe = container.querySelector("iframe");
+      expect(iframe?.getAttribute("src")).toBe("http://wallet.localhost:60472");
     });
   });
 });
