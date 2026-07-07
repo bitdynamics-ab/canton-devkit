@@ -27,14 +27,16 @@ components:
 
 then `dpm install package` and use it as `dpm localnet <cmd>`.
 
-As a standalone binary, download the archive for your platform (macOS
-arm64, Linux amd64, Windows amd64) from the
-[releases page](https://github.com/bitdynamics-ab/canton-devkit/releases)
-and verify it against the `SHA256SUMS` file published with each release.
-Homebrew (`brew install bitdynamics-ab/canton-devkit/canton-devkit`), an APT
-repository for Debian/Ubuntu, and `go install` are also supported — the
-[installation guide](docs/getting-started.md) covers each path
-step by step.
+For a standalone binary, use the quick-install script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/homebrew-canton-devkit/main/install.sh | sh
+```
+
+Homebrew (`brew install bitdynamics-ab/canton-devkit/canton-devkit`), APT for
+Debian/Ubuntu, manual platform downloads, and `go install` are also
+supported — the [installation guide](docs/getting-started.md) covers each
+path step by step.
 
 Both paths ship the same binary; `dpm localnet <cmd>` and
 `canton-devkit localnet <cmd>` are interchangeable everywhere below.
