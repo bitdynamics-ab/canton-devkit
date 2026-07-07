@@ -44,11 +44,14 @@ content SHA. Uncurated tags are resolved live against GitHub and cached
 locally — handy for trying a brand-new upstream release before it's
 curated.
 
-## Tokens (CIP-0112 / V2)
+## Tokens
 
 **V1 or V2?**
-This tool targets **Token Standard V2 (CIP-0112)** only. V1 / CIP-0056 is
-not supported. See [tokens.md](tokens.md).
+Both, routed per instrument. Reads and transfers work against
+**CIP-0056** (Final) instruments — what existing assets such as Canton
+Coin implement on stable Splice releases. Creating a **new** instrument
+uses **Token Standard V2 (CIP-0112**, approved but not yet final**)**,
+which requires the alpha track below. See [tokens.md](tokens.md).
 
 **Why is V2 "alpha" and what does `--profile tokens-v2` do?**
 V2 runs on a special upstream Splice build (alpha protocol 35) on the

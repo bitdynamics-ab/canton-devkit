@@ -1,70 +1,80 @@
 ---
 title: Canton DevKit
-description: One command to a full Canton LocalNet — spin up, inspect, and tear down a complete Canton developer stack.
-template: splash
-hero:
-  tagline: One command to a full Canton LocalNet
-  actions:
-    - text: Get started
-      link: getting-started/
-      icon: right-arrow
-    - text: View on GitHub
-      link: https://github.com/bitdynamics-ab/canton-devkit
-      icon: external
-      variant: minimal
+description: Run a complete local Canton network — synchronizer, participant, Splice apps, wallets, explorer — with one command.
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+canton-devkit runs a complete local [Canton](https://canton.network/)
+network on your machine: a Canton synchronizer and participant, the
+Splice validator and super-validator apps, and three party wallets
+(app-user, app-provider, super-validator), each with signed JWTs. One
+binary, one command, nothing to configure.
 
-`canton-devkit` is a single-binary toolkit for spinning up, inspecting, and tearing
-down a complete [Canton](https://canton.network/) developer stack — Canton
-synchronizer + participant, Splice super-validator apps, three party wallets
-(app-user, app-provider, SV), Scan explorer, and signed JWTs.
+```
+$ canton-devkit localnet up demo
+  ✓  Splice 0.6.4 cache hit
+  ✓  Compose started · 12 containers
+  ✓  Health checks · canton · splice · postgres
+  ✓  JWTs signed · app-user · app-provider · super-validator
+  ✦  "demo" is ready · Splice 0.6.4 · ready in 1m 24s
+```
 
-## Getting started
+It is a thin wrapper over the upstream
+[Splice LocalNet](https://github.com/canton-network/splice) — pinned to
+immutable commit SHAs, verified by content hash, no forks, no patched
+images. The only prerequisite is Docker with Compose v2; the devkit's
+preflight checks for at least 8 GB of Docker memory (12 GB recommended)
+and 10 GB of free disk.
 
-Start with [Installation & Getting Started](getting-started/) for install paths,
-Docker prerequisites, and a zero-to-running LocalNet walkthrough.
+## Install
 
-<CardGrid>
-	<Card title="One command" icon="rocket">
-		No YAML editing, no env-file shuffling. `up` downloads Splice, signs JWTs,
-		brings up a dozen containers, prints endpoints. Cold start ~90&nbsp;s.
-	</Card>
-	<Card title="Two surfaces" icon="laptop">
-		Same code, two skins: a CLI for terminals &amp; CI, a
-		Vite/React Web UI for browser-driven inspection. Always at parity.
-	</Card>
-	<Card title="Zero lock-in" icon="approve-check">
-		No forks, no patches. Thin wrapper over upstream
-		[Splice LocalNet](https://github.com/canton-network/splice), pinned to
-		immutable commit SHAs and verified by content hash.
-	</Card>
-	<Card title="Snapshot &amp; restore" icon="seti:db">
-		Save a working state to a `.tgz`, hand it to a teammate, replay it on CI.
-		Restore a captured state in seconds.
-	</Card>
-	<Card title="Single binary" icon="download">
-		`go install` or `dpm install package` — same artefact. macOS arm64, Linux
-		amd64, Windows amd64. No JVM, no Python, no Node at runtime.
-	</Card>
-	<Card title="Observability built-in" icon="magnifier">
-		Optional `--profile observability` adds Prometheus + Grafana with a
-		Canton dashboard. The CLI scrapes the same metrics.
-	</Card>
-</CardGrid>
+Follow [Installation & Getting Started](getting-started/) — it covers
+the DPM component, standalone binaries for macOS/Linux/Windows,
+Homebrew, APT, and `go install`, plus the Docker prerequisites and a
+zero-to-running walkthrough.
 
-## Documentation
+```sh
+canton-devkit localnet doctor    # verify Docker, memory, disk, ports
+canton-devkit localnet up demo   # bring up a network named "demo"
+```
 
-- [LocalNet lifecycle](guides/localnet-lifecycle/) — up, inspect, multiple instances, clean up
-- [Tokens (CIP-0112 / V2)](guides/tokens/)
-- [Contract explorer](guides/explorer/)
-- [Observability](guides/observability/)
-- [FAQ](reference/faq/)
-- [Troubleshooting](reference/troubleshooting/)
-- [Known limitations](reference/limitations/)
+## What you get
+
+- **A CLI and a Web UI at parity** — every operation works from both.
+  `localnet ui` serves a local dashboard: lifecycle, container health
+  and logs, a contract explorer with per-party visibility, DAR
+  management, metrics, and the token workspace.
+- **The full development loop** — DAR upload/inspect/diff with hot
+  redeploy (`dar watch`), live ledger inspection (`contracts watch`,
+  `tx ls / replay`), token flows for both standard generations
+  (CIP-0056 assets and Token Standard V2 instruments), and portable
+  snapshot/restore of a network's entire state.
+- **CI-ready behavior** — stable exit codes, `--format json`
+  everywhere it matters, deterministic ports on request
+  (`--port-base`), and a ready-made
+  [GitHub Actions example](https://github.com/bitdynamics-ab/canton-devkit/blob/main/examples/ci/github-actions.yml).
+- **Optional observability** — `--profile observability` adds
+  Prometheus and Grafana with a curated Canton dashboard.
+
+## Guides
+
+- [LocalNet lifecycle](guides/localnet-lifecycle/) — zero to running,
+  multiple instances, deterministic ports, teardown
+- [Contract explorer](guides/explorer/) — ACS, transactions, per-party views
+- [Observability](guides/observability/) — Prometheus + Grafana profile
+- [Dashboard customization](guides/dashboard-customization/)
+- [Tokens](guides/tokens/) — CIP-0056 assets and Token Standard V2 (CIP-0112) flows
+- [Homebrew install](guides/homebrew/)
+
+## Reference
+
+- [Splice version catalogue](reference/versions/) — how versions are pinned
+- [Packaging & distribution](reference/packaging/)
+- [Telemetry](reference/telemetry/) — what is collected, how to opt out
+- [FAQ](reference/faq/) · [Troubleshooting](reference/troubleshooting/) ·
+  [Known limitations](reference/limitations/)
 
 :::note
-**Not for production.** This is a developer tool. For production Canton
-deployments, see the official [Canton documentation](https://docs.daml.com/canton/).
+This is a developer tool, not a production deployment path. For
+production Canton, see the official
+[Canton documentation](https://docs.daml.com/canton/).
 :::

@@ -1,15 +1,21 @@
-# Tokens — Canton Token Standard V2 on LocalNet
+# Tokens — Canton Token Standard on LocalNet
 
-canton-devkit ships first-class tooling for the **Canton Token Standard
-V2** (the CIP-0112 path) so you can create an instrument, mint/transfer/
-burn holdings, fund parties, and reconcile balances against a live
-LocalNet — from the CLI **or** the Web UI, by readable party alias, with
-without surfacing raw JWTs, ports, or full contract IDs in every command.
+canton-devkit ships first-class tooling for the Canton Token Standard so
+you can create an instrument, mint/transfer/burn holdings, fund parties,
+and reconcile balances against a live LocalNet — from the CLI **or** the
+Web UI, by readable party alias, without surfacing raw JWTs, ports, or
+full contract IDs in every command.
 
-> **Scope: V2 / CIP-0112 only.** This tooling targets the Token Standard
-> V2 (CIP-0112) surface. V1 / CIP-0056 is **not** supported. V2 is
-> currently an opt-in *alpha* track (see [the alpha caveat](#the-v2-alpha-caveat));
-> it will be promoted to the default channel once V2 lands in mainline Splice.
+> **Scope: both token-standard generations, routed per instrument.**
+> Reads and transfers work against
+> [CIP-0056](https://github.com/global-synchronizer-foundation/cips/blob/main/cip-0056/cip-0056.md)
+> (Final) instruments — what existing assets such as Canton Coin
+> implement on stable Splice releases. Creating a **new** instrument uses
+> the Token Standard V2
+> ([CIP-0112](https://github.com/global-synchronizer-foundation/cips/blob/main/cip-0112/cip-0112.md),
+> approved but not yet final) surface, which is an opt-in *alpha* track
+> (see [the alpha caveat](#the-v2-alpha-caveat)); it will be promoted to
+> the default channel once V2 lands in mainline Splice.
 
 ---
 
