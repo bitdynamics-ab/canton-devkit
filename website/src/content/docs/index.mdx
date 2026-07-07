@@ -4,9 +4,10 @@ description: Run a complete local Canton network — synchronizer, participant, 
 ---
 
 canton-devkit runs a complete local [Canton](https://canton.network/)
-network on your machine: synchronizer, participant, the Splice
-super-validator apps, three party wallets, the Scan explorer, and signed
-JWTs for each party. One binary, one command, nothing to configure.
+network on your machine: a Canton synchronizer and participant, the
+Splice validator and super-validator apps, and three party wallets
+(app-user, app-provider, super-validator), each with signed JWTs. One
+binary, one command, nothing to configure.
 
 ```
 $ canton-devkit localnet up demo
@@ -20,8 +21,9 @@ $ canton-devkit localnet up demo
 It is a thin wrapper over the upstream
 [Splice LocalNet](https://github.com/canton-network/splice) — pinned to
 immutable commit SHAs, verified by content hash, no forks, no patched
-images. The only prerequisite is Docker with Compose v2, ~8 GB of memory
-for the Docker VM, and 20 GB of disk.
+images. The only prerequisite is Docker with Compose v2; the devkit's
+preflight checks for at least 8 GB of Docker memory (12 GB recommended)
+and 10 GB of free disk.
 
 ## Install
 
@@ -43,7 +45,8 @@ canton-devkit localnet up demo   # bring up a network named "demo"
   management, metrics, and the token workspace.
 - **The full development loop** — DAR upload/inspect/diff with hot
   redeploy (`dar watch`), live ledger inspection (`contracts watch`,
-  `tx ls / replay`), CIP-0112 token flows, and portable
+  `tx ls / replay`), token flows for both standard generations
+  (CIP-0056 assets and Token Standard V2 instruments), and portable
   snapshot/restore of a network's entire state.
 - **CI-ready behavior** — stable exit codes, `--format json`
   everywhere it matters, deterministic ports on request
@@ -59,7 +62,7 @@ canton-devkit localnet up demo   # bring up a network named "demo"
 - [Contract explorer](guides/explorer/) — ACS, transactions, per-party views
 - [Observability](guides/observability/) — Prometheus + Grafana profile
 - [Dashboard customization](guides/dashboard-customization/)
-- [Tokens](guides/tokens/) — CIP-0112 / Token Standard V2 flows
+- [Tokens](guides/tokens/) — CIP-0056 assets and Token Standard V2 (CIP-0112) flows
 - [Homebrew install](guides/homebrew/)
 
 ## Reference

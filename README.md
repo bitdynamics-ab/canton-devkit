@@ -6,9 +6,10 @@
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
 canton-devkit runs a complete local [Canton](https://canton.network/)
-network on your machine: synchronizer, participant, the Splice
-super-validator apps, three party wallets, the Scan explorer, and signed
-JWTs for each party. One binary, one command, nothing to configure.
+network on your machine: a Canton synchronizer and participant, the
+Splice validator and super-validator apps, and three party wallets
+(app-user, app-provider, super-validator), each with signed JWTs. One
+binary, one command, nothing to configure.
 
 ```
 $ canton-devkit localnet up demo
@@ -27,8 +28,9 @@ thin wrapper over the upstream
 immutable commit SHAs and verified by content hash after download. No
 forks, no patched images.
 
-The only prerequisite is Docker (Engine or Desktop) with Compose v2,
-roughly 8 GB of memory for the Docker VM, and 20 GB of disk.
+The only prerequisite is Docker (Engine or Desktop) with Compose v2;
+the devkit's preflight checks for at least 8 GB of Docker memory
+(12 GB recommended) and 10 GB of free disk before starting anything.
 
 ## Install
 
@@ -72,9 +74,18 @@ The command surface covers the full development loop:
 | App wiring | `env` `creds` — endpoints, party IDs, and JWTs for tests and CI |
 | DAR management | `dar upload / list / info / download / diff / remove / build-upload / watch` |
 | Ledger inspection | `contracts ls / watch` · `tx ls / replay` |
-| Tokens (CIP-0112) | `token create / mint / transfer / burn / balance` |
+| Tokens | `token create / mint / transfer / burn / balance` |
 | State | `snapshot` / `restore` — a portable `.tgz` of a network's full state |
 | Versions | `versions` — curated Splice releases, pinned by commit SHA |
+
+Token commands support both Canton token-standard generations, routed
+per instrument: [CIP-0056](https://github.com/global-synchronizer-foundation/cips/blob/main/cip-0056/cip-0056.md)
+(Final — what existing assets such as Canton Coin implement) for reads
+and transfers, and Token Standard V2
+([CIP-0112](https://github.com/global-synchronizer-foundation/cips/blob/main/cip-0112/cip-0112.md),
+approved but not yet final) for creating new instruments, which requires
+an alpha Splice build (`--version token-standard-v2 --profile tokens-v2`)
+— see the [tokens guide](docs/tokens.md).
 
 Commands that produce output take `--format json`, and exit codes are
 stable (`0` ok, `1` usage, `2` preflight, `3` timeout or interrupt, `4`

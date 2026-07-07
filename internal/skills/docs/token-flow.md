@@ -1,13 +1,16 @@
 ---
 name: canton-token-flow
-description: Create and exercise CIP-0112 token flows (create, mint, transfer, burn, balance) on a Canton LocalNet. Use when the user wants to test token operations locally.
+description: Create and exercise Canton Token Standard flows (create, mint, transfer, burn, balance) on a Canton LocalNet. Use when the user wants to test token operations locally.
 ---
 
-# Token flows (CIP-0112)
+# Token flows (Canton Token Standard)
 
 Exercise token-standard operations on LocalNet via `dpm localnet token`.
-Targets CIP-0112 (Token Standard V2) as the default path. For LocalNet
-testing only — not a production issuer/custodian/wallet.
+Both generations are supported, routed per instrument: CIP-0056 (Final —
+existing assets such as Canton Coin) for reads and transfers; creating a
+new instrument uses Token Standard V2 (CIP-0112, alpha) and needs
+`--version token-standard-v2 --profile tokens-v2`. For LocalNet testing
+only — not a production issuer/custodian/wallet.
 
 ## When to use
 The user asks to "create a test token", "mint/transfer/burn tokens", or
@@ -44,6 +47,7 @@ The user asks to "create a test token", "mint/transfer/burn tokens", or
 ## Guardrails
 - This is a LocalNet faucet/testing surface, not production token
   infrastructure. Do not point it at MainNet.
-- V2 (CIP-0112) only — V1 / CIP-0056 is not supported by this CLI.
+- Creating/minting/burning targets Token Standard V2 (CIP-0112, alpha)
+  instruments; CIP-0056 instruments support reads and transfers only.
 - All operations go through the Ledger API / Registry API on the
   selected instance; verify with `token balance` after each step.
