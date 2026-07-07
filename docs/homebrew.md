@@ -10,25 +10,21 @@ This source repository does not keep a `Formula/` directory. Homebrew
 distribution files are maintained in `homebrew-canton-devkit`; this repository only
 keeps the release helper script and docs that describe the process.
 
-## Install (direct, no tap)
+## Install
 
-```sh
-brew install --formula \
-  https://raw.githubusercontent.com/bitdynamics-ab/homebrew-canton-devkit/main/Formula/canton-devkit.rb
-```
-
-> Note: the formula's `url` + `sha256` are rewritten automatically by
-> the release workflow on every release tag (see below), so the direct
-> formula always points at the latest published release. There is no
-> `--HEAD` install path — the formula installs prebuilt release
-> artifacts only.
-
-## Install (via tap)
+Homebrew requires formulae to live in a tap (installing a formula from
+a URL or a bare file path is no longer supported), so install via the
+tap:
 
 ```sh
 brew tap bitdynamics-ab/canton-devkit
 brew install canton-devkit
 ```
+
+> Note: the formula's `url` + `sha256` are rewritten automatically by
+> the release workflow on every release tag (see below), so the tap
+> always installs the latest published release. There is no `--HEAD`
+> install path — the formula installs prebuilt release artifacts only.
 
 ## How the formula stays in sync
 
@@ -58,15 +54,24 @@ wrong.
 
 ## Smoke test
 
+Current Homebrew rejects bare-path formula installs ("Homebrew requires
+formulae to be in a tap"), so test a not-yet-pushed formula bump by
+tapping the local clone. `brew tap` clones the git repo, so commit the
+bump locally in `../homebrew-canton-devkit` first, then:
+
 ```sh
-brew install --formula ../homebrew-canton-devkit/Formula/canton-devkit.rb
-brew test  canton-devkit                          # invokes `localnet --help`
+brew tap bitdynamics-ab/canton-devkit ../homebrew-canton-devkit
+brew install bitdynamics-ab/canton-devkit/canton-devkit
+brew test canton-devkit
 canton-devkit localnet --help
 ```
 
-`brew test` is also exercised by the formula's `test do …` block, which
-runs `canton-devkit localnet --help` and asserts the LocalNet command
-tree is reachable.
+After pushing, the plain `brew tap bitdynamics-ab/canton-devkit &&
+brew install canton-devkit` form verifies the published tap.
+
+`brew test canton-devkit` runs the formula's `test do` block, which
+executes `canton-devkit localnet --help` and asserts the LocalNet
+command tree is reachable.
 
 ## What's not supported (yet)
 

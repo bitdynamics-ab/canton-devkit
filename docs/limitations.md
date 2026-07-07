@@ -32,9 +32,10 @@ resolved.
 
   Instead DevKit VERIFIES post-up: after services are healthy it records
   each running image's content digest (image ID) in `state.json`
-  (`image_digests`) and, on a later `up`/`restart` of the SAME version,
+  (`image_digests`) and, on a later `up` of the SAME version,
   WARNs if a digest changed — i.e. a mutable ghcr tag was republished
-  under you. This is a warning,
+  under you (`restart` reuses the existing containers, so no re-check
+  happens there). This is a warning,
   not a gate (a digest can legitimately change if you manually re-pull),
   and it's best-effort (a capture failure just skips the check). True
   digest-pinning at pull time would need upstream Splice to expose
@@ -43,19 +44,22 @@ resolved.
 ## Compose env reconstruction
 
 - **`composeContext` rebuilds env from registry state.**
-  `down` / `logs` / `creds` need the env that was passed to `up`.
-  DevKit reconstructs it from `state.json` so a fresh shell can still
-  operate the instance. Any new env var a future Splice release adds
+  `down` / `restart` / `pause` / `clean` need the env that was passed
+  to `up`; DevKit reconstructs it from `state.json` so a fresh shell
+  can still operate the instance. (`logs` and `creds` read the
+  registry/containers directly and need no env reconstruction.)
+  Any new env var a future Splice release adds
   that is not captured in state will silently break operations from a
   fresh shell.
 
 ## Integration testing
 
-- **No CI integration test for `localnet up` against real Splice.**
-  Unit tests cover parsers and orchestration well, but the actual
-  bring-up flow is not yet exercised end-to-end in CI, so drift in the
-  upstream Splice compose contract may first surface at runtime rather
-  than in CI.
+- **Integration coverage for `localnet up` against real Splice runs
+  nightly, not on every PR.** Unit tests cover parsers and
+  orchestration on every PR, but the end-to-end bring-up flow runs
+  only nightly (and on PRs labeled `run-integration`) via
+  `.github/workflows/integration.yml`, so drift in the upstream
+  Splice compose contract can land up to a day before CI notices.
 
 ## Memory requirements
 
@@ -63,23 +67,29 @@ resolved.
   `cluster/compose/localnet/resource-constraints.yaml` (from
   [canton-network/splice](https://github.com/canton-network/splice))
   sums to canton 4 GB + splice 3 GB +
-  postgres 2 GB + console 2 GB + 7 UI services @ 256-512 MB ≈ 12 GB.
-  In practice a single instance runs on 7-8 GB because most of those
+  postgres 2 GB + console 2 GB + 7 UI services @ 256-512 MB (plus
+  nginx/swagger-ui) ≈ 13 GB of limits — DevKit's coded recommendation
+  is 12 GB. In practice a single instance runs on 7-8 GB because most of those
   limits are headroom. But:
 
   - **Two concurrent instances exceed 8 GB Docker** → splice in one of
     them gets OOM-restarted by docker, never reaches healthy, and
-    `WaitForHealthy` times out at 15 min.
-  - **GitHub `ubuntu-latest` runners have 7 GB RAM** — enough for
-    `up` to start but Splice's onboarding may not complete. Use a
-    larger runner class or a self-hosted runner for CI jobs that
-    bring up LocalNet.
-  - **Docker Desktop default on macOS is 8 GB.** Bump via Settings →
-    Resources before running multi-instance scenarios.
+    `WaitForHealthy` times out at 25 min.
+  - **GitHub `ubuntu-latest` runners have 16 GB RAM on public repos
+    but only 8 GB on private repos** — on private-repo runners `up`
+    starts but Splice's onboarding may not complete; use a larger
+    runner class or a self-hosted runner there.
+  - **Docker Desktop defaults to 50% of host memory** (8 GB on a
+    16 GB Mac). Bump via Settings → Resources before running
+    multi-instance scenarios.
 
-  The preflight check enforces a 4 GB hard floor; the 12 GB
-  recommendation is documentation, not a gate — single-instance
-  setups on 7-8 GB work fine for most users.
+  The preflight check enforces a per-version hard floor: 8 GB for the
+  0.6 line (0.6.3, 0.6.4/`latest`, the V2 alpha — and any uncurated
+  0.6.x tag, which inherits the strictest catalogued floor for its
+  major), 4 GB for 0.5.18 and only for tags whose major has no
+  catalogued entry. The 12 GB figure is the coded recommendation
+  threshold (`recommended_memory_bytes`) — below it preflight WARNs
+  but does not refuse.
 
   On timeout, `WaitForHealthy` now dumps the last `docker compose ps`
   snapshot in its error so the stuck service + state are visible

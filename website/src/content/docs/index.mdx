@@ -11,11 +11,11 @@ binary, one command, nothing to configure.
 
 ```
 $ canton-devkit localnet up demo
-  ✓  Splice 0.6.4 cache hit
-  ✓  Compose started · 12 containers
-  ✓  Health checks · canton · splice · postgres
-  ✓  JWTs signed · app-user · app-provider · super-validator
-  ✦  "demo" is ready · Splice 0.6.4 · ready in 1m 24s
+Running preflight checks...
+Starting services...
+Waiting for services to become healthy...
+
+  ✦  "demo" is ready  ·  Splice 0.6.4  ·  ready in 1m 24s
 ```
 
 It is a thin wrapper over the upstream
@@ -76,5 +76,5 @@ canton-devkit localnet up demo   # bring up a network named "demo"
 :::note
 This is a developer tool, not a production deployment path. For
 production Canton, see the official
-[Canton documentation](https://docs.daml.com/canton/).
+[Canton documentation](https://docs.canton.network/).
 :::
