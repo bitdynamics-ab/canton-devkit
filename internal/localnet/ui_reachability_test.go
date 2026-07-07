@@ -26,7 +26,7 @@ func installFakeUIProbe(t *testing.T, fn func(ctx context.Context, rawURL string
 }
 
 // recordingUIProbe is a fake probe that records every URL it was asked
-// to check and fails those in failURLs. Concurrency-safe: the probe
+// to check and fails those in failWith. Concurrency-safe: the probe
 // runs from multiple goroutines.
 type recordingUIProbe struct {
 	mu       sync.Mutex
@@ -70,9 +70,6 @@ func TestDefaultUIProbe_RedirectIsReachableWithoutFollowing(t *testing.T) {
 	}
 }
 
-// TestDefaultUIProbe_EmptyReplyIsUnreachable reproduces the stale
-// loopback-overlay failure mode: the TCP accept succeeds (docker-proxy
-// owns the host port) but the connection closes with zero HTTP bytes.
 func TestDefaultUIProbe_EmptyReplyIsUnreachable(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -129,7 +126,7 @@ services:
 		content string // "" = don't write the file
 		want    bool
 	}{
-		{"pre-136 fixed container ports", stale, true},
+		{"fixed container ports", stale, true},
 		{"current env-templated ports", current, false},
 		{"missing overlay", "", false},
 	}

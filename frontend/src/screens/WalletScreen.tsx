@@ -94,8 +94,7 @@ export function WalletScreen() {
   // null when the instance doesn't yet have endpoints surfaced.
   const walletEndpoint = walletEndpointFor(role, state.instance.endpoints);
   const walletURL = walletEndpoint?.url ?? null;
-  // Backend status probe says the port accepts TCP but serves no
-  // HTTP — embedding it would just render a blank iframe.
+  // Embedding an unreachable wallet UI would just render a blank iframe.
   const walletUnreachable = walletEndpoint?.reachability === "unreachable";
 
   return (

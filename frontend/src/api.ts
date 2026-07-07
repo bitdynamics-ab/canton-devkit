@@ -106,9 +106,7 @@ export interface Endpoint {
   /**
    * Status-time HTTP probe verdict for browser-UI endpoints. Absent
    * when the endpoint was not probed (non-UI schemes, instance not
-   * running). "unreachable" means the port accepted TCP but no HTTP
-   * response came back — the stale loopback-overlay signature; the
-   * fix is Recreate / `dpm localnet up --name <n>`.
+   * running).
    */
   reachability?: "ok" | "unreachable";
   reachability_detail?: string;

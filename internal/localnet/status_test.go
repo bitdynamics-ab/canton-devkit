@@ -218,11 +218,6 @@ func TestStatus_SoftFailSetsLiveProbeFailedInJSON(t *testing.T) {
 	}
 }
 
-// TestStatus_UIUnreachableWarnsWithRemediation is the regression test
-// for the stale loopback-overlay bug: instances created by a pre-#136
-// DevKit accept TCP on the UI ports but serve no HTTP, and status used
-// to render them fully green. The probe must mark the endpoint and the
-// table must point at `up --name` / Recreate.
 func TestStatus_UIUnreachableWarnsWithRemediation(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedStatusInstance(t, "demo", registry.StatusRunning)
@@ -337,7 +332,7 @@ func TestStatus_UIProbeSkippedWhenDockerQueryFails(t *testing.T) {
 		t.Fatalf("exit code = %d", code)
 	}
 	if called {
-		t.Error("UI probe must not run when the docker query failed — a stopped daemon would masquerade as a stale overlay")
+		t.Error("UI probe must not run when the docker query failed")
 	}
 }
 

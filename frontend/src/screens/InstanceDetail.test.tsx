@@ -81,10 +81,6 @@ describe("InstanceDetail", () => {
   });
 
   it("shows the unreachable-UI banner with the Recreate remediation", async () => {
-    // Regression: instances created by a pre-#136 DevKit carry a stale
-    // loopback overlay — UI ports accept TCP but serve no HTTP. The
-    // backend probe marks the endpoint; the card must surface it with
-    // the regenerate-overlays remediation.
     mockInstanceFetch({
       schema_version: 1,
       name: "demo",

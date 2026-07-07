@@ -15,9 +15,7 @@ import {
 import { W, wMono } from "../tokens";
 import { BackupRestore } from "./BackupRestore";
 
-// UI endpoints the backend probed and found dead — the port accepts
-// TCP but returns no HTTP response (stale loopback overlay from a
-// pre-#136 DevKit). Recreate / re-up regenerates the overlays.
+// UI endpoints the backend probed and found not serving HTTP.
 function unreachableUIs(inst: Instance): Endpoint[] {
   return (inst.endpoints ?? []).filter(
     (e) => e.reachability === "unreachable",

@@ -238,10 +238,6 @@ describe("WalletScreen smoke", () => {
   });
 
   it("replaces the iframe with remediation when the wallet UI is unreachable", async () => {
-    // Backend probe result for a stale-overlay instance (pre-#136
-    // DevKit): port accepts TCP, serves no HTTP. Framing it would
-    // render a blank page, so the screen must explain + point at
-    // Recreate / `dpm localnet up`.
     stubFetch({
       name: "demo",
       endpoints: [

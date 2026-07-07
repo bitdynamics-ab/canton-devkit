@@ -20,20 +20,17 @@ import (
 
 // UI reachability probe.
 //
-// Instances created by a DevKit older than the loopback-overlay fix
-// (PR #136) carry a stale generated loopback-ports.yaml that maps the
-// host UI ports onto fixed container ports 2000/3000/4000 while
-// Splice's nginx listens on the env-templated ports inside the
-// container. The wallet/scan UIs then accept TCP (docker-proxy owns
-// the host port) but return an empty reply — invisible to
-// `docker compose ps` health, so status/doctor looked green while the
-// browser saw a blank page. A one-GET-per-UI-port HTTP probe catches
-// exactly that class of breakage.
+// A UI host port can accept TCP without serving anything: docker-proxy
+// owns the host port even when the container-side mapping points at a
+// port nothing listens on (e.g. an instance whose generated
+// loopback-ports.yaml predates the env-templated nginx ports). That
+// state is invisible to `docker compose ps` health, so status probes
+// the recorded UI endpoints over HTTP directly.
 
 // uiProbePortKeys are the state.json port keys that carry a browser UI
-// behind Splice's nginx — the ports the stale overlay breaks. Swagger
-// and grpc/postgres endpoints are deliberately not probed: they either
-// don't speak plain HTTP or are unaffected by the overlay bug.
+// behind Splice's nginx. Other endpoints are not probed: grpc and
+// postgres don't speak plain HTTP, and swagger-ui is served by its own
+// container with a fixed port mapping.
 var uiProbePortKeys = []string{"app_user_ui", "app_provider_ui", "sv_ui"}
 
 // uiProbeTimeout bounds each endpoint GET. Loopback either answers in
@@ -119,9 +116,9 @@ func probeUIEndpoints(ctx context.Context, s *registry.State, endpoints []types.
 	wg.Wait()
 }
 
-// uiProbeErrorDetail humanizes transport errors. The interesting case
-// is EOF — TCP accepted, zero HTTP bytes back — which is the stale-
-// overlay signature ("empty reply from server" in curl terms).
+// uiProbeErrorDetail humanizes transport errors. EOF — TCP accepted,
+// zero HTTP bytes back — gets its own wording because "EOF" alone
+// tells the user nothing.
 func uiProbeErrorDetail(err error) string {
 	var uerr *url.Error
 	if errors.As(err, &uerr) {
@@ -264,12 +261,12 @@ func uiReachabilityCheck(ctx context.Context) docker.CheckResult {
 }
 
 // hasStaleLoopbackOverlay reports whether the instance's generated
-// loopback-ports.yaml still maps UI host ports onto the fixed
-// container ports 2000/3000/4000 that pre-#136 DevKits emitted.
-// Current DevKits template both sides of the nginx mapping
-// ("${SV_UI_PORT}:${SV_UI_PORT}"), so a literal :2000/:3000/:4000
-// container side is a definitive stale-overlay signal. Best effort:
-// a missing or unreadable overlay is not evidence of staleness.
+// loopback-ports.yaml still maps UI host ports onto fixed container
+// ports 2000/3000/4000, as older DevKits emitted. Current DevKits
+// template both sides of the nginx mapping
+// ("${SV_UI_PORT}:${SV_UI_PORT}"), so a literal container side is a
+// definitive stale-overlay signal. Best effort: a missing or
+// unreadable overlay is not evidence of staleness.
 func hasStaleLoopbackOverlay(dataDir string) bool {
 	if dataDir == "" {
 		return false

@@ -100,10 +100,9 @@ func CollectStatus(ctx context.Context, name string, live, includeJWT bool) (typ
 			inst.Services = nil
 		} else {
 			inst.Services = svcs
-			// UI reachability only means something while the instance
-			// is supposed to be up; skip it when docker itself is
-			// unreachable so "unreachable UI" always points at the
-			// instance, not at a stopped daemon.
+			// Probe only when docker itself answered, so
+			// "unreachable UI" always points at the instance, not
+			// at a stopped daemon.
 			if s.Status == registry.StatusRunning {
 				probeUIEndpoints(ctx, s, inst.Endpoints)
 			}
@@ -322,11 +321,10 @@ func writeStatusTable(w io.Writer, inst types.Instance) {
 	writeUIReachabilityWarning(w, inst)
 }
 
-// writeUIReachabilityWarning renders the scan-then-act box for UI
-// endpoints that accept TCP but never answer HTTP — the stale
-// loopback-overlay signature `docker compose ps` health can't see.
-// Placed last so the remediation is the final thing the eye lands on,
-// matching doctor's table-then-box layout.
+// writeUIReachabilityWarning renders the remediation box for UI
+// endpoints that never answered HTTP. Placed last so the remediation
+// is the final thing the eye lands on, matching doctor's
+// table-then-box layout.
 func writeUIReachabilityWarning(w io.Writer, inst types.Instance) {
 	var broken []types.Endpoint
 	for _, e := range inst.Endpoints {

@@ -37,9 +37,6 @@ type Endpoint struct {
 	// Reachability is the status-time HTTP probe verdict for browser
 	// UI endpoints ("ok" | "unreachable"). Empty when the endpoint was
 	// not probed: non-UI schemes, stopped instances, or --no-live.
-	// A UI port can accept TCP yet serve nothing (stale loopback
-	// overlay from a pre-#136 DevKit), which docker health checks
-	// don't see — hence an HTTP-level probe.
 	Reachability string `json:"reachability,omitempty"`
 	// ReachabilityDetail explains an "unreachable" verdict in human
 	// terms ("connection accepted but no HTTP response", …).
