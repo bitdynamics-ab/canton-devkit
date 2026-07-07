@@ -27,11 +27,12 @@ const LOGIN_USER_FOR: Record<Role, string> = {
 };
 
 // roleLabel matches the backend's Endpoint.Label format:
-// "Wallet · <role>". Resolves a role to the matching endpoint URL.
-function walletURLFor(role: Role, endpoints: Instance["endpoints"]): string | null {
+// "Wallet · <role>". Resolves a role to the matching endpoint (URL +
+// the backend's reachability probe verdict).
+function walletEndpointFor(role: Role, endpoints: Instance["endpoints"]) {
   if (!endpoints) return null;
   const want = `Wallet · ${role}`;
-  return endpoints.find((e) => e.label === want)?.url ?? null;
+  return endpoints.find((e) => e.label === want) ?? null;
 }
 
 export function WalletScreen() {
@@ -91,7 +92,11 @@ export function WalletScreen() {
   }
 
   // null when the instance doesn't yet have endpoints surfaced.
-  const walletURL = walletURLFor(role, state.instance.endpoints);
+  const walletEndpoint = walletEndpointFor(role, state.instance.endpoints);
+  const walletURL = walletEndpoint?.url ?? null;
+  // Backend status probe says the port accepts TCP but serves no
+  // HTTP — embedding it would just render a blank iframe.
+  const walletUnreachable = walletEndpoint?.reachability === "unreachable";
 
   return (
     <section
@@ -250,7 +255,23 @@ export function WalletScreen() {
             signed in as {role} via DevKit JWT
           </span>
         </div>
-        {walletURL ? (
+        {walletUnreachable ? (
+          <div role="alert" style={{ flex: 1, padding: 24, color: W.warn }}>
+            The wallet UI for{" "}
+            <code style={{ fontFamily: wMono, color: W.text2 }}>{role}</code>{" "}
+            is not serving HTTP
+            {walletEndpoint?.reachability_detail
+              ? ` (${walletEndpoint.reachability_detail})`
+              : ""}
+            . This usually means the instance was created by an older DevKit
+            whose generated port overlay is stale. Use <strong>Recreate</strong>{" "}
+            on the dashboard, or re-run{" "}
+            <code style={{ fontFamily: wMono, color: W.text2 }}>
+              dpm localnet up --name {name}
+            </code>{" "}
+            to regenerate the instance's overlays.
+          </div>
+        ) : walletURL ? (
           <iframe
             key={walletURL}
             src={walletURL}

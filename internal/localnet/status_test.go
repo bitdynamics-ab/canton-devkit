@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os/exec"
 	"strings"
 	"testing"
@@ -214,6 +215,129 @@ func TestStatus_SoftFailSetsLiveProbeFailedInJSON(t *testing.T) {
 	}
 	if got.Services != nil {
 		t.Errorf("Services should be nil on soft-fail, got %+v", got.Services)
+	}
+}
+
+// TestStatus_UIUnreachableWarnsWithRemediation is the regression test
+// for the stale loopback-overlay bug: instances created by a pre-#136
+// DevKit accept TCP on the UI ports but serve no HTTP, and status used
+// to render them fully green. The probe must mark the endpoint and the
+// table must point at `up --name` / Recreate.
+func TestStatus_UIUnreachableWarnsWithRemediation(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedStatusInstance(t, "demo", registry.StatusRunning)
+	installFakeStatusProber(t, func(context.Context, *registry.State) ([]types.ServiceStatus, error) {
+		return []types.ServiceStatus{{Name: "nginx", State: "healthy", Image: "nginx"}}, nil
+	})
+	installFakeUIProbe(t, func(_ context.Context, rawURL string) error {
+		if rawURL == "http://localhost:4485" {
+			return io.EOF
+		}
+		return nil
+	})
+
+	var out, errBuf bytes.Buffer
+	code := RunStatus(context.Background(), &out, &errBuf, &StatusOptions{Name: "demo", Format: "table"})
+	if code != ExitSuccess {
+		t.Fatalf("exit code = %d, stderr=%q", code, errBuf.String())
+	}
+	body := out.String()
+	for _, want := range []string{
+		"unreachable",
+		"not serving HTTP",
+		"connection accepted but no HTTP response (empty reply)",
+		"dpm localnet up --name demo",
+		"Recreate in the Web UI",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("table missing %q\nfull:\n%s", want, body)
+		}
+	}
+}
+
+func TestStatus_UIReachableRendersNoWarning(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedStatusInstance(t, "demo", registry.StatusRunning)
+	installFakeStatusProber(t, func(context.Context, *registry.State) ([]types.ServiceStatus, error) {
+		return nil, nil
+	})
+	installFakeUIProbe(t, func(context.Context, string) error { return nil })
+
+	var out, errBuf bytes.Buffer
+	code := RunStatus(context.Background(), &out, &errBuf, &StatusOptions{Name: "demo", Format: "table"})
+	if code != ExitSuccess {
+		t.Fatalf("exit code = %d", code)
+	}
+	for _, forbid := range []string{"unreachable", "not serving HTTP"} {
+		if strings.Contains(out.String(), forbid) {
+			t.Errorf("healthy UI table should not contain %q\nfull:\n%s", forbid, out.String())
+		}
+	}
+}
+
+func TestStatus_JSONCarriesReachability(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedStatusInstance(t, "demo", registry.StatusRunning)
+	installFakeStatusProber(t, func(context.Context, *registry.State) ([]types.ServiceStatus, error) {
+		return nil, nil
+	})
+	installFakeUIProbe(t, func(context.Context, string) error { return io.EOF })
+
+	var out, errBuf bytes.Buffer
+	code := RunStatus(context.Background(), &out, &errBuf, &StatusOptions{Name: "demo", Format: "json"})
+	if code != ExitSuccess {
+		t.Fatalf("exit code = %d, stderr=%q", code, errBuf.String())
+	}
+	var got types.Instance
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\nbody=%s", err, out.String())
+	}
+	byLabel := map[string]types.Endpoint{}
+	for _, e := range got.Endpoints {
+		byLabel[e.Label] = e
+	}
+	ui := byLabel["Wallet · app-user"]
+	if ui.Reachability != types.ReachabilityUnreachable || ui.ReachabilityDetail == "" {
+		t.Errorf("UI endpoint = %+v, want unreachable with detail", ui)
+	}
+	if pg := byLabel["Postgres"]; pg.Reachability != "" {
+		t.Errorf("postgres should not be probed, got %+v", pg)
+	}
+}
+
+func TestStatus_UIProbeSkippedWhenNotRunning(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedStatusInstance(t, "demo", registry.StatusStopped)
+	installFakeStatusProber(t, func(context.Context, *registry.State) ([]types.ServiceStatus, error) {
+		return nil, nil
+	})
+	called := false
+	installFakeUIProbe(t, func(context.Context, string) error { called = true; return nil })
+
+	var out, errBuf bytes.Buffer
+	if code := RunStatus(context.Background(), &out, &errBuf, &StatusOptions{Name: "demo", Format: "table"}); code != ExitSuccess {
+		t.Fatalf("exit code = %d", code)
+	}
+	if called {
+		t.Error("stopped instances must not be UI-probed")
+	}
+}
+
+func TestStatus_UIProbeSkippedWhenDockerQueryFails(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedStatusInstance(t, "demo", registry.StatusRunning)
+	installFakeStatusProber(t, func(context.Context, *registry.State) ([]types.ServiceStatus, error) {
+		return nil, errors.New("docker daemon unreachable")
+	})
+	called := false
+	installFakeUIProbe(t, func(context.Context, string) error { called = true; return nil })
+
+	var out, errBuf bytes.Buffer
+	if code := RunStatus(context.Background(), &out, &errBuf, &StatusOptions{Name: "demo", Format: "table"}); code != ExitSuccess {
+		t.Fatalf("exit code = %d", code)
+	}
+	if called {
+		t.Error("UI probe must not run when the docker query failed — a stopped daemon would masquerade as a stale overlay")
 	}
 }
 

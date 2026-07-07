@@ -75,6 +75,7 @@ func CollectDoctor(ctx context.Context, opts DoctorOptions) (types.PreflightRepo
 	report.Results = append(report.Results,
 		platformSupportCheck(goos, goarch),
 		portCheck,
+		uiReachabilityCheck(ctx),
 	)
 
 	return PreflightReportFromDocker(report), nil

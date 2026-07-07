@@ -34,7 +34,14 @@ import { DoctorScreen } from "./DoctorScreen";
 interface InstanceShape {
   name: string;
   status?: string;
-  endpoints?: Array<{ label: string; url: string; port: number; scheme: string }>;
+  endpoints?: Array<{
+    label: string;
+    url: string;
+    port: number;
+    scheme: string;
+    reachability?: "ok" | "unreachable";
+    reachability_detail?: string;
+  }>;
 }
 
 // stubFetch wires the minimum set of endpoints each screen probes.
@@ -228,6 +235,39 @@ describe("WalletScreen smoke", () => {
     await waitFor(() => {
       expect(screen.getByText(/Login:/i)).toBeTruthy();
     });
+  });
+
+  it("replaces the iframe with remediation when the wallet UI is unreachable", async () => {
+    // Backend probe result for a stale-overlay instance (pre-#136
+    // DevKit): port accepts TCP, serves no HTTP. Framing it would
+    // render a blank page, so the screen must explain + point at
+    // Recreate / `dpm localnet up`.
+    stubFetch({
+      name: "demo",
+      endpoints: [
+        {
+          label: "Wallet · app-user",
+          url: "http://localhost:4485",
+          port: 4485,
+          scheme: "http",
+          reachability: "unreachable",
+          reachability_detail:
+            "connection accepted but no HTTP response (empty reply)",
+        },
+      ],
+    });
+    render(
+      <Providers>
+        <WalletScreen />
+      </Providers>,
+    );
+    await waitFor(() => {
+      const alert = screen.getByRole("alert");
+      expect(alert.textContent).toMatch(/not serving HTTP/i);
+      expect(alert.textContent).toContain("Recreate");
+      expect(alert.textContent).toContain("dpm localnet up --name demo");
+    });
+    expect(document.querySelector("iframe")).toBeNull();
   });
 });
 
