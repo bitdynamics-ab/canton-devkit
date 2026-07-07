@@ -1,21 +1,18 @@
 ---
 title: Canton DevKit
-description: Run a complete local Canton network — synchronizer, participant, Splice apps, wallets, explorer — with one command.
+description: Run a complete local Canton network on your machine — 2 regular validator/participant nodes + 1 super-validator node, 3 parties and their respective JWTs with one CLI command
 ---
 
-canton-devkit runs a complete local [Canton](https://canton.network/)
-network on your machine: a Canton synchronizer and participant, the
-Splice validator and super-validator apps, and three party wallets
-(app-user, app-provider, super-validator), each with signed JWTs. One
-binary, one command, nothing to configure.
+canton-devkit helps you to run a complete local [Canton](https://canton.network/)
+network on your machine. You get two participant/validator nodes and
+a super-validator node, each with their own party
+(app-user, app-provider, super-validator) and JWT token. All done through
+a single command line interface with zero knowledge required for
+infrastructure, DevOps or Docker.
 
-It is a thin wrapper over the upstream
-[Splice LocalNet](https://github.com/canton-network/splice) — pinned to
-immutable commit SHAs, verified by content hash, no forks, no patched
-images. The only prerequisite is Docker with Compose v2; preflight
-checks require at least 8 GB of Docker memory (12 GB recommended) and
-10 GB of free disk — plan more headroom for images and volumes (see
-[Getting Started](getting-started/)).
+The only prerequisite is Docker and at least 8 GB of available memory (12 GB
+recommended) and 10 GB of free disk — see the
+[installation guide](getting-started/).
 
 ## Install
 
