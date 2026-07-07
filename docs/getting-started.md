@@ -69,48 +69,64 @@ surface minimal and conflict-free.
 
 ## 3. Install — standalone binary
 
-Download the binary for your platform from the
-[Releases page](https://github.com/bitdynamics-ab/canton-devkit/releases),
-verify its checksum, mark it executable, and put it on your `PATH`.
-
-Release assets are versioned archives named
-`canton-devkit_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) — each
+Standalone builds are published from the distribution repository
+[`bitdynamics-ab/homebrew-canton-devkit`](https://github.com/bitdynamics-ab/homebrew-canton-devkit).
+Release archives are named
+`canton-devkit_v<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) — each
 contains the `canton-devkit` binary plus `LICENSE` and `README.md`. Every
-release also publishes a single `SHA256SUMS` file covering all archives;
-the examples below verify against it.
+release also publishes a single `SHA256SUMS` file covering all archives.
 
-### macOS (Apple Silicon)
-
-```bash
-VERSION=v0.7   # replace with the latest release tag
-ASSET="canton-devkit_${VERSION}_darwin_arm64.tar.gz"
-base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}"
-curl -fLO "${base}/${ASSET}"
-curl -fLO "${base}/SHA256SUMS"
-# verify against the release checksums (recommended)
-grep " ${ASSET}\$" SHA256SUMS | shasum -a 256 -c - || { echo "checksum mismatch"; exit 1; }
-tar -xzf "${ASSET}"             # → canton-devkit, LICENSE, README.md
-chmod +x canton-devkit
-sudo mv canton-devkit /usr/local/bin/
-# Gatekeeper: first run may need this once
-xattr -d com.apple.quarantine /usr/local/bin/canton-devkit 2>/dev/null || true
-canton-devkit version
-```
-
-### Linux (amd64)
+### Quick install (macOS arm64 / Linux amd64)
 
 ```bash
-VERSION=v0.7
-ASSET="canton-devkit_${VERSION}_linux_amd64.tar.gz"
-base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}"
-curl -fLO "${base}/${ASSET}"
-curl -fLO "${base}/SHA256SUMS"
-grep " ${ASSET}\$" SHA256SUMS | sha256sum -c - || { echo "checksum mismatch"; exit 1; }
-tar -xzf "${ASSET}"             # → canton-devkit, LICENSE, README.md
-chmod +x canton-devkit
-sudo mv canton-devkit /usr/local/bin/
-canton-devkit version
+curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/homebrew-canton-devkit/main/install.sh | sh
 ```
+
+Or with `wget`:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/bitdynamics-ab/homebrew-canton-devkit/main/install.sh | sh
+```
+
+Options (pass as environment variables):
+
+```bash
+# Pin a specific version
+curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/homebrew-canton-devkit/main/install.sh | VERSION=0.12.2 sh
+
+# Custom install directory
+curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/homebrew-canton-devkit/main/install.sh | INSTALL_DIR=/usr/local/bin sh
+```
+
+The installer detects your platform, downloads the matching archive from
+the [releases page](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases),
+verifies the SHA-256 checksum, and installs to `~/.local/bin` by default.
+It warns when that directory is not on your `PATH`.
+
+Supported platforms:
+
+- macOS Apple Silicon (`darwin/arm64`)
+- Linux x86_64 (`linux/amd64`)
+
+### Homebrew (macOS arm64 / Linux amd64)
+
+```bash
+brew tap bitdynamics-ab/canton-devkit
+brew install bitdynamics-ab/canton-devkit/canton-devkit
+```
+
+To upgrade after a new release is published:
+
+```bash
+brew update
+brew upgrade canton-devkit
+```
+
+The formula downloads platform-specific release tarballs from the
+[distribution repo releases page](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases).
+
+> See the [Homebrew guide](homebrew.md) for the tap layout and how the
+> formula is kept in sync on each release.
 
 ### APT — Debian / Ubuntu (amd64)
 
@@ -150,7 +166,7 @@ Direct `.deb` install also works:
 VERSION=v0.12.2   # replace with the latest release tag
 DEB_VERSION="${VERSION#v}"
 ASSET="canton-devkit_${DEB_VERSION}_amd64.deb"
-base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}"
+base="https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases/download/${VERSION}"
 curl -fLO "${base}/${ASSET}"
 curl -fLO "${base}/SHA256SUMS"
 grep " ${ASSET}\$" SHA256SUMS | sha256sum -c - || { echo "checksum mismatch"; exit 1; }
@@ -162,12 +178,49 @@ The Debian package installs `/usr/bin/canton-devkit`. It does not install
 Docker; run `canton-devkit localnet doctor` after installation to verify
 Docker CLI, Compose v2, ports, disk, memory, and host prerequisites.
 
+### Manual download — macOS (Apple Silicon)
+
+Download the binary for your platform from the
+[releases page](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases),
+verify its checksum, mark it executable, and put it on your `PATH`:
+
+```bash
+VERSION=v0.12.2   # replace with the latest release tag
+ASSET="canton-devkit_${VERSION}_darwin_arm64.tar.gz"
+base="https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases/download/${VERSION}"
+curl -fLO "${base}/${ASSET}"
+curl -fLO "${base}/SHA256SUMS"
+# verify against the release checksums (recommended)
+grep " ${ASSET}\$" SHA256SUMS | shasum -a 256 -c - || { echo "checksum mismatch"; exit 1; }
+tar -xzf "${ASSET}"             # → canton-devkit, LICENSE, README.md
+chmod +x canton-devkit
+sudo mv canton-devkit /usr/local/bin/
+# Gatekeeper: first run may need this once
+xattr -d com.apple.quarantine /usr/local/bin/canton-devkit 2>/dev/null || true
+canton-devkit version
+```
+
+### Manual download — Linux (amd64)
+
+```bash
+VERSION=v0.12.2   # replace with the latest release tag
+ASSET="canton-devkit_${VERSION}_linux_amd64.tar.gz"
+base="https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases/download/${VERSION}"
+curl -fLO "${base}/${ASSET}"
+curl -fLO "${base}/SHA256SUMS"
+grep " ${ASSET}\$" SHA256SUMS | sha256sum -c - || { echo "checksum mismatch"; exit 1; }
+tar -xzf "${ASSET}"             # → canton-devkit, LICENSE, README.md
+chmod +x canton-devkit
+sudo mv canton-devkit /usr/local/bin/
+canton-devkit version
+```
+
 ### Windows (amd64, PowerShell)
 
 ```powershell
-$Version = "v0.7"
+$Version = "v0.12.2"   # replace with the latest release tag
 $Asset = "canton-devkit_${Version}_windows_amd64.zip"
-$base = "https://github.com/bitdynamics-ab/canton-devkit/releases/download/$Version"
+$base = "https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases/download/$Version"
 Invoke-WebRequest -Uri "$base/$Asset" -OutFile $Asset
 Invoke-WebRequest -Uri "$base/SHA256SUMS" -OutFile SHA256SUMS
 # verify against the release checksums
@@ -179,17 +232,6 @@ Expand-Archive -Path $Asset -DestinationPath canton-devkit-dist -Force
 Move-Item canton-devkit-dist\canton-devkit.exe "$env:USERPROFILE\bin\canton-devkit.exe"
 canton-devkit version
 ```
-
-### Homebrew (macOS arm64 / Linux amd64)
-
-```bash
-brew tap bitdynamics-ab/canton-devkit
-brew install canton-devkit
-```
-
-> See the [Homebrew guide](homebrew.md) for the direct-formula
-> install, the tap layout, and how the formula is kept in sync on each
-> release.
 
 ### From source (Go toolchain)
 
