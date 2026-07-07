@@ -5,24 +5,16 @@
 [![Downloads](https://img.shields.io/github/downloads/bitdynamics-ab/homebrew-canton-devkit/total.svg?label=downloads)](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
-canton-devkit runs a complete local [Canton](https://canton.network/)
-network on your machine: a Canton synchronizer and participant, the
-Splice validator and super-validator apps, and three party wallets
-(app-user, app-provider, super-validator), each with signed JWTs. One
-binary, one command, nothing to configure.
+canton-devkit helps you to run a complete local [Canton](https://canton.network/)
+network on your machine. You get two participant/validator nodes and 
+a super-validator nodes, each with their own party
+(app-user, app-provider, super-validator) and JWT token. All done through
+a single command line interface with zero knowledge required for 
+infrastructure, DevOps or Docker.
 
-Setting this up by hand means cloning Splice, working out its
-docker-compose layering, finding the JWT dev secret, and copying party
-IDs around. The devkit automates exactly that and nothing more: it is a
-thin wrapper over the upstream
-[Splice LocalNet](https://github.com/canton-network/splice), pinned to
-immutable commit SHAs and verified by content hash after download. No
-forks, no patched images.
-
-The only prerequisite is Docker (Engine or Desktop) with Compose v2.
-Preflight checks require at least 8 GB of Docker memory (12 GB
-recommended) and 10 GB of free disk; plan more headroom for images
-and volumes — see the [installation guide](docs/getting-started.md).
+The only prerequisite is Docker and at least 8 GB of available memory (12 GB
+recommended) and 10 GB of free disk — see the 
+[installation guide](docs/getting-started.md).
 
 ## Install
 
