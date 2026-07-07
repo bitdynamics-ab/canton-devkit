@@ -311,3 +311,35 @@ starlight-toc a[aria-current='true']:hover {
 	outline-offset: 2px;
 	border-radius: 2px;
 }
+
+/* --------------------------- prev / next --------------------------- */
+/* Starlight's defaults (24px titles, 8px radius, drop shadow) read as
+ * marketing cards; cut them to the system's quiet scale. */
+.pagination-links a {
+	border: 1px solid var(--sl-color-hairline);
+	border-radius: 4px;
+	padding: 0.75rem 1rem;
+	box-shadow: none;
+	transition: background-color var(--cds-fast) var(--cds-ease),
+		border-color var(--cds-fast) var(--cds-ease);
+}
+.pagination-links a:hover {
+	background-color: var(--cds-hover-tint);
+	border-color: var(--sl-color-hairline);
+}
+/* The "Previous / Next" eyebrow. */
+.pagination-links a > span {
+	font-size: 0.75rem;
+	color: var(--cds-muted);
+}
+/* The destination title. */
+.pagination-links .link-title {
+	font-size: 0.9375rem;
+	font-weight: 500;
+	line-height: 1.4;
+	color: var(--cds-text);
+}
+.pagination-links a svg {
+	width: 0.875rem;
+	height: 0.875rem;
+}
