@@ -19,7 +19,7 @@ import (
 // RunDown always calls Stop(ctx, false): `down` — and the Web UI Stop /
 // Restart actions that route through RunDown — MUST preserve the named
 // volumes that hold the ledger (Postgres) state so a later `up`
-// resumes. Volume removal is `clean`'s job only; passing
+// resumes. Volume removal is `remove`'s job only; passing
 // removeVolumes=true here would wipe the ledger.
 type composeDowner interface {
 	Stop(ctx context.Context, removeVolumes bool) error
@@ -46,7 +46,7 @@ type DownOptions struct {
 //     ledger volumes are preserved so a later `up` resumes; volume
 //     removal is `clean`'s job) with the compose files recorded in state.
 //  4. Set status=stopped and persist the registry entry so that a
-//     subsequent `localnet clean` can discover the instance.
+//     subsequent `localnet remove` can discover the instance.
 func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptions) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

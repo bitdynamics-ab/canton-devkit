@@ -9,7 +9,7 @@ import (
 // trigger the one-time disclosure. Informational commands (version,
 // help, `telemetry …`) deliberately don't, so a user can read and decide
 // before any operational run.
-var noticeOperationalVerbs = set("up", "down", "restart", "status", "doctor", "clean", "snapshot", "restore")
+var noticeOperationalVerbs = set("up", "down", "restart", "status", "doctor", "remove", "clean", "snapshot", "restore")
 
 // MaybeNotice prints the one-time opt-out disclosure to w and records it,
 // but only when ALL of these hold: telemetry is effectively enabled, the

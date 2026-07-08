@@ -14,7 +14,7 @@ import (
 // OverlayEnvFile is the filename written to each instance's DataDir at
 // `up` time. It captures the exact compose interpolation vars the
 // adapter produced so downstream commands (down, logs, pause, restart,
-// clean) replay them without re-deriving from the adapter.
+// remove) replay them without re-deriving from the adapter.
 const OverlayEnvFile = "overlay.env"
 
 // overlayEnvPath returns the absolute path to the instance's persisted
@@ -64,7 +64,7 @@ func composeEnvFiles(state *registry.State) ([]string, error) {
 	// ResolveForOperation (not Resolve): an instance brought up with
 	// --allow-uncurated has a tag that isn't in the catalogue, but it
 	// already exists and must stay operable (down / logs / restart /
-	// clean). The adapter only needs the Major, which ResolveForOperation
+	// remove). The adapter only needs the Major, which ResolveForOperation
 	// recovers from the resolved-versions cache or the tag itself.
 	v, err := splice.ResolveForOperation(state.SpliceVersion)
 	if err != nil {

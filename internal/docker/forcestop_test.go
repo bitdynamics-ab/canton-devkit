@@ -46,7 +46,7 @@ func TestForceStop_LabelOnly(t *testing.T) {
 	}
 }
 
-// TestForceStop_RemoveVolumes adds --volumes when asked (the clean path).
+// TestForceStop_RemoveVolumes adds --volumes when asked (the remove path).
 func TestForceStop_RemoveVolumes(t *testing.T) {
 	rec := &recorder{}
 	c := runnerForWiring(t, rec)

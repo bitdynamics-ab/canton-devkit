@@ -93,9 +93,9 @@ The following aliases are not in the proposal but are shipped:
 
 **Proposal said:** the destructive teardown verb — the command that removes an instance's data volumes and registry state — was named `clean`.
 
-**Shipped:** the canonical command is `dpm localnet remove`, with `clean` retained as an alias. Both forms are equivalent: `dpm localnet remove --name dev` and `dpm localnet clean --name dev` do the same thing. Flags are unchanged (`--name`, `--all`, `--force`, `--dry-run`).
+**Shipped:** the canonical command is `dpm localnet remove`, with `clean` retained as an alias. Both forms are equivalent: `dpm localnet remove dev` and `dpm localnet clean dev` do the same thing. The instance name is now a **positional argument** (`dpm localnet remove <name>`), matching `up`/`down`/`stop`/`start`; `--name <name>` is still accepted for backward compatibility, but passing both the positional and `--name` is an error. `--all` remains mutually exclusive with naming a single instance. Other flags are unchanged (`--force`, `--dry-run`).
 
-**Why:** `remove` names the action plainly — it removes the instance's containers, volumes, and registry state — and reads unambiguously next to the other lifecycle verbs (`down`, `stop`, `remove`), where "clean" could be mistaken for a non-destructive tidy-up. The `clean` alias is kept so existing scripts, CI pipelines, and muscle memory continue to work without a breaking change.
+**Why:** `remove` names the action plainly — it removes the instance's containers, volumes, and registry state — and reads unambiguously next to the other lifecycle verbs (`down`, `stop`, `remove`), where "clean" could be mistaken for a non-destructive tidy-up. The `clean` alias is kept so existing scripts, CI pipelines, and muscle memory continue to work without a breaking change. Accepting the name positionally aligns `remove` with the rest of the lifecycle verbs, which already take `<name>` positionally.
 
 ---
 
