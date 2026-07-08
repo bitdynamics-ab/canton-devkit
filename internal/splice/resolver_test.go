@@ -232,7 +232,7 @@ func TestResolveOrUpstream_CuratedTagSkipsNetwork(t *testing.T) {
 // already-running instance must stay operable from a fresh shell across
 // all three resolution tiers — curated catalogue, resolved cache, and
 // bare Major-from-tag inference — where Resolve alone would reject the
-// uncurated tag with ErrUncuratedTag and strand down/restart/logs/clean.
+// uncurated tag with ErrUncuratedTag and strand down/restart/logs/remove.
 func TestResolveForOperation_ThreeTiers(t *testing.T) {
 	withTempCache(t)
 

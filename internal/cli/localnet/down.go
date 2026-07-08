@@ -22,7 +22,7 @@ import (
 //
 //	docker compose down → NO --volumes (preserves state)
 //	StatusRunning → StatusStopping (BEFORE compose call)
-//	  └─ compose ok → StatusStopped (registry entry preserved for `clean`)
+//	  └─ compose ok → StatusStopped (registry entry preserved for `remove`)
 //	  └─ compose err → StatusFailed (preserved for retry) exit 4
 //	  └─ interrupted → StatusPartial (compose may still be in flight) exit 3
 //
@@ -230,7 +230,7 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 		"Detaching networks · keeping volumes", "", ""))
 
 	// Preserve the registry entry with status=stopped so that a
-	// subsequent `localnet clean` can discover the compose project
+	// subsequent `localnet remove` can discover the compose project
 	// and remove Docker volumes.
 	state.Status = registry.StatusStopped
 	if werr := registry.Write(state); werr != nil {

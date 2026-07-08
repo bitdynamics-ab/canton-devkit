@@ -176,7 +176,7 @@ func TestDownArgvShape(t *testing.T) {
 }
 
 // TestStopTeardownIsProjectLabelOnly pins that Stop() (and therefore
-// `localnet down` / `clean` / the Web UI Stop action that route through
+// `localnet down` / `remove` / the Web UI Stop action that route through
 // it) tears down by Docker PROJECT LABEL only — it MUST NOT pass `-f`
 // compose files, `--env-file`, or `--profile`.
 //
@@ -261,7 +261,7 @@ func TestStopContainersAndStartAreProjectLabelOnly(t *testing.T) {
 // TestWorkDirOrFallback pins that a recorded WorkDir which no longer
 // exists (e.g. the shared Splice cache dir was pruned) falls back to a
 // neutral temp dir instead of being chdir'd into — otherwise the
-// label-only teardown's exec fails and clean could orphan containers.
+// label-only teardown's exec fails and remove could orphan containers.
 func TestWorkDirOrFallback(t *testing.T) {
 	existing := t.TempDir()
 	if got := workDirOrFallback(existing); got != existing {
@@ -278,7 +278,7 @@ func TestWorkDirOrFallback(t *testing.T) {
 
 // TestRemainingContainers_FiltersByProjectAndParsesIDs pins that the
 // helper queries `docker ps` by the compose project label and splits the
-// id list — the signal clean uses to avoid orphaning containers.
+// id list — the signal remove uses to avoid orphaning containers.
 func TestRemainingContainers_FiltersByProjectAndParsesIDs(t *testing.T) {
 	if _, err := os.Stat("/bin/sh"); err != nil {
 		t.Skip("no /bin/sh for scripted docker fake")

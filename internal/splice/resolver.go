@@ -209,7 +209,7 @@ func (c *ResolvedVersionCache) Upsert(r ResolvedVersion) {
 
 // ResolveForOperation resolves a PERSISTED version tag to a Version for
 // operating an instance that already exists (down / restart / logs /
-// clean / status), as opposed to Resolve which gates a fresh `up` to the
+// remove / status), as opposed to Resolve which gates a fresh `up` to the
 // curated catalogue.
 //
 // Resolution order:
@@ -225,7 +225,7 @@ func (c *ResolvedVersionCache) Upsert(r ResolvedVersion) {
 //
 // This exists because an uncurated instance, once brought up, must stay
 // operable from a fresh shell — Resolve alone would reject its tag with
-// ErrUncuratedTag and strand down/restart/logs/clean.
+// ErrUncuratedTag and strand down/restart/logs/remove.
 func ResolveForOperation(tag string) (Version, error) {
 	if v, err := Resolve(tag); err == nil {
 		return v, nil

@@ -70,7 +70,7 @@ PROM_PORT=$(canton-devkit localnet status --name metric-audit --format json \
   | jq -r '.endpoints[] | select(.label=="prometheus_ui") | .port')
 METRICSQ_SMOKE_PROM=http://localhost:${PROM_PORT} \
   go test -tags=integration -run TestSummaryQueries_LiveProm ./...
-canton-devkit localnet remove --name metric-audit --force
+canton-devkit localnet remove metric-audit --force
 ```
 
 The test is **skipped** when `METRICSQ_SMOKE_PROM` is unset, so

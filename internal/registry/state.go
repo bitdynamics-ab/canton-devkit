@@ -69,7 +69,7 @@ type State struct {
 	// Every Splice LocalNet service is profile-gated, so compose
 	// subcommands that operate on the service model (`restart`,
 	// `pause`, `ps`) MUST replay this set or they target zero services;
-	// teardown (`down`/`clean`) works by project label and does not
+	// teardown (`down`/`remove`) works by project label and does not
 	// need it. Additive: older state.json files decode with
 	// Profiles == nil and callers re-derive from the version adapter.
 	Profiles []string `json:"profiles,omitempty"`
