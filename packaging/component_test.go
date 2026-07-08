@@ -87,12 +87,14 @@ func TestComponentTemplateRendersValidYAMLPerPlatform(t *testing.T) {
 			if cmd.Path != tc.binPath {
 				t.Errorf("command path = %q, want %q", cmd.Path, tc.binPath)
 			}
-			// exec-args MUST be exactly ["localnet"] — DPM doesn't pass the
-			// registered command name into argv, so the binary relies on
-			// this to dispatch into its localnet subtree (TestRunIsArgvOnly
-			// locks the binary side of the same contract).
-			if len(cmd.ExecArgs) != 1 || cmd.ExecArgs[0] != "localnet" {
-				t.Errorf("exec-args = %v, want [localnet]", cmd.ExecArgs)
+			// exec-args MUST be exactly ["--via-dpm", "localnet"] — DPM
+			// doesn't pass the registered command name into argv, so the
+			// binary relies on the "localnet" arg to dispatch into its
+			// localnet subtree, and on the leading "--via-dpm" marker to
+			// know it was launched by DPM (TestRunIsArgvOnly + the
+			// detectMode tests lock the binary side of this contract).
+			if len(cmd.ExecArgs) != 2 || cmd.ExecArgs[0] != "--via-dpm" || cmd.ExecArgs[1] != "localnet" {
+				t.Errorf("exec-args = %v, want [--via-dpm localnet]", cmd.ExecArgs)
 			}
 		})
 	}

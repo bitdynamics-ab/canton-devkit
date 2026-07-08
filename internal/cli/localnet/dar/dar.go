@@ -10,7 +10,9 @@ import (
 // Build returns the `dar` Cobra command, registered by
 // internal/cli/localnet/localnet.go. Each subcommand lives in its own
 // file in this package.
-func Build() *cobra.Command {
+// Build wires the `dar` subtree. viaDPM is true under `dpm localnet …`; it
+// is forwarded to subcommands that hide DPM-inapplicable flags.
+func Build(viaDPM bool) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dar",
 		Short: "Inspect and manage DAR files (Daml package archives)",
@@ -40,7 +42,7 @@ Available commands (participant Admin API):
 	cmd.AddCommand(buildListUploaded())
 	cmd.AddCommand(buildDownload())
 	cmd.AddCommand(buildRemove())
-	cmd.AddCommand(buildBuildUpload())
+	cmd.AddCommand(buildBuildUpload(viaDPM))
 	cmd.AddCommand(buildWatch())
 	return cmd
 }

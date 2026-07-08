@@ -51,31 +51,31 @@ func helpCols() int {
 //
 // Render is lazy (per-call HelpFunc) rather than baked at install time,
 // so NO_COLOR set after startup (a real CI pattern) is honored.
-func applyHelp(localnet *cobra.Command) {
+func applyHelp(localnet *cobra.Command, name string) {
 	for _, child := range localnet.Commands() {
 		child.SetHelpTemplate(child.HelpTemplate())
 		child.SetHelpFunc(child.HelpFunc())
 	}
 	localnet.SetHelpFunc(func(c *cobra.Command, _ []string) {
-		_, _ = c.OutOrStdout().Write([]byte(renderLocalnetHelp()))
+		_, _ = c.OutOrStdout().Write([]byte(renderLocalnetHelp(name)))
 	})
 }
 
 // renderLocalnetHelp renders per --help invocation (cheap, so no caching
 // — caching would break the lazy-palette behavior). Terminals narrower
 // than narrowFallbackCols get a plain listing; a clipped box is worse.
-func renderLocalnetHelp() string {
+func renderLocalnetHelp(name string) string {
 	if helpCols() < narrowFallbackCols {
-		return renderNarrowHelp()
+		return renderNarrowHelp(name)
 	}
-	return renderBoxedHelp()
+	return renderBoxedHelp(name)
 }
 
 // renderNarrowHelp is the narrow-terminal fallback: a bold title line
 // plus one line per command — no boxes, no sections, no padding math.
-func renderNarrowHelp() string {
+func renderNarrowHelp(name string) string {
 	var b strings.Builder
-	b.WriteString(term.Brandc(helpTitle()))
+	b.WriteString(term.Brandc(helpTitle(name)))
 	b.WriteString("\n")
 	for _, cat := range helpCategories() {
 		for _, row := range cat.Commands {
@@ -135,13 +135,13 @@ func helpCategories() []helpCategory {
 	}
 }
 
-func renderBoxedHelp() string {
+func renderBoxedHelp(name string) string {
 	categories := helpCategories()
 
 	var b strings.Builder
 
 	boxBody := []string{
-		helpTitle(),
+		helpTitle(name),
 		"manage Canton LocalNets like a normal",
 		"process, not a Docker compose project",
 	}
@@ -152,7 +152,7 @@ func renderBoxedHelp() string {
 
 	b.WriteString("\n")
 	b.WriteString(term.Dimc("Usage  "))
-	b.WriteString(term.Textc(appName + " localnet "))
+	b.WriteString(term.Textc(name + " localnet "))
 	b.WriteString(term.Brandc("<command>"))
 	b.WriteString(term.Dimc(" [flags]"))
 	b.WriteString("\n\n")
@@ -177,7 +177,7 @@ func renderBoxedHelp() string {
 	b.WriteString(term.Textc("NO_COLOR=1"))
 	b.WriteString(term.Dimc(" for plain output"))
 	b.WriteString(term.Dimc(". Run "))
-	b.WriteString(term.Textc(appName + " localnet <cmd> --help"))
+	b.WriteString(term.Textc(name + " localnet <cmd> --help"))
 	b.WriteString(term.Dimc(" for command-specific help."))
 	b.WriteString("\n")
 	return b.String()
@@ -223,11 +223,11 @@ func localeForcesASCII() bool {
 	return false
 }
 
-func helpTitle() string {
+func helpTitle(name string) string {
 	if localeForcesASCII() {
-		return "canton-devkit - localnet"
+		return name + " - localnet"
 	}
-	return "canton-devkit · localnet"
+	return name + " · localnet"
 }
 
 func renderHelpSection(title, children string) string {

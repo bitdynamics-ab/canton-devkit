@@ -13,9 +13,15 @@
 # commands published by other components.
 #
 # DPM does NOT pass the registered command name to the binary's argv —
-# only `exec-args` + user args reach it. `exec-args: ["localnet"]` is
-# therefore required so the binary dispatches into its `localnet`
-# subtree regardless of how DPM invoked the component.
+# only `exec-args` + user args reach it. `exec-args: ["--via-dpm",
+# "localnet"]` is therefore required so the binary dispatches into its
+# `localnet` subtree regardless of how DPM invoked the component.
+#
+# The leading `--via-dpm` marker also tells the binary it was launched by
+# DPM (argv is otherwise identical to a direct `canton-devkit localnet …`
+# call). App.Run strips the marker before Cobra parses and uses it to
+# switch help/examples to `dpm localnet …` and hide flags that don't apply
+# under DPM (e.g. `--project`). See internal/cli/app.go.
 #
 # digitalasset.com/v1 is the GA component schema (NOT a v1beta1
 # pre-release): `dpm publish component --dry-run` on DPM 1.0.16 validates
@@ -28,4 +34,4 @@ spec:
     - name: localnet
       path: @@BINARY_PATH@@
       desc: "Canton DevKit: manage LocalNet, DARs, contracts, tokens, and observability"
-      exec-args: ["localnet"]
+      exec-args: ["--via-dpm", "localnet"]

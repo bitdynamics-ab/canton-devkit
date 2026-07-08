@@ -70,10 +70,32 @@ delegates the rest of the DevKit CLI surface to the binary's own argv
 parser. See [`packaging/component.yaml.tmpl`](../packaging/component.yaml.tmpl).
 
 DPM does NOT pass the registered command name into the binary's argv —
-only `exec-args` + user args reach it. `exec-args: ["localnet"]` is
-therefore required so the binary always dispatches into its `localnet`
-subtree regardless of how DPM invoked the component. A contract test
-(`TestRunIsArgvOnly`) locks this invariant.
+only `exec-args` + user args reach it. `exec-args: ["--via-dpm",
+"localnet"]` is therefore required: the `localnet` arg makes the binary
+dispatch into its `localnet` subtree regardless of how DPM invoked the
+component, and the leading `--via-dpm` marker tells the binary it was
+launched by DPM. A contract test (`TestRunIsArgvOnly`) locks this
+invariant.
+
+### Detecting DPM vs direct invocation
+
+`dpm localnet up` and a direct `canton-devkit localnet up` reach the binary
+with identical arguments (`["localnet","up"]`), so the argument list alone
+can't distinguish them. The `--via-dpm` marker prepended via `exec-args` is
+the signal: `App.Run` strips it before Cobra parses (see
+[`internal/cli/invocation.go`](../internal/cli/invocation.go)) and records an
+`InvocationMode`. The mode drives:
+
+- **Help and examples** — `dpm localnet …` under DPM, `canton-devkit
+  localnet …` when run directly.
+- **Flag visibility** — flags that don't apply under DPM are hidden. For
+  example `dar build-upload --project` is hidden under DPM, since
+  `dpm localnet` only runs from a Daml project root (the flag still works
+  and still defaults to the current directory).
+
+The marker is a hidden persistent flag, so a stray `--via-dpm` reaching the
+parser is tolerated rather than erroring. `detectMode` only honours the
+marker in the leading position, where DPM always places it.
 
 The manifest lives as a template with a `@@BINARY_PATH@@` token: the
 release workflow substitutes `bin/canton-devkit` on Unix platforms and
