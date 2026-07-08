@@ -34,7 +34,7 @@ func seedInstanceStatus(t *testing.T, name string, status registry.Status) {
 	}
 }
 
-// nilDowner returns a CleanOptions runner factory whose Down() always
+// nilDowner returns a RemoveOptions runner factory whose Down() always
 // succeeds — the common case (containers already gone / teardown OK).
 func nilDowner() func(string, []string, []string, []string, string, io.Writer) composeDowner {
 	return func(string, []string, []string, []string, string, io.Writer) composeDowner {
@@ -42,49 +42,49 @@ func nilDowner() func(string, []string, []string, []string, string, io.Writer) c
 	}
 }
 
-func TestRunClean_StoppedInstanceDeletesRegistry(t *testing.T) {
+func TestRunRemove_StoppedInstanceDeletesRegistry(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstanceStatus(t, "stopped-one", registry.StatusStopped)
 
 	var out, errBuf bytes.Buffer
-	code := RunClean(context.Background(), &out, &errBuf, &CleanOptions{
+	code := RunRemove(context.Background(), &out, &errBuf, &RemoveOptions{
 		Name:      "stopped-one",
 		NewRunner: nilDowner(),
 	})
 	if code != ExitSuccess {
-		t.Fatalf("RunClean = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
+		t.Fatalf("RunRemove = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
 	if _, err := registry.Read("stopped-one"); err != registry.ErrNotFound {
 		t.Errorf("registry entry should be gone, got err=%v", err)
 	}
 }
 
-func TestRunClean_RunningRefusedWithoutForce(t *testing.T) {
+func TestRunRemove_RunningRefusedWithoutForce(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstanceStatus(t, "live-one", registry.StatusRunning)
 
 	var out, errBuf bytes.Buffer
-	code := RunClean(context.Background(), &out, &errBuf, &CleanOptions{
+	code := RunRemove(context.Background(), &out, &errBuf, &RemoveOptions{
 		Name:      "live-one",
 		NewRunner: nilDowner(),
 	})
 	if code != ExitUserError {
-		t.Fatalf("RunClean = %d, want ExitUserError", code)
+		t.Fatalf("RunRemove = %d, want ExitUserError", code)
 	}
 	// Registry must be PRESERVED — we refused.
 	if _, err := registry.Read("live-one"); err != nil {
-		t.Errorf("running instance must survive a refused clean, got err=%v", err)
+		t.Errorf("running instance must survive a refused remove, got err=%v", err)
 	}
 }
 
-func TestRunClean_RunningForcedTearsDownAndDeletes(t *testing.T) {
+func TestRunRemove_RunningForcedTearsDownAndDeletes(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstanceStatus(t, "live-force", registry.StatusRunning)
 
 	downCalled := false
 	removedVolumes := false
 	var out, errBuf bytes.Buffer
-	code := RunClean(context.Background(), &out, &errBuf, &CleanOptions{
+	code := RunRemove(context.Background(), &out, &errBuf, &RemoveOptions{
 		Name:  "live-force",
 		Force: true,
 		NewRunner: func(string, []string, []string, []string, string, io.Writer) composeDowner {
@@ -96,27 +96,27 @@ func TestRunClean_RunningForcedTearsDownAndDeletes(t *testing.T) {
 		},
 	})
 	if code != ExitSuccess {
-		t.Fatalf("RunClean = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
+		t.Fatalf("RunRemove = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
 	if !downCalled {
-		t.Error("--force clean must invoke compose down on a running instance")
+		t.Error("--force remove must invoke compose down on a running instance")
 	}
-	// `clean` is the destructive verb: unlike `down`, it MUST remove the
+	// `remove` is the destructive verb: unlike `down`, it MUST remove the
 	// ledger volumes (the symmetric half of the data-loss fix).
 	if !removedVolumes {
-		t.Error("--force clean must pass removeVolumes=true to reclaim ledger volumes")
+		t.Error("--force remove must pass removeVolumes=true to reclaim ledger volumes")
 	}
 	if _, err := registry.Read("live-force"); err != registry.ErrNotFound {
-		t.Errorf("registry entry should be gone after forced clean, got err=%v", err)
+		t.Errorf("registry entry should be gone after forced remove, got err=%v", err)
 	}
 }
 
-func TestRunClean_ForceTeardownFailurePreservesState(t *testing.T) {
+func TestRunRemove_ForceTeardownFailurePreservesState(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstanceStatus(t, "live-fail", registry.StatusRunning)
 
 	var out, errBuf bytes.Buffer
-	code := RunClean(context.Background(), &out, &errBuf, &CleanOptions{
+	code := RunRemove(context.Background(), &out, &errBuf, &RemoveOptions{
 		Name:  "live-fail",
 		Force: true,
 		NewRunner: func(string, []string, []string, []string, string, io.Writer) composeDowner {
@@ -124,7 +124,7 @@ func TestRunClean_ForceTeardownFailurePreservesState(t *testing.T) {
 		},
 	})
 	if code != ExitRuntimeFailure {
-		t.Fatalf("RunClean = %d, want ExitRuntimeFailure", code)
+		t.Fatalf("RunRemove = %d, want ExitRuntimeFailure", code)
 	}
 	// A failed forced teardown must NOT scrub state — that would
 	// orphan live containers.
@@ -134,7 +134,7 @@ func TestRunClean_ForceTeardownFailurePreservesState(t *testing.T) {
 }
 
 // downerWithContainers is a composeDowner whose Stop fails and that
-// reports a fixed set of still-present containers — exercising clean's
+// reports a fixed set of still-present containers — exercising remove's
 // "don't scrub the registry while containers linger" guard.
 type downerWithContainers struct{ remaining []string }
 
@@ -147,19 +147,19 @@ func (d downerWithContainers) RemainingContainers(context.Context) ([]string, er
 // A STOPPED instance whose teardown errors AND still has containers must
 // keep its registry entry — deleting it would orphan those containers
 // (the exact bug behind the e2e-metrics-demo-style orphans).
-func TestRunClean_StoppedTeardownFailureWithLingeringContainersPreservesRegistry(t *testing.T) {
+func TestRunRemove_StoppedTeardownFailureWithLingeringContainersPreservesRegistry(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstanceStatus(t, "stuck", registry.StatusStopped)
 
 	var out, errBuf bytes.Buffer
-	code := RunClean(context.Background(), &out, &errBuf, &CleanOptions{
+	code := RunRemove(context.Background(), &out, &errBuf, &RemoveOptions{
 		Name: "stuck",
 		NewRunner: func(string, []string, []string, []string, string, io.Writer) composeDowner {
 			return downerWithContainers{remaining: []string{"c1", "c2"}}
 		},
 	})
 	if code != ExitRuntimeFailure {
-		t.Fatalf("RunClean = %d, want ExitRuntimeFailure (containers linger); stderr=%q", code, errBuf.String())
+		t.Fatalf("RunRemove = %d, want ExitRuntimeFailure (containers linger); stderr=%q", code, errBuf.String())
 	}
 	if _, err := registry.Read("stuck"); err != nil {
 		t.Errorf("registry must be preserved when containers remain, got err=%v", err)
@@ -169,37 +169,37 @@ func TestRunClean_StoppedTeardownFailureWithLingeringContainersPreservesRegistry
 // The lenient case stays lenient: a teardown error with NO remaining
 // containers (the usual "no such project" for an already-gone instance)
 // still scrubs the registry.
-func TestRunClean_StoppedTeardownErrorButContainersGoneStillDeletes(t *testing.T) {
+func TestRunRemove_StoppedTeardownErrorButContainersGoneStillDeletes(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstanceStatus(t, "gone", registry.StatusStopped)
 
 	var out, errBuf bytes.Buffer
-	code := RunClean(context.Background(), &out, &errBuf, &CleanOptions{
+	code := RunRemove(context.Background(), &out, &errBuf, &RemoveOptions{
 		Name: "gone",
 		NewRunner: func(string, []string, []string, []string, string, io.Writer) composeDowner {
 			return downerWithContainers{remaining: nil}
 		},
 	})
 	if code != ExitSuccess {
-		t.Fatalf("RunClean = %d, want ExitSuccess (containers already gone); stderr=%q", code, errBuf.String())
+		t.Fatalf("RunRemove = %d, want ExitSuccess (containers already gone); stderr=%q", code, errBuf.String())
 	}
 	if _, err := registry.Read("gone"); err != registry.ErrNotFound {
 		t.Errorf("registry should be scrubbed when no containers remain, got err=%v", err)
 	}
 }
 
-func TestRunClean_DryRunChangesNothing(t *testing.T) {
+func TestRunRemove_DryRunChangesNothing(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstanceStatus(t, "dry-one", registry.StatusStopped)
 
 	var out, errBuf bytes.Buffer
-	code := RunClean(context.Background(), &out, &errBuf, &CleanOptions{
+	code := RunRemove(context.Background(), &out, &errBuf, &RemoveOptions{
 		Name:      "dry-one",
 		DryRun:    true,
 		NewRunner: nilDowner(),
 	})
 	if code != ExitSuccess {
-		t.Fatalf("RunClean = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
+		t.Fatalf("RunRemove = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
 	if _, err := registry.Read("dry-one"); err != nil {
 		t.Errorf("dry-run must not delete the instance, got err=%v", err)
@@ -209,7 +209,7 @@ func TestRunClean_DryRunChangesNothing(t *testing.T) {
 	}
 }
 
-func TestRunClean_DryRunOrphanDoesNotCreateLockArtifacts(t *testing.T) {
+func TestRunRemove_DryRunOrphanDoesNotCreateLockArtifacts(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstanceStatus(t, "dry-ghost", registry.StatusStopped)
 	dataDir := registry.DataDirFor("dry-ghost")
@@ -220,13 +220,13 @@ func TestRunClean_DryRunOrphanDoesNotCreateLockArtifacts(t *testing.T) {
 	}
 
 	var out, errBuf bytes.Buffer
-	code := RunClean(context.Background(), &out, &errBuf, &CleanOptions{
+	code := RunRemove(context.Background(), &out, &errBuf, &RemoveOptions{
 		Name:      "dry-ghost",
 		DryRun:    true,
 		NewRunner: nilDowner(),
 	})
 	if code != ExitSuccess {
-		t.Fatalf("RunClean = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
+		t.Fatalf("RunRemove = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
 	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
 		t.Fatalf("dry-run must not recreate orphan data dir, stat err=%v", err)
@@ -246,31 +246,31 @@ func TestRunClean_DryRunOrphanDoesNotCreateLockArtifacts(t *testing.T) {
 	}
 }
 
-func TestRunClean_MissingNameDoesNotCreateLockArtifacts(t *testing.T) {
+func TestRunRemove_MissingNameDoesNotCreateLockArtifacts(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	dataDir := registry.DataDirFor("never-registered")
 
 	var out, errBuf bytes.Buffer
-	code := RunClean(context.Background(), &out, &errBuf, &CleanOptions{
+	code := RunRemove(context.Background(), &out, &errBuf, &RemoveOptions{
 		Name:      "never-registered",
 		NewRunner: nilDowner(),
 	})
 	if code != ExitSuccess {
-		t.Fatalf("RunClean = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
+		t.Fatalf("RunRemove = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
 	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
-		t.Fatalf("missing-name clean must not create data dir, stat err=%v", err)
+		t.Fatalf("missing-name remove must not create data dir, stat err=%v", err)
 	}
 	if !bytes.Contains(out.Bytes(), []byte("No instance named \"never-registered\" is registered")) {
 		t.Errorf("missing-name output should say no instance is registered; got %q", out.String())
 	}
 }
 
-func TestRunClean_OrphanIndexEntryScrubbed(t *testing.T) {
+func TestRunRemove_OrphanIndexEntryScrubbed(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstanceStatus(t, "ghost", registry.StatusStopped)
 	// Wipe the data dir (incl. state.json) but leave the index entry —
-	// the orphan condition clean must repair.
+	// the orphan condition remove must repair.
 	if err := os.RemoveAll(registry.DataDirFor("ghost")); err != nil {
 		t.Fatalf("wipe dataDir: %v", err)
 	}
@@ -279,12 +279,12 @@ func TestRunClean_OrphanIndexEntryScrubbed(t *testing.T) {
 	}
 
 	var out, errBuf bytes.Buffer
-	code := RunClean(context.Background(), &out, &errBuf, &CleanOptions{
+	code := RunRemove(context.Background(), &out, &errBuf, &RemoveOptions{
 		Name:      "ghost",
 		NewRunner: nilDowner(),
 	})
 	if code != ExitSuccess {
-		t.Fatalf("RunClean = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
+		t.Fatalf("RunRemove = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
 	idx, _ := registry.ReadIndex()
 	for _, e := range idx.Entries {
@@ -294,27 +294,27 @@ func TestRunClean_OrphanIndexEntryScrubbed(t *testing.T) {
 	}
 }
 
-func TestRunClean_AllSweep(t *testing.T) {
+func TestRunRemove_AllSweep(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstanceStatus(t, "a-stopped", registry.StatusStopped)
 	seedInstanceStatus(t, "b-failed", registry.StatusFailed)
 	seedInstanceStatus(t, "c-running", registry.StatusRunning)
 
 	var out, errBuf bytes.Buffer
-	code := RunClean(context.Background(), &out, &errBuf, &CleanOptions{
+	code := RunRemove(context.Background(), &out, &errBuf, &RemoveOptions{
 		All:       true,
 		NewRunner: nilDowner(),
 	})
 	// One running instance refused → soft ExitUserError overall.
 	if code != ExitUserError {
-		t.Fatalf("RunClean --all = %d, want ExitUserError (running refused)", code)
+		t.Fatalf("RunRemove --all = %d, want ExitUserError (running refused)", code)
 	}
-	// Stopped + failed cleaned; running preserved.
+	// Stopped + failed removed; running preserved.
 	if _, err := registry.Read("a-stopped"); err != registry.ErrNotFound {
-		t.Errorf("a-stopped should be cleaned, got %v", err)
+		t.Errorf("a-stopped should be removed, got %v", err)
 	}
 	if _, err := registry.Read("b-failed"); err != registry.ErrNotFound {
-		t.Errorf("b-failed should be cleaned, got %v", err)
+		t.Errorf("b-failed should be removed, got %v", err)
 	}
 	if _, err := registry.Read("c-running"); err != nil {
 		t.Errorf("c-running should be preserved (refused), got %v", err)

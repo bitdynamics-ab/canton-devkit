@@ -522,7 +522,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	overlayVars := adapter.OverlayEnv(params)
 
 	// Persist the overlay env to a .env file so downstream commands
-	// (down, logs, pause, restart, clean) replay the exact same
+	// (down, logs, pause, restart, remove) replay the exact same
 	// compose environment via --env-file — no adapter re-derivation
 	// needed. The file is written to DataDir alongside state.json.
 	overlayEnvPath, err := WriteOverlayEnv(dataDir, overlayVars)

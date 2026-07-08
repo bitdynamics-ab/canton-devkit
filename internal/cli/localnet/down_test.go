@@ -81,7 +81,7 @@ func TestDown_AlreadyStoppedIsNoOpSuccess(t *testing.T) {
 // We assert by having the fake stopper READ the registry mid-call:
 // at that point Status must already be StatusStopping. After
 // success, the entry is preserved with status=stopped so that
-// `localnet clean` can discover the instance.
+// `localnet remove` can discover the instance.
 func TestDown_HappyPath_StatusStoppingBeforeCompose(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedDownInstance(t, "demo", registry.StatusRunning)

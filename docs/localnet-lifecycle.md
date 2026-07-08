@@ -116,7 +116,7 @@ Notes:
 
 ```bash
 # stop + remove a single instance's containers, volumes, and state
-canton-devkit localnet remove --name demo
+canton-devkit localnet remove demo
 
 # remove every DevKit-managed instance
 canton-devkit localnet remove --all

@@ -76,7 +76,7 @@ func (c *ComposeRunner) command(ctx context.Context, args ...string) *exec.Cmd {
 // --remove-orphans`) and RemainingContainers don't need the project's
 // compose files, so falling back keeps them working even after the
 // shared Splice cache dir (the recorded WorkDir) has been pruned. Without
-// the fallback the chdir fails, `down` errors, and `clean` could then
+// the fallback the chdir fails, `down` errors, and `remove` could then
 // orphan the containers by scrubbing their registry entry.
 func workDirOrFallback(dir string) string {
 	if dir != "" {
@@ -88,7 +88,7 @@ func workDirOrFallback(dir string) string {
 }
 
 // RemainingContainers returns the ids of every container (running or
-// stopped) still labelled for this compose project. `clean` calls it to
+// stopped) still labelled for this compose project. `remove` calls it to
 // confirm a teardown actually cleared docker BEFORE it scrubs the
 // registry — so a `down` that errored or silently no-op'd can't orphan
 // containers by deleting their only record. It shells out to plain
@@ -469,13 +469,13 @@ func (c *ComposeRunner) DiscoverPort(ctx context.Context, service string, contai
 
 // Stop runs `docker compose down`. When removeVolumes is true the call
 // is destructive — it strips named volumes and orphan containers (the
-// `localnet clean` semantics). When false it preserves volumes so a
+// `localnet remove` semantics). When false it preserves volumes so a
 // follow-up `localnet up` against the same --name can resume from
 // existing state (the `localnet down` semantics).
 //
 // --remove-orphans is always set because forgetting it leaves dangling
 // containers after a compose project rename, and the user has no way to
-// find or clean them without inspecting docker directly.
+// find or remove them without inspecting docker directly.
 //
 // TEARDOWN IS `-p`-ONLY — it deliberately omits the `-f` compose files,
 // `--env-file`, and `--profile` flags (i.e. it does NOT use
@@ -488,7 +488,7 @@ func (c *ComposeRunner) DiscoverPort(ctx context.Context, service string, contai
 // (https://docs.docker.com/compose/how-tos/profiles/#stop-application-and-services-with-specific-profiles),
 // not a version bug. Tearing down by project label (`-p`) is
 // profile-agnostic and removes the whole project — exactly what `down`
-// and `clean` want, and what ForceStop already relies on. See
+// and `remove` want, and what ForceStop already relies on. See
 // CONTRIBUTING.md "Docker Compose teardown must be `-p`-only".
 func (c *ComposeRunner) Stop(ctx context.Context, removeVolumes bool) error {
 	args := []string{"compose", "-p", c.ProjectName, "down", "--remove-orphans"}

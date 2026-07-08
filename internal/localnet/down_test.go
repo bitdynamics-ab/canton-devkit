@@ -133,7 +133,7 @@ func TestRunDown_InterruptionExitsTimeout(t *testing.T) {
 
 // TestRunDown_HappyPathPreservesRegistry is the success counterpart —
 // when compose down returns nil, the registry entry is preserved with
-// status=stopped so that a subsequent `localnet clean` can discover
+// status=stopped so that a subsequent `localnet remove` can discover
 // the compose project and remove Docker volumes.
 func TestRunDown_HappyPathPreservesRegistry(t *testing.T) {
 	name := "down-happy"

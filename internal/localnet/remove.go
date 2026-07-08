@@ -12,16 +12,16 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// CleanOptions captures `localnet clean` flags. Cobra binds directly.
-type CleanOptions struct {
+// RemoveOptions captures `localnet remove` flags. Cobra binds directly.
+type RemoveOptions struct {
 	// Name targets a single instance. The CLI layer rejects --name
 	// together with --all as mutually exclusive; if both are set on
-	// the struct directly (e.g. a programmatic caller), cleanTargets
+	// the struct directly (e.g. a programmatic caller), removeTargets
 	// honours All and walks every instance.
 	Name string
-	// All cleans every registered instance (walks the index).
+	// All removes every registered instance (walks the index).
 	All bool
-	// Force allows cleaning a RUNNING instance — clean tears it
+	// Force allows removing a RUNNING instance — remove tears it
 	// down (compose down --volumes) first. Without Force, a running
 	// instance is refused with a "run down first" hint.
 	Force bool
@@ -29,14 +29,14 @@ type CleanOptions struct {
 	DryRun bool
 
 	// NewRunner is a test-only seam mirroring DownOptions.NewRunner.
-	// When nil, RunClean constructs the real *docker.ComposeRunner.
+	// When nil, RunRemove constructs the real *docker.ComposeRunner.
 	NewRunner func(projectName string, composeFiles, envFiles, env []string, workDir string, logw io.Writer) composeDowner
 }
 
-// RunClean removes DevKit-managed state for one or all instances.
+// RunRemove removes DevKit-managed state for one or all instances.
 //
 // Unlike `down` (which stops a running instance and is the normal
-// lifecycle exit), `clean` is the recovery / housekeeping verb: it
+// lifecycle exit), `remove` is the recovery / housekeeping verb: it
 // removes the registry entry, the per-instance data dir, and — for
 // instances that still have docker resources — runs
 // `docker compose down --volumes --remove-orphans` to reclaim
@@ -45,41 +45,41 @@ type CleanOptions struct {
 //
 // Safety rules:
 //   - A RUNNING instance is refused unless --force (which tears it
-//     down first). This prevents a `clean` from silently nuking a
+//     down first). This prevents a `remove` from silently nuking a
 //     live demo.
 //   - --dry-run prints the plan and changes nothing.
 //   - Orphaned entries (index row present, state.json gone) are
 //     scrubbed idempotently.
 //
-// Exit code: ExitSuccess when every targeted instance was cleaned
+// Exit code: ExitSuccess when every targeted instance was removed
 // (or nothing matched). ExitUserError when a running instance was
 // refused without --force. ExitRuntimeFailure on a teardown/delete
 // error.
-func RunClean(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOptions) int {
+func RunRemove(ctx context.Context, out io.Writer, errw io.Writer, opts *RemoveOptions) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	targets, err := cleanTargets(opts)
+	targets, err := removeTargets(opts)
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "%s\n", err)
 		return ExitUserError
 	}
 	if len(targets) == 0 {
 		if opts.All {
-			_, _ = fmt.Fprintln(out, "No registered instances. Nothing to clean.")
+			_, _ = fmt.Fprintln(out, "No registered instances. Nothing to remove.")
 		} else {
-			_, _ = fmt.Fprintf(out, "No instance named %q is registered. Nothing to clean.\n", opts.Name)
+			_, _ = fmt.Fprintf(out, "No instance named %q is registered. Nothing to remove.\n", opts.Name)
 		}
 		return ExitSuccess
 	}
 
 	exit := ExitSuccess
-	cleaned := 0
+	removed := 0
 	for _, name := range targets {
-		code := cleanOne(ctx, out, errw, opts, name)
+		code := removeOne(ctx, out, errw, opts, name)
 		switch code {
 		case ExitSuccess:
-			cleaned++
+			removed++
 		case ExitUserError:
 			// Refused (running, no --force). Keep going through the
 			// rest of an --all sweep but remember the soft failure.
@@ -96,12 +96,12 @@ func RunClean(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOpt
 		_, _ = fmt.Fprintf(out, "\nDry run — nothing was removed. %d instance(s) matched.\n", len(targets))
 		return exit
 	}
-	_, _ = fmt.Fprintf(out, "\nCleaned %d of %d instance(s).\n", cleaned, len(targets))
+	_, _ = fmt.Fprintf(out, "\nRemoved %d of %d instance(s).\n", removed, len(targets))
 	return exit
 }
 
-// cleanTargets resolves the set of instance names to operate on.
-func cleanTargets(opts *CleanOptions) ([]string, error) {
+// removeTargets resolves the set of instance names to operate on.
+func removeTargets(opts *RemoveOptions) ([]string, error) {
 	if opts.All {
 		idx, err := registry.ReadIndex()
 		if err != nil {
@@ -123,29 +123,29 @@ func cleanTargets(opts *CleanOptions) ([]string, error) {
 	return []string{opts.Name}, nil
 }
 
-// containerLister is the optional capability cleanOne uses to confirm a
+// containerLister is the optional capability removeOne uses to confirm a
 // project's containers are actually gone before it scrubs the registry.
-// *docker.ComposeRunner implements it; cleanOne type-asserts (rather
+// *docker.ComposeRunner implements it; removeOne type-asserts (rather
 // than widening composeDowner) so down.go's runner and the existing test
 // stubs don't have to implement it.
 type containerLister interface {
 	RemainingContainers(ctx context.Context) ([]string, error)
 }
 
-// cleanOne cleans a single instance under its per-instance lock.
-func cleanOne(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOptions, name string) int {
-	indexed, err := cleanIndexHasEntry(name)
+// removeOne removes a single instance under its per-instance lock.
+func removeOne(ctx context.Context, out io.Writer, errw io.Writer, opts *RemoveOptions, name string) int {
+	indexed, err := removeIndexHasEntry(name)
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "%s: read registry index: %s\n", name, err)
 		return ExitRuntimeFailure
 	}
 
 	if opts.DryRun {
-		return dryRunCleanOne(out, errw, opts, name, indexed)
+		return dryRunRemoveOne(out, errw, opts, name, indexed)
 	}
 
 	if !indexed {
-		_, _ = fmt.Fprintf(out, "No instance named %q is registered. Nothing to clean.\n", name)
+		_, _ = fmt.Fprintf(out, "No instance named %q is registered. Nothing to remove.\n", name)
 		return ExitSuccess
 	}
 
@@ -175,15 +175,15 @@ func cleanOne(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOpt
 	running := state.Status == registry.StatusRunning
 	if running && !opts.Force {
 		_, _ = fmt.Fprintf(errw,
-			"%s is running — refusing to clean. Run `localnet down --name %s` first, "+
-				"or pass --force to tear it down and clean in one step.\n",
+			"%s is running — refusing to remove. Run `localnet down %s` first, "+
+				"or pass --force to tear it down and remove in one step.\n",
 			name, name)
 		return ExitUserError
 	}
 
 	// Best-effort teardown of any lingering docker resources. Even a
 	// `stopped` instance can leave volumes behind if it was stopped
-	// without --volumes; clean's contract is "reclaim everything",
+	// without --volumes; remove's contract is "reclaim everything",
 	// so we always attempt compose down --volumes here. Failures are
 	// non-fatal for a non-running instance (the containers may
 	// already be gone) but fatal-ish for a running --force teardown.
@@ -207,7 +207,7 @@ func cleanOne(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOpt
 			Profiles: composeProfiles(state),
 		}
 	}
-	// removeVolumes=true: `clean` is the destructive verb — it reclaims
+	// removeVolumes=true: `remove` is the destructive verb — it reclaims
 	// the named ledger volumes (unlike `down`, which preserves them).
 	if derr := runner.Stop(ctx, true); derr != nil {
 		if running {
@@ -215,15 +215,15 @@ func cleanOne(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOpt
 			// teardown failed — do NOT scrub state, or we'd orphan
 			// live containers. Surface and bail.
 			_, _ = fmt.Fprintf(errw,
-				"%s: docker compose down failed during --force clean: %s\n"+
+				"%s: docker compose down failed during --force remove: %s\n"+
 					"Registry state preserved; retry once the host is healthy.\n",
 				name, derr)
 			return ExitRuntimeFailure
 		}
 		// Non-running instance: the down failure is usually "no such
 		// project" because containers are already gone — in which case
-		// scrubbing the registry is exactly clean's job. But a down that
-		// errored while containers REMAIN must not let clean orphan them
+		// scrubbing the registry is exactly remove's job. But a down that
+		// errored while containers REMAIN must not let remove orphan them
 		// by deleting their only registry record. Verify docker is
 		// actually clear first; if containers linger, keep the entry and
 		// fail so the user can retry once the host is healthy.
@@ -252,11 +252,11 @@ func cleanOne(ctx context.Context, out io.Writer, errw io.Writer, opts *CleanOpt
 	// the shared-stack lock so a concurrent `up` can't race the teardown.
 	_ = DeregisterInstanceAndTeardownIfIdle(ctx, name, io.Discard)
 
-	_, _ = fmt.Fprintf(out, "Cleaned %q.\n", name)
+	_, _ = fmt.Fprintf(out, "Removed %q.\n", name)
 	return ExitSuccess
 }
 
-func cleanIndexHasEntry(name string) (bool, error) {
+func removeIndexHasEntry(name string) (bool, error) {
 	idx, err := registry.ReadIndex()
 	if err != nil {
 		return false, err
@@ -269,9 +269,9 @@ func cleanIndexHasEntry(name string) (bool, error) {
 	return false, nil
 }
 
-func dryRunCleanOne(out io.Writer, errw io.Writer, opts *CleanOptions, name string, indexed bool) int {
+func dryRunRemoveOne(out io.Writer, errw io.Writer, opts *RemoveOptions, name string, indexed bool) int {
 	if !indexed {
-		_, _ = fmt.Fprintf(out, "No instance named %q is registered. Nothing to clean.\n", name)
+		_, _ = fmt.Fprintf(out, "No instance named %q is registered. Nothing to remove.\n", name)
 		return ExitSuccess
 	}
 
@@ -288,8 +288,8 @@ func dryRunCleanOne(out io.Writer, errw io.Writer, opts *CleanOptions, name stri
 	running := state.Status == registry.StatusRunning
 	if running && !opts.Force {
 		_, _ = fmt.Fprintf(errw,
-			"%s is running — refusing to clean. Run `localnet down --name %s` first, "+
-				"or pass --force to tear it down and clean in one step.\n",
+			"%s is running — refusing to remove. Run `localnet down %s` first, "+
+				"or pass --force to tear it down and remove in one step.\n",
 			name, name)
 		return ExitUserError
 	}
