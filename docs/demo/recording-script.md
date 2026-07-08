@@ -3,7 +3,7 @@
 Two short videos, one per grant milestone:
 
 - **Video A** — [Milestone 1: LocalNet Management — CLI](https://github.com/canton-foundation/canton-dev-fund/issues/386) (~9-11 min)
-- **Video B** — [Milestone 2: Web UI, Observability, Monitoring, DAR & Contract Tooling, Optional AI Agent Skill Documents](https://github.com/canton-foundation/canton-dev-fund/issues/387) (~13-16 min)
+- **Video B** — [Milestone 2: Web UI, Observability, Monitoring, DAR & Contract Tooling, Optional AI Agent Skill Documents](https://github.com/canton-foundation/canton-dev-fund/issues/387) (~15-18 min)
 
 **The two linked issues are the source of truth for what must be shown.**
 Every deliverable bullet in each issue is quoted verbatim and traced to a
@@ -56,6 +56,17 @@ organized around.
 - [ ] Have `docs/getting-started.md` (compatibility matrix) and
       `examples/ci/github-actions.yml` open in a tab/editor for the two
       "show the doc/file, don't just say it" beats in Video A/B.
+- [ ] For the snapshot-rollback DAR scene in Video B: have **two** distinct
+      Daml projects ready to build. The repo ships one sample —
+      `e2e-tests/daml-test-contracts/` — use it as the first DAR; point
+      `--project` at any second Daml project you have on hand (a different
+      `daml.yaml` name/version is enough) for the second DAR so the two rows
+      are visually distinct in `dar list`.
+- [ ] That scene's `restore` step is destructive — it rolls `demo` back to
+      the pre-scene snapshot, undoing anything else you demoed on it (DAR
+      uploads, observability toggles, tokens). **Record it last** on the
+      `demo` instance, or re-run `up demo` fresh immediately afterward if
+      you need `demo` intact for a re-take of an earlier segment.
 
 ---
 
@@ -204,8 +215,9 @@ dpm localnet down demo-b
 | Bundled Prometheus/Grafana, per-component enable/disable, lightweight defaults, min-resources docs | Observability | live + shown (docs) |
 | Canton-specific Grafana dashboard presets (tx/sec, completion latency, active contracts, per-template throughput) | Observability | live (Grafana tab) |
 | `dpm localnet metrics` — dashboard URLs + text summary (throughput, latency p50/p99, resource usage) | Observability | live |
-| DAR management CLI (upload/list/info/download/diff/remove/build-upload/watch), multi-participant, SCU-aware diff | DAR suite | live |
+| DAR management CLI (upload/list/info/download/diff/remove/build-upload/watch), multi-participant, SCU-aware diff | DAR suite; Snapshot rollback | live |
 | DAR Web UI: drag-drop upload, per-participant vetting toggles, package explorer tree, diff viewer, hot-deploy indicator | DAR suite (UI half) | live |
+| (reinforces #386) Snapshot/restore (`dpm localnet snapshot/restore`) | Snapshot rollback | live — DAR count (2 → 1) as visible proof of ledger rollback |
 | Contract tracking CLI (`contracts watch`, `tx ls/replay`) via Ledger API v2 | Contracts & transactions | live |
 | Contract tracking Web UI "Explorer": live ACS table, transaction timeline, contract detail drawer, per-party visibility | Contracts & transactions (UI half) | live |
 | Optional AI agent skill documents (lifecycle, DAR upload, package inspection, contract queries, log/status checks) | AI agent skills | live |
@@ -214,7 +226,7 @@ dpm localnet down demo-b
 
 ---
 
-## 5 · Video B — Milestone 2: Web UI, observability, DAR, contracts, tokens, skills (~13-16 min)
+## 5 · Video B — Milestone 2: Web UI, observability, DAR, contracts, tokens, skills (~15-18 min)
 
 Assumes `demo` (default profile) and `demo-tokens` (`--profile tokens-v2`)
 are already running from the pre-flight checklist.
@@ -292,7 +304,54 @@ dpm localnet dar diff <old.dar> <new.dar>
 - Optional: `dar watch <path> --publish-to <ui-url>` and show the hot-deploy
   badge light up in the UI as you touch a source file.
 
-### [10:00] Contracts & transactions
+### [09:15] Snapshot rollback: DAR state as proof
+Uses the `demo` instance. Record this scene **last** on `demo` — the
+`restore` step is destructive to whatever else has been demoed on it (see
+pre-flight checklist).
+
+```
+# 1 — Build & upload the first DAR (the app under development)
+dpm localnet dar build-upload --project e2e-tests/daml-test-contracts \
+  --instance demo --role app-provider
+
+# 2 — Baseline: the active contract set right now
+dpm localnet contracts ls --name demo
+
+# 3 — Snapshot the running node (snapshot requires the instance running)
+dpm localnet snapshot demo --to demo-1dar.tgz
+
+# 4 — Deploy a second, different DAR
+dpm localnet dar build-upload --project <path/to/second-daml-project> \
+  --instance demo --role app-provider
+
+# 5 — List all deployed DARs — expect 2 rows
+dpm localnet dar list --instance demo --role app-provider --enrich
+
+# 6 — Restore (restore requires the instance stopped first)
+dpm localnet down demo
+dpm localnet restore demo --from demo-1dar.tgz
+dpm localnet up demo
+
+# 7 — List all deployed DARs again — back to 1 row
+dpm localnet dar list --instance demo --role app-provider --enrich
+```
+*(cut/speed-ramp over the `down`/`restore`/`up` cycle — another full boot)*
+- Snapshot/restore is a `pg_dumpall` of the Postgres backing the participant
+  and Splice apps; restore reloads it with `--clean --if-exists` — this is a
+  true point-in-time **ledger rollback**, not a file copy.
+- The DAR count is the visible proof: 2 DARs before restore, 1 after — the
+  second upload never happened as far as the restored ledger is concerned.
+  The same mechanism rewinds contracts, parties, and vetting state, not just
+  DARs.
+- Call out the ordering constraint: `snapshot` needs the instance **running**
+  (it reads a live Postgres); `restore` needs it **stopped** first (`down`),
+  then `up` to bring it back — visible directly in the exit path if you try
+  it the other way around.
+- Contrast with Video A's snapshot segment: there it's framed as backup/DR
+  (hand a `.tgz` to a teammate or CI); here the same commands are a
+  rollback/undo tool for local experimentation.
+
+### [11:45] Contracts & transactions
 ```
 dpm localnet contracts ls demo
 dpm localnet contracts watch demo
@@ -308,7 +367,7 @@ dpm localnet tx replay demo --id <updateId>
   timeline, contract detail drawer, explicit per-party visibility
   projection.
 
-### [12:15] Token flows (bonus: CIP-0112 / V2, not a #387 line item but shares the ledger tooling)
+### [14:00] Token flows (bonus: CIP-0112 / V2, not a #387 line item but shares the ledger tooling)
 Switch to the `demo-tokens` instance for this segment.
 ```
 dpm localnet token demo --instance demo-tokens --symbol DEMO --supply 1000000 --decimals 6 --seed-holder
@@ -318,7 +377,7 @@ dpm localnet token balances --instance demo-tokens
   a holder. Keep this brief — it's not an #387 deliverable, just a natural
   extension of the ledger tooling just shown.
 
-### [13:15] AI agent skill documents
+### [15:15] AI agent skill documents
 ```
 dpm localnet skills list
 dpm localnet skills install --target claude
@@ -329,7 +388,7 @@ dpm localnet skills install --target claude
 - `skills install` drops them into `~/.claude/skills` (or `--target codex`).
 - Show the **Agent Skills** page in the Web UI rendering the same docs.
 
-### [14:45] Close
+### [16:45] Close
 ```
 dpm localnet down demo
 dpm localnet down demo-tokens
@@ -345,7 +404,8 @@ dpm localnet down demo-tokens
 
 ## 6 · Recording & editing notes
 
-- **Hard-cut or speed-ramp** any live `up` boot, `dar watch` rebuild loop, or
+- **Hard-cut or speed-ramp** any live `up` boot, the snapshot-rollback
+  scene's `down`/`restore`/`up` cycle, `dar watch` rebuild loop, or
   long-running `contracts watch` — don't make viewers wait in real time.
 - **Lower-third callouts** worth adding in post:
   - The printed endpoints/JWTs right after `up` finishes.
