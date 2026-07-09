@@ -57,7 +57,7 @@ func TestLocalnetHelp_RendersMockupShape(t *testing.T) {
 // exempt — they're not part of the curated surface.
 func TestLocalnetHelp_MatchesWiredCommandSet(t *testing.T) {
 	wired := make(map[string]bool)
-	for _, cmd := range localnet.Build().Commands() {
+	for _, cmd := range localnet.Build(false).Commands() {
 		if cmd.Hidden || cmd.Name() == "help" || cmd.Name() == "completion" {
 			continue
 		}

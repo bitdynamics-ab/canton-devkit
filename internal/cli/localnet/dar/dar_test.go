@@ -15,7 +15,7 @@ func TestBuild_AllSubcommandsRegistered(t *testing.T) {
 		"upload", "list", "download", "info", "diff",
 		"remove", "build-upload", "watch",
 	}
-	root := Build()
+	root := Build(false)
 	got := make(map[string]bool, len(root.Commands()))
 	for _, c := range root.Commands() {
 		got[c.Name()] = true
@@ -38,7 +38,7 @@ func TestBuild_AllSubcommandsRegistered(t *testing.T) {
 // Catches a regression where someone strips short descriptions
 // from subcommand registration.
 func TestBuild_RootHelpMentionsKeyVerbs(t *testing.T) {
-	root := Build()
+	root := Build(false)
 	var buf bytes.Buffer
 	root.SetOut(&buf)
 	root.SetErr(&buf)
@@ -56,7 +56,7 @@ func TestBuild_RootHelpMentionsKeyVerbs(t *testing.T) {
 // TestUpload_RequiresArg: `dar upload` without a path argument
 // must fail with a clear usage error, not segfault or hang.
 func TestUpload_RequiresArg(t *testing.T) {
-	root := Build()
+	root := Build(false)
 	root.SetArgs([]string{"upload"})
 	var buf bytes.Buffer
 	root.SetOut(&buf)
@@ -70,7 +70,7 @@ func TestUpload_RequiresArg(t *testing.T) {
 // TestDownload_RequiresArg: same for download — the package-id
 // arg is required.
 func TestDownload_RequiresArg(t *testing.T) {
-	root := Build()
+	root := Build(false)
 	root.SetArgs([]string{"download"})
 	var buf bytes.Buffer
 	root.SetOut(&buf)
@@ -84,7 +84,7 @@ func TestDownload_RequiresArg(t *testing.T) {
 // TestInfo_RequiresArg: info needs either a local DAR path or a
 // package id.
 func TestInfo_RequiresArg(t *testing.T) {
-	root := Build()
+	root := Build(false)
 	root.SetArgs([]string{"info"})
 	var buf bytes.Buffer
 	root.SetOut(&buf)

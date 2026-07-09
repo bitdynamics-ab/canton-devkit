@@ -10,8 +10,15 @@
 #
 # DPM strips the registered command name from argv and passes
 # `exec-args` + the user's args to the binary, so `dpm localnet up --name x`
-# invokes `canton-devkit localnet up --name x`. The TestRunIsArgvOnly test
-# (internal/cli/cli_test.go) locks this invariant.
+# invokes `canton-devkit --via-dpm localnet up --name x`. The
+# TestRunIsArgvOnly test (internal/cli/cli_test.go) locks this invariant.
+#
+# The leading `--via-dpm` marker is how the binary knows it was launched by
+# DPM (argv is otherwise identical to a direct `canton-devkit localnet …`
+# call). App.Run strips it before Cobra parses and uses it to switch help
+# text / examples to `dpm localnet …` and to hide flags that don't apply
+# under DPM (e.g. `--project`, since `dpm localnet` only runs inside a Daml
+# project). See internal/cli/app.go.
 #
 # Published per-platform via `dpm publish component` from the release CI;
 # the `path` is rewritten to `canton-devkit.exe` on Windows by
@@ -25,5 +32,5 @@ spec:
     - path: canton-devkit
       name: localnet
       desc: Manage Canton LocalNet developer environments — lifecycle, DAR, contracts, observability, and CIP-0112 token tooling.
-      exec-args: ["localnet"]
+      exec-args: ["--via-dpm", "localnet"]
       aliases: []
