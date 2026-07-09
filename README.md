@@ -22,6 +22,7 @@ recommended) and 10 GB of free disk — see the
 ## Install
 
 Through the dpm ([Daml Package Manager](https://docs.canton.network/sdks-tools/cli-tools/dpm)), in a project's `daml.yaml`. Ensure you remove the sdk-version field from the file. For example, if your current daml.yaml file is:
+
 ```yaml
 sdk-version: 3.5.2
 name: daml-test-1
@@ -35,6 +36,7 @@ dependencies:
 ```
 
 You should use the following daml.yaml file:
+
 ```yaml
 #sdk-version: 3.5.2
 name: daml-test-1
@@ -47,12 +49,13 @@ dependencies:
   - daml-script
 components:
   - damlc:3.5.2
+  - daml-script:3.5.2
   - oci://ghcr.io/bitdynamics-ab/canton-devkit:latest
 ```
 
 then `dpm install package` and use it as `dpm localnet <cmd>`.
 
-For a quick standalone install on macOS arm64 or Linux amd64:
+For a quick standalone install on macOS or Linux:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/install.sh | sh
@@ -82,16 +85,18 @@ canton-devkit localnet down demo
 
 The command surface covers the full development loop:
 
-| Area | Commands |
-|------|----------|
-| Lifecycle | `up` `down` `stop` `start` `restart` `pause` `resume` `clean` `list` `status` `logs` |
-| Host checks | `doctor` — the same preflight `up` runs, with remediation hints |
-| App wiring | `env` `creds` — endpoints, party IDs, and JWTs for tests and CI |
-| DAR management | `dar upload / list / info / download / diff / remove / build-upload / watch` |
-| Ledger inspection | `contracts ls / watch` · `tx ls / replay` |
-| Tokens | `token create / mint / transfer / burn / balance` |
-| State | `snapshot` / `restore` — a portable `.tgz` of a network's full state |
-| Versions | `versions` — pinned Splice releases, keyed by commit SHA |
+
+| Area              | Commands                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------ |
+| Lifecycle         | `up` `down` `stop` `start` `restart` `pause` `resume` `clean` `list` `status` `logs` |
+| Host checks       | `doctor` — the same preflight `up` runs, with remediation hints                      |
+| App wiring        | `env` `creds` — endpoints, party IDs, and JWTs for tests and CI                      |
+| DAR management    | `dar upload / list / info / download / diff / remove / build-upload / watch`         |
+| Ledger inspection | `contracts ls / watch` · `tx ls / replay`                                            |
+| Tokens            | `token create / mint / transfer / burn / balance`                                    |
+| State             | `snapshot` / `restore` — a portable `.tgz` of a network's full state                 |
+| Versions          | `versions` — pinned Splice releases, keyed by commit SHA                             |
+
 
 Token commands support both Canton token-standard generations, routed
 per instrument: [CIP-0056](https://github.com/global-synchronizer-foundation/cips/blob/main/cip-0056/cip-0056.md)

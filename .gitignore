@@ -28,3 +28,5 @@ internal/ui/dist/*
 
 # worktrunk configs
 .config/wt.toml
+
+tmp/
