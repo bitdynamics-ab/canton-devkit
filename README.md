@@ -4,8 +4,9 @@
 [![Release](https://img.shields.io/github/v/release/bitdynamics-ab/canton-devkit?display_name=tag&sort=semver)](https://github.com/bitdynamics-ab/canton-devkit/releases/latest)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
-Homebrew downloads: [![Homebrew Downloads](https://img.shields.io/github/downloads/bitdynamics-ab/homebrew-canton-devkit/total.svg?label=downloads)](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases)
-Other downloads: [![Other Downloads](https://img.shields.io/github/downloads/bitdynamics-ab/canton-devkit/total.svg?label=downloads)](https://github.com/bitdynamics-ab/canton-devkit/releases)
+Homebrew: [![Homebrew Downloads](https://img.shields.io/github/downloads/bitdynamics-ab/homebrew-canton-devkit/total.svg?label=downloads)](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases)
+
+Other installation fees: [![Other Downloads](https://img.shields.io/github/downloads/bitdynamics-ab/canton-devkit/total.svg?label=downloads)](https://github.com/bitdynamics-ab/canton-devkit/releases)
 
 canton-devkit helps you to run a complete local [Canton](https://canton.network/)
 network on your machine. You get two participant/validator nodes and 
