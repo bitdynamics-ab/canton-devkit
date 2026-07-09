@@ -7,6 +7,7 @@ on:
       - "go.mod"
       - "go.sum"
       - ".github/workflows/ci.yml"
+      - "install.sh"
       - "docs/design/mockups/**.jsx"
       - "frontend/**"
       - "Makefile"
@@ -26,6 +27,7 @@ on:
       - "go.mod"
       - "go.sum"
       - ".github/workflows/ci.yml"
+      - "install.sh"
       - "docs/design/mockups/**.jsx"
       - "frontend/**"
       - "Makefile"
@@ -55,6 +57,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+
+      - name: Validate install.sh syntax
+        run: sh -n install.sh
 
       - name: Build
         run: go build ./...
