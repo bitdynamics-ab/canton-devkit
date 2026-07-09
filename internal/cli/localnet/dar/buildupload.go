@@ -18,7 +18,7 @@ import (
 // dar build-upload — shell out to `dpm build` (or `daml build`), then
 // upload the resulting DAR. Compilation is deliberately delegated to
 // the user's toolchain; DevKit never reimplements damlc / dpm.
-func buildBuildUpload() *cobra.Command {
+func buildBuildUpload(viaDPM bool) *cobra.Command {
 	var (
 		conn     connectFlags
 		project  string
@@ -123,6 +123,12 @@ Exit codes:
 	}
 	conn.register(cmd)
 	cmd.Flags().StringVar(&project, "project", "", "Path to the Daml project (the dir containing daml.yaml). Defaults to cwd.")
+	// Under `dpm localnet …` the working directory is always the Daml
+	// project root, so pointing elsewhere doesn't apply — hide the flag
+	// (still accepted, still defaults to cwd) to keep DPM help focused.
+	if viaDPM {
+		_ = cmd.Flags().MarkHidden("project")
+	}
 	cmd.Flags().StringVar(&builder, "builder", "auto", "Build tool: auto (prefers dpm), dpm, or daml.")
 	cmd.Flags().BoolVar(&vet, "vet", true, "Vet packages after upload.")
 	cmd.Flags().BoolVar(&dry, "dry-run", false, "Build but validate instead of upload.")

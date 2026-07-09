@@ -70,10 +70,12 @@ delegates the rest of the DevKit CLI surface to the binary's own argv
 parser. See [`packaging/component.yaml.tmpl`](../packaging/component.yaml.tmpl).
 
 DPM does NOT pass the registered command name into the binary's argv —
-only `exec-args` + user args reach it. `exec-args: ["localnet"]` is
-therefore required so the binary always dispatches into its `localnet`
-subtree regardless of how DPM invoked the component. A contract test
-(`TestRunIsArgvOnly`) locks this invariant.
+only `exec-args` + user args reach it. `exec-args: ["--via-dpm",
+"localnet"]` is therefore required: the `localnet` arg makes the binary
+dispatch into its `localnet` subtree regardless of how DPM invoked the
+component, and the leading `--via-dpm` marker tells the binary it was
+launched by DPM. A contract test (`TestRunIsArgvOnly`) locks this
+invariant.
 
 The manifest lives as a template with a `@@BINARY_PATH@@` token: the
 release workflow substitutes `bin/canton-devkit` on Unix platforms and

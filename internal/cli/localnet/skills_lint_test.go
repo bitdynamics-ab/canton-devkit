@@ -41,7 +41,7 @@ import (
 // the old flag — and the agent then teaches the user the broken flag.
 // The test fails CI on the next push.
 func TestSkillsLint_AgainstLiveCobraSurface(t *testing.T) {
-	root := Build() // `dpm localnet` root
+	root := Build(false) // `canton-devkit localnet` root (direct mode)
 
 	docs, err := skills.List()
 	if err != nil {
@@ -503,7 +503,7 @@ func TestSkillsLint_FutureVerbsHaveTODOs(t *testing.T) {
 // positional instance name, so `list` — a true cobra.NoArgs command (it
 // takes no instance) — stands in as the reject-direction example.
 func TestSkillsLint_RejectsPositionalArgsOnNoArgsCommand(t *testing.T) {
-	root := Build()
+	root := Build(false)
 
 	// `list` is cobra.NoArgs — the offending doc shape.
 	cmd, extra, found := resolveCobra(root, []string{"list", "canton"})

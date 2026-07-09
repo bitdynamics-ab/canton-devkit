@@ -24,6 +24,9 @@ type App struct {
 	// so tests never touch the real config dir or the network; main() turns
 	// it on.
 	telemetry bool
+	// mode records whether the binary was launched directly or via DPM,
+	// resolved from args in Run. Defaults to Direct.
+	mode InvocationMode
 }
 
 func New(out io.Writer, err io.Writer, version, commit string) *App {
@@ -47,6 +50,11 @@ func (a *App) WithTelemetry() *App {
 }
 
 func (a *App) Run(args []string) int {
+	// Resolve direct-vs-DPM from a leading marker DPM prepends via the
+	// component manifest, then strip it so Cobra only sees real args. Done
+	// first so help/examples and flag visibility reflect the mode.
+	a.mode, args = detectMode(args)
+
 	// Install the real sink only when telemetry is on AND effectively
 	// enabled; otherwise the package's no-op sink stays installed, so even
 	// a stray Inc records nothing.

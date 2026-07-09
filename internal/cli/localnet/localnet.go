@@ -8,7 +8,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func Build() *cobra.Command {
+// Build wires the `localnet` command tree. viaDPM is true when the binary
+// was launched by DPM (`dpm localnet …`); it lets subcommands hide flags
+// that don't apply under DPM (e.g. `dar build-upload --project`, since
+// `dpm localnet` only runs inside a Daml project).
+func Build(viaDPM bool) *cobra.Command {
 	localnet := &cobra.Command{
 		Use:   "localnet",
 		Short: "Manage Canton LocalNet instances",
@@ -64,7 +68,7 @@ func Build() *cobra.Command {
 
 	// DAR admin and Token Standard commands live in their own
 	// subpackages, each owning its command tree.
-	localnet.AddCommand(dar.Build())
+	localnet.AddCommand(dar.Build(viaDPM))
 	localnet.AddCommand(token.Build())
 
 	return localnet

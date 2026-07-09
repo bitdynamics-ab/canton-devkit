@@ -103,16 +103,23 @@ func TestRunLocalnetRemove_RequiresTarget(t *testing.T) {
 // a real `localnet up` depends on whether Docker is available on this
 // host, while `--help` short-circuits and is deterministic.
 func TestRunIsArgvOnly(t *testing.T) {
-	var out bytes.Buffer
-	var err bytes.Buffer
+	// Both the direct argv and the DPM argv (marker prepended via
+	// exec-args) must dispatch identically into `localnet up`.
+	for _, args := range [][]string{
+		{"localnet", "up", "--help"},
+		{"--via-dpm", "localnet", "up", "--help"},
+	} {
+		var out bytes.Buffer
+		var err bytes.Buffer
 
-	code := New(&out, &err, "test", "").Run([]string{"localnet", "up", "--help"})
+		code := New(&out, &err, "test", "").Run(args)
 
-	if code != 0 {
-		t.Fatalf("expected exit 0 for --help, got %d (stderr=%q)", code, err.String())
-	}
-	if !strings.Contains(out.String(), "Splice LocalNet") {
-		t.Fatalf("expected up help to mention Splice LocalNet, got %q", out.String())
+		if code != 0 {
+			t.Fatalf("args %v: expected exit 0 for --help, got %d (stderr=%q)", args, code, err.String())
+		}
+		if !strings.Contains(out.String(), "Splice LocalNet") {
+			t.Fatalf("args %v: expected up help to mention Splice LocalNet, got %q", args, out.String())
+		}
 	}
 }
 
