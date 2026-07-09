@@ -77,29 +77,28 @@ contains the `canton-devkit` binary plus `LICENSE` and `README.md`. Every
 release also publishes a single `SHA256SUMS` file covering all archives.
 
 ### Quick install (macOS arm64 / Linux amd64)
-
 ```bash
-curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/homebrew-canton-devkit/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/install.sh | sh
 ```
 
 Or with `wget`:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/bitdynamics-ab/homebrew-canton-devkit/main/install.sh | sh
+wget -qO- https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/install.sh | sh
 ```
 
 Options (pass as environment variables):
 
 ```bash
 # Pin a specific version
-curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/homebrew-canton-devkit/main/install.sh | VERSION=0.12.2 sh
+curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/install.sh | VERSION=0.12.2 sh
 
 # Custom install directory
-curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/homebrew-canton-devkit/main/install.sh | INSTALL_DIR=/usr/local/bin sh
+curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/install.sh | INSTALL_DIR=/usr/local/bin sh
 ```
 
 The installer detects your platform, downloads the matching archive from
-the [releases page](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases),
+the [releases page](https://github.com/bitdynamics-ab/canton-devkit/releases),
 verifies the SHA-256 checksum, and installs to `~/.local/bin` by default.
 It warns when that directory is not on your `PATH`.
 
@@ -122,8 +121,9 @@ brew update
 brew upgrade canton-devkit
 ```
 
-The formula downloads platform-specific release tarballs from the
-[distribution repo releases page](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases).
+The formula downloads platform-specific release tarballs from the tap
+repository release page:
+[`bitdynamics-ab/homebrew-canton-devkit/releases`](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases).
 
 > See the [Homebrew guide](homebrew.md) for the tap layout and how the
 > formula is kept in sync on each release.

@@ -8,7 +8,9 @@ following the standard Homebrew tap layout.
 
 This source repository does not keep a `Formula/` directory. Homebrew
 distribution files are maintained in `homebrew-canton-devkit`; this repository only
-keeps the release helper script and docs that describe the process.
+keeps the canonical `install.sh` script and docs that describe the process.
+The tap repository keeps the Homebrew formula, APT repository metadata,
+and a redirecting `install.sh` for backward compatibility.
 
 ## Install
 

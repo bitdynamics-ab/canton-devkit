@@ -35,6 +35,12 @@ tar -xzf canton-devkit_v0.7.0_linux_amd64.tar.gz
 ./canton-devkit localnet --help
 ```
 
+For macOS arm64 and Linux amd64, a scripted installer is also available:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/install.sh | sh
+```
+
 > **Version-string asymmetry:** the standalone archive filenames keep the
 > `v` prefix (`canton-devkit_v0.7.0_linux_amd64.tar.gz`), matching the
 > git tag, while the DPM/OCI tag strips it
