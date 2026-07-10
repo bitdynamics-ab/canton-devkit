@@ -8,7 +8,7 @@ import {
   type PrometheusRangeResponse,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { W, wMono } from "../tokens";
+import { W, wMono, tint, R } from "../tokens";
 import { Button } from "../components/Button";
 import { IcX } from "../components/icons";
 import { MetricCard } from "../components/MetricCard";
@@ -22,50 +22,30 @@ import {
   type Series,
 } from "../components/charts/types";
 
-// MetricsScreen — live Canton + Splice metrics for the selected
-// instance: a 4-up MetricCard strip with deltas + sparklines, six
-// PromQL-backed chart cards, and a full-width "Top error sources"
-// bar chart. Auto-refreshes every 5 s (the cards load in parallel).
-// When the observability profile isn't enabled, a friendly
-// empty-state panel offers to turn it on.
-
 interface CardState<T> {
   kind: "loading" | "ok" | "err";
   data?: T;
   error?: string;
 }
 
-// PromQL queries. Sourced from internal/metricsq for parity with the
-// CLI's `localnet metrics` headline; the per-template / phase /
-// heatmap queries are extensions specific to this screen.
-//
-// All metric names are the daml_* / db_client_* / jvm_* families the
-// Splice OTel reporter actually emits (verified against a live obs
-// profile). Some per-screen extensions have no direct daml_*
-// equivalent on Splice 0.6.4 — the closest functional analogue is
-// used instead, marked inline (see docs/observability.md).
 const Q = {
   // Substitute: indexer-update counter, same as HeadlineLedgerTPS.
   throughputSeries:
     "sum(rate(daml_participant_api_indexer_updates[1m])) or vector(0)",
-  p99: 'histogram_quantile(0.99, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
-  // Live Splice does not expose total ACS cardinality as a stock
-  // Prometheus metric. This is the audited ACS-related signal that
-  // exists in 0.6.4; keep UI copy honest and call it a lookup buffer.
+  // 0.6.4 exports this histogram with only the +Inf bucket, so
+  // histogram_quantile is NaN; use the mean (sum/count), x1000 -> ms.
+  avgLatency:
+    "1000 * sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_sum[5m])) / sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_count[5m]))",
+  // No total-ACS-cardinality metric on 0.6.4 (old proxy gone); the
+  // active-contracts buffer gauge is the closest present signal.
   acsLookupBuffer:
-    "sum(daml_participant_api_index_db_active_contract_lookup_batch_buffer_length)",
-  // No daml_* command-rejection counter on Splice 0.6.4 — use the
-  // user-error completion-status counter as a proxy for "things
-  // the participant refused to commit". Returns 0 if not exposed.
+    "sum(daml_participant_api_index_active_contracts_buffer_size)",
+  // No command-rejection counter on 0.6.4; the non-OK gRPC completion
+  // counter is the substitute for refused commands. 0 if not exposed.
   errorsRate:
     'sum(rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m])) or vector(0)',
-  latencyMedian:
-    'histogram_quantile(0.50, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
-  latencyP99:
-    'histogram_quantile(0.99, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
-  // Splice 0.6.x does not expose template-grain submission counters.
-  // Use the live gRPC method counter as a command-throughput fallback
-  // instead of querying a non-existent `daml_commands_*` family.
+  // No template-grain submission counters on 0.6.x; the gRPC method
+  // counter is the command-throughput substitute.
   commandThroughput:
     "sum by (grpc_method_name) (rate(daml_grpc_server_handled_total[5m]))",
   errors1m:
@@ -76,15 +56,10 @@ const Q = {
     'sum by (component) (jvm_memory_used_bytes{jvm_memory_type="heap"})',
 };
 
-// scopeQ injects instance="<scope>" into every metric selector of a chart
-// query when the summary reports a scope — i.e. when this instance is
-// served by the shared multi-instance Prometheus, so a chart shows
-// one instance, not the sum across all of them. It targets our known
-// metric-name prefixes, so it never touches function names (sum, rate,
-// histogram_quantile) or `by (...)` label lists, and composes with a
-// metric's existing label without an invalid trailing comma. An empty
-// scope (the single-instance per-instance Prometheus) returns the query
-// unchanged.
+// Injects instance="<scope>" into each metric selector so a chart shows
+// one instance on the shared multi-instance Prometheus. Matches only
+// metric-name prefixes, so it skips function names and `by (...)` lists;
+// empty scope returns the query unchanged.
 export function scopeQ(query: string, scope: string): string {
   if (!scope) return query;
   const inst = `instance="${scope}"`;
@@ -98,7 +73,7 @@ export function scopeQ(query: string, scope: string): string {
 }
 
 const TPS_COLOR = "#8FA3EE";
-const P99_COLOR = "#DDB25E";
+const LATENCY_COLOR = "#DDB25E";
 const ACS_COLOR = "#6480E6";
 const ERR_COLOR = "#7BD2C6";
 
@@ -112,7 +87,7 @@ export function MetricsScreen() {
   const [throughputSeries, setThroughputSeries] = useState<CardState<Series>>({
     kind: "loading",
   });
-  const [p99Series, setP99Series] = useState<CardState<Series>>({
+  const [latencySeries, setLatencySeries] = useState<CardState<Series>>({
     kind: "loading",
   });
   const [acsSeries, setAcsSeries] = useState<CardState<Series>>({
@@ -137,11 +112,6 @@ export function MetricsScreen() {
 
   useEffect(() => {
     if (!name) return;
-    // An AbortSignal (not a boolean flag) reaches in-flight loaders:
-    // fetch aborts mid-flight and loaders short-circuit on
-    // signal.aborted, so nothing setStates on an unmounted component.
-    // Polling is gated on document.visibilityState — no point
-    // hammering Prometheus when the tab is hidden.
     let outer: AbortController | null = null;
     const tick = async () => {
       // Abort the prior tick's in-flight requests — a slow query from
@@ -149,8 +119,6 @@ export function MetricsScreen() {
       outer?.abort();
       outer = new AbortController();
       const signal = outer.signal;
-      // Instance label to scope the chart queries by — set when the
-      // summary reports we're reading the shared multi-instance stack.
       let scope = "";
       try {
         const s = await fetchMetricsSummary(name, signal);
@@ -177,15 +145,12 @@ export function MetricsScreen() {
       }
       await Promise.all([
         loadSeries(name, scopeQ(Q.throughputSeries, scope), "tx/s", setThroughputSeries, signal),
-        loadSeries(name, scopeQ(Q.p99, scope), "p99", setP99Series, signal),
+        loadSeries(name, scopeQ(Q.avgLatency, scope), "avg latency", setLatencySeries, signal),
         loadSeries(name, scopeQ(Q.acsLookupBuffer, scope), "ACS lookup buffer", setAcsSeries, signal),
         loadSeries(name, scopeQ(Q.errorsRate, scope), "errors", setErrorsSeries, signal),
         loadMultiSeries(
           name,
-          [
-            { query: scopeQ(Q.latencyMedian, scope), label: "median", color: CHART_PALETTE[1] },
-            { query: scopeQ(Q.latencyP99, scope), label: "p99", color: CHART_PALETTE[3] },
-          ],
+          [{ query: scopeQ(Q.avgLatency, scope), label: "avg", color: CHART_PALETTE[1] }],
           setLatencyPhase,
           signal,
         ),
@@ -229,19 +194,22 @@ export function MetricsScreen() {
     };
   }, [name]);
 
-  // These memos MUST sit above every conditional return below so hook
-  // order is stable across the (!name) and (observabilityOff)
-  // early-exit paths — rules of hooks.
+  // These memos must sit above every conditional return so hook order
+  // is stable across the early-exit paths (rules of hooks).
   const tpsDelta = useMemo(() => deltaFromSeries(throughputSeries.data), [throughputSeries.data]);
-  const p99Delta = useMemo(() => deltaFromSeries(p99Series.data, 1000), [p99Series.data]);
+  const latencyDelta = useMemo(() => deltaFromSeries(latencySeries.data), [latencySeries.data]);
   const acsDelta = useMemo(() => deltaFromSeries(acsSeries.data), [acsSeries.data]);
   const errDelta = useMemo(() => deltaFromSeries(errorsSeries.data), [errorsSeries.data]);
 
   if (!name) {
     return (
-      <section style={{ padding: 24 }}>
-        <p style={{ color: W.dim }}>
-          No instance selected. Create or pick one from the dashboard first.
+      <section style={{ padding: "14px 16px" }}>
+        <p style={{ color: W.text2, fontSize: 13, margin: 0 }}>
+          No instance selected.
+        </p>
+        <p style={{ color: W.dim, fontSize: 12.5, margin: "4px 0 0" }}>
+          Pick an instance from the topbar switcher, or create one from
+          Overview.
         </p>
       </section>
     );
@@ -254,8 +222,6 @@ export function MetricsScreen() {
         <ObservabilityOffPanel
           name={name}
           onEnabled={() => {
-            // Clearing the empty state lets the ongoing 5s poll
-            // repopulate from the newly-running Prometheus.
             setObservabilityOff(null);
           }}
         />
@@ -264,16 +230,14 @@ export function MetricsScreen() {
   }
 
   const m = summary.data?.metrics;
-  const p99Value =
-    summary.kind === "ok" && summary.data
-      ? (summary.data.latency?.p99_ms ?? Number.NaN)
-      : undefined;
+  // Backend p99_ms is NaN on 0.6.4 (no finite buckets); use the
+  // computable average series' latest point, already in ms.
+  const latencyValue = latencySeries.data?.points.at(-1)?.v;
 
   return (
     <section style={{ padding: 24 }}>
       <Header name={name} />
 
-      {/* 4-up top strip */}
       <div
         style={{
           display: "grid",
@@ -293,13 +257,13 @@ export function MetricsScreen() {
           deltaPolarity="up-is-good"
         />
         <MetricCard
-          title="Command completion p99"
+          title="Avg latency"
           unit="ms"
-          value={p99Value}
-          sparkline={p99Series.data?.points.map((p) => ({ t: p.t, v: p.v * 1000 }))}
-          sparklineColor={P99_COLOR}
-          error={p99Series.kind === "err" ? p99Series.error : undefined}
-          delta={p99Delta}
+          value={latencyValue}
+          sparkline={latencySeries.data?.points}
+          sparklineColor={LATENCY_COLOR}
+          error={latencySeries.kind === "err" ? latencySeries.error : undefined}
+          delta={latencyDelta}
           deltaPolarity="down-is-good"
           format={(v) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1))}
         />
@@ -327,7 +291,6 @@ export function MetricsScreen() {
         />
       </div>
 
-      {/* 2-col chart grid */}
       <div
         style={{
           display: "grid",
@@ -336,7 +299,7 @@ export function MetricsScreen() {
           marginBottom: 16,
         }}
       >
-        <ChartCard title="Latency by phase" subtitle="median · p99 — last hour">
+        <ChartCard title="Sequencing latency" subtitle="average · last hour">
           {latencyPhase.kind === "err" ? (
             <ErrLine msg={latencyPhase.error ?? "failed"} />
           ) : (
@@ -344,7 +307,7 @@ export function MetricsScreen() {
               series={latencyPhase.data ?? []}
               width={420}
               height={170}
-              format={(v) => (v >= 1 ? v.toFixed(2) + "s" : (v * 1000).toFixed(0) + "ms")}
+              format={(v) => (v >= 1000 ? (v / 1000).toFixed(2) + "s" : v.toFixed(0) + "ms")}
             />
           )}
         </ChartCard>
@@ -389,7 +352,7 @@ export function MetricsScreen() {
           ) : null}
         </ChartCard>
 
-        <ChartCard title="Resource usage" subtitle="JVM heap bytes — components">
+        <ChartCard title="Resource usage" subtitle="JVM heap bytes · components">
           {cpuSeries.kind === "err" ? (
             <ErrLine msg={cpuSeries.error ?? "failed"} />
           ) : (
@@ -422,15 +385,20 @@ export function MetricsScreen() {
         </ChartCard>
       </div>
 
-      {/* Latency headline triplet — mirrors `dpm localnet metrics`
-          text output so CLI and UI agree on the curated quantiles. */}
-      <LatencyStrip
-        p50={summary.data?.latency?.p50_ms ?? undefined}
-        p95={summary.data?.latency?.p95_ms ?? undefined}
-        p99={summary.data?.latency?.p99_ms ?? undefined}
-      />
+      {/* Percentiles are NaN on 0.6.4 (+Inf-only histogram); hide the
+          strip rather than show three dashes. Reappears with finite buckets. */}
+      {[
+        summary.data?.latency?.p50_ms,
+        summary.data?.latency?.p95_ms,
+        summary.data?.latency?.p99_ms,
+      ].some((v) => typeof v === "number" && Number.isFinite(v)) && (
+        <LatencyStrip
+          p50={summary.data?.latency?.p50_ms ?? undefined}
+          p95={summary.data?.latency?.p95_ms ?? undefined}
+          p99={summary.data?.latency?.p99_ms ?? undefined}
+        />
+      )}
 
-      {/* Top error sources — full width */}
       <ChartCard title="Top error sources" subtitle="last hour">
         {topErrors.kind === "err" ? (
           <ErrLine msg={topErrors.error ?? "failed"} />
@@ -444,16 +412,11 @@ export function MetricsScreen() {
         )}
       </ChartCard>
 
-      {/* Dashboards — deep link to the bundled Grafana view. Same UID
-          the CLI's text output prints, so both surfaces point at the
-          same view (CLI ↔ UI parity, see CONTRIBUTING.md). */}
       <DashboardsBlock url={summary.data?.dashboards?.grafana_url} />
     </section>
   );
 }
 
-// LatencyStrip surfaces the same three quantiles `dpm localnet
-// metrics` prints, making the SLA shape visible at a glance.
 function LatencyStrip(props: {
   p50?: number;
   p95?: number;
@@ -464,9 +427,10 @@ function LatencyStrip(props: {
     padding: "10px 14px",
     background: W.surface,
     border: `1px solid ${W.border}`,
-    borderRadius: 2,
+    borderRadius: R.control,
     fontFamily: wMono,
     fontSize: 13,
+    fontVariantNumeric: "tabular-nums",
     color: W.text,
   };
   const label: CSSProperties = {
@@ -498,16 +462,13 @@ function LatencyStrip(props: {
   );
 }
 
-// DashboardsBlock surfaces the Grafana deep link from the summary
-// handler. When the URL is empty we render the same hint as the CLI
-// rather than hiding the section, so users learn the profile exists.
 function DashboardsBlock(props: { url?: string }) {
   const wrap: CSSProperties = {
     marginTop: 16,
     padding: "10px 14px",
     background: W.surface,
     border: `1px solid ${W.border}`,
-    borderRadius: 2,
+    borderRadius: R.control,
     fontFamily: wMono,
     fontSize: 13,
     color: W.text,
@@ -584,8 +545,23 @@ function ChartCard({
 
 function ErrLine({ msg }: { msg: string }) {
   return (
-    <div role="alert" style={{ color: "#7BD2C6", fontSize: 12, padding: "20px 0" }}>
-      {msg}
+    <div role="alert" style={{ padding: "14px 0", fontSize: 12 }}>
+      <div style={{ color: W.err }}>Query failed. Retrying every 5 s.</div>
+      <details style={{ marginTop: 6 }}>
+        <summary style={{ cursor: "pointer", color: W.dim, fontSize: 11 }}>
+          Server message
+        </summary>
+        <div
+          style={{
+            marginTop: 4,
+            color: W.text2,
+            fontFamily: wMono,
+            fontSize: 11,
+          }}
+        >
+          {msg}
+        </div>
+      </details>
     </div>
   );
 }
@@ -604,8 +580,7 @@ function ObservabilityOffPanel({
     setBusy(true);
     setErr(null);
     try {
-      // Send BOTH: the Metrics screen needs Prometheus (for data)
-      // AND Grafana (for the dashboards link).
+      // Prometheus for data, Grafana for the dashboards link.
       await setObservability(name, { prometheus: true, grafana: true });
       onEnabled();
     } catch (e) {
@@ -617,9 +592,9 @@ function ObservabilityOffPanel({
   return (
     <div
       style={{
-        background: `${W.warn}10`,
+        background: `${tint(W.warn, 6)}`,
         border: `1px solid ${W.warn}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 20,
       }}
     >
@@ -671,10 +646,6 @@ function ObservabilityOffPanel({
   );
 }
 
-// ── Loaders ──────────────────────────────────────────────────────
-
-// isAborted treats an AbortError thrown by fetch the same as the
-// signal being already aborted at the moment we check it.
 function isAborted(signal: AbortSignal, e: unknown): boolean {
   if (signal.aborted) return true;
   return e instanceof DOMException && e.name === "AbortError";
@@ -771,7 +742,6 @@ async function loadBars(
       r as unknown as PrometheusRangeResponse,
       labelFn,
     );
-    // For a "right now" bar chart we just want the latest value per series.
     const bars: Bar[] = decoded
       .map((s, i) => ({
         label: s.label,
@@ -804,8 +774,6 @@ async function loadHeatmap(
       r as unknown as PrometheusRangeResponse,
       (m) => m.le ?? "+Inf",
     );
-    // Map le buckets to row indices (6 rows: <5ms, <25ms, <100ms,
-    // <500ms, <2s, >2s). Skip series we don't have a row for.
     const rowFor = (le: string): number | null => {
       const n = Number(le);
       if (!Number.isFinite(n)) return 5; // +Inf
@@ -816,7 +784,6 @@ async function loadHeatmap(
       if (n <= 2) return 4;
       return 5;
     };
-    // Determine global max for normalisation.
     let max = 0;
     for (const s of decoded) {
       for (const p of s.points) {
@@ -842,11 +809,10 @@ async function loadHeatmap(
   }
 }
 
-// deltaFromSeries: latest minus the value 5 minutes back.
+// Latest value minus the point nearest 5 minutes back.
 function deltaFromSeries(s: Series | undefined, scale = 1): number | undefined {
   if (!s || s.points.length < 2) return undefined;
   const last = s.points[s.points.length - 1].v * scale;
-  // 5 minutes back in points: assume step is consistent; find nearest.
   const targetT = s.points[s.points.length - 1].t - 5 * 60 * 1000;
   let nearest = s.points[0];
   let nd = Math.abs(s.points[0].t - targetT);

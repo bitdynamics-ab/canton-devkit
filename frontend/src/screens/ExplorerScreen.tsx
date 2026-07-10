@@ -16,30 +16,28 @@ import {
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { Button } from "../components/Button";
 import { Dot, IcRefresh } from "../components/icons";
-import { TX_KIND_COLOR, W, wMono, tableCaps, wideCaps } from "../tokens";
+import { MonoId } from "../components/MonoId";
+import { StatusBadge } from "../components/StatusBadge";
+import { SkeletonTable, useLoadingDelay } from "../components/Skeleton";
+import { TX_KIND_COLOR, W, wMono, tableCaps, wideCaps, tint, R, FAST } from "../tokens";
 import { ContractDetailDrawer } from "./ContractDetailDrawer";
 import { TxReplayDrawer } from "./TxReplayDrawer";
 
-// ExplorerScreen — live Active Contract Set, transaction history, and
-// per-party visibility for the selected instance.
-//
-// The ACS table is a live snapshot + SSE delta stream: an initial
-// snapshot fills it, an EventSource applies create/archive deltas, and
-// a 30s timer reconciles drift. The Transactions view supports the
-// same party/template/offset filters the CLI `tx ls` has, and each
-// transaction row can be replayed as a per-party visibility projection
-// (the Web UI counterpart of `tx replay`).
-
 const ROLES: Role[] = ["app-user", "app-provider", "sv"];
-// Hash palette for template/party dots — the dataviz ramp ordered so
-// neighbouring indices never share a hue family, and no danger red
-// (red stays reserved for errors).
+// Template/party dot palette, ordered so neighbouring indices differ in
+// hue; no red (reserved for errors).
 const PALETTE = [
   "#6480E6", "#7BD2C6", "#DDB25E", "#7CC89A",
   "#93A7F0", "#C8971F", "#189E8C", "#9BA3B5",
 ];
 
 type View = "contracts" | "transactions" | "timeline";
+
+// Honour the OS reduced-motion setting for the timeline glyph fades.
+const prefersReducedMotion =
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export function ExplorerScreen() {
   const sel = useInstanceSelection();
@@ -57,19 +55,13 @@ export function ExplorerScreen() {
   const [activeParties, setActiveParties] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [selectedCid, setSelectedCid] = useState<string | null>(null);
-  // Live-stream status: "live" after the first frame, "reconnecting"
-  // while the browser retries a dropped connection, "truncated" when
-  // the backend hit its event cap.
   const [streamStatus, setStreamStatus] = useState<
     "idle" | "live" | "reconnecting" | "truncated"
   >("idle");
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // refreshSnapshot fills the table from the snapshot endpoint.
-  // Background callers (the 30s reconciliation timer, SSE recovery)
-  // pass quiet=true so the table repopulates in place without
-  // flashing the loading panel; the initial mount uses quiet=false
-  // so users see "Snapshotting ACS…" before the first paint.
+  // quiet=true (reconciliation timer, SSE recovery) repopulates in place;
+  // quiet=false (initial mount) shows the loading panel first.
   const refreshSnapshot = useCallback(
     async (instance: string, asRole: Role, quiet: boolean) => {
       if (!quiet) {
@@ -114,8 +106,7 @@ export function ExplorerScreen() {
             error: e instanceof ApiError ? e.message : "failed to load ACS",
           });
         }
-        // Quiet background failures are swallowed — the user keeps
-        // the last-known good state and the next tick retries.
+        // Quiet background failures are swallowed; next tick retries.
       }
     },
     [],
@@ -127,19 +118,14 @@ export function ExplorerScreen() {
     void refreshSnapshot(name, role, false);
   }, [name, role, refreshSnapshot]);
 
-  // Live SSE subscription, mounted once the snapshot has loaded;
-  // tears down when the instance/role changes or the screen unmounts.
-  // EventSource auto-reconnects on transient failures; the `error`
-  // listener triggers a snapshot refetch to recover missed events.
-  //
-  // Deltas are applied via a Map<contract_id, row>, which dedupes
-  // create-then-archive races: an archive arriving before its create
-  // removes nothing, so either ordering converges to the same state.
+  // Live SSE subscription, mounted once the snapshot has loaded. Deltas
+  // apply via a Map<contract_id, row> so create/archive races converge to
+  // the same state regardless of arrival order.
   useEffect(() => {
     if (!name) return;
     if (state.kind !== "ok") return;
-    // Resume from the snapshot's `ledger_end` so no events are
-    // skipped between the snapshot fetch and the stream open.
+    // Resume from ledger_end so no events are skipped between the
+    // snapshot fetch and the stream open.
     const es = openContractsStream(name, role, state.data.ledger_end);
     let opened = false;
     const onMessage = (raw: MessageEvent) => {
@@ -153,8 +139,6 @@ export function ExplorerScreen() {
       }
       if (payload.event === "truncated") {
         setStreamStatus("truncated");
-        // Backend stopped sending — reconcile and we'll re-open
-        // when the user picks a different instance.
         void refreshSnapshot(name, role, true);
         return;
       }
@@ -190,9 +174,8 @@ export function ExplorerScreen() {
     };
     es.addEventListener("contracts", onMessage as EventListener);
     es.onerror = () => {
-      // EventSource auto-reconnects unless closed. Show the
-      // reconnecting state and reconcile via snapshot — the browser
-      // may have been suspended (lid-close) for minutes.
+      // EventSource auto-reconnects; reconcile via snapshot since the
+      // browser may have been suspended for minutes.
       setStreamStatus("reconnecting");
       if (opened) {
         void refreshSnapshot(name, role, true);
@@ -203,13 +186,12 @@ export function ExplorerScreen() {
       es.close();
       setStreamStatus("idle");
     };
-    // Depend on state.kind (not state) so the subscription is set up
-    // once per snapshot transition, not on every contract-list change.
+    // Depend on state.kind (not state) so the subscription resets once
+    // per snapshot transition, not on every contract-list change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, role, state.kind, refreshSnapshot]);
 
-  // Every 30s, quietly re-pull the snapshot to correct any drift the
-  // SSE deltas missed (network hiccups, browser suspend, restarts).
+  // Every 30s, re-pull the snapshot to correct drift the SSE deltas missed.
   useEffect(() => {
     if (!name) return;
     if (state.kind !== "ok") return;
@@ -220,8 +202,7 @@ export function ExplorerScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, role, state.kind, refreshSnapshot]);
 
-  // Keyboard: "/" focuses search (unless typing in an editable
-  // element); Esc clears the selection.
+  // "/" focuses search (unless already in an editable); Esc clears selection.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
@@ -241,7 +222,7 @@ export function ExplorerScreen() {
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedCid]);
 
-  // Derive template + party facets from the (unfiltered) ACS.
+  // Template + party facets from the unfiltered ACS.
   const facets = useMemo(() => {
     if (state.kind !== "ok") return { templates: [], parties: [] };
     const tpl = new Map<string, number>();
@@ -257,7 +238,7 @@ export function ExplorerScreen() {
     return { templates: colored(tpl), parties: colored(pty) };
   }, [state]);
 
-  // Filter the ACS in render. Search matches template, cid, payload JSON, party.
+  // Search matches template, cid, payload JSON, and party.
   const filtered = useMemo(() => {
     if (state.kind !== "ok") return [];
     const needle = search.trim().toLowerCase();
@@ -293,9 +274,7 @@ export function ExplorerScreen() {
     [state, selectedCid],
   );
 
-  // j/k navigation over the *filtered* view so the user follows what
-  // they see, not the underlying ACS order. The drawer registers its
-  // own keydown listener (Esc + j/k) and invokes these callbacks.
+  // Navigate over the filtered view (what the user sees), not the ACS order.
   const goPrev = useCallback(() => {
     if (!selectedCid) return;
     const i = filtered.findIndex((c) => c.contract_id === selectedCid);
@@ -339,8 +318,13 @@ export function ExplorerScreen() {
         streamStatus={streamStatus}
       />
 
-      {state.kind === "loading" && <Status>Snapshotting ACS…</Status>}
-      {state.kind === "err" && <ErrorPanel msg={state.error} />}
+      {state.kind === "loading" && <AcsLoading />}
+      {state.kind === "err" && (
+        <ErrorPanel
+          msg={state.error}
+          onRetry={() => void refreshSnapshot(name, role, false)}
+        />
+      )}
       {state.kind === "port-missing" && (
         <EmptyPanel
           title="Participant ports not recorded"
@@ -365,7 +349,6 @@ export function ExplorerScreen() {
             alignItems: "start",
           }}
         >
-          {/* LEFT — filter sidebar */}
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <Card
               title="Templates"
@@ -420,11 +403,11 @@ export function ExplorerScreen() {
                 <span style={{ color: W.dim, fontSize: 12, fontWeight: 500 }}>
                   Stream
                 </span>
-                <span
-                  style={{ fontFamily: wMono, fontSize: 11, color: W.text2 }}
-                >
-                  {streamStatus}
-                </span>
+                <StatusBadge
+                  status={streamStatus}
+                  pulse={streamStatus === "reconnecting"}
+                  style={{ fontSize: 11 }}
+                />
               </div>
               <div
                 style={{
@@ -439,7 +422,12 @@ export function ExplorerScreen() {
                   Ledger end
                 </span>
                 <span
-                  style={{ fontFamily: wMono, fontSize: 11, color: W.text2 }}
+                  style={{
+                    fontFamily: wMono,
+                    fontSize: 11,
+                    color: W.text2,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
                 >
                   {state.data.ledger_end ?? "—"}
                 </span>
@@ -447,7 +435,6 @@ export function ExplorerScreen() {
             </Card>
           </div>
 
-          {/* CENTER — ACS table */}
           <div
             style={{
               background: W.surface,
@@ -518,7 +505,6 @@ export function ExplorerScreen() {
               </div>
             </div>
 
-            {/* Column header row */}
             <div
               style={{
                 display: "grid",
@@ -532,20 +518,71 @@ export function ExplorerScreen() {
               }}
             >
               <span>Template</span>
-              <span>Cid</span>
-              <span>Owner / signatory</span>
-              <span>Payload</span>
+              <span>Contract Id</span>
+              <span>Owner / Signatory</span>
+              <span style={{ textAlign: "right" }}>Payload</span>
               <span style={{ display: "flex", justifyContent: "space-between" }}>
                 <span>Age</span>
                 <span>Sig · Obs</span>
               </span>
             </div>
 
-            {filtered.length === 0 && (
-              <div style={{ padding: 18, color: W.dim, fontSize: 12.5 }}>
-                No contracts match the current filters.
-              </div>
-            )}
+            {filtered.length === 0 &&
+              (() => {
+                const hasAcsFilters =
+                  activeTemplates.size > 0 ||
+                  activeParties.size > 0 ||
+                  search.trim() !== "";
+                return (
+                  <div
+                    style={{
+                      padding: "14px 16px",
+                      color: W.dim,
+                      fontSize: 12.5,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      gap: 8,
+                    }}
+                  >
+                    {hasAcsFilters ? (
+                      <>
+                        <span>
+                          No contracts match these filters.{" "}
+                          {state.data.contracts.length.toLocaleString()} in the
+                          snapshot.
+                        </span>
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setActiveTemplates(new Set());
+                            setActiveParties(new Set());
+                            setSearch("");
+                          }}
+                        >
+                          Clear filters
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <span>
+                          The active contract set is empty. Create a contract to
+                          populate it.
+                        </span>
+                        <code
+                          style={{
+                            fontFamily: wMono,
+                            fontSize: 11.5,
+                            color: W.text2,
+                          }}
+                        >
+                          dpm localnet tx submit
+                        </code>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
             <div style={{ maxHeight: "60vh", overflowY: "auto" }}>
               {filtered.map((c) => (
                 <AcsRow
@@ -566,7 +603,7 @@ export function ExplorerScreen() {
                 borderTop: `1px solid ${W.border}`,
               }}
             >
-              <span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>
                 Showing {filtered.length} of {state.data.contracts.length} ·{" "}
                 {streamStatus === "live" ? "live" : "snapshot"} @ offset{" "}
                 {state.data.ledger_end ?? "—"}
@@ -577,7 +614,6 @@ export function ExplorerScreen() {
         </div>
       )}
 
-      {/* Detail drawer — fixed right-side overlay, outside the grid */}
       {state.kind === "ok" && view === "contracts" && selected && (
         <ContractDetailDrawer
           instance={name}
@@ -599,8 +635,6 @@ export function ExplorerScreen() {
   );
 }
 
-// ─────── Sub-components ────────────────────────────────────────
-
 function ProjectionBar({
   instance,
   role,
@@ -620,22 +654,6 @@ function ProjectionBar({
   ledgerEnd: number | null;
   streamStatus: "idle" | "live" | "reconnecting" | "truncated";
 }) {
-  const pillColor =
-    streamStatus === "live"
-      ? "#7CC89A"
-      : streamStatus === "reconnecting"
-        ? "#DDB25E"
-        : streamStatus === "truncated"
-          ? "#7BD2C6"
-          : "#7C8598";
-  const pillLabel =
-    streamStatus === "live"
-      ? "live"
-      : streamStatus === "reconnecting"
-        ? "reconnecting"
-        : streamStatus === "truncated"
-          ? "truncated"
-          : "idle";
   return (
     <section
       style={{
@@ -733,20 +751,21 @@ function ProjectionBar({
             style={{
               padding: "5px 12px",
               fontSize: 12,
-              borderRadius: 2,
+              borderRadius: R.control,
               border: "none",
               background: v === view ? W.brand : "transparent",
-              color: v === view ? "#0B0F1A" : W.dim,
+              color: v === view ? W.onAccent : W.dim,
               fontWeight: v === view ? 600 : 500,
               cursor: "pointer",
               textTransform: "capitalize",
+              transition: `background-color ${FAST}, color ${FAST}`,
             }}
           >
             {v}
           </button>
         ))}
       </div>
-      <Pill color={pillColor}>{pillLabel}</Pill>
+      <StatusBadge status={streamStatus} variant="pill" pulse={streamStatus === "reconnecting"} />
     </section>
   );
 }
@@ -767,27 +786,28 @@ function FilterChip({
   return (
     <button
       onClick={onClick}
+      aria-pressed={active}
       style={{
         display: "flex",
         alignItems: "center",
         gap: 8,
         padding: "6px 9px",
-        borderRadius: 2,
+        borderRadius: R.control,
         cursor: "pointer",
-        background: active ? W.border : "transparent",
-        borderLeft: active ? `2px solid ${color}` : "2px solid transparent",
-        paddingLeft: 9,
+        background: active ? tint(W.brand, 12) : "transparent",
         width: "100%",
         border: "none",
         textAlign: "left",
+        transition: `background-color ${FAST}`,
       }}
     >
       <span
         style={{
           width: 8,
           height: 8,
-          borderRadius: 2,
+          borderRadius: R.control,
           background: color,
+          opacity: active ? 1 : 0.7,
           flexShrink: 0,
         }}
       />
@@ -837,15 +857,16 @@ function AcsRow({
         gap: 14,
         padding: "9px 14px",
         alignItems: "center",
-        background: active ? `${W.brand}10` : "transparent",
-        borderLeft: active ? `2px solid ${W.brand}` : "2px solid transparent",
-        paddingLeft: active ? 12 : 14,
+        background: active ? tint(W.brand, 12) : "transparent",
         borderBottom: `1px solid ${W.border}`,
         cursor: "pointer",
+        transition: `background-color ${FAST}`,
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-        <Dot color={W.ok} size={6} />
+        <span title="Active contract" aria-label="Active contract" style={{ display: "inline-flex" }}>
+          <Dot color={W.ok} size={6} />
+        </span>
         <span
           style={{
             fontSize: 12.5,
@@ -860,19 +881,7 @@ function AcsRow({
           {shortTpl}
         </span>
       </div>
-      <code
-        style={{
-          color: "#93A7F0",
-          fontFamily: wMono,
-          fontSize: 11,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-        title={row.contract_id}
-      >
-        {row.contract_id.slice(0, 14)}…
-      </code>
+      <MonoId value={row.contract_id} head={8} tail={6} size={11} color={W.mag} />
       <span
         style={{
           color: W.text2,
@@ -885,7 +894,15 @@ function AcsRow({
       >
         {row.signatories[0]?.split("::")[0] ?? "—"}
       </span>
-      <span style={{ fontFamily: wMono, fontSize: 12, color: W.text }}>
+      <span
+        style={{
+          fontFamily: wMono,
+          fontSize: 12,
+          color: W.text,
+          fontVariantNumeric: "tabular-nums",
+          textAlign: "right",
+        }}
+      >
         {payloadPreview}
       </span>
       <span
@@ -899,7 +916,7 @@ function AcsRow({
         }}
       >
         <span>{row.created_at ? ago(row.created_at) : "—"}</span>
-        <span>
+        <span style={{ fontFamily: wMono, fontVariantNumeric: "tabular-nums" }}>
           {row.signatories.length}·{row.observers.length}
         </span>
       </span>
@@ -907,12 +924,8 @@ function AcsRow({
   );
 }
 
-// TransactionsView — table of recent ledger updates (transactions,
-// reassignments, topology events). Each row expands inline to show
-// its event tree and can be replayed as a per-party visibility
-// projection. The filter bar mirrors the CLI `tx ls` flags; filters
-// are applied server-side over the offset window, so narrowing the
-// query can find contracts beyond the row cap.
+// Filters are applied server-side over the offset window, so narrowing
+// the query can surface rows beyond the row cap.
 function TransactionsView({ name, role }: { name: string; role: Role }) {
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -923,9 +936,8 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
   >({ kind: "loading" });
   const [openId, setOpenId] = useState<string | null>(null);
   const [replayId, setReplayId] = useState<string | null>(null);
-  // Draft filter inputs (raw strings) vs the applied filters used in
-  // the fetch effect; applying on submit avoids a round-trip per
-  // keystroke.
+  // Draft inputs vs applied filters; applying on submit avoids a
+  // round-trip per keystroke.
   const [draft, setDraft] = useState<TxFilterDraft>(emptyDraft);
   const [applied, setApplied] = useState<TransactionFilters>({});
 
@@ -969,7 +981,7 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
   }, [name, role, applied]);
 
   // Party options for the replay drawer's "visible to" selector,
-  // derived from the witnesses present in the loaded rows.
+  // from witnesses in the loaded rows.
   const partyOptions = useMemo(() => {
     if (state.kind !== "ok") return [];
     const set = new Set<string>();
@@ -994,10 +1006,21 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
 
   const body = (() => {
     if (state.kind === "loading") {
-      return <Status>Loading updates stream…</Status>;
+      return (
+        <TableLoading
+          columns={[70, 110, 1.4, 1.1, 0.8, 56, 70]}
+          rows={6}
+          rowHeight={36}
+        />
+      );
     }
     if (state.kind === "err") {
-      return <ErrorPanel msg={state.error} />;
+      return (
+        <ErrorPanel
+          msg={state.error}
+          onRetry={() => setApplied((f) => ({ ...f }))}
+        />
+      );
     }
     if (state.kind === "port-missing") {
       return (
@@ -1040,7 +1063,14 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
             <div style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}>
               Transactions
             </div>
-            <div style={{ color: W.dim, fontSize: 11.5, marginTop: 2 }}>
+            <div
+              style={{
+                color: W.dim,
+                fontSize: 11.5,
+                marginTop: 2,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
               {state.data.transactions.length} updates · newest first ·{" "}
               {hasFilters ? "filtered · " : ""}
               scanned from {state.data.scanned_from?.toLocaleString() ?? "—"} to
@@ -1072,10 +1102,34 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
         </div>
 
         {state.data.transactions.length === 0 && (
-          <div style={{ padding: 18, color: W.dim, fontSize: 12.5 }}>
-            {hasFilters
-              ? "No updates matched the filters in the scanned window."
-              : "No updates in the current ledger window."}
+          <div
+            style={{
+              padding: "14px 16px",
+              color: W.dim,
+              fontSize: 12.5,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-start",
+              gap: 8,
+            }}
+          >
+            {hasFilters ? (
+              <>
+                <span>No updates matched these filters in the scanned window.</span>
+                <Button variant="secondary" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              </>
+            ) : (
+              <>
+                <span>No updates in the current ledger window.</span>
+                <code
+                  style={{ fontFamily: wMono, fontSize: 11.5, color: W.text2 }}
+                >
+                  dpm localnet tx ls
+                </code>
+              </>
+            )}
           </div>
         )}
 
@@ -1125,8 +1179,6 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
         active={!!hasFilters}
       />
       {body}
-      {/* Replay drawer — fixed right-side overlay; the table keeps
-          its full width underneath. */}
       {replayId && (
         <TxReplayDrawer
           instance={name}
@@ -1140,8 +1192,7 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
   );
 }
 
-// TxFilterDraft holds the raw filter-bar inputs. party/template are
-// comma-separated free text; from/to are offset strings.
+// party/template are comma-separated free text; from/to are offset strings.
 interface TxFilterDraft {
   party: string;
   template: string;
@@ -1151,9 +1202,7 @@ interface TxFilterDraft {
 
 const emptyDraft: TxFilterDraft = { party: "", template: "", from: "", to: "" };
 
-// parseDraft converts the raw inputs into the typed TransactionFilters
-// the API client forwards. Blank fields drop out; non-numeric from/to
-// are ignored.
+// Blank fields drop out; non-numeric from/to are ignored.
 function parseDraft(d: TxFilterDraft): TransactionFilters {
   const split = (s: string) =>
     s
@@ -1272,7 +1321,7 @@ function TxRowComponent({
           gap: 14,
           padding: "9px 14px",
           alignItems: "center",
-          background: open ? `${W.brand}10` : "transparent",
+          background: open ? `${tint(W.brand, 6)}` : "transparent",
           borderBottom: `1px solid ${W.border}`,
           cursor: "pointer",
         }}
@@ -1287,22 +1336,23 @@ function TxRowComponent({
         >
           {tx.kind}
         </span>
-        <code style={{ fontFamily: wMono, color: W.text2, fontSize: 11 }}>
-          {tx.offset.toLocaleString()}
-        </code>
         <code
           style={{
             fontFamily: wMono,
-            color: "#93A7F0",
+            color: W.text2,
             fontSize: 11,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
+            fontVariantNumeric: "tabular-nums",
           }}
-          title={tx.command_id ?? tx.update_id ?? ""}
         >
-          {tx.command_id ?? tx.update_id?.slice(0, 16) ?? "—"}
+          {tx.offset.toLocaleString()}
         </code>
+        {tx.command_id ? (
+          <MonoId value={tx.command_id} head={8} tail={6} size={11} color={W.mag} />
+        ) : tx.update_id ? (
+          <MonoId value={tx.update_id} head={8} tail={6} size={11} color={W.mag} />
+        ) : (
+          <span style={{ color: W.dim, fontSize: 11 }}>—</span>
+        )}
         <span
           style={{
             color: W.text2,
@@ -1323,6 +1373,7 @@ function TxRowComponent({
             fontFamily: wMono,
             fontSize: 11,
             textAlign: "right",
+            fontVariantNumeric: "tabular-nums",
           }}
         >
           {tx.event_count ?? "—"}
@@ -1353,7 +1404,7 @@ function TxRowComponent({
       {open && tx.events && tx.events.length > 0 && (
         <div
           style={{
-            background: `${W.brand}05`,
+            background: `${tint(W.brand, 2)}`,
             padding: "10px 14px 12px 84px",
             borderBottom: `1px solid ${W.border}`,
           }}
@@ -1410,24 +1461,18 @@ function EventTreeNode({
           ? ev.template.split(":").slice(1).join(":")
           : "—"}
       </span>
-      <code
-        style={{
-          fontFamily: wMono,
-          color: "#93A7F0",
-          fontSize: 10.5,
-          marginLeft: "auto",
-        }}
-        title={ev.contract_id}
-      >
-        {ev.contract_id.slice(0, 16)}…
-      </code>
+      <MonoId
+        value={ev.contract_id}
+        head={8}
+        tail={6}
+        size={10.5}
+        color={W.mag}
+        style={{ marginLeft: "auto" }}
+      />
     </div>
   );
 }
 
-// TimelineView — time-axis strip showing every update as a coloured
-// glyph. Clicking a glyph highlights it and shows quick metadata in
-// a side card — useful for "what happened in the last minute".
 function TimelineView({ name, role }: { name: string; role: Role }) {
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -1436,10 +1481,12 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
     | { kind: "port-missing"; remediation: string }
     | { kind: "err"; error: string }
   >({ kind: "loading" });
-  // Click = persistent selection; hover = preview when nothing is
-  // selected. Click again or Esc clears.
+  // Click pins a selection; hover previews when nothing is pinned.
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  // Bumped by the error-state Retry to re-run the fetch effect.
+  const [nonce, setNonce] = useState(0);
+  const reload = useCallback(() => setNonce((n) => n + 1), []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1488,10 +1535,14 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
     return () => {
       cancelled = true;
     };
-  }, [name, role]);
+  }, [name, role, nonce]);
 
-  if (state.kind === "loading") return <Status>Loading timeline…</Status>;
-  if (state.kind === "err") return <ErrorPanel msg={state.error} />;
+  if (state.kind === "loading")
+    return (
+      <TableLoading columns={[1, 1, 1, 1, 1, 1]} rows={4} rowHeight={30} />
+    );
+  if (state.kind === "err")
+    return <ErrorPanel msg={state.error} onRetry={reload} />;
   if (state.kind === "port-missing")
     return (
       <EmptyPanel
@@ -1510,11 +1561,8 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
     );
 
   const txs = state.data.transactions;
-  // Bucket updates into time slots for the strip — newest on the right.
   const buckets = bucketByTime(txs, 60);
-  // Selection wins over hover: once a glyph is clicked, the side
-  // panel sticks to that update so the user can read the events
-  // without keeping the cursor over the strip.
+  // Pinned selection wins over hover.
   const focusedIdx = selectedIdx ?? hoverIdx;
   const focused = focusedIdx !== null ? txs[focusedIdx] ?? null : null;
 
@@ -1543,7 +1591,6 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
           </div>
         </div>
 
-        {/* Activity strip */}
         <div
           style={{
             padding: "16px 14px",
@@ -1551,7 +1598,7 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
             gap: 2,
             alignItems: "flex-end",
             height: 100,
-            background: `linear-gradient(180deg, transparent 0%, ${W.border}20 100%)`,
+            background: W.sunken,
           }}
         >
           {buckets.map((b, i) => {
@@ -1563,11 +1610,8 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
                 style={{
                   flex: 1,
                   height: h,
-                  background:
-                    b.count === 0
-                      ? W.border
-                      : `linear-gradient(180deg, ${W.brand}66 0%, ${W.brand} 100%)`,
-                  borderRadius: 2,
+                  background: b.count === 0 ? W.border : W.brand,
+                  borderRadius: R.control,
                 }}
               />
             );
@@ -1594,7 +1638,6 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
           )}
         </div>
 
-        {/* Event glyph row */}
         <div
           style={{
             padding: "12px 14px",
@@ -1638,18 +1681,14 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
                   background: color,
                   opacity:
                     selectedIdx === i || hoverIdx === i ? 1 : 0.65,
-                  borderRadius: 1.5,
+                  borderRadius: R.control,
                   cursor: "pointer",
-                  transition: "opacity 80ms, transform 80ms",
+                  transition: prefersReducedMotion
+                    ? undefined
+                    : `opacity ${FAST}`,
                   outline:
                     selectedIdx === i ? `2px solid ${W.brand}` : "none",
                   outlineOffset: selectedIdx === i ? 1 : 0,
-                  transform:
-                    selectedIdx === i
-                      ? "translateY(-2px)"
-                      : hoverIdx === i
-                        ? "translateY(-1px)"
-                        : "none",
                 }}
               />
             );
@@ -1672,14 +1711,12 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
           </span>
           <span>
             {selectedIdx !== null
-              ? "Selected — click again or press Esc to clear."
+              ? "Pinned. Click again or press Esc to clear."
               : "Hover for preview · click to pin."}
           </span>
         </div>
       </div>
 
-      {/* Detail overlay — hovered/pinned update, fixed to the right
-          edge so the timeline strip keeps its full width. */}
       {focused && (
         <div
           style={{
@@ -1688,18 +1725,13 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
             right: 0,
             bottom: 0,
             width: "min(480px, 92vw)",
-            // Raised surface — matches ContractDetailDrawer/TxReplayDrawer.
             background: W.surface2,
             borderLeft: `1px solid ${W.borderHi}`,
-            boxShadow:
-              "0 0 0 1px rgba(0,0,0,0.2), -16px 0 40px -12px rgba(0,0,0,0.5)",
-            // A hover preview must not steal hit-testing from the strip
-            // underneath it (hover-in would unhover the glyph and
-            // unmount the panel in a loop); only a pinned selection is
-            // interactive.
+            // Only a pinned panel is interactive; a hover preview taking
+            // pointer events would unhover the glyph and loop-unmount.
             pointerEvents: selectedIdx !== null ? "auto" : "none",
             overscrollBehavior: "contain",
-            // Below the CommandPalette (zIndex 100) but above content.
+            // Below the CommandPalette (zIndex 100), above content.
             zIndex: 40,
             overflowY: "auto",
           }}
@@ -1717,7 +1749,14 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
               >
                 {focused.kind}
               </Pill>
-              <span style={{ color: W.dim, fontSize: 11.5, fontFamily: wMono }}>
+              <span
+                style={{
+                  color: W.dim,
+                  fontSize: 11.5,
+                  fontFamily: wMono,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
                 offset {focused.offset.toLocaleString()}
               </span>
             </div>
@@ -1777,7 +1816,8 @@ function Mono({ children }: { children: React.ReactNode }) {
         fontFamily: wMono,
         color: W.text2,
         fontSize: 11,
-        wordBreak: "break-all",
+        fontVariantNumeric: "tabular-nums",
+        wordBreak: "break-word",
       }}
     >
       {children}
@@ -1817,10 +1857,8 @@ function hhmmss(iso: string): string {
   if (!Number.isFinite(d.getTime())) return iso;
   return d
     .toISOString()
-    .slice(11, 19); // "HH:MM:SS"
+    .slice(11, 19);
 }
-
-// ─────── Tiny shared primitives ───────────────────────────────
 
 function Card({
   title,
@@ -1836,7 +1874,7 @@ function Card({
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 10,
       }}
     >
@@ -1883,11 +1921,11 @@ function Pill({ color, children }: { color: string; children: React.ReactNode })
   return (
     <span
       style={{
-        background: `${color}1A`,
-        border: `1px solid ${color}44`,
+        background: tint(color, 13),
+        border: `1px solid ${tint(color, 34)}`,
         color,
         padding: "1px 8px",
-        borderRadius: 2,
+        borderRadius: R.control,
         fontSize: 10.5,
         fontWeight: 600,
         fontFamily: wMono,
@@ -1898,36 +1936,91 @@ function Pill({ color, children }: { color: string; children: React.ReactNode })
   );
 }
 
-function Status({ children }: { children: React.ReactNode }) {
+// Layout-matched skeleton, gated so a fast snapshot never flashes it.
+function AcsLoading() {
+  const show = useLoadingDelay(true);
+  if (!show) return null;
   return (
     <div
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
-        padding: 16,
-        color: W.dim,
-        fontSize: 13,
+        borderRadius: R.card,
+        overflow: "hidden",
       }}
     >
-      {children}
+      <SkeletonTable columns={[1.8, 1.2, 1, 0.8, 0.8]} rows={7} rowHeight={38} />
     </div>
   );
 }
 
-function ErrorPanel({ msg }: { msg: string }) {
+function TableLoading({
+  columns,
+  rows,
+  rowHeight,
+}: {
+  columns: (number | string)[];
+  rows: number;
+  rowHeight: number;
+}) {
+  const show = useLoadingDelay(true);
+  if (!show) return null;
   return (
     <div
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
-        padding: 16,
-        color: "#7BD2C6",
-        fontSize: 13,
+        borderRadius: R.card,
+        overflow: "hidden",
       }}
     >
-      {msg}
+      <SkeletonTable columns={columns} rows={rows} rowHeight={rowHeight} />
+    </div>
+  );
+}
+
+function ErrorPanel({ msg, onRetry }: { msg: string; onRetry?: () => void }) {
+  return (
+    <div
+      style={{
+        background: W.surface,
+        border: `1px solid ${W.border}`,
+        borderRadius: R.card,
+        padding: "14px 16px",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-start",
+        gap: 8,
+      }}
+    >
+      <div style={{ color: W.err, fontSize: 13, fontWeight: 600 }}>
+        Could not load ledger data.
+      </div>
+      <div style={{ color: W.text2, fontSize: 12.5 }}>
+        The participant did not answer. Check the instance is running, then
+        retry.
+      </div>
+      {onRetry && (
+        <Button variant="secondary" onClick={onRetry}>
+          Retry
+        </Button>
+      )}
+      <details style={{ color: W.dim, fontSize: 11.5 }}>
+        <summary style={{ cursor: "pointer" }}>Details</summary>
+        <code
+          style={{
+            display: "block",
+            marginTop: 6,
+            fontFamily: wMono,
+            color: W.text2,
+            fontSize: 11,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
+          {msg}
+        </code>
+      </details>
     </div>
   );
 }
@@ -1944,17 +2037,21 @@ function EmptyPanel({
   return (
     <div
       style={{
-        background: `${W.warn}10`,
+        background: tint(W.warn, 6),
         border: `1px solid ${W.warn}`,
-        borderRadius: 4,
-        padding: 20,
+        borderRadius: R.card,
+        padding: "14px 16px",
       }}
     >
       <h3 style={{ color: W.warn, fontSize: 14, marginTop: 0, marginBottom: 8 }}>
         {title}
       </h3>
-      <p style={{ color: W.text2, fontSize: 13, lineHeight: 1.5 }}>{body}</p>
-      <p style={{ color: W.dim, fontSize: 12, marginTop: 12 }}>{remediation}</p>
+      <p style={{ color: W.text2, fontSize: 13, lineHeight: 1.5, margin: 0 }}>
+        {body}
+      </p>
+      <p style={{ color: W.dim, fontSize: 12, marginTop: 12, marginBottom: 0 }}>
+        {remediation}
+      </p>
     </div>
   );
 }
@@ -1966,8 +2063,6 @@ function Hint({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
-// ─────── Helpers ──────────────────────────────────────────────
 
 function shortTemplate(tpl: string): string {
   const parts = tpl.split(":");

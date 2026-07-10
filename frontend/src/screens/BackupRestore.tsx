@@ -5,24 +5,11 @@ import {
   restoreSnapshot,
   type RestoreResponse,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, tint, R, FAST } from "../tokens";
 import { Button } from "../components/Button";
 import { IcCheck, IcDownload } from "../components/icons";
 
-// Backup & restore card. Two actions:
-//   1. Download snapshot — POST /api/instances/:name/snapshot; the
-//      browser saves the tar via Content-Disposition.
-//   2. Restore from snapshot — drag-drop or file picker, with an
-//      optional target-name override and a `--force` checkbox for
-//      cross-version restores.
-//
-// CLI ↔ UI parity (CONTRIBUTING.md): mirrors `localnet snapshot --name
-// X --to <path>` and `localnet restore --name X --from <path>
-// [--force]` — same server-side validation, same error taxonomy.
-
 interface Props {
-  // Snapshot downloads always use this name; restore defaults to it
-  // but lets the user override.
   instanceName: string;
 }
 
@@ -41,9 +28,7 @@ export function BackupRestore({ instanceName }: Props) {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // useState only honors its initial value on first mount, so switching
-  // instances must resync targetName explicitly — and reset the result
-  // banner/options so state doesn't bleed across instances.
+  // Resync on instance switch: useState keeps its first-mount value.
   useEffect(() => {
     setTargetName(instanceName);
     setRestore({ kind: "idle" });
@@ -52,18 +37,11 @@ export function BackupRestore({ instanceName }: Props) {
   }, [instanceName]);
 
   async function onDownload() {
-    // The snapshot is application-consistent: the backend pauses the
-    // instance's node containers for the duration of the dump (the same
-    // quiesce the CLI does), so there is no crash-consistency caveat to
-    // surface.
     setDownloading(true);
     setDownloadError(null);
     try {
       await downloadSnapshot(instanceName);
     } catch (e) {
-      // downloadSnapshot rejects when the server returned an error
-      // document instead of a file; without surfacing it the button
-      // would just flash and the user would assume success.
       setDownloadError(
         e instanceof ApiError ? e.message : "snapshot download failed",
       );
@@ -74,9 +52,8 @@ export function BackupRestore({ instanceName }: Props) {
 
   async function onFileChosen(file: File | null) {
     if (!file) return;
-    // 4 GiB is the practical ceiling for an XHR upload (browsers buffer
-    // the whole body in memory) — refuse client-side rather than OOM
-    // the tab on a stray drop.
+    // XHR buffers the whole body in memory; refuse >4 GiB client-side
+    // rather than OOM the tab.
     const MAX_TARBALL_BYTES = 4 * 1024 * 1024 * 1024;
     if (file.size > MAX_TARBALL_BYTES) {
       setRestore({
@@ -107,10 +84,8 @@ export function BackupRestore({ instanceName }: Props) {
     <section
       style={{
         marginTop: 16,
-        background: W.surface,
-        border: `1px solid ${W.border}`,
-        borderRadius: 4,
-        padding: 16,
+        borderTop: `1px solid ${W.border}`,
+        paddingTop: 16,
       }}
       aria-label="Backup and restore"
     >
@@ -130,7 +105,6 @@ export function BackupRestore({ instanceName }: Props) {
         </span>
       </header>
 
-      {/* Download row */}
       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
         <Button
           variant="secondary"
@@ -149,15 +123,14 @@ export function BackupRestore({ instanceName }: Props) {
         </span>
       </div>
 
-      {/* Download error banner */}
       {downloadError && (
         <div
           role="alert"
           style={{
             marginTop: 10,
-            background: `${W.err}10`,
+            background: `${tint(W.err, 6)}`,
             border: `1px solid ${W.err}`,
-            borderRadius: 2,
+            borderRadius: R.control,
             padding: "8px 12px",
             fontSize: 12,
             color: W.err,
@@ -167,7 +140,6 @@ export function BackupRestore({ instanceName }: Props) {
         </div>
       )}
 
-      {/* Restore row */}
       <div style={{ marginTop: 18 }}>
         <div
           style={{
@@ -196,15 +168,15 @@ export function BackupRestore({ instanceName }: Props) {
           tabIndex={0}
           aria-label="Drop snapshot file here or click to choose"
           style={{
-            border: `1.5px dashed ${dragOver ? W.brand : W.border}`,
-            background: dragOver ? `${W.brand}10` : "transparent",
-            borderRadius: 4,
+            border: `1px dashed ${dragOver ? W.brand : W.border}`,
+            background: dragOver ? `${tint(W.brand, 6)}` : "transparent",
+            borderRadius: R.control,
             padding: "14px 16px",
             cursor: "pointer",
             color: W.dim,
             fontSize: 12.5,
             textAlign: "center",
-            transition: "all 0.12s",
+            transition: `background-color ${FAST}, border-color ${FAST}`,
           }}
         >
           {restore.kind === "uploading" ? (
@@ -234,7 +206,6 @@ export function BackupRestore({ instanceName }: Props) {
           onChange={(e) => void onFileChosen(e.target.files?.[0] ?? null)}
         />
 
-        {/* Options row */}
         <div
           style={{
             marginTop: 10,
@@ -255,7 +226,7 @@ export function BackupRestore({ instanceName }: Props) {
                 background: "transparent",
                 color: W.text,
                 border: `1px solid ${W.border}`,
-                borderRadius: 2,
+                borderRadius: R.control,
                 padding: "2px 6px",
                 fontSize: 12,
                 fontFamily: wMono,
@@ -285,15 +256,14 @@ export function BackupRestore({ instanceName }: Props) {
           </label>
         </div>
 
-        {/* Result banner */}
         {restore.kind === "success" && (
           <div
             role="status"
             style={{
               marginTop: 10,
-              background: `${W.brand}10`,
+              background: `${tint(W.brand, 6)}`,
               border: `1px solid ${W.brand}`,
-              borderRadius: 2,
+              borderRadius: R.control,
               padding: "8px 12px",
               fontSize: 12,
               color: W.text2,
@@ -319,9 +289,9 @@ export function BackupRestore({ instanceName }: Props) {
             role="alert"
             style={{
               marginTop: 10,
-              background: `${W.err}10`,
+              background: `${tint(W.err, 6)}`,
               border: `1px solid ${W.err}`,
-              borderRadius: 2,
+              borderRadius: R.control,
               padding: "8px 12px",
               fontSize: 12,
               color: W.err,
@@ -352,7 +322,7 @@ function UploadProgress({
         style={{
           height: 6,
           background: W.border,
-          borderRadius: 2,
+          borderRadius: R.control,
           overflow: "hidden",
         }}
       >

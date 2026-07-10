@@ -6,34 +6,24 @@ import {
   scrubInstance,
   type StepName,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, tint, R } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcAlert, IcCheck, IcRefresh, IcX } from "../components/icons";
+import { StatusBadge } from "../components/StatusBadge";
 import {
   type ProgressState,
   type StepState,
   useCreateProgress,
 } from "./useCreateProgress";
 
-// CreatingPanel — shown above the InstanceDetail/DeveloperSetup cards
-// when the selected instance is status="creating". Subscribes to
-// /api/instances/{name}/events and renders the same step rows as the
-// create modal (both consume the shared useCreateProgress state).
-//
-// Two scenarios:
-//   1. Live bring-up: the SSE stream replays buffered events + live
-//      ones — real-time progress just like the modal.
-//   2. Zombie creating: the registry says creating but no goroutine is
-//      publishing (e.g. a server restart killed it mid-flight). No
-//      events arrive; after a grace period the panel surfaces a "looks
-//      stalled" hint with a cleanup CTA.
+// Shown when the selected instance is status="creating". Renders live
+// SSE bring-up progress, or — if no event arrives within ZOMBIE_GRACE_MS
+// (e.g. a server restart orphaned the entry) — a stalled hint + cleanup.
 
-const ZOMBIE_GRACE_MS = 3000; // wait this long before showing "stalled" hint
+const ZOMBIE_GRACE_MS = 3000;
 
 interface Props {
   name: string;
-  // Called after a cancel or stalled-state cleanup so the Dashboard
-  // re-fetches and the row's status updates.
   onRefresh: () => void;
 }
 
@@ -41,13 +31,9 @@ export function CreatingPanel({ name, onRefresh }: Props) {
   const eventsUrl = `/api/instances/${encodeURIComponent(name)}/events`;
   const progress = useCreateProgress(eventsUrl);
 
-  // Zombie detection: no event by ZOMBIE_GRACE_MS surfaces the
-  // "stalled" affordance. Derived freshly on every render rather than
-  // via setTimeout — a timeout closure would capture progress.startedAt
-  // at setup time and never re-check it, so events arriving late (slow
-  // network, slow first publish) would leave the panel permanently
-  // "stalled". mountedAtRef pegs the start time per name; the 1s ticker
-  // below keeps the derived check current.
+  // Derived per render, not via setTimeout: a timeout closure would
+  // capture startedAt once and never re-check, wedging late events as
+  // "stalled". mountedAtRef pegs the start; the 1s ticker below refreshes.
   const mountedAtRef = useRef<number>(Date.now());
   useEffect(() => {
     mountedAtRef.current = Date.now();
@@ -61,9 +47,8 @@ export function CreatingPanel({ name, onRefresh }: Props) {
     progress.startedAt === null &&
     Date.now() - mountedAtRef.current > ZOMBIE_GRACE_MS;
 
-  // Live path: ask the goroutine to stop. The backend publishes
-  // kind=cancelled, then the goroutine sees ctx.Done() and writes
-  // status=failed via its existing path.
+  // Live path: ask the goroutine to stop; it publishes kind=cancelled
+  // then writes status=failed.
   async function onCancelLive() {
     try {
       await cancelInstanceUp(name);
@@ -74,14 +59,12 @@ export function CreatingPanel({ name, onRefresh }: Props) {
   }
 
   // Zombie path: no live goroutine, so /up cancel would 404 — scrub the
-  // registry entry instead so the row disappears from the list.
+  // registry entry instead.
   async function onScrub() {
     try {
       await scrubInstance(name);
       onRefresh();
     } catch {
-      // Even if scrub fails (e.g. 409 because the entry is now
-      // running), refresh so the user sees current state.
       onRefresh();
     }
   }
@@ -92,7 +75,7 @@ export function CreatingPanel({ name, onRefresh }: Props) {
         marginTop: 24,
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 16,
       }}
     >
@@ -125,10 +108,10 @@ export function CreatingPanel({ name, onRefresh }: Props) {
                 <div
                   key={i}
                   style={{
-                    background: `${W.warn}1A`,
-                    border: `1px solid ${W.warn}44`,
+                    background: `${tint(W.warn, 10)}`,
+                    border: `1px solid ${tint(W.warn, 27)}`,
                     color: W.warn,
-                    borderRadius: 2,
+                    borderRadius: R.control,
                     padding: "6px 10px",
                     fontSize: 11.5,
                     marginBottom: 4,
@@ -170,7 +153,7 @@ export function CreatingPanel({ name, onRefresh }: Props) {
                   margin: "8px 0 0",
                   background: W.bg,
                   border: `1px solid ${W.border}`,
-                  borderRadius: 2,
+                  borderRadius: R.control,
                   padding: "10px 12px",
                   fontFamily: wMono,
                   fontSize: 10.5,
@@ -240,7 +223,7 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
         display: "flex",
         gap: 10,
         padding: "6px 4px",
-        borderBottom: `1px dashed ${W.border}`,
+        borderBottom: `1px solid ${W.border}`,
         fontSize: 12.5,
       }}
     >
@@ -277,7 +260,7 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
               marginTop: 4,
               height: 4,
               background: W.surface2,
-              borderRadius: 2,
+              borderRadius: R.control,
               overflow: "hidden",
             }}
           >
@@ -304,39 +287,18 @@ function BannerPill({
   zombie: boolean;
 }) {
   if (zombie) {
-    return <Pill color={W.warn}>looks stalled</Pill>;
+    return <StatusBadge status="stalled" variant="pill" />;
   }
   switch (banner.kind) {
     case "done":
-      return <Pill color={W.ok}>ready</Pill>;
+      return <StatusBadge status="ready" variant="pill" />;
     case "failed":
-      return <Pill color={W.err}>failed</Pill>;
+      return <StatusBadge status="failed" variant="pill" />;
     case "cancelled":
-      return <Pill color={W.warn}>cancelled</Pill>;
+      return <StatusBadge status="cancelled" variant="pill" />;
     default:
-      return <Pill color={W.brand}>streaming</Pill>;
+      return <StatusBadge status="starting" variant="pill" pulse />;
   }
-}
-
-function Pill({ color, children }: { color: string; children: React.ReactNode }) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 5,
-        padding: "2px 9px",
-        borderRadius: 2,
-        border: `1px solid ${color}`,
-        background: `${color}1A`,
-        color,
-        fontFamily: wMono,
-        fontSize: 11,
-      }}
-    >
-      <Dot color={color} /> {children}
-    </span>
-  );
 }
 
 function ZombieHint({
@@ -350,10 +312,11 @@ function ZombieHint({
 }) {
   return (
     <div
+      role="alert"
       style={{
-        background: `${W.warn}10`,
-        border: `1px solid ${W.warn}44`,
-        borderRadius: 4,
+        background: `${tint(W.warn, 6)}`,
+        border: `1px solid ${tint(W.warn, 27)}`,
+        borderRadius: R.card,
         padding: "12px 14px",
         color: W.text,
         fontSize: 12.5,
@@ -367,7 +330,7 @@ function ZombieHint({
         the SSE stream is silent. The most likely causes:
       </div>
       <ul style={{ color: W.text2, marginTop: 6, paddingLeft: 18 }}>
-        <li>The bring-up finished after the page loaded — refresh to pick up the new state.</li>
+        <li>The bring-up finished after the page loaded. Refresh to pick up the new state.</li>
         <li>
           The server was restarted mid-bring-up, orphaning the entry.
           Click <strong>Remove entry</strong> to scrub it from the

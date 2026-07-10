@@ -6,18 +6,15 @@ import {
   type TxReplayEvent,
   type TxReplayResponse,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, R } from "../tokens";
 import { Button } from "../components/Button";
+import { MonoId } from "../components/MonoId";
 import { IcX } from "../components/icons";
 
-// TxReplayDrawer — the Web UI counterpart of `dpm localnet tx replay
-// --id <id>`, rendered as a fixed right-side overlay below the topbar
-// so the transactions table keeps its full width.
-// Fetches one transaction with the LEDGER_EFFECTS shape
-// (exercised choices, not just the ACS delta) projected through a
-// party set and renders the event tree. The party selector answers
-// "what did party P see in this transaction?" — the same id queried
-// as different parties returns different event sets.
+// Replays one transaction with the LEDGER_EFFECTS shape (exercised
+// choices, not just the ACS delta) projected through a party set. The
+// party selector answers "what did party P see?" — the same id returns
+// different event sets per party.
 
 const EVENT_COLOR: Record<TxReplayEvent["kind"], string> = {
   created: "#7CC89A",
@@ -39,8 +36,7 @@ export function TxReplayDrawer({
   partyOptions: string[];
   onClose: () => void;
 }) {
-  // "" = project through the JWT's own parties (the default the
-  // backend uses when no ?party is passed).
+  // "" = project through the JWT's own parties (the backend default).
   const [party, setParty] = useState<string>("");
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -97,13 +93,9 @@ export function TxReplayDrawer({
         right: 0,
         bottom: 0,
         width: "min(480px, 92vw)",
-        // Raised surface — a fixed overlay sits above the page, and
-        // surface-on-page was reading dark-on-dark.
         background: W.surface2,
         borderLeft: `1px solid ${W.borderHi}`,
-        boxShadow:
-          "0 0 0 1px rgba(0,0,0,0.2), -16px 0 40px -12px rgba(0,0,0,0.5)",
-        // Below the CommandPalette (zIndex 100) but above page content.
+        // Below the CommandPalette (zIndex 100), above page content.
         zIndex: 40,
         overscrollBehavior: "contain",
         overflowY: "auto",
@@ -122,17 +114,7 @@ export function TxReplayDrawer({
           <div style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}>
             Replay · per-party projection
           </div>
-          <code
-            style={{
-              color: "#93A7F0",
-              fontFamily: wMono,
-              fontSize: 11,
-              wordBreak: "break-all",
-            }}
-            title={updateId}
-          >
-            {updateId}
-          </code>
+          <MonoId value={updateId} head={10} tail={8} size={11} color={W.mag} />
         </div>
         <Button
           variant="ghost"
@@ -164,7 +146,7 @@ export function TxReplayDrawer({
             fontFamily: wMono,
             fontSize: 11.5,
             padding: "4px 8px",
-            borderRadius: 2,
+            borderRadius: R.control,
             cursor: "pointer",
             maxWidth: 240,
           }}
@@ -184,7 +166,7 @@ export function TxReplayDrawer({
         </div>
       )}
       {state.kind === "err" && (
-        <div style={{ padding: 16, color: "#7BD2C6", fontSize: 13 }}>
+        <div style={{ padding: 16, color: W.err, fontSize: 13 }}>
           {state.error}
         </div>
       )}
@@ -209,7 +191,13 @@ export function TxReplayDrawer({
             }}
           >
             offset{" "}
-            <span style={{ color: W.text2, fontFamily: wMono }}>
+            <span
+              style={{
+                color: W.text2,
+                fontFamily: wMono,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
               {state.data.offset.toLocaleString()}
             </span>{" "}
             · {state.data.event_count}{" "}
@@ -282,17 +270,14 @@ function ReplayNode({ ev, last }: { ev: TxReplayEvent; last: boolean }) {
       {detail && (
         <span style={{ color: W.text2, fontSize: 11 }}>{detail}</span>
       )}
-      <code
-        style={{
-          fontFamily: wMono,
-          color: "#93A7F0",
-          fontSize: 10.5,
-          marginLeft: "auto",
-        }}
-        title={ev.contract_id}
-      >
-        {ev.contract_id.slice(0, 16)}…
-      </code>
+      <MonoId
+        value={ev.contract_id}
+        head={8}
+        tail={6}
+        size={10.5}
+        color={W.mag}
+        style={{ marginLeft: "auto" }}
+      />
     </div>
   );
 }

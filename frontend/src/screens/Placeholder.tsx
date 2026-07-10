@@ -1,25 +1,24 @@
-import { W } from "../tokens";
+import { W, R } from "../tokens";
 
-// Placeholder — the route stub for screens whose backend hasn't
-// landed yet. Swap the route in App.tsx to the real screen component
-// as each one becomes available.
+// 404 page for the `path="*"` catch-all — the only place this renders.
 export function Placeholder({ name }: { name: string }) {
   return (
     <div
       style={{
         background: W.surface,
-        border: `1px dashed ${W.border}`,
-        borderRadius: 4,
-        padding: 32,
-        textAlign: "center",
+        border: `1px solid ${W.border}`,
+        borderRadius: R.card,
+        padding: "14px 16px",
         color: W.dim,
         maxWidth: 480,
-        margin: "48px auto",
       }}
     >
-      <h2 style={{ color: W.text2, marginTop: 0, fontSize: 18 }}>{name}</h2>
-      <p style={{ marginTop: 0 }}>
-        Not implemented yet in this build.
+      <h2 style={{ color: W.text2, marginTop: 0, marginBottom: 6, fontSize: 15 }}>
+        {name}
+      </h2>
+      <p style={{ margin: 0, fontSize: 13 }}>
+        That route doesn’t exist. Pick another screen from the sidebar or
+        press ⌘K.
       </p>
     </div>
   );

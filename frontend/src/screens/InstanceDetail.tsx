@@ -12,7 +12,7 @@ import {
   stopInstance,
   unpauseInstance,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, tint, R } from "../tokens";
 import { Button } from "../components/Button";
 import {
   IcEject,
@@ -22,29 +22,22 @@ import {
   IcStop,
   IcX,
 } from "../components/icons";
+import { StatusBadge } from "../components/StatusBadge";
+import { SkeletonBar, useLoadingDelay } from "../components/Skeleton";
+import { confirmDialog } from "../components/ConfirmDialog";
 import { BackupRestore } from "./BackupRestore";
 
-// UI endpoints the backend probed and found not serving HTTP.
 function unreachableUIs(inst: Instance): Endpoint[] {
   return (inst.endpoints ?? []).filter(
     (e) => e.reachability === "unreachable",
   );
 }
 
-// InstanceDetail — the per-instance detail card the dashboard shows
-// when a row is selected. Surfaces the fields GET /api/instances/:name
-// returns beyond the summary row (compose project, docker network,
-// data dir, container prefix, uptime, live-probe state).
 interface Props {
   name: string;
-  // statusHint comes from the dashboard's always-fresh instance list
-  // and gates which action button renders. Falls back to this card's
-  // own fetched status if omitted — but the dashboard should pass it
-  // so the button reflects the latest list state immediately after
-  // onChanged, not the stale copy from this card's mount-time fetch.
+  // From the dashboard's fresh list; gates which action button renders.
+  // Falls back to this card's own fetched status when omitted.
   statusHint?: string;
-  // Refresh the dashboard's instance list after an action succeeds so
-  // the row's status updates.
   onChanged?: () => void;
 }
 
@@ -54,18 +47,17 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
     | { kind: "ok"; instance: Instance }
     | { kind: "err"; error: string }
   >({ kind: "loading" });
-  // Bumped after an action so the cached instance.status doesn't lie
-  // about the post-action state.
+  // Bumped after an action so the cached instance.status is refetched.
   const [refetchTick, setRefetchTick] = useState(0);
   const [stopping, setStopping] = useState<
     | { kind: "idle" }
     | { kind: "running" }
     | { kind: "err"; message: string }
   >({ kind: "idle" });
+  const showSkeleton = useLoadingDelay(state.kind === "loading");
 
   async function onStop() {
-    // Gentle stop: `docker compose stop` keeps containers around for a
-    // fast Start. No destructive confirm needed — nothing is removed.
+    // docker compose stop keeps containers for a fast Start; no confirm needed.
     setStopping({ kind: "running" });
     try {
       await stopInstance(name);
@@ -81,15 +73,21 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
   }
 
   async function onDown() {
-    if (!confirm(`Tear down instance ${name}? Containers will be removed via docker compose down. Data volumes are preserved.`)) {
+    if (
+      !(await confirmDialog({
+        title: "Tear down instance?",
+        body: `Removes ${name}'s containers and networks. Data volumes are preserved, so Start recreates it.`,
+        detail: `dpm localnet down ${name}`,
+        confirmLabel: "Down",
+        danger: true,
+      }))
+    ) {
       return;
     }
     setStopping({ kind: "running" });
     try {
       await downInstance(name);
       setStopping({ kind: "idle" });
-      // Refetch our own status, then notify the parent so the
-      // dashboard's row + ActionButton catch up too.
       setRefetchTick((n) => n + 1);
       onChanged?.();
     } catch (e) {
@@ -130,19 +128,19 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
 
   async function onRecreate() {
     if (
-      !confirm(
-        `Recreate ${name}? Containers will be brought down and back up via docker compose. ` +
-          `The recorded Splice version and profiles are preserved; data volumes are NOT touched.`,
-      )
+      !(await confirmDialog({
+        title: "Recreate instance?",
+        body: `Brings ${name} down then back up. The recorded Splice version and profiles are preserved. Data volumes are not touched.`,
+        detail: `dpm localnet down ${name} && dpm localnet up ${name}`,
+        confirmLabel: "Recreate",
+      }))
     ) {
       return;
     }
     setStopping({ kind: "running" });
     try {
       await recreateInstance(name);
-      // 202 — recreate is async (down → up). Refresh both surfaces
-      // eagerly so the user sees the transitional status before the
-      // dashboard's next poll.
+      // 202 async (down → up); refresh eagerly to show the transitional status.
       setStopping({ kind: "idle" });
       setRefetchTick((n) => n + 1);
       onChanged?.();
@@ -157,10 +155,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
   async function onStart() {
     setStopping({ kind: "running" });
     try {
-      // 204 → fast `docker compose start` done; 202 → full bring-up in
-      // progress (containers had been removed). Either way, refresh
-      // both surfaces so the user sees the transitional status before
-      // the dashboard's next poll.
+      // 204 → fast start done; 202 → full bring-up (containers had been removed).
       await startInstance(name);
       setStopping({ kind: "idle" });
       setRefetchTick((n) => n + 1);
@@ -173,10 +168,13 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
 
   async function onRemove() {
     if (
-      !confirm(
-        `Remove ${name} from the registry?\n\nThis deletes the instance entry + state.json. ` +
-          `Docker volumes (if any) are NOT touched — for that, use \`dpm localnet remove --name ${name}\` from a terminal.`,
-      )
+      !(await confirmDialog({
+        title: "Remove from registry?",
+        body: `Deletes the ${name} entry and its state.json. Docker volumes (if any) are not touched. To drop those, run dpm localnet remove from a terminal.`,
+        detail: `dpm localnet remove --name ${name}`,
+        confirmLabel: "Remove",
+        danger: true,
+      }))
     ) {
       return;
     }
@@ -185,8 +183,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
       await scrubInstance(name);
       setStopping({ kind: "idle" });
       onChanged?.();
-      // No setRefetchTick — the entry is gone; the parent's refresh
-      // drops this whole card.
+      // No setRefetchTick — the entry is gone; the parent's refresh drops this card.
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "failed to remove";
       setStopping({ kind: "err", message: msg });
@@ -196,9 +193,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    // Show the loading placeholder only on a true name-change mount,
-    // not on a refetchTick bump — without this guard, every action
-    // would briefly blank the detail card.
+    // Only blank to loading on a name-change mount, not a refetchTick bump.
     if (refetchTick === 0) {
       setState({ kind: "loading" });
     }
@@ -224,7 +219,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
         marginTop: 24,
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 16,
       }}
     >
@@ -238,18 +233,16 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
             style={{
               color: W.warn,
               fontSize: 11,
-              border: `1px solid ${W.warn}`,
-              borderRadius: 2,
+              border: `1px solid ${tint(W.warn, 34)}`,
+              background: tint(W.warn, 13),
+              borderRadius: R.control,
               padding: "2px 8px",
             }}
           >
-            live probe failed
+            Live probe failed
           </span>
         )}
         <span style={{ marginLeft: "auto" }} />
-        {/* Prefer statusHint (parent's fresh list) over this card's
-           own fetch so the action button updates the instant the
-           dashboard refreshes. */}
         {(statusHint || state.kind === "ok") && (
           <ActionButton
             status={statusHint ?? (state.kind === "ok" ? state.instance.status : "")}
@@ -269,10 +262,10 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
         <div
           role="alert"
           style={{
-            background: `${W.err}10`,
+            background: `${tint(W.err, 6)}`,
             color: W.err,
             border: `1px solid ${W.err}`,
-            borderRadius: 2,
+            borderRadius: R.control,
             padding: "6px 10px",
             fontSize: 12,
             marginBottom: 10,
@@ -286,10 +279,10 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
         <div
           role="alert"
           style={{
-            background: `${W.warn}10`,
+            background: `${tint(W.warn, 6)}`,
             color: W.warn,
             border: `1px solid ${W.warn}`,
-            borderRadius: 6,
+            borderRadius: R.control,
             padding: "6px 10px",
             fontSize: 12,
             marginBottom: 10,
@@ -298,7 +291,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
           {unreachableUIs(state.instance)
             .map((e) => e.label)
             .join(", ")}{" "}
-          not serving HTTP — usually a stale port overlay from an instance
+          not serving HTTP. Usually a stale port overlay from an instance
           created by an older DevKit. Use <strong>Recreate</strong> (or re-run{" "}
           <code style={{ fontFamily: wMono }}>
             dpm localnet up --name {name}
@@ -307,32 +300,29 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
         </div>
       )}
 
-      {state.kind === "loading" && (
-        <div style={{ color: W.dim, fontSize: 13 }}>Loading…</div>
-      )}
+      {state.kind === "loading" && showSkeleton && <DetailGridLoading />}
       {state.kind === "err" && (
-        <div style={{ color: W.err, fontSize: 13 }}>{state.error}</div>
+        <div role="alert" style={{ color: W.err, fontSize: 13 }}>{state.error}</div>
       )}
       {state.kind === "ok" && <DetailGrid instance={state.instance} />}
-      {/* Rendered even on loading/error so the user can still take a
-          snapshot of a mostly-broken instance for support tickets. */}
+      {/* Rendered even on loading/error so a broken instance can still be snapshotted. */}
       <BackupRestore instanceName={name} />
     </section>
   );
 }
 
 function DetailGrid({ instance }: { instance: Instance }) {
-  // Identity first, then runtime, then on-disk locations.
-  const rows: Array<[string, React.ReactNode]> = [
-    ["splice", instance.splice_version],
-    ["status", instance.status],
-    ["created", instance.created_at],
-    ["uptime", instance.uptime ?? "—"],
-    ["compose project", instance.compose_project],
-    ["docker network", instance.docker_network],
-    ["container prefix", instance.container_prefix],
-    ["project dir", instance.project_dir],
-    ["data dir", instance.data_dir],
+  // `mono` marks machine-string rows so prose values (status/uptime) stay proportional.
+  const rows: Array<[string, React.ReactNode, boolean]> = [
+    ["splice", instance.splice_version, true],
+    ["status", <StatusBadge status={instance.status} />, false],
+    ["created", instance.created_at, true],
+    ["uptime", instance.uptime ?? "—", false],
+    ["compose project", instance.compose_project, true],
+    ["docker network", instance.docker_network, true],
+    ["container prefix", instance.container_prefix, true],
+    ["project dir", instance.project_dir, true],
+    ["data dir", instance.data_dir, true],
   ];
 
   return (
@@ -345,10 +335,17 @@ function DetailGrid({ instance }: { instance: Instance }) {
         fontSize: 12.5,
       }}
     >
-      {rows.map(([k, v]) => (
-        <div key={k} style={{ display: "contents" }}>
+      {rows.map(([k, v, mono]) => (
+        <div key={String(k)} style={{ display: "contents" }}>
           <div style={{ color: W.dim }}>{k}</div>
-          <div style={{ color: W.text2, fontFamily: wMono, wordBreak: "break-all" }}>
+          <div
+            style={{
+              color: W.text2,
+              fontFamily: mono ? wMono : undefined,
+              fontVariantNumeric: mono ? "tabular-nums" : undefined,
+              wordBreak: mono ? "break-all" : undefined,
+            }}
+          >
             {v}
           </div>
         </div>
@@ -357,20 +354,28 @@ function DetailGrid({ instance }: { instance: Instance }) {
   );
 }
 
-// ActionButton dispatches the right verb(s) per instance status.
-// Registry status alone isn't enough — docker truth may diverge:
-//
-//   - running/paused → Pause/Resume + Recreate + Stop + Down
-//   - failed/partial → Recreate + Down + Remove (containers MAY still
-//                      be up even though the orchestrator gave up;
-//                      compose down no-ops cleanly if not)
-//   - stopped        → Start + Down + Remove
-//   - creating/other → no button (CreatingPanel owns that surface)
-//
-// Stop (docker compose stop) is the gentle halt — containers are kept
-// so Start is fast. Down (docker compose down) removes containers; a
-// following Start recreates them via up. On failed/partial, Down is
-// labeled "Down containers" to signal a force-cleanup.
+function DetailGridLoading() {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "160px 1fr",
+        rowGap: 10,
+        columnGap: 16,
+      }}
+    >
+      {Array.from({ length: 6 }).map((_, r) => (
+        <div key={r} style={{ display: "contents" }}>
+          <SkeletonBar width="60%" height={11} />
+          <SkeletonBar width={r % 2 === 0 ? "42%" : "70%"} height={11} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Dispatches verbs per status; on failed/partial containers MAY still be
+// up (compose down no-ops cleanly if not), so Down is offered there too.
 function ActionButton({
   status,
   busy,
@@ -447,9 +452,6 @@ function ActionButton({
     );
   }
   if (status === "failed" || status === "partial") {
-    // Recreate is offered because failed/partial often comes from a
-    // transient compose hiccup that a clean down + up resolves
-    // without losing the instance metadata.
     return (
       <div style={{ display: "flex", gap: 6 }}>
         <Button
@@ -483,9 +485,6 @@ function ActionButton({
     );
   }
   if (status === "stopped") {
-    // Start is intelligent: a fast `docker compose start` when the
-    // containers are still present, or a full up (reusing the recorded
-    // version + profiles) when they were removed by a Down.
     return (
       <div style={{ display: "flex", gap: 6 }}>
         <Button

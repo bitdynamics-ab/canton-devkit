@@ -12,8 +12,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// stubDemoSeams swaps the four RunDemo orchestration seams for fakes and
-// returns a restore func — lets us pin the choreography without a ledger.
+// stubDemoSeams swaps the four RunDemo orchestration seams for fakes.
 func stubDemoSeams(
 	t *testing.T,
 	party func(context.Context, PartyOptions) (*registry.PartyRef, error),
@@ -25,6 +24,14 @@ func stubDemoSeams(
 	op, oc, om, of := demoPartyNew, demoCreate, demoMint, demoFaucet
 	demoPartyNew, demoCreate, demoMint, demoFaucet = party, create, mint, faucet
 	t.Cleanup(func() { demoPartyNew, demoCreate, demoMint, demoFaucet = op, oc, om, of })
+}
+
+// stubDemoV2Capable pins the V1/V2 routing decision.
+func stubDemoV2Capable(t *testing.T, v bool) {
+	t.Helper()
+	prev := demoV2Capable
+	demoV2Capable = func(string) bool { return v }
+	t.Cleanup(func() { demoV2Capable = prev })
 }
 
 func TestRunDemo_RequiresEndpoint(t *testing.T) {
@@ -40,6 +47,7 @@ func TestRunDemo_RequiresInstance(t *testing.T) {
 }
 
 func TestRunDemo_ComposesPartyCreateMintFaucet(t *testing.T) {
+	stubDemoV2Capable(t, true)
 	var order []string
 	var createOpts CreateOptions
 	var mintOpts MintOptions
@@ -78,8 +86,6 @@ func TestRunDemo_ComposesPartyCreateMintFaucet(t *testing.T) {
 	if !slices.Equal(order, want) {
 		t.Fatalf("call order = %v, want %v", order, want)
 	}
-	// Issuer party id threads into create (admin), mint (recipient) and the
-	// faucet source; defaults applied for symbol/supply/decimals.
 	if createOpts.Issuer != "demo-issuer::pid" || createOpts.Symbol != "DEMO" || createOpts.InitialSupply != "1000000" || createOpts.Decimals != 6 {
 		t.Errorf("create opts wrong: %+v", createOpts)
 	}
@@ -95,6 +101,7 @@ func TestRunDemo_ComposesPartyCreateMintFaucet(t *testing.T) {
 }
 
 func TestRunDemo_NoSeedHolderSkipsFaucet(t *testing.T) {
+	stubDemoV2Capable(t, true)
 	var order []string
 	stubDemoSeams(t,
 		func(_ context.Context, o PartyOptions) (*registry.PartyRef, error) {
@@ -125,6 +132,7 @@ func TestRunDemo_NoSeedHolderSkipsFaucet(t *testing.T) {
 }
 
 func TestRunDemo_StopsOnCreateError(t *testing.T) {
+	stubDemoV2Capable(t, true)
 	minted := false
 	stubDemoSeams(t,
 		func(_ context.Context, o PartyOptions) (*registry.PartyRef, error) {
@@ -143,10 +151,10 @@ func TestRunDemo_StopsOnCreateError(t *testing.T) {
 	}
 }
 
-// Re-running the demo with the same symbol (the "click it twice" case)
-// must give an actionable "already exists" message, while still wrapping
-// ErrSymbolInUse so both surfaces map it to 409.
+// Re-run must give an actionable "already exists" message while still wrapping
+// ErrSymbolInUse (→ 409 on both surfaces).
 func TestRunDemo_DuplicateSymbolIsActionable(t *testing.T) {
+	stubDemoV2Capable(t, true)
 	stubDemoSeams(t,
 		func(_ context.Context, o PartyOptions) (*registry.PartyRef, error) {
 			return &registry.PartyRef{Alias: o.Alias, PartyID: "pid"}, nil
@@ -166,6 +174,7 @@ func TestRunDemo_DuplicateSymbolIsActionable(t *testing.T) {
 }
 
 func TestRunDemo_ReusesExistingIssuerAlias(t *testing.T) {
+	stubDemoV2Capable(t, true)
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	s := registry.NewState("demo", "0.6.4")
 	s.Parties = map[string]registry.PartyRef{"demo-issuer": {Alias: "demo-issuer", PartyID: "existing::pid"}}
@@ -191,5 +200,46 @@ func TestRunDemo_ReusesExistingIssuerAlias(t *testing.T) {
 	}
 	if createIssuer != "existing::pid" {
 		t.Errorf("should reuse the existing demo-issuer party, got %q", createIssuer)
+	}
+}
+
+// On a V1 instance the demo faucets Amulet to a holder — no create, no mint.
+func TestRunDemo_V1FundsHolderWithAmulet(t *testing.T) {
+	stubDemoV2Capable(t, false)
+	var order []string
+	var faucetOpts FaucetOptions
+	stubDemoSeams(t,
+		func(_ context.Context, o PartyOptions) (*registry.PartyRef, error) {
+			order = append(order, "party:"+o.Alias)
+			return &registry.PartyRef{Alias: o.Alias, PartyID: o.Alias + "::pid", Role: o.Role}, nil
+		},
+		func(_ io.Writer, o CreateOptions) (*CreateResult, error) {
+			order = append(order, "create")
+			return &CreateResult{TokenRef: registry.TokenRef{Symbol: o.Symbol}}, nil
+		},
+		func(_ context.Context, _ io.Writer, _ MintOptions) error { order = append(order, "mint"); return nil },
+		func(_ context.Context, _ io.Writer, o FaucetOptions) error {
+			order = append(order, "faucet:"+o.To)
+			faucetOpts = o
+			return nil
+		},
+	)
+
+	res, err := RunDemo(context.Background(), nil, DemoOptions{
+		Instance: "demo", Endpoint: "localhost:5001", Role: "app-user", SeedHolder: true,
+	})
+	if err != nil {
+		t.Fatalf("RunDemo: %v", err)
+	}
+
+	if want := []string{"party:demo-holder", "faucet:demo-holder::pid"}; !slices.Equal(order, want) {
+		t.Fatalf("V1 call order = %v, want %v (no create/mint)", order, want)
+	}
+	if faucetOpts.Instrument != "Amulet" || faucetOpts.Source != "app-user" ||
+		faucetOpts.To != "demo-holder::pid" || faucetOpts.Amount != "100" {
+		t.Errorf("V1 faucet opts wrong: %+v", faucetOpts)
+	}
+	if res.Token.Symbol != "Amulet" || res.Holder == nil || res.Holder.PartyID != "demo-holder::pid" || !res.Seeded {
+		t.Errorf("V1 result wrong: %+v", res)
 	}
 }

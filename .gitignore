@@ -22,6 +22,11 @@ CLAUDE.md
 # index.html is tracked so go:embed has at least one match on a
 # fresh clone; `make frontend` overwrites it with the real bundle.
 # See internal/ui/assets.go.
+#
+# DO NOT commit a real Vite build's index.html over the placeholder: the
+# hashed assets/*.js and *.css it references are git-ignored, so a checkout
+# would point at files that don't exist. Keep the DEVKIT_FRONTEND_PLACEHOLDER
+# version tracked; let `make frontend` produce the real bundle at build time.
 internal/ui/dist/*
 !internal/ui/dist/index.html
 .worktrees/

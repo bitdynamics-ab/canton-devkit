@@ -1,16 +1,13 @@
-// DAR structural diff viewer. Renders /api/instances/:name/dar/diff
-// between two DARs as expandable sections: modules / templates /
-// interfaces added/removed/changed. No third-party diff library — the
-// JSON shape is small enough that a hand-rolled list-with-colour reads
-// cleanly. Embedded as a drawer inside DARScreen when the user picks
-// two DARs to compare.
+// Structural diff between two DARs, as expandable added/removed/changed
+// sections for modules, templates, and interfaces.
 import { useEffect, useState } from "react";
 import {
   fetchDARDiff,
   type DARDiffResponse,
   type Role,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, tableCaps, R, tint } from "../tokens";
+import { MonoId } from "../components/MonoId";
 import {
   IcArrowRight,
   IcChevronDown,
@@ -201,7 +198,7 @@ export function DARDiff({ instance, a, b, role }: Props) {
 const paneStyle: React.CSSProperties = {
   background: W.surface,
   border: `1px solid ${W.border}`,
-  borderRadius: 4,
+  borderRadius: R.card,
   padding: 12,
   fontSize: 12,
   maxHeight: "60vh",
@@ -229,14 +226,14 @@ function Side({
     );
   }
   return (
-    <span style={{ fontSize: 11 }}>
-      <span style={{ color: W.dim }}>{label}: </span>
+    <span
+      style={{ fontSize: 11, display: "inline-flex", alignItems: "baseline", gap: 6 }}
+    >
+      <span style={{ color: W.dim }}>{label}:</span>
       <code style={mono}>
         {side.name}@{side.version}
       </code>
-      <span style={{ color: W.dim, marginLeft: 6 }}>
-        {side.main.slice(0, 8)}…
-      </span>
+      <MonoId value={side.main} head={8} tail={6} size={11} color={W.dim} />
     </span>
   );
 }
@@ -246,13 +243,13 @@ type Tone = "add" | "rm" | "chg" | "info";
 function toneColour(t: Tone): { bg: string; fg: string } {
   switch (t) {
     case "add":
-      return { bg: "#7CC89A22", fg: "#7CC89A" };
+      return { bg: tint(W.ok, 13), fg: W.ok };
     case "rm":
-      return { bg: `${W.err}22`, fg: W.err };
+      return { bg: `${tint(W.err, 13)}`, fg: W.err };
     case "chg":
-      return { bg: `${W.warn}22`, fg: W.warn };
+      return { bg: `${tint(W.warn, 13)}`, fg: W.warn };
     case "info":
-      return { bg: `${W.brand}1A`, fg: W.brand };
+      return { bg: `${tint(W.brand, 10)}`, fg: W.brand };
   }
 }
 
@@ -281,10 +278,9 @@ function Section<T>({
           border: "none",
           color: c.fg,
           fontSize: 11.5,
-          fontWeight: 600,
           cursor: "pointer",
           padding: "2px 0",
-          letterSpacing: 0.6,
+          ...tableCaps,
           display: "inline-flex",
           alignItems: "center",
           gap: 6,
@@ -337,7 +333,7 @@ function ChipGroup({
           key={l}
           style={{
             padding: "0 5px",
-            borderRadius: 2,
+            borderRadius: R.control,
             background: c.bg,
             color: c.fg,
             fontSize: 10.5,
