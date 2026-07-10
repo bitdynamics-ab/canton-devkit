@@ -1,8 +1,11 @@
 package localnet
 
 import (
+	"bytes"
 	"context"
+	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"testing"
 
@@ -159,5 +162,84 @@ func TestSetObservability_GrafanaWithoutPrometheusWarns(t *testing.T) {
 func TestSetObservability_NilState(t *testing.T) {
 	if _, err := SetObservability(context.Background(), nil, true, true, nil); err == nil {
 		t.Fatal("expected error on nil state")
+	}
+}
+
+// activeProfiles collects the profiles an argv activates via its
+// `--profile <name>` flags (which precede the `up` subcommand).
+func activeProfiles(args []string) map[string]bool {
+	out := map[string]bool{}
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "--profile" {
+			out[args[i+1]] = true
+		}
+	}
+	return out
+}
+
+// TestObservabilityUpArgs_GrafanaKeepsPrometheusInProfileSet is the
+// regression for the "grafana depends on undefined service prometheus"
+// bring-up failure. Enabling grafana under only `--profile grafana`
+// filters prometheus out of the compose project model, so grafana's
+// overlay `depends_on: prometheus` no longer resolves and Compose
+// rejects the whole project ("invalid compose project"). The generated
+// `up` argv must therefore keep prometheus in the ACTIVE profile set
+// whenever grafana is started, while `--no-deps` stops that from
+// actually spinning a Prometheus container up in a grafana-only
+// (external-scrape) setup. We materialize the real overlay so the argv
+// is composed over the same compose file the toggle feeds docker, and
+// inject a bytes.Buffer for the overlay drift writer per the repo
+// testing rules.
+func TestObservabilityUpArgs_GrafanaKeepsPrometheusInProfileSet(t *testing.T) {
+	dataDir := t.TempDir()
+	projectDir := t.TempDir()
+	var warn bytes.Buffer
+	overlay, err := MaterializeObservabilityOverlay(dataDir, projectDir, &warn)
+	if err != nil {
+		t.Fatalf("MaterializeObservabilityOverlay: %v", err)
+	}
+
+	const project = "canton-test"
+	envFiles := []string{filepath.Join(dataDir, "localnet.env")}
+	composeFiles := []string{filepath.Join(projectDir, "compose.yaml"), overlay}
+
+	// Grafana: prometheus profile MUST be active (else grafana's
+	// depends_on breaks the project), grafana profile active too, and
+	// the up scoped with --no-deps to the grafana service.
+	graf := observabilityUpArgs(project, envFiles, composeFiles, "grafana")
+	grafProfiles := activeProfiles(graf)
+	if !grafProfiles[PrometheusProfileName] {
+		t.Errorf("grafana up is missing --profile %s; grafana's depends_on would break the project.\nargs=%v",
+			PrometheusProfileName, graf)
+	}
+	if !grafProfiles[GrafanaProfileName] {
+		t.Errorf("grafana up is missing --profile %s.\nargs=%v", GrafanaProfileName, graf)
+	}
+	if !slices.Contains(graf, "--no-deps") {
+		t.Errorf("grafana up must pass --no-deps so activating the prometheus profile does not drag prometheus up.\nargs=%v", graf)
+	}
+	if !slices.Contains(graf, "up") || graf[len(graf)-1] != "grafana" {
+		t.Errorf("grafana argv should be an `up … grafana`, got %v", graf)
+	}
+	// The materialized overlay is the -f file the argv composes over.
+	if !slices.Contains(graf, overlay) {
+		t.Errorf("expected the materialized overlay %q in the compose -f set.\nargs=%v", overlay, graf)
+	}
+
+	// Prometheus alone does not need — and must not activate — the
+	// grafana profile.
+	prom := observabilityUpArgs(project, envFiles, composeFiles, "prometheus")
+	promProfiles := activeProfiles(prom)
+	if !promProfiles[PrometheusProfileName] {
+		t.Errorf("prometheus up is missing --profile %s.\nargs=%v", PrometheusProfileName, prom)
+	}
+	if promProfiles[GrafanaProfileName] {
+		t.Errorf("prometheus up should not activate the grafana profile.\nargs=%v", prom)
+	}
+	if !slices.Contains(prom, "--no-deps") {
+		t.Errorf("prometheus up must pass --no-deps.\nargs=%v", prom)
+	}
+	if prom[len(prom)-1] != "prometheus" {
+		t.Errorf("prometheus argv should target the prometheus service last, got %v", prom)
 	}
 }
