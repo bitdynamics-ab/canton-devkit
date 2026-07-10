@@ -52,7 +52,7 @@ Notes:
 - Live API data requires a running LocalNet (`dpm localnet up`); pure
   UI/theming work renders without one.
 
-For anything non-trivial, please [open an issue](https://github.com/bitdynamics-ab/canton-devkit/issues) first to discuss the change.
+For anything non-trivial, please [open an issue](https://github.com/bitdynamics-ab/canton-devkit/issues) first to discuss the change. For bugs, use the [bug report template](https://github.com/bitdynamics-ab/canton-devkit/issues/new?template=bug_report.yml).
 
 ## Code Change Rules
 
