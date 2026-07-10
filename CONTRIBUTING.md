@@ -21,6 +21,37 @@ make lint           # golangci-lint
 make frontend       # build the Web UI bundle (optional)
 ```
 
+### Web UI dev loop
+
+To iterate on the `frontend/` UI, run the backend API and the Vite dev
+server side by side.
+
+**Terminal 1** — backend API + SSE (from repo root):
+
+```sh
+go run ./cmd/canton-devkit localnet ui --port 7777
+```
+
+**Terminal 2** — Vite dev server with hot reload:
+
+```sh
+cd frontend
+npm install     # first run only; run `nvm use` to match .nvmrc
+npm run dev
+```
+
+Open **http://localhost:5173** (not 7777). Vite proxies `/api` and
+`/events` to the backend on `:7777` — see `frontend/vite.config.ts`.
+
+Notes:
+
+- You do **not** need `make frontend` for this loop; that target only
+  builds the production bundle embedded into the Go binary. The
+  placeholder-bundle warning printed at `localnet ui` startup is
+  expected here since the browser loads the Vite dev server.
+- Live API data requires a running LocalNet (`dpm localnet up`); pure
+  UI/theming work renders without one.
+
 For anything non-trivial, please [open an issue](https://github.com/bitdynamics-ab/canton-devkit/issues) first to discuss the change.
 
 ## Code Change Rules
