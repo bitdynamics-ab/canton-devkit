@@ -9,9 +9,11 @@ import (
 )
 
 // buildDemo returns `token demo` — a one-step "launch a transferable
-// demo token" (issuer party + on-ledger V2 instrument + minted supply +
-// optional funded holder). The Web UI's "Launch demo token" button drives
-// the same token.RunDemo via POST /api/tokens/demo.
+// demo token" that adapts to the instance: on a token-standard-v2
+// instance it creates a new on-ledger V2 instrument (issuer + minted
+// supply + funded holder); on a standard instance it funds a holder
+// with the existing V1 Amulet. The Web UI's "Launch demo token" button
+// drives the same token.RunDemo via POST /api/tokens/demo.
 func buildDemo() *cobra.Command {
 	var (
 		instance   string
@@ -27,12 +29,18 @@ func buildDemo() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "demo",
 		Short: "Provision a live, transferable demo token in one step",
-		Long: `Launch a demo token end-to-end in a single command: allocate an issuer
-party, create a V2 instrument on-ledger, mint the initial supply, and
-(unless --seed-holder=false) fund a holder party so the token is
-transferable immediately.
+		Long: `Launch a transferable demo token end-to-end in a single command. The
+flow adapts to the instance:
 
-Requires a running V2 LocalNet — the participant endpoint is auto-
+  token-standard-v2 instance: allocate an issuer party, create a V2
+    instrument on-ledger, mint the initial supply, and (unless
+    --seed-holder=false) fund a holder party.
+
+  standard instance (V1): there is no create/mint — Amulet is the only
+    instrument — so a holder party is funded with Amulet moved from the
+    role's network-funded party, giving a transferable balance.
+
+Requires a running LocalNet — the participant endpoint is auto-
 discovered from the instance's captured port (pass --endpoint to
 override). The Web UI's "Launch demo token" button runs the same
 orchestration via POST /api/tokens/demo.`,
