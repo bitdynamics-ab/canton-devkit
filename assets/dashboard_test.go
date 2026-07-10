@@ -49,7 +49,7 @@ func TestDashboardHasACSAndThroughputPanels(t *testing.T) {
 		t.Fatalf("parse dashboard: %v", err)
 	}
 	want := map[int]string{
-		14: "ACS Lookup Buffer Length",
+		14: "ACS Lookup Buffer",
 		15: "Top 10 gRPC Methods by Throughput (ops/s, 5m)",
 	}
 	got := map[int]string{}
