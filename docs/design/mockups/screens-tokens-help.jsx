@@ -89,8 +89,8 @@ function ScreenHelp() {
       <pre style={{margin:0, color:TERM.brand, fontFamily:fontMono, fontSize:11.5, lineHeight:1.15}}>{`
    ┌──────────────────────────────────────────┐
    │   canton-devkit · localnet                │
-   │   manage Canton LocalNets like a normal   │
-   │   process, not a Docker compose project   │
+   │   spin up and manage a full Canton        │
+   │   LocalNet with one command               │
    └──────────────────────────────────────────┘`}</pre>
       <Line />
       <Line><span style={{color:TERM.dim}}>Usage  </span><span style={{color:TERM.text}}>dpm localnet </span><span style={{color:TERM.brand}}>&lt;command&gt;</span><span style={{color:TERM.dim}}> [flags]</span></Line>

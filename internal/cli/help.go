@@ -142,8 +142,8 @@ func renderBoxedHelp(name string) string {
 
 	boxBody := []string{
 		helpTitle(name),
-		"manage Canton LocalNets like a normal",
-		"process, not a Docker compose project",
+		"spin up and manage a full Canton LocalNet",
+		"with one command",
 	}
 	for _, line := range dynamicBox(boxBody) {
 		b.WriteString(term.Brandc(line))
