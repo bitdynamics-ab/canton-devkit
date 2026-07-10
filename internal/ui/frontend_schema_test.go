@@ -66,3 +66,30 @@ func TestFrontend_DistContainsRealBuildOrPlaceholder(t *testing.T) {
 			string(body[:min(200, len(body))]))
 	}
 }
+
+// TestFrontend_DistIndexReferencesExistingAssets catches stale Vite
+// hash references before they ship. A stale /assets/index-*.js entry
+// fails in browsers as a strict MIME error if the server falls back to
+// index.html.
+func TestFrontend_DistIndexReferencesExistingAssets(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join("dist", "index.html"))
+	if err != nil {
+		t.Fatalf("dist/index.html: %v", err)
+	}
+	html := string(body)
+	if strings.Contains(html, placeholderSentinel) {
+		t.Skip("placeholder index has no generated asset references")
+	}
+
+	re := regexp.MustCompile(`/(assets/[^"'>[:space:]]+)`)
+	matches := re.FindAllStringSubmatch(html, -1)
+	if len(matches) == 0 {
+		t.Fatal("dist/index.html has no /assets/... references")
+	}
+	for _, match := range matches {
+		assetPath := filepath.FromSlash(match[1])
+		if _, err := os.Stat(filepath.Join("dist", assetPath)); err != nil {
+			t.Errorf("dist/index.html references missing asset %q: %v", match[1], err)
+		}
+	}
+}
