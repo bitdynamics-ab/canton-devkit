@@ -506,12 +506,6 @@ function LogoLockup() {
         lineHeight: 1,
       }}
     >
-      <svg width="20" height="20" viewBox="0 0 64 64" aria-label="BitDynamics">
-        <rect x="10" y="10" width="44" height="44" fill="none" stroke={W.dim} strokeWidth="3" />
-        <rect x="22" y="22" width="20" height="20" fill={W.brand} />
-        <line x1="32" y1="0" x2="32" y2="8" stroke={W.brand} strokeWidth="4" />
-        <line x1="32" y1="56" x2="32" y2="64" stroke={W.dim} strokeWidth="3" />
-      </svg>
       <span
         style={{
           fontFamily: wSans,
@@ -519,12 +513,11 @@ function LogoLockup() {
           color: W.text,
           fontWeight: 600,
           letterSpacing: "0.14em",
-          fontSize: 12,
+          fontSize: 14,
         }}
       >
-        BITDYNAMICS
+        CANTON DEVKIT
       </span>
-      <span style={{ fontFamily: wMono, fontSize: 10, color: W.dim }}>.cc</span>
     </span>
   );
 }
