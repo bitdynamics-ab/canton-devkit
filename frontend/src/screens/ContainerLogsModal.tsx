@@ -4,11 +4,9 @@ import { W, wMono, wSans, tint, R } from "../tokens";
 import { Button } from "../components/Button";
 import { IcX } from "../components/icons";
 
-// ContainerLogsModal — opens when the user clicks a row in
-// ContainerHealth. Polls docker logs for the selected container at
-// LOG_POLL_MS and renders them in a terminal-styled <pre>. Tail size
-// and since duration are toolbar-tunable; auto-scroll-to-bottom is on
-// by default but disabled once the user scrolls up.
+// Polls docker logs for the selected container at LOG_POLL_MS. Tail
+// and since are toolbar-tunable; auto-scroll disables once the user
+// scrolls up.
 
 const LOG_POLL_MS = 3000;
 
@@ -27,12 +25,10 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
   const [loading, setLoading] = useState(false);
   const preRef = useRef<HTMLPreElement>(null);
   const autoScrollRef = useRef(true);
-  // Only close when both mousedown AND click originated on the overlay;
-  // otherwise the click that opened the modal (mousedown on a row cell,
-  // mouseup after the modal mounted) would immediately close it.
+  // Close only when both mousedown AND click landed on the overlay, else
+  // the opening click (mouseup after the modal mounts) closes it instantly.
   const downOnOverlayRef = useRef(false);
 
-  // Esc closes.
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
@@ -73,8 +69,6 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
     };
   }, [open, instance, container, tail, since]);
 
-  // Auto-scroll to bottom on new content unless the user scrolled up;
-  // tracked via a ref to avoid a state update per scroll event.
   useEffect(() => {
     if (!preRef.current || !autoScrollRef.current) return;
     preRef.current.scrollTop = preRef.current.scrollHeight;
@@ -230,9 +224,6 @@ const modalStyle: React.CSSProperties = {
   width: "min(900px, 95vw)",
   height: "min(700px, 88vh)",
   background: W.surface,
-  // One depth technique: a slightly stronger hairline, no competing
-  // box-shadow — matches the ConfirmDialog treatment so every overlay
-  // in the console separates from the page the same way.
   border: `1px solid ${W.borderHi}`,
   borderRadius: R.card,
   display: "flex",

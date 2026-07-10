@@ -1,6 +1,5 @@
-// Theme state. Dark (default) and light palettes live in index.css as
-// CSS variables keyed off `data-theme` on <html>; setting it re-themes
-// every W.* token. Persisted in localStorage.
+// Theme state. Palettes live in index.css as CSS variables keyed off
+// `data-theme` on <html>; setting it re-themes every W.* token.
 
 import { useSyncExternalStore } from "react";
 
@@ -14,14 +13,11 @@ function read(): Theme {
     const v = window.localStorage.getItem(STORAGE_KEY);
     if (v === "light" || v === "dark") return v;
   } catch {
-    // localStorage may be unavailable (private mode / sandbox); fall
-    // through to the default.
+    // localStorage may be unavailable (private mode / sandbox).
   }
   return "dark";
 }
 
-// Sets the attribute that drives the CSS variables. Called before the
-// first render (main.tsx) to avoid a flash, and on every change.
 export function applyTheme(t: Theme): void {
   document.documentElement.dataset.theme = t;
 }
@@ -49,7 +45,6 @@ export function initTheme(): void {
   applyTheme(read());
 }
 
-// Subscribe a component to theme changes so a toggle re-renders it.
 export function useTheme(): Theme {
   return useSyncExternalStore(
     (cb) => {

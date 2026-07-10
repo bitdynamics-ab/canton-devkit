@@ -11,26 +11,11 @@ import { W, wMono } from "../tokens";
 import { Button } from "../components/Button";
 import { MonoId } from "../components/MonoId";
 
-// DeveloperSetup — the "Developer setup" card. Two sub-panels:
-//
-//  1. JWT generator: role/audience picker + a usable token preview +
-//     copy button. LocalNet is loopback-only with dev-secret tokens
-//     (the dev-secret warning renders below), so the raw token is
-//     surfaced directly — no redaction toggle.
-//
-//  2. App config exporter: format tabs (env / json / yaml) + monospace
-//     preview + copy button, all backed by
-//     /api/instances/{name}/app-config?format=.
-//
-// The Dashboard owns instance selection; this component just receives
-// `name` as a prop.
+// Two panels: a JWT generator and an app-config exporter (env/json/yaml).
 
 const ROLES = ["app-provider", "app-user", "sv"] as const;
 type Role = (typeof ROLES)[number];
 
-// The backend redacts JWTs by default; this LocalNet-only UI opts
-// into the raw token (?include_jwt=true) so the generated token is
-// usable as-is. The dev-secret warning makes the trade-off explicit.
 export function DeveloperSetup({ name }: { name: string }) {
   return (
     <div
@@ -54,8 +39,7 @@ function JwtPanel({ name }: { name: string }) {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Issue a usable JWT on mount + whenever role/audience/name changes.
-  // include_jwt=true so the raw token is returned — LocalNet only.
+  // include_jwt=true returns the raw token, usable as-is (LocalNet only).
   useEffect(() => {
     let cancelled = false;
     setBusy(true);
@@ -223,11 +207,6 @@ function AppConfigPanel({ name }: { name: string }) {
   );
 }
 
-// ──────────────────────── shared primitives ─────────────────────────
-//
-// Kept inline while this screen is the only consumer; promote to a
-// shared module when a second screen needs them.
-
 interface CardProps {
   title: string;
   subtitle?: string;
@@ -319,9 +298,8 @@ function ChipRow({ options, value, onChange }: ChipRowProps) {
 }
 
 function TokenBox({ token, revealed }: { token: string; revealed: boolean }) {
-  // Split the JWT into header.payload.signature for the colored
-  // preview. Placeholders ("—", "…") aren't 3-part tokens, so they
-  // render as plain text.
+  // header.payload.signature for the colored preview; placeholders
+  // ("—", "…") aren't 3-part tokens and render as plain text.
   const parts = token.split(".");
   const isJwt = parts.length === 3 && revealed;
   return (

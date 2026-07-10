@@ -11,21 +11,14 @@ import { W, wMono, wSans, tint, R, wideCaps } from "../tokens";
 import { useInstanceSelection } from "./useInstanceSelection";
 import { NAV, isInstanceScoped, linkTo } from "./routes";
 
-// CommandPalette — ⌘K (Ctrl+K elsewhere) opens a search modal with two
-// groups: route navigation and instance switching. ↑/↓ move, Enter
-// activates, Esc dismisses.
-
 interface Action {
   id: string;
   group: "Navigate" | "Switch instance";
   label: string;
-  // Secondary line shown beneath the label (path, instance status).
   hint?: string;
   perform: () => void;
 }
 
-// Derive nav rows from the shared NAV table so the sidebar and palette
-// can't drift on routes / labels / instance-scoping.
 const NAV_ACTIONS: Array<Omit<Action, "perform"> & { path: string }> = NAV.map(
   (n) => ({
     id: `nav-${n.to === "/" ? "overview" : n.to.replace(/^\//, "")}`,
@@ -36,8 +29,7 @@ const NAV_ACTIONS: Array<Omit<Action, "perform"> & { path: string }> = NAV.map(
   }),
 );
 
-// Lets non-keyboard callers (the topbar "Commands" button) open the
-// palette without owning its open state.
+// Lets the topbar "Commands" button open the palette without owning its state.
 const OPEN_EVENT = "cdk-open-palette";
 export function openPalette(): void {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT));
@@ -50,14 +42,11 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const sel = useInstanceSelection();
-  // Carry `?instance=` into instance-scoped routes (same as the Shell
-  // sidebar); otherwise ⌘K → "Wallet" lands on the empty state even
-  // though the header still shows an instance.
+  // Carry `?instance=` into instance-scoped routes; otherwise ⌘K →
+  // "Wallet" lands on the empty state despite a selected instance.
   const [searchParams] = useSearchParams();
   const instance = searchParams.get("instance");
 
-  // Global hotkey: ⌘K on Mac, Ctrl+K elsewhere. Accept either modifier
-  // rather than UA-sniffing.
   useEffect(() => {
     function onKey(e: globalThis.KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -78,7 +67,6 @@ export function CommandPalette() {
     };
   }, [open]);
 
-  // Focus the input on open; reset so each open is a fresh search.
   useEffect(() => {
     if (open) {
       setQuery("");
@@ -223,8 +211,6 @@ export function CommandPalette() {
   );
 }
 
-// Groups consecutive actions sharing a `group` label under a section
-// header.
 function renderGroups(
   filtered: Action[],
   cursor: number,
@@ -318,8 +304,7 @@ function titleCase(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
-// Case-insensitive substring match across label + hint; keeps input
-// order so the grouping stays stable.
+// Case-insensitive substring match; preserves input order so grouping stays stable.
 export function filter(actions: Action[], query: string): Action[] {
   const q = query.trim().toLowerCase();
   if (!q) return actions;

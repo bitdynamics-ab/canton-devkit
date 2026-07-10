@@ -1,9 +1,6 @@
-// In-app confirm dialog. Promise-based so call sites stay a one-liner:
-//
+// Promise-based confirm dialog:
 //   if (!(await confirmDialog({ title, body, confirmLabel, danger }))) return;
-//
-// A single ConfirmHost (mounted in App) listens for the event
-// confirmDialog() dispatches and owns the open state.
+// A single ConfirmHost (mounted in App) handles the dispatched event.
 
 import { useEffect, useState } from "react";
 import { W, wMono, wSans, R, EASE, FAST } from "../tokens";
@@ -11,7 +8,6 @@ import { Button } from "./Button";
 
 export interface ConfirmOptions {
   title: string;
-  /** Plain-language consequence. Rendered as-is (string). */
   body: string;
   /** Optional monospace detail line (the exact command / effect). */
   detail?: string;

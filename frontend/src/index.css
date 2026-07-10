@@ -1,14 +1,8 @@
-/* Base styles + the design-system token sheet. Every semantic color
-   lives here as a CSS variable with a dark default (:root) and a light
-   override (:root[data-theme="light"]), so tokens.ts W.* references
-   resolve per-theme with no per-screen change. Components own layout
-   via tokens.ts; this file owns fonts, the token sheet, focus rings,
-   hover states, and keyframes. */
+/* Base styles + design-system token sheet: every semantic color as a
+   CSS variable with a dark default (:root) and light override
+   (:root[data-theme="light"]), resolved per-theme by tokens.ts W.*. */
 
-/* Canton Infrastructure Design System typefaces, self-hosted so the
-   UI renders identically offline (licenses in src/fonts/). Archivo
-   variable: body at 100% width, wide structural caps at 118%.
-   JetBrains Mono for code and all data values. */
+/* Typefaces self-hosted so the UI renders identically offline. */
 @font-face {
   font-family: "Archivo";
   src: url("./fonts/archivo.woff2") format("woff2-variations");
@@ -43,7 +37,7 @@
   font-display: swap;
 }
 
-/* ---- Raw ramps (theme-independent) ---- */
+/* Raw ramps (theme-independent). */
 :root {
   --gray-25: #fcfcfd; --gray-50: #f7f8fa; --gray-100: #eff1f5;
   --gray-200: #e2e5ec; --gray-300: #cdd2dd; --gray-400: #9ba3b5;
@@ -56,15 +50,11 @@
   --teal-300: #7bd2c6; --teal-500: #189e8c;
   --green-500: #2e9e5b; --amber-500: #d89117; --red-500: #d24a38;
 
-  /* Motion — quick, damped, no bounce. */
   --ease-out: cubic-bezier(0.2, 0.6, 0.2, 1);
   --duration-fast: 120ms;
 }
 
-/* ---- Dark theme (default) — Carbon Slate: true-neutral graphite +
-   one indigo-violet accent. Accent hue sits well off the near-zero-hue
-   neutrals, so action never collides with chrome. All pairs verified
-   WCAG AA. ---- */
+/* Dark theme (default) — Carbon Slate. All pairs verified WCAG AA. */
 :root {
   color-scheme: dark;
   --bg-page: #0f1012; --bg-sunken: #0b0c0e; --bg-surface: #16171a;
@@ -86,7 +76,7 @@
   --dot-grid: radial-gradient(circle at 1px 1px, #2a2c31 1px, transparent 1px);
 }
 
-/* ---- Light theme — Carbon Slate ---- */
+/* Light theme — Carbon Slate. */
 :root[data-theme="light"] {
   color-scheme: light;
   --bg-page: #fbfbfc; --bg-sunken: #f7f7f8; --bg-surface: #ffffff;
@@ -143,8 +133,7 @@ a {
   color: var(--text-primary);
 }
 
-/* Themed scrollbars — a raised thumb on a transparent track, so the
-   chrome doesn't read as OS-default grey against either theme. */
+/* Themed scrollbars — raised thumb on a transparent track. */
 ::-webkit-scrollbar {
   width: 11px;
   height: 11px;
@@ -163,14 +152,8 @@ a {
   background: transparent;
 }
 
-/* a11y: keyboard focus rings.
- *
- * :focus-visible — only when the focus came from keyboard (Tab,
- * arrow keys) or programmatic .focus(). Mouse clicks don't paint
- * the ring, matching what sighted users expect from native UI.
- *
- * 2px accent outline (blue-500 — identical in light and dark), offset
- * 2px so it doesn't merge into the element's own border. */
+/* a11y: keyboard-only focus rings via :focus-visible; offset 2px so the
+   ring doesn't merge into the element's own border. */
 :focus {
   outline: none;
 }
@@ -181,10 +164,8 @@ a {
   border-radius: 2px;
 }
 
-/* Sidebar nav items (shell/Shell.tsx::Sidebar). Hover/active tints
- * live here because inline style objects can't express :hover.
- * Active = accent-subtle fill + accent text at 2px radius — the
- * design system's "current item" signature. */
+/* Sidebar nav items — hover/active tints live here since inline styles
+ * can't express :hover. */
 .side-nav-link {
   display: flex;
   align-items: center;
@@ -210,7 +191,6 @@ a {
   font-weight: 500;
 }
 
-/* The nav icon dims with the label and lights up on the active row. */
 .side-nav-link svg {
   color: var(--text-faint);
   flex: none;
@@ -222,10 +202,8 @@ a {
   color: var(--accent);
 }
 
-/* Button system (components/Button.tsx). Hover/active tints live
- * here because inline style objects can't express :hover.
- * primary = the solid accent CTA (white text, both themes);
- * secondary = bordered surface; ghost = quiet; danger = filled red. */
+/* Button system (components/Button.tsx) — hover/active tints live here
+ * since inline styles can't express :hover. */
 .bd-btn {
   appearance: none;
   display: inline-flex;
@@ -313,10 +291,8 @@ a {
   flex: none;
 }
 
-/* Skip-to-content link (shell/Shell.tsx::SkipLink). Visually
- * hidden until focused via Tab — first focusable element on the
- * page so a keyboard user can jump past the sidebar to the main
- * content. The .focus state pulls it on-screen. */
+/* Skip-to-content link — visually hidden until focused via Tab so a
+ * keyboard user can jump past the sidebar to main content. */
 .skip-link {
   position: absolute;
   top: -100px;
@@ -336,10 +312,7 @@ a {
   outline: none;
 }
 
-/* Connection-health pill (shell/Shell.tsx::HealthPill). Pulses
-   when the topbar pill is in a degraded state. Kept here rather
-   than inline because @keyframes can't be expressed in a React
-   style object. */
+/* Connection-health pill pulse (shell/Shell.tsx::HealthPill). */
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
@@ -351,16 +324,13 @@ a {
   to { opacity: 1; transform: none; }
 }
 
-/* Skeleton shimmer (components/Skeleton). A slow sweep, gated below by
-   prefers-reduced-motion. */
+/* Skeleton shimmer (components/Skeleton), gated below by prefers-reduced-motion. */
 @keyframes cdk-shimmer {
   0% { background-position: -180% 0; }
   100% { background-position: 180% 0; }
 }
 
-/* Respect prefers-reduced-motion — the pulse is ambient and
-   not load-bearing for the state communication (color carries
-   the signal too). */
+/* prefers-reduced-motion: color still carries the state signal. */
 @media (prefers-reduced-motion: reduce) {
   @keyframes pulse {
     0%, 100% { opacity: 1; }

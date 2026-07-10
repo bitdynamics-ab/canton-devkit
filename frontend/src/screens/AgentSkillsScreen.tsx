@@ -9,10 +9,8 @@ import { W, wMono, tint, FAST } from "../tokens";
 import { Button } from "../components/Button";
 import { IcAlert, IcCheck, IcX } from "../components/icons";
 
-// AgentSkillsScreen browses the bundled AI-agent skill docs (served by
-// /api/skills — the same embedded markdown the CLI `localnet skills`
-// command ships) and offers one-click install into ~/.claude/skills or
-// ~/.codex/skills. Both surfaces read internal/skills.
+// Browses the bundled agent skill docs and installs them into
+// ~/.claude/skills or ~/.codex/skills.
 export function AgentSkillsScreen() {
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -103,7 +101,6 @@ export function AgentSkillsScreen() {
     >
       <Header />
 
-      {/* Install bar */}
       <div
         style={{
           display: "flex",
@@ -181,7 +178,6 @@ export function AgentSkillsScreen() {
         )}
       </div>
 
-      {/* Two-pane: list | preview */}
       <div
         style={{
           flex: 1,

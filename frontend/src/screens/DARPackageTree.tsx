@@ -1,8 +1,5 @@
-// DAR package-tree explorer. Renders a /api/instances/:name/dar/:id/
-// inspect response as an expandable tree: package → module → (template
-// | interface | data type), with choices and methods as inline chips.
-// Self-contained — fetches its own data and owns its expand/collapse
-// state. Embedded as a drawer inside DARScreen.
+// Expandable package → module → (template | interface | data type) tree
+// for a DAR inspect response, with choices and methods as inline chips.
 import { useEffect, useState } from "react";
 import {
   fetchDARInspect,
@@ -15,9 +12,8 @@ import { W, wMono, R, tint } from "../tokens";
 import { MonoId } from "../components/MonoId";
 import { IcChevronDown, IcChevronRight } from "../components/icons";
 
-// Middle-truncate for ids rendered INSIDE a toggle button, where a
-// full MonoId (itself a button) would nest interactive elements. Keeps
-// the discriminating suffix visible instead of a tail-only slice.
+// Middle-truncate for ids inside a toggle button, where a MonoId (itself
+// a button) would nest interactive elements.
 function midId(s: string, head = 10, tail = 6): string {
   if (s.length <= head + tail + 1) return s;
   return `${s.slice(0, head)}…${s.slice(-tail)}`;
@@ -47,8 +43,6 @@ export function DARPackageTree({ instance, mainID, role }: Props) {
       .then((data) => {
         if (cancelled) return;
         setState({ kind: "ok", data });
-        // Auto-expand the main package so the most useful tree is
-        // visible on first render.
         const main = data.packages.find((p) => p.is_main);
         if (main) setExpandedPkgs(new Set([main.package_id]));
       })

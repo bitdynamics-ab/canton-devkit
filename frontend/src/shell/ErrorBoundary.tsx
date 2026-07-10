@@ -2,30 +2,20 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { W, wMono, tint, R } from "../tokens";
 import { Button } from "../components/Button";
 
-// ErrorBoundary — catches render-time exceptions from descendants and
-// renders a fallback so one crashed screen doesn't take the whole UI
-// down. Wrapped per-route so the shell stays interactive and sibling
-// routes stay renderable. Class component because React's
-// error-boundary API has no hook equivalent.
-//
-// No automatic recovery: a render that threw once will almost
-// certainly throw again on the same state, so auto-retry would
-// busy-loop. The "Retry" button instead forces a re-mount via a reset
-// key so transient state corruption gets a fresh shot.
+// Catches render-time exceptions per-route so one crashed screen doesn't
+// take the whole UI down. Class component because the error-boundary API
+// has no hook equivalent. No auto-retry (would busy-loop on the same
+// state); Retry forces a re-mount via resetCount.
 
 interface Props {
-  // routeKey lets the parent force a reset when navigating to a
-  // new screen — without this, an error from /explorer would
-  // stick around when the user clicks /overview because the
-  // boundary itself stays mounted across the Routes switch.
+  // Force a reset on navigation; the boundary stays mounted across the
+  // Routes switch, so without this a crashed screen's error persists.
   routeKey?: string;
   children: ReactNode;
 }
 
 interface State {
   error: Error | null;
-  // Bump to force the boundary to drop its error and re-render
-  // children. Used by the Retry button.
   resetCount: number;
 }
 
@@ -37,16 +27,13 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // The fallback shows only .name/.message; the full stack goes to
-    // the console. Don't ship to a remote telemetry endpoint without
-    // explicit user consent.
+    // Full stack to the console only; no remote telemetry without consent.
     // eslint-disable-next-line no-console
     console.error("ErrorBoundary caught a render error:", error, info);
   }
 
   componentDidUpdate(prev: Props) {
-    // Route change → drop the error; otherwise navigating away from a
-    // crashed screen keeps showing the fallback.
+    // Route change → drop the error, else the fallback persists after nav.
     if (prev.routeKey !== this.props.routeKey && this.state.error) {
       this.setState({ error: null });
     }
@@ -57,9 +44,8 @@ export class ErrorBoundary extends Component<Props, State> {
       return <Fallback error={this.state.error} onRetry={this.handleRetry} />;
     }
     return (
-      // The reset key forces a clean remount of children when
-      // the user clicks Retry — without remount, a stale closure
-      // or torn fetch can re-throw the same error immediately.
+      // resetCount key forces a clean remount on Retry; without it a stale
+      // closure or torn fetch re-throws the same error immediately.
       <div key={this.state.resetCount}>{this.props.children}</div>
     );
   }

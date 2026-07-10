@@ -5,39 +5,27 @@ import { ROLE_COLOR, W, wMono, tint, R, FAST } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcAlert, IcRefresh } from "../components/icons";
 
-// WalletScreen embeds Splice's per-role Wallet UI inside the DevKit
-// shell so users don't juggle three browser tabs (one per party).
-// The iframe target is the `<role>_ui` host port from state.json —
-// Splice already exposes its wallet there; we just frame it with a
-// role switcher.
-//
-// X-Frame-Options is empty on Splice 0.6.4's wallet UI (nginx sends
-// no frame-options header), so the iframe loads directly. If a future
-// Splice release ships SAMEORIGIN, the "Open in new tab" fallback
-// covers it.
+// Embeds Splice's per-role Wallet UI (the `<role>_ui` host port from
+// state.json) in an iframe. Splice 0.6.4 sends no X-Frame-Options, so it
+// loads directly; the "Open in new tab" fallback covers a future SAMEORIGIN.
 const ROLES: Role[] = ["app-user", "app-provider", "sv"];
 
-// LocalNet wallet login user names — the hardcoded
-// AUTH_<ROLE>_WALLET_ADMIN_USER_NAME values from
-// `env/<role>-auth-on.env`. Password is ignored: LocalNet auth is
-// dev-only HS-256 with the literal secret "unsafe" (no MetaMask,
-// no real OAuth provider).
+// Hardcoded AUTH_<ROLE>_WALLET_ADMIN_USER_NAME values from env/<role>-auth-on.env.
+// Password is ignored: LocalNet auth is dev-only HS-256 with the secret "unsafe".
 const LOGIN_USER_FOR: Record<Role, string> = {
   "app-user": "app-user",
   "app-provider": "app-provider",
   sv: "sv",
 };
 
-// Per-role wallet endpoint keys — the logical port names from
-// state.json. Endpoints are matched by key; labels are display-only.
+// Logical port names from state.json; endpoints match by key, labels are display-only.
 const WALLET_ENDPOINT_KEY: Record<Role, string> = {
   "app-user": "app_user_ui",
   "app-provider": "app_provider_ui",
   sv: "sv_ui",
 };
 
-// walletEndpointFor returns the whole endpoint so callers can read
-// both the URL and the backend's reachability verdict.
+// Returns the whole endpoint so callers get both URL and reachability verdict.
 function walletEndpointFor(role: Role, endpoints: Instance["endpoints"]) {
   if (!endpoints) return null;
   const want = WALLET_ENDPOINT_KEY[role];
@@ -53,8 +41,7 @@ export function WalletScreen() {
     | { kind: "ok"; instance: Instance }
     | { kind: "err"; error: string }
   >({ kind: "loading" });
-  // Bumped by Retry to re-fetch the instance, which re-runs the
-  // backend reachability probe.
+  // Bumped by Retry to re-fetch and re-run the backend reachability probe.
   const [refetchNonce, setRefetchNonce] = useState(0);
 
   useEffect(() => {
@@ -103,12 +90,10 @@ export function WalletScreen() {
     );
   }
 
-  // null when the instance doesn't yet have endpoints surfaced.
   const walletEndpoint = walletEndpointFor(role, state.instance.endpoints);
   const walletURL = walletEndpoint?.url ?? null;
-  // Backend status probe verdict. An iframe pointed at a dead port
-  // renders the browser's own gray error page; own the failure state
-  // instead and point at the fix.
+  // Own the failure state rather than let an iframe render the browser's
+  // gray error page on a dead port.
   const walletUnreachable = walletEndpoint?.reachability === "unreachable";
 
   return (
@@ -121,7 +106,6 @@ export function WalletScreen() {
         gap: 14,
       }}
     >
-      {/* Header */}
       <header
         style={{
           display: "flex",
@@ -151,8 +135,7 @@ export function WalletScreen() {
         <RoleSwitcher role={role} onChange={setRole} />
       </header>
 
-      {/* Login help — surface the dev-mode credentials inline so
-          users don't have to dig through env files. */}
+      {/* Login help — dev-mode credentials inline, no env-file digging. */}
       <div
         style={{
           background: `${tint(W.brand, 6)}`,
@@ -186,7 +169,6 @@ export function WalletScreen() {
         </div>
       </div>
 
-      {/* Active wallet info strip */}
       <div
         style={{
           background: W.surface,
@@ -234,7 +216,6 @@ export function WalletScreen() {
         </div>
       </div>
 
-      {/* Embedded wallet iframe */}
       <div
         style={{
           flex: 1,
@@ -247,8 +228,7 @@ export function WalletScreen() {
           flexDirection: "column",
         }}
       >
-        {/* Fake browser chrome so devs know they're looking at the
-            real Splice UI inside our shell, not a re-implementation. */}
+        {/* Fake browser chrome: signals this is the real Splice UI, not a reimplementation. */}
         <div
           style={{
             background: W.border,
@@ -315,19 +295,10 @@ export function WalletScreen() {
             key={walletURL}
             src={walletURL}
             title={`Splice Wallet — ${role}`}
-            // Sandbox rationale: the "allow-same-origin +
-            // allow-scripts neutralises the sandbox" foot-gun only
-            // applies when the iframe origin EQUALS the parent's.
-            // Here the parent (127.0.0.1:<port>) and the iframe
-            // (wallet.localhost:<per-role port>) differ in host AND
-            // port, so they are cross-origin: `allow-same-origin`
-            // lets the wallet's scripts read ITS OWN cookies /
-            // localStorage (needed for its auth session) but not the
-            // parent's origin or `window.top`. Without it the iframe
-            // would get a unique opaque origin and the wallet's
-            // cookie-based auth would break. Deliberately omitted:
-            // allow-top-navigation, allow-modals, allow-downloads,
-            // allow-popups-to-escape-sandbox.
+            // The allow-same-origin + allow-scripts foot-gun only bites when
+            // iframe and parent share an origin; here they differ in host and
+            // port, so allow-same-origin only lets the wallet reach its own
+            // cookies/localStorage (needed for its auth), not the parent.
             sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
             referrerPolicy="no-referrer"
             style={{ flex: 1, border: 0, background: "#FCFCFD" }}

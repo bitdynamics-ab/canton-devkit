@@ -1,11 +1,9 @@
-// Skeleton — loading placeholders shaped like the real table so content
-// arrives in place without a layout shift. A short delay avoids a
-// flicker on fast local fetches.
+// Loading placeholders shaped like the real table to avoid layout shift.
 
 import { useEffect, useState, type CSSProperties } from "react";
 import { W, R } from "../tokens";
 
-// Returns true only after `ms`, so a fast fetch never flashes a skeleton.
+// Delays true until `ms` so a fast fetch never flashes a skeleton.
 export function useLoadingDelay(active: boolean, ms = 160): boolean {
   const [shown, setShown] = useState(false);
   useEffect(() => {
@@ -36,7 +34,6 @@ export function SkeletonBar({
         width,
         height,
         borderRadius: R.control,
-        // Ramp between two neutral surfaces so it reads on either theme.
         background: `linear-gradient(90deg, ${W.surface2} 25%, ${W.rowHover} 50%, ${W.surface2} 75%)`,
         backgroundSize: "220% 100%",
         animation: "cdk-shimmer 1.4s ease-in-out infinite",
@@ -46,8 +43,7 @@ export function SkeletonBar({
   );
 }
 
-// Pass the same relative column widths the real table uses so the
-// skeleton lines up with it.
+// Pass the real table's column widths so the skeleton lines up.
 export function SkeletonTable({
   columns,
   rows = 4,

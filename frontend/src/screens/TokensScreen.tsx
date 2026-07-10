@@ -48,25 +48,18 @@ import {
   IcX,
 } from "../components/icons";
 
-// shortParty trims a fingerprinted id to its readable prefix for display.
 function shortParty(p: string): string {
   const i = p.indexOf("::");
   return i > 0 ? p.slice(0, i) : p;
 }
 
-// partyLabel prefers a registered alias over the raw prefix:
-// `app_user_v2-localparty-1::1220…` → `app-user` when aliased, else the
-// `::`-prefix fallback.
+// Prefers a registered alias over the `::`-prefix fallback.
 function partyLabel(aliases: AliasMap, p: string): string {
   return aliases[p] ?? shortParty(p);
 }
 
-// Asset capability guards — gated on the machine generation tag, never
-// the human display label:
-//   mint  : only a native Token Standard V2 (CIP-0112) instrument we
-//           created on-ledger. V1 tokens (Amulet) have no user-mint.
-//   burn  : no deployable token supports a standalone burn yet (needs
-//           AllocationV2/DvP).
+// Capability guards keyed on the machine generation tag, not the display
+// label: mint requires a native V2 (CIP-0112) instrument created on-ledger.
 export function mintDisabledReason(t: InstrumentRef): string | null {
   if (t.generation !== "v2")
     return `${t.symbol} (${t.standard}) has no standard mint. Use the asset's wallet UI.`;
@@ -78,19 +71,12 @@ const BURN_DISABLED_REASON =
   "Burn is only available on a native CIP-0112 v2 token created on this " +
   "instance. Amulet has no burn surface.";
 
-// TOKEN_DAR_UNAVAILABLE_HINT is the friendly remediation for the on-ledger
-// create 412 (TEST_TOKEN_DAR_UNAVAILABLE): the test-token DAR isn't
-// published for this instance's Splice version. Shared by the create modal
-// (where on-ledger create surfaces it) and the action-modal banner.
+// Remediation for the on-ledger create 412 (TEST_TOKEN_DAR_UNAVAILABLE).
 const TOKEN_DAR_UNAVAILABLE_HINT =
   "The test-token DAR isn't published for this instance's Splice version, so on-ledger " +
   "V2 tokens can't be created here. Bring up a token-standard-v2 instance " +
   "(localnet up --version token-standard-v2 --profile tokens-v2) and re-run.";
 
-// createErrorText maps a token-create failure to the message shown in the
-// create modal: the actionable DAR remedy for the on-ledger 412
-// (TEST_TOKEN_DAR_UNAVAILABLE), otherwise the raw server message (or a
-// generic fallback for a non-API error). Exported for unit testing.
 export function createErrorText(e: unknown): string {
   if (e instanceof ApiError && e.code === "TEST_TOKEN_DAR_UNAVAILABLE") {
     return TOKEN_DAR_UNAVAILABLE_HINT;
@@ -98,11 +84,6 @@ export function createErrorText(e: unknown): string {
   return e instanceof ApiError ? e.message : "create failed";
 }
 
-// TokensScreen — the V2 Token Standard surface: lists every
-// instrument on the selected instance, exposes Mint / Transfer /
-// Burn / Faucet / Accept actions on each, and a Create wizard. The
-// holdings table for the selected instrument refreshes whenever the
-// user picks a row or completes a mutation.
 export function TokensScreen() {
   const sel = useInstanceSelection();
   const instance = sel.selected;
@@ -115,14 +96,11 @@ export function TokensScreen() {
 
   const [holdings, setHoldings] = useState<TokenHolding[]>([]);
   const [holdingsErr, setHoldingsErr] = useState<string | null>(null);
-  // holdingsSource: "ledger" = real on-ledger balances; "registry" =
-  // the pseudo-balance fallback shown when no live participant is
-  // reachable. Drives the disclaimer banner so a user never mistakes a
-  // fabricated row for a real holding.
+  // "ledger" = real on-ledger balances; "registry" = pseudo-balance fallback
+  // when no live participant is reachable. Drives the disclaimer banner.
   const [holdingsSource, setHoldingsSource] = useState<HoldingSource>("ledger");
-  const [expanded, setExpanded] = useState<string | null>(null); // party whose UTXOs are shown
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [contracts, setContracts] = useState<HoldingContract[]>([]);
-  // Monotonic counter behind toggleExpand's latest-click guard.
   const expandSeqRef = useRef(0);
   const [matrix, setMatrix] = useState<BalanceMatrix | null>(null);
   const [matrixErr, setMatrixErr] = useState<string | null>(null);
@@ -153,8 +131,6 @@ export function TokensScreen() {
       return;
     }
     let cancelled = false;
-    // ACS-derived instrument discovery: Amulet + any minted
-    // token appear without a state.Tokens seed.
     fetchInstruments(instance)
       .then((items) => {
         if (cancelled) return;
@@ -176,7 +152,6 @@ export function TokensScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instance, refreshTick]);
 
-  // Matrix lens — one ACS scan, party × instrument.
   useEffect(() => {
     if (!instance || view !== "matrix") return;
     let cancelled = false;
@@ -221,8 +196,6 @@ export function TokensScreen() {
     };
   }, [instance, activeSymbol, refreshTick]);
 
-  // Party alias registry: one fetch per instance powers the
-  // alias labels across every lens and the party manager.
   useEffect(() => {
     if (!instance) {
       setParties([]);
@@ -241,9 +214,7 @@ export function TokensScreen() {
     };
   }, [instance, refreshTick]);
 
-  // Instrument-first KPI summary: supply, holder +
-  // contract counts, holder distribution. One ACS scan; best-effort —
-  // a failure just hides the KPI strip, the holdings table still loads.
+  // Best-effort: a failure just hides the KPI strip; holdings still load.
   useEffect(() => {
     if (!instance || !activeSymbol) {
       setSummary(null);
@@ -262,10 +233,8 @@ export function TokensScreen() {
     };
   }, [instance, activeSymbol, refreshTick]);
 
-  // Activity feed: transfer/mint/burn history
-  // reconstructed from the ledger transaction stream. Fetched lazily —
-  // only when the Activity tab is open — since it's a full historical
-  // scan, heavier than the ACS snapshots the other lenses use.
+  // Lazy: only fetched when the Activity tab is open, since it's a full
+  // historical scan, heavier than the other lenses' ACS snapshots.
   useEffect(() => {
     if (!instance || !activeSymbol || detailTab !== "activity") return;
     let cancelled = false;
@@ -293,10 +262,8 @@ export function TokensScreen() {
     [list, activeSymbol],
   );
 
-  // Expand a party's balance into its individual Holding contracts
-  // (UTXOs). expandSeq increments on every click; the in-flight
-  // closure captures its own seq and bails when it no longer matches,
-  // so a stale fetch can't overwrite a newer click's state.
+  // Each click bumps expandSeq; the in-flight closure bails when its seq
+  // no longer matches, so a stale fetch can't overwrite a newer click.
   function toggleExpand(party: string) {
     if (expanded === party) {
       setExpanded(null);
@@ -336,8 +303,7 @@ export function TokensScreen() {
     return { tone: "err", text: e instanceof ApiError ? e.message : fallback };
   }
 
-  // launchDemo provisions a live, transferable demo token in one click:
-  // the server composes issuer-party → create → mint → faucet-a-holder.
+  // Server composes issuer-party → create → mint → faucet-a-holder.
   async function launchDemo() {
     if (!instance) return;
     setDemoBusy(true);
@@ -408,7 +374,6 @@ export function TokensScreen() {
         <div role="status" style={notice(topNotice.tone)}>{topNotice.text}</div>
       )}
 
-      {/* Lens switcher */}
       <div style={{ display: "flex", gap: 4, background: W.surface2, borderRadius: 4, padding: 3, width: "fit-content", border: `1px solid ${W.border}` }}>
         {(["instruments", "matrix"] as const).map((v) => (
           <button
@@ -451,7 +416,6 @@ export function TokensScreen() {
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 14 }}>
-          {/* Left rail: instrument list (ACS-discovered) */}
           <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 4, overflow: "hidden" }}>
             {list.map((t) => {
               const sym = t.symbol ?? t.instrument_id;
@@ -478,7 +442,6 @@ export function TokensScreen() {
             })}
           </div>
 
-          {/* Right pane: detail + holdings + actions */}
           <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 4, padding: 16 }}>
             {active && (() => {
               const sym = active.symbol ?? active.instrument_id;
@@ -518,7 +481,6 @@ export function TokensScreen() {
                   <MonoId value={active.instrument_id} size={12} color={W.dim} />
                 </div>
 
-                {/* Overview / Activity tab switcher */}
                 <div style={{ display: "flex", gap: 4, margin: "16px 0 2px", borderBottom: `1px solid ${W.border}` }}>
                   {(["overview", "activity"] as const).map((tab) => (
                     <button
@@ -666,8 +628,7 @@ export function TokensScreen() {
           onDone={(offered) => {
             bump();
             if (offered) {
-              // Offer transfer: hand the id straight to a prefilled Accept
-              // modal so the receiver can settle it without copy-pasting.
+              // Hand the id to a prefilled Accept modal so the receiver settles it.
               setTopNotice({ tone: "ok", text: `Transfer offered. Accept instruction ${offered.instructionId.slice(0, 12)}… to settle it.` });
               setModal({ kind: "accept", id: offered.instructionId, party: offered.receiver });
             } else {
@@ -727,10 +688,8 @@ export function TokensScreen() {
   );
 }
 
-// TransferModal — From/To/Amount plus a live coin-selection preview:
-// as the user fills From + Amount, it dry-runs the transfer
-// (planTransfer) and shows which Holding contracts would be consumed
-// and the change returned — the Canton UTXO reality, before any submit.
+// From/To/Amount plus a live coin-selection preview: dry-runs the transfer
+// as From + Amount fill in, showing which Holding contracts get consumed.
 function TransferModal({
   instance, symbol, parties, onPartiesChanged, onClose, onDone, onError,
 }: {
@@ -739,9 +698,8 @@ function TransferModal({
   parties: PartyRef[];
   onPartiesChanged?: () => void;
   onClose: () => void;
-  // offered is set when the transfer created a pending TransferInstruction
-  // (Offer kind, no auto-accept) the caller should route to Accept;
-  // undefined when it already settled.
+  // offered set when a pending TransferInstruction needs routing to Accept;
+  // undefined when the transfer already settled.
   onDone: (offered?: { instructionId: string; receiver: string }) => void;
   onError: (e: unknown) => void;
 }) {
@@ -753,7 +711,6 @@ function TransferModal({
   const [busy, setBusy] = useState(false);
   const [plan, setPlan] = useState<import("../api").TransferPlan | null>(null);
 
-  // Debounced dry-run whenever from + amount are both present.
   useEffect(() => {
     if (!from || !amount) {
       setPlan(null);
@@ -773,8 +730,7 @@ function TransferModal({
     setBusy(true);
     try {
       const res = await transferToken(instance, symbol, from, to, amount, reason || undefined, undefined, autoAccept);
-      // A non-auto-accept Offer hands back an instruction id to accept;
-      // anything settled (auto-accept / Direct / self) just closes.
+      // A non-auto-accept Offer returns an instruction id; anything settled just closes.
       onDone(!res.settled && res.transferInstructionId
         ? { instructionId: res.transferInstructionId, receiver: to }
         : undefined);
@@ -855,9 +811,7 @@ function TransferModal({
   );
 }
 
-// KpiRow — the instrument KPI strip: supply, circulating (= supply on
-// a UTXO ledger), holder count, and the number of Holding contracts
-// backing it. All derived from one ACS scan.
+// KPI strip from one ACS scan. Circulating == total supply on a UTXO ledger.
 function KpiRow({ s }: { s: InstrumentSummary }) {
   const cards: Array<{ label: string; value: string; full?: string; hint?: string }> = [
     { label: "Total supply", value: statAmount(s.total_supply), full: s.total_supply },
@@ -894,9 +848,7 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
               fontSize: 20,
               fontFamily: wMono,
               fontVariantNumeric: "tabular-nums",
-              // Belt and braces: a value that still can't fit its card
-              // ellipsizes (full precision lives in the title) rather
-              // than clipping mid-digit.
+              // Ellipsize an oversized value (full precision in the title).
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -911,18 +863,14 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
   );
 }
 
-// A stat headline must fit its card: group thousands, keep at most
-// two decimals, and let the title attribute carry full precision.
-// Non-numeric strings pass through untouched.
+// Group thousands, cap at two decimals; non-numeric strings pass through.
 function statAmount(raw: string): string {
   const n = Number(raw);
   if (!Number.isFinite(n)) return raw;
   return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
-// HolderDistribution — per-holder stake table: balance, share of
-// supply (with an inline bar), and how many Holding contracts back
-// each holder. Sorted biggest-first by the backend.
+// Per-holder stake table (balance, share, UTXO count); backend sorts biggest-first.
 function HolderDistribution({ s, aliases }: { s: InstrumentSummary; aliases: AliasMap }) {
   return (
     <>
@@ -973,9 +921,7 @@ function HolderDistribution({ s, aliases }: { s: InstrumentSummary; aliases: Ali
   );
 }
 
-// ActivityFeed — the instrument's transfer/mint/burn history,
-// reconstructed from the ledger transaction stream. Each row is one
-// netted transaction: kind, amount, and who sent → received.
+// Transfer/mint/burn history from the ledger stream; one netted transaction per row.
 function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null; err: string | null; aliases: AliasMap }) {
   if (err) return <div role="alert" style={{ color: W.err, fontSize: 13, marginTop: 12 }}>{err}</div>;
   if (events === null) return <div style={{ color: W.dim, fontSize: 13, marginTop: 12 }}>Scanning ledger history…</div>;
@@ -1041,9 +987,8 @@ function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null
   );
 }
 
-// MatrixLens — the party × instrument balance table. One ACS scan;
-// rows = parties, columns = instruments, plus a totals row. Only the
-// parties the role's JWT can read appear.
+// Party × instrument balance table from one ACS scan; only parties the
+// role's JWT can read appear.
 function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; err: string | null; aliases: AliasMap }) {
   if (err) return <div role="alert" style={{ color: W.err, fontSize: 13 }}>{err}</div>;
   if (!matrix) return <div style={{ color: W.dim, fontSize: 13 }}>Scanning ACS…</div>;
@@ -1108,10 +1053,8 @@ function Header({ right }: { right?: React.ReactNode }) {
   );
 }
 
-// PartyManagerModal — list the instance's aliased parties, allocate a
-// new one by name, or forget an alias. New parties immediately become
-// visible in the matrix / activity (the scan grants read-as for every
-// registered party).
+// List/allocate/forget aliased parties. New parties are immediately visible
+// in the matrix/activity (the scan grants read-as for every registered party).
 function PartyManagerModal({
   instance,
   parties,
@@ -1348,12 +1291,9 @@ function ActionModal({
   );
 }
 
-// PartyPicker — alias-aware party selector for the token modals: pick
-// a registered alias, create one inline (POST /api/parties), or fall
-// back to typing a raw id. Always emits the resolved party_id, which
-// the backend's ResolveAlias passes through unchanged — correct for
-// both the create path (no alias resolution) and the
-// mint/transfer/burn/faucet paths (which do resolve).
+// Alias-aware party selector: pick a registered alias, create one inline,
+// or type a raw id. Always emits the resolved party_id (ResolveAlias passes
+// it through unchanged, so it's correct on both create and action paths).
 function PartyPicker({
   instance,
   parties,
@@ -1375,8 +1315,7 @@ function PartyPicker({
   const [newAlias, setNewAlias] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // Locally-created parties show in the list instantly, before the
-  // parent's onPartiesChanged refetch lands.
+  // Locally-created parties show instantly, before the parent's refetch lands.
   const [extra, setExtra] = useState<PartyRef[]>([]);
 
   const all = useMemo(() => {
@@ -1529,12 +1468,8 @@ const input: React.CSSProperties = {
   background: W.surface2, color: W.text, border: `1px solid ${W.border}`,
   borderRadius: 2, padding: "6px 8px", fontSize: 13,
 };
-// Table column headers are an allowed wide-caps site; the 10px cell
-// side-padding keeps >=12px of air between adjacent columns.
 const th: React.CSSProperties = { ...tableCaps, padding: "6px 10px", borderBottom: `1px solid ${W.border}`, fontSize: 11 };
 const td: React.CSSProperties = { padding: "6px 10px", borderBottom: `1px solid ${W.border}`, color: W.text };
-// Numeric columns (amounts, balances, counts) right-align with tabular
-// figures so digits line up column-wise.
 const thNum: React.CSSProperties = { ...th, textAlign: "right" };
 const tdNum: React.CSSProperties = { ...td, textAlign: "right", fontFamily: wMono, fontVariantNumeric: "tabular-nums" };
 

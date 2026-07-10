@@ -19,17 +19,11 @@ import { CreatingPanel } from "./CreatingPanel";
 import { DeveloperSetup } from "./DeveloperSetup";
 import { InstanceDetail } from "./InstanceDetail";
 
-// Dashboard — the Overview screen. Renders the registered-instance
-// table from GET /api/instances.
-//
-// Selection state lives in the URL (?instance=<name>) via
-// useInstanceSelection so the topbar switcher and Dashboard agree on a
-// single source of truth — and so shared links preserve the user's
-// pick.
+// Selection state lives in the URL (?instance=<name>) so the topbar
+// switcher and Dashboard share one source of truth and links survive.
 export function Dashboard() {
   const sel = useInstanceSelection();
   const [createOpen, setCreateOpen] = useState(false);
-  // Gate the skeleton so a fast local fetch never flashes it.
   const showSkeleton = useLoadingDelay(sel.loading);
 
   return (
@@ -46,8 +40,7 @@ export function Dashboard() {
           LocalNet instances
         </h1>
         <Button
-          // While the list is empty the hero CTA is the primary action,
-          // so this button steps down to secondary to avoid two primaries.
+          // Steps down to secondary when the empty-state hero CTA owns primary.
           variant={sel.instances.length === 0 ? "secondary" : "primary"}
           icon={<IcPlus />}
           onClick={() => setCreateOpen(true)}
@@ -61,10 +54,8 @@ export function Dashboard() {
         onClose={useCallback(() => setCreateOpen(false), [])}
         onCreated={useCallback(
           (name: string) => {
-            // Refresh the list and promote the new instance to the
-            // URL-driven selection so the detail card pops when the
-            // modal closes. useCallback'd so the modal's done-effect
-            // doesn't see a new identity each render and refire.
+            // useCallback'd so the modal's done-effect keeps a stable
+            // identity and doesn't refire each render.
             sel.refresh();
             sel.select(name);
           },
@@ -122,9 +113,8 @@ export function Dashboard() {
       )}
 
       {sel.selected && (() => {
-        // Mid-bring-up: show the live progress panel above the static
-        // detail and hide the JWT generator — no point signing tokens
-        // for an instance that isn't running yet.
+        // While creating, show the live progress panel and hide the JWT
+        // generator — no point signing tokens before it's running.
         const selectedRow = sel.instances.find((i) => i.name === sel.selected);
         const isCreating = selectedRow?.status === "creating";
         return (
@@ -189,8 +179,7 @@ function InstanceTable({ instances, selected, onSelect }: InstanceTableProps) {
                 onClick={() => onSelect(i.name)}
                 style={{
                   borderTop: `1px solid ${W.border}`,
-                  // Flat active fill — no accent side-bar, no padding
-                  // swap, so the row never shifts on selection.
+                  // Flat fill, no padding swap, so the row never shifts on select.
                   background: isSel ? W.selRow : undefined,
                   cursor: "pointer",
                 }}
@@ -216,8 +205,6 @@ function InstanceTable({ instances, selected, onSelect }: InstanceTableProps) {
   );
 }
 
-// Table loading placeholder — mirrors the four-column instance table so
-// rows arrive in place instead of jumping in after a spinner.
 function InstanceTableLoading() {
   return (
     <div
@@ -244,8 +231,6 @@ const td: React.CSSProperties = {
   verticalAlign: "middle",
 };
 
-// Numeric / mono columns (ports, versions): right-aligned, tabular so
-// digits line up column-to-column.
 const numCell: React.CSSProperties = {
   textAlign: "right",
   fontFamily: wMono,
@@ -304,12 +289,7 @@ function ErrorPanel({ error }: { error: string }) {
   );
 }
 
-// RecentActivity — instance-scoped ledger activity on the Overview.
-// Reuses GET /api/instances/{name}/transactions (the same offset-window
-// scan the Explorer and CLI `tx ls` use), flattened to one row per
-// ledger event and projected through the app-provider participant. A
-// snapshot with manual refresh — the transactions endpoint is a window
-// scan, not an SSE stream.
+// Snapshot with manual refresh — /transactions is a window scan, not an SSE stream.
 function RecentActivity({ name }: { name: string }) {
   const [tick, setTick] = useState(0);
   const [state, setState] = useState<
@@ -461,9 +441,7 @@ function RecentActivity({ name }: { name: string }) {
   );
 }
 
-// shortTemplate drops the package-id prefix from a fully-qualified
-// template id (`<pkg>:Module:Entity` → `Module:Entity`) for a compact,
-// readable EVENT column.
+// `<pkg>:Module:Entity` → `Module:Entity` for a compact EVENT column.
 function shortTemplate(t?: string): string {
   if (!t) return "—";
   const parts = t.split(":");

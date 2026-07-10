@@ -16,9 +16,8 @@ import { AgentSkillsScreen } from "./screens/AgentSkillsScreen";
 import { TokensScreen } from "./screens/TokensScreen";
 import { W } from "./tokens";
 
-// App boots with a schema-version handshake against the backend and
-// renders the shell only on a match — a UI bundle must never silently
-// mis-decode responses from a backend with a different schema.
+// Boots with a schema-version handshake and renders the shell only on a
+// match, so the bundle never mis-decodes a mismatched backend's responses.
 export function App() {
   const [status, setStatus] = useState<"loading" | "ready" | "mismatch" | "offline">(
     "loading",
@@ -50,16 +49,14 @@ export function App() {
       <Shell>
         <RoutedSurface />
       </Shell>
-      {/* One confirm-dialog host for the whole app; confirmDialog()
-          from anywhere resolves against it. */}
+      {/* One confirm-dialog host; confirmDialog() from anywhere resolves against it. */}
       <ConfirmHost />
     </InstanceSelectionProvider>
   );
 }
 
-// RoutedSurface wraps each route element in its own ErrorBoundary,
-// keyed by pathname, so a crash on one screen neither follows the
-// user to the next route nor takes down the shell around it.
+// Each route gets its own ErrorBoundary keyed by pathname, so a crash on
+// one screen neither follows the user nor takes down the shell.
 function RoutedSurface() {
   const loc = useLocation();
   return (

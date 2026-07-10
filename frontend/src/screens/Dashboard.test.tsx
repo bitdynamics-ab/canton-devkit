@@ -5,16 +5,6 @@ import { MemoryRouter } from "react-router-dom";
 import { Dashboard } from "./Dashboard";
 import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
 
-// Dashboard tests — the user-facing states for the Overview
-// screen. Pin the table-rendering + click-to-select wiring +
-// the empty/error fallbacks; the InstanceTable's status badge
-// is implementation detail not worth testing in isolation.
-//
-// Three classes of state the user sees:
-//   1. ok with instances → table + InstanceDetail + DeveloperSetup
-//   2. ok with empty list → EmptyState ("run dpm localnet up")
-//   3. error → ErrorPanel with the message
-
 function mockListResponse(
   instances: Array<{ name: string; status: string }> | "error",
   warning?: string,
@@ -23,7 +13,6 @@ function mockListResponse(
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string) => {
-      // /api/instances/:name detail — for InstanceDetail card.
       if (url.match(/\/api\/instances\/[^/?]+(?:\?|$)/)) {
         return Promise.resolve(
           new Response(
@@ -43,9 +32,7 @@ function mockListResponse(
           ),
         );
       }
-      // /api/instances/{name}/containers — ContainerHealth's
-      // 3s poll. Return empty list so the panel renders the
-      // "no containers" placeholder rather than the error path.
+      // Empty list so ContainerHealth renders its placeholder, not the error path.
       if (url.match(/\/api\/instances\/[^/?]+\/containers/)) {
         return Promise.resolve(
           new Response(
@@ -63,8 +50,7 @@ function mockListResponse(
           ),
         );
       }
-      // /api/instances/{name}/transactions — the RecentActivity
-      // panel's ledger-event scan, fired only for a running instance.
+      // RecentActivity's ledger-event scan, fired only for a running instance.
       if (url.includes("/transactions")) {
         if (txOverride) {
           return Promise.resolve(
@@ -99,7 +85,6 @@ function mockListResponse(
           ),
         );
       }
-      // /api/instances list — primary fetch.
       if (url.includes("/api/instances")) {
         if (instances === "error") {
           return Promise.resolve(
@@ -130,9 +115,7 @@ function mockListResponse(
           ),
         );
       }
-      // JWT + app-config — DeveloperSetup fires these once the
-      // instance is selected. Return minimal payloads to keep
-      // the components happy.
+      // DeveloperSetup fires these once an instance is selected.
       if (url.includes("/jwt")) {
         return Promise.resolve(
           new Response(
@@ -177,17 +160,12 @@ describe("Dashboard", () => {
     ]);
     renderDashboard();
 
-    // "demo" appears in the table AND in the InstanceDetail
-    // header (auto-selected); "hubble" only in the table.
-    // Scope to <table> so we're asserting the row, not the
-    // detail card's echo.
+    // Scope to <table> so we assert the row, not the detail card's echo of "demo".
     await waitFor(() => {
       const table = screen.getByRole("table");
       expect(within(table).getByText("demo")).toBeInTheDocument();
       expect(within(table).getByText("hubble")).toBeInTheDocument();
     });
-    // State badges within the table — StatusBadge renders Title-Case
-    // labels so the dot is never the only cue.
     const table = screen.getByRole("table");
     expect(within(table).getByText("Running")).toBeInTheDocument();
     expect(within(table).getByText("Stopped")).toBeInTheDocument();
@@ -199,8 +177,6 @@ describe("Dashboard", () => {
     await waitFor(() => {
       expect(screen.getByText(/no localnet instances/i)).toBeInTheDocument();
     });
-    // The remediation hint must include the dpm command — this
-    // is the user's first interaction with an empty UI.
     expect(screen.getByText(/dpm localnet up/i)).toBeInTheDocument();
   });
 
@@ -213,9 +189,6 @@ describe("Dashboard", () => {
   });
 
   it("renders the warning strip when ListResponse.warning is set", async () => {
-    // Same warning the CLI's `dpm localnet list` surfaces (e.g.
-    // registry parse drift). Should show as an amber strip above
-    // the table.
     mockListResponse(
       [{ name: "demo", status: "running" }],
       "registry has 1 unreadable entry; ignoring",
@@ -235,20 +208,12 @@ describe("Dashboard", () => {
     ]);
     renderDashboard();
 
-    // The auto-pick rule picks demo (first running). Click on
-    // hubble's row to override.
+    // Auto-pick selects demo (first running); click hubble to override.
     const hubbleCell = await screen.findByText("hubble");
     await userEvent.click(hubbleCell);
 
-    // After selection, the InstanceDetail card pops with the
-    // detail-fetched data. We fetch a static "demo" detail in
-    // the mock, but the card header echoes the URL-selected
-    // name (hubble), so look for that as the source-of-truth.
+    // InstanceDetail only renders once selection is non-null.
     await waitFor(() => {
-      // The hubble cell should now show in the brand colour
-      // class — but we can't easily check colour. Instead pin
-      // that the InstanceDetail section appeared, which only
-      // happens once selection is non-null.
       expect(screen.getByText(/instance detail/i)).toBeInTheDocument();
     });
   });
@@ -260,9 +225,7 @@ describe("Dashboard", () => {
     ]);
     renderDashboard();
 
-    // InstanceDetail appears because the auto-pick selected demo.
-    // Without the auto-pick rule there'd be no selected
-    // instance and the detail card wouldn't render.
+    // InstanceDetail renders only because auto-pick selected demo.
     await waitFor(() => {
       expect(screen.getByText(/instance detail/i)).toBeInTheDocument();
     });
@@ -271,8 +234,6 @@ describe("Dashboard", () => {
   it("shows the recent-activity panel with ledger events for a running instance", async () => {
     mockListResponse([{ name: "demo", status: "running" }]);
     renderDashboard();
-    // The panel mounts for the auto-selected running instance and
-    // flattens transactions → one row per ledger event.
     await waitFor(() =>
       expect(screen.getByText(/recent activity/i)).toBeInTheDocument(),
     );
@@ -293,8 +254,7 @@ describe("Dashboard", () => {
   });
 
   it("recent-activity shows the restart-to-capture hint for the no-JWT-recorded 500", async () => {
-    // The real e2e-metrics-demo case: instances predating JWT capture
-    // return a generic 500, distinguished by message, not a code.
+    // Instances predating JWT capture return a generic 500 distinguished by message, not code.
     mockListResponse([{ name: "demo", status: "running" }], undefined, {
       status: 500,
       body: { code: "INTERNAL", error: "no JWT recorded for role app-provider" },

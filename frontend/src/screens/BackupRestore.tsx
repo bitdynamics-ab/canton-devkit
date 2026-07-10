@@ -9,20 +9,7 @@ import { W, wMono, tint, R, FAST } from "../tokens";
 import { Button } from "../components/Button";
 import { IcCheck, IcDownload } from "../components/icons";
 
-// Backup & restore card. Two actions:
-//   1. Download snapshot — POST /api/instances/:name/snapshot; the
-//      browser saves the tar via Content-Disposition.
-//   2. Restore from snapshot — drag-drop or file picker, with an
-//      optional target-name override and a `--force` checkbox for
-//      cross-version restores.
-//
-// CLI ↔ UI parity (CONTRIBUTING.md): mirrors `localnet snapshot --name
-// X --to <path>` and `localnet restore --name X --from <path>
-// [--force]` — same server-side validation, same error taxonomy.
-
 interface Props {
-  // Snapshot downloads always use this name; restore defaults to it
-  // but lets the user override.
   instanceName: string;
 }
 
@@ -41,9 +28,7 @@ export function BackupRestore({ instanceName }: Props) {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // useState only honors its initial value on first mount, so switching
-  // instances must resync targetName explicitly — and reset the result
-  // banner/options so state doesn't bleed across instances.
+  // Resync on instance switch: useState keeps its first-mount value.
   useEffect(() => {
     setTargetName(instanceName);
     setRestore({ kind: "idle" });
@@ -52,18 +37,11 @@ export function BackupRestore({ instanceName }: Props) {
   }, [instanceName]);
 
   async function onDownload() {
-    // The snapshot is application-consistent: the backend pauses the
-    // instance's node containers for the duration of the dump (the same
-    // quiesce the CLI does), so there is no crash-consistency caveat to
-    // surface.
     setDownloading(true);
     setDownloadError(null);
     try {
       await downloadSnapshot(instanceName);
     } catch (e) {
-      // downloadSnapshot rejects when the server returned an error
-      // document instead of a file; without surfacing it the button
-      // would just flash and the user would assume success.
       setDownloadError(
         e instanceof ApiError ? e.message : "snapshot download failed",
       );
@@ -74,9 +52,8 @@ export function BackupRestore({ instanceName }: Props) {
 
   async function onFileChosen(file: File | null) {
     if (!file) return;
-    // 4 GiB is the practical ceiling for an XHR upload (browsers buffer
-    // the whole body in memory) — refuse client-side rather than OOM
-    // the tab on a stray drop.
+    // XHR buffers the whole body in memory; refuse >4 GiB client-side
+    // rather than OOM the tab.
     const MAX_TARBALL_BYTES = 4 * 1024 * 1024 * 1024;
     if (file.size > MAX_TARBALL_BYTES) {
       setRestore({
@@ -106,9 +83,6 @@ export function BackupRestore({ instanceName }: Props) {
   return (
     <section
       style={{
-        // This card lives inside the InstanceDetail card. One container
-        // edge per region: drop the nested border/fill and delimit with
-        // a hairline top divider + a section header instead.
         marginTop: 16,
         borderTop: `1px solid ${W.border}`,
         paddingTop: 16,
@@ -131,7 +105,6 @@ export function BackupRestore({ instanceName }: Props) {
         </span>
       </header>
 
-      {/* Download row */}
       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
         <Button
           variant="secondary"
@@ -150,7 +123,6 @@ export function BackupRestore({ instanceName }: Props) {
         </span>
       </div>
 
-      {/* Download error banner */}
       {downloadError && (
         <div
           role="alert"
@@ -168,7 +140,6 @@ export function BackupRestore({ instanceName }: Props) {
         </div>
       )}
 
-      {/* Restore row */}
       <div style={{ marginTop: 18 }}>
         <div
           style={{
@@ -235,7 +206,6 @@ export function BackupRestore({ instanceName }: Props) {
           onChange={(e) => void onFileChosen(e.target.files?.[0] ?? null)}
         />
 
-        {/* Options row */}
         <div
           style={{
             marginTop: 10,
@@ -286,7 +256,6 @@ export function BackupRestore({ instanceName }: Props) {
           </label>
         </div>
 
-        {/* Result banner */}
         {restore.kind === "success" && (
           <div
             role="status"

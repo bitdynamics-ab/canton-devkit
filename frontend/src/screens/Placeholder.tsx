@@ -1,8 +1,6 @@
 import { W, R } from "../tokens";
 
-// Placeholder — the route stub for screens whose backend hasn't
-// landed yet. Swap the route in App.tsx to the real screen component
-// as each one becomes available.
+// Route stub for screens whose backend hasn't landed yet.
 export function Placeholder({ name }: { name: string }) {
   return (
     <div

@@ -16,25 +16,14 @@ import {
   useCreateProgress,
 } from "./useCreateProgress";
 
-// CreatingPanel — shown above the InstanceDetail/DeveloperSetup cards
-// when the selected instance is status="creating". Subscribes to
-// /api/instances/{name}/events and renders the same step rows as the
-// create modal (both consume the shared useCreateProgress state).
-//
-// Two scenarios:
-//   1. Live bring-up: the SSE stream replays buffered events + live
-//      ones — real-time progress just like the modal.
-//   2. Zombie creating: the registry says creating but no goroutine is
-//      publishing (e.g. a server restart killed it mid-flight). No
-//      events arrive; after a grace period the panel surfaces a "looks
-//      stalled" hint with a cleanup CTA.
+// Shown when the selected instance is status="creating". Renders live
+// SSE bring-up progress, or — if no event arrives within ZOMBIE_GRACE_MS
+// (e.g. a server restart orphaned the entry) — a stalled hint + cleanup.
 
-const ZOMBIE_GRACE_MS = 3000; // wait this long before showing "stalled" hint
+const ZOMBIE_GRACE_MS = 3000;
 
 interface Props {
   name: string;
-  // Called after a cancel or stalled-state cleanup so the Dashboard
-  // re-fetches and the row's status updates.
   onRefresh: () => void;
 }
 
@@ -42,13 +31,9 @@ export function CreatingPanel({ name, onRefresh }: Props) {
   const eventsUrl = `/api/instances/${encodeURIComponent(name)}/events`;
   const progress = useCreateProgress(eventsUrl);
 
-  // Zombie detection: no event by ZOMBIE_GRACE_MS surfaces the
-  // "stalled" affordance. Derived freshly on every render rather than
-  // via setTimeout — a timeout closure would capture progress.startedAt
-  // at setup time and never re-check it, so events arriving late (slow
-  // network, slow first publish) would leave the panel permanently
-  // "stalled". mountedAtRef pegs the start time per name; the 1s ticker
-  // below keeps the derived check current.
+  // Derived per render, not via setTimeout: a timeout closure would
+  // capture startedAt once and never re-check, wedging late events as
+  // "stalled". mountedAtRef pegs the start; the 1s ticker below refreshes.
   const mountedAtRef = useRef<number>(Date.now());
   useEffect(() => {
     mountedAtRef.current = Date.now();
@@ -62,9 +47,8 @@ export function CreatingPanel({ name, onRefresh }: Props) {
     progress.startedAt === null &&
     Date.now() - mountedAtRef.current > ZOMBIE_GRACE_MS;
 
-  // Live path: ask the goroutine to stop. The backend publishes
-  // kind=cancelled, then the goroutine sees ctx.Done() and writes
-  // status=failed via its existing path.
+  // Live path: ask the goroutine to stop; it publishes kind=cancelled
+  // then writes status=failed.
   async function onCancelLive() {
     try {
       await cancelInstanceUp(name);
@@ -75,14 +59,12 @@ export function CreatingPanel({ name, onRefresh }: Props) {
   }
 
   // Zombie path: no live goroutine, so /up cancel would 404 — scrub the
-  // registry entry instead so the row disappears from the list.
+  // registry entry instead.
   async function onScrub() {
     try {
       await scrubInstance(name);
       onRefresh();
     } catch {
-      // Even if scrub fails (e.g. 409 because the entry is now
-      // running), refresh so the user sees current state.
       onRefresh();
     }
   }
@@ -304,8 +286,6 @@ function BannerPill({
   banner: ProgressState["banner"];
   zombie: boolean;
 }) {
-  // Route the bring-up banner through the shared StatusBadge so the
-  // creating panel reads the same as every other status in the console.
   if (zombie) {
     return <StatusBadge status="stalled" variant="pill" />;
   }
@@ -317,7 +297,6 @@ function BannerPill({
     case "cancelled":
       return <StatusBadge status="cancelled" variant="pill" />;
     default:
-      // Live SSE stream: pulse the dot to signal in-progress.
       return <StatusBadge status="starting" variant="pill" pulse />;
   }
 }

@@ -1,5 +1,4 @@
-// StatusBadge — single renderer for instance / container / stream status.
-// Always pairs a colored dot with a text label so color is never the only cue.
+// Pairs a colored dot with a text label so color is never the only cue.
 
 import type { CSSProperties } from "react";
 import { W, tint, R } from "../tokens";
@@ -7,7 +6,6 @@ import { Dot } from "./icons";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
 
-// Known statuses map to a label + tone; unknown values render muted.
 const MAP: Record<string, { label: string; tone: Tone }> = {
   running: { label: "Running", tone: "ok" },
   healthy: { label: "Healthy", tone: "ok" },
@@ -24,7 +22,6 @@ const MAP: Record<string, { label: string; tone: Tone }> = {
   failed: { label: "Failed", tone: "danger" },
   error: { label: "Error", tone: "danger" },
   dead: { label: "Dead", tone: "danger" },
-  // Explorer stream states.
   live: { label: "Live", tone: "ok" },
   reconnecting: { label: "Reconnecting", tone: "warn" },
   truncated: { label: "Truncated", tone: "warn" },
@@ -50,10 +47,8 @@ function resolve(status: string): { label: string; color: string } {
 
 interface StatusBadgeProps {
   status: string;
-  /** "text" = dot + colored label (tables, detail rows);
-   *  "pill" = bordered tinted chip (topbar, cards). */
+  /** "text" = dot + label; "pill" = bordered tinted chip. */
   variant?: "text" | "pill";
-  /** Pulse the dot (in-flight states). */
   pulse?: boolean;
   style?: CSSProperties;
 }

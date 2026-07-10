@@ -12,8 +12,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// stubDemoSeams swaps the four RunDemo orchestration seams for fakes and
-// returns a restore func — lets us pin the choreography without a ledger.
+// stubDemoSeams swaps the four RunDemo orchestration seams for fakes.
 func stubDemoSeams(
 	t *testing.T,
 	party func(context.Context, PartyOptions) (*registry.PartyRef, error),
@@ -27,8 +26,7 @@ func stubDemoSeams(
 	t.Cleanup(func() { demoPartyNew, demoCreate, demoMint, demoFaucet = op, oc, om, of })
 }
 
-// stubDemoV2Capable pins the V1/V2 routing decision so a test exercises the
-// chosen path without a real catalogue/registry lookup.
+// stubDemoV2Capable pins the V1/V2 routing decision.
 func stubDemoV2Capable(t *testing.T, v bool) {
 	t.Helper()
 	prev := demoV2Capable
@@ -88,8 +86,6 @@ func TestRunDemo_ComposesPartyCreateMintFaucet(t *testing.T) {
 	if !slices.Equal(order, want) {
 		t.Fatalf("call order = %v, want %v", order, want)
 	}
-	// Issuer party id threads into create (admin), mint (recipient) and the
-	// faucet source; defaults applied for symbol/supply/decimals.
 	if createOpts.Issuer != "demo-issuer::pid" || createOpts.Symbol != "DEMO" || createOpts.InitialSupply != "1000000" || createOpts.Decimals != 6 {
 		t.Errorf("create opts wrong: %+v", createOpts)
 	}
@@ -155,9 +151,8 @@ func TestRunDemo_StopsOnCreateError(t *testing.T) {
 	}
 }
 
-// Re-running the demo with the same symbol (the "click it twice" case)
-// must give an actionable "already exists" message, while still wrapping
-// ErrSymbolInUse so both surfaces map it to 409.
+// Re-run must give an actionable "already exists" message while still wrapping
+// ErrSymbolInUse (→ 409 on both surfaces).
 func TestRunDemo_DuplicateSymbolIsActionable(t *testing.T) {
 	stubDemoV2Capable(t, true)
 	stubDemoSeams(t,
@@ -208,9 +203,7 @@ func TestRunDemo_ReusesExistingIssuerAlias(t *testing.T) {
 	}
 }
 
-// On a standard (V1) instance the demo can't create/mint a new instrument;
-// it allocates a holder and faucets Amulet to it from the funded role
-// party. No create, no mint.
+// On a V1 instance the demo faucets Amulet to a holder — no create, no mint.
 func TestRunDemo_V1FundsHolderWithAmulet(t *testing.T) {
 	stubDemoV2Capable(t, false)
 	var order []string
@@ -239,12 +232,9 @@ func TestRunDemo_V1FundsHolderWithAmulet(t *testing.T) {
 		t.Fatalf("RunDemo: %v", err)
 	}
 
-	// Only allocate-holder + faucet — never create or mint on V1.
 	if want := []string{"party:demo-holder", "faucet:demo-holder::pid"}; !slices.Equal(order, want) {
 		t.Fatalf("V1 call order = %v, want %v (no create/mint)", order, want)
 	}
-	// Faucet moves Amulet from the role's funded party (app-user), with the
-	// smaller V1 seed default.
 	if faucetOpts.Instrument != "Amulet" || faucetOpts.Source != "app-user" ||
 		faucetOpts.To != "demo-holder::pid" || faucetOpts.Amount != "100" {
 		t.Errorf("V1 faucet opts wrong: %+v", faucetOpts)

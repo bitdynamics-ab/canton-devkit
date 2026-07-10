@@ -22,56 +22,30 @@ import {
   type Series,
 } from "../components/charts/types";
 
-// MetricsScreen — live Canton + Splice metrics for the selected
-// instance: a 4-up MetricCard strip with deltas + sparklines, six
-// PromQL-backed chart cards, and a full-width "Top error sources"
-// bar chart. Auto-refreshes every 5 s (the cards load in parallel).
-// When the observability profile isn't enabled, a friendly
-// empty-state panel offers to turn it on.
-
 interface CardState<T> {
   kind: "loading" | "ok" | "err";
   data?: T;
   error?: string;
 }
 
-// PromQL queries. Sourced from internal/metricsq for parity with the
-// CLI's `localnet metrics` headline; the per-template / phase /
-// heatmap queries are extensions specific to this screen.
-//
-// All metric names are the daml_* / db_client_* / jvm_* families the
-// Splice OTel reporter actually emits (verified against a live obs
-// profile). Some per-screen extensions have no direct daml_*
-// equivalent on Splice 0.6.4 — the closest functional analogue is
-// used instead, marked inline (see docs/observability.md).
 const Q = {
   // Substitute: indexer-update counter, same as HeadlineLedgerTPS.
   throughputSeries:
     "sum(rate(daml_participant_api_indexer_updates[1m])) or vector(0)",
-  // Splice 0.6.4 exports the sequencing-duration histogram with only the
-  // +Inf bucket (no finite `le` boundaries), so histogram_quantile()
-  // returns NaN regardless of load — percentiles are not computable here.
-  // The average IS (sum/count), so the latency surfaces show that instead,
-  // labelled honestly as an average. In milliseconds.
+  // 0.6.4 exports this histogram with only the +Inf bucket, so
+  // histogram_quantile is NaN; use the mean (sum/count), x1000 -> ms.
   avgLatency:
     "1000 * sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_sum[5m])) / sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_count[5m]))",
-  // Live Splice does not expose total ACS cardinality as a stock
-  // Prometheus metric. The former proxy
-  // (daml_participant_api_index_db_active_contract_lookup_batch_buffer_length)
-  // is no longer emitted by Splice 0.6.4 — verified absent from a live
-  // instance's Prometheus. The active-contracts in-memory buffer gauge
-  // is the audited ACS-related signal that exists in 0.6.4; keep UI copy
-  // honest and call it a lookup buffer.
+  // No total-ACS-cardinality metric on 0.6.4 (old proxy gone); the
+  // active-contracts buffer gauge is the closest present signal.
   acsLookupBuffer:
     "sum(daml_participant_api_index_active_contracts_buffer_size)",
-  // No daml_* command-rejection counter on Splice 0.6.4 — use the
-  // user-error completion-status counter as a proxy for "things
-  // the participant refused to commit". Returns 0 if not exposed.
+  // No command-rejection counter on 0.6.4; the non-OK gRPC completion
+  // counter is the substitute for refused commands. 0 if not exposed.
   errorsRate:
     'sum(rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m])) or vector(0)',
-  // Splice 0.6.x does not expose template-grain submission counters.
-  // Use the live gRPC method counter as a command-throughput fallback
-  // instead of querying a non-existent `daml_commands_*` family.
+  // No template-grain submission counters on 0.6.x; the gRPC method
+  // counter is the command-throughput substitute.
   commandThroughput:
     "sum by (grpc_method_name) (rate(daml_grpc_server_handled_total[5m]))",
   errors1m:
@@ -82,15 +56,10 @@ const Q = {
     'sum by (component) (jvm_memory_used_bytes{jvm_memory_type="heap"})',
 };
 
-// scopeQ injects instance="<scope>" into every metric selector of a chart
-// query when the summary reports a scope — i.e. when this instance is
-// served by the shared multi-instance Prometheus, so a chart shows
-// one instance, not the sum across all of them. It targets our known
-// metric-name prefixes, so it never touches function names (sum, rate,
-// histogram_quantile) or `by (...)` label lists, and composes with a
-// metric's existing label without an invalid trailing comma. An empty
-// scope (the single-instance per-instance Prometheus) returns the query
-// unchanged.
+// Injects instance="<scope>" into each metric selector so a chart shows
+// one instance on the shared multi-instance Prometheus. Matches only
+// metric-name prefixes, so it skips function names and `by (...)` lists;
+// empty scope returns the query unchanged.
 export function scopeQ(query: string, scope: string): string {
   if (!scope) return query;
   const inst = `instance="${scope}"`;
@@ -143,11 +112,6 @@ export function MetricsScreen() {
 
   useEffect(() => {
     if (!name) return;
-    // An AbortSignal (not a boolean flag) reaches in-flight loaders:
-    // fetch aborts mid-flight and loaders short-circuit on
-    // signal.aborted, so nothing setStates on an unmounted component.
-    // Polling is gated on document.visibilityState — no point
-    // hammering Prometheus when the tab is hidden.
     let outer: AbortController | null = null;
     const tick = async () => {
       // Abort the prior tick's in-flight requests — a slow query from
@@ -155,8 +119,6 @@ export function MetricsScreen() {
       outer?.abort();
       outer = new AbortController();
       const signal = outer.signal;
-      // Instance label to scope the chart queries by — set when the
-      // summary reports we're reading the shared multi-instance stack.
       let scope = "";
       try {
         const s = await fetchMetricsSummary(name, signal);
@@ -232,11 +194,9 @@ export function MetricsScreen() {
     };
   }, [name]);
 
-  // These memos MUST sit above every conditional return below so hook
-  // order is stable across the (!name) and (observabilityOff)
-  // early-exit paths — rules of hooks.
+  // These memos must sit above every conditional return so hook order
+  // is stable across the early-exit paths (rules of hooks).
   const tpsDelta = useMemo(() => deltaFromSeries(throughputSeries.data), [throughputSeries.data]);
-  // avgLatency is already in ms — no unit scaling for the delta.
   const latencyDelta = useMemo(() => deltaFromSeries(latencySeries.data), [latencySeries.data]);
   const acsDelta = useMemo(() => deltaFromSeries(acsSeries.data), [acsSeries.data]);
   const errDelta = useMemo(() => deltaFromSeries(errorsSeries.data), [errorsSeries.data]);
@@ -262,8 +222,6 @@ export function MetricsScreen() {
         <ObservabilityOffPanel
           name={name}
           onEnabled={() => {
-            // Clearing the empty state lets the ongoing 5s poll
-            // repopulate from the newly-running Prometheus.
             setObservabilityOff(null);
           }}
         />
@@ -272,16 +230,14 @@ export function MetricsScreen() {
   }
 
   const m = summary.data?.metrics;
-  // The backend latency.p99_ms is histogram_quantile-derived and NaN on
-  // Splice 0.6.4 (no finite buckets); use the computable average from the
-  // frontend series instead — its latest point, already in ms.
+  // Backend p99_ms is NaN on 0.6.4 (no finite buckets); use the
+  // computable average series' latest point, already in ms.
   const latencyValue = latencySeries.data?.points.at(-1)?.v;
 
   return (
     <section style={{ padding: 24 }}>
       <Header name={name} />
 
-      {/* 4-up top strip */}
       <div
         style={{
           display: "grid",
@@ -335,7 +291,6 @@ export function MetricsScreen() {
         />
       </div>
 
-      {/* 2-col chart grid */}
       <div
         style={{
           display: "grid",
@@ -430,12 +385,8 @@ export function MetricsScreen() {
         </ChartCard>
       </div>
 
-      {/* Latency headline triplet — mirrors `dpm localnet metrics` text
-          output so CLI and UI agree on the curated quantiles. Splice 0.6.4
-          exports the histogram with only the +Inf bucket, so these
-          percentiles are NaN there; hide the strip rather than show three
-          dashes. It reappears on any version whose histogram carries finite
-          buckets. */}
+      {/* Percentiles are NaN on 0.6.4 (+Inf-only histogram); hide the
+          strip rather than show three dashes. Reappears with finite buckets. */}
       {[
         summary.data?.latency?.p50_ms,
         summary.data?.latency?.p95_ms,
@@ -448,7 +399,6 @@ export function MetricsScreen() {
         />
       )}
 
-      {/* Top error sources — full width */}
       <ChartCard title="Top error sources" subtitle="last hour">
         {topErrors.kind === "err" ? (
           <ErrLine msg={topErrors.error ?? "failed"} />
@@ -462,16 +412,11 @@ export function MetricsScreen() {
         )}
       </ChartCard>
 
-      {/* Dashboards — deep link to the bundled Grafana view. Same UID
-          the CLI's text output prints, so both surfaces point at the
-          same view (CLI ↔ UI parity, see CONTRIBUTING.md). */}
       <DashboardsBlock url={summary.data?.dashboards?.grafana_url} />
     </section>
   );
 }
 
-// LatencyStrip surfaces the same three quantiles `dpm localnet
-// metrics` prints, making the SLA shape visible at a glance.
 function LatencyStrip(props: {
   p50?: number;
   p95?: number;
@@ -517,9 +462,6 @@ function LatencyStrip(props: {
   );
 }
 
-// DashboardsBlock surfaces the Grafana deep link from the summary
-// handler. When the URL is empty we render the same hint as the CLI
-// rather than hiding the section, so users learn the profile exists.
 function DashboardsBlock(props: { url?: string }) {
   const wrap: CSSProperties = {
     marginTop: 16,
@@ -601,10 +543,6 @@ function ChartCard({
   );
 }
 
-// ErrLine — a chart card's query failed. The 5 s poll re-issues the
-// query on the next tick, so this states the cause and that a retry is
-// already in flight, with the raw server message tucked behind a
-// disclosure rather than shouting a stack-shaped string.
 function ErrLine({ msg }: { msg: string }) {
   return (
     <div role="alert" style={{ padding: "14px 0", fontSize: 12 }}>
@@ -642,8 +580,7 @@ function ObservabilityOffPanel({
     setBusy(true);
     setErr(null);
     try {
-      // Send BOTH: the Metrics screen needs Prometheus (for data)
-      // AND Grafana (for the dashboards link).
+      // Prometheus for data, Grafana for the dashboards link.
       await setObservability(name, { prometheus: true, grafana: true });
       onEnabled();
     } catch (e) {
@@ -709,10 +646,6 @@ function ObservabilityOffPanel({
   );
 }
 
-// ── Loaders ──────────────────────────────────────────────────────
-
-// isAborted treats an AbortError thrown by fetch the same as the
-// signal being already aborted at the moment we check it.
 function isAborted(signal: AbortSignal, e: unknown): boolean {
   if (signal.aborted) return true;
   return e instanceof DOMException && e.name === "AbortError";
@@ -809,7 +742,6 @@ async function loadBars(
       r as unknown as PrometheusRangeResponse,
       labelFn,
     );
-    // For a "right now" bar chart we just want the latest value per series.
     const bars: Bar[] = decoded
       .map((s, i) => ({
         label: s.label,
@@ -842,8 +774,6 @@ async function loadHeatmap(
       r as unknown as PrometheusRangeResponse,
       (m) => m.le ?? "+Inf",
     );
-    // Map le buckets to row indices (6 rows: <5ms, <25ms, <100ms,
-    // <500ms, <2s, >2s). Skip series we don't have a row for.
     const rowFor = (le: string): number | null => {
       const n = Number(le);
       if (!Number.isFinite(n)) return 5; // +Inf
@@ -854,7 +784,6 @@ async function loadHeatmap(
       if (n <= 2) return 4;
       return 5;
     };
-    // Determine global max for normalisation.
     let max = 0;
     for (const s of decoded) {
       for (const p of s.points) {
@@ -880,11 +809,10 @@ async function loadHeatmap(
   }
 }
 
-// deltaFromSeries: latest minus the value 5 minutes back.
+// Latest value minus the point nearest 5 minutes back.
 function deltaFromSeries(s: Series | undefined, scale = 1): number | undefined {
   if (!s || s.points.length < 2) return undefined;
   const last = s.points[s.points.length - 1].v * scale;
-  // 5 minutes back in points: assume step is consistent; find nearest.
   const targetT = s.points[s.points.length - 1].t - 5 * 60 * 1000;
   let nearest = s.points[0];
   let nd = Math.abs(s.points[0].t - targetT);

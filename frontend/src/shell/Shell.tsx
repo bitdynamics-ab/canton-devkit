@@ -23,14 +23,6 @@ import { type InstanceSelection, useInstanceSelection } from "./useInstanceSelec
 import { CommandPalette, openPalette } from "./CommandPalette";
 import { NAV, linkTo } from "./routes";
 
-// Shell — sidebar + topbar layout; children render in the main
-// content area. The sidebar order comes from the shared NAV table
-// (./routes), a design decision rather than an alphabetical accident.
-// The logo is drawn as an inline SVG so the shell renders correctly
-// even before public/assets/ files are served.
-
-// Route → sidebar icon. Kept next to the shell (not in routes.ts) so
-// the shared route table stays presentation-free.
 const NAV_ICON: Record<string, (p: { size?: number }) => JSX.Element> = {
   "/": IcOverview,
   "/doctor": IcDoctor,
@@ -42,7 +34,6 @@ const NAV_ICON: Record<string, (p: { size?: number }) => JSX.Element> = {
   "/agent": IcAgent,
 };
 
-// Published docs site (astro.config site + base).
 const DOCS_URL = "https://bitdynamics-ab.github.io/canton-devkit/";
 
 interface ShellProps {
@@ -66,9 +57,7 @@ export function Shell({ children }: ShellProps) {
       <Sidebar />
       <main
         id="main-content"
-        // tabIndex=-1 so the SkipLink can programmatically focus
-        // it; without this the link jumps the scroll but
-        // keyboard focus stays in the topbar.
+        // tabIndex=-1 so the SkipLink can programmatically focus it.
         tabIndex={-1}
         style={{
           gridColumn: "2",
@@ -76,25 +65,18 @@ export function Shell({ children }: ShellProps) {
           overflow: "auto",
           padding: 24,
           background: W.bg,
-          // Suppress the focus outline on the scroll container —
-          // the SkipLink target getting outlined is visual noise;
-          // it's a focus *destination*, not a focusable control.
+          // SkipLink target is a focus destination, not a control; no outline.
           outline: "none",
         }}
       >
         {children}
       </main>
-      {/* Palette is a portal-style overlay (position: fixed),
-          rendered inside the grid but escaping it visually. */}
       <CommandPalette />
     </div>
   );
 }
 
 function SkipLink() {
-  // First focusable element on the page; visually hidden until
-  // focused. Anchor (not button) so screen readers announce
-  // "main, region" after activation — the standard pattern.
   return (
     <a
       href="#main-content"
@@ -114,9 +96,7 @@ function SkipLink() {
   );
 }
 
-// currentRouteLabel resolves the active pathname to its NAV label for
-// the topbar page title. Instance-scoped routes carry a query string,
-// so match on pathname only.
+// Match on pathname only; instance-scoped routes carry a query string.
 function currentRouteLabel(pathname: string): string {
   const hit = NAV.find((n) => n.to === pathname);
   return hit ? hit.label : "";
@@ -212,8 +192,6 @@ function ThemeToggle() {
 
 function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
   const [open, setOpen] = useState(false);
-  // Empty / loading / error states degrade to a muted label rather than
-  // a dropdown; the Dashboard owns the empty-state messaging.
   if (sel.loading) {
     return <span style={pillStyle(W.dim)}>Loading instances…</span>;
   }
@@ -226,9 +204,7 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
       <button
         onClick={() => setOpen((v) => !v)}
         onBlur={() => {
-          // Defer so a click on a menu item registers before we
-          // unmount. 100ms = below the click-vs-tap perception
-          // threshold.
+          // Defer so a click on a menu item registers before we unmount.
           setTimeout(() => setOpen(false), 100);
         }}
         aria-haspopup="listbox"
@@ -291,9 +267,8 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
                 role="option"
                 aria-selected={i.name === sel.selected}
                 onMouseDown={(e) => {
-                  // mouseDown beats the button's own onBlur from
-                  // firing first and closing the menu. Without
-                  // this the click never lands.
+                  // mouseDown fires before the button's onBlur, so the
+                  // menu doesn't close before the click lands.
                   e.preventDefault();
                   sel.select(i.name);
                   setOpen(false);
@@ -304,8 +279,6 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
                   gap: 10,
                   width: "100%",
                   padding: "7px 10px",
-                  // Flat active fill, constant padding — no accent
-                  // side-bar, no content shift on selection.
                   background:
                     i.name === sel.selected ? W.brandSoft : "transparent",
                   border: "none",
@@ -352,8 +325,7 @@ function StatusDot({ status }: { status: string }) {
 }
 
 function PaletteHint() {
-  // Opens the ⌘K palette; the keycap is a discovery hint. UA-sniff
-  // for the glyph because Mac users expect ⌘ and others expect Ctrl.
+  // ⌘ on Mac, Ctrl elsewhere.
   const isMac =
     typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
   const mod = isMac ? "⌘" : "Ctrl";
@@ -459,9 +431,8 @@ function HealthPill({ conn }: { conn: ConnectionState }) {
 }
 
 function Sidebar() {
-  // Thread the currently-selected instance into per-instance routes
-  // so sidebar clicks don't drop the selection. NAV + linkTo live in
-  // ./routes so the ⌘K palette shares the same table.
+  // Thread the selected instance into per-instance routes so sidebar
+  // clicks don't drop the selection.
   const [params] = useSearchParams();
   const instance = params.get("instance");
   const conn = useConnectionHealth();
@@ -494,8 +465,6 @@ function Sidebar() {
             key={item.to}
             to={linkTo(item.to, item.instanceScoped, instance)}
             end={item.to === "/"}
-            // Visuals live in index.css (.side-nav-link) so :hover and
-            // the router-managed .active class can carry the states.
             className="side-nav-link"
           >
             <Icon size={15} />
@@ -545,7 +514,6 @@ function LogoLockup() {
       </svg>
       <span
         style={{
-          // The brand's structural wide caps: 118% width, tracked out.
           fontFamily: wSans,
           fontStretch: "118%",
           color: W.text,

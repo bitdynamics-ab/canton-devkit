@@ -11,14 +11,10 @@ import { Button } from "../components/Button";
 import { MonoId } from "../components/MonoId";
 import { IcX } from "../components/icons";
 
-// TxReplayDrawer — the Web UI counterpart of `dpm localnet tx replay
-// --id <id>`, rendered as a fixed right-side overlay below the topbar
-// so the transactions table keeps its full width.
-// Fetches one transaction with the LEDGER_EFFECTS shape
-// (exercised choices, not just the ACS delta) projected through a
-// party set and renders the event tree. The party selector answers
-// "what did party P see in this transaction?" — the same id queried
-// as different parties returns different event sets.
+// Replays one transaction with the LEDGER_EFFECTS shape (exercised
+// choices, not just the ACS delta) projected through a party set. The
+// party selector answers "what did party P see?" — the same id returns
+// different event sets per party.
 
 const EVENT_COLOR: Record<TxReplayEvent["kind"], string> = {
   created: "#7CC89A",
@@ -40,8 +36,7 @@ export function TxReplayDrawer({
   partyOptions: string[];
   onClose: () => void;
 }) {
-  // "" = project through the JWT's own parties (the default the
-  // backend uses when no ?party is passed).
+  // "" = project through the JWT's own parties (the backend default).
   const [party, setParty] = useState<string>("");
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -98,12 +93,9 @@ export function TxReplayDrawer({
         right: 0,
         bottom: 0,
         width: "min(480px, 92vw)",
-        // Raised surface — a fixed overlay sits above the page, and
-        // surface-on-page was reading dark-on-dark. One depth technique
-        // for a dense-console drawer: hairline border, no shadow.
         background: W.surface2,
         borderLeft: `1px solid ${W.borderHi}`,
-        // Below the CommandPalette (zIndex 100) but above page content.
+        // Below the CommandPalette (zIndex 100), above page content.
         zIndex: 40,
         overscrollBehavior: "contain",
         overflowY: "auto",

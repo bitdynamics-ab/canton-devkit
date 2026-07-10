@@ -1,11 +1,5 @@
-// The single icon system for the Web UI — 16×16 stroke glyphs drawn
-// with currentColor so they inherit the text color of whatever they
-// sit in. Replaces the mixed emoji/unicode controls (⚡ 🔥 ⏸ ↻ …)
-// that read as prototype polish.
-//
-// Usage: <IcPause /> inside a Button icon slot, or standalone with
-// size/style overrides. All icons are aria-hidden decoration; the
-// accessible name belongs to the surrounding control.
+// 16×16 stroke glyphs on currentColor. All icons are aria-hidden
+// decoration; the accessible name belongs to the surrounding control.
 
 import type { CSSProperties, ReactNode } from "react";
 
@@ -148,8 +142,6 @@ export const IcDroplet = (p: IconProps) => (
   </I>
 );
 
-// ---- Navigation glyphs (sidebar) ----
-
 export const IcOverview = (p: IconProps) => (
   <I {...p}>
     <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" />
@@ -210,8 +202,6 @@ export const IcAgent = (p: IconProps) => (
   </I>
 );
 
-// ---- Topbar glyphs ----
-
 export const IcSun = (p: IconProps) => (
   <I {...p}>
     <circle cx="8" cy="8" r="3" />
@@ -238,7 +228,6 @@ export const IcBook = (p: IconProps) => (
   </I>
 );
 
-/** Status dot — the only full-radius element in the system. */
 export function Dot({
   color,
   size = 6,

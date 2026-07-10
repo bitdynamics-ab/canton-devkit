@@ -11,29 +11,16 @@ import { Button } from "../components/Button";
 import { MonoId } from "../components/MonoId";
 import { IcX } from "../components/icons";
 
-// ContractDetailDrawer is a true right-side overlay: position-fixed
-// below the topbar so the ACS table keeps its full width. It opens
-// when a row is clicked. Fetches the deep view from
-// /api/instances/{name}/contracts/{cid}
-// (EventQueryService.GetEventsByContractId) for the create event's full
-// payload, signatories, observers, and archive metadata. While that
-// loads it shows the row-level ACS fields so the user always has
-// something to read.
-//
-// Keyboard: Esc closes, J/K move to the next/previous row. The parent
-// owns row navigation because it owns the filtered table state; the
-// drawer only owns the deep-view fetch lifecycle.
-
+// Right-side overlay showing a contract's deep view (payload, parties,
+// archive metadata), falling back to row-level ACS fields while it loads.
+// The parent owns J/K row navigation since it holds the filtered table state.
 export interface ContractDetailDrawerProps {
   instance: string;
   role: Role;
   /** Row data we already have from the ACS snapshot. */
   row: ContractRow;
-  /** Close the drawer. */
   onClose: () => void;
-  /** Move selection to the previous row (K / ArrowUp). */
   onPrev?: () => void;
-  /** Move selection to the next row (J / ArrowDown). */
   onNext?: () => void;
 }
 
@@ -72,9 +59,8 @@ export function ContractDetailDrawer({
     };
   }, [instance, role, row.contract_id]);
 
-  // Esc / J / K, listened on window so keystrokes work from anywhere
-  // on the page. INPUT/TEXTAREA/contenteditable are ignored so typing
-  // in the search box doesn't trigger navigation.
+  // Esc / J / K on window; skip when an editable element is focused so
+  // typing in the search box doesn't trigger navigation.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
@@ -125,11 +111,9 @@ export function ContractDetailDrawer({
         right: 0,
         bottom: 0,
         width: "min(480px, 92vw)",
-        // Raised surface — a fixed overlay sits above the page, so
-        // surface-on-page would read too flat against it.
         background: W.surface2,
         borderLeft: `1px solid ${W.borderHi}`,
-        // Below the CommandPalette (zIndex 100) but above page content.
+        // Below the CommandPalette (zIndex 100), above page content.
         zIndex: 40,
         overscrollBehavior: "contain",
         overflowY: "auto",
@@ -324,16 +308,13 @@ export function ContractDetailDrawer({
   );
 }
 
-// ── helpers ──────────────────────────────────────────────────────
-
 function shortTemplateLabel(tpl: string | undefined): string {
   if (!tpl) return "—";
   const parts = tpl.split(":");
   return parts.length >= 3 ? `${parts[1]}:${parts[2]}` : tpl;
 }
 
-// Middle-truncate an id for a link label — the suffix is the
-// discriminating part, so keep both ends (matches MonoId's discipline).
+// Middle-truncate an id, keeping both ends (the suffix is discriminating).
 function truncMid(s: string, head = 8, tail = 6): string {
   if (s.length <= head + tail + 1) return s;
   return `${s.slice(0, head)}…${s.slice(-tail)}`;
@@ -422,10 +403,7 @@ function PartyChip({ party, kind }: { party: string; kind: "sig" | "obs" }) {
   );
 }
 
-// PayloadNode — recursive JSON-like view for the contract payload:
-// objects as label:value pairs, arrays as indexed lists, primitives in
-// place. Each level indents 12px — enough to see structure without
-// burning horizontal space in the overlay drawer.
+// Recursive JSON-like view of the contract payload; each level indents 12px.
 function PayloadNode({
   value,
   depth,

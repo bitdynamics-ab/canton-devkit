@@ -8,12 +8,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildDemo returns `token demo` — a one-step "launch a transferable
-// demo token" that adapts to the instance: on a token-standard-v2
-// instance it creates a new on-ledger V2 instrument (issuer + minted
-// supply + funded holder); on a standard instance it funds a holder
-// with the existing V1 Amulet. The Web UI's "Launch demo token" button
-// drives the same token.RunDemo via POST /api/tokens/demo.
+// buildDemo returns `token demo`, a one-step launch of a transferable demo
+// token. The Web UI's "Launch demo token" button drives the same
+// token.RunDemo via POST /api/tokens/demo.
 func buildDemo() *cobra.Command {
 	var (
 		instance   string

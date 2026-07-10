@@ -23,26 +23,14 @@ import {
   useCreateProgress,
 } from "./useCreateProgress";
 
-// CreateLocalNetModal — the "Create LocalNet" flow. Three top-level
-// stages:
-//
-//   1. form        — name + version + advanced options
-//   2. submitting  — POST in flight; brief (<1s)
-//   3. progress    — 202 received; EventSource open; render steps
-//
-// "Done" / "failed" / "cancelled" are sub-states of progress —
-// the modal stays open until the user closes it.
-//
-// The name regex matches internal/registry's RFC 1123 DNS-label rule.
-// Client-side validation is for snappy feedback only; the server
-// validates too, so a stale regex here is a UX bug, not a security one.
+// Stages: form → submitting → progress (with done/failed/cancelled
+// sub-states). RFC 1123 DNS-label rule from internal/registry; the
+// server re-validates, so this is advisory only.
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  // Called on success so the dashboard can refresh its instance list
-  // and select the new instance.
   onCreated?: (name: string) => void;
 }
 
@@ -56,28 +44,15 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
   const [name, setName] = useState("");
   const [version, setVersion] = useState("");
   const [allowUncurated, setAllowUncurated] = useState(false);
-  // Prometheus and Grafana are independent toggles (metrics-only
-  // setups, or Grafana pointed at an external scrape source). Both
-  // default OFF — the overlay pulls extra images and adds memory
-  // pressure. Grafana-without-Prometheus shows a warning, not a block,
-  // so the combination stays reachable but the empty-dashboard surprise
-  // is signposted.
   const [prometheus, setPrometheus] = useState(false);
   const [grafana, setGrafana] = useState(false);
-  // tokensV2: when on, bring-up adds the Token Standard V2 alpha-protocol
-  // Canton overlay (`--profile tokens-v2`). Needs a V2-capable Splice
-  // version; default OFF.
   const [tokensV2, setTokensV2] = useState(false);
-  // portBase: when non-empty, pins deterministic host ports from this
-  // base (`--port-base`) instead of auto-allocating. Empty = auto.
   const [portBase, setPortBase] = useState("");
   const [versions, setVersions] = useState<SpliceVersionEntry[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [versionsError, setVersionsError] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage>({ kind: "form" });
-  // Per-version system-requirements probe. "blocked" (any FAIL)
-  // disables Create; a WARN-only report still allows submit and renders
-  // inline as a heads-up.
+  // "blocked" (any FAIL) disables Create; WARN-only still allows submit.
   const [preflight, setPreflight] = useState<
     | { kind: "idle" }
     | { kind: "loading" }
@@ -91,7 +66,7 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
     stage.kind === "progress" ? stage.accepted.events_url : null,
   );
 
-  // Reset on every open — each open is a fresh form.
+  // Each open is a fresh form.
   useEffect(() => {
     if (open) {
       setName("");
@@ -103,22 +78,17 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
       setPortBase("");
       setStage({ kind: "form" });
       requestAnimationFrame(() => inputRef.current?.focus());
-      // Refresh the version catalogue on open. Server-cached (embedded
-      // versions.json), so this is fast.
       setVersionsLoading(true);
       setVersionsError(null);
       fetchSpliceVersions()
         .then((r) => {
           setVersions(r.versions);
-          // Pre-select the "latest" entry for the common case.
           if (!version) {
             const latest = r.versions.find((v) => v.status === "latest");
             if (latest) setVersion(latest.tag);
           }
         })
         .catch((e) => {
-          // Distinguish failure from "still loading" so a 5xx doesn't
-          // leave the picker on "Loading…" forever.
           setVersions([]);
           setVersionsError(
             e instanceof ApiError ? e.message : "Couldn't load the version catalogue",
@@ -126,20 +96,17 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
         })
         .finally(() => setVersionsLoading(false));
     }
-    // versions captured intentionally — only re-run on open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Escape closes — but not mid-submit or while a bring-up is running.
-  // Accidentally cancelling a 90-second up with a stray Esc is much
-  // worse than the extra click.
+  // Escape closes, but not mid-submit or while a bring-up is running.
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
       if (stage.kind === "submitting") return;
       if (stage.kind === "progress" && progress.banner.kind === "running") {
-        return; // running — require explicit Cancel button click
+        return; // require explicit Cancel while running
       }
       onClose();
     }
@@ -147,11 +114,8 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, stage, progress.banner.kind, onClose]);
 
-  // Fire onCreated when the up succeeds — at most once per accepted
-  // instance. Parents typically pass a fresh arrow function as
-  // `onCreated`, which changes the effect's identity every render and
-  // would re-invoke the callback; firedRef guarantees one call
-  // regardless of how the parent typed it.
+  // Fire onCreated at most once per accepted instance; a fresh
+  // callback identity each render would otherwise re-invoke it.
   const firedRef = useRef<string | null>(null);
   useEffect(() => {
     if (
@@ -163,16 +127,13 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
       onCreated?.(stage.accepted.instance);
     }
   }, [progress.banner.kind, stage, onCreated]);
-  // Reset the guard on close so a new create can fire onCreated again.
   useEffect(() => {
     if (!open) firedRef.current = null;
   }, [open]);
 
-  // Probe system requirements when the picked version changes (form
-  // stage only). Skipped for uncurated tags — the server doesn't
-  // enforce a per-version floor for tags outside the catalogue. The
-  // cancelled flag keeps only the latest result when the user flips
-  // versions quickly, not whichever probe finishes last.
+  // Probe requirements on version change (form stage only). Skipped for
+  // uncurated tags; the cancelled flag keeps the latest result when the
+  // user flips versions quickly.
   useEffect(() => {
     if (!open || stage.kind !== "form") return;
     if (!version || allowUncurated) {
@@ -208,8 +169,6 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
   if (!open) return null;
 
   const nameValid = NAME_RE.test(name);
-  // "loading"/"err" preflight still allows submit — it's advisory in
-  // those states; the server's own gate is the source of truth.
   const preflightBlocks = preflight.kind === "blocked";
   const canSubmit =
     nameValid && stage.kind === "form" && !preflightBlocks;
@@ -236,9 +195,7 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
       setStage({ kind: "progress", accepted });
     } catch (e) {
       if (e instanceof PreflightFailedError) {
-        // Server-side gate caught what the inline probe missed. Drop
-        // back to the form with the report populated so the inline
-        // panel renders the findings.
+        // Server gate caught what the inline probe missed; show findings.
         setPreflight({ kind: "blocked", report: e.report });
         setStage({ kind: "form" });
         return;
@@ -256,11 +213,9 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
     if (stage.kind !== "progress") return;
     try {
       await cancelInstanceUp(stage.accepted.instance);
-      // The SSE stream delivers kind=cancelled and the reducer flips
-      // the banner; no local state mutation needed.
+      // SSE delivers kind=cancelled; the reducer flips the banner.
     } catch {
-      // Cancel-after-finish is a 404 swallowed by the API client;
-      // other errors are rare enough that an inline toast is overkill.
+      // Cancel-after-finish 404s; not worth surfacing.
     }
   }
 
@@ -324,8 +279,6 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
     </div>
   );
 }
-
-// ── header / footer ───────────────────────────────────────────────
 
 function ModalHeader({
   stage,
@@ -440,8 +393,6 @@ function ModalFooter({
     </footer>
   );
 }
-
-// ── stage bodies ──────────────────────────────────────────────────
 
 type PreflightState =
   | { kind: "idle" }
@@ -928,8 +879,6 @@ function ErrorBody({
   );
 }
 
-// ── pieces ────────────────────────────────────────────────────────
-
 function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
   if (banner.kind === "running") {
     return (
@@ -1014,7 +963,6 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
       </div>
     );
   }
-  // cancelled
   return (
     <div
       style={{
@@ -1115,17 +1063,9 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
   );
 }
 
-// VersionPicker renders the curated Splice catalogue as a native HTML
-// <select> in every state — disabled placeholder while loading/on
-// error, populated when versions arrive. A free-text fallback would let
-// arbitrary tags route silently to the upstream-resolution path the
-// curated dropdown exists to prevent.
-//
-// Sort order: "latest" first, then descending semver, so the newest
-// catalogued releases sit near the top.
-//
-// Exported so VersionPicker.test.tsx can render the component in
-// isolation and pin the "always a <select>, never a textbox" invariant.
+// Always a <select>, never free text: a textbox would route arbitrary
+// tags to the upstream-resolution path the curated dropdown prevents.
+// Sorted "latest" first, then descending semver.
 export function VersionPicker({
   versions,
   selected,
@@ -1140,8 +1080,6 @@ export function VersionPicker({
   error?: string | null;
 }) {
   if (versions.length === 0) {
-    // Distinct placeholders so a failed fetch doesn't render as an
-    // endless "Loading…".
     let placeholder = "No curated versions available";
     if (loading) placeholder = "Loading curated versions…";
     else if (error) placeholder = `Couldn't load versions: ${error}`;
@@ -1182,14 +1120,9 @@ export function VersionPicker({
   );
 }
 
-// compareSpliceTags orders two Splice version tags like a localeCompare
-// (negative ⇒ a is older/lower than b), but semver-aware so a final
-// release outranks its own pre-release. localeCompare(…, {numeric:true})
-// gets this wrong: "0.6.4" is a prefix of "0.6.4-rc.1", so string
-// collation sorts the rc AFTER the release — inverting semver
-// precedence. Non-semver tags ("token-standard-v2") have no precedence
-// to reason about and fall back to numeric localeCompare. Exported for
-// the regression test.
+// Semver-aware ordering (negative ⇒ a older than b) so a release
+// outranks its own pre-release; plain localeCompare sorts "0.6.4-rc.1"
+// after "0.6.4". Non-semver tags fall back to numeric localeCompare.
 export function compareSpliceTags(a: string, b: string): number {
   const pa = parseSemverTag(a);
   const pb = parseSemverTag(b);
@@ -1199,7 +1132,7 @@ export function compareSpliceTags(a: string, b: string): number {
   for (let i = 0; i < 3; i++) {
     if (pa.core[i] !== pb.core[i]) return pa.core[i] - pb.core[i];
   }
-  // Same x.y.z: a release (no pre-release) is newer than any pre-release.
+  // Same x.y.z: a release is newer than any pre-release.
   if (pa.pre === null && pb.pre === null) return 0;
   if (pa.pre === null) return 1;
   if (pb.pre === null) return -1;
@@ -1212,10 +1145,8 @@ function parseSemverTag(tag: string): { core: [number, number, number]; pre: str
   return { core: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4] ?? null };
 }
 
-// comparePrerelease applies the semver pre-release precedence rules:
-// dot-separated identifiers compared left-to-right; numeric identifiers
-// numerically and ranked below alphanumerics; a shorter run loses to a
-// longer one when otherwise equal.
+// Semver pre-release precedence: dot-separated identifiers left-to-right,
+// numeric ranked below alphanumeric, shorter run loses when otherwise equal.
 function comparePrerelease(a: string, b: string): number {
   const as = a.split(".");
   const bs = b.split(".");
@@ -1238,13 +1169,9 @@ function comparePrerelease(a: string, b: string): number {
   return 0;
 }
 
-// selectStyle is inlined rather than spread from `inputStyle`, which is
-// declared further down — referencing it here would hit the ES-module
-// TDZ ("used before declaration") under Vite/SWC. Visual parity with
-// inputStyle is intentional. `appearance: "auto"` keeps the native OS
-// dropdown caret, which some browsers drop when a custom
-// borderRadius/background is applied — leaving the field looking like a
-// disabled text input.
+// Inlined, not spread from inputStyle (declared below): referencing it
+// here would hit the ES-module TDZ. appearance:"auto" keeps the native
+// dropdown caret some browsers drop with a custom border/background.
 const selectStyle: React.CSSProperties = {
   width: "100%",
   background: W.bg,
@@ -1260,11 +1187,6 @@ const selectStyle: React.CSSProperties = {
   appearance: "auto",
 };
 
-// PreflightPanel renders the system-requirements check inline in the
-// form: nothing when idle, a pill while loading, a neutral non-blocking
-// note on probe error (the server-side gate still runs on submit), a
-// compact green pill on pass, an amber box for warnings (submit still
-// allowed), and a red box with per-check remediation when blocked.
 function PreflightPanel({ state }: { state: PreflightState }) {
   if (state.kind === "idle") return null;
   if (state.kind === "loading") {
@@ -1327,7 +1249,6 @@ function PreflightPanel({ state }: { state: PreflightState }) {
     ? "Host meets minimums. Raise resources for headroom."
     : "Host is ready for this version";
   if (!blocked && warns.length === 0) {
-    // Compact success pill — don't clutter the form.
     return (
       <div
         style={{
@@ -1473,7 +1394,6 @@ function Field({
 }
 
 function Elapsed({ startedAt }: { startedAt: number }) {
-  // Tick once per second to keep the counter live; cleared on unmount.
   const [, force] = useState(0);
   useEffect(() => {
     const t = setInterval(() => force((n) => n + 1), 1000);
@@ -1484,8 +1404,6 @@ function Elapsed({ startedAt }: { startedAt: number }) {
   const s = sec % 60;
   return <>{m}:{String(s).padStart(2, "0")} elapsed</>;
 }
-
-// ── styles ────────────────────────────────────────────────────────
 
 const overlayStyle: React.CSSProperties = {
   position: "fixed",
@@ -1502,8 +1420,6 @@ const overlayStyle: React.CSSProperties = {
 const modalStyle: React.CSSProperties = {
   width: "min(680px, 92vw)",
   background: W.surface,
-  // Overlay depth matched to the confirm dialog + palette: hairline
-  // border + one subtle shadow, not a hard border AND a heavy shadow.
   border: `1px solid ${W.border}`,
   borderRadius: R.dialog,
   boxShadow: "0 10px 32px rgba(0,0,0,0.24)",
