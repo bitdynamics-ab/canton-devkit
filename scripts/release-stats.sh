@@ -14,7 +14,7 @@
 # the only way to build a real time series later.
 #
 # Outputs (into docs/assets/):
-#   release-downloads-by-version.svg   — all-time total downloads per version (bars)
+#   release-downloads-by-version.svg   — per-version total downloads over time (line)
 #   release-downloads-by-platform.svg  — all-time total downloads per platform (bars, no .deb)
 #   release-downloads.md               — per-version + per-platform summary tables
 #   release-downloads-history.jsonl    — appended daily snapshot (total + per platform + per version)
@@ -148,6 +148,105 @@ nice_max() {
 }
 
 # ------------------------------------------------------------------------
+# Line chart renderer.
+#   $1 = output file
+#   $2 = chart title
+#   $3 = JSON: { labels: [..], series: [ {name, color, values:[..]} ] }
+# ------------------------------------------------------------------------
+render_line_chart() {
+  local out="$1" title="$2" data="$3"
+
+  local W=760 H=380
+  local ml=56 mr=180 mt=48 mb=64        # margins (mr wide for legend)
+  local pw ph
+  pw=$(( W - ml - mr ))
+  ph=$(( H - mt - mb ))
+
+  local labels n maxv
+  labels="$(printf '%s' "${data}" | jq -r '.labels | join("\u0001")')"
+  n="$(printf '%s' "${data}" | jq '.labels | length')"
+  maxv="$(printf '%s' "${data}" | jq '[.series[].values[]] | max // 0')"
+  maxv="$(nice_max "${maxv}")"
+
+  {
+    printf '<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-label="%s">\n' \
+      "$W" "$H" "$W" "$H" "$(svg_escape "${title}")"
+    printf '<rect width="%d" height="%d" fill="#ffffff"/>\n' "$W" "$H"
+    printf '<text x="%d" y="26" font-size="16" font-weight="600" fill="#111827">%s</text>\n' "$ml" "$(svg_escape "${title}")"
+
+    # Y grid + labels (5 ticks)
+    local i gy val
+    for i in 0 1 2 3 4 5; do
+      gy=$(awk -v mt="$mt" -v ph="$ph" -v i="$i" 'BEGIN{printf "%.1f", mt + ph - (ph*i/5)}')
+      val=$(awk -v m="$maxv" -v i="$i" 'BEGIN{printf "%d", m*i/5}')
+      printf '<line x1="%d" y1="%s" x2="%d" y2="%s" stroke="#e5e7eb" stroke-width="1"/>\n' \
+        "$ml" "$gy" $(( ml + pw )) "$gy"
+      printf '<text x="%d" y="%s" font-size="11" fill="#6b7280" text-anchor="end">%s</text>\n' \
+        $(( ml - 8 )) "$(awk -v g="$gy" 'BEGIN{printf "%.1f", g+4}')" "$val"
+    done
+
+    # Axes
+    printf '<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#9ca3af" stroke-width="1"/>\n' \
+      "$ml" "$mt" "$ml" $(( mt + ph ))
+    printf '<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#9ca3af" stroke-width="1"/>\n' \
+      "$ml" $(( mt + ph )) $(( ml + pw )) $(( mt + ph ))
+
+    # X labels
+    local idx=0 lbl xx
+    IFS=$'\001' read -ra _labels <<< "${labels}"
+    for lbl in "${_labels[@]}"; do
+      if [ "$n" -gt 1 ]; then
+        xx=$(awk -v ml="$ml" -v pw="$pw" -v i="$idx" -v n="$n" 'BEGIN{printf "%.1f", ml + pw*i/(n-1)}')
+      else
+        xx=$(awk -v ml="$ml" -v pw="$pw" 'BEGIN{printf "%.1f", ml + pw/2}')
+      fi
+      printf '<text x="%s" y="%d" font-size="11" fill="#6b7280" text-anchor="middle">%s</text>\n' \
+        "$xx" $(( mt + ph + 20 )) "$(svg_escape "${lbl}")"
+      idx=$(( idx + 1 ))
+    done
+    printf '<text x="%d" y="%d" font-size="12" fill="#374151" text-anchor="middle">Release tag (oldest -> newest)</text>\n' \
+      $(( ml + pw/2 )) $(( H - 12 ))
+
+    # Series: polylines + points
+    local si=0 sname scolor
+    while IFS= read -r sname; do
+      scolor="$(printf '%s' "${data}" | jq -r --argjson i "$si" '.series[$i].color')"
+      # polyline points
+      local pts=""
+      local vi=0 v px py
+      while IFS= read -r v; do
+        if [ "$n" -gt 1 ]; then
+          px=$(awk -v ml="$ml" -v pw="$pw" -v i="$vi" -v n="$n" 'BEGIN{printf "%.1f", ml + pw*i/(n-1)}')
+        else
+          px=$(awk -v ml="$ml" -v pw="$pw" 'BEGIN{printf "%.1f", ml + pw/2}')
+        fi
+        py=$(awk -v mt="$mt" -v ph="$ph" -v val="$v" -v m="$maxv" 'BEGIN{printf "%.1f", mt + ph - (ph*val/m)}')
+        pts="${pts} ${px},${py}"
+        vi=$(( vi + 1 ))
+      done < <(printf '%s' "${data}" | jq -r --argjson i "$si" '.series[$i].values[]')
+
+      printf '<polyline points="%s" fill="none" stroke="%s" stroke-width="2.5"/>\n' "${pts# }" "${scolor}"
+      # points
+      for p in ${pts}; do
+        printf '<circle cx="%s" cy="%s" r="3.5" fill="%s"/>\n' "${p%,*}" "${p#*,}" "${scolor}"
+      done
+
+      # legend entry
+      local ly=$(( mt + si*22 ))
+      printf '<rect x="%d" y="%d" width="14" height="14" rx="2" fill="%s"/>\n' \
+        $(( ml + pw + 16 )) "$ly" "${scolor}"
+      printf '<text x="%d" y="%d" font-size="12" fill="#374151">%s</text>\n' \
+        $(( ml + pw + 36 )) $(( ly + 12 )) "$(svg_escape "${sname}")"
+
+      si=$(( si + 1 ))
+    done < <(printf '%s' "${data}" | jq -r '.series[].name')
+
+    printf '</svg>\n'
+  } > "${out}"
+  echo "wrote ${out}"
+}
+
+# ------------------------------------------------------------------------
 # Horizontal bar chart renderer.
 #   $1 = output file
 #   $2 = chart title
@@ -194,12 +293,16 @@ render_bar_chart() {
   echo "wrote ${out}"
 }
 
-# --- View 1: all-time total downloads per version (bars, newest first) ----
-version_bars="$(printf '%s' "${model}" | jq '
-  { bars: [ (.totalsByVersion | reverse)[] | { label: .tag, value: .total } ] }
+# --- View 1: per-version total downloads over time ------------------------
+by_version_data="$(printf '%s' "${model}" | jq '
+  { labels: [ .releases[].tag ],
+    series: [ { name: "Total downloads",
+                color: "#2563eb",
+                values: [ .releases[].total ] } ]
+  }
 ')"
-render_bar_chart "${OUT_DIR}/release-downloads-by-version.svg" \
-  "All-time downloads per version" "${version_bars}"
+render_line_chart "${OUT_DIR}/release-downloads-by-version.svg" \
+  "Total downloads, by release" "${by_version_data}"
 
 # --- View 2: all-time total downloads per platform (bars, no .deb) -------
 platform_bars="$(printf '%s' "${model}" | jq '

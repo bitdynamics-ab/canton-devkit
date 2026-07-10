@@ -1,43 +1,36 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="628" height="592" viewBox="0 0 628 592" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-label="All-time downloads per version">
-<rect width="628" height="592" fill="#ffffff"/>
-<text x="16" y="26" font-size="16" font-weight="600" fill="#111827">All-time downloads per version</text>
-<text x="130" y="67" font-size="12" fill="#374151" text-anchor="end">v0.15.0</text>
-<rect x="140" y="48" width="40.0" height="30" rx="3" fill="#2563eb"/>
-<text x="186.0" y="67" font-size="12" font-weight="600" fill="#374151">1</text>
-<text x="130" y="107" font-size="12" fill="#374151" text-anchor="end">v0.14.0</text>
-<rect x="140" y="88" width="40.0" height="30" rx="3" fill="#16a34a"/>
-<text x="186.0" y="107" font-size="12" font-weight="600" fill="#374151">1</text>
-<text x="130" y="147" font-size="12" fill="#374151" text-anchor="end">v0.13.0</text>
-<rect x="140" y="128" width="40.0" height="30" rx="3" fill="#ea580c"/>
-<text x="186.0" y="147" font-size="12" font-weight="600" fill="#374151">1</text>
-<text x="130" y="187" font-size="12" fill="#374151" text-anchor="end">v0.12.2</text>
-<rect x="140" y="168" width="0.0" height="30" rx="3" fill="#9333ea"/>
-<text x="146.0" y="187" font-size="12" font-weight="600" fill="#374151">0</text>
-<text x="130" y="227" font-size="12" fill="#374151" text-anchor="end">v0.12.1</text>
-<rect x="140" y="208" width="40.0" height="30" rx="3" fill="#0891b2"/>
-<text x="186.0" y="227" font-size="12" font-weight="600" fill="#374151">1</text>
-<text x="130" y="267" font-size="12" fill="#374151" text-anchor="end">v0.10.1</text>
-<rect x="140" y="248" width="440.0" height="30" rx="3" fill="#ca8a04"/>
-<text x="586.0" y="267" font-size="12" font-weight="600" fill="#374151">11</text>
-<text x="130" y="307" font-size="12" fill="#374151" text-anchor="end">v0.9.0</text>
-<rect x="140" y="288" width="200.0" height="30" rx="3" fill="#2563eb"/>
-<text x="346.0" y="307" font-size="12" font-weight="600" fill="#374151">5</text>
-<text x="130" y="347" font-size="12" fill="#374151" text-anchor="end">v0.8.1</text>
-<rect x="140" y="328" width="0.0" height="30" rx="3" fill="#16a34a"/>
-<text x="146.0" y="347" font-size="12" font-weight="600" fill="#374151">0</text>
-<text x="130" y="387" font-size="12" fill="#374151" text-anchor="end">v0.7</text>
-<rect x="140" y="368" width="40.0" height="30" rx="3" fill="#ea580c"/>
-<text x="186.0" y="387" font-size="12" font-weight="600" fill="#374151">1</text>
-<text x="130" y="427" font-size="12" fill="#374151" text-anchor="end">v0.6</text>
-<rect x="140" y="408" width="40.0" height="30" rx="3" fill="#9333ea"/>
-<text x="186.0" y="427" font-size="12" font-weight="600" fill="#374151">1</text>
-<text x="130" y="467" font-size="12" fill="#374151" text-anchor="end">v0.5</text>
-<rect x="140" y="448" width="160.0" height="30" rx="3" fill="#0891b2"/>
-<text x="306.0" y="467" font-size="12" font-weight="600" fill="#374151">4</text>
-<text x="130" y="507" font-size="12" fill="#374151" text-anchor="end">v0.4</text>
-<rect x="140" y="488" width="120.0" height="30" rx="3" fill="#ca8a04"/>
-<text x="266.0" y="507" font-size="12" font-weight="600" fill="#374151">3</text>
-<text x="130" y="547" font-size="12" fill="#374151" text-anchor="end">v0.3</text>
-<rect x="140" y="528" width="40.0" height="30" rx="3" fill="#2563eb"/>
-<text x="186.0" y="547" font-size="12" font-weight="600" fill="#374151">1</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="380" viewBox="0 0 760 380" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-label="Total downloads, by release">
+<rect width="760" height="380" fill="#ffffff"/>
+<text x="56" y="26" font-size="16" font-weight="600" fill="#111827">Total downloads, by release</text>
+<line x1="56" y1="316.0" x2="580" y2="316.0" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="320.0" font-size="11" fill="#6b7280" text-anchor="end">0</text>
+<line x1="56" y1="262.4" x2="580" y2="262.4" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="266.4" font-size="11" fill="#6b7280" text-anchor="end">2</text>
+<line x1="56" y1="208.8" x2="580" y2="208.8" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="212.8" font-size="11" fill="#6b7280" text-anchor="end">4</text>
+<line x1="56" y1="155.2" x2="580" y2="155.2" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="159.2" font-size="11" fill="#6b7280" text-anchor="end">6</text>
+<line x1="56" y1="101.6" x2="580" y2="101.6" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="105.6" font-size="11" fill="#6b7280" text-anchor="end">8</text>
+<line x1="56" y1="48.0" x2="580" y2="48.0" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="52.0" font-size="11" fill="#6b7280" text-anchor="end">11</text>
+<line x1="56" y1="48" x2="56" y2="316" stroke="#9ca3af" stroke-width="1"/>
+<line x1="56" y1="316" x2="580" y2="316" stroke="#9ca3af" stroke-width="1"/>
+<text x="56.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">v0.3v0.4v0.5v0.6v0.7v0.8.1v0.9.0v0.10.1v0.12.1v0.12.2v0.13.0v0.14.0v0.15.0</text>
+<text x="318" y="368" font-size="12" fill="#374151" text-anchor="middle">Release tag (oldest -> newest)</text>
+<polyline points="56.0,291.6 99.7,242.9 143.3,218.5 187.0,291.6 230.7,291.6 274.3,316.0 318.0,194.2 361.7,48.0 405.3,291.6 449.0,316.0 492.7,291.6 536.3,291.6 580.0,291.6" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+<circle cx="56.0" cy="291.6" r="3.5" fill="#2563eb"/>
+<circle cx="99.7" cy="242.9" r="3.5" fill="#2563eb"/>
+<circle cx="143.3" cy="218.5" r="3.5" fill="#2563eb"/>
+<circle cx="187.0" cy="291.6" r="3.5" fill="#2563eb"/>
+<circle cx="230.7" cy="291.6" r="3.5" fill="#2563eb"/>
+<circle cx="274.3" cy="316.0" r="3.5" fill="#2563eb"/>
+<circle cx="318.0" cy="194.2" r="3.5" fill="#2563eb"/>
+<circle cx="361.7" cy="48.0" r="3.5" fill="#2563eb"/>
+<circle cx="405.3" cy="291.6" r="3.5" fill="#2563eb"/>
+<circle cx="449.0" cy="316.0" r="3.5" fill="#2563eb"/>
+<circle cx="492.7" cy="291.6" r="3.5" fill="#2563eb"/>
+<circle cx="536.3" cy="291.6" r="3.5" fill="#2563eb"/>
+<circle cx="580.0" cy="291.6" r="3.5" fill="#2563eb"/>
+<rect x="596" y="48" width="14" height="14" rx="2" fill="#2563eb"/>
+<text x="616" y="60" font-size="12" fill="#374151">Total downloads</text>
 </svg>
