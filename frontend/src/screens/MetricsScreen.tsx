@@ -48,21 +48,27 @@ const Q = {
   // Substitute: indexer-update counter, same as HeadlineLedgerTPS.
   throughputSeries:
     "sum(rate(daml_participant_api_indexer_updates[1m])) or vector(0)",
-  p99: 'histogram_quantile(0.99, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
+  // Splice 0.6.4 exports the sequencing-duration histogram with only the
+  // +Inf bucket (no finite `le` boundaries), so histogram_quantile()
+  // returns NaN regardless of load — percentiles are not computable here.
+  // The average IS (sum/count), so the latency surfaces show that instead,
+  // labelled honestly as an average. In milliseconds.
+  avgLatency:
+    "1000 * sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_sum[5m])) / sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_count[5m]))",
   // Live Splice does not expose total ACS cardinality as a stock
-  // Prometheus metric. This is the audited ACS-related signal that
-  // exists in 0.6.4; keep UI copy honest and call it a lookup buffer.
+  // Prometheus metric. The former proxy
+  // (daml_participant_api_index_db_active_contract_lookup_batch_buffer_length)
+  // is no longer emitted by Splice 0.6.4 — verified absent from a live
+  // instance's Prometheus. The active-contracts in-memory buffer gauge
+  // is the audited ACS-related signal that exists in 0.6.4; keep UI copy
+  // honest and call it a lookup buffer.
   acsLookupBuffer:
-    "sum(daml_participant_api_index_db_active_contract_lookup_batch_buffer_length)",
+    "sum(daml_participant_api_index_active_contracts_buffer_size)",
   // No daml_* command-rejection counter on Splice 0.6.4 — use the
   // user-error completion-status counter as a proxy for "things
   // the participant refused to commit". Returns 0 if not exposed.
   errorsRate:
     'sum(rate(daml_grpc_server_handled_total{grpc_code!="OK"}[1m])) or vector(0)',
-  latencyMedian:
-    'histogram_quantile(0.50, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
-  latencyP99:
-    'histogram_quantile(0.99, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m])) by (le))',
   // Splice 0.6.x does not expose template-grain submission counters.
   // Use the live gRPC method counter as a command-throughput fallback
   // instead of querying a non-existent `daml_commands_*` family.
@@ -98,7 +104,7 @@ export function scopeQ(query: string, scope: string): string {
 }
 
 const TPS_COLOR = "#8FA3EE";
-const P99_COLOR = "#DDB25E";
+const LATENCY_COLOR = "#DDB25E";
 const ACS_COLOR = "#6480E6";
 const ERR_COLOR = "#7BD2C6";
 
@@ -112,7 +118,7 @@ export function MetricsScreen() {
   const [throughputSeries, setThroughputSeries] = useState<CardState<Series>>({
     kind: "loading",
   });
-  const [p99Series, setP99Series] = useState<CardState<Series>>({
+  const [latencySeries, setLatencySeries] = useState<CardState<Series>>({
     kind: "loading",
   });
   const [acsSeries, setAcsSeries] = useState<CardState<Series>>({
@@ -177,15 +183,12 @@ export function MetricsScreen() {
       }
       await Promise.all([
         loadSeries(name, scopeQ(Q.throughputSeries, scope), "tx/s", setThroughputSeries, signal),
-        loadSeries(name, scopeQ(Q.p99, scope), "p99", setP99Series, signal),
+        loadSeries(name, scopeQ(Q.avgLatency, scope), "avg latency", setLatencySeries, signal),
         loadSeries(name, scopeQ(Q.acsLookupBuffer, scope), "ACS lookup buffer", setAcsSeries, signal),
         loadSeries(name, scopeQ(Q.errorsRate, scope), "errors", setErrorsSeries, signal),
         loadMultiSeries(
           name,
-          [
-            { query: scopeQ(Q.latencyMedian, scope), label: "median", color: CHART_PALETTE[1] },
-            { query: scopeQ(Q.latencyP99, scope), label: "p99", color: CHART_PALETTE[3] },
-          ],
+          [{ query: scopeQ(Q.avgLatency, scope), label: "avg", color: CHART_PALETTE[1] }],
           setLatencyPhase,
           signal,
         ),
@@ -233,7 +236,8 @@ export function MetricsScreen() {
   // order is stable across the (!name) and (observabilityOff)
   // early-exit paths — rules of hooks.
   const tpsDelta = useMemo(() => deltaFromSeries(throughputSeries.data), [throughputSeries.data]);
-  const p99Delta = useMemo(() => deltaFromSeries(p99Series.data, 1000), [p99Series.data]);
+  // avgLatency is already in ms — no unit scaling for the delta.
+  const latencyDelta = useMemo(() => deltaFromSeries(latencySeries.data), [latencySeries.data]);
   const acsDelta = useMemo(() => deltaFromSeries(acsSeries.data), [acsSeries.data]);
   const errDelta = useMemo(() => deltaFromSeries(errorsSeries.data), [errorsSeries.data]);
 
@@ -268,10 +272,10 @@ export function MetricsScreen() {
   }
 
   const m = summary.data?.metrics;
-  const p99Value =
-    summary.kind === "ok" && summary.data
-      ? (summary.data.latency?.p99_ms ?? Number.NaN)
-      : undefined;
+  // The backend latency.p99_ms is histogram_quantile-derived and NaN on
+  // Splice 0.6.4 (no finite buckets); use the computable average from the
+  // frontend series instead — its latest point, already in ms.
+  const latencyValue = latencySeries.data?.points.at(-1)?.v;
 
   return (
     <section style={{ padding: 24 }}>
@@ -297,13 +301,13 @@ export function MetricsScreen() {
           deltaPolarity="up-is-good"
         />
         <MetricCard
-          title="Command completion p99"
+          title="Avg latency"
           unit="ms"
-          value={p99Value}
-          sparkline={p99Series.data?.points.map((p) => ({ t: p.t, v: p.v * 1000 }))}
-          sparklineColor={P99_COLOR}
-          error={p99Series.kind === "err" ? p99Series.error : undefined}
-          delta={p99Delta}
+          value={latencyValue}
+          sparkline={latencySeries.data?.points}
+          sparklineColor={LATENCY_COLOR}
+          error={latencySeries.kind === "err" ? latencySeries.error : undefined}
+          delta={latencyDelta}
           deltaPolarity="down-is-good"
           format={(v) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1))}
         />
@@ -340,7 +344,7 @@ export function MetricsScreen() {
           marginBottom: 16,
         }}
       >
-        <ChartCard title="Latency by phase" subtitle="median · p99 · last hour">
+        <ChartCard title="Sequencing latency" subtitle="average · last hour">
           {latencyPhase.kind === "err" ? (
             <ErrLine msg={latencyPhase.error ?? "failed"} />
           ) : (
@@ -348,7 +352,7 @@ export function MetricsScreen() {
               series={latencyPhase.data ?? []}
               width={420}
               height={170}
-              format={(v) => (v >= 1 ? v.toFixed(2) + "s" : (v * 1000).toFixed(0) + "ms")}
+              format={(v) => (v >= 1000 ? (v / 1000).toFixed(2) + "s" : v.toFixed(0) + "ms")}
             />
           )}
         </ChartCard>
@@ -426,13 +430,23 @@ export function MetricsScreen() {
         </ChartCard>
       </div>
 
-      {/* Latency headline triplet — mirrors `dpm localnet metrics`
-          text output so CLI and UI agree on the curated quantiles. */}
-      <LatencyStrip
-        p50={summary.data?.latency?.p50_ms ?? undefined}
-        p95={summary.data?.latency?.p95_ms ?? undefined}
-        p99={summary.data?.latency?.p99_ms ?? undefined}
-      />
+      {/* Latency headline triplet — mirrors `dpm localnet metrics` text
+          output so CLI and UI agree on the curated quantiles. Splice 0.6.4
+          exports the histogram with only the +Inf bucket, so these
+          percentiles are NaN there; hide the strip rather than show three
+          dashes. It reappears on any version whose histogram carries finite
+          buckets. */}
+      {[
+        summary.data?.latency?.p50_ms,
+        summary.data?.latency?.p95_ms,
+        summary.data?.latency?.p99_ms,
+      ].some((v) => typeof v === "number" && Number.isFinite(v)) && (
+        <LatencyStrip
+          p50={summary.data?.latency?.p50_ms ?? undefined}
+          p95={summary.data?.latency?.p95_ms ?? undefined}
+          p99={summary.data?.latency?.p99_ms ?? undefined}
+        />
+      )}
 
       {/* Top error sources — full width */}
       <ChartCard title="Top error sources" subtitle="last hour">
