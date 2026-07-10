@@ -163,7 +163,6 @@ render_line_chart() {
   ph=$(( H - mt - mb ))
 
   local labels n maxv
-  labels="$(printf '%s' "${data}" | jq -r '.labels | join("\u0001")')"
   n="$(printf '%s' "${data}" | jq '.labels | length')"
   maxv="$(printf '%s' "${data}" | jq '[.series[].values[]] | max // 0')"
   maxv="$(nice_max "${maxv}")"
@@ -193,8 +192,7 @@ render_line_chart() {
 
     # X labels
     local idx=0 lbl xx
-    IFS=$'\001' read -ra _labels <<< "${labels}"
-    for lbl in "${_labels[@]}"; do
+    while IFS= read -r lbl; do
       if [ "$n" -gt 1 ]; then
         xx=$(awk -v ml="$ml" -v pw="$pw" -v i="$idx" -v n="$n" 'BEGIN{printf "%.1f", ml + pw*i/(n-1)}')
       else
@@ -203,7 +201,7 @@ render_line_chart() {
       printf '<text x="%s" y="%d" font-size="11" fill="#6b7280" text-anchor="middle">%s</text>\n' \
         "$xx" $(( mt + ph + 20 )) "$(svg_escape "${lbl}")"
       idx=$(( idx + 1 ))
-    done
+    done < <(printf '%s' "${data}" | jq -r '.labels[]')
     printf '<text x="%d" y="%d" font-size="12" fill="#374151" text-anchor="middle">Release tag (oldest -> newest)</text>\n' \
       $(( ml + pw/2 )) $(( H - 12 ))
 
