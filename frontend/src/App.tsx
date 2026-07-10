@@ -4,6 +4,7 @@ import { SCHEMA_VERSION, fetchVersion } from "./api";
 import { Shell } from "./shell/Shell";
 import { InstanceSelectionProvider } from "./shell/useInstanceSelection";
 import { ErrorBoundary } from "./shell/ErrorBoundary";
+import { ConfirmHost } from "./components/ConfirmDialog";
 import { Dashboard } from "./screens/Dashboard";
 import { DoctorScreen } from "./screens/DoctorScreen";
 import { Placeholder } from "./screens/Placeholder";
@@ -49,6 +50,9 @@ export function App() {
       <Shell>
         <RoutedSurface />
       </Shell>
+      {/* One confirm-dialog host for the whole app; confirmDialog()
+          from anywhere resolves against it. */}
+      <ConfirmHost />
     </InstanceSelectionProvider>
   );
 }

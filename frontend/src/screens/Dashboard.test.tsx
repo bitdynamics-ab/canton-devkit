@@ -186,10 +186,11 @@ describe("Dashboard", () => {
       expect(within(table).getByText("demo")).toBeInTheDocument();
       expect(within(table).getByText("hubble")).toBeInTheDocument();
     });
-    // STATE badges within the table.
+    // State badges within the table — StatusBadge renders Title-Case
+    // labels so the dot is never the only cue.
     const table = screen.getByRole("table");
-    expect(within(table).getByText("running")).toBeInTheDocument();
-    expect(within(table).getByText("stopped")).toBeInTheDocument();
+    expect(within(table).getByText("Running")).toBeInTheDocument();
+    expect(within(table).getByText("Stopped")).toBeInTheDocument();
   });
 
   it("renders the EmptyState when no instances are registered", async () => {

@@ -14,8 +14,10 @@ import {
   type Role,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { W, wMono, tableCaps, tint } from "../tokens";
+import { W, wMono, tableCaps, R, tint } from "../tokens";
 import { Button } from "../components/Button";
+import { MonoId } from "../components/MonoId";
+import { SkeletonTable, useLoadingDelay } from "../components/Skeleton";
 import {
   Dot,
   IcAlert,
@@ -279,7 +281,7 @@ export function DARScreen() {
         <RoleSwitcher role={role} onChange={setRole} />
       </header>
 
-      {state.kind === "loading" && <Status>Loading DAR list…</Status>}
+      {state.kind === "loading" && <DARListLoading />}
       {state.kind === "err" && <ErrorPanel msg={state.error} />}
       {state.kind === "port-missing" && (
         <EmptyPanel
@@ -323,15 +325,13 @@ export function DARScreen() {
                 aria-label="Drop DAR file here or click to choose"
                 style={{
                   margin: 14,
-                  border: `1.5px dashed ${dragOver ? W.brand : `${tint(W.brand, 33)}`}`,
-                  borderRadius: 4,
+                  border: `1px dashed ${dragOver ? W.brand : tint(W.brand, 33)}`,
+                  borderRadius: R.control,
                   padding: "22px 16px",
                   textAlign: "center",
-                  background: dragOver
-                    ? `${tint(W.brand, 10)}`
-                    : `linear-gradient(180deg, ${tint(W.brand, 4)} 0%, transparent 100%)`,
+                  background: dragOver ? tint(W.brand, 10) : "transparent",
                   cursor: "pointer",
-                  transition: "all 120ms",
+                  transition: "background-color 120ms, border-color 120ms",
                 }}
               >
                 {upload.kind === "uploading" ? (
@@ -359,7 +359,7 @@ export function DARScreen() {
                       Drop DAR here
                     </div>
                     <div style={{ color: W.dim, fontSize: 11.5 }}>
-                      or click to browse · multi-file ok
+                      or click to browse · multiple .dar accepted
                     </div>
                   </>
                 )}
@@ -468,7 +468,7 @@ export function DARScreen() {
             >
               <div>
                 <div
-                  style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}
+                  style={{ color: W.text, fontSize: 13, fontWeight: 600 }}
                 >
                   Packages on {role} participant
                 </div>
@@ -598,14 +598,18 @@ function WatchModeCard({ instance }: { instance: string }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span
             style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
               padding: "2px 8px",
-              borderRadius: 2,
+              borderRadius: R.control,
               fontSize: 12,
-              background: active ? "#7CC89A22" : W.border,
-              color: active ? "#7CC89A" : W.dim,
+              background: active ? tint(W.ok, 13) : W.border,
+              color: active ? W.ok : W.dim,
               fontWeight: 500,
             }}
           >
+            <Dot color={active ? W.ok : W.dim} size={6} pulse={active} />
             {active ? "Watching" : "Idle"}
           </span>
           {last && (
@@ -676,11 +680,10 @@ function PkgRow({
         gap: 14,
         padding: "10px 14px",
         alignItems: "center",
-        background: active ? `${tint(W.brand, 6)}` : "transparent",
-        borderLeft: active ? `2px solid ${W.brand}` : "2px solid transparent",
-        paddingLeft: active ? 12 : 14,
+        background: active ? tint(W.brand, 12) : "transparent",
         borderBottom: `1px solid ${W.border}`,
         cursor: "pointer",
+        transition: "background-color 120ms",
       }}
     >
       <code
@@ -697,22 +700,17 @@ function PkgRow({
       >
         {row.name}
       </code>
-      <code style={{ fontFamily: wMono, color: W.brand, fontSize: 11.5 }}>
-        {row.version}
-      </code>
       <code
         style={{
           fontFamily: wMono,
-          color: W.dim,
-          fontSize: 11,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
+          color: W.brand,
+          fontSize: 11.5,
+          fontVariantNumeric: "tabular-nums",
         }}
-        title={row.main}
       >
-        {row.main.slice(0, 12)}…{row.main.slice(-6)}
+        {row.version}
       </code>
+      <MonoId value={row.main} head={12} tail={6} size={11} color={W.dim} />
       <VettingCell vet={vet} />
     </div>
   );
@@ -751,7 +749,7 @@ function VettingCell({ vet }: { vet: VetState | undefined }) {
       {vet.rows.map((r) => {
         const abbr =
           r.role === "app-user" ? "U" : r.role === "app-provider" ? "P" : "S";
-        const color = r.error ? W.warn : r.vetted ? "#7CC89A" : W.dim;
+        const color = r.error ? W.warn : r.vetted ? W.ok : W.dim;
         const title = r.error
           ? `${r.role}: ${r.error}`
           : `${r.role}: ${r.vetted ? "vetted" : "not vetted"}`;
@@ -794,14 +792,16 @@ function InspectDrawer({
         style={{
           background: W.surface,
           border: `1px solid ${W.border}`,
-          borderRadius: 4,
-          padding: 32,
-          textAlign: "center",
+          borderRadius: R.card,
+          padding: 14,
+          textAlign: "left",
           color: W.dim,
           fontSize: 13,
+          lineHeight: 1.5,
         }}
       >
-        Select a package to inspect.
+        Select a package to inspect its tree, per-participant vetting, and
+        structural diff.
       </div>
     );
   }
@@ -816,7 +816,7 @@ function InspectDrawer({
     >
       <header style={{ padding: "14px 16px", borderBottom: `1px solid ${W.border}` }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-          <span style={{ color: W.text, fontWeight: 600, fontSize: 14 }}>
+          <span style={{ color: W.text, fontWeight: 600, fontSize: 13 }}>
             {row.name}
           </span>
           <span style={{ color: W.brand, fontWeight: 400, fontSize: 12, fontFamily: wMono }}>
@@ -830,7 +830,18 @@ function InspectDrawer({
         )}
       </header>
       <Section label="Identity">
-        <KV label="pkg-id" value={row.main} mono color="#93A7F0" />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "70px 1fr",
+            gap: 12,
+            padding: "4px 0",
+            alignItems: "center",
+          }}
+        >
+          <span style={{ color: W.dim, fontSize: 12 }}>pkg-id</span>
+          <MonoId value={row.main} head={10} tail={8} size={11} color={W.mag} />
+        </div>
         <KV label="name" value={row.name} mono />
         <KV label="version" value={row.version} mono />
         {row.description && (
@@ -1014,14 +1025,14 @@ function VettingPanel({
                 border: "none",
                 padding: 0,
                 cursor: pending === r.role ? "wait" : "pointer",
-                color: r.vetted ? "#7CC89A" : W.dim,
+                color: r.vetted ? W.ok : W.dim,
               }}
             >
               <span
                 style={{
                   width: 22,
                   height: 12,
-                  background: r.vetted ? "#7CC89A" : W.borderHi,
+                  background: r.vetted ? W.ok : W.borderHi,
                   borderRadius: 999,
                   position: "relative",
                   flexShrink: 0,
@@ -1109,14 +1120,14 @@ function UploadResultBanner({
   const heading =
     kind === "success"
       ? `Uploaded ${total} package${total === 1 ? "" : "s"} to ${okCount} participant${okCount === 1 ? "" : "s"}. Refreshing list…`
-      : `Partial upload — ${okCount}/${results.length} participant${results.length === 1 ? "" : "s"} succeeded`;
+      : `Partial upload. ${okCount}/${results.length} participant${results.length === 1 ? "" : "s"} succeeded.`;
   return (
     <div
       role={kind === "success" ? "status" : "alert"}
       style={{
-        background: `${accent}10`,
+        background: tint(accent, 10),
         border: `1px solid ${accent}`,
-        borderRadius: 2,
+        borderRadius: R.control,
         padding: "8px 12px",
         fontSize: 12,
         color: W.text2,
@@ -1212,16 +1223,16 @@ function RoleSwitcher({
             key={r}
             onClick={() => onChange(r)}
             style={{
-              background: active ? W.surface : "transparent",
-              color: active ? W.text : W.dim,
+              background: active ? tint(W.brand, 16) : "transparent",
+              color: active ? W.brand : W.dim,
               border: "none",
-              borderRadius: 2,
+              borderRadius: R.control,
               padding: "5px 12px",
               fontSize: 12,
               fontFamily: wMono,
               fontWeight: active ? 600 : 500,
               cursor: active ? "default" : "pointer",
-              boxShadow: active ? `0 0 0 1px ${W.brand}` : "none",
+              transition: "background-color 120ms",
             }}
           >
             {r}
@@ -1383,8 +1394,8 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     <div
       style={{
         color: W.dim,
-        fontSize: 12,
-        fontWeight: 500,
+        fontSize: 10.5,
+        ...tableCaps,
       }}
     >
       {children}
@@ -1418,7 +1429,8 @@ function KV({
           color: color ?? W.text2,
           fontSize: mono ? 11 : 12,
           fontFamily: mono ? wMono : undefined,
-          wordBreak: "break-all",
+          fontVariantNumeric: mono ? "tabular-nums" : undefined,
+          wordBreak: "break-word",
         }}
       >
         {value}
@@ -1451,19 +1463,40 @@ function Row({
   );
 }
 
-function Status({ children }: { children: React.ReactNode }) {
+// DARListLoading is the middle package-list skeleton: same four-column
+// rhythm as the real list, so rows arrive in place instead of popping
+// in after a bare "Loading…". Gated so a fast local fetch never flashes.
+function DARListLoading() {
+  const show = useLoadingDelay(true);
   return (
     <div
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
-        padding: 16,
-        color: W.dim,
-        fontSize: 13,
+        borderRadius: R.card,
+        overflow: "hidden",
       }}
     >
-      {children}
+      <div
+        style={{
+          padding: "11px 14px",
+          borderBottom: `1px solid ${W.border}`,
+          color: W.dim,
+          fontSize: 12,
+        }}
+      >
+        Loading package list
+      </div>
+      {show ? (
+        <SkeletonTable
+          columns={[1.6, 0.6, 1, 0.8]}
+          rows={5}
+          rowHeight={40}
+          label="Loading package list"
+        />
+      ) : (
+        <div style={{ height: 200 }} />
+      )}
     </div>
   );
 }

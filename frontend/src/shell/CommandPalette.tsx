@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { W, wMono, wSans, tint } from "../tokens";
+import { W, wMono, wSans, tint, R, wideCaps } from "../tokens";
 import { useInstanceSelection } from "./useInstanceSelection";
 import { NAV, isInstanceScoped, linkTo } from "./routes";
 
@@ -107,7 +107,7 @@ export function CommandPalette() {
       id: `inst-${i.name}`,
       group: "Switch instance",
       label: i.name,
-      hint: `${i.status} · ${i.splice_version}`,
+      hint: `${titleCase(i.status)} · ${i.splice_version}`,
       perform: () => sel.select(i.name),
     }));
     return [...nav, ...instances];
@@ -168,9 +168,12 @@ export function CommandPalette() {
         style={{
           width: "min(560px, 92vw)",
           background: W.surface,
+          // Floating overlay: one depth technique, matched to the
+          // instance switcher — hairline border plus a subtle shadow,
+          // not a hard border AND a heavy shadow.
           border: `1px solid ${W.border}`,
-          borderRadius: 8,
-          boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+          borderRadius: R.dialog,
+          boxShadow: "0 10px 32px rgba(0,0,0,0.24)",
           overflow: "hidden",
         }}
       >
@@ -250,11 +253,10 @@ function renderGroups(
           key={`group-${a.group}`}
           aria-hidden
           style={{
+            ...wideCaps,
             padding: "10px 12px 4px",
             color: W.dim,
             fontSize: 10.5,
-            textTransform: "uppercase", fontStretch: "118%",
-            letterSpacing: 1.1,
           }}
         >
           {a.group}
@@ -287,7 +289,14 @@ function renderGroups(
         >
           <span style={{ flex: 1 }}>{a.label}</span>
           {a.hint && (
-            <span style={{ color: W.dim, fontFamily: wMono, fontSize: 11 }}>
+            <span
+              style={{
+                color: W.dim,
+                fontFamily: wMono,
+                fontSize: 11,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
               {a.hint}
             </span>
           )}
@@ -317,6 +326,13 @@ function Hotkey({ label, hint }: { label: string; hint: string }) {
       {hint}
     </span>
   );
+}
+
+// titleCase renders a status enum ("running") as a Title-Case label
+// ("Running") for the instance hint line, matching StatusBadge's
+// vocabulary so the palette and the switcher read the same.
+function titleCase(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
 // filter — case-insensitive substring match across label + hint.

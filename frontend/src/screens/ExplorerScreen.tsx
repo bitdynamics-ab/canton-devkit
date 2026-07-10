@@ -16,7 +16,10 @@ import {
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { Button } from "../components/Button";
 import { Dot, IcRefresh } from "../components/icons";
-import { TX_KIND_COLOR, W, wMono, tableCaps, wideCaps, tint } from "../tokens";
+import { MonoId } from "../components/MonoId";
+import { StatusBadge } from "../components/StatusBadge";
+import { SkeletonTable, useLoadingDelay } from "../components/Skeleton";
+import { TX_KIND_COLOR, W, wMono, tableCaps, wideCaps, tint, R, FAST } from "../tokens";
 import { ContractDetailDrawer } from "./ContractDetailDrawer";
 import { TxReplayDrawer } from "./TxReplayDrawer";
 
@@ -40,6 +43,12 @@ const PALETTE = [
 ];
 
 type View = "contracts" | "transactions" | "timeline";
+
+// Honour the OS reduced-motion setting for the timeline glyph fades.
+const prefersReducedMotion =
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export function ExplorerScreen() {
   const sel = useInstanceSelection();
@@ -339,8 +348,13 @@ export function ExplorerScreen() {
         streamStatus={streamStatus}
       />
 
-      {state.kind === "loading" && <Status>Snapshotting ACS…</Status>}
-      {state.kind === "err" && <ErrorPanel msg={state.error} />}
+      {state.kind === "loading" && <AcsLoading />}
+      {state.kind === "err" && (
+        <ErrorPanel
+          msg={state.error}
+          onRetry={() => void refreshSnapshot(name, role, false)}
+        />
+      )}
       {state.kind === "port-missing" && (
         <EmptyPanel
           title="Participant ports not recorded"
@@ -420,11 +434,11 @@ export function ExplorerScreen() {
                 <span style={{ color: W.dim, fontSize: 12, fontWeight: 500 }}>
                   Stream
                 </span>
-                <span
-                  style={{ fontFamily: wMono, fontSize: 11, color: W.text2 }}
-                >
-                  {streamStatus}
-                </span>
+                <StatusBadge
+                  status={streamStatus}
+                  pulse={streamStatus === "reconnecting"}
+                  style={{ fontSize: 11 }}
+                />
               </div>
               <div
                 style={{
@@ -439,7 +453,12 @@ export function ExplorerScreen() {
                   Ledger end
                 </span>
                 <span
-                  style={{ fontFamily: wMono, fontSize: 11, color: W.text2 }}
+                  style={{
+                    fontFamily: wMono,
+                    fontSize: 11,
+                    color: W.text2,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
                 >
                   {state.data.ledger_end ?? "—"}
                 </span>
@@ -532,20 +551,71 @@ export function ExplorerScreen() {
               }}
             >
               <span>Template</span>
-              <span>Cid</span>
-              <span>Owner / signatory</span>
-              <span>Payload</span>
+              <span>Contract Id</span>
+              <span>Owner / Signatory</span>
+              <span style={{ textAlign: "right" }}>Payload</span>
               <span style={{ display: "flex", justifyContent: "space-between" }}>
                 <span>Age</span>
                 <span>Sig · Obs</span>
               </span>
             </div>
 
-            {filtered.length === 0 && (
-              <div style={{ padding: 18, color: W.dim, fontSize: 12.5 }}>
-                No contracts match the current filters.
-              </div>
-            )}
+            {filtered.length === 0 &&
+              (() => {
+                const hasAcsFilters =
+                  activeTemplates.size > 0 ||
+                  activeParties.size > 0 ||
+                  search.trim() !== "";
+                return (
+                  <div
+                    style={{
+                      padding: "14px 16px",
+                      color: W.dim,
+                      fontSize: 12.5,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      gap: 8,
+                    }}
+                  >
+                    {hasAcsFilters ? (
+                      <>
+                        <span>
+                          No contracts match these filters.{" "}
+                          {state.data.contracts.length.toLocaleString()} in the
+                          snapshot.
+                        </span>
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setActiveTemplates(new Set());
+                            setActiveParties(new Set());
+                            setSearch("");
+                          }}
+                        >
+                          Clear filters
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <span>
+                          The active contract set is empty. Create a contract to
+                          populate it.
+                        </span>
+                        <code
+                          style={{
+                            fontFamily: wMono,
+                            fontSize: 11.5,
+                            color: W.text2,
+                          }}
+                        >
+                          dpm localnet tx submit
+                        </code>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
             <div style={{ maxHeight: "60vh", overflowY: "auto" }}>
               {filtered.map((c) => (
                 <AcsRow
@@ -566,7 +636,7 @@ export function ExplorerScreen() {
                 borderTop: `1px solid ${W.border}`,
               }}
             >
-              <span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>
                 Showing {filtered.length} of {state.data.contracts.length} ·{" "}
                 {streamStatus === "live" ? "live" : "snapshot"} @ offset{" "}
                 {state.data.ledger_end ?? "—"}
@@ -620,22 +690,6 @@ function ProjectionBar({
   ledgerEnd: number | null;
   streamStatus: "idle" | "live" | "reconnecting" | "truncated";
 }) {
-  const pillColor =
-    streamStatus === "live"
-      ? "#7CC89A"
-      : streamStatus === "reconnecting"
-        ? "#DDB25E"
-        : streamStatus === "truncated"
-          ? "#7BD2C6"
-          : W.dim;
-  const pillLabel =
-    streamStatus === "live"
-      ? "live"
-      : streamStatus === "reconnecting"
-        ? "reconnecting"
-        : streamStatus === "truncated"
-          ? "truncated"
-          : "idle";
   return (
     <section
       style={{
@@ -733,20 +787,21 @@ function ProjectionBar({
             style={{
               padding: "5px 12px",
               fontSize: 12,
-              borderRadius: 2,
+              borderRadius: R.control,
               border: "none",
               background: v === view ? W.brand : "transparent",
               color: v === view ? W.onAccent : W.dim,
               fontWeight: v === view ? 600 : 500,
               cursor: "pointer",
               textTransform: "capitalize",
+              transition: `background-color ${FAST}, color ${FAST}`,
             }}
           >
             {v}
           </button>
         ))}
       </div>
-      <Pill color={pillColor}>{pillLabel}</Pill>
+      <StatusBadge status={streamStatus} variant="pill" pulse={streamStatus === "reconnecting"} />
     </section>
   );
 }
@@ -767,27 +822,28 @@ function FilterChip({
   return (
     <button
       onClick={onClick}
+      aria-pressed={active}
       style={{
         display: "flex",
         alignItems: "center",
         gap: 8,
         padding: "6px 9px",
-        borderRadius: 2,
+        borderRadius: R.control,
         cursor: "pointer",
-        background: active ? W.border : "transparent",
-        borderLeft: active ? `2px solid ${color}` : "2px solid transparent",
-        paddingLeft: 9,
+        background: active ? tint(W.brand, 12) : "transparent",
         width: "100%",
         border: "none",
         textAlign: "left",
+        transition: `background-color ${FAST}`,
       }}
     >
       <span
         style={{
           width: 8,
           height: 8,
-          borderRadius: 2,
+          borderRadius: R.control,
           background: color,
+          opacity: active ? 1 : 0.7,
           flexShrink: 0,
         }}
       />
@@ -837,15 +893,16 @@ function AcsRow({
         gap: 14,
         padding: "9px 14px",
         alignItems: "center",
-        background: active ? `${tint(W.brand, 6)}` : "transparent",
-        borderLeft: active ? `2px solid ${W.brand}` : "2px solid transparent",
-        paddingLeft: active ? 12 : 14,
+        background: active ? tint(W.brand, 12) : "transparent",
         borderBottom: `1px solid ${W.border}`,
         cursor: "pointer",
+        transition: `background-color ${FAST}`,
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-        <Dot color={W.ok} size={6} />
+        <span title="Active contract" aria-label="Active contract" style={{ display: "inline-flex" }}>
+          <Dot color={W.ok} size={6} />
+        </span>
         <span
           style={{
             fontSize: 12.5,
@@ -860,19 +917,7 @@ function AcsRow({
           {shortTpl}
         </span>
       </div>
-      <code
-        style={{
-          color: "#93A7F0",
-          fontFamily: wMono,
-          fontSize: 11,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-        title={row.contract_id}
-      >
-        {row.contract_id.slice(0, 14)}…
-      </code>
+      <MonoId value={row.contract_id} head={8} tail={6} size={11} color={W.mag} />
       <span
         style={{
           color: W.text2,
@@ -885,7 +930,15 @@ function AcsRow({
       >
         {row.signatories[0]?.split("::")[0] ?? "—"}
       </span>
-      <span style={{ fontFamily: wMono, fontSize: 12, color: W.text }}>
+      <span
+        style={{
+          fontFamily: wMono,
+          fontSize: 12,
+          color: W.text,
+          fontVariantNumeric: "tabular-nums",
+          textAlign: "right",
+        }}
+      >
         {payloadPreview}
       </span>
       <span
@@ -899,7 +952,7 @@ function AcsRow({
         }}
       >
         <span>{row.created_at ? ago(row.created_at) : "—"}</span>
-        <span>
+        <span style={{ fontFamily: wMono, fontVariantNumeric: "tabular-nums" }}>
           {row.signatories.length}·{row.observers.length}
         </span>
       </span>
@@ -994,10 +1047,21 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
 
   const body = (() => {
     if (state.kind === "loading") {
-      return <Status>Loading updates stream…</Status>;
+      return (
+        <TableLoading
+          columns={[70, 110, 1.4, 1.1, 0.8, 56, 70]}
+          rows={6}
+          rowHeight={36}
+        />
+      );
     }
     if (state.kind === "err") {
-      return <ErrorPanel msg={state.error} />;
+      return (
+        <ErrorPanel
+          msg={state.error}
+          onRetry={() => setApplied((f) => ({ ...f }))}
+        />
+      );
     }
     if (state.kind === "port-missing") {
       return (
@@ -1040,7 +1104,14 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
             <div style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}>
               Transactions
             </div>
-            <div style={{ color: W.dim, fontSize: 11.5, marginTop: 2 }}>
+            <div
+              style={{
+                color: W.dim,
+                fontSize: 11.5,
+                marginTop: 2,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
               {state.data.transactions.length} updates · newest first ·{" "}
               {hasFilters ? "filtered · " : ""}
               scanned from {state.data.scanned_from?.toLocaleString() ?? "—"} to
@@ -1072,10 +1143,34 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
         </div>
 
         {state.data.transactions.length === 0 && (
-          <div style={{ padding: 18, color: W.dim, fontSize: 12.5 }}>
-            {hasFilters
-              ? "No updates matched the filters in the scanned window."
-              : "No updates in the current ledger window."}
+          <div
+            style={{
+              padding: "14px 16px",
+              color: W.dim,
+              fontSize: 12.5,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-start",
+              gap: 8,
+            }}
+          >
+            {hasFilters ? (
+              <>
+                <span>No updates matched these filters in the scanned window.</span>
+                <Button variant="secondary" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              </>
+            ) : (
+              <>
+                <span>No updates in the current ledger window.</span>
+                <code
+                  style={{ fontFamily: wMono, fontSize: 11.5, color: W.text2 }}
+                >
+                  dpm localnet tx ls
+                </code>
+              </>
+            )}
           </div>
         )}
 
@@ -1287,22 +1382,23 @@ function TxRowComponent({
         >
           {tx.kind}
         </span>
-        <code style={{ fontFamily: wMono, color: W.text2, fontSize: 11 }}>
-          {tx.offset.toLocaleString()}
-        </code>
         <code
           style={{
             fontFamily: wMono,
-            color: "#93A7F0",
+            color: W.text2,
             fontSize: 11,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
+            fontVariantNumeric: "tabular-nums",
           }}
-          title={tx.command_id ?? tx.update_id ?? ""}
         >
-          {tx.command_id ?? tx.update_id?.slice(0, 16) ?? "—"}
+          {tx.offset.toLocaleString()}
         </code>
+        {tx.command_id ? (
+          <MonoId value={tx.command_id} head={8} tail={6} size={11} color={W.mag} />
+        ) : tx.update_id ? (
+          <MonoId value={tx.update_id} head={8} tail={6} size={11} color={W.mag} />
+        ) : (
+          <span style={{ color: W.dim, fontSize: 11 }}>—</span>
+        )}
         <span
           style={{
             color: W.text2,
@@ -1323,6 +1419,7 @@ function TxRowComponent({
             fontFamily: wMono,
             fontSize: 11,
             textAlign: "right",
+            fontVariantNumeric: "tabular-nums",
           }}
         >
           {tx.event_count ?? "—"}
@@ -1410,17 +1507,14 @@ function EventTreeNode({
           ? ev.template.split(":").slice(1).join(":")
           : "—"}
       </span>
-      <code
-        style={{
-          fontFamily: wMono,
-          color: "#93A7F0",
-          fontSize: 10.5,
-          marginLeft: "auto",
-        }}
-        title={ev.contract_id}
-      >
-        {ev.contract_id.slice(0, 16)}…
-      </code>
+      <MonoId
+        value={ev.contract_id}
+        head={8}
+        tail={6}
+        size={10.5}
+        color={W.mag}
+        style={{ marginLeft: "auto" }}
+      />
     </div>
   );
 }
@@ -1440,6 +1534,9 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
   // selected. Click again or Esc clears.
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  // Bumped by the error-state Retry to re-run the fetch effect.
+  const [nonce, setNonce] = useState(0);
+  const reload = useCallback(() => setNonce((n) => n + 1), []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1488,10 +1585,14 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
     return () => {
       cancelled = true;
     };
-  }, [name, role]);
+  }, [name, role, nonce]);
 
-  if (state.kind === "loading") return <Status>Loading timeline…</Status>;
-  if (state.kind === "err") return <ErrorPanel msg={state.error} />;
+  if (state.kind === "loading")
+    return (
+      <TableLoading columns={[1, 1, 1, 1, 1, 1]} rows={4} rowHeight={30} />
+    );
+  if (state.kind === "err")
+    return <ErrorPanel msg={state.error} onRetry={reload} />;
   if (state.kind === "port-missing")
     return (
       <EmptyPanel
@@ -1543,7 +1644,7 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
           </div>
         </div>
 
-        {/* Activity strip */}
+        {/* Activity strip — flat bars; height is the data encoding. */}
         <div
           style={{
             padding: "16px 14px",
@@ -1551,7 +1652,7 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
             gap: 2,
             alignItems: "flex-end",
             height: 100,
-            background: `linear-gradient(180deg, transparent 0%, ${tint(W.border, 13)} 100%)`,
+            background: W.sunken,
           }}
         >
           {buckets.map((b, i) => {
@@ -1563,11 +1664,8 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
                 style={{
                   flex: 1,
                   height: h,
-                  background:
-                    b.count === 0
-                      ? W.border
-                      : `linear-gradient(180deg, ${tint(W.brand, 40)} 0%, ${W.brand} 100%)`,
-                  borderRadius: 2,
+                  background: b.count === 0 ? W.border : W.brand,
+                  borderRadius: R.control,
                 }}
               />
             );
@@ -1638,18 +1736,14 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
                   background: color,
                   opacity:
                     selectedIdx === i || hoverIdx === i ? 1 : 0.65,
-                  borderRadius: 1.5,
+                  borderRadius: R.control,
                   cursor: "pointer",
-                  transition: "opacity 80ms, transform 80ms",
+                  transition: prefersReducedMotion
+                    ? undefined
+                    : `opacity ${FAST}`,
                   outline:
                     selectedIdx === i ? `2px solid ${W.brand}` : "none",
                   outlineOffset: selectedIdx === i ? 1 : 0,
-                  transform:
-                    selectedIdx === i
-                      ? "translateY(-2px)"
-                      : hoverIdx === i
-                        ? "translateY(-1px)"
-                        : "none",
                 }}
               />
             );
@@ -1672,7 +1766,7 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
           </span>
           <span>
             {selectedIdx !== null
-              ? "Selected — click again or press Esc to clear."
+              ? "Pinned. Click again or press Esc to clear."
               : "Hover for preview · click to pin."}
           </span>
         </div>
@@ -1689,10 +1783,9 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
             bottom: 0,
             width: "min(480px, 92vw)",
             // Raised surface — matches ContractDetailDrawer/TxReplayDrawer.
+            // One depth technique: hairline border, no shadow ring.
             background: W.surface2,
             borderLeft: `1px solid ${W.borderHi}`,
-            boxShadow:
-              "0 0 0 1px rgba(0,0,0,0.2), -16px 0 40px -12px rgba(0,0,0,0.5)",
             // A hover preview must not steal hit-testing from the strip
             // underneath it (hover-in would unhover the glyph and
             // unmount the panel in a loop); only a pinned selection is
@@ -1717,7 +1810,14 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
               >
                 {focused.kind}
               </Pill>
-              <span style={{ color: W.dim, fontSize: 11.5, fontFamily: wMono }}>
+              <span
+                style={{
+                  color: W.dim,
+                  fontSize: 11.5,
+                  fontFamily: wMono,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
                 offset {focused.offset.toLocaleString()}
               </span>
             </div>
@@ -1777,7 +1877,8 @@ function Mono({ children }: { children: React.ReactNode }) {
         fontFamily: wMono,
         color: W.text2,
         fontSize: 11,
-        wordBreak: "break-all",
+        fontVariantNumeric: "tabular-nums",
+        wordBreak: "break-word",
       }}
     >
       {children}
@@ -1836,7 +1937,7 @@ function Card({
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 10,
       }}
     >
@@ -1883,11 +1984,11 @@ function Pill({ color, children }: { color: string; children: React.ReactNode })
   return (
     <span
       style={{
-        background: `${color}1A`,
-        border: `1px solid ${color}44`,
+        background: tint(color, 13),
+        border: `1px solid ${tint(color, 34)}`,
         color,
         padding: "1px 8px",
-        borderRadius: 2,
+        borderRadius: R.control,
         fontSize: 10.5,
         fontWeight: 600,
         fontFamily: wMono,
@@ -1898,36 +1999,97 @@ function Pill({ color, children }: { color: string; children: React.ReactNode })
   );
 }
 
-function Status({ children }: { children: React.ReactNode }) {
+// AcsLoading — a layout-matched skeleton for the ACS table (its grid
+// is 1.8/1.2/1/0.8/0.8), gated so a fast local snapshot never flashes.
+function AcsLoading() {
+  const show = useLoadingDelay(true);
+  if (!show) return null;
   return (
     <div
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
-        padding: 16,
-        color: W.dim,
-        fontSize: 13,
+        borderRadius: R.card,
+        overflow: "hidden",
       }}
     >
-      {children}
+      <SkeletonTable columns={[1.8, 1.2, 1, 0.8, 0.8]} rows={7} rowHeight={38} />
     </div>
   );
 }
 
-function ErrorPanel({ msg }: { msg: string }) {
+// TableLoading — a bordered skeleton container for the Transactions /
+// Timeline tables. Same delay gate as the ACS loader.
+function TableLoading({
+  columns,
+  rows,
+  rowHeight,
+}: {
+  columns: (number | string)[];
+  rows: number;
+  rowHeight: number;
+}) {
+  const show = useLoadingDelay(true);
+  if (!show) return null;
   return (
     <div
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
-        padding: 16,
-        color: "#7BD2C6",
-        fontSize: 13,
+        borderRadius: R.card,
+        overflow: "hidden",
       }}
     >
-      {msg}
+      <SkeletonTable columns={columns} rows={rows} rowHeight={rowHeight} />
+    </div>
+  );
+}
+
+// ErrorPanel — left-aligned, plain-language cause up front, a Retry
+// affordance, and the raw message tucked behind a details disclosure
+// so it doesn't shout at the operator on every transient blip.
+function ErrorPanel({ msg, onRetry }: { msg: string; onRetry?: () => void }) {
+  return (
+    <div
+      style={{
+        background: W.surface,
+        border: `1px solid ${W.border}`,
+        borderRadius: R.card,
+        padding: "14px 16px",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-start",
+        gap: 8,
+      }}
+    >
+      <div style={{ color: W.err, fontSize: 13, fontWeight: 600 }}>
+        Could not load ledger data.
+      </div>
+      <div style={{ color: W.text2, fontSize: 12.5 }}>
+        The participant did not answer. Check the instance is running, then
+        retry.
+      </div>
+      {onRetry && (
+        <Button variant="secondary" onClick={onRetry}>
+          Retry
+        </Button>
+      )}
+      <details style={{ color: W.dim, fontSize: 11.5 }}>
+        <summary style={{ cursor: "pointer" }}>Details</summary>
+        <code
+          style={{
+            display: "block",
+            marginTop: 6,
+            fontFamily: wMono,
+            color: W.text2,
+            fontSize: 11,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
+          {msg}
+        </code>
+      </details>
     </div>
   );
 }
@@ -1944,17 +2106,21 @@ function EmptyPanel({
   return (
     <div
       style={{
-        background: `${tint(W.warn, 6)}`,
+        background: tint(W.warn, 6),
         border: `1px solid ${W.warn}`,
-        borderRadius: 4,
-        padding: 20,
+        borderRadius: R.card,
+        padding: "14px 16px",
       }}
     >
       <h3 style={{ color: W.warn, fontSize: 14, marginTop: 0, marginBottom: 8 }}>
         {title}
       </h3>
-      <p style={{ color: W.text2, fontSize: 13, lineHeight: 1.5 }}>{body}</p>
-      <p style={{ color: W.dim, fontSize: 12, marginTop: 12 }}>{remediation}</p>
+      <p style={{ color: W.text2, fontSize: 13, lineHeight: 1.5, margin: 0 }}>
+        {body}
+      </p>
+      <p style={{ color: W.dim, fontSize: 12, marginTop: 12, marginBottom: 0 }}>
+        {remediation}
+      </p>
     </div>
   );
 }

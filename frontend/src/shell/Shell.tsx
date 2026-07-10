@@ -1,6 +1,7 @@
 import { NavLink, useLocation, useSearchParams } from "react-router-dom";
 import { useState } from "react";
-import { W, wMono, wSans, wideCaps, tint } from "../tokens";
+import { W, wMono, wSans, wideCaps, tint, R } from "../tokens";
+import { StatusBadge } from "../components/StatusBadge";
 import {
   Dot,
   IcOverview,
@@ -215,10 +216,10 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
   // rather than a dropdown. The Dashboard owns the "go run dpm
   // localnet up" empty-state messaging; the topbar just shrugs.
   if (sel.loading) {
-    return <span style={pillStyle(W.dim)}>loading instances…</span>;
+    return <span style={pillStyle(W.dim)}>Loading instances…</span>;
   }
   if (sel.error || sel.instances.length === 0) {
-    return <span style={pillStyle(W.dim)}>no instances</span>;
+    return <span style={pillStyle(W.dim)}>No instances</span>;
   }
   const selected = sel.instances.find((i) => i.name === sel.selected);
   return (
@@ -255,7 +256,14 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
         >
           instance
         </span>
-        <strong style={{ color: W.text, fontFamily: wMono, fontSize: 12 }}>
+        <strong
+          style={{
+            color: W.text,
+            fontFamily: wMono,
+            fontSize: 12,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
           {sel.selected ?? "—"}
         </strong>
         <IcChevronDown size={12} style={{ color: W.dim }} />
@@ -271,11 +279,13 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
             padding: 4,
             listStyle: "none",
             background: W.surface,
+            // Floating overlay: one depth technique. Hairline border
+            // plus a subtle shadow, matched to the command palette.
             border: `1px solid ${W.border}`,
-            borderRadius: 4,
+            borderRadius: R.card,
             minWidth: 240,
             zIndex: 10,
-            boxShadow: "0 8px 28px rgba(0,0,0,0.28)",
+            boxShadow: "0 6px 20px rgba(0,0,0,0.16)",
           }}
         >
           {sel.instances.map((i) => (
@@ -294,13 +304,15 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 8,
+                  gap: 10,
                   width: "100%",
                   padding: "7px 10px",
+                  // Flat active fill, constant padding — no accent
+                  // side-bar, no content shift on selection.
                   background:
                     i.name === sel.selected ? W.brandSoft : "transparent",
                   border: "none",
-                  borderRadius: 2,
+                  borderRadius: R.control,
                   color: i.name === sel.selected ? W.brandText : W.text,
                   fontFamily: wMono,
                   fontSize: 12,
@@ -308,9 +320,15 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
                   cursor: "pointer",
                 }}
               >
-                <StatusDot status={i.status} />
                 <span style={{ flex: 1 }}>{i.name}</span>
-                <span style={{ color: W.dim, fontSize: 11 }}>
+                <StatusBadge status={i.status} />
+                <span
+                  style={{
+                    color: W.dim,
+                    fontSize: 11,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
                   {i.splice_version}
                 </span>
               </button>
@@ -412,7 +430,7 @@ function HealthPill({ conn }: { conn: ConnectionState }) {
       case "offline":
         return {
           color: W.err,
-          label: "offline",
+          label: "Offline",
           tooltip:
             conn.serverVersion != null
               ? `Lost connection · last seen schema v${conn.serverVersion}`

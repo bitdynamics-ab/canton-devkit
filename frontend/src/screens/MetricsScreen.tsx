@@ -8,7 +8,7 @@ import {
   type PrometheusRangeResponse,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { W, wMono, tint } from "../tokens";
+import { W, wMono, tint, R } from "../tokens";
 import { Button } from "../components/Button";
 import { IcX } from "../components/icons";
 import { MetricCard } from "../components/MetricCard";
@@ -239,9 +239,13 @@ export function MetricsScreen() {
 
   if (!name) {
     return (
-      <section style={{ padding: 24 }}>
-        <p style={{ color: W.dim }}>
-          No instance selected. Create or pick one from the dashboard first.
+      <section style={{ padding: "14px 16px" }}>
+        <p style={{ color: W.text2, fontSize: 13, margin: 0 }}>
+          No instance selected.
+        </p>
+        <p style={{ color: W.dim, fontSize: 12.5, margin: "4px 0 0" }}>
+          Pick an instance from the topbar switcher, or create one from
+          Overview.
         </p>
       </section>
     );
@@ -336,7 +340,7 @@ export function MetricsScreen() {
           marginBottom: 16,
         }}
       >
-        <ChartCard title="Latency by phase" subtitle="median · p99 — last hour">
+        <ChartCard title="Latency by phase" subtitle="median · p99 · last hour">
           {latencyPhase.kind === "err" ? (
             <ErrLine msg={latencyPhase.error ?? "failed"} />
           ) : (
@@ -389,7 +393,7 @@ export function MetricsScreen() {
           ) : null}
         </ChartCard>
 
-        <ChartCard title="Resource usage" subtitle="JVM heap bytes — components">
+        <ChartCard title="Resource usage" subtitle="JVM heap bytes · components">
           {cpuSeries.kind === "err" ? (
             <ErrLine msg={cpuSeries.error ?? "failed"} />
           ) : (
@@ -464,9 +468,10 @@ function LatencyStrip(props: {
     padding: "10px 14px",
     background: W.surface,
     border: `1px solid ${W.border}`,
-    borderRadius: 2,
+    borderRadius: R.control,
     fontFamily: wMono,
     fontSize: 13,
+    fontVariantNumeric: "tabular-nums",
     color: W.text,
   };
   const label: CSSProperties = {
@@ -507,7 +512,7 @@ function DashboardsBlock(props: { url?: string }) {
     padding: "10px 14px",
     background: W.surface,
     border: `1px solid ${W.border}`,
-    borderRadius: 2,
+    borderRadius: R.control,
     fontFamily: wMono,
     fontSize: 13,
     color: W.text,
@@ -582,10 +587,29 @@ function ChartCard({
   );
 }
 
+// ErrLine — a chart card's query failed. The 5 s poll re-issues the
+// query on the next tick, so this states the cause and that a retry is
+// already in flight, with the raw server message tucked behind a
+// disclosure rather than shouting a stack-shaped string.
 function ErrLine({ msg }: { msg: string }) {
   return (
-    <div role="alert" style={{ color: "#7BD2C6", fontSize: 12, padding: "20px 0" }}>
-      {msg}
+    <div role="alert" style={{ padding: "14px 0", fontSize: 12 }}>
+      <div style={{ color: W.err }}>Query failed. Retrying every 5 s.</div>
+      <details style={{ marginTop: 6 }}>
+        <summary style={{ cursor: "pointer", color: W.dim, fontSize: 11 }}>
+          Server message
+        </summary>
+        <div
+          style={{
+            marginTop: 4,
+            color: W.text2,
+            fontFamily: wMono,
+            fontSize: 11,
+          }}
+        >
+          {msg}
+        </div>
+      </details>
     </div>
   );
 }
@@ -619,7 +643,7 @@ function ObservabilityOffPanel({
       style={{
         background: `${tint(W.warn, 6)}`,
         border: `1px solid ${W.warn}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 20,
       }}
     >

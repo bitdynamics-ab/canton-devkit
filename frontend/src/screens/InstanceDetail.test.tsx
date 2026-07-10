@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { InstanceDetail } from "./InstanceDetail";
+import { ConfirmHost } from "../components/ConfirmDialog";
 
 // InstanceDetail tests — surfaces every field the /api/instances/:name
 // endpoint returns beyond the summary. Three states:
@@ -266,17 +267,24 @@ describe("InstanceDetail", () => {
       );
     });
     vi.stubGlobal("fetch", fetchMock);
-    vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
 
     const onChanged = vi.fn();
     render(
-      <InstanceDetail name="demo" statusHint="running" onChanged={onChanged} />,
+      <>
+        <InstanceDetail name="demo" statusHint="running" onChanged={onChanged} />
+        <ConfirmHost />
+      </>,
     );
 
     // Wait for the Recreate button to appear (the action-button
     // bar renders once statusHint resolves).
     const restartBtn = await screen.findByRole("button", { name: /recreate/i });
     fireEvent.click(restartBtn);
+
+    // Recreate is destructive-ish, so it routes through the in-app
+    // confirm dialog. Approve it by clicking the dialog's confirm.
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /recreate/i }));
 
     await waitFor(() => {
       const calls = fetchMock.mock.calls.map((c) => c[0]);
@@ -415,15 +423,22 @@ describe("InstanceDetail", () => {
       );
     });
     vi.stubGlobal("fetch", fetchMock);
-    vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
 
     const onChanged = vi.fn();
     render(
-      <InstanceDetail name="demo" statusHint="stopped" onChanged={onChanged} />,
+      <>
+        <InstanceDetail name="demo" statusHint="stopped" onChanged={onChanged} />
+        <ConfirmHost />
+      </>,
     );
 
     const downBtn = await screen.findByRole("button", { name: /^Down$/ });
     fireEvent.click(downBtn);
+
+    // Down removes containers, so it routes through the in-app confirm
+    // dialog. Approve it via the dialog's confirm button.
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Down$/ }));
 
     await waitFor(() => {
       const calls = fetchMock.mock.calls.map((c) => c[0]);

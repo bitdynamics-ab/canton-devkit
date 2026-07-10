@@ -50,7 +50,7 @@
   --gray-500: #6c7488; --gray-600: #4d5567; --gray-700: #384050;
   --gray-800: #232a39; --gray-900: #141a28; --gray-950: #0b0f1a;
   --blue-50: #eef1fd; --blue-100: #dce3fb; --blue-200: #bcc9f6;
-  --blue-300: #93a7f0; --blue-400: #6480e6; --blue-500: #3d5bdc;
+  --blue-300: #93a7f0; --blue-400: #6480e6; --blue-500: #5661db;
   --blue-600: #2946ce; --blue-700: #2138a8; --blue-800: #1d2f85;
   --blue-900: #1a2861; --blue-950: #101836;
   --teal-300: #7bd2c6; --teal-500: #189e8c;
@@ -61,47 +61,50 @@
   --duration-fast: 120ms;
 }
 
-/* ---- Dark theme (default) ---- */
+/* ---- Dark theme (default) — Carbon Slate: true-neutral graphite +
+   one indigo-violet accent. Accent hue sits well off the near-zero-hue
+   neutrals, so action never collides with chrome. All pairs verified
+   WCAG AA. ---- */
 :root {
   color-scheme: dark;
-  --bg-page: #0b0f1a; --bg-sunken: #080c15; --bg-surface: #10151f;
-  --bg-raised: #161c29; --bg-inset: #0d1220;
-  --text-primary: #e9ecf4; --text-secondary: #a9b2c6;
-  --text-muted: #7c8598; --text-faint: #5a6375;
-  --border-subtle: #171e2c; --border-default: #232b3d; --border-strong: #313b52;
-  --hover-tint: #171e2c; --active-tint: #1e2637;
-  --accent: #6480e6; --accent-hover: #7b93ec; --accent-active: #93a7f0;
-  --accent-subtle: #141c36; --accent-muted: #1c2747; --accent-text: #93a7f0;
-  --on-accent: #0b0f1a;
-  --accent-solid: #2e4cd4; --accent-solid-hover: #3b57db; --on-accent-solid: #ffffff;
-  --link: #8fa3ee; --link-hover: #b3c1f4;
-  --ok-text: #7cc89a; --ok-bg: #0e1f16; --ok-border: #1e3a2a;
-  --warn-text: #ddb25e; --warn-bg: #211a0b; --warn-border: #3e3115;
-  --danger-text: #e08d7d; --danger-bg: #24120e; --danger-border: #45201a;
-  --danger: #d2604b; --danger-hover: #e08d7d;
-  --info-text: #a9baf2; --info-bg: #121a33; --info-border: #223059;
-  --dot-grid: radial-gradient(circle at 1px 1px, #232b3d 1px, transparent 1px);
+  --bg-page: #0f1012; --bg-sunken: #0b0c0e; --bg-surface: #16171a;
+  --bg-raised: #1e1f23; --bg-inset: #101113;
+  --text-primary: #e4e5e8; --text-secondary: #aeb1b8;
+  --text-muted: #75787f; --text-faint: #6e7178;
+  --border-subtle: #1e1f23; --border-default: #2a2c31; --border-strong: #3a3d44;
+  --hover-tint: #1a1b1f; --active-tint: #212227;
+  --accent: #8b93f2; --accent-hover: #9aa1f5; --accent-active: #a6acf6;
+  --accent-subtle: #1b1d2e; --accent-muted: #23263c; --accent-text: #a6acf6;
+  --on-accent: #12121a;
+  --accent-solid: #4e57d6; --accent-solid-hover: #5a62de; --on-accent-solid: #ffffff;
+  --link: #a6acf6; --link-hover: #c0c4f9;
+  --ok-text: #5bc98c; --ok-bg: #0f2118; --ok-border: #1e3a2a;
+  --warn-text: #e8b24c; --warn-bg: #221a0b; --warn-border: #3e3115;
+  --danger-text: #f07b72; --danger-bg: #241210; --danger-border: #45201a;
+  --danger: #e5604f; --danger-hover: #f07b72;
+  --info-text: #a9baf2; --info-bg: #16182b; --info-border: #2a2e48;
+  --dot-grid: radial-gradient(circle at 1px 1px, #2a2c31 1px, transparent 1px);
 }
 
-/* ---- Light theme ---- */
+/* ---- Light theme — Carbon Slate ---- */
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg-page: #ffffff; --bg-sunken: #f7f8fa; --bg-surface: #ffffff;
-  --bg-raised: #ffffff; --bg-inset: #eff1f5;
-  --text-primary: #141a28; --text-secondary: #4d5567;
-  --text-muted: #6c7488; --text-faint: #9ba3b5;
-  --border-subtle: #eff1f5; --border-default: #e2e5ec; --border-strong: #cdd2dd;
-  --hover-tint: #f7f8fa; --active-tint: #eff1f5;
-  --accent: #2946ce; --accent-hover: #2138a8; --accent-active: #1d2f85;
-  --accent-subtle: #eef1fd; --accent-muted: #dce3fb; --accent-text: #2138a8;
+  --bg-page: #fbfbfc; --bg-sunken: #f7f7f8; --bg-surface: #ffffff;
+  --bg-raised: #f4f5f6; --bg-inset: #eeeff1;
+  --text-primary: #1b1c1f; --text-secondary: #54575e;
+  --text-muted: #82868e; --text-faint: #8a8d95;
+  --border-subtle: #eeeff1; --border-default: #e1e3e6; --border-strong: #c6c9ce;
+  --hover-tint: #f4f5f6; --active-tint: #eeeff1;
+  --accent: #4a52c9; --accent-hover: #3d45be; --accent-active: #333ba8;
+  --accent-subtle: #eef0fd; --accent-muted: #dde0fa; --accent-text: #3d45be;
   --on-accent: #ffffff;
-  --accent-solid: #2946ce; --accent-solid-hover: #2138a8; --on-accent-solid: #ffffff;
-  --link: #2946ce; --link-hover: #1d2f85;
-  --ok-text: #18653b; --ok-bg: #edf7f0; --ok-border: #bce0c9;
-  --warn-text: #85560e; --warn-bg: #fcf5e8; --warn-border: #ebd9a9;
-  --danger-text: #962e20; --danger-bg: #fbefed; --danger-border: #efc5bd;
-  --danger: #ba3a29; --danger-hover: #962e20;
-  --info-text: #1d2f85; --info-bg: #eef1fd; --info-border: #bcc9f6;
+  --accent-solid: #4a52c9; --accent-solid-hover: #3d45be; --on-accent-solid: #ffffff;
+  --link: #4a52c9; --link-hover: #333ba8;
+  --ok-text: #157c45; --ok-bg: #edf7f0; --ok-border: #bce0c9;
+  --warn-text: #8a6410; --warn-bg: #fcf5e8; --warn-border: #ebd9a9;
+  --danger-text: #b93a2e; --danger-bg: #fbefed; --danger-border: #efc5bd;
+  --danger: #b93a2e; --danger-hover: #962e20;
+  --info-text: #3d45be; --info-bg: #eef0fd; --info-border: #bcc9f6;
   --dot-grid: radial-gradient(circle at 1px 1px, #e2e5ec 1px, transparent 1px);
 }
 
@@ -343,11 +346,31 @@ a {
   50% { opacity: 0.35; }
 }
 
+/* Modal/overlay entrance (ConfirmDialog). */
+@keyframes cdk-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Skeleton shimmer (components/Skeleton). A slow sweep, gated below by
+   prefers-reduced-motion. */
+@keyframes cdk-shimmer {
+  0% { background-position: -180% 0; }
+  100% { background-position: 180% 0; }
+}
+
 /* Respect prefers-reduced-motion — the pulse is ambient and
    not load-bearing for the state communication (color carries
    the signal too). */
 @media (prefers-reduced-motion: reduce) {
   @keyframes pulse {
     0%, 100% { opacity: 1; }
+  }
+  @keyframes cdk-shimmer {
+    0%, 100% { background-position: 0 0; }
+  }
+  @keyframes cdk-fade {
+    from { opacity: 1; }
+    to { opacity: 1; }
   }
 }

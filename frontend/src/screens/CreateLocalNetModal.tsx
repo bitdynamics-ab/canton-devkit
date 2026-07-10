@@ -13,7 +13,7 @@ import {
   type PreflightReport,
   type SpliceVersionEntry,
 } from "../api";
-import { W, wMono, wSans, tint } from "../tokens";
+import { W, wMono, wSans, tint, R } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcAlert, IcCheck, IcStop, IcX } from "../components/icons";
 import { remediationForCode } from "./remediation";
@@ -677,7 +677,7 @@ function FormBody({
             Injects the alpha-protocol Canton config for CIP-0112 token
             flows. Requires a V2-capable Splice version (e.g.{" "}
             <code style={{ fontFamily: wMono }}>token-standard-v2</code>). The
-            instance will settle at status <strong>partial</strong> — the V2
+            instance settles at status <strong>partial</strong>. The V2
             splice healthcheck never reports healthy, but token flows work.
             Equivalent to{" "}
             <code style={{ fontFamily: wMono, marginLeft: 4 }}>
@@ -698,7 +698,7 @@ function FormBody({
             padding: "6px 0",
           }}
         >
-          Advanced — uncurated versions
+          Advanced · uncurated versions
         </summary>
         <label
           style={{
@@ -721,7 +721,7 @@ function FormBody({
             <div style={{ color: W.dim, fontSize: 11, marginTop: 2 }}>
               Resolve <code style={{ fontFamily: wMono }}>--version</code>{" "}
               upstream when not in the catalogue. DevKit hasn't reviewed
-              those bits — experiments only.
+              those bits. Experiments only.
             </div>
           </div>
         </label>
@@ -745,12 +745,13 @@ function FormBody({
             style={{
               width: 88,
               fontFamily: wMono,
+              fontVariantNumeric: "tabular-nums",
               fontSize: 12,
               padding: "4px 6px",
               background: W.surface,
               color: W.text,
               border: `1px solid ${W.border}`,
-              borderRadius: 2,
+              borderRadius: R.control,
             }}
           />
           <div style={{ flex: 1, fontSize: 12, color: W.text2 }}>
@@ -996,11 +997,10 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
             style={{
               marginTop: 8,
               padding: "8px 10px",
-              background: W.surface2,
-              borderRadius: 2,
+              background: tint(W.warn, 8),
+              borderRadius: R.control,
               color: W.text2,
               fontSize: 11.5,
-              borderLeft: `3px solid ${W.warn}`,
             }}
           >
             <strong style={{ color: W.warn }}>{remediation.title}</strong>
@@ -1027,7 +1027,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
       }}
     >
       <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-        <IcStop size={12} /> cancelled{banner.reason ? ` — ${banner.reason}` : ""}
+        <IcStop size={12} /> Cancelled{banner.reason ? `. ${banner.reason}` : ""}
       </span>
     </div>
   );
@@ -1060,7 +1060,7 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
         display: "flex",
         gap: 10,
         padding: "6px 4px",
-        borderBottom: `1px dashed ${W.border}`,
+        borderBottom: `1px solid ${W.border}`,
         fontSize: 12.5,
       }}
     >
@@ -1144,7 +1144,7 @@ export function VersionPicker({
     // endless "Loading…".
     let placeholder = "No curated versions available";
     if (loading) placeholder = "Loading curated versions…";
-    else if (error) placeholder = `Couldn't load versions — ${error}`;
+    else if (error) placeholder = `Couldn't load versions: ${error}`;
     return (
       <select
         disabled
@@ -1175,7 +1175,7 @@ export function VersionPicker({
         <option key={v.tag} value={v.tag}>
           {v.tag}
           {v.status === "latest" ? " (latest)" : ""}
-          {v.major ? ` — major ${v.major}` : ""}
+          {v.major ? ` · major ${v.major}` : ""}
         </option>
       ))}
     </select>
@@ -1250,10 +1250,11 @@ const selectStyle: React.CSSProperties = {
   background: W.bg,
   color: W.text,
   border: `1px solid ${W.border}`,
-  borderRadius: 2,
+  borderRadius: R.control,
   padding: "7px 10px",
   fontSize: 13,
   fontFamily: wMono,
+  fontVariantNumeric: "tabular-nums",
   outline: "none",
   cursor: "pointer",
   appearance: "auto",
@@ -1323,7 +1324,7 @@ function PreflightPanel({ state }: { state: PreflightState }) {
   const heading = blocked
     ? "Host doesn't meet this version's requirements"
     : warns.length > 0
-    ? "Host meets minimums — but raise resources for headroom"
+    ? "Host meets minimums. Raise resources for headroom."
     : "Host is ready for this version";
   if (!blocked && warns.length === 0) {
     // Compact success pill — don't clutter the form.
@@ -1350,9 +1351,9 @@ function PreflightPanel({ state }: { state: PreflightState }) {
       role={blocked ? "alert" : undefined}
       style={{
         padding: "10px 12px",
-        background: `${accent}10`,
+        background: tint(accent, 6),
         border: `1px solid ${accent}`,
-        borderRadius: 4,
+        borderRadius: R.control,
         fontSize: 12,
       }}
     >
@@ -1501,9 +1502,11 @@ const overlayStyle: React.CSSProperties = {
 const modalStyle: React.CSSProperties = {
   width: "min(680px, 92vw)",
   background: W.surface,
+  // Overlay depth matched to the confirm dialog + palette: hairline
+  // border + one subtle shadow, not a hard border AND a heavy shadow.
   border: `1px solid ${W.border}`,
-  borderRadius: 8,
-  boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+  borderRadius: R.dialog,
+  boxShadow: "0 10px 32px rgba(0,0,0,0.24)",
   overflow: "hidden",
 };
 
@@ -1512,9 +1515,10 @@ const inputStyle: React.CSSProperties = {
   background: W.bg,
   color: W.text,
   border: `1px solid ${W.border}`,
-  borderRadius: 2,
+  borderRadius: R.control,
   padding: "7px 10px",
   fontSize: 13,
   fontFamily: wMono,
+  fontVariantNumeric: "tabular-nums",
   outline: "none",
 };

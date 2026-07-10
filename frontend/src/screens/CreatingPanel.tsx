@@ -6,9 +6,10 @@ import {
   scrubInstance,
   type StepName,
 } from "../api";
-import { W, wMono, tint } from "../tokens";
+import { W, wMono, tint, R } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcAlert, IcCheck, IcRefresh, IcX } from "../components/icons";
+import { StatusBadge } from "../components/StatusBadge";
 import {
   type ProgressState,
   type StepState,
@@ -92,7 +93,7 @@ export function CreatingPanel({ name, onRefresh }: Props) {
         marginTop: 24,
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 16,
       }}
     >
@@ -128,7 +129,7 @@ export function CreatingPanel({ name, onRefresh }: Props) {
                     background: `${tint(W.warn, 10)}`,
                     border: `1px solid ${tint(W.warn, 27)}`,
                     color: W.warn,
-                    borderRadius: 2,
+                    borderRadius: R.control,
                     padding: "6px 10px",
                     fontSize: 11.5,
                     marginBottom: 4,
@@ -170,7 +171,7 @@ export function CreatingPanel({ name, onRefresh }: Props) {
                   margin: "8px 0 0",
                   background: W.bg,
                   border: `1px solid ${W.border}`,
-                  borderRadius: 2,
+                  borderRadius: R.control,
                   padding: "10px 12px",
                   fontFamily: wMono,
                   fontSize: 10.5,
@@ -240,7 +241,7 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
         display: "flex",
         gap: 10,
         padding: "6px 4px",
-        borderBottom: `1px dashed ${W.border}`,
+        borderBottom: `1px solid ${W.border}`,
         fontSize: 12.5,
       }}
     >
@@ -277,7 +278,7 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
               marginTop: 4,
               height: 4,
               background: W.surface2,
-              borderRadius: 2,
+              borderRadius: R.control,
               overflow: "hidden",
             }}
           >
@@ -303,40 +304,22 @@ function BannerPill({
   banner: ProgressState["banner"];
   zombie: boolean;
 }) {
+  // Route the bring-up banner through the shared StatusBadge so the
+  // creating panel reads the same as every other status in the console.
   if (zombie) {
-    return <Pill color={W.warn}>looks stalled</Pill>;
+    return <StatusBadge status="stalled" variant="pill" />;
   }
   switch (banner.kind) {
     case "done":
-      return <Pill color={W.ok}>ready</Pill>;
+      return <StatusBadge status="ready" variant="pill" />;
     case "failed":
-      return <Pill color={W.err}>failed</Pill>;
+      return <StatusBadge status="failed" variant="pill" />;
     case "cancelled":
-      return <Pill color={W.warn}>cancelled</Pill>;
+      return <StatusBadge status="cancelled" variant="pill" />;
     default:
-      return <Pill color={W.brand}>streaming</Pill>;
+      // Live SSE stream: pulse the dot to signal in-progress.
+      return <StatusBadge status="starting" variant="pill" pulse />;
   }
-}
-
-function Pill({ color, children }: { color: string; children: React.ReactNode }) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 5,
-        padding: "2px 9px",
-        borderRadius: 2,
-        border: `1px solid ${color}`,
-        background: `${color}1A`,
-        color,
-        fontFamily: wMono,
-        fontSize: 11,
-      }}
-    >
-      <Dot color={color} /> {children}
-    </span>
-  );
 }
 
 function ZombieHint({
@@ -350,10 +333,11 @@ function ZombieHint({
 }) {
   return (
     <div
+      role="alert"
       style={{
         background: `${tint(W.warn, 6)}`,
         border: `1px solid ${tint(W.warn, 27)}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: "12px 14px",
         color: W.text,
         fontSize: 12.5,
@@ -367,7 +351,7 @@ function ZombieHint({
         the SSE stream is silent. The most likely causes:
       </div>
       <ul style={{ color: W.text2, marginTop: 6, paddingLeft: 18 }}>
-        <li>The bring-up finished after the page loaded — refresh to pick up the new state.</li>
+        <li>The bring-up finished after the page loaded. Refresh to pick up the new state.</li>
         <li>
           The server was restarted mid-bring-up, orphaning the entry.
           Click <strong>Remove entry</strong> to scrub it from the

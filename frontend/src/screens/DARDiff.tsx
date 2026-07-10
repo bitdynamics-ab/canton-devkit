@@ -10,7 +10,8 @@ import {
   type DARDiffResponse,
   type Role,
 } from "../api";
-import { W, wMono, tint } from "../tokens";
+import { W, wMono, tableCaps, R, tint } from "../tokens";
+import { MonoId } from "../components/MonoId";
 import {
   IcArrowRight,
   IcChevronDown,
@@ -201,7 +202,7 @@ export function DARDiff({ instance, a, b, role }: Props) {
 const paneStyle: React.CSSProperties = {
   background: W.surface,
   border: `1px solid ${W.border}`,
-  borderRadius: 4,
+  borderRadius: R.card,
   padding: 12,
   fontSize: 12,
   maxHeight: "60vh",
@@ -229,14 +230,14 @@ function Side({
     );
   }
   return (
-    <span style={{ fontSize: 11 }}>
-      <span style={{ color: W.dim }}>{label}: </span>
+    <span
+      style={{ fontSize: 11, display: "inline-flex", alignItems: "baseline", gap: 6 }}
+    >
+      <span style={{ color: W.dim }}>{label}:</span>
       <code style={mono}>
         {side.name}@{side.version}
       </code>
-      <span style={{ color: W.dim, marginLeft: 6 }}>
-        {side.main.slice(0, 8)}…
-      </span>
+      <MonoId value={side.main} head={8} tail={6} size={11} color={W.dim} />
     </span>
   );
 }
@@ -246,7 +247,7 @@ type Tone = "add" | "rm" | "chg" | "info";
 function toneColour(t: Tone): { bg: string; fg: string } {
   switch (t) {
     case "add":
-      return { bg: "#7CC89A22", fg: "#7CC89A" };
+      return { bg: tint(W.ok, 13), fg: W.ok };
     case "rm":
       return { bg: `${tint(W.err, 13)}`, fg: W.err };
     case "chg":
@@ -281,10 +282,9 @@ function Section<T>({
           border: "none",
           color: c.fg,
           fontSize: 11.5,
-          fontWeight: 600,
           cursor: "pointer",
           padding: "2px 0",
-          letterSpacing: 0.6,
+          ...tableCaps,
           display: "inline-flex",
           alignItems: "center",
           gap: 6,
@@ -337,7 +337,7 @@ function ChipGroup({
           key={l}
           style={{
             padding: "0 5px",
-            borderRadius: 2,
+            borderRadius: R.control,
             background: c.bg,
             color: c.fg,
             fontSize: 10.5,

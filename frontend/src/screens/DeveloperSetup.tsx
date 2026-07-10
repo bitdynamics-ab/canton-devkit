@@ -9,6 +9,7 @@ import {
 } from "../api";
 import { W, wMono } from "../tokens";
 import { Button } from "../components/Button";
+import { MonoId } from "../components/MonoId";
 
 // DeveloperSetup — the "Developer setup" card. Two sub-panels:
 //
@@ -103,9 +104,11 @@ function JwtPanel({ name }: { name: string }) {
         />
       </Row>
       <Row label="party">
-        <code style={{ color: W.text2, fontFamily: wMono, fontSize: 12 }}>
-          {jwt?.party ?? "—"}
-        </code>
+        {jwt?.party ? (
+          <MonoId value={jwt.party} size={12} color={W.text2} />
+        ) : (
+          <code style={{ color: W.dim, fontFamily: wMono, fontSize: 12 }}>—</code>
+        )}
       </Row>
       <div style={{ marginTop: 12 }}>
         <TokenBox token={busy ? "…" : token ?? "—"} revealed={!!token} />

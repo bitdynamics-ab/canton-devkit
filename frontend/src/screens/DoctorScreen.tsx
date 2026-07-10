@@ -7,8 +7,9 @@ import {
   fetchDoctor,
   fetchSpliceVersions,
 } from "../api";
-import { W, wMono, wideCaps, tint } from "../tokens";
+import { W, wMono, wideCaps, tint, R } from "../tokens";
 import { Button } from "../components/Button";
+import { SkeletonTable, useLoadingDelay } from "../components/Skeleton";
 import { Dot, IcAlert, IcCheck, IcRefresh, IcX } from "../components/icons";
 
 // DoctorScreen — the Web UI surface for `dpm localnet doctor`.
@@ -86,31 +87,75 @@ export function DoctorScreen() {
 
       {report && <SummaryBanner report={report} />}
 
-      {err && (
-        <div
-          style={{
-            marginTop: 16,
-            padding: "12px 14px",
-            background: `${tint(W.err, 10)}`,
-            border: `1px solid ${W.err}`,
-            borderRadius: 4,
-            color: W.err,
-            fontSize: 13,
-          }}
-        >
-          {err}
-        </div>
-      )}
+      {err && <DoctorError message={err} onRetry={() => run(version)} />}
 
-      {loading && !report && (
-        <div style={{ marginTop: 24, color: W.dim, fontSize: 13 }}>
-          Running host checks…
-        </div>
-      )}
+      {loading && !report && !err && <DoctorLoading />}
 
       {report?.sections.map((sec) => (
         <Section key={sec.title} title={sec.title} checks={sec.checks} />
       ))}
+    </div>
+  );
+}
+
+// DoctorError — the endpoint failed. Give a plain-language cause, a
+// Retry, and tuck the raw server message behind a disclosure so the
+// screen leads with what to do, not a stack-shaped string.
+function DoctorError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div
+      role="alert"
+      style={{
+        marginTop: 16,
+        padding: "12px 14px",
+        background: `${tint(W.err, 8)}`,
+        border: `1px solid ${W.err}`,
+        borderRadius: R.control,
+        color: W.text,
+        fontSize: 13,
+      }}
+    >
+      <strong style={{ color: W.err }}>Couldn't run host checks.</strong>{" "}
+      The doctor endpoint didn't respond. Confirm the devkit server is up,
+      then retry.
+      <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+        <Button variant="secondary" size="sm" icon={<IcRefresh />} onClick={onRetry}>
+          Retry
+        </Button>
+      </div>
+      <details style={{ marginTop: 8 }}>
+        <summary style={{ cursor: "pointer", color: W.dim, fontSize: 11.5 }}>
+          Server message
+        </summary>
+        <div
+          style={{
+            marginTop: 6,
+            color: W.text2,
+            fontFamily: wMono,
+            fontSize: 11.5,
+          }}
+        >
+          {message}
+        </div>
+      </details>
+    </div>
+  );
+}
+
+// DoctorLoading mirrors the section-of-rows shape the report renders so
+// content lands in place instead of popping in under a "Running…" line.
+function DoctorLoading() {
+  const shown = useLoadingDelay(true);
+  if (!shown) return null;
+  return (
+    <div style={{ marginTop: 20 }}>
+      <SkeletonTable columns={["18px", 3, "60px"]} rows={4} rowHeight={40} />
     </div>
   );
 }
@@ -169,10 +214,11 @@ function Header({
               background: W.surface,
               color: W.text,
               border: `1px solid ${W.border}`,
-              borderRadius: 2,
+              borderRadius: R.control,
               padding: "5px 8px",
               fontSize: 12,
               fontFamily: wMono,
+              fontVariantNumeric: "tabular-nums",
             }}
           >
             <option value="">latest</option>
@@ -218,9 +264,9 @@ function SummaryBanner({ report }: { report: PreflightReport }) {
       style={{
         marginTop: 16,
         padding: "12px 14px",
-        background: `${accent}14`,
+        background: tint(accent, 8),
         border: `1px solid ${accent}`,
-        borderRadius: 4,
+        borderRadius: R.control,
         color: accent,
         fontSize: 13,
         fontWeight: 600,
@@ -263,7 +309,7 @@ function Section({
         style={{
           background: W.surface,
           border: `1px solid ${W.border}`,
-          borderRadius: 4,
+          borderRadius: R.card,
           overflow: "hidden",
         }}
       >
@@ -318,6 +364,7 @@ function CheckRow({ check, last }: { check: PreflightCheck; last: boolean }) {
               color: W.dim,
               fontSize: 11.5,
               fontFamily: wMono,
+              fontVariantNumeric: "tabular-nums",
               marginTop: 2,
             }}
           >

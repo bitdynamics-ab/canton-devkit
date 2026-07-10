@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, fetchContainerLogs } from "../api";
-import { W, wMono, wSans, tint } from "../tokens";
+import { W, wMono, wSans, tint, R } from "../tokens";
 import { Button } from "../components/Button";
 import { IcX } from "../components/icons";
 
@@ -230,9 +230,11 @@ const modalStyle: React.CSSProperties = {
   width: "min(900px, 95vw)",
   height: "min(700px, 88vh)",
   background: W.surface,
-  border: `1px solid ${W.border}`,
-  borderRadius: 4,
-  boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+  // One depth technique: a slightly stronger hairline, no competing
+  // box-shadow — matches the ConfirmDialog treatment so every overlay
+  // in the console separates from the page the same way.
+  border: `1px solid ${W.borderHi}`,
+  borderRadius: R.card,
   display: "flex",
   flexDirection: "column",
   overflow: "hidden",
@@ -250,7 +252,7 @@ const selectStyle: React.CSSProperties = {
   background: W.bg,
   color: W.text,
   border: `1px solid ${W.border}`,
-  borderRadius: 2,
+  borderRadius: R.control,
   padding: "2px 6px",
   fontSize: 11,
   fontFamily: wMono,

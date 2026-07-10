@@ -6,9 +6,12 @@ import {
   type TransactionEvent,
   type TransactionRow,
 } from "../api";
-import { W, wMono, tableCaps, tint } from "../tokens";
+import { W, wMono, tableCaps, tint, R } from "../tokens";
 import { Button } from "../components/Button";
-import { Dot, IcPlus, IcRefresh } from "../components/icons";
+import { IcPlus, IcRefresh } from "../components/icons";
+import { StatusBadge } from "../components/StatusBadge";
+import { MonoId } from "../components/MonoId";
+import { SkeletonTable, useLoadingDelay } from "../components/Skeleton";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { ContainerHealth } from "./ContainerHealth";
 import { CreateLocalNetModal } from "./CreateLocalNetModal";
@@ -26,6 +29,8 @@ import { InstanceDetail } from "./InstanceDetail";
 export function Dashboard() {
   const sel = useInstanceSelection();
   const [createOpen, setCreateOpen] = useState(false);
+  // Gate the skeleton so a fast local fetch never flashes it.
+  const showSkeleton = useLoadingDelay(sel.loading);
 
   return (
     <div>
@@ -67,7 +72,7 @@ export function Dashboard() {
         )}
       />
 
-      {sel.loading && <p style={{ color: W.dim }}>Loading…</p>}
+      {sel.loading && showSkeleton && <InstanceTableLoading />}
 
       {sel.error && <ErrorPanel error={sel.error} />}
 
@@ -80,13 +85,13 @@ export function Dashboard() {
                 background: `${tint(W.dim, 10)}`,
                 border: `1px solid ${W.dim}`,
                 color: W.dim,
-                borderRadius: 4,
+                borderRadius: R.control,
                 padding: "6px 12px",
                 marginBottom: 12,
                 fontSize: 12,
               }}
             >
-              Couldn’t refresh — showing last known state.
+              Couldn’t refresh. Showing last known state.
             </div>
           )}
           {sel.warning && (
@@ -95,7 +100,7 @@ export function Dashboard() {
                 background: `${tint(W.warn, 10)}`,
                 border: `1px solid ${W.warn}`,
                 color: W.warn,
-                borderRadius: 4,
+                borderRadius: R.control,
                 padding: "8px 12px",
                 marginBottom: 16,
                 fontSize: 13,
@@ -156,7 +161,7 @@ function InstanceTable({ instances, selected, onSelect }: InstanceTableProps) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         overflow: "hidden",
       }}
     >
@@ -169,43 +174,61 @@ function InstanceTable({ instances, selected, onSelect }: InstanceTableProps) {
       >
         <thead>
           <tr style={{ background: W.surface2, color: W.dim, textAlign: "left" }}>
-            <th style={th}>NAME</th>
-            <th style={th}>STATE</th>
-            <th style={th}>SPLICE</th>
-            <th style={th}>PORTS</th>
+            <th style={th}>Name</th>
+            <th style={th}>State</th>
+            <th style={{ ...th, textAlign: "right" }}>Splice</th>
+            <th style={{ ...th, textAlign: "right" }}>Ports</th>
           </tr>
         </thead>
         <tbody>
-          {instances.map((i) => (
-            <tr
-              key={i.name}
-              onClick={() => onSelect(i.name)}
-              style={{
-                borderTop: `1px solid ${W.border}`,
-                background: i.name === selected ? W.surface2 : undefined,
-                cursor: "pointer",
-              }}
-            >
-              <td style={td}>
-                <strong
-                  style={{
-                    color: i.name === selected ? W.brand : W.text,
-                  }}
-                >
-                  {i.name}
-                </strong>
-              </td>
-              <td style={td}>
-                <StatusBadge status={i.status} />
-              </td>
-              <td style={{ ...td, color: W.text2 }}>{i.splice_version}</td>
-              <td style={{ ...td, color: W.text2, fontFamily: "monospace" }}>
-                {i.ports}
-              </td>
-            </tr>
-          ))}
+          {instances.map((i) => {
+            const isSel = i.name === selected;
+            return (
+              <tr
+                key={i.name}
+                onClick={() => onSelect(i.name)}
+                style={{
+                  borderTop: `1px solid ${W.border}`,
+                  // Flat active fill — no accent side-bar, no padding
+                  // swap, so the row never shifts on selection.
+                  background: isSel ? W.selRow : undefined,
+                  cursor: "pointer",
+                }}
+              >
+                <td style={td}>
+                  <strong style={{ color: isSel ? W.brand : W.text }}>
+                    {i.name}
+                  </strong>
+                </td>
+                <td style={td}>
+                  <StatusBadge status={i.status} />
+                </td>
+                <td style={{ ...td, ...numCell, color: W.text2 }}>
+                  {i.splice_version}
+                </td>
+                <td style={{ ...td, ...numCell, color: W.text2 }}>{i.ports}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// Table loading placeholder — mirrors the four-column instance table so
+// rows arrive in place instead of jumping in after a spinner.
+function InstanceTableLoading() {
+  return (
+    <div
+      style={{
+        background: W.surface,
+        border: `1px solid ${W.border}`,
+        borderRadius: R.card,
+        overflow: "hidden",
+      }}
+    >
+      <SkeletonTable columns={[2, 1.4, 1, 1.4]} rows={3} rowHeight={40} />
     </div>
   );
 }
@@ -221,31 +244,13 @@ const td: React.CSSProperties = {
   verticalAlign: "middle",
 };
 
-function StatusBadge({ status }: { status: string }) {
-  const color = (() => {
-    switch (status) {
-      case "running":
-        return W.ok;
-      case "creating":
-      case "stopping":
-      case "partial":
-        return W.warn;
-      case "failed":
-        return W.err;
-      case "stopped":
-      default:
-        return W.dim;
-    }
-  })();
-  return (
-    <span
-      style={{ color, display: "inline-flex", alignItems: "center", gap: 6 }}
-    >
-      <Dot color={color} />
-      <span>{status}</span>
-    </span>
-  );
-}
+// Numeric / mono columns (ports, versions): right-aligned, tabular so
+// digits line up column-to-column.
+const numCell: React.CSSProperties = {
+  textAlign: "right",
+  fontFamily: wMono,
+  fontVariantNumeric: "tabular-nums",
+};
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
@@ -253,10 +258,9 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
-        padding: 32,
+        borderRadius: R.card,
+        padding: 16,
         color: W.dim,
-        textAlign: "center",
       }}
     >
       <p style={{ marginTop: 0, fontSize: 14, color: W.text }}>
@@ -273,7 +277,9 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       </Button>
       <p style={{ marginBottom: 0, fontSize: 11.5 }}>
         Or run{" "}
-        <code style={{ color: W.text2 }}>dpm localnet up --name demo</code>{" "}
+        <code style={{ fontFamily: wMono, color: W.text2 }}>
+          dpm localnet up --name demo
+        </code>{" "}
         in your terminal.
       </p>
     </div>
@@ -283,10 +289,11 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 function ErrorPanel({ error }: { error: string }) {
   return (
     <div
+      role="alert"
       style={{
         background: `${tint(W.err, 10)}`,
         border: `1px solid ${W.err}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 16,
         color: W.err,
       }}
@@ -365,13 +372,13 @@ function RecentActivity({ name }: { name: string }) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 16,
         marginBottom: 16,
       }}
     >
       <header style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-        <h3 style={{ margin: 0, fontSize: 14, color: W.text }}>Recent activity</h3>
+        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: W.text }}>Recent activity</h3>
         <span style={{ color: W.dim, fontSize: 12 }}>
           ledger events · as seen by the app-provider participant
         </span>
@@ -391,15 +398,15 @@ function RecentActivity({ name }: { name: string }) {
       )}
       {state.kind === "needs-jwt" && (
         <div style={{ color: W.dim, fontSize: 12.5, padding: "8px 0" }}>
-          Ledger activity needs a party-rights JWT — Splice LocalNet signs user-id tokens by
+          Ledger activity needs a party-rights JWT. Splice LocalNet signs user-id tokens by
           default. Open the Explorer to project through a specific party.
         </div>
       )}
       {state.kind === "err" && (
         <div style={{ color: W.dim, fontSize: 12.5, padding: "8px 0" }}>
           {/no jwt recorded/i.test(state.error)
-            ? "Ledger activity needs recorded role JWTs — restart the instance to capture them (older instances predate JWT capture)."
-            : `Ledger activity unavailable — ${state.error}.`}{" "}
+            ? "Ledger activity needs recorded role JWTs. Restart the instance to capture them (older instances predate JWT capture)."
+            : `Ledger activity unavailable. ${state.error}.`}{" "}
           Open the Explorer for the full ledger view.
         </div>
       )}
@@ -421,13 +428,14 @@ function RecentActivity({ name }: { name: string }) {
           <tbody>
             {events.map((e) => (
               <tr key={e.key} style={{ borderTop: `1px solid ${W.border}` }}>
-                <td style={{ ...actTd, color: W.dim, fontFamily: wMono, fontSize: 11 }}>{e.time}</td>
+                <td style={{ ...actTd, color: W.dim, fontFamily: wMono, fontVariantNumeric: "tabular-nums", fontSize: 11 }}>{e.time}</td>
                 <td style={actTd}>
                   <span
                     style={{
                       color: kindColor[e.kind],
-                      border: `1px solid ${kindColor[e.kind]}`,
-                      borderRadius: 2,
+                      border: `1px solid ${tint(kindColor[e.kind], 34)}`,
+                      background: tint(kindColor[e.kind], 13),
+                      borderRadius: R.control,
                       padding: "1px 6px",
                       fontSize: 11,
                     }}
@@ -436,8 +444,8 @@ function RecentActivity({ name }: { name: string }) {
                   </span>
                 </td>
                 <td style={{ ...actTd, fontFamily: wMono, color: W.text2 }}>{e.event}</td>
-                <td style={{ ...actTd, fontFamily: wMono, color: W.info, fontSize: 11 }}>
-                  {e.cid.slice(0, 10)}…
+                <td style={actTd}>
+                  <MonoId value={e.cid} head={6} tail={6} size={11} color={W.info} />
                 </td>
               </tr>
             ))}

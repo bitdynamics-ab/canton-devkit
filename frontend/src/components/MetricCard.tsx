@@ -1,7 +1,7 @@
 import type { Point } from "./charts/types";
 import { Sparkline } from "./charts/Sparkline";
 import { IcArrowUp } from "./icons";
-import { W, wMono, wideCaps } from "../tokens";
+import { W, wMono, wideCaps, R } from "../tokens";
 
 // MetricCard — the 4-up strip at the top of the Metrics screen.
 // One headline number + a delta vs the prior window + an inline
@@ -56,7 +56,7 @@ export function MetricCard({
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 14,
         display: "flex",
         flexDirection: "column",
@@ -87,6 +87,7 @@ export function MetricCard({
             style={{
               fontFamily: wMono,
               fontSize: 11,
+              fontVariantNumeric: "tabular-nums",
               color: deltaColor,
               fontWeight: 600,
               display: "inline-flex",
@@ -131,6 +132,7 @@ export function MetricCard({
                   fontWeight: 600,
                   lineHeight: 1.1,
                   fontFamily: wMono,
+                  fontVariantNumeric: "tabular-nums",
                 }}
               >
                 —
@@ -143,6 +145,7 @@ export function MetricCard({
                     fontSize: 26,
                     fontWeight: 600,
                     fontFamily: wMono,
+                    fontVariantNumeric: "tabular-nums",
                     lineHeight: 1,
                   }}
                 >
@@ -181,7 +184,7 @@ function Skeleton({
         width,
         height,
         background: W.border,
-        borderRadius: 2,
+        borderRadius: R.control,
         opacity: 0.4,
       }}
     />

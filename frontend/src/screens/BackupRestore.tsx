@@ -5,7 +5,7 @@ import {
   restoreSnapshot,
   type RestoreResponse,
 } from "../api";
-import { W, wMono, tint } from "../tokens";
+import { W, wMono, tint, R, FAST } from "../tokens";
 import { Button } from "../components/Button";
 import { IcCheck, IcDownload } from "../components/icons";
 
@@ -106,11 +106,12 @@ export function BackupRestore({ instanceName }: Props) {
   return (
     <section
       style={{
+        // This card lives inside the InstanceDetail card. One container
+        // edge per region: drop the nested border/fill and delimit with
+        // a hairline top divider + a section header instead.
         marginTop: 16,
-        background: W.surface,
-        border: `1px solid ${W.border}`,
-        borderRadius: 4,
-        padding: 16,
+        borderTop: `1px solid ${W.border}`,
+        paddingTop: 16,
       }}
       aria-label="Backup and restore"
     >
@@ -157,7 +158,7 @@ export function BackupRestore({ instanceName }: Props) {
             marginTop: 10,
             background: `${tint(W.err, 6)}`,
             border: `1px solid ${W.err}`,
-            borderRadius: 2,
+            borderRadius: R.control,
             padding: "8px 12px",
             fontSize: 12,
             color: W.err,
@@ -196,15 +197,15 @@ export function BackupRestore({ instanceName }: Props) {
           tabIndex={0}
           aria-label="Drop snapshot file here or click to choose"
           style={{
-            border: `1.5px dashed ${dragOver ? W.brand : W.border}`,
+            border: `1px dashed ${dragOver ? W.brand : W.border}`,
             background: dragOver ? `${tint(W.brand, 6)}` : "transparent",
-            borderRadius: 4,
+            borderRadius: R.control,
             padding: "14px 16px",
             cursor: "pointer",
             color: W.dim,
             fontSize: 12.5,
             textAlign: "center",
-            transition: "all 0.12s",
+            transition: `background-color ${FAST}, border-color ${FAST}`,
           }}
         >
           {restore.kind === "uploading" ? (
@@ -255,7 +256,7 @@ export function BackupRestore({ instanceName }: Props) {
                 background: "transparent",
                 color: W.text,
                 border: `1px solid ${W.border}`,
-                borderRadius: 2,
+                borderRadius: R.control,
                 padding: "2px 6px",
                 fontSize: 12,
                 fontFamily: wMono,
@@ -293,7 +294,7 @@ export function BackupRestore({ instanceName }: Props) {
               marginTop: 10,
               background: `${tint(W.brand, 6)}`,
               border: `1px solid ${W.brand}`,
-              borderRadius: 2,
+              borderRadius: R.control,
               padding: "8px 12px",
               fontSize: 12,
               color: W.text2,
@@ -321,7 +322,7 @@ export function BackupRestore({ instanceName }: Props) {
               marginTop: 10,
               background: `${tint(W.err, 6)}`,
               border: `1px solid ${W.err}`,
-              borderRadius: 2,
+              borderRadius: R.control,
               padding: "8px 12px",
               fontSize: 12,
               color: W.err,
@@ -352,7 +353,7 @@ function UploadProgress({
         style={{
           height: 6,
           background: W.border,
-          borderRadius: 2,
+          borderRadius: R.control,
           overflow: "hidden",
         }}
       >

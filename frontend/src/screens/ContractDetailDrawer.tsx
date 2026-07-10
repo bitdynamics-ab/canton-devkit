@@ -6,8 +6,9 @@ import {
   type ContractRow,
   type Role,
 } from "../api";
-import { W, wMono, wideCaps } from "../tokens";
+import { W, wMono, wideCaps, tint, R } from "../tokens";
 import { Button } from "../components/Button";
+import { MonoId } from "../components/MonoId";
 import { IcX } from "../components/icons";
 
 // ContractDetailDrawer is a true right-side overlay: position-fixed
@@ -49,7 +50,6 @@ export function ContractDetailDrawer({
     | { kind: "ok"; detail: ContractDetail }
     | { kind: "err"; message: string }
   >({ kind: "loading" });
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,16 +116,6 @@ export function ContractDetailDrawer({
           archived: false,
         };
 
-  const copyCid = async () => {
-    try {
-      await navigator.clipboard.writeText(detail.contract_id);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1100);
-    } catch {
-      // clipboard may be unavailable (http on non-localhost); silent
-    }
-  };
-
   return (
     <aside
       aria-label="Contract detail"
@@ -136,11 +126,10 @@ export function ContractDetailDrawer({
         bottom: 0,
         width: "min(480px, 92vw)",
         // Raised surface — a fixed overlay sits above the page, and
-        // surface-on-page was reading dark-on-dark.
+        // surface-on-page was reading dark-on-dark. One depth technique
+        // for a dense-console drawer: hairline border, no shadow.
         background: W.surface2,
         borderLeft: `1px solid ${W.borderHi}`,
-        boxShadow:
-          "0 0 0 1px rgba(0,0,0,0.2), -16px 0 40px -12px rgba(0,0,0,0.5)",
         // Below the CommandPalette (zIndex 100) but above page content.
         zIndex: 40,
         overscrollBehavior: "contain",
@@ -154,10 +143,10 @@ export function ContractDetailDrawer({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Pill color={detail.archived ? "#7BD2C6" : W.brand}>
+          <Pill color={detail.archived ? W.rose : W.brand}>
             {detail.archived ? "archived" : "active"}
           </Pill>
-          <Pill color="#8FA3EE">
+          <Pill color={W.mag}>
             visible to {detail.signatories.length + detail.observers.length}
           </Pill>
           <span style={{ marginLeft: "auto" }} />
@@ -202,20 +191,15 @@ export function ContractDetailDrawer({
             display: "flex",
             alignItems: "center",
             gap: 6,
-            color: "#93A7F0",
-            fontFamily: wMono,
-            fontSize: 11.5,
-            wordBreak: "break-all",
           }}
         >
-          <span>{detail.contract_id}</span>
-          <Button
-            variant="ghost"
-            aria-label="Copy contract id"
-            onClick={copyCid}
-          >
-            {copied ? "copied" : "copy"}
-          </Button>
+          <MonoId
+            value={detail.contract_id}
+            head={10}
+            tail={8}
+            size={11.5}
+            color={W.mag}
+          />
         </div>
         {state.kind === "loading" && (
           <div
@@ -226,14 +210,14 @@ export function ContractDetailDrawer({
               fontFamily: wMono,
             }}
           >
-            loading full detail…
+            Loading full detail…
           </div>
         )}
         {state.kind === "err" && (
           <div
             style={{
               marginTop: 6,
-              color: "#7BD2C6",
+              color: W.err,
               fontSize: 11,
             }}
           >
@@ -267,16 +251,18 @@ export function ContractDetailDrawer({
           {detail.created_update_id && (
             <a
               href={`#/transactions/${encodeURIComponent(detail.created_update_id)}`}
+              title={detail.created_update_id}
               style={{
                 marginTop: 4,
                 display: "inline-block",
                 color: W.brand,
                 fontFamily: wMono,
                 fontSize: 11,
+                fontVariantNumeric: "tabular-nums",
                 textDecoration: "none",
               }}
             >
-              tx · {detail.created_update_id.slice(0, 16)}…
+              tx · {truncMid(detail.created_update_id)}
             </a>
           )}
         </Section>
@@ -291,23 +277,32 @@ export function ContractDetailDrawer({
             </div>
           )}
           {detail.archived_offset !== undefined && (
-            <div style={{ color: W.dim, fontSize: 11, marginTop: 3 }}>
+            <div
+              style={{
+                color: W.dim,
+                fontSize: 11,
+                marginTop: 3,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
               offset {detail.archived_offset.toLocaleString()}
             </div>
           )}
           {detail.archived_update_id && (
             <a
               href={`#/transactions/${encodeURIComponent(detail.archived_update_id)}`}
+              title={detail.archived_update_id}
               style={{
                 marginTop: 4,
                 display: "inline-block",
                 color: W.brand,
                 fontFamily: wMono,
                 fontSize: 11,
+                fontVariantNumeric: "tabular-nums",
                 textDecoration: "none",
               }}
             >
-              tx · {detail.archived_update_id.slice(0, 16)}…
+              tx · {truncMid(detail.archived_update_id)}
             </a>
           )}
         </Section>
@@ -336,6 +331,13 @@ function shortTemplateLabel(tpl: string | undefined): string {
   if (!tpl) return "—";
   const parts = tpl.split(":");
   return parts.length >= 3 ? `${parts[1]}:${parts[2]}` : tpl;
+}
+
+// Middle-truncate an id for a link label — the suffix is the
+// discriminating part, so keep both ends (matches MonoId's discipline).
+function truncMid(s: string, head = 8, tail = 6): string {
+  if (s.length <= head + tail + 1) return s;
+  return `${s.slice(0, head)}…${s.slice(-tail)}`;
 }
 
 function Section({
@@ -372,11 +374,11 @@ function Pill({
   return (
     <span
       style={{
-        background: `${color}1A`,
-        border: `1px solid ${color}44`,
+        background: tint(color, 13),
+        border: `1px solid ${tint(color, 34)}`,
         color,
         padding: "1px 8px",
-        borderRadius: 2,
+        borderRadius: R.control,
         fontSize: 10.5,
         fontWeight: 600,
         fontFamily: wMono,
@@ -396,7 +398,7 @@ function Hint({ children }: { children: React.ReactNode }) {
 }
 
 function PartyChip({ party, kind }: { party: string; kind: "sig" | "obs" }) {
-  const color = kind === "sig" ? "#6480E6" : "#8FA3EE";
+  const color = kind === "sig" ? W.brand : W.mag;
   return (
     <div
       style={{
@@ -411,21 +413,12 @@ function PartyChip({ party, kind }: { party: string; kind: "sig" | "obs" }) {
         style={{
           width: 6,
           height: 6,
-          borderRadius: 2,
+          borderRadius: R.control,
           background: color,
           flexShrink: 0,
         }}
       />
-      <code
-        style={{
-          fontFamily: wMono,
-          fontSize: 11,
-          color: W.text2,
-          wordBreak: "break-all",
-        }}
-      >
-        {party}
-      </code>
+      <MonoId value={party} head={12} tail={8} size={11} color={W.text2} />
     </div>
   );
 }
@@ -495,7 +488,8 @@ function primStyle(kind: "text" | "num" | "dim"): React.CSSProperties {
   return {
     fontFamily: wMono,
     fontSize: 11,
-    color: kind === "dim" ? W.dim : kind === "num" ? "#DDB25E" : W.text2,
-    wordBreak: "break-all",
+    color: kind === "dim" ? W.dim : kind === "num" ? W.warn : W.text2,
+    fontVariantNumeric: kind === "num" ? "tabular-nums" : undefined,
+    wordBreak: "break-word",
   };
 }

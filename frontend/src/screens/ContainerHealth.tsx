@@ -5,9 +5,10 @@ import {
   fetchContainers,
   restartContainer,
 } from "../api";
-import { W, wMono, tableCaps, tint } from "../tokens";
+import { W, wMono, tableCaps, tint, R } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcRefresh } from "../components/icons";
+import { confirmDialog } from "../components/ConfirmDialog";
 import { ContainerLogsModal } from "./ContainerLogsModal";
 
 // ContainerHealth — live per-container status panel. Polls
@@ -35,7 +36,15 @@ export function ContainerHealth({ name }: { name: string }) {
   const [restartErr, setRestartErr] = useState<string | null>(null);
 
   async function onRestart(container: string) {
-    if (!confirm(`Restart ${container}? Container will be stopped + started; in-flight requests may drop.`)) {
+    if (
+      !(await confirmDialog({
+        title: "Restart container?",
+        body: `Stops then starts ${container}. In-flight requests to it may drop.`,
+        detail: `docker restart ${container}`,
+        confirmLabel: "Restart",
+        danger: true,
+      }))
+    ) {
       return;
     }
     setRestarting((s) => new Set([...s, container]));
@@ -98,7 +107,7 @@ export function ContainerHealth({ name }: { name: string }) {
         marginTop: 16,
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 14,
       }}
     >
@@ -133,7 +142,7 @@ export function ContainerHealth({ name }: { name: string }) {
             color: W.err,
             background: `${tint(W.err, 6)}`,
             border: `1px solid ${W.err}`,
-            borderRadius: 2,
+            borderRadius: R.control,
             padding: "6px 10px",
             fontSize: 12,
           }}
@@ -149,7 +158,7 @@ export function ContainerHealth({ name }: { name: string }) {
             color: W.err,
             background: `${tint(W.err, 6)}`,
             border: `1px solid ${W.err}`,
-            borderRadius: 2,
+            borderRadius: R.control,
             padding: "6px 10px",
             fontSize: 12,
             marginBottom: 8,
@@ -307,12 +316,13 @@ function SummaryPills({ counts }: { counts: ContainersResponse }) {
             key={label}
             style={{
               padding: "2px 8px",
-              borderRadius: 2,
-              border: `1px solid ${color}`,
-              background: `${color}1A`,
+              borderRadius: R.control,
+              border: `1px solid ${tint(color, 34)}`,
+              background: tint(color, 13),
               color,
               fontSize: 10.5,
               fontFamily: wMono,
+              fontVariantNumeric: "tabular-nums",
             }}
           >
             {n} {label}

@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { W, wMono, tint } from "../tokens";
+import { W, wMono, tint, R } from "../tokens";
 import { Button } from "../components/Button";
 
 // ErrorBoundary — catches render-time exceptions from descendants and
@@ -81,8 +81,8 @@ function Fallback({ error, onRetry }: FallbackProps) {
       style={{
         background: `${tint(W.err, 6)}`,
         border: `1px solid ${W.err}`,
-        borderRadius: 4,
-        padding: 20,
+        borderRadius: R.control,
+        padding: 16,
         margin: "8px 0",
         color: W.text,
       }}
@@ -96,33 +96,39 @@ function Fallback({ error, onRetry }: FallbackProps) {
         </code>
       </header>
       <p style={{ color: W.text2, fontSize: 13, marginTop: 8, marginBottom: 12 }}>
-        The rest of the UI is still usable — switch screens via the
-        sidebar or ⌘K. If the error keeps coming back, capture this
-        block in a screenshot and the full stack from your browser's
-        dev-tools console.
+        The rest of the console still works. Switch screens from the
+        sidebar or ⌘K. Retry re-mounts this screen. If it throws again,
+        open the browser dev-tools console for the full stack.
       </p>
-      <pre
-        style={{
-          background: W.bg,
-          border: `1px solid ${W.border}`,
-          borderRadius: 2,
-          padding: "10px 12px",
-          fontFamily: wMono,
-          fontSize: 11.5,
-          color: W.text2,
-          margin: 0,
-          maxHeight: 120,
-          overflow: "auto",
-          whiteSpace: "pre-wrap",
-        }}
-      >
-        {error.message || "(no message)"}
-      </pre>
-      <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
         <Button variant="secondary" size="md" onClick={onRetry}>
           Retry
         </Button>
       </div>
+      <details style={{ marginTop: 8 }}>
+        <summary
+          style={{ cursor: "pointer", color: W.dim, fontSize: 11.5 }}
+        >
+          Error details
+        </summary>
+        <pre
+          style={{
+            background: W.bg,
+            border: `1px solid ${W.border}`,
+            borderRadius: R.control,
+            padding: "10px 12px",
+            fontFamily: wMono,
+            fontSize: 11.5,
+            color: W.text2,
+            margin: "8px 0 0",
+            maxHeight: 120,
+            overflow: "auto",
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {error.message || "(no message)"}
+        </pre>
+      </details>
     </div>
   );
 }

@@ -11,8 +11,17 @@ import {
   type DARPackageInspect,
   type Role,
 } from "../api";
-import { W, wMono, tint } from "../tokens";
+import { W, wMono, R, tint } from "../tokens";
+import { MonoId } from "../components/MonoId";
 import { IcChevronDown, IcChevronRight } from "../components/icons";
+
+// Middle-truncate for ids rendered INSIDE a toggle button, where a
+// full MonoId (itself a button) would nest interactive elements. Keeps
+// the discriminating suffix visible instead of a tail-only slice.
+function midId(s: string, head = 10, tail = 6): string {
+  if (s.length <= head + tail + 1) return s;
+  return `${s.slice(0, head)}…${s.slice(-tail)}`;
+}
 
 interface Props {
   instance: string;
@@ -85,12 +94,21 @@ export function DARPackageTree({ instance, mainID, role }: Props) {
 
   return (
     <div style={paneStyle} data-testid="dar-package-tree">
-      <div style={{ color: W.dim, fontSize: 11.5, marginBottom: 8 }}>
-        {state.data.packages.length} package
-        {state.data.packages.length === 1 ? "" : "s"} · sha256{" "}
-        <code style={{ fontFamily: wMono, color: W.text2 }}>
-          {state.data.sha256.slice(0, 12)}…
-        </code>
+      <div
+        style={{
+          color: W.dim,
+          fontSize: 11.5,
+          marginBottom: 8,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}
+      >
+        <span>
+          {state.data.packages.length} package
+          {state.data.packages.length === 1 ? "" : "s"} · sha256
+        </span>
+        <MonoId value={state.data.sha256} head={10} tail={8} size={11} color={W.text2} />
       </div>
       {state.data.packages.map((pkg) => (
         <PackageNode
@@ -109,7 +127,7 @@ export function DARPackageTree({ instance, mainID, role }: Props) {
 const paneStyle: React.CSSProperties = {
   background: W.surface,
   border: `1px solid ${W.border}`,
-  borderRadius: 4,
+  borderRadius: R.card,
   padding: 12,
   fontSize: 12,
   maxHeight: "60vh",
@@ -154,16 +172,35 @@ function PackageNode({
             <IcChevronRight size={12} />
           )}
         </span>
-        <span style={{ fontFamily: wMono, color: pkg.is_main ? W.brand : W.text }}>
-          {pkg.name || pkg.package_id.slice(0, 12)}
+        <span
+          style={{ fontFamily: wMono, color: pkg.is_main ? W.brand : W.text }}
+          title={pkg.package_id}
+        >
+          {pkg.name || midId(pkg.package_id)}
         </span>
         {pkg.version && (
-          <span style={{ fontFamily: wMono, color: W.dim, marginLeft: 6 }}>
+          <span
+            style={{
+              fontFamily: wMono,
+              color: W.dim,
+              marginLeft: 6,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
             {pkg.version}
           </span>
         )}
-        <span style={{ fontFamily: wMono, color: W.dim, marginLeft: 8, fontSize: 10.5 }}>
-          {pkg.lf_version} · {pkg.package_id.slice(0, 10)}…
+        <span
+          style={{
+            fontFamily: wMono,
+            color: W.dim,
+            marginLeft: 8,
+            fontSize: 10.5,
+            fontVariantNumeric: "tabular-nums",
+          }}
+          title={pkg.package_id}
+        >
+          {pkg.lf_version} · {midId(pkg.package_id)}
         </span>
       </button>
       {expanded &&
@@ -228,7 +265,7 @@ function ModuleNode({
         <div style={{ marginLeft: 28, marginTop: 3 }}>
           {(mod.templates ?? []).map((t) => (
             <div key={"t-" + t.name} style={leafRow}>
-              <span style={{ color: "#8FA3EE", fontFamily: wMono }}>template</span>{" "}
+              <span style={{ color: W.mag, fontFamily: wMono }}>template</span>{" "}
               <span style={{ color: W.text, fontFamily: wMono }}>{t.name}</span>
               {t.choices && t.choices.length > 0 && (
                 <span style={{ marginLeft: 8 }}>
@@ -241,7 +278,7 @@ function ModuleNode({
           ))}
           {(mod.interfaces ?? []).map((i) => (
             <div key={"i-" + i.name} style={leafRow}>
-              <span style={{ color: "#7BD2C6", fontFamily: wMono }}>interface</span>{" "}
+              <span style={{ color: W.teal, fontFamily: wMono }}>interface</span>{" "}
               <span style={{ color: W.text, fontFamily: wMono }}>{i.name}</span>
               {i.choices && i.choices.length > 0 && (
                 <span style={{ marginLeft: 8 }}>
@@ -261,7 +298,7 @@ function ModuleNode({
           ))}
           {(mod.data_types ?? []).map((dt) => (
             <div key={"d-" + dt} style={leafRow}>
-              <span style={{ color: "#7CC89A", fontFamily: wMono }}>data</span>{" "}
+              <span style={{ color: W.ok, fontFamily: wMono }}>data</span>{" "}
               <span style={{ color: W.text2, fontFamily: wMono }}>{dt}</span>
             </div>
           ))}
@@ -301,7 +338,9 @@ function Chip({
   kind: "choice" | "method";
 }) {
   const tone =
-    kind === "choice" ? { bg: `${tint(W.brand, 10)}`, fg: W.brand } : { bg: "#8FA3EE22", fg: "#8FA3EE" };
+    kind === "choice"
+      ? { bg: tint(W.brand, 10), fg: W.brand }
+      : { bg: tint(W.mag, 13), fg: W.mag };
   return (
     <span
       style={{
@@ -309,7 +348,7 @@ function Chip({
         padding: "0 6px",
         marginRight: 4,
         marginTop: 2,
-        borderRadius: 2,
+        borderRadius: R.control,
         background: tone.bg,
         color: tone.fg,
         fontSize: 10.5,

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, fetchInstance, type Instance, type Role } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { ROLE_COLOR, W, wMono, tint } from "../tokens";
+import { ROLE_COLOR, W, wMono, tint, R, FAST } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcAlert, IcRefresh } from "../components/icons";
 
@@ -180,7 +180,7 @@ export function WalletScreen() {
           >
             {LOGIN_USER_FOR[role]}
           </code>
-          . Password is unused — LocalNet auth is dev-mode HS-256 with the
+          . Password is unused. LocalNet auth is dev-mode HS-256 with the
           shared secret <code style={{ fontFamily: wMono }}>"unsafe"</code>.
           No MetaMask required.
         </div>
@@ -337,7 +337,7 @@ export function WalletScreen() {
             No wallet endpoint recorded for{" "}
             <code style={{ fontFamily: wMono, color: W.text2 }}>{role}</code>{" "}
             on this instance. Splice publishes a per-role wallet UI on a host
-            port — re-run{" "}
+            port. Re-run{" "}
             <code style={{ fontFamily: wMono, color: W.text2 }}>
               dpm localnet up --name {name}
             </code>{" "}
@@ -378,15 +378,15 @@ function RoleSwitcher({
               alignItems: "center",
               gap: 8,
               padding: "6px 11px",
-              borderRadius: 2,
+              borderRadius: R.control,
               border: "none",
-              background: active ? W.surface : "transparent",
+              background: active ? tint(W.brand, 16) : "transparent",
               cursor: active ? "default" : "pointer",
               fontSize: 12.5,
               fontFamily: wMono,
               fontWeight: active ? 600 : 500,
               color: active ? W.text : W.dim,
-              boxShadow: active ? `0 0 0 1px ${W.brand}` : "none",
+              transition: `background-color ${FAST}`,
             }}
           >
             <RoleAvatarMini role={id} />
@@ -406,7 +406,7 @@ function RoleAvatar({ role }: { role: Role }) {
         width: 36,
         height: 36,
         borderRadius: "50%",
-        background: `linear-gradient(135deg, ${color}, ${W.brand})`,
+        background: color,
         color: W.onAccent,
         display: "flex",
         alignItems: "center",
@@ -428,7 +428,7 @@ function RoleAvatarMini({ role }: { role: Role }) {
         width: 16,
         height: 16,
         borderRadius: "50%",
-        background: `linear-gradient(135deg, ${color}, ${W.brand})`,
+        background: color,
         color: W.onAccent,
         display: "flex",
         alignItems: "center",
