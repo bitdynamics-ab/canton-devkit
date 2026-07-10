@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="628" height="768" viewBox="0 0 628 768">
-<rect width="628" height="768" fill="#ffffff"/>
-<g><rect width="628" height="552" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="628" height="808" viewBox="0 0 628 808">
+<rect width="628" height="808" fill="#ffffff"/>
+<g><rect width="628" height="592" fill="#ffffff"/>
 <text x="16" y="26" font-size="16" font-weight="600" fill="#111827">All-time downloads per version</text>
 <text x="130" y="67" font-size="12" fill="#374151" text-anchor="end">v0.3</text>
 <rect x="140" y="48" width="40.0" height="30" rx="3" fill="#2563eb"/>
@@ -36,19 +36,22 @@
 <rect x="140" y="448" width="40.0" height="30" rx="3" fill="#0891b2"/>
 <text x="186.0" y="467" font-size="12" font-weight="600" fill="#374151">1</text>
 <text x="130" y="507" font-size="12" fill="#374151" text-anchor="end">v0.14.0</text>
-<rect x="140" y="488" width="0.0" height="30" rx="3" fill="#ca8a04"/>
-<text x="146.0" y="507" font-size="12" font-weight="600" fill="#374151">0</text>
+<rect x="140" y="488" width="40.0" height="30" rx="3" fill="#ca8a04"/>
+<text x="186.0" y="507" font-size="12" font-weight="600" fill="#374151">1</text>
+<text x="130" y="547" font-size="12" fill="#374151" text-anchor="end">v0.15.0</text>
+<rect x="140" y="528" width="0.0" height="30" rx="3" fill="#2563eb"/>
+<text x="146.0" y="547" font-size="12" font-weight="600" fill="#374151">0</text>
 </g>
-<g transform="translate(0,576)"><rect width="628" height="192" fill="#ffffff"/>
+<g transform="translate(0,616)"><rect width="628" height="192" fill="#ffffff"/>
 <text x="16" y="26" font-size="16" font-weight="600" fill="#111827">All-time downloads per platform</text>
 <text x="130" y="67" font-size="12" fill="#374151" text-anchor="end">macOS (arm64)</text>
 <rect x="140" y="48" width="440.0" height="30" rx="3" fill="#2563eb"/>
-<text x="586.0" y="67" font-size="12" font-weight="600" fill="#374151">17</text>
+<text x="586.0" y="67" font-size="12" font-weight="600" fill="#374151">18</text>
 <text x="130" y="107" font-size="12" fill="#374151" text-anchor="end">Linux (amd64)</text>
-<rect x="140" y="88" width="181.2" height="30" rx="3" fill="#16a34a"/>
-<text x="327.2" y="107" font-size="12" font-weight="600" fill="#374151">7</text>
+<rect x="140" y="88" width="171.1" height="30" rx="3" fill="#16a34a"/>
+<text x="317.1" y="107" font-size="12" font-weight="600" fill="#374151">7</text>
 <text x="130" y="147" font-size="12" fill="#374151" text-anchor="end">Windows (amd64)</text>
-<rect x="140" y="128" width="103.5" height="30" rx="3" fill="#ea580c"/>
-<text x="249.5" y="147" font-size="12" font-weight="600" fill="#374151">4</text>
+<rect x="140" y="128" width="97.8" height="30" rx="3" fill="#ea580c"/>
+<text x="243.8" y="147" font-size="12" font-weight="600" fill="#374151">4</text>
 </g>
 </svg>
