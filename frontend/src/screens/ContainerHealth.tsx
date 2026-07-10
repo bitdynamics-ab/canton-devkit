@@ -5,7 +5,7 @@ import {
   fetchContainers,
   restartContainer,
 } from "../api";
-import { W, wMono, tableCaps } from "../tokens";
+import { W, wMono, tableCaps, tint } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcRefresh } from "../components/icons";
 import { ContainerLogsModal } from "./ContainerLogsModal";
@@ -131,7 +131,7 @@ export function ContainerHealth({ name }: { name: string }) {
           role="alert"
           style={{
             color: W.err,
-            background: `${W.err}10`,
+            background: `${tint(W.err, 6)}`,
             border: `1px solid ${W.err}`,
             borderRadius: 2,
             padding: "6px 10px",
@@ -147,7 +147,7 @@ export function ContainerHealth({ name }: { name: string }) {
           role="alert"
           style={{
             color: W.err,
-            background: `${W.err}10`,
+            background: `${tint(W.err, 6)}`,
             border: `1px solid ${W.err}`,
             borderRadius: 2,
             padding: "6px 10px",

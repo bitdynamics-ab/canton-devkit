@@ -8,7 +8,7 @@ import {
   type PrometheusRangeResponse,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { W, wMono } from "../tokens";
+import { W, wMono, tint } from "../tokens";
 import { Button } from "../components/Button";
 import { IcX } from "../components/icons";
 import { MetricCard } from "../components/MetricCard";
@@ -617,7 +617,7 @@ function ObservabilityOffPanel({
   return (
     <div
       style={{
-        background: `${W.warn}10`,
+        background: `${tint(W.warn, 6)}`,
         border: `1px solid ${W.warn}`,
         borderRadius: 4,
         padding: 20,

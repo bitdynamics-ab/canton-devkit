@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, fetchContainerLogs } from "../api";
-import { W, wMono, wSans } from "../tokens";
+import { W, wMono, wSans, tint } from "../tokens";
 import { Button } from "../components/Button";
 import { IcX } from "../components/icons";
 
@@ -134,7 +134,7 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
             role="alert"
             style={{
               color: W.err,
-              background: `${W.err}10`,
+              background: `${tint(W.err, 6)}`,
               borderBottom: `1px solid ${W.err}`,
               padding: "8px 16px",
               fontSize: 12,

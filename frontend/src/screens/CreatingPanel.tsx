@@ -6,7 +6,7 @@ import {
   scrubInstance,
   type StepName,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, tint } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcAlert, IcCheck, IcRefresh, IcX } from "../components/icons";
 import {
@@ -125,8 +125,8 @@ export function CreatingPanel({ name, onRefresh }: Props) {
                 <div
                   key={i}
                   style={{
-                    background: `${W.warn}1A`,
-                    border: `1px solid ${W.warn}44`,
+                    background: `${tint(W.warn, 10)}`,
+                    border: `1px solid ${tint(W.warn, 27)}`,
                     color: W.warn,
                     borderRadius: 2,
                     padding: "6px 10px",
@@ -351,8 +351,8 @@ function ZombieHint({
   return (
     <div
       style={{
-        background: `${W.warn}10`,
-        border: `1px solid ${W.warn}44`,
+        background: `${tint(W.warn, 6)}`,
+        border: `1px solid ${tint(W.warn, 27)}`,
         borderRadius: 4,
         padding: "12px 14px",
         color: W.text,

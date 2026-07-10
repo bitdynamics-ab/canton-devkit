@@ -5,7 +5,7 @@ import {
   restoreSnapshot,
   type RestoreResponse,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, tint } from "../tokens";
 import { Button } from "../components/Button";
 import { IcCheck, IcDownload } from "../components/icons";
 
@@ -155,7 +155,7 @@ export function BackupRestore({ instanceName }: Props) {
           role="alert"
           style={{
             marginTop: 10,
-            background: `${W.err}10`,
+            background: `${tint(W.err, 6)}`,
             border: `1px solid ${W.err}`,
             borderRadius: 2,
             padding: "8px 12px",
@@ -197,7 +197,7 @@ export function BackupRestore({ instanceName }: Props) {
           aria-label="Drop snapshot file here or click to choose"
           style={{
             border: `1.5px dashed ${dragOver ? W.brand : W.border}`,
-            background: dragOver ? `${W.brand}10` : "transparent",
+            background: dragOver ? `${tint(W.brand, 6)}` : "transparent",
             borderRadius: 4,
             padding: "14px 16px",
             cursor: "pointer",
@@ -291,7 +291,7 @@ export function BackupRestore({ instanceName }: Props) {
             role="status"
             style={{
               marginTop: 10,
-              background: `${W.brand}10`,
+              background: `${tint(W.brand, 6)}`,
               border: `1px solid ${W.brand}`,
               borderRadius: 2,
               padding: "8px 12px",
@@ -319,7 +319,7 @@ export function BackupRestore({ instanceName }: Props) {
             role="alert"
             style={{
               marginTop: 10,
-              background: `${W.err}10`,
+              background: `${tint(W.err, 6)}`,
               border: `1px solid ${W.err}`,
               borderRadius: 2,
               padding: "8px 12px",

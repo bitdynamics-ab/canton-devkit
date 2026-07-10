@@ -16,7 +16,7 @@ import {
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { Button } from "../components/Button";
 import { Dot, IcRefresh } from "../components/icons";
-import { TX_KIND_COLOR, W, wMono, tableCaps, wideCaps } from "../tokens";
+import { TX_KIND_COLOR, W, wMono, tableCaps, wideCaps, tint } from "../tokens";
 import { ContractDetailDrawer } from "./ContractDetailDrawer";
 import { TxReplayDrawer } from "./TxReplayDrawer";
 
@@ -627,7 +627,7 @@ function ProjectionBar({
         ? "#DDB25E"
         : streamStatus === "truncated"
           ? "#7BD2C6"
-          : "#7C8598";
+          : W.dim;
   const pillLabel =
     streamStatus === "live"
       ? "live"
@@ -736,7 +736,7 @@ function ProjectionBar({
               borderRadius: 2,
               border: "none",
               background: v === view ? W.brand : "transparent",
-              color: v === view ? "#0B0F1A" : W.dim,
+              color: v === view ? W.onAccent : W.dim,
               fontWeight: v === view ? 600 : 500,
               cursor: "pointer",
               textTransform: "capitalize",
@@ -837,7 +837,7 @@ function AcsRow({
         gap: 14,
         padding: "9px 14px",
         alignItems: "center",
-        background: active ? `${W.brand}10` : "transparent",
+        background: active ? `${tint(W.brand, 6)}` : "transparent",
         borderLeft: active ? `2px solid ${W.brand}` : "2px solid transparent",
         paddingLeft: active ? 12 : 14,
         borderBottom: `1px solid ${W.border}`,
@@ -1272,7 +1272,7 @@ function TxRowComponent({
           gap: 14,
           padding: "9px 14px",
           alignItems: "center",
-          background: open ? `${W.brand}10` : "transparent",
+          background: open ? `${tint(W.brand, 6)}` : "transparent",
           borderBottom: `1px solid ${W.border}`,
           cursor: "pointer",
         }}
@@ -1353,7 +1353,7 @@ function TxRowComponent({
       {open && tx.events && tx.events.length > 0 && (
         <div
           style={{
-            background: `${W.brand}05`,
+            background: `${tint(W.brand, 2)}`,
             padding: "10px 14px 12px 84px",
             borderBottom: `1px solid ${W.border}`,
           }}
@@ -1551,7 +1551,7 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
             gap: 2,
             alignItems: "flex-end",
             height: 100,
-            background: `linear-gradient(180deg, transparent 0%, ${W.border}20 100%)`,
+            background: `linear-gradient(180deg, transparent 0%, ${tint(W.border, 13)} 100%)`,
           }}
         >
           {buckets.map((b, i) => {
@@ -1566,7 +1566,7 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
                   background:
                     b.count === 0
                       ? W.border
-                      : `linear-gradient(180deg, ${W.brand}66 0%, ${W.brand} 100%)`,
+                      : `linear-gradient(180deg, ${tint(W.brand, 40)} 0%, ${W.brand} 100%)`,
                   borderRadius: 2,
                 }}
               />
@@ -1944,7 +1944,7 @@ function EmptyPanel({
   return (
     <div
       style={{
-        background: `${W.warn}10`,
+        background: `${tint(W.warn, 6)}`,
         border: `1px solid ${W.warn}`,
         borderRadius: 4,
         padding: 20,

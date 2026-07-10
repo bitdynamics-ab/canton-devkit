@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { W, wMono } from "../tokens";
+import { W, wMono, tint } from "../tokens";
 import { Button } from "../components/Button";
 
 // ErrorBoundary — catches render-time exceptions from descendants and
@@ -79,7 +79,7 @@ function Fallback({ error, onRetry }: FallbackProps) {
     <div
       role="alert"
       style={{
-        background: `${W.err}10`,
+        background: `${tint(W.err, 6)}`,
         border: `1px solid ${W.err}`,
         borderRadius: 4,
         padding: 20,

@@ -14,7 +14,7 @@ import {
   type Role,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { W, wMono, tableCaps } from "../tokens";
+import { W, wMono, tableCaps, tint } from "../tokens";
 import { Button } from "../components/Button";
 import {
   Dot,
@@ -323,13 +323,13 @@ export function DARScreen() {
                 aria-label="Drop DAR file here or click to choose"
                 style={{
                   margin: 14,
-                  border: `1.5px dashed ${dragOver ? W.brand : `${W.brand}55`}`,
+                  border: `1.5px dashed ${dragOver ? W.brand : `${tint(W.brand, 33)}`}`,
                   borderRadius: 4,
                   padding: "22px 16px",
                   textAlign: "center",
                   background: dragOver
-                    ? `${W.brand}1A`
-                    : `linear-gradient(180deg, ${W.brand}0A 0%, transparent 100%)`,
+                    ? `${tint(W.brand, 10)}`
+                    : `linear-gradient(180deg, ${tint(W.brand, 4)} 0%, transparent 100%)`,
                   cursor: "pointer",
                   transition: "all 120ms",
                 }}
@@ -676,7 +676,7 @@ function PkgRow({
         gap: 14,
         padding: "10px 14px",
         alignItems: "center",
-        background: active ? `${W.brand}10` : "transparent",
+        background: active ? `${tint(W.brand, 6)}` : "transparent",
         borderLeft: active ? `2px solid ${W.brand}` : "2px solid transparent",
         paddingLeft: active ? 12 : 14,
         borderBottom: `1px solid ${W.border}`,
@@ -1021,7 +1021,7 @@ function VettingPanel({
                 style={{
                   width: 22,
                   height: 12,
-                  background: r.vetted ? "#7CC89A" : "#313B52",
+                  background: r.vetted ? "#7CC89A" : W.borderHi,
                   borderRadius: 999,
                   position: "relative",
                   flexShrink: 0,
@@ -1175,7 +1175,7 @@ function ErrorBanner({ msg }: { msg: string }) {
     <div
       role="alert"
       style={{
-        background: `${W.err}10`,
+        background: `${tint(W.err, 6)}`,
         border: `1px solid ${W.err}`,
         borderRadius: 2,
         padding: "8px 12px",
@@ -1267,7 +1267,7 @@ function VetToggle({
         style={{
           width: 24,
           height: 14,
-          background: on ? W.brand : "#313B52",
+          background: on ? W.brand : W.borderHi,
           borderRadius: 999,
           position: "relative",
           flexShrink: 0,
@@ -1309,7 +1309,7 @@ function FilterBtn({
         fontSize: 11.5,
         borderRadius: 2,
         border: `1px solid ${active ? W.brand : W.border}`,
-        background: active ? `${W.brand}1A` : "transparent",
+        background: active ? `${tint(W.brand, 10)}` : "transparent",
         color: active ? W.brand : W.dim,
         cursor: "pointer",
         fontFamily: wMono,
@@ -1495,7 +1495,7 @@ function EmptyPanel({
   return (
     <div
       style={{
-        background: `${W.warn}10`,
+        background: `${tint(W.warn, 6)}`,
         border: `1px solid ${W.warn}`,
         borderRadius: 4,
         padding: 20,

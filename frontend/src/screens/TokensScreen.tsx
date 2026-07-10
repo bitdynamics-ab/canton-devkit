@@ -416,7 +416,7 @@ export function TokensScreen() {
               padding: "5px 14px", fontSize: 12, borderRadius: 2, border: "none", cursor: "pointer",
               fontWeight: 600,
               background: view === v ? W.brand : "transparent",
-              color: view === v ? "#0B0F1A" : W.dim,
+              color: view === v ? W.onAccent : W.dim,
             }}
           >
             {v === "instruments" ? "Instruments" : "Holdings matrix"}

@@ -1,7 +1,9 @@
-/* Base styles. Components own their styling via tokens.ts; this file
-   holds only what CSS must own: font-face, body defaults, focus
-   rings, hover states, and keyframes. tokens.ts stays the single
-   source of truth for the palette. */
+/* Base styles + the design-system token sheet. Every semantic color
+   lives here as a CSS variable with a dark default (:root) and a light
+   override (:root[data-theme="light"]), so tokens.ts W.* references
+   resolve per-theme with no per-screen change. Components own layout
+   via tokens.ts; this file owns fonts, the token sheet, focus rings,
+   hover states, and keyframes. */
 
 /* Canton Infrastructure Design System typefaces, self-hosted so the
    UI renders identically offline (licenses in src/fonts/). Archivo
@@ -41,13 +43,66 @@
   font-display: swap;
 }
 
+/* ---- Raw ramps (theme-independent) ---- */
 :root {
-  color-scheme: dark;
-  --bg: #0b0f1a;
-  --text: #e9ecf4;
+  --gray-25: #fcfcfd; --gray-50: #f7f8fa; --gray-100: #eff1f5;
+  --gray-200: #e2e5ec; --gray-300: #cdd2dd; --gray-400: #9ba3b5;
+  --gray-500: #6c7488; --gray-600: #4d5567; --gray-700: #384050;
+  --gray-800: #232a39; --gray-900: #141a28; --gray-950: #0b0f1a;
+  --blue-50: #eef1fd; --blue-100: #dce3fb; --blue-200: #bcc9f6;
+  --blue-300: #93a7f0; --blue-400: #6480e6; --blue-500: #3d5bdc;
+  --blue-600: #2946ce; --blue-700: #2138a8; --blue-800: #1d2f85;
+  --blue-900: #1a2861; --blue-950: #101836;
+  --teal-300: #7bd2c6; --teal-500: #189e8c;
+  --green-500: #2e9e5b; --amber-500: #d89117; --red-500: #d24a38;
+
   /* Motion — quick, damped, no bounce. */
   --ease-out: cubic-bezier(0.2, 0.6, 0.2, 1);
   --duration-fast: 120ms;
+}
+
+/* ---- Dark theme (default) ---- */
+:root {
+  color-scheme: dark;
+  --bg-page: #0b0f1a; --bg-sunken: #080c15; --bg-surface: #10151f;
+  --bg-raised: #161c29; --bg-inset: #0d1220;
+  --text-primary: #e9ecf4; --text-secondary: #a9b2c6;
+  --text-muted: #7c8598; --text-faint: #5a6375;
+  --border-subtle: #171e2c; --border-default: #232b3d; --border-strong: #313b52;
+  --hover-tint: #171e2c; --active-tint: #1e2637;
+  --accent: #6480e6; --accent-hover: #7b93ec; --accent-active: #93a7f0;
+  --accent-subtle: #141c36; --accent-muted: #1c2747; --accent-text: #93a7f0;
+  --on-accent: #0b0f1a;
+  --accent-solid: #2e4cd4; --accent-solid-hover: #3b57db; --on-accent-solid: #ffffff;
+  --link: #8fa3ee; --link-hover: #b3c1f4;
+  --ok-text: #7cc89a; --ok-bg: #0e1f16; --ok-border: #1e3a2a;
+  --warn-text: #ddb25e; --warn-bg: #211a0b; --warn-border: #3e3115;
+  --danger-text: #e08d7d; --danger-bg: #24120e; --danger-border: #45201a;
+  --danger: #d2604b; --danger-hover: #e08d7d;
+  --info-text: #a9baf2; --info-bg: #121a33; --info-border: #223059;
+  --dot-grid: radial-gradient(circle at 1px 1px, #232b3d 1px, transparent 1px);
+}
+
+/* ---- Light theme ---- */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-page: #ffffff; --bg-sunken: #f7f8fa; --bg-surface: #ffffff;
+  --bg-raised: #ffffff; --bg-inset: #eff1f5;
+  --text-primary: #141a28; --text-secondary: #4d5567;
+  --text-muted: #6c7488; --text-faint: #9ba3b5;
+  --border-subtle: #eff1f5; --border-default: #e2e5ec; --border-strong: #cdd2dd;
+  --hover-tint: #f7f8fa; --active-tint: #eff1f5;
+  --accent: #2946ce; --accent-hover: #2138a8; --accent-active: #1d2f85;
+  --accent-subtle: #eef1fd; --accent-muted: #dce3fb; --accent-text: #2138a8;
+  --on-accent: #ffffff;
+  --accent-solid: #2946ce; --accent-solid-hover: #2138a8; --on-accent-solid: #ffffff;
+  --link: #2946ce; --link-hover: #1d2f85;
+  --ok-text: #18653b; --ok-bg: #edf7f0; --ok-border: #bce0c9;
+  --warn-text: #85560e; --warn-bg: #fcf5e8; --warn-border: #ebd9a9;
+  --danger-text: #962e20; --danger-bg: #fbefed; --danger-border: #efc5bd;
+  --danger: #ba3a29; --danger-hover: #962e20;
+  --info-text: #1d2f85; --info-bg: #eef1fd; --info-border: #bcc9f6;
+  --dot-grid: radial-gradient(circle at 1px 1px, #e2e5ec 1px, transparent 1px);
 }
 
 * {
@@ -60,13 +115,14 @@ body,
   margin: 0;
   padding: 0;
   height: 100%;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--bg-page);
+  color: var(--text-primary);
   font-family: "Archivo", -apple-system, "Segoe UI", "Helvetica Neue",
     Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button {
@@ -77,6 +133,31 @@ button {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--text-primary);
+}
+
+/* Themed scrollbars — a raised thumb on a transparent track, so the
+   chrome doesn't read as OS-default grey against either theme. */
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* a11y: keyboard focus rings.
@@ -93,7 +174,7 @@ a {
 }
 
 :focus-visible {
-  outline: 2px solid #3d5bdc;
+  outline: 2px solid var(--blue-500);
   outline-offset: 2px;
   border-radius: 2px;
 }
@@ -103,31 +184,46 @@ a {
  * Active = accent-subtle fill + accent text at 2px radius — the
  * design system's "current item" signature. */
 .side-nav-link {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 7px 10px;
   margin: 1px 0;
-  border-radius: 2px;
+  border-radius: 4px;
   font-size: 13px;
-  color: #a9b2c6;
+  color: var(--text-secondary);
   transition: background var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out);
 }
 
 .side-nav-link:hover {
-  background: #171e2c;
-  color: #e9ecf4;
+  background: var(--hover-tint);
+  color: var(--text-primary);
 }
 
 .side-nav-link.active,
 .side-nav-link.active:hover {
-  background: #141c36;
-  color: #93a7f0;
+  background: var(--accent-subtle);
+  color: var(--accent-text);
   font-weight: 500;
 }
 
+/* The nav icon dims with the label and lights up on the active row. */
+.side-nav-link svg {
+  color: var(--text-faint);
+  flex: none;
+}
+.side-nav-link:hover svg {
+  color: var(--text-muted);
+}
+.side-nav-link.active svg {
+  color: var(--accent);
+}
+
 /* Button system (components/Button.tsx). Hover/active tints live
- * here because inline style objects can't express :hover. Values
- * are the dark-console tokens from tokens.ts. */
+ * here because inline style objects can't express :hover.
+ * primary = the solid cobalt CTA (white text, both themes);
+ * secondary = bordered surface; ghost = quiet; danger = filled red. */
 .bd-btn {
   appearance: none;
   display: inline-flex;
@@ -167,50 +263,47 @@ a {
 }
 
 .bd-btn--primary {
-  background: #6480e6;
-  color: #0b0f1a;
+  background: var(--accent-solid);
+  color: var(--on-accent-solid);
 }
 .bd-btn--primary:hover:not(:disabled) {
-  background: #7b93ec;
+  background: var(--accent-solid-hover);
 }
 .bd-btn--primary:active:not(:disabled) {
-  background: #93a7f0;
+  background: var(--accent-active);
 }
 
 .bd-btn--secondary {
-  background: #10151f;
-  border-color: #232b3d;
-  color: #e9ecf4;
+  background: var(--bg-surface);
+  border-color: var(--border-default);
+  color: var(--text-primary);
 }
 .bd-btn--secondary:hover:not(:disabled) {
-  background: #171e2c;
-  border-color: #313b52;
+  background: var(--hover-tint);
+  border-color: var(--border-strong);
 }
 .bd-btn--secondary:active:not(:disabled) {
-  background: #1e2637;
+  background: var(--active-tint);
 }
 
 .bd-btn--ghost {
   background: transparent;
-  color: #a9b2c6;
+  color: var(--text-secondary);
 }
 .bd-btn--ghost:hover:not(:disabled) {
-  background: #171e2c;
-  color: #e9ecf4;
+  background: var(--hover-tint);
+  color: var(--text-primary);
 }
 .bd-btn--ghost:active:not(:disabled) {
-  background: #1e2637;
+  background: var(--active-tint);
 }
 
 .bd-btn--danger {
-  background: #d2604b;
+  background: var(--danger);
   color: #fff;
 }
 .bd-btn--danger:hover:not(:disabled) {
-  background: #e08d7d;
-}
-.bd-btn--danger:active:not(:disabled) {
-  background: #ba3a29;
+  background: var(--danger-hover);
 }
 
 .bd-btn__icon {
@@ -226,8 +319,8 @@ a {
   position: absolute;
   top: -100px;
   left: 8px;
-  background: #6480e6;
-  color: #0b0f1a;
+  background: var(--accent-solid);
+  color: var(--on-accent-solid);
   padding: 8px 14px;
   font-weight: 600;
   border-radius: 2px;

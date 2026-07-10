@@ -12,7 +12,7 @@ import {
   stopInstance,
   unpauseInstance,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, tint } from "../tokens";
 import { Button } from "../components/Button";
 import {
   IcEject,
@@ -269,7 +269,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
         <div
           role="alert"
           style={{
-            background: `${W.err}10`,
+            background: `${tint(W.err, 6)}`,
             color: W.err,
             border: `1px solid ${W.err}`,
             borderRadius: 2,
@@ -286,7 +286,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
         <div
           role="alert"
           style={{
-            background: `${W.warn}10`,
+            background: `${tint(W.warn, 6)}`,
             color: W.warn,
             border: `1px solid ${W.warn}`,
             borderRadius: 6,
