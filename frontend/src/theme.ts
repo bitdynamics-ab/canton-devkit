@@ -1,8 +1,6 @@
-// Theme state for the Web UI. The design system ships both a dark
-// (default) and light palette; the active one is written to
-// `data-theme` on <html>, which flips every CSS variable in index.css
-// and therefore every W.* token app-wide. The choice persists in
-// localStorage so a reload keeps it.
+// Theme state. Dark (default) and light palettes live in index.css as
+// CSS variables keyed off `data-theme` on <html>; setting it re-themes
+// every W.* token. Persisted in localStorage.
 
 import { useSyncExternalStore } from "react";
 
@@ -22,9 +20,8 @@ function read(): Theme {
   return "dark";
 }
 
-// applyTheme sets the attribute that drives the CSS variables. Called
-// once at startup (before render, see main.tsx) so there is no
-// light-on-dark flash, and again on every change.
+// Sets the attribute that drives the CSS variables. Called before the
+// first render (main.tsx) to avoid a flash, and on every change.
 export function applyTheme(t: Theme): void {
   document.documentElement.dataset.theme = t;
 }
@@ -47,14 +44,12 @@ export function toggleTheme(): void {
   setTheme(getTheme() === "dark" ? "light" : "dark");
 }
 
-// initTheme applies the persisted (or default) theme. Call before the
-// first render.
+// Apply the persisted (or default) theme before the first render.
 export function initTheme(): void {
   applyTheme(read());
 }
 
-// useTheme subscribes a component to theme changes so a toggle
-// re-renders with the current value.
+// Subscribe a component to theme changes so a toggle re-renders it.
 export function useTheme(): Theme {
   return useSyncExternalStore(
     (cb) => {

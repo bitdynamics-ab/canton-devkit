@@ -1,11 +1,6 @@
-// MonoId — the one way to render a ledger identifier (contract id,
-// party id, package id, hash, offset) in this console.
-//
-// Ledger ids are long and their *suffix* is the discriminating part,
-// so tail-only truncation ("00ce960f…") hides exactly what tells two
-// ids apart. MonoId middle-truncates (head…tail), keeps the full value
-// in the title for hover, and copies it on click — the discipline an
-// auditor comparing ids relies on.
+// MonoId — renders a ledger identifier (contract / party / package id,
+// hash, offset). Middle-truncates (head…tail) so the discriminating suffix
+// stays visible, shows the full value on hover, and copies it on click.
 
 import { useState, type CSSProperties } from "react";
 import { W, wMono } from "../tokens";
@@ -40,16 +35,14 @@ export function MonoId({
   const [copied, setCopied] = useState(false);
   const shown = full ? value : truncateMid(value, head, tail);
   const copy = () => {
-    // clipboard may be unavailable (http on non-localhost) or denied;
-    // swallow both the throw and the promise rejection so a failed
-    // copy is a silent no-op, not an unhandled rejection.
+    // clipboard can be unavailable (non-localhost http) or denied; ignore
+    // both the throw and the rejection so a failed copy is a no-op.
     try {
-      const p = navigator.clipboard?.writeText(value);
-      if (p) p.catch(() => {});
+      navigator.clipboard?.writeText(value).catch(() => {});
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1100);
     } catch {
-      // no clipboard API at all
+      /* no clipboard API */
     }
   };
   return (

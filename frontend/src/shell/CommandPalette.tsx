@@ -11,26 +11,21 @@ import { W, wMono, wSans, tint, R, wideCaps } from "../tokens";
 import { useInstanceSelection } from "./useInstanceSelection";
 import { NAV, isInstanceScoped, linkTo } from "./routes";
 
-// CommandPalette — ⌘K (Ctrl+K on non-Mac) launches a centred search
-// modal with two action groups: route navigation and instance
-// switching. Keyboard model is intentionally simple: ↑/↓ to move,
-// Enter to activate, Esc to dismiss — every press has one obvious
-// meaning.
+// CommandPalette — ⌘K (Ctrl+K elsewhere) opens a search modal with two
+// groups: route navigation and instance switching. ↑/↓ move, Enter
+// activates, Esc dismisses.
 
 interface Action {
   id: string;
-  // Group label rendered as a subtle section header in the list.
   group: "Navigate" | "Switch instance";
   label: string;
   // Secondary line shown beneath the label (path, instance status).
   hint?: string;
-  // perform is the side-effect — navigate, mutate, etc.
   perform: () => void;
 }
 
-// Derive the palette's nav rows from the shared NAV table so the
-// sidebar and the palette can never drift on routes / labels /
-// instance-scoping. Adding a tab to ./routes wires both surfaces.
+// Derive nav rows from the shared NAV table so the sidebar and palette
+// can't drift on routes / labels / instance-scoping.
 const NAV_ACTIONS: Array<Omit<Action, "perform"> & { path: string }> = NAV.map(
   (n) => ({
     id: `nav-${n.to === "/" ? "overview" : n.to.replace(/^\//, "")}`,
@@ -41,9 +36,8 @@ const NAV_ACTIONS: Array<Omit<Action, "perform"> & { path: string }> = NAV.map(
   }),
 );
 
-// openPalette lets non-keyboard callers (the topbar "Commands" button)
-// open the palette. It dispatches an event the mounted CommandPalette
-// listens for, so the open state stays owned by the component.
+// Lets non-keyboard callers (the topbar "Commands" button) open the
+// palette without owning its open state.
 const OPEN_EVENT = "cdk-open-palette";
 export function openPalette(): void {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT));
@@ -62,10 +56,8 @@ export function CommandPalette() {
   const [searchParams] = useSearchParams();
   const instance = searchParams.get("instance");
 
-  // Global hotkey. ⌘K on Mac, Ctrl+K elsewhere — same as VS Code,
-  // Slack, GitHub. We use the e.metaKey || e.ctrlKey gate rather
-  // than UA-sniffing because either is acceptable on any platform
-  // (some keyboard layouts swap them).
+  // Global hotkey: ⌘K on Mac, Ctrl+K elsewhere. Accept either modifier
+  // rather than UA-sniffing.
   useEffect(() => {
     function onKey(e: globalThis.KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -86,14 +78,12 @@ export function CommandPalette() {
     };
   }, [open]);
 
-  // Auto-focus the input when the palette opens; reset query +
-  // cursor so each open is a fresh search.
+  // Focus the input on open; reset so each open is a fresh search.
   useEffect(() => {
     if (open) {
       setQuery("");
       setCursor(0);
-      // Defer to next frame — the input isn't in the DOM until
-      // the modal renders, and React batches the state update.
+      // Defer a frame: the input isn't in the DOM until the modal renders.
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [open]);
@@ -168,9 +158,6 @@ export function CommandPalette() {
         style={{
           width: "min(560px, 92vw)",
           background: W.surface,
-          // Floating overlay: one depth technique, matched to the
-          // instance switcher — hairline border plus a subtle shadow,
-          // not a hard border AND a heavy shadow.
           border: `1px solid ${W.border}`,
           borderRadius: R.dialog,
           boxShadow: "0 10px 32px rgba(0,0,0,0.24)",
@@ -236,9 +223,8 @@ export function CommandPalette() {
   );
 }
 
-// renderGroups groups consecutive actions sharing a `group` label
-// and inserts a subtle section header before each block. Keeps the
-// list scannable: nav actions cluster, instance actions cluster.
+// Groups consecutive actions sharing a `group` label under a section
+// header.
 function renderGroups(
   filtered: Action[],
   cursor: number,
@@ -328,17 +314,12 @@ function Hotkey({ label, hint }: { label: string; hint: string }) {
   );
 }
 
-// titleCase renders a status enum ("running") as a Title-Case label
-// ("Running") for the instance hint line, matching StatusBadge's
-// vocabulary so the palette and the switcher read the same.
 function titleCase(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
-// filter — case-insensitive substring match across label + hint.
-// Deliberately not a fuzzy matcher: the palette has ~10–20 items and
-// exact substring is easier to reason about. Results keep input order
-// (NAV first, instances after) so the visual grouping stays stable.
+// Case-insensitive substring match across label + hint; keeps input
+// order so the grouping stays stable.
 export function filter(actions: Action[], query: string): Action[] {
   const q = query.trim().toLowerCase();
   if (!q) return actions;

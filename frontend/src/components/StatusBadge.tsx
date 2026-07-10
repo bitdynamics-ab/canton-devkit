@@ -1,10 +1,5 @@
-// StatusBadge — the one renderer for instance / container / connection
-// status across the console. Before this, the same status datum showed
-// up four different ways (a lowercase dot+enum in the table, plain mono
-// text in the detail grid, a Title-Case pill in the topbar, a bare
-// color-only dot in the ACS). One renderer fixes the inconsistency and
-// guarantees color is never the ONLY cue — the label carries the
-// meaning for the colorblind / auditor audience.
+// StatusBadge — single renderer for instance / container / stream status.
+// Always pairs a colored dot with a text label so color is never the only cue.
 
 import type { CSSProperties } from "react";
 import { W, tint, R } from "../tokens";
@@ -12,8 +7,7 @@ import { Dot } from "./icons";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
 
-// Canonical status vocabulary. Terse Title-Case labels; unknown values
-// fall through to a muted, capitalized rendering rather than breaking.
+// Known statuses map to a label + tone; unknown values render muted.
 const MAP: Record<string, { label: string; tone: Tone }> = {
   running: { label: "Running", tone: "ok" },
   healthy: { label: "Healthy", tone: "ok" },
@@ -30,7 +24,7 @@ const MAP: Record<string, { label: string; tone: Tone }> = {
   failed: { label: "Failed", tone: "danger" },
   error: { label: "Error", tone: "danger" },
   dead: { label: "Dead", tone: "danger" },
-  // Explorer stream states — the ACS/tx snapshot-vs-live stream.
+  // Explorer stream states.
   live: { label: "Live", tone: "ok" },
   reconnecting: { label: "Reconnecting", tone: "warn" },
   truncated: { label: "Truncated", tone: "warn" },

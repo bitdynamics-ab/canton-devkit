@@ -2,11 +2,10 @@
 //
 // Every semantic color resolves through a CSS variable defined in
 // index.css under :root (dark) and :root[data-theme="light"], so the
-// same W.* reference renders correctly in both themes with no
-// per-screen change. Structure comes from 1px hairlines, not shadows;
-// one interactive accent (cobalt); teal/amber are DATA accents only
-// (series, parties, throughput) and stay fixed mid-tones legible on
-// either background.
+// same W.* reference renders correctly in both themes. Structure comes
+// from 1px hairlines, not shadows; one interactive accent; teal/amber
+// are data-only accents (series, parties, throughput) held at fixed
+// mid-tones legible on either background.
 export const W = {
   bg: "var(--bg-page)",
   surface: "var(--bg-surface)", // cards, sidebars, inputs
@@ -17,14 +16,14 @@ export const W = {
   text2: "var(--text-secondary)",
   dim: "var(--text-muted)",
   faint: "var(--text-faint)",
-  brand: "var(--accent)", // cobalt — buttons, tabs, active nav
+  brand: "var(--accent)", // buttons, tabs, active nav
   brandSoft: "var(--accent-subtle)", // active-nav fill, selection
   brandText: "var(--accent-text)",
   ok: "var(--ok-text)",
   warn: "var(--warn-text)",
   err: "var(--danger-text)",
   info: "var(--info-text)", // status/info + links
-  mag: "#93A7F0", // series accent (cobalt-light — data)
+  mag: "#93A7F0", // series accent (data)
   rose: "#7BD2C6", // series accent (teal — data only)
   amber: "#C8971F", // series accent (deep amber — data)
   card: "var(--bg-surface)",
@@ -56,10 +55,9 @@ export const W = {
   focus: "var(--blue-500)", // 2px focus outline — identical in both themes
 } as const;
 
-// Translucent tint of a themed color. Replaces the old `${W.x}NN`
-// hex-alpha concatenation, which is invalid once W.x is a CSS var
-// (`var(--accent)1A` is not a color). color-mix over transparent is
-// the faithful equivalent of a hex alpha over the surface behind it.
+// Translucent tint of a themed color. W.x is a CSS var, so a `${W.x}1A`
+// hex-alpha concat is invalid; color-mix over transparent is the
+// equivalent.
 export function tint(color: string, pct: number): string {
   return `color-mix(in srgb, ${color} ${pct}%, transparent)`;
 }
@@ -77,9 +75,8 @@ export const R = { control: 2, card: 4, dialog: 8 } as const;
 export const EASE = "cubic-bezier(0.2, 0.6, 0.2, 1)";
 export const FAST = "120ms";
 
-// Wide structural caps — the brand's label voice for STRUCTURE:
-// the wordmark, section headers, stat-card labels. Spread where a
-// style object is built.
+// Wide structural caps for the wordmark, section headers, and stat-card
+// labels.
 export const wideCaps = {
   fontWeight: 600,
   fontStretch: "118%",
@@ -87,19 +84,16 @@ export const wideCaps = {
   textTransform: "uppercase",
 } as const;
 
-// Quiet caps for data-table column headers. Uppercase is the table
-// convention, but headers repeat on every table — at 118% width and
-// heavy tracking they read as brand moments instead of chrome, so
-// tables get the toned-down cut.
+// Quieter caps for data-table column headers — the wide structural cut
+// repeats on every table and reads as chrome, so tables tone it down.
 export const tableCaps = {
   fontWeight: 500,
   letterSpacing: "0.05em",
   textTransform: "uppercase",
 } as const;
 
-// Role-to-color map shared by every screen so a role addition or
-// palette swap is a one-line change. Parties are data → cobalt /
-// teal / amber triad from the dataviz ramp.
+// Role-to-color map shared by every screen. Parties are data: the
+// accent / teal / amber triad from the dataviz ramp.
 export const ROLE_COLOR: Record<"app-user" | "app-provider" | "sv", string> = {
   "app-user": W.brand,
   "app-provider": W.teal,

@@ -212,9 +212,8 @@ function ThemeToggle() {
 
 function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
   const [open, setOpen] = useState(false);
-  // Empty / loading / error states all degrade to a muted label
-  // rather than a dropdown. The Dashboard owns the "go run dpm
-  // localnet up" empty-state messaging; the topbar just shrugs.
+  // Empty / loading / error states degrade to a muted label rather than
+  // a dropdown; the Dashboard owns the empty-state messaging.
   if (sel.loading) {
     return <span style={pillStyle(W.dim)}>Loading instances…</span>;
   }
@@ -279,8 +278,6 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
             padding: 4,
             listStyle: "none",
             background: W.surface,
-            // Floating overlay: one depth technique. Hairline border
-            // plus a subtle shadow, matched to the command palette.
             border: `1px solid ${W.border}`,
             borderRadius: R.card,
             minWidth: 240,

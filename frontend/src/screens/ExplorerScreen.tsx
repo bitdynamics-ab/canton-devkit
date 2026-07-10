@@ -1782,8 +1782,7 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
             right: 0,
             bottom: 0,
             width: "min(480px, 92vw)",
-            // Raised surface — matches ContractDetailDrawer/TxReplayDrawer.
-            // One depth technique: hairline border, no shadow ring.
+            // Raised surface, matching the other drawers.
             background: W.surface2,
             borderLeft: `1px solid ${W.borderHi}`,
             // A hover preview must not steal hit-testing from the strip

@@ -1,14 +1,11 @@
-// Skeleton — layout-matched loading placeholders. A dense console
-// knows its table shapes ahead of time, so a bare centered "Loading…"
-// that pops into a full table causes a jarring layout shift. Skeletons
-// mirror the real row height and column rhythm so content arrives in
-// place, and a short show-delay avoids a flicker on fast local fetches.
+// Skeleton — loading placeholders shaped like the real table so content
+// arrives in place without a layout shift. A short delay avoids a
+// flicker on fast local fetches.
 
 import { useEffect, useState, type CSSProperties } from "react";
 import { W, R } from "../tokens";
 
-// useDelayedFlag returns true only after `ms`, so a fetch that resolves
-// in <150ms never flashes a skeleton.
+// Returns true only after `ms`, so a fast fetch never flashes a skeleton.
 export function useLoadingDelay(active: boolean, ms = 160): boolean {
   const [shown, setShown] = useState(false);
   useEffect(() => {
@@ -49,8 +46,8 @@ export function SkeletonBar({
   );
 }
 
-// SkeletonTable mirrors a column-based table: pass the same relative
-// column widths the real table uses so the skeleton lines up with it.
+// Pass the same relative column widths the real table uses so the
+// skeleton lines up with it.
 export function SkeletonTable({
   columns,
   rows = 4,

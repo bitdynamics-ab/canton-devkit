@@ -46,8 +46,8 @@ export function Dashboard() {
           LocalNet instances
         </h1>
         <Button
-          // The empty-state hero CTA is the primary while the list is
-          // empty — never two cobalt fills for the same action at once.
+          // While the list is empty the hero CTA is the primary action,
+          // so this button steps down to secondary to avoid two primaries.
           variant={sel.instances.length === 0 ? "secondary" : "primary"}
           icon={<IcPlus />}
           onClick={() => setCreateOpen(true)}

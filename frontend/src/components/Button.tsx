@@ -1,7 +1,7 @@
 // The one button system for the Web UI (visuals in index.css under
 // .bd-btn). Four variants with a strict usage contract:
 //
-//   primary   — THE one dominant action of a view or dialog (cobalt
+//   primary   — THE one dominant action of a view or dialog (accent
 //               fill, ink text). At most one visible per context.
 //   secondary — the default: bordered, quiet (Refresh, Pause, Mint…).
 //   ghost     — low-emphasis inline actions (Edit, close ×, chips).

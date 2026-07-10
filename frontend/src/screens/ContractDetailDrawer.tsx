@@ -125,9 +125,8 @@ export function ContractDetailDrawer({
         right: 0,
         bottom: 0,
         width: "min(480px, 92vw)",
-        // Raised surface — a fixed overlay sits above the page, and
-        // surface-on-page was reading dark-on-dark. One depth technique
-        // for a dense-console drawer: hairline border, no shadow.
+        // Raised surface — a fixed overlay sits above the page, so
+        // surface-on-page would read too flat against it.
         background: W.surface2,
         borderLeft: `1px solid ${W.borderHi}`,
         // Below the CommandPalette (zIndex 100) but above page content.

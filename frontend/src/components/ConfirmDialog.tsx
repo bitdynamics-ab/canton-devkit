@@ -1,12 +1,9 @@
-// In-app confirm dialog — replaces the browser-native confirm(), which
-// can't match the console's typography, can't show container/port
-// detail inline, and reads as unfinished. Promise-based so call sites
-// stay a one-liner:
+// In-app confirm dialog. Promise-based so call sites stay a one-liner:
 //
 //   if (!(await confirmDialog({ title, body, confirmLabel, danger }))) return;
 //
-// A single ConfirmHost is mounted once (see App); confirmDialog()
-// dispatches an event it listens for, keeping open state in the host.
+// A single ConfirmHost (mounted in App) listens for the event
+// confirmDialog() dispatches and owns the open state.
 
 import { useEffect, useState } from "react";
 import { W, wMono, wSans, R, EASE, FAST } from "../tokens";
@@ -87,7 +84,6 @@ export function ConfirmHost() {
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "min(440px, 92vw)",
-          // One depth technique: hairline border, no competing shadow.
           background: W.surface,
           border: `1px solid ${W.borderHi}`,
           borderRadius: R.dialog,

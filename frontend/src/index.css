@@ -169,9 +169,8 @@ a {
  * arrow keys) or programmatic .focus(). Mouse clicks don't paint
  * the ring, matching what sighted users expect from native UI.
  *
- * 2px cobalt outline (blue-500 — identical in light and dark per
- * the design system), offset 2px so it doesn't merge into the
- * element's own border. */
+ * 2px accent outline (blue-500 — identical in light and dark), offset
+ * 2px so it doesn't merge into the element's own border. */
 :focus {
   outline: none;
 }
@@ -225,7 +224,7 @@ a {
 
 /* Button system (components/Button.tsx). Hover/active tints live
  * here because inline style objects can't express :hover.
- * primary = the solid cobalt CTA (white text, both themes);
+ * primary = the solid accent CTA (white text, both themes);
  * secondary = bordered surface; ghost = quiet; danger = filled red. */
 .bd-btn {
   appearance: none;
