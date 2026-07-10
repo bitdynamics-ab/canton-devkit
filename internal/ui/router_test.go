@@ -111,9 +111,10 @@ func TestAssets_SPAFallbackServesIndex(t *testing.T) {
 	}
 }
 
-// TestAssets_MissingAssetDoesNotServeIndex pins the production failure
-// class where a stale index.html references a removed hashed bundle and
-// the server answers that missing .js/.css request with text/html.
+// TestAssets_MissingAssetDoesNotServeIndex pins the SPA fallback boundary:
+// /assets/... is the static bundle namespace, not a React Router route. A
+// missing bundle file should fail as a missing file instead of returning
+// index.html and hiding a stale dist/ build behind a successful HTML response.
 func TestAssets_MissingAssetDoesNotServeIndex(t *testing.T) {
 	srv, addr := startTestServer(t)
 	defer func() { _ = srv.Shutdown(context.Background()) }()

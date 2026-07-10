@@ -69,8 +69,8 @@ func TestFrontend_DistContainsRealBuildOrPlaceholder(t *testing.T) {
 
 // TestFrontend_DistIndexReferencesExistingAssets catches stale Vite
 // hash references before they ship. A stale /assets/index-*.js entry
-// fails in browsers as a strict MIME error if the server falls back to
-// index.html.
+// still breaks the browser bootstrap even when the server returns a
+// proper 404 instead of the old text/html SPA fallback.
 func TestFrontend_DistIndexReferencesExistingAssets(t *testing.T) {
 	body, err := os.ReadFile(filepath.Join("dist", "index.html"))
 	if err != nil {
