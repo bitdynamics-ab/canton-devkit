@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { W, wMono } from "../../tokens";
 import type { Point, Series } from "./types";
 import { extent, linearScale, niceTicks } from "./scale";
@@ -40,6 +40,10 @@ export function AreaChart({
   const innerW = Math.max(1, width - PADDING.left - PADDING.right);
   const innerH = Math.max(1, height - PADDING.top - PADDING.bottom);
   const hasData = series.points.length > 0;
+  // Unique, id-safe gradient handle. Deriving it from series.label breaks
+  // when the label has spaces (e.g. "ACS lookup buffer"): url(#area-ACS
+  // lookup buffer) is an invalid reference, so the fill falls back to black.
+  const gradId = `area-${useId().replace(/:/g, "")}`;
 
   const { x, y, xTicks, yTicks } = useMemo(() => {
     if (!hasData) {
@@ -113,7 +117,7 @@ export function AreaChart({
       style={{ display: "block" }}
     >
       <defs>
-        <linearGradient id={`area-${series.label}`} x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={series.color} stopOpacity={0.32} />
           <stop offset="100%" stopColor={series.color} stopOpacity={0} />
         </linearGradient>
@@ -164,7 +168,7 @@ export function AreaChart({
 
         {hasData ? (
           <>
-            <path d={areaPath} fill={`url(#area-${series.label})`} />
+            <path d={areaPath} fill={`url(#${gradId})`} />
             <path
               d={linePath}
               fill="none"
