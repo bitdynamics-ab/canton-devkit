@@ -15,7 +15,7 @@ function read(): Theme {
   } catch {
     // localStorage may be unavailable (private mode / sandbox).
   }
-  return "dark";
+  return "light";
 }
 
 export function applyTheme(t: Theme): void {
@@ -52,6 +52,6 @@ export function useTheme(): Theme {
       return () => listeners.delete(cb);
     },
     getTheme,
-    () => "dark",
+    () => "light",
   );
 }
