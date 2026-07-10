@@ -1,9 +1,9 @@
 name: Release stats
 
 # Regenerate the release download-statistics charts embedded in the README.
-# Data source is the public builds repo (bitdynamics-ab/homebrew-canton-devkit),
-# which mirrors the same release assets as this repo. Uses the built-in
-# GITHUB_TOKEN only — no additional secrets required.
+# Data sources are both release repos (bitdynamics-ab/canton-devkit and
+# bitdynamics-ab/homebrew-canton-devkit); download counts are merged by tag.
+# Uses the built-in GITHUB_TOKEN only — no additional secrets required.
 #
 # Generated files are published to the `release-stats-data` branch (not
 # `main`) and the README embeds them via raw.githubusercontent.com URLs,
@@ -41,6 +41,7 @@ jobs:
       - name: Generate charts + append daily snapshot
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATS_REPOS: bitdynamics-ab/canton-devkit bitdynamics-ab/homebrew-canton-devkit
         run: bash scripts/release-stats.sh
 
       - name: Publish charts + snapshot to release-stats-data branch
@@ -49,7 +50,6 @@ jobs:
           files=(
             docs/assets/release-downloads-by-platform.svg
             docs/assets/release-downloads-by-version.svg
-            docs/assets/release-downloads-totals.svg
             docs/assets/release-downloads.md
             docs/assets/release-downloads-history.jsonl
           )
