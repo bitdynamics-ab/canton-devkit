@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, fetchInstance, type Instance, type Role } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { ROLE_COLOR, W, wMono } from "../tokens";
+import { ROLE_COLOR, W, wMono, tint } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcAlert, IcRefresh } from "../components/icons";
 
@@ -155,8 +155,8 @@ export function WalletScreen() {
           users don't have to dig through env files. */}
       <div
         style={{
-          background: `${W.brand}10`,
-          border: `1px solid ${W.brand}40`,
+          background: `${tint(W.brand, 6)}`,
+          border: `1px solid ${tint(W.brand, 25)}`,
           borderRadius: 4,
           padding: "10px 14px",
           display: "flex",
@@ -407,7 +407,7 @@ function RoleAvatar({ role }: { role: Role }) {
         height: 36,
         borderRadius: "50%",
         background: `linear-gradient(135deg, ${color}, ${W.brand})`,
-        color: "#0B0F1A",
+        color: W.onAccent,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -429,7 +429,7 @@ function RoleAvatarMini({ role }: { role: Role }) {
         height: 16,
         borderRadius: "50%",
         background: `linear-gradient(135deg, ${color}, ${W.brand})`,
-        color: "#0B0F1A",
+        color: W.onAccent,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -452,7 +452,7 @@ function Pill({ children }: { children: React.ReactNode }) {
         borderRadius: 2,
         fontSize: 10.5,
         fontFamily: wMono,
-        background: `${W.border}40`,
+        background: `${tint(W.border, 25)}`,
       }}
     >
       {children}

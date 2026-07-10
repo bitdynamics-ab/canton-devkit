@@ -11,7 +11,7 @@ import {
   type DARPackageInspect,
   type Role,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, tint } from "../tokens";
 import { IcChevronDown, IcChevronRight } from "../components/icons";
 
 interface Props {
@@ -301,7 +301,7 @@ function Chip({
   kind: "choice" | "method";
 }) {
   const tone =
-    kind === "choice" ? { bg: `${W.brand}1A`, fg: W.brand } : { bg: "#8FA3EE22", fg: "#8FA3EE" };
+    kind === "choice" ? { bg: `${tint(W.brand, 10)}`, fg: W.brand } : { bg: "#8FA3EE22", fg: "#8FA3EE" };
   return (
     <span
       style={{

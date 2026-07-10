@@ -6,7 +6,7 @@ import {
   type TransactionEvent,
   type TransactionRow,
 } from "../api";
-import { W, wMono, tableCaps } from "../tokens";
+import { W, wMono, tableCaps, tint } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcPlus, IcRefresh } from "../components/icons";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
@@ -77,7 +77,7 @@ export function Dashboard() {
             <div
               role="status"
               style={{
-                background: `${W.dim}1A`,
+                background: `${tint(W.dim, 10)}`,
                 border: `1px solid ${W.dim}`,
                 color: W.dim,
                 borderRadius: 4,
@@ -92,7 +92,7 @@ export function Dashboard() {
           {sel.warning && (
             <div
               style={{
-                background: `${W.warn}1A`,
+                background: `${tint(W.warn, 10)}`,
                 border: `1px solid ${W.warn}`,
                 color: W.warn,
                 borderRadius: 4,
@@ -284,7 +284,7 @@ function ErrorPanel({ error }: { error: string }) {
   return (
     <div
       style={{
-        background: `${W.err}1A`,
+        background: `${tint(W.err, 10)}`,
         border: `1px solid ${W.err}`,
         borderRadius: 4,
         padding: 16,

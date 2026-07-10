@@ -299,7 +299,7 @@ function ChipRow({ options, value, onChange }: ChipRowProps) {
           onClick={() => onChange(opt)}
           style={{
             background: opt === value ? W.brand : W.surface2,
-            color: opt === value ? "#0B0F1A" : W.text2,
+            color: opt === value ? W.onAccent : W.text2,
             border: `1px solid ${opt === value ? W.brand : W.border}`,
             borderRadius: 2,
             padding: "4px 10px",

@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { W, wMono, wSans } from "../tokens";
+import { W, wMono, wSans, tint } from "../tokens";
 import { useInstanceSelection } from "./useInstanceSelection";
 import { NAV, isInstanceScoped, linkTo } from "./routes";
 
@@ -41,6 +41,14 @@ const NAV_ACTIONS: Array<Omit<Action, "perform"> & { path: string }> = NAV.map(
   }),
 );
 
+// openPalette lets non-keyboard callers (the topbar "Commands" button)
+// open the palette. It dispatches an event the mounted CommandPalette
+// listens for, so the open state stays owned by the component.
+const OPEN_EVENT = "cdk-open-palette";
+export function openPalette(): void {
+  window.dispatchEvent(new CustomEvent(OPEN_EVENT));
+}
+
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -67,8 +75,15 @@ export function CommandPalette() {
         setOpen(false);
       }
     }
+    function onOpen() {
+      setOpen(true);
+    }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener(OPEN_EVENT, onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(OPEN_EVENT, onOpen);
+    };
   }, [open]);
 
   // Auto-focus the input when the palette opens; reset query +
@@ -260,7 +275,7 @@ function renderGroups(
             gap: 12,
             width: "100%",
             padding: "8px 12px",
-            background: isCursor ? `${W.brand}1A` : "transparent",
+            background: isCursor ? `${tint(W.brand, 10)}` : "transparent",
             border: "none",
             borderRadius: 2,
             color: W.text,

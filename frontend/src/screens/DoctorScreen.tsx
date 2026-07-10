@@ -7,7 +7,7 @@ import {
   fetchDoctor,
   fetchSpliceVersions,
 } from "../api";
-import { W, wMono, wideCaps } from "../tokens";
+import { W, wMono, wideCaps, tint } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcAlert, IcCheck, IcRefresh, IcX } from "../components/icons";
 
@@ -91,7 +91,7 @@ export function DoctorScreen() {
           style={{
             marginTop: 16,
             padding: "12px 14px",
-            background: `${W.err}1A`,
+            background: `${tint(W.err, 10)}`,
             border: `1px solid ${W.err}`,
             borderRadius: 4,
             color: W.err,

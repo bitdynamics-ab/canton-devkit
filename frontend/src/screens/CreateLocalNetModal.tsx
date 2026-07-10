@@ -13,7 +13,7 @@ import {
   type PreflightReport,
   type SpliceVersionEntry,
 } from "../api";
-import { W, wMono, wSans } from "../tokens";
+import { W, wMono, wSans, tint } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcAlert, IcCheck, IcStop, IcX } from "../components/icons";
 import { remediationForCode } from "./remediation";
@@ -558,7 +558,7 @@ function FormBody({
               fontSize: 10.5,
               padding: "1px 6px",
               borderRadius: 2,
-              background: `${W.brand}1A`,
+              background: `${tint(W.brand, 10)}`,
               color: W.brand,
               fontFamily: wMono,
             }}
@@ -603,7 +603,7 @@ function FormBody({
               fontSize: 10.5,
               padding: "1px 6px",
               borderRadius: 2,
-              background: `${W.brand}1A`,
+              background: `${tint(W.brand, 10)}`,
               color: W.brand,
               fontFamily: wMono,
             }}
@@ -623,7 +623,7 @@ function FormBody({
               style={{
                 marginTop: 8,
                 padding: "6px 8px",
-                background: `${W.warn}15`,
+                background: `${tint(W.warn, 8)}`,
                 border: `1px solid ${W.warn}`,
                 borderRadius: 2,
                 fontSize: 11.5,
@@ -666,7 +666,7 @@ function FormBody({
               fontSize: 10.5,
               padding: "1px 6px",
               borderRadius: 2,
-              background: `${W.brand}1A`,
+              background: `${tint(W.brand, 10)}`,
               color: W.brand,
               fontFamily: wMono,
             }}
@@ -823,8 +823,8 @@ function ProgressBody({
         <div
           key={i}
           style={{
-            background: `${W.warn}1A`,
-            border: `1px solid ${W.warn}44`,
+            background: `${tint(W.warn, 10)}`,
+            border: `1px solid ${tint(W.warn, 27)}`,
             color: W.warn,
             borderRadius: 2,
             padding: "6px 10px",
@@ -903,7 +903,7 @@ function ErrorBody({
       role="alert"
       style={{
         padding: "20px 22px",
-        background: `${W.err}10`,
+        background: `${tint(W.err, 6)}`,
         color: W.text,
       }}
     >
@@ -935,9 +935,9 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
       <div
         style={{
           padding: "8px 12px",
-          background: `${W.brand}10`,
+          background: `${tint(W.brand, 6)}`,
           color: W.brand,
-          border: `1px solid ${W.brand}44`,
+          border: `1px solid ${tint(W.brand, 27)}`,
           borderRadius: 2,
           fontSize: 12,
           fontFamily: wMono,
@@ -954,7 +954,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
       <div
         style={{
           padding: "10px 14px",
-          background: `${W.ok}1A`,
+          background: `${tint(W.ok, 10)}`,
           color: W.ok,
           border: `1px solid ${W.ok}`,
           borderRadius: 2,
@@ -974,7 +974,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
       <div
         style={{
           padding: "10px 14px",
-          background: `${W.err}10`,
+          background: `${tint(W.err, 6)}`,
           color: W.err,
           border: `1px solid ${W.err}`,
           borderRadius: 2,
@@ -1019,7 +1019,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
     <div
       style={{
         padding: "10px 14px",
-        background: `${W.warn}1A`,
+        background: `${tint(W.warn, 10)}`,
         color: W.warn,
         border: `1px solid ${W.warn}`,
         borderRadius: 2,
@@ -1331,9 +1331,9 @@ function PreflightPanel({ state }: { state: PreflightState }) {
       <div
         style={{
           padding: "6px 10px",
-          background: `${W.ok}14`,
+          background: `${tint(W.ok, 8)}`,
           color: W.ok,
-          border: `1px solid ${W.ok}44`,
+          border: `1px solid ${tint(W.ok, 27)}`,
           borderRadius: 2,
           fontSize: 11.5,
           fontFamily: wMono,

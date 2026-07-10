@@ -10,7 +10,7 @@ import {
   type DARDiffResponse,
   type Role,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, tint } from "../tokens";
 import {
   IcArrowRight,
   IcChevronDown,
@@ -248,11 +248,11 @@ function toneColour(t: Tone): { bg: string; fg: string } {
     case "add":
       return { bg: "#7CC89A22", fg: "#7CC89A" };
     case "rm":
-      return { bg: `${W.err}22`, fg: W.err };
+      return { bg: `${tint(W.err, 13)}`, fg: W.err };
     case "chg":
-      return { bg: `${W.warn}22`, fg: W.warn };
+      return { bg: `${tint(W.warn, 13)}`, fg: W.warn };
     case "info":
-      return { bg: `${W.brand}1A`, fg: W.brand };
+      return { bg: `${tint(W.brand, 10)}`, fg: W.brand };
   }
 }
 
