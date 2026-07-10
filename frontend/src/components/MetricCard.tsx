@@ -1,27 +1,18 @@
 import type { Point } from "./charts/types";
 import { Sparkline } from "./charts/Sparkline";
 import { IcArrowUp } from "./icons";
-import { W, wMono, wideCaps } from "../tokens";
+import { W, wMono, wideCaps, R } from "../tokens";
 
-// MetricCard — the 4-up strip at the top of the Metrics screen.
-// One headline number + a delta vs the prior window + an inline
-// sparkline so the value reads against its trend.
-//
-// Loading and error states are first-class — when the upstream
-// PromQL fetch is in flight the card shows a skeleton; when it
-// fails the card shows the error without taking down the whole
-// grid.
+// Headline number + delta vs prior window + inline sparkline.
 
 export interface MetricCardProps {
   title: string;
   unit?: string;
-  /** Current value (the big number). undefined → loading. */
+  /** undefined → loading. */
   value: number | undefined;
   /** Delta vs prior window. undefined hides the badge. */
   delta?: number;
-  /** "up arrow good" or "down arrow good" — affects delta colour. */
   deltaPolarity?: "up-is-good" | "down-is-good" | "neutral";
-  /** Tiny chart embedded in the card. */
   sparkline?: Point[];
   sparklineColor?: string;
   /** When set, replaces the value + sparkline with the error message. */
@@ -56,14 +47,13 @@ export function MetricCard({
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 14,
         display: "flex",
         flexDirection: "column",
         minWidth: 0,
       }}
     >
-      {/* Stat label row — label left, delta chip right (>=8px apart). */}
       <div
         style={{
           display: "flex",
@@ -87,6 +77,7 @@ export function MetricCard({
             style={{
               fontFamily: wMono,
               fontSize: 11,
+              fontVariantNumeric: "tabular-nums",
               color: deltaColor,
               fontWeight: 600,
               display: "inline-flex",
@@ -131,6 +122,7 @@ export function MetricCard({
                   fontWeight: 600,
                   lineHeight: 1.1,
                   fontFamily: wMono,
+                  fontVariantNumeric: "tabular-nums",
                 }}
               >
                 —
@@ -143,6 +135,7 @@ export function MetricCard({
                     fontSize: 26,
                     fontWeight: 600,
                     fontFamily: wMono,
+                    fontVariantNumeric: "tabular-nums",
                     lineHeight: 1,
                   }}
                 >
@@ -181,7 +174,7 @@ function Skeleton({
         width,
         height,
         background: W.border,
-        borderRadius: 2,
+        borderRadius: R.control,
         opacity: 0.4,
       }}
     />

@@ -5,13 +5,11 @@ import (
 	"testing"
 )
 
-// TestSummaryQueries_AllHeadlinesPresent pins the curated map's
-// membership: adding/removing a Headline is a wire-breaking change
-// to the JSON shape both CLI and Web UI emit, so the set should be
-// reviewed deliberately, not changed by accident.
+// Membership change = wire-breaking JSON change; pin it so it's deliberate.
 func TestSummaryQueries_AllHeadlinesPresent(t *testing.T) {
 	want := []Headline{
 		HeadlineLedgerTPS,
+		HeadlineMediatorAvg,
 		HeadlineMediatorP50,
 		HeadlineMediatorP95,
 		HeadlineMediatorP99,
@@ -29,10 +27,6 @@ func TestSummaryQueries_AllHeadlinesPresent(t *testing.T) {
 	}
 }
 
-// TestLatencyQuantiles_WellFormed: the three histogram_quantile
-// queries must share the same bucket source (so a percentile-vs-
-// percentile comparison is meaningful) and pin the requested
-// quantile.
 func TestLatencyQuantiles_WellFormed(t *testing.T) {
 	cases := []struct {
 		h    Headline
@@ -47,14 +41,31 @@ func TestLatencyQuantiles_WellFormed(t *testing.T) {
 		if !strings.HasPrefix(q, c.want) {
 			t.Errorf("query for %s = %q, want prefix %q", c.h, q, c.want)
 		}
-		// All three percentiles must share the same bucket source so a
-		// p50/p95/p99 comparison is meaningful (mixing histogram
-		// families would silently render incomparable numbers).
+		// Same bucket source across all three, else the percentiles are incomparable.
 		if !strings.Contains(q, "daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[5m]") {
 			t.Errorf("query for %s must share the sequencer submission-duration histogram; got %q", c.h, q)
 		}
 		if !strings.Contains(q, "by (le)") {
 			t.Errorf("query for %s missing `by (le)` grouping needed by histogram_quantile; got %q", c.h, q)
 		}
+	}
+}
+
+// The avg must be the histogram mean (_sum/_count), which stays exact when
+// the percentiles go NaN on +Inf-only buckets — never a histogram_quantile.
+func TestMediatorAvg_UsesSumOverCount(t *testing.T) {
+	q := SummaryQueries[HeadlineMediatorAvg]
+	base := "daml_sequencer_client_submissions_sequencing_duration_seconds"
+	if !strings.Contains(q, base+"_sum") {
+		t.Errorf("avg query must rate the histogram's _sum series; got %q", q)
+	}
+	if !strings.Contains(q, base+"_count") {
+		t.Errorf("avg query must divide by the histogram's _count series; got %q", q)
+	}
+	if !strings.Contains(q, "/") {
+		t.Errorf("avg query must be a _sum/_count ratio; got %q", q)
+	}
+	if strings.Contains(q, "histogram_quantile") {
+		t.Errorf("avg query must not use histogram_quantile (that is NaN on +Inf-only histograms); got %q", q)
 	}
 }

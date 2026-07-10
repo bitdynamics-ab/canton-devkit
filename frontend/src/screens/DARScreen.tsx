@@ -14,8 +14,10 @@ import {
   type Role,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { W, wMono, tableCaps } from "../tokens";
+import { W, wMono, tableCaps, R, tint } from "../tokens";
 import { Button } from "../components/Button";
+import { MonoId } from "../components/MonoId";
+import { SkeletonTable, useLoadingDelay } from "../components/Skeleton";
 import {
   Dot,
   IcAlert,
@@ -27,19 +29,9 @@ import {
 import { DARPackageTree } from "./DARPackageTree";
 import { DARDiff } from "./DARDiff";
 
-// DARScreen — three-column DAR manager:
-//   LEFT (320px)   drag-drop upload + per-participant vetting toggles
-//                  + Watch-mode card
-//   MIDDLE         package list (Package · Version · Package-id ·
-//                  Vetting)
-//   RIGHT (360px)  inspect drawer with package tree / structural diff
-//
-// Vetting is live end-to-end: the package-list column (VettingCell)
-// and the inspect-drawer toggles (VettingPanel) both read
-// per-participant state from GET …/dar/{id}/vetting and POST to the
-// vet/unvet endpoint. The Watch-mode card reflects SSE events from a
-// `dpm localnet dar watch` process when one is running, and stays
-// "Idle" otherwise.
+// Three-column DAR manager: upload + vetting + watch (left), package
+// list (middle), inspect tree / structural diff (right). Vetting is
+// live per-participant end-to-end.
 
 const ROLES: Role[] = ["app-user", "app-provider", "sv"];
 
@@ -54,11 +46,8 @@ export function DARScreen() {
   const sel = useInstanceSelection();
   const name = sel.selected;
   const [role, setRole] = useState<Role>("app-user");
-  // Which participants an upload fans out to (the backend dials each in
-  // parallel). Default ON for all three so "vet everywhere" is one
-  // drag-and-drop. Orthogonal to `role`, which drives the package LIST:
-  // the user can read one participant's packages while uploading to a
-  // different subset.
+  // Participants an upload fans out to (parallel, backend-side).
+  // Orthogonal to `role`, which drives only the package LIST.
   const [vetTargets, setVetTargets] = useState<Record<Role, boolean>>({
     "app-user": true,
     "app-provider": true,
@@ -74,17 +63,13 @@ export function DARScreen() {
     | { kind: "err"; error: string }
   >({ kind: "loading" });
   const [selectedHash, setSelectedHash] = useState<string | null>(null);
-  // Diff mode: a picked "compare with" target flips the right drawer
-  // from the inspect tree to DARDiff. Kept separate from selectedHash
-  // so the user can toggle the comparison off without losing their
+  // Separate from selectedHash so toggling the comparison off keeps the
   // primary selection.
   const [compareHash, setCompareHash] = useState<string | null>(null);
   const [upload, setUpload] = useState<UploadState>({ kind: "idle" });
   const [dragOver, setDragOver] = useState(false);
   const [filter, setFilter] = useState<"all" | "app">("all");
   const [tick, setTick] = useState(0); // bump to refetch after upload
-  // Per-participant vetting per listed DAR, keyed by main package id;
-  // populated lazily by the batch-fetch effect below.
   const [vetting, setVetting] = useState<Record<string, VetState>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -139,9 +124,7 @@ export function DARScreen() {
       });
       return;
     }
-    // Mirrors the backend's multipart cap (darUploadMax = 64 MiB in
-    // internal/ui/handlers/dar.go); reject client-side so an oversized
-    // DAR doesn't upload just to fail server-side.
+    // Mirrors the backend multipart cap (darUploadMax, dar.go).
     const MAX_DAR_BYTES = 64 * 1024 * 1024;
     const tooBig = arr.find((f) => f.size > MAX_DAR_BYTES);
     if (tooBig) {
@@ -181,7 +164,6 @@ export function DARScreen() {
     if (state.kind !== "ok") return [] as DARRow[];
     let list = state.data.dars;
     if (filter === "app") {
-      // Hide the canton/splice/daml system packages.
       list = list.filter(
         (d) =>
           !d.name.startsWith("canton-builtin-") &&
@@ -192,17 +174,12 @@ export function DARScreen() {
     return list;
   }, [state, filter]);
 
-  // Reset the vetting cache when the instance changes or the list is
-  // refetched. Keyed by main id, so a role switch — same DARs,
-  // different participant's list — reuses already-fetched verdicts.
   useEffect(() => {
     setVetting({});
   }, [name, tick]);
 
-  // Lazily fetch real per-participant vetting for each visible row (the
-  // endpoint fans out to all three participants server-side) so the
-  // list column reflects ledger state. Rows are marked "loading" in one
-  // batch before dispatch so re-renders never double-fetch.
+  // Lazily fetch per-participant vetting for each visible row; rows are
+  // marked "loading" in one batch so re-renders never double-fetch.
   const visibleMains = useMemo(() => rows.map((d) => d.main).join(","), [rows]);
   useEffect(() => {
     if (!name || state.kind !== "ok") return;
@@ -231,8 +208,7 @@ export function DARScreen() {
     return () => {
       cancelled = true;
     };
-    // visibleMains captures the row-set identity; vetting is read via
-    // the functional updater so it isn't a dependency (would loop).
+    // vetting read via functional updater to keep it out of the deps (would loop).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, state.kind, visibleMains]);
 
@@ -279,7 +255,7 @@ export function DARScreen() {
         <RoleSwitcher role={role} onChange={setRole} />
       </header>
 
-      {state.kind === "loading" && <Status>Loading DAR list…</Status>}
+      {state.kind === "loading" && <DARListLoading />}
       {state.kind === "err" && <ErrorPanel msg={state.error} />}
       {state.kind === "port-missing" && (
         <EmptyPanel
@@ -297,7 +273,6 @@ export function DARScreen() {
             alignItems: "start",
           }}
         >
-          {/* LEFT — upload + vetting + watch mode */}
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <Card>
               <div
@@ -323,15 +298,13 @@ export function DARScreen() {
                 aria-label="Drop DAR file here or click to choose"
                 style={{
                   margin: 14,
-                  border: `1.5px dashed ${dragOver ? W.brand : `${W.brand}55`}`,
-                  borderRadius: 4,
+                  border: `1px dashed ${dragOver ? W.brand : tint(W.brand, 33)}`,
+                  borderRadius: R.control,
                   padding: "22px 16px",
                   textAlign: "center",
-                  background: dragOver
-                    ? `${W.brand}1A`
-                    : `linear-gradient(180deg, ${W.brand}0A 0%, transparent 100%)`,
+                  background: dragOver ? tint(W.brand, 10) : "transparent",
                   cursor: "pointer",
-                  transition: "all 120ms",
+                  transition: "background-color 120ms, border-color 120ms",
                 }}
               >
                 {upload.kind === "uploading" ? (
@@ -359,7 +332,7 @@ export function DARScreen() {
                       Drop DAR here
                     </div>
                     <div style={{ color: W.dim, fontSize: 11.5 }}>
-                      or click to browse · multi-file ok
+                      or click to browse · multiple .dar accepted
                     </div>
                   </>
                 )}
@@ -448,7 +421,6 @@ export function DARScreen() {
 
           </div>
 
-          {/* MIDDLE — package list */}
           <div
             style={{
               background: W.surface,
@@ -468,7 +440,7 @@ export function DARScreen() {
             >
               <div>
                 <div
-                  style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}
+                  style={{ color: W.text, fontSize: 13, fontWeight: 600 }}
                 >
                   Packages on {role} participant
                 </div>
@@ -492,7 +464,6 @@ export function DARScreen() {
               </FilterBtn>
             </div>
 
-            {/* Column header */}
             <div
               style={{
                 display: "grid",
@@ -542,7 +513,6 @@ export function DARScreen() {
             </div>
           </div>
 
-          {/* RIGHT — inspect drawer / diff viewer */}
           <InspectDrawer
             row={selected}
             instance={name}
@@ -558,13 +528,10 @@ export function DARScreen() {
   );
 }
 
-// WatchModeCard subscribes to the DAR watch SSE stream and renders the
-// latest lifecycle event as a "Watching" badge with a last-rebuild
-// timer. With no events (no `dar watch` running) it stays "Idle".
+// Renders the latest DAR-watch SSE event as a "Watching"/"Idle" badge.
 function WatchModeCard({ instance }: { instance: string }) {
   const [last, setLast] = useState<DARWatchEvent | null>(null);
   const [active, setActive] = useState(false);
-  // Re-render every 10s so the "ago" label stays fresh.
   const [, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -598,14 +565,18 @@ function WatchModeCard({ instance }: { instance: string }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span
             style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
               padding: "2px 8px",
-              borderRadius: 2,
+              borderRadius: R.control,
               fontSize: 12,
-              background: active ? "#7CC89A22" : W.border,
-              color: active ? "#7CC89A" : W.dim,
+              background: active ? tint(W.ok, 13) : W.border,
+              color: active ? W.ok : W.dim,
               fontWeight: 500,
             }}
           >
+            <Dot color={active ? W.ok : W.dim} size={6} pulse={active} />
             {active ? "Watching" : "Idle"}
           </span>
           {last && (
@@ -639,8 +610,6 @@ function WatchModeCard({ instance }: { instance: string }) {
   );
 }
 
-// formatAgo renders a "X ago" label for a unix-second delta; bands
-// finer than 5s read as noise on this card.
 function formatAgo(deltaSec: number): string {
   if (deltaSec < 5) return "just now";
   if (deltaSec < 60) return `${Math.floor(deltaSec)}s ago`;
@@ -649,8 +618,7 @@ function formatAgo(deltaSec: number): string {
   return `${Math.floor(deltaSec / 86400)}d ago`;
 }
 
-// VetState is the per-row vetting cell state; undefined means not yet
-// requested.
+// undefined means not yet requested.
 type VetState =
   | { kind: "loading" }
   | { kind: "ok"; rows: DARVettingRow[] }
@@ -676,11 +644,10 @@ function PkgRow({
         gap: 14,
         padding: "10px 14px",
         alignItems: "center",
-        background: active ? `${W.brand}10` : "transparent",
-        borderLeft: active ? `2px solid ${W.brand}` : "2px solid transparent",
-        paddingLeft: active ? 12 : 14,
+        background: active ? tint(W.brand, 12) : "transparent",
         borderBottom: `1px solid ${W.border}`,
         cursor: "pointer",
+        transition: "background-color 120ms",
       }}
     >
       <code
@@ -697,31 +664,24 @@ function PkgRow({
       >
         {row.name}
       </code>
-      <code style={{ fontFamily: wMono, color: W.brand, fontSize: 11.5 }}>
-        {row.version}
-      </code>
       <code
         style={{
           fontFamily: wMono,
-          color: W.dim,
-          fontSize: 11,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
+          color: W.brand,
+          fontSize: 11.5,
+          fontVariantNumeric: "tabular-nums",
         }}
-        title={row.main}
       >
-        {row.main.slice(0, 12)}…{row.main.slice(-6)}
+        {row.version}
       </code>
+      <MonoId value={row.main} head={12} tail={6} size={11} color={W.dim} />
       <VettingCell vet={vet} />
     </div>
   );
 }
 
-// VettingCell renders per-participant vetting for one DAR as a compact
-// "U P S" trio of dots — green vetted, grey unvetted, amber "?" when
-// that participant couldn't be probed. Matches the CLI `dar list
-// --vetting` column and the inspect-drawer toggles.
+// Per-participant vetting as a "U P S" dot trio: green vetted, grey
+// unvetted, amber "?" when a participant couldn't be probed.
 function VettingCell({ vet }: { vet: VetState | undefined }) {
   if (!vet || vet.kind === "loading") {
     return (
@@ -751,7 +711,7 @@ function VettingCell({ vet }: { vet: VetState | undefined }) {
       {vet.rows.map((r) => {
         const abbr =
           r.role === "app-user" ? "U" : r.role === "app-provider" ? "P" : "S";
-        const color = r.error ? W.warn : r.vetted ? "#7CC89A" : W.dim;
+        const color = r.error ? W.warn : r.vetted ? W.ok : W.dim;
         const title = r.error
           ? `${r.role}: ${r.error}`
           : `${r.role}: ${r.vetted ? "vetted" : "not vetted"}`;
@@ -794,14 +754,16 @@ function InspectDrawer({
         style={{
           background: W.surface,
           border: `1px solid ${W.border}`,
-          borderRadius: 4,
-          padding: 32,
-          textAlign: "center",
+          borderRadius: R.card,
+          padding: 14,
+          textAlign: "left",
           color: W.dim,
           fontSize: 13,
+          lineHeight: 1.5,
         }}
       >
-        Select a package to inspect.
+        Select a package to inspect its tree, per-participant vetting, and
+        structural diff.
       </div>
     );
   }
@@ -816,7 +778,7 @@ function InspectDrawer({
     >
       <header style={{ padding: "14px 16px", borderBottom: `1px solid ${W.border}` }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-          <span style={{ color: W.text, fontWeight: 600, fontSize: 14 }}>
+          <span style={{ color: W.text, fontWeight: 600, fontSize: 13 }}>
             {row.name}
           </span>
           <span style={{ color: W.brand, fontWeight: 400, fontSize: 12, fontFamily: wMono }}>
@@ -830,7 +792,18 @@ function InspectDrawer({
         )}
       </header>
       <Section label="Identity">
-        <KV label="pkg-id" value={row.main} mono color="#93A7F0" />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "70px 1fr",
+            gap: 12,
+            padding: "4px 0",
+            alignItems: "center",
+          }}
+        >
+          <span style={{ color: W.dim, fontSize: 12 }}>pkg-id</span>
+          <MonoId value={row.main} head={10} tail={8} size={11} color={W.mag} />
+        </div>
         <KV label="name" value={row.name} mono />
         <KV label="version" value={row.version} mono />
         {row.description && (
@@ -873,9 +846,7 @@ function InspectDrawer({
   );
 }
 
-// CompareSelector renders a small "compare with…" dropdown of every
-// DAR currently visible in the list (excluding the active one).
-// Picking a target flips the drawer into diff mode.
+// "compare with…" dropdown; picking a target flips the drawer to diff mode.
 function CompareSelector({
   allRows,
   currentMain,
@@ -919,10 +890,8 @@ function CompareSelector({
   );
 }
 
-// VettingPanel renders the per-participant vetting state for one
-// DAR and lets the user toggle each. Loads on mount, refetches after
-// every successful toggle so the UI never shows a stale "vetted=true"
-// after an UnvetDar succeeded.
+// Per-participant vetting toggles; refetches after each successful
+// toggle so state never goes stale.
 function VettingPanel({
   instance,
   mainID,
@@ -1014,14 +983,14 @@ function VettingPanel({
                 border: "none",
                 padding: 0,
                 cursor: pending === r.role ? "wait" : "pointer",
-                color: r.vetted ? "#7CC89A" : W.dim,
+                color: r.vetted ? W.ok : W.dim,
               }}
             >
               <span
                 style={{
                   width: 22,
                   height: 12,
-                  background: r.vetted ? "#7CC89A" : "#313B52",
+                  background: r.vetted ? W.ok : W.borderHi,
                   borderRadius: 999,
                   position: "relative",
                   flexShrink: 0,
@@ -1091,10 +1060,8 @@ function UploadProgress({
   );
 }
 
-// UploadResultBanner renders the per-participant outcome of a
-// multi-target upload. Partial failures still return 200 from the
-// backend, so they land here (not the error banner) and the user sees
-// what landed and what didn't.
+// Per-participant outcome of a multi-target upload. Partial failures
+// still return 200, so they land here, not the error banner.
 function UploadResultBanner({
   kind,
   total,
@@ -1109,14 +1076,14 @@ function UploadResultBanner({
   const heading =
     kind === "success"
       ? `Uploaded ${total} package${total === 1 ? "" : "s"} to ${okCount} participant${okCount === 1 ? "" : "s"}. Refreshing list…`
-      : `Partial upload — ${okCount}/${results.length} participant${results.length === 1 ? "" : "s"} succeeded`;
+      : `Partial upload. ${okCount}/${results.length} participant${results.length === 1 ? "" : "s"} succeeded.`;
   return (
     <div
       role={kind === "success" ? "status" : "alert"}
       style={{
-        background: `${accent}10`,
+        background: tint(accent, 10),
         border: `1px solid ${accent}`,
-        borderRadius: 2,
+        borderRadius: R.control,
         padding: "8px 12px",
         fontSize: 12,
         color: W.text2,
@@ -1175,7 +1142,7 @@ function ErrorBanner({ msg }: { msg: string }) {
     <div
       role="alert"
       style={{
-        background: `${W.err}10`,
+        background: `${tint(W.err, 6)}`,
         border: `1px solid ${W.err}`,
         borderRadius: 2,
         padding: "8px 12px",
@@ -1212,16 +1179,16 @@ function RoleSwitcher({
             key={r}
             onClick={() => onChange(r)}
             style={{
-              background: active ? W.surface : "transparent",
-              color: active ? W.text : W.dim,
+              background: active ? tint(W.brand, 16) : "transparent",
+              color: active ? W.brand : W.dim,
               border: "none",
-              borderRadius: 2,
+              borderRadius: R.control,
               padding: "5px 12px",
               fontSize: 12,
               fontFamily: wMono,
               fontWeight: active ? 600 : 500,
               cursor: active ? "default" : "pointer",
-              boxShadow: active ? `0 0 0 1px ${W.brand}` : "none",
+              transition: "background-color 120ms",
             }}
           >
             {r}
@@ -1267,7 +1234,7 @@ function VetToggle({
         style={{
           width: 24,
           height: 14,
-          background: on ? W.brand : "#313B52",
+          background: on ? W.brand : W.borderHi,
           borderRadius: 999,
           position: "relative",
           flexShrink: 0,
@@ -1309,7 +1276,7 @@ function FilterBtn({
         fontSize: 11.5,
         borderRadius: 2,
         border: `1px solid ${active ? W.brand : W.border}`,
-        background: active ? `${W.brand}1A` : "transparent",
+        background: active ? `${tint(W.brand, 10)}` : "transparent",
         color: active ? W.brand : W.dim,
         cursor: "pointer",
         fontFamily: wMono,
@@ -1320,8 +1287,6 @@ function FilterBtn({
     </button>
   );
 }
-
-// ─── Tiny shared primitives ─────────────────────────────────
 
 function Card({
   title,
@@ -1383,8 +1348,8 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     <div
       style={{
         color: W.dim,
-        fontSize: 12,
-        fontWeight: 500,
+        fontSize: 10.5,
+        ...tableCaps,
       }}
     >
       {children}
@@ -1418,7 +1383,8 @@ function KV({
           color: color ?? W.text2,
           fontSize: mono ? 11 : 12,
           fontFamily: mono ? wMono : undefined,
-          wordBreak: "break-all",
+          fontVariantNumeric: mono ? "tabular-nums" : undefined,
+          wordBreak: "break-word",
         }}
       >
         {value}
@@ -1451,19 +1417,38 @@ function Row({
   );
 }
 
-function Status({ children }: { children: React.ReactNode }) {
+// Package-list skeleton, gated so a fast local fetch never flashes it.
+function DARListLoading() {
+  const show = useLoadingDelay(true);
   return (
     <div
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
-        padding: 16,
-        color: W.dim,
-        fontSize: 13,
+        borderRadius: R.card,
+        overflow: "hidden",
       }}
     >
-      {children}
+      <div
+        style={{
+          padding: "11px 14px",
+          borderBottom: `1px solid ${W.border}`,
+          color: W.dim,
+          fontSize: 12,
+        }}
+      >
+        Loading package list
+      </div>
+      {show ? (
+        <SkeletonTable
+          columns={[1.6, 0.6, 1, 0.8]}
+          rows={5}
+          rowHeight={40}
+          label="Loading package list"
+        />
+      ) : (
+        <div style={{ height: 200 }} />
+      )}
     </div>
   );
 }
@@ -1495,7 +1480,7 @@ function EmptyPanel({
   return (
     <div
       style={{
-        background: `${W.warn}10`,
+        background: `${tint(W.warn, 6)}`,
         border: `1px solid ${W.warn}`,
         borderRadius: 4,
         padding: 20,

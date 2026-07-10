@@ -1,11 +1,5 @@
-// The single icon system for the Web UI — 16×16 stroke glyphs drawn
-// with currentColor so they inherit the text color of whatever they
-// sit in. Replaces the mixed emoji/unicode controls (⚡ 🔥 ⏸ ↻ …)
-// that read as prototype polish.
-//
-// Usage: <IcPause /> inside a Button icon slot, or standalone with
-// size/style overrides. All icons are aria-hidden decoration; the
-// accessible name belongs to the surrounding control.
+// 16×16 stroke glyphs on currentColor. All icons are aria-hidden
+// decoration; the accessible name belongs to the surrounding control.
 
 import type { CSSProperties, ReactNode } from "react";
 
@@ -148,7 +142,92 @@ export const IcDroplet = (p: IconProps) => (
   </I>
 );
 
-/** Status dot — the only full-radius element in the system. */
+export const IcOverview = (p: IconProps) => (
+  <I {...p}>
+    <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" />
+    <rect x="9" y="2.5" width="4.5" height="4.5" rx="1" />
+    <rect x="2.5" y="9" width="4.5" height="4.5" rx="1" />
+    <rect x="9" y="9" width="4.5" height="4.5" rx="1" />
+  </I>
+);
+
+export const IcDoctor = (p: IconProps) => (
+  <I {...p}>
+    <path d="M1.5 8h3l1.5-4 3 8 1.5-4h3" />
+  </I>
+);
+
+export const IcWallet = (p: IconProps) => (
+  <I {...p}>
+    <rect x="2" y="3.5" width="12" height="9" rx="1.5" />
+    <path d="M2 6.5h12" />
+    <circle cx="11" cy="9.5" r="0.75" fill="currentColor" stroke="none" />
+  </I>
+);
+
+export const IcExplorer = (p: IconProps) => (
+  <I {...p}>
+    <circle cx="7" cy="7" r="4.5" />
+    <path d="M10.5 10.5 14 14" />
+  </I>
+);
+
+export const IcPackage = (p: IconProps) => (
+  <I {...p}>
+    <path d="M8 1.8 13.5 5v6L8 14.2 2.5 11V5L8 1.8Z" />
+    <path d="M2.5 5 8 8.2 13.5 5M8 8.2V14.2" />
+  </I>
+);
+
+export const IcMetrics = (p: IconProps) => (
+  <I {...p}>
+    <path d="M2.5 2.5v11h11" />
+    <path d="M5 10.5 7.5 7l2 2 3-4.5" />
+  </I>
+);
+
+export const IcTokens = (p: IconProps) => (
+  <I {...p}>
+    <ellipse cx="8" cy="4.5" rx="5" ry="2.2" />
+    <path d="M3 4.5v6.5c0 1.2 2.24 2.2 5 2.2s5-1 5-2.2V4.5" />
+    <path d="M3 8c0 1.2 2.24 2.2 5 2.2s5-1 5-2.2" />
+  </I>
+);
+
+export const IcAgent = (p: IconProps) => (
+  <I {...p}>
+    <path d="M3 2.5h8.5A1.5 1.5 0 0 1 13 4v9.5H4.5A1.5 1.5 0 0 1 3 12V2.5Z" />
+    <path d="M3 11.5h10" />
+    <path d="M6 5.5h4M6 8h2.5" />
+  </I>
+);
+
+export const IcSun = (p: IconProps) => (
+  <I {...p}>
+    <circle cx="8" cy="8" r="3" />
+    <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M13 3l-1 1M4 12l-1 1" />
+  </I>
+);
+
+export const IcMoon = (p: IconProps) => (
+  <I {...p}>
+    <path d="M13 9.3A5.5 5.5 0 0 1 6.7 3a5.5 5.5 0 1 0 6.3 6.3Z" />
+  </I>
+);
+
+export const IcCommand = (p: IconProps) => (
+  <I {...p}>
+    <path d="M5.5 2.5A1.75 1.75 0 1 1 3.75 4.25H12.25A1.75 1.75 0 1 1 10.5 2.5v11a1.75 1.75 0 1 1 1.75-1.75H3.75A1.75 1.75 0 1 1 5.5 13.5v-11Z" />
+  </I>
+);
+
+export const IcBook = (p: IconProps) => (
+  <I {...p}>
+    <path d="M8 3.5C6.8 2.7 5 2.4 3 2.5v9c2-.1 3.8.2 5 1 1.2-.8 3-1.1 5-1v-9c-2-.1-3.8.2-5 1Z" />
+    <path d="M8 3.5v10" />
+  </I>
+);
+
 export function Dot({
   color,
   size = 6,

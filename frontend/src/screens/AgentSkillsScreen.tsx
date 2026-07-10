@@ -5,14 +5,12 @@ import {
   installSkills,
   type Skill,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, tint, FAST } from "../tokens";
 import { Button } from "../components/Button";
 import { IcAlert, IcCheck, IcX } from "../components/icons";
 
-// AgentSkillsScreen browses the bundled AI-agent skill docs (served by
-// /api/skills — the same embedded markdown the CLI `localnet skills`
-// command ships) and offers one-click install into ~/.claude/skills or
-// ~/.codex/skills. Both surfaces read internal/skills.
+// Browses the bundled agent skill docs and installs them into
+// ~/.claude/skills or ~/.codex/skills.
 export function AgentSkillsScreen() {
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -103,7 +101,6 @@ export function AgentSkillsScreen() {
     >
       <Header />
 
-      {/* Install bar */}
       <div
         style={{
           display: "flex",
@@ -181,7 +178,6 @@ export function AgentSkillsScreen() {
         )}
       </div>
 
-      {/* Two-pane: list | preview */}
       <div
         style={{
           flex: 1,
@@ -210,11 +206,11 @@ export function AgentSkillsScreen() {
                   width: "100%",
                   textAlign: "left",
                   padding: "10px 14px",
-                  background: isActive ? W.surface2 : "transparent",
+                  background: isActive ? tint(W.brand, 12) : "transparent",
                   border: "none",
-                  borderLeft: `2px solid ${isActive ? W.brand : "transparent"}`,
                   cursor: "pointer",
                   color: isActive ? W.text : W.text2,
+                  transition: `background-color ${FAST}`,
                 }}
               >
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{s.name}</div>
@@ -278,8 +274,8 @@ function Header() {
       </div>
       <div style={{ color: W.dim, fontSize: 12.5, marginTop: 3 }}>
         Safe `dpm localnet` workflows for AI agents. Same docs as the CLI
-        `localnet skills` command — install into your agent and let it
-        drive DevKit.
+        `localnet skills` command. Install into your agent and let it drive
+        DevKit.
       </div>
     </header>
   );

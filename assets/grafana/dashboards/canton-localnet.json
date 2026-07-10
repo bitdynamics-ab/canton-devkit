@@ -48,13 +48,15 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Sequencer Submission Latency (p95)",
+      "title": "Sequencer Submission Latency (avg)",
+      "description": "Mean sequencing time (sum/count). Stock Splice 0.6.4 exports this histogram with only the +Inf bucket, so histogram_quantile percentiles are NaN — the mean is the reliable figure. Add p50/p95 panels on Splice versions whose histograms carry finite le buckets.",
       "datasource": "Prometheus",
       "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
-          "legendFormat": "p95"
+          "expr": "sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_sum{instance=~\"$instance\"}[5m])) / sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_count{instance=~\"$instance\"}[5m]))",
+          "legendFormat": "avg"
         }
       ]
     },
@@ -110,25 +112,23 @@
     {
       "id": 13,
       "type": "timeseries",
-      "title": "Submission Sequencing Latency",
+      "title": "Submission Sequencing Latency (avg)",
+      "description": "Mean sequencing time per component (sum/count). histogram_quantile percentiles are NaN on stock Splice 0.6.4 — its histogram carries only the +Inf bucket.",
       "datasource": "Prometheus",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, component))",
-          "legendFormat": "p50 {{component}}"
-        },
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, component))",
-          "legendFormat": "p95 {{component}}"
+          "expr": "sum by (component) (rate(daml_sequencer_client_submissions_sequencing_duration_seconds_sum{instance=~\"$instance\"}[5m])) / sum by (component) (rate(daml_sequencer_client_submissions_sequencing_duration_seconds_count{instance=~\"$instance\"}[5m]))",
+          "legendFormat": "avg {{component}}"
         }
       ]
     },
     {
       "id": 14,
       "type": "stat",
-      "title": "ACS Lookup Buffer Length",
-      "description": "ACS-related index lookup buffer length across participants. Stock Splice 0.6.4 does not expose total active-contract cardinality as a Prometheus metric; use the Web UI Explorer / JSON API ACS lookup for exact active contract counts.",
+      "title": "ACS Lookup Buffer",
+      "description": "Active-contracts index buffer size across participants. Stock Splice 0.6.4 does not expose total active-contract cardinality as a Prometheus metric; use the Web UI Explorer / JSON API ACS lookup for exact active contract counts.",
       "datasource": "Prometheus",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
       "options": {
@@ -139,7 +139,7 @@
       },
       "targets": [
         {
-          "expr": "sum(daml_participant_api_index_db_active_contract_lookup_batch_buffer_length{instance=~\"$instance\"})",
+          "expr": "sum(daml_participant_api_index_active_contracts_buffer_size{instance=~\"$instance\"})",
           "legendFormat": "ACS lookup buffer"
         }
       ]

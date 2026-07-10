@@ -1,12 +1,8 @@
-/* Base styles. Components own their styling via tokens.ts; this file
-   holds only what CSS must own: font-face, body defaults, focus
-   rings, hover states, and keyframes. tokens.ts stays the single
-   source of truth for the palette. */
+/* Base styles + design-system token sheet: every semantic color as a
+   CSS variable with a dark default (:root) and light override
+   (:root[data-theme="light"]), resolved per-theme by tokens.ts W.*. */
 
-/* Canton Infrastructure Design System typefaces, self-hosted so the
-   UI renders identically offline (licenses in src/fonts/). Archivo
-   variable: body at 100% width, wide structural caps at 118%.
-   JetBrains Mono for code and all data values. */
+/* Typefaces self-hosted so the UI renders identically offline. */
 @font-face {
   font-family: "Archivo";
   src: url("./fonts/archivo.woff2") format("woff2-variations");
@@ -41,13 +37,65 @@
   font-display: swap;
 }
 
+/* Raw ramps (theme-independent). */
 :root {
-  color-scheme: dark;
-  --bg: #0b0f1a;
-  --text: #e9ecf4;
-  /* Motion — quick, damped, no bounce. */
+  --gray-25: #fcfcfd; --gray-50: #f7f8fa; --gray-100: #eff1f5;
+  --gray-200: #e2e5ec; --gray-300: #cdd2dd; --gray-400: #9ba3b5;
+  --gray-500: #6c7488; --gray-600: #4d5567; --gray-700: #384050;
+  --gray-800: #232a39; --gray-900: #141a28; --gray-950: #0b0f1a;
+  --blue-50: #eef1fd; --blue-100: #dce3fb; --blue-200: #bcc9f6;
+  --blue-300: #93a7f0; --blue-400: #6480e6; --blue-500: #5661db;
+  --blue-600: #2946ce; --blue-700: #2138a8; --blue-800: #1d2f85;
+  --blue-900: #1a2861; --blue-950: #101836;
+  --teal-300: #7bd2c6; --teal-500: #189e8c;
+  --green-500: #2e9e5b; --amber-500: #d89117; --red-500: #d24a38;
+
   --ease-out: cubic-bezier(0.2, 0.6, 0.2, 1);
   --duration-fast: 120ms;
+}
+
+/* Dark theme (default) — Carbon Slate. All pairs verified WCAG AA. */
+:root {
+  color-scheme: dark;
+  --bg-page: #0f1012; --bg-sunken: #0b0c0e; --bg-surface: #16171a;
+  --bg-raised: #1e1f23; --bg-inset: #101113;
+  --text-primary: #e4e5e8; --text-secondary: #aeb1b8;
+  --text-muted: #75787f; --text-faint: #6e7178;
+  --border-subtle: #1e1f23; --border-default: #2a2c31; --border-strong: #3a3d44;
+  --hover-tint: #1a1b1f; --active-tint: #212227;
+  --accent: #8b93f2; --accent-hover: #9aa1f5; --accent-active: #a6acf6;
+  --accent-subtle: #1b1d2e; --accent-muted: #23263c; --accent-text: #a6acf6;
+  --on-accent: #12121a;
+  --accent-solid: #4e57d6; --accent-solid-hover: #5a62de; --on-accent-solid: #ffffff;
+  --link: #a6acf6; --link-hover: #c0c4f9;
+  --ok-text: #5bc98c; --ok-bg: #0f2118; --ok-border: #1e3a2a;
+  --warn-text: #e8b24c; --warn-bg: #221a0b; --warn-border: #3e3115;
+  --danger-text: #f07b72; --danger-bg: #241210; --danger-border: #45201a;
+  --danger: #e5604f; --danger-hover: #f07b72;
+  --info-text: #a9baf2; --info-bg: #16182b; --info-border: #2a2e48;
+  --dot-grid: radial-gradient(circle at 1px 1px, #2a2c31 1px, transparent 1px);
+}
+
+/* Light theme — Carbon Slate. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-page: #fbfbfc; --bg-sunken: #f7f7f8; --bg-surface: #ffffff;
+  --bg-raised: #f4f5f6; --bg-inset: #eeeff1;
+  --text-primary: #1b1c1f; --text-secondary: #54575e;
+  --text-muted: #82868e; --text-faint: #8a8d95;
+  --border-subtle: #eeeff1; --border-default: #e1e3e6; --border-strong: #c6c9ce;
+  --hover-tint: #f4f5f6; --active-tint: #eeeff1;
+  --accent: #4a52c9; --accent-hover: #3d45be; --accent-active: #333ba8;
+  --accent-subtle: #eef0fd; --accent-muted: #dde0fa; --accent-text: #3d45be;
+  --on-accent: #ffffff;
+  --accent-solid: #4a52c9; --accent-solid-hover: #3d45be; --on-accent-solid: #ffffff;
+  --link: #4a52c9; --link-hover: #333ba8;
+  --ok-text: #157c45; --ok-bg: #edf7f0; --ok-border: #bce0c9;
+  --warn-text: #8a6410; --warn-bg: #fcf5e8; --warn-border: #ebd9a9;
+  --danger-text: #b93a2e; --danger-bg: #fbefed; --danger-border: #efc5bd;
+  --danger: #b93a2e; --danger-hover: #962e20;
+  --info-text: #3d45be; --info-bg: #eef0fd; --info-border: #bcc9f6;
+  --dot-grid: radial-gradient(circle at 1px 1px, #e2e5ec 1px, transparent 1px);
 }
 
 * {
@@ -60,13 +108,14 @@ body,
   margin: 0;
   padding: 0;
   height: 100%;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--bg-page);
+  color: var(--text-primary);
   font-family: "Archivo", -apple-system, "Segoe UI", "Helvetica Neue",
     Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button {
@@ -79,55 +128,82 @@ a {
   text-decoration: none;
 }
 
-/* a11y: keyboard focus rings.
- *
- * :focus-visible — only when the focus came from keyboard (Tab,
- * arrow keys) or programmatic .focus(). Mouse clicks don't paint
- * the ring, matching what sighted users expect from native UI.
- *
- * 2px cobalt outline (blue-500 — identical in light and dark per
- * the design system), offset 2px so it doesn't merge into the
- * element's own border. */
+::selection {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--text-primary);
+}
+
+/* Themed scrollbars — raised thumb on a transparent track. */
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* a11y: keyboard-only focus rings via :focus-visible; offset 2px so the
+   ring doesn't merge into the element's own border. */
 :focus {
   outline: none;
 }
 
 :focus-visible {
-  outline: 2px solid #3d5bdc;
+  outline: 2px solid var(--blue-500);
   outline-offset: 2px;
   border-radius: 2px;
 }
 
-/* Sidebar nav items (shell/Shell.tsx::Sidebar). Hover/active tints
- * live here because inline style objects can't express :hover.
- * Active = accent-subtle fill + accent text at 2px radius — the
- * design system's "current item" signature. */
+/* Sidebar nav items — hover/active tints live here since inline styles
+ * can't express :hover. */
 .side-nav-link {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 7px 10px;
   margin: 1px 0;
-  border-radius: 2px;
+  border-radius: 4px;
   font-size: 13px;
-  color: #a9b2c6;
+  color: var(--text-secondary);
   transition: background var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out);
 }
 
 .side-nav-link:hover {
-  background: #171e2c;
-  color: #e9ecf4;
+  background: var(--hover-tint);
+  color: var(--text-primary);
 }
 
 .side-nav-link.active,
 .side-nav-link.active:hover {
-  background: #141c36;
-  color: #93a7f0;
+  background: var(--accent-subtle);
+  color: var(--accent-text);
   font-weight: 500;
 }
 
-/* Button system (components/Button.tsx). Hover/active tints live
- * here because inline style objects can't express :hover. Values
- * are the dark-console tokens from tokens.ts. */
+.side-nav-link svg {
+  color: var(--text-faint);
+  flex: none;
+}
+.side-nav-link:hover svg {
+  color: var(--text-muted);
+}
+.side-nav-link.active svg {
+  color: var(--accent);
+}
+
+/* Button system (components/Button.tsx) — hover/active tints live here
+ * since inline styles can't express :hover. */
 .bd-btn {
   appearance: none;
   display: inline-flex;
@@ -167,50 +243,47 @@ a {
 }
 
 .bd-btn--primary {
-  background: #6480e6;
-  color: #0b0f1a;
+  background: var(--accent-solid);
+  color: var(--on-accent-solid);
 }
 .bd-btn--primary:hover:not(:disabled) {
-  background: #7b93ec;
+  background: var(--accent-solid-hover);
 }
 .bd-btn--primary:active:not(:disabled) {
-  background: #93a7f0;
+  background: var(--accent-active);
 }
 
 .bd-btn--secondary {
-  background: #10151f;
-  border-color: #232b3d;
-  color: #e9ecf4;
+  background: var(--bg-surface);
+  border-color: var(--border-default);
+  color: var(--text-primary);
 }
 .bd-btn--secondary:hover:not(:disabled) {
-  background: #171e2c;
-  border-color: #313b52;
+  background: var(--hover-tint);
+  border-color: var(--border-strong);
 }
 .bd-btn--secondary:active:not(:disabled) {
-  background: #1e2637;
+  background: var(--active-tint);
 }
 
 .bd-btn--ghost {
   background: transparent;
-  color: #a9b2c6;
+  color: var(--text-secondary);
 }
 .bd-btn--ghost:hover:not(:disabled) {
-  background: #171e2c;
-  color: #e9ecf4;
+  background: var(--hover-tint);
+  color: var(--text-primary);
 }
 .bd-btn--ghost:active:not(:disabled) {
-  background: #1e2637;
+  background: var(--active-tint);
 }
 
 .bd-btn--danger {
-  background: #d2604b;
+  background: var(--danger);
   color: #fff;
 }
 .bd-btn--danger:hover:not(:disabled) {
-  background: #e08d7d;
-}
-.bd-btn--danger:active:not(:disabled) {
-  background: #ba3a29;
+  background: var(--danger-hover);
 }
 
 .bd-btn__icon {
@@ -218,16 +291,14 @@ a {
   flex: none;
 }
 
-/* Skip-to-content link (shell/Shell.tsx::SkipLink). Visually
- * hidden until focused via Tab — first focusable element on the
- * page so a keyboard user can jump past the sidebar to the main
- * content. The .focus state pulls it on-screen. */
+/* Skip-to-content link — visually hidden until focused via Tab so a
+ * keyboard user can jump past the sidebar to main content. */
 .skip-link {
   position: absolute;
   top: -100px;
   left: 8px;
-  background: #6480e6;
-  color: #0b0f1a;
+  background: var(--accent-solid);
+  color: var(--on-accent-solid);
   padding: 8px 14px;
   font-weight: 600;
   border-radius: 2px;
@@ -241,20 +312,34 @@ a {
   outline: none;
 }
 
-/* Connection-health pill (shell/Shell.tsx::HealthPill). Pulses
-   when the topbar pill is in a degraded state. Kept here rather
-   than inline because @keyframes can't be expressed in a React
-   style object. */
+/* Connection-health pill pulse (shell/Shell.tsx::HealthPill). */
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
 
-/* Respect prefers-reduced-motion — the pulse is ambient and
-   not load-bearing for the state communication (color carries
-   the signal too). */
+/* Modal/overlay entrance (ConfirmDialog). */
+@keyframes cdk-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Skeleton shimmer (components/Skeleton), gated below by prefers-reduced-motion. */
+@keyframes cdk-shimmer {
+  0% { background-position: -180% 0; }
+  100% { background-position: 180% 0; }
+}
+
+/* prefers-reduced-motion: color still carries the state signal. */
 @media (prefers-reduced-motion: reduce) {
   @keyframes pulse {
     0%, 100% { opacity: 1; }
+  }
+  @keyframes cdk-shimmer {
+    0%, 100% { background-position: 0 0; }
+  }
+  @keyframes cdk-fade {
+    from { opacity: 1; }
+    to { opacity: 1; }
   }
 }
