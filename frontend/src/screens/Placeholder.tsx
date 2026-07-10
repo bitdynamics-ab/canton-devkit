@@ -1,6 +1,6 @@
 import { W, R } from "../tokens";
 
-// Route stub for screens whose backend hasn't landed yet.
+// 404 page for the `path="*"` catch-all — the only place this renders.
 export function Placeholder({ name }: { name: string }) {
   return (
     <div
@@ -17,8 +17,8 @@ export function Placeholder({ name }: { name: string }) {
         {name}
       </h2>
       <p style={{ margin: 0, fontSize: 13 }}>
-        Not implemented yet in this build. Pick another screen from the
-        sidebar or press ⌘K.
+        That route doesn’t exist. Pick another screen from the sidebar or
+        press ⌘K.
       </p>
     </div>
   );
