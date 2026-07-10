@@ -180,16 +180,18 @@ For general Canton and Daml questions, the
 
 ## Download statistics
 
-Release download counts for the public builds repo
-([`bitdynamics-ab/homebrew-canton-devkit`](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases)),
-which mirrors the release assets published here. Charts refresh daily via
+Release download counts aggregated from
+[`bitdynamics-ab/canton-devkit`](https://github.com/bitdynamics-ab/canton-devkit/releases)
+and
+[`bitdynamics-ab/homebrew-canton-devkit`](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases).
+Charts refresh daily via
 [`release-stats.yml`](.github/workflows/release-stats.yml); checksum
 files are excluded from the counts. Exact numbers:
 [release-downloads.md](https://github.com/bitdynamics-ab/canton-devkit/blob/release-stats-data/docs/assets/release-downloads.md).
 
 <img src="https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-by-version.svg" alt="Total downloads per release over time" width="720" />
 
-<img src="https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-by-platform.svg" alt="Downloads per platform per release over time" width="720" />
+<img src="https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-by-platform.svg" alt="All-time downloads per platform" width="720" />
 
 ## Contributing
 
