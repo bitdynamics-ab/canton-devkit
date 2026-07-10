@@ -1965,10 +1965,12 @@ func (r observabilityToggleRequest) resolveTargets() (prom, graf bool, ok bool) 
 //
 //	enabled=true  → MaterializeObservabilityOverlay into dataDir,
 //	                append the overlay to state.ComposeFiles if
-//	                absent, run `docker compose ... --profile
-//	                observability up -d prometheus grafana`,
-//	                discover the new host port, persist into
-//	                state.Ports["prometheus_ui"].
+//	                absent, then bring up each requested sidecar with
+//	                its own `docker compose ... up -d --no-deps <svc>`
+//	                under the profile set the service needs (grafana
+//	                also activates the prometheus profile so its
+//	                `depends_on: prometheus` resolves). Discover the
+//	                new host port, persist into state.Ports[...].
 //	enabled=false → `docker compose ... stop prometheus grafana`
 //	                then `... rm -f prometheus grafana`. Clear the
 //	                port from state.json. Canton + splice are
