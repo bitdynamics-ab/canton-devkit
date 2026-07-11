@@ -42,8 +42,44 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: Build and test
+  changes:
+    name: Detect changed paths
+    runs-on: [self-hosted, Linux]
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+      install_sh: ${{ steps.filter.outputs.install_sh }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      mockups: ${{ steps.filter.outputs.mockups }}
+    steps:
+      - name: Check out repository
+        # actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Filter changed paths
+        # dorny/paths-filter@v4.0.2
+        id: filter
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
+        with:
+          filters: |
+            go:
+              - '**/*.go'
+              - 'go.mod'
+              - 'go.sum'
+              - 'Makefile'
+              - 'internal/skills/docs/**'
+              - 'packaging/**'
+              - '.github/workflows/ci.yml'
+            install_sh:
+              - 'install.sh'
+            frontend:
+              - 'frontend/**'
+              - 'Makefile'
+            mockups:
+              - 'docs/design/mockups/**.jsx'
+
+  go:
+    name: Build, lint, and test
+    needs: changes
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.install_sh == 'true'
     runs-on: [self-hosted, Linux]
 
     steps:
@@ -59,12 +95,22 @@ jobs:
           cache: false
 
       - name: Validate install.sh syntax
+        if: needs.changes.outputs.install_sh == 'true'
         run: sh -n install.sh
 
+      - name: Run golangci-lint
+        if: needs.changes.outputs.go == 'true'
+        # golangci/golangci-lint-action@v9.2.0
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20
+        with:
+          version: v2.12.2
+
       - name: Build
+        if: needs.changes.outputs.go == 'true'
         run: go build ./...
 
       - name: Test
+        if: needs.changes.outputs.go == 'true'
         run: go test ./...
 
   mockup-syntax:
@@ -74,6 +120,8 @@ jobs:
     # browser. esbuild's `--loader=jsx` is the cheapest JSX-aware parser
     # available; no node_modules install needed.
     name: Mockup JSX syntax
+    needs: changes
+    if: needs.changes.outputs.mockups == 'true'
     runs-on: [self-hosted, Linux]
     steps:
       - name: Check out repository
@@ -95,32 +143,10 @@ jobs:
               || { echo "::error file=$f::JSX syntax error"; exit 1; }
           done
 
-  lint:
-    name: Lint
-    runs-on: [self-hosted, Linux]
-
-    steps:
-      - name: Check out repository
-        # actions/checkout@v5
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-
-      - name: Set up Go
-        # actions/setup-go@v6
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: Run golangci-lint
-        # golangci/golangci-lint-action@v9.2.0
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20
-        with:
-          version: v2.12.2
-
   frontend:
-    # Frontend lint + typecheck + Vitest suite. Gated on
-    # frontend/** + Makefile path filters above, so a Go-only
-    # change doesn't pay the npm-install cost.
+    # Frontend typecheck + Vitest suite. Job-level path filter (via the
+    # `changes` job) skips this when only Go/mockup/install.sh files
+    # change, so a Go-only PR doesn't pay the npm-install cost.
     #
     # Deliberately does NOT run `npm run build` — the production
     # bundle goes through `make frontend` at release time
@@ -128,6 +154,8 @@ jobs:
     # //go:embed picks it up. This job is the per-PR fast loop:
     # tsc + vitest, ~30s on a warm runner.
     name: Frontend test
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: [self-hosted, Linux]
 
     steps:
