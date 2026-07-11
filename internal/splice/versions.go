@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -262,14 +263,63 @@ func strictestRecommendedForMajor(major string) uint64 {
 // drifts.
 const defaultMinMemoryBytesFallback uint64 = 4_000_000_000
 
-// Supported returns the supported tags sorted ascending. Stable order
-// makes it easy to grep error messages and renders the version list
-// deterministically across hosts.
+// Supported returns the supported tags in ascending version order.
+// Ordering is numeric (0.6.9 before 0.6.10), not lexical, so the CLI's
+// `--version` list matches the semver-sorted Web UI picker; non-semver
+// tags (e.g. token-standard-v2) sort last. Deterministic across hosts.
 func Supported() []string {
 	out := make([]string, 0, len(SupportedVersions))
 	for k := range SupportedVersions {
 		out = append(out, k)
 	}
-	sort.Strings(out)
+	sort.Slice(out, func(i, j int) bool { return compareTags(out[i], out[j]) < 0 })
 	return out
+}
+
+// compareTags orders two catalogue tags by numeric major.minor.patch.
+// Semver tags sort before non-semver ones (token-standard-v2); ties and
+// two non-semver tags fall back to a lexical compare.
+func compareTags(a, b string) int {
+	va, oka := parseSemver(a)
+	vb, okb := parseSemver(b)
+	if oka && okb {
+		for k := 0; k < 3; k++ {
+			if va[k] != vb[k] {
+				if va[k] < vb[k] {
+					return -1
+				}
+				return 1
+			}
+		}
+		return strings.Compare(a, b) // same major.minor.patch: pre-release suffix, etc.
+	}
+	if oka != okb {
+		if oka {
+			return -1 // semver before non-semver
+		}
+		return 1
+	}
+	return strings.Compare(a, b)
+}
+
+// parseSemver reads the leading major.minor.patch of a tag, ignoring any
+// `-pre`/`+build` suffix. Returns false when the tag isn't N.N.N.
+func parseSemver(tag string) ([3]int, bool) {
+	var v [3]int
+	base := tag
+	if i := strings.IndexAny(base, "-+"); i >= 0 {
+		base = base[:i]
+	}
+	parts := strings.Split(base, ".")
+	if len(parts) != 3 {
+		return v, false
+	}
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			return v, false
+		}
+		v[i] = n
+	}
+	return v, true
 }
