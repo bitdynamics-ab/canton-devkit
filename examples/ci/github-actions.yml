@@ -28,10 +28,10 @@ jobs:
 
     env:
       # Pin the canton-devkit release you test against (reproducible CI).
-      DEVKIT_VERSION: v0.7
+      DEVKIT_VERSION: v0.15.1
       # Pin the Splice LocalNet version (must be in the curated catalogue;
       # see `canton-devkit localnet versions`).
-      SPLICE_VERSION: "0.6.4"
+      SPLICE_VERSION: "0.6.12"
       INSTANCE: ci
 
     steps:

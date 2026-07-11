@@ -19,7 +19,7 @@
 set -u
 
 CDK="${CDK:-bin/canton-devkit}"
-SPLICE_VERSION="0.6.3"
+SPLICE_VERSION="0.6.12"
 SNAPSHOT_PATH="/tmp/e2e-m1-snapshot.tgz"
 
 # Helper: invoke the localnet subcommand via the CDK binary.
