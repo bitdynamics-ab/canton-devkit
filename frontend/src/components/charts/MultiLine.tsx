@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { W, wMono } from "../../tokens";
+import { W, wMono, fs } from "../../tokens";
 import type { Series } from "./types";
 import { extent, linearScale, niceTicks } from "./scale";
 
@@ -102,7 +102,7 @@ export function MultiLine({
                   x={-6}
                   y={yy + 3}
                   textAnchor="end"
-                  fontSize={9}
+                  fontSize={fs.micro}
                   fill={W.dim}
                   fontFamily={wMono}
                 >
@@ -119,7 +119,7 @@ export function MultiLine({
               textAnchor={
                 i === 0 ? "start" : i === xTicks.length - 1 ? "end" : "middle"
               }
-              fontSize={9}
+              fontSize={fs.micro}
               fill={W.dim}
               fontFamily={wMono}
             >
@@ -164,7 +164,7 @@ export function MultiLine({
               x={innerW / 2}
               y={innerH / 2}
               textAnchor="middle"
-              fontSize={11}
+              fontSize={fs.label}
               fill={W.dim}
               fontFamily={wMono}
             >
@@ -191,7 +191,7 @@ export function MultiLine({
             gap: 14,
             flexWrap: "wrap",
             padding: "4px 12px 0",
-            fontSize: 11,
+            fontSize: fs.label,
             fontFamily: wMono,
             color: W.text2,
           }}

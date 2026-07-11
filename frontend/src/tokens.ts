@@ -65,6 +65,22 @@ export const R = { control: 2, card: 4, dialog: 8 } as const;
 export const EASE = "cubic-bezier(0.2, 0.6, 0.2, 1)";
 export const FAST = "120ms";
 
+// Type scale — rem so the console honors the browser/OS font-size
+// preference (accessibility), like the docs site. Sizes stay role-tuned:
+// operational data is dense; prose (titles, descriptions, body copy) reads
+// larger. Reference these instead of hardcoding px.
+export const fs = {
+  micro: "0.625rem", //   10px — tiny chart / badge micro-text
+  label: "0.6875rem", // 11px — uppercase micro-labels, kbd, timestamps
+  meta: "0.75rem", //     12px — dense secondary metadata
+  data: "0.8125rem", //  13px — table cells, mono ids, nav, secondary text
+  body: "0.875rem", //   14px — body prose, empty states, guidance
+  lead: "0.9375rem", //  15px — screen descriptions, section headings
+  strong: "1rem", //     16px — dialog titles, larger headings
+  title: "1.375rem", //  22px — page titles
+  stat: "1.625rem", //   26px — metric values
+} as const;
+
 export const wideCaps = {
   fontWeight: 600,
   fontStretch: "118%",

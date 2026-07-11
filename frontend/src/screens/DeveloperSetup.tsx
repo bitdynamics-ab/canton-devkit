@@ -7,7 +7,7 @@ import {
   fetchAppConfigText,
   issueJwt,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { MonoId } from "../components/MonoId";
 
@@ -82,7 +82,7 @@ function JwtPanel({ name }: { name: string }) {
             border: `1px solid ${W.border}`,
             borderRadius: 2,
             padding: "6px 10px",
-            fontSize: 13,
+            fontSize: fs.data,
             fontFamily: wMono,
           }}
         />
@@ -91,7 +91,7 @@ function JwtPanel({ name }: { name: string }) {
         {jwt?.party ? (
           <MonoId value={jwt.party} size={12} color={W.text2} />
         ) : (
-          <code style={{ color: W.dim, fontFamily: wMono, fontSize: 12 }}>—</code>
+          <code style={{ color: W.dim, fontFamily: wMono, fontSize: fs.meta }}>—</code>
         )}
       </Row>
       <div style={{ marginTop: 12 }}>
@@ -117,7 +117,7 @@ function JwtPanel({ name }: { name: string }) {
         <p
           style={{
             color: W.warn,
-            fontSize: 11.5,
+            fontSize: fs.body,
             marginTop: 12,
             marginBottom: 0,
             lineHeight: 1.5,
@@ -183,7 +183,7 @@ function AppConfigPanel({ name }: { name: string }) {
           borderRadius: 2,
           padding: "10px 12px",
           fontFamily: wMono,
-          fontSize: 11.5,
+          fontSize: fs.label,
           color: W.text2,
           lineHeight: 1.5,
           maxHeight: 200,
@@ -224,9 +224,9 @@ function Card({ title, subtitle, children }: CardProps) {
       }}
     >
       <header style={{ marginBottom: 12 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, color: W.text }}>{title}</div>
+        <div style={{ fontWeight: 600, fontSize: fs.lead, color: W.text }}>{title}</div>
         {subtitle && (
-          <div style={{ color: W.dim, fontSize: 12, marginTop: 2 }}>
+          <div style={{ color: W.dim, fontSize: fs.meta, marginTop: 2 }}>
             {subtitle}
           </div>
         )}
@@ -254,7 +254,7 @@ function Row({ label, children }: RowProps) {
       <span
         style={{
           color: W.dim,
-          fontSize: 12,
+          fontSize: fs.meta,
           width: 80,
           flexShrink: 0,
         }}
@@ -285,7 +285,7 @@ function ChipRow({ options, value, onChange }: ChipRowProps) {
             border: `1px solid ${opt === value ? W.brand : W.border}`,
             borderRadius: 2,
             padding: "4px 10px",
-            fontSize: 11.5,
+            fontSize: fs.label,
             fontWeight: opt === value ? 600 : 400,
             cursor: "pointer",
           }}
@@ -310,7 +310,7 @@ function TokenBox({ token, revealed }: { token: string; revealed: boolean }) {
         borderRadius: 2,
         padding: "10px 12px",
         fontFamily: wMono,
-        fontSize: 11,
+        fontSize: fs.label,
         wordBreak: "break-all",
         lineHeight: 1.5,
         color: W.text2,
@@ -337,7 +337,7 @@ function ErrorLine({ msg }: { msg: string }) {
       style={{
         color: W.err,
         marginTop: 8,
-        fontSize: 12,
+        fontSize: fs.meta,
       }}
     >
       {msg}

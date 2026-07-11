@@ -3,7 +3,7 @@
 // A single ConfirmHost (mounted in App) handles the dispatched event.
 
 import { useEffect, useState } from "react";
-import { W, wMono, wSans, R, EASE, FAST } from "../tokens";
+import { W, wMono, wSans, R, EASE, FAST, fs } from "../tokens";
 import { Button } from "./Button";
 
 export interface ConfirmOptions {
@@ -87,10 +87,10 @@ export function ConfirmHost() {
         }}
       >
         <div style={{ padding: "16px 18px 14px" }}>
-          <h2 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 600, color: W.text }}>
+          <h2 style={{ margin: "0 0 8px", fontSize: fs.strong, fontWeight: 600, color: W.text }}>
             {p.title}
           </h2>
-          <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: W.text2 }}>
+          <p style={{ margin: 0, fontSize: fs.lead, lineHeight: 1.5, color: W.text2 }}>
             {p.body}
           </p>
           {p.detail && (
@@ -98,7 +98,7 @@ export function ConfirmHost() {
               style={{
                 marginTop: 10,
                 fontFamily: wMono,
-                fontSize: 11.5,
+                fontSize: fs.label,
                 color: W.dim,
                 background: W.inset,
                 border: `1px solid ${W.border}`,
