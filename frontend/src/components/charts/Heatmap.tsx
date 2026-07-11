@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { W, wMono } from "../../tokens";
+import { W, wMono, fs } from "../../tokens";
 
 // Heatmap — 2D density grid. Rows are e.g. latency buckets;
 // columns are time buckets. Cells coloured by intensity 0..1.
@@ -64,7 +64,7 @@ export function Heatmap({
           x={width / 2}
           y={height / 2}
           textAnchor="middle"
-          fontSize={11}
+          fontSize={fs.label}
           fill={W.dim}
           fontFamily={wMono}
         >
@@ -108,7 +108,7 @@ export function Heatmap({
             x={-6}
             y={r * cellH + cellH / 2 + 3}
             textAnchor="end"
-            fontSize={9.5}
+            fontSize={fs.micro}
             fill={W.dim}
             fontFamily={wMono}
           >
@@ -123,7 +123,7 @@ export function Heatmap({
               x={c * cellW + cellW / 2}
               y={innerH + 14}
               textAnchor={c === 0 ? "start" : c === cols - 1 ? "end" : "middle"}
-              fontSize={9}
+              fontSize={fs.micro}
               fill={W.dim}
               fontFamily={wMono}
             >

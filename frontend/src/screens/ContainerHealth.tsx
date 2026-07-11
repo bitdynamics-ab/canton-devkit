@@ -5,7 +5,7 @@ import {
   fetchContainers,
   restartContainer,
 } from "../api";
-import { W, wMono, tableCaps, tint, R } from "../tokens";
+import { W, wMono, tableCaps, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcRefresh } from "../components/icons";
 import { confirmDialog } from "../components/ConfirmDialog";
@@ -110,10 +110,10 @@ export function ContainerHealth({ name }: { name: string }) {
           marginBottom: 10,
         }}
       >
-        <div style={{ fontWeight: 600, fontSize: 13, color: W.text }}>
+        <div style={{ fontWeight: 600, fontSize: fs.lead, color: W.text }}>
           Container health
         </div>
-        <code style={{ color: W.dim, fontSize: 11, fontFamily: wMono }}>
+        <code style={{ color: W.dim, fontSize: fs.label, fontFamily: wMono }}>
           live · polled every {POLL_MS / 1000}s
         </code>
         <span style={{ marginLeft: "auto" }} />
@@ -123,7 +123,7 @@ export function ContainerHealth({ name }: { name: string }) {
       </header>
 
       {state.kind === "loading" && (
-        <div style={{ color: W.dim, fontSize: 12 }}>Querying docker…</div>
+        <div style={{ color: W.dim, fontSize: fs.meta }}>Querying docker…</div>
       )}
 
       {state.kind === "err" && (
@@ -135,7 +135,7 @@ export function ContainerHealth({ name }: { name: string }) {
             border: `1px solid ${W.err}`,
             borderRadius: R.control,
             padding: "6px 10px",
-            fontSize: 12,
+            fontSize: fs.meta,
           }}
         >
           Docker probe failed: {state.message}
@@ -151,7 +151,7 @@ export function ContainerHealth({ name }: { name: string }) {
             border: `1px solid ${W.err}`,
             borderRadius: R.control,
             padding: "6px 10px",
-            fontSize: 12,
+            fontSize: fs.meta,
             marginBottom: 8,
           }}
         >
@@ -181,7 +181,7 @@ export function ContainerHealth({ name }: { name: string }) {
 const colHeader: React.CSSProperties = {
   ...tableCaps,
   color: W.dim,
-  fontSize: 11,
+  fontSize: fs.label,
 };
 
 function ContainersTable({
@@ -197,7 +197,7 @@ function ContainersTable({
 }) {
   if (containers.length === 0) {
     return (
-      <div style={{ color: W.dim, fontSize: 12, padding: "8px 0" }}>
+      <div style={{ color: W.dim, fontSize: fs.body, padding: "8px 0" }}>
         No containers found for this compose project.
       </div>
     );
@@ -209,7 +209,7 @@ function ContainersTable({
         display: "grid",
         gridTemplateColumns: "auto 1fr 1fr auto auto",
         gap: "4px 12px",
-        fontSize: 11.5,
+        fontSize: fs.label,
         fontFamily: wMono,
         alignItems: "center",
       }}
@@ -261,7 +261,7 @@ function ContainersTable({
                 <span style={{ color: W.dim }}> · {c.health}</span>
               )}
             </div>
-            <div onClick={onLogs} style={{ ...cellBase, color: W.dim, fontSize: 10.5 }}>{c.status}</div>
+            <div onClick={onLogs} style={{ ...cellBase, color: W.dim, fontSize: fs.micro }}>{c.status}</div>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <Button
                 variant="ghost"
@@ -302,7 +302,7 @@ function SummaryPills({ counts }: { counts: ContainersResponse }) {
               border: `1px solid ${tint(color, 34)}`,
               background: tint(color, 13),
               color,
-              fontSize: 10.5,
+              fontSize: fs.micro,
               fontFamily: wMono,
               fontVariantNumeric: "tabular-nums",
             }}

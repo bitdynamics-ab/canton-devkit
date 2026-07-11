@@ -1,5 +1,5 @@
 import { useId, useMemo, useState } from "react";
-import { W, wMono } from "../../tokens";
+import { W, wMono, fs } from "../../tokens";
 import type { Point, Series } from "./types";
 import { extent, linearScale, niceTicks } from "./scale";
 
@@ -142,7 +142,7 @@ export function AreaChart({
                 x={-6}
                 y={yy + 3}
                 textAnchor="end"
-                fontSize={9}
+                fontSize={fs.micro}
                 fill={W.dim}
                 fontFamily={wMono}
               >
@@ -158,7 +158,7 @@ export function AreaChart({
             x={x(t)}
             y={innerH + 14}
             textAnchor={i === 0 ? "start" : i === xTicks.length - 1 ? "end" : "middle"}
-            fontSize={9}
+            fontSize={fs.micro}
             fill={W.dim}
             fontFamily={wMono}
           >
@@ -207,7 +207,7 @@ export function AreaChart({
             x={innerW / 2}
             y={innerH / 2}
             textAnchor="middle"
-            fontSize={11}
+            fontSize={fs.label}
             fill={W.dim}
             fontFamily={wMono}
           >
@@ -231,7 +231,7 @@ export function AreaChart({
               borderRadius: 2,
               padding: "3px 7px",
               fontFamily: wMono,
-              fontSize: 10.5,
+              fontSize: fs.micro,
               color: W.text,
               textAlign: "center",
             }}
@@ -240,7 +240,7 @@ export function AreaChart({
               {format(hover.p.v)}
               {yLabel ? " " + yLabel : ""}
             </div>
-            <div style={{ color: W.dim, fontSize: 9 }}>{fmtTime(hover.p.t)}</div>
+            <div style={{ color: W.dim, fontSize: fs.micro }}>{fmtTime(hover.p.t)}</div>
           </div>
         </foreignObject>
       )}

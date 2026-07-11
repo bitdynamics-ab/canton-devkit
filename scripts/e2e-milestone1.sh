@@ -163,13 +163,15 @@ TEST_ID="M1-INST-003"
 
   # Step 2: help includes all visible M1 lifecycle + inspection commands.
   # start/stop are now first-class lifecycle commands (previously up/down
-  # aliases); pause/resume and restart/clean are also listed in --help.
+  # aliases); pause/resume, restart, and remove are listed in --help.
   HELP=$(cli --help 2>&1)
-  for cmd in up start stop down restart pause resume clean status logs snapshot restore doctor env list creds; do
+  for cmd in up start stop down restart pause resume remove status logs snapshot restore doctor env list creds; do
     echo "$HELP" | grep -qiE "$cmd"
   done
   # 'unpause' is an alias of 'resume' — verify its --help resolves.
   cli unpause --help >/dev/null 2>&1
+  # 'clean' is an alias of 'remove' — verify its --help resolves.
+  cli clean --help >/dev/null 2>&1
 
   # Step 3: binary is a compiled executable (platform-specific)
   case "$(uname -s)" in
