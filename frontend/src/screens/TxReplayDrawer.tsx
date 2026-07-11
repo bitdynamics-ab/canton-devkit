@@ -111,7 +111,7 @@ export function TxReplayDrawer({
         }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}>
+          <div style={{ color: W.text, fontSize: 15, fontWeight: 600 }}>
             Replay · per-party projection
           </div>
           <MonoId value={updateId} head={10} tail={8} size={11} color={W.mag} />
@@ -171,12 +171,12 @@ export function TxReplayDrawer({
         </div>
       )}
       {state.kind === "not-visible" && (
-        <div style={{ padding: 16, color: W.dim, fontSize: 13 }}>
+        <div style={{ padding: 16, color: W.dim, fontSize: 14 }}>
           This transaction is not visible to the selected party.
         </div>
       )}
       {state.kind === "needs-jwt" && (
-        <div style={{ padding: 16, color: W.dim, fontSize: 13 }}>
+        <div style={{ padding: 16, color: W.dim, fontSize: 14 }}>
           {state.remediation}
         </div>
       )}
@@ -206,7 +206,7 @@ export function TxReplayDrawer({
           </div>
           <div style={{ padding: "10px 16px" }}>
             {state.data.events.length === 0 ? (
-              <div style={{ color: W.dim, fontSize: 12.5 }}>
+              <div style={{ color: W.dim, fontSize: 14 }}>
                 No events in this transaction are visible to the selected
                 party.
               </div>

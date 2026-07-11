@@ -98,7 +98,7 @@ function DoctorError({
         border: `1px solid ${W.err}`,
         borderRadius: R.control,
         color: W.text,
-        fontSize: 13,
+        fontSize: 14,
       }}
     >
       <strong style={{ color: W.err }}>Couldn't run host checks.</strong>{" "}
@@ -161,10 +161,10 @@ function Header({
       }}
     >
       <div style={{ flex: 1 }}>
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: W.text }}>
+        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 600, color: W.text }}>
           Doctor
         </h1>
-        <p style={{ margin: "4px 0 0", color: W.dim, fontSize: 13 }}>
+        <p style={{ margin: "4px 0 0", color: W.dim, fontSize: 15 }}>
           Host readiness for Canton LocalNet — Docker, resources, network,
           platform support. Same checks as{" "}
           <code style={{ color: W.text2, fontFamily: wMono }}>

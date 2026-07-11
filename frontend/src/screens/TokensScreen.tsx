@@ -398,7 +398,7 @@ export function TokensScreen() {
           <div style={{ color: W.text, fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
             No tokens on <code>{instance}</code> yet
           </div>
-          <div style={{ color: W.dim, fontSize: 13, marginBottom: 16 }}>
+          <div style={{ color: W.dim, fontSize: 14, marginBottom: 16 }}>
             Go from empty to a live, transferable token in one click. No party ids to paste.
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
@@ -1046,8 +1046,8 @@ function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; er
 function Header({ right }: { right?: React.ReactNode }) {
   return (
     <header style={{ display: "flex", alignItems: "center", gap: 12 }}>
-      <h2 style={{ color: W.text, fontSize: 18, margin: 0 }}>Tokens</h2>
-      <span style={{ color: W.dim, fontSize: 12 }}>Token Standard instruments + actions</span>
+      <h2 style={{ color: W.text, fontSize: 22, margin: 0 }}>Tokens</h2>
+      <span style={{ color: W.dim, fontSize: 15 }}>Token Standard instruments + actions</span>
       <span style={{ marginLeft: "auto" }}>{right}</span>
     </header>
   );
@@ -1100,7 +1100,7 @@ function PartyManagerModal({
 
   return (
     <ModalShell title="Parties" onClose={onClose}>
-      <p style={{ color: W.dim, fontSize: 12, marginTop: 0 }}>
+      <p style={{ color: W.dim, fontSize: 15, marginTop: 0 }}>
         On LocalNet you own every party. Name one here and use the alias anywhere
         a party is accepted — it appears in the matrix and activity automatically.
       </p>
@@ -1439,7 +1439,7 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
         borderRadius: 8, padding: 18, width: 420, maxWidth: "92vw",
       }}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
-          <h3 style={{ color: W.text, margin: 0, fontSize: 14 }}>{title}</h3>
+          <h3 style={{ color: W.text, margin: 0, fontSize: 16 }}>{title}</h3>
           <Button
             variant="ghost"
             size="sm"

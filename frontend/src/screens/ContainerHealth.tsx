@@ -110,7 +110,7 @@ export function ContainerHealth({ name }: { name: string }) {
           marginBottom: 10,
         }}
       >
-        <div style={{ fontWeight: 600, fontSize: 13, color: W.text }}>
+        <div style={{ fontWeight: 600, fontSize: 15, color: W.text }}>
           Container health
         </div>
         <code style={{ color: W.dim, fontSize: 11, fontFamily: wMono }}>
@@ -197,7 +197,7 @@ function ContainersTable({
 }) {
   if (containers.length === 0) {
     return (
-      <div style={{ color: W.dim, fontSize: 12, padding: "8px 0" }}>
+      <div style={{ color: W.dim, fontSize: 14, padding: "8px 0" }}>
         No containers found for this compose project.
       </div>
     );

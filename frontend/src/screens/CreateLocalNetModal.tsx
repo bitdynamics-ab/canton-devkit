@@ -319,8 +319,8 @@ function ModalHeader({
         borderBottom: `1px solid ${W.border}`,
       }}
     >
-      <div style={{ fontWeight: 600, fontSize: 15, color: W.text }}>{title}</div>
-      <div style={{ color: W.dim, fontSize: 12, marginTop: 3 }}>{subtitle}</div>
+      <div style={{ fontWeight: 600, fontSize: 16, color: W.text }}>{title}</div>
+      <div style={{ color: W.dim, fontSize: 15, marginTop: 3 }}>{subtitle}</div>
     </header>
   );
 }

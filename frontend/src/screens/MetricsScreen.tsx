@@ -207,7 +207,7 @@ export function MetricsScreen() {
         <p style={{ color: W.text2, fontSize: 13, margin: 0 }}>
           No instance selected.
         </p>
-        <p style={{ color: W.dim, fontSize: 12.5, margin: "4px 0 0" }}>
+        <p style={{ color: W.dim, fontSize: 14, margin: "4px 0 0" }}>
           Pick an instance from the topbar switcher, or create one from
           Overview.
         </p>
@@ -496,11 +496,11 @@ function DashboardsBlock(props: { url?: string }) {
 function Header({ name }: { name: string }) {
   return (
     <header style={{ marginBottom: 16 }}>
-      <h2 style={{ color: W.text, fontSize: 18, margin: 0 }}>
+      <h2 style={{ color: W.text, fontSize: 22, margin: 0 }}>
         Metrics —{" "}
         <code style={{ fontFamily: wMono, color: W.brand }}>{name}</code>
       </h2>
-      <p style={{ color: W.dim, fontSize: 12.5, margin: "3px 0 0" }}>
+      <p style={{ color: W.dim, fontSize: 15, margin: "3px 0 0" }}>
         Live Canton + Splice metrics scraped from Prometheus. Auto-refresh 5 s.
       </p>
     </header>
@@ -529,7 +529,7 @@ function ChartCard({
       }}
     >
       <div style={{ marginBottom: 12 }}>
-        <div style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}>
+        <div style={{ color: W.text, fontSize: 15, fontWeight: 600 }}>
           {title}
         </div>
         {subtitle && (
@@ -598,10 +598,10 @@ function ObservabilityOffPanel({
         padding: 20,
       }}
     >
-      <h3 style={{ color: W.warn, fontSize: 14, marginTop: 0, marginBottom: 8 }}>
+      <h3 style={{ color: W.warn, fontSize: 15, marginTop: 0, marginBottom: 8 }}>
         Observability profile not enabled
       </h3>
-      <p style={{ color: W.text2, fontSize: 13, lineHeight: 1.5 }}>
+      <p style={{ color: W.text2, fontSize: 14, lineHeight: 1.5 }}>
         Instance{" "}
         <code style={{ fontFamily: wMono, color: W.brand }}>{name}</code>{" "}
         was started without the observability profile. Prometheus and Grafana

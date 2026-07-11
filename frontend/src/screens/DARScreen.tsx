@@ -243,10 +243,10 @@ export function DARScreen() {
         }}
       >
         <div>
-          <h2 style={{ color: W.text, fontSize: 18, margin: 0 }}>
+          <h2 style={{ color: W.text, fontSize: 22, margin: 0 }}>
             DAR Manager
           </h2>
-          <div style={{ color: W.dim, fontSize: 12.5, marginTop: 3 }}>
+          <div style={{ color: W.dim, fontSize: 15, marginTop: 3 }}>
             {state.kind === "ok"
               ? `${state.data.dars.length} packages on ${role} participant`
               : "loading…"}
@@ -440,7 +440,7 @@ export function DARScreen() {
             >
               <div>
                 <div
-                  style={{ color: W.text, fontSize: 13, fontWeight: 600 }}
+                  style={{ color: W.text, fontSize: 15, fontWeight: 600 }}
                 >
                   Packages on {role} participant
                 </div>
@@ -483,7 +483,7 @@ export function DARScreen() {
             </div>
 
             {rows.length === 0 && (
-              <div style={{ padding: 18, color: W.dim, fontSize: 12.5 }}>
+              <div style={{ padding: 18, color: W.dim, fontSize: 14 }}>
                 No packages match the current filter.
               </div>
             )}
@@ -758,7 +758,7 @@ function InspectDrawer({
           padding: 14,
           textAlign: "left",
           color: W.dim,
-          fontSize: 13,
+          fontSize: 14,
           lineHeight: 1.5,
         }}
       >
@@ -1313,7 +1313,7 @@ function Card({
             borderBottom: `1px solid ${W.border}`,
           }}
         >
-          <div style={{ color: W.text, fontSize: 12.5, fontWeight: 600 }}>
+          <div style={{ color: W.text, fontSize: 15, fontWeight: 600 }}>
             {title}
           </div>
           {subtitle && (
@@ -1486,10 +1486,10 @@ function EmptyPanel({
         padding: 20,
       }}
     >
-      <h3 style={{ color: W.warn, fontSize: 14, marginTop: 0, marginBottom: 8 }}>
+      <h3 style={{ color: W.warn, fontSize: 15, marginTop: 0, marginBottom: 8 }}>
         {title}
       </h3>
-      <p style={{ color: W.text2, fontSize: 13 }}>{remediation}</p>
+      <p style={{ color: W.text2, fontSize: 14 }}>{remediation}</p>
     </div>
   );
 }

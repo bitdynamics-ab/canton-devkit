@@ -36,7 +36,7 @@ export function Dashboard() {
           marginBottom: 12,
         }}
       >
-        <h1 style={{ fontSize: 20, fontWeight: 600, marginTop: 0, marginBottom: 0 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 600, marginTop: 0, marginBottom: 0 }}>
           LocalNet instances
         </h1>
         <Button
@@ -358,7 +358,7 @@ function RecentActivity({ name }: { name: string }) {
       }}
     >
       <header style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: W.text }}>Recent activity</h3>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: W.text }}>Recent activity</h3>
         <span style={{ color: W.dim, fontSize: 12 }}>
           ledger events · as seen by the app-provider participant
         </span>
@@ -377,13 +377,13 @@ function RecentActivity({ name }: { name: string }) {
         <div style={{ color: W.dim, fontSize: 13, padding: "8px 0" }}>Scanning recent ledger updates…</div>
       )}
       {state.kind === "needs-jwt" && (
-        <div style={{ color: W.dim, fontSize: 12.5, padding: "8px 0" }}>
+        <div style={{ color: W.dim, fontSize: 14, padding: "8px 0" }}>
           Ledger activity needs a party-rights JWT. Splice LocalNet signs user-id tokens by
           default. Open the Explorer to project through a specific party.
         </div>
       )}
       {state.kind === "err" && (
-        <div style={{ color: W.dim, fontSize: 12.5, padding: "8px 0" }}>
+        <div style={{ color: W.dim, fontSize: 14, padding: "8px 0" }}>
           {/no jwt recorded/i.test(state.error)
             ? "Ledger activity needs recorded role JWTs. Restart the instance to capture them (older instances predate JWT capture)."
             : `Ledger activity unavailable. ${state.error}.`}{" "}
@@ -391,7 +391,7 @@ function RecentActivity({ name }: { name: string }) {
         </div>
       )}
       {state.kind === "ok" && events.length === 0 && (
-        <div style={{ color: W.dim, fontSize: 13, padding: "8px 0" }}>
+        <div style={{ color: W.dim, fontSize: 14, padding: "8px 0" }}>
           No recent ledger activity. Run a token or DAR operation to see updates.
         </div>
       )}

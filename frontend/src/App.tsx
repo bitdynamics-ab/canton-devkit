@@ -141,7 +141,7 @@ function BootGate({ status, serverVersion }: BootGateProps) {
   return (
     <div style={containerStyle}>
       <div style={cardStyle}>
-        <h2 style={{ marginTop: 0, fontSize: 16, fontWeight: 600 }}>{title}</h2>
+        <h2 style={{ marginTop: 0, fontSize: 18, fontWeight: 600 }}>{title}</h2>
         {body}
       </div>
     </div>

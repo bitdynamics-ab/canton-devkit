@@ -87,7 +87,7 @@ export function CreatingPanel({ name, onRefresh }: Props) {
           marginBottom: 12,
         }}
       >
-        <div style={{ fontWeight: 600, fontSize: 14, color: W.text }}>
+        <div style={{ fontWeight: 600, fontSize: 15, color: W.text }}>
           Bring-up in progress
         </div>
         <code style={{ color: W.brand, fontFamily: wMono, fontSize: 12 }}>

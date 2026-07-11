@@ -97,7 +97,7 @@ export function BackupRestore({ instanceName }: Props) {
           gap: 12,
         }}
       >
-        <div style={{ fontWeight: 600, fontSize: 14, color: W.text }}>
+        <div style={{ fontWeight: 600, fontSize: 15, color: W.text }}>
           Backup &amp; restore
         </div>
         <span style={{ color: W.dim, fontSize: 11.5 }}>
@@ -144,7 +144,7 @@ export function BackupRestore({ instanceName }: Props) {
         <div
           style={{
             color: W.text,
-            fontSize: 12.5,
+            fontSize: 15,
             fontWeight: 600,
             marginBottom: 6,
           }}

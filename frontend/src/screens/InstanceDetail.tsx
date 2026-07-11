@@ -224,7 +224,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
       }}
     >
       <header style={{ marginBottom: 12, display: "flex", alignItems: "baseline", gap: 12 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, color: W.text }}>
+        <div style={{ fontWeight: 600, fontSize: 15, color: W.text }}>
           Instance detail
         </div>
         <code style={{ color: W.brand, fontFamily: wMono, fontSize: 12 }}>{name}</code>

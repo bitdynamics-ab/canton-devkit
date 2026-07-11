@@ -74,14 +74,14 @@ function Fallback({ error, onRetry }: FallbackProps) {
       }}
     >
       <header style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-        <strong style={{ color: W.err, fontSize: 14 }}>
+        <strong style={{ color: W.err, fontSize: 18 }}>
           This screen hit a render error
         </strong>
         <code style={{ color: W.dim, fontSize: 11, fontFamily: wMono }}>
           {error.name}
         </code>
       </header>
-      <p style={{ color: W.text2, fontSize: 13, marginTop: 8, marginBottom: 12 }}>
+      <p style={{ color: W.text2, fontSize: 15, marginTop: 8, marginBottom: 12 }}>
         The rest of the console still works. Switch screens from the
         sidebar or ⌘K. Retry re-mounts this screen. If it throws again,
         open the browser dev-tools console for the full stack.

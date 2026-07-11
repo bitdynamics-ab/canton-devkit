@@ -258,7 +258,7 @@ function Header() {
   return (
     <header>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <h2 style={{ color: W.text, fontSize: 18, margin: 0 }}>Agent Skills</h2>
+        <h2 style={{ color: W.text, fontSize: 22, margin: 0 }}>Agent Skills</h2>
         <span
           style={{
             color: W.dim,
@@ -272,7 +272,7 @@ function Header() {
           editor-agnostic
         </span>
       </div>
-      <div style={{ color: W.dim, fontSize: 12.5, marginTop: 3 }}>
+      <div style={{ color: W.dim, fontSize: 15, marginTop: 3 }}>
         Safe `dpm localnet` workflows for AI agents. Same docs as the CLI
         `localnet skills` command. Install into your agent and let it drive
         DevKit.

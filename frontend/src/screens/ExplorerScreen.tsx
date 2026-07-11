@@ -301,8 +301,8 @@ export function ExplorerScreen() {
   return (
     <section style={{ padding: 24 }}>
       <header style={{ marginBottom: 10 }}>
-        <h2 style={{ color: W.text, fontSize: 18, margin: 0 }}>Explorer</h2>
-        <p style={{ color: W.dim, fontSize: 12.5, margin: "3px 0 0" }}>
+        <h2 style={{ color: W.text, fontSize: 22, margin: 0 }}>Explorer</h2>
+        <p style={{ color: W.dim, fontSize: 15, margin: "3px 0 0" }}>
           Live Active Contract Set, transaction history, and per-party visibility.
         </p>
       </header>
@@ -453,7 +453,7 @@ export function ExplorerScreen() {
               }}
             >
               <div>
-                <div style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}>
+                <div style={{ color: W.text, fontSize: 15, fontWeight: 600 }}>
                   Active Contract Set
                 </div>
                 <div style={{ color: W.dim, fontSize: 11.5, marginTop: 2 }}>
@@ -538,7 +538,7 @@ export function ExplorerScreen() {
                     style={{
                       padding: "14px 16px",
                       color: W.dim,
-                      fontSize: 12.5,
+                      fontSize: 14,
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "flex-start",
@@ -1060,7 +1060,7 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
           }}
         >
           <div>
-            <div style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}>
+            <div style={{ color: W.text, fontSize: 15, fontWeight: 600 }}>
               Transactions
             </div>
             <div
@@ -1106,7 +1106,7 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
             style={{
               padding: "14px 16px",
               color: W.dim,
-              fontSize: 12.5,
+              fontSize: 14,
               display: "flex",
               flexDirection: "column",
               alignItems: "flex-start",
@@ -1582,7 +1582,7 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
             borderBottom: `1px solid ${W.border}`,
           }}
         >
-          <div style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}>
+          <div style={{ color: W.text, fontSize: 15, fontWeight: 600 }}>
             Timeline
           </div>
           <div style={{ color: W.dim, fontSize: 11.5, marginTop: 2 }}>
@@ -1993,10 +1993,10 @@ function ErrorPanel({ msg, onRetry }: { msg: string; onRetry?: () => void }) {
         gap: 8,
       }}
     >
-      <div style={{ color: W.err, fontSize: 13, fontWeight: 600 }}>
+      <div style={{ color: W.err, fontSize: 15, fontWeight: 600 }}>
         Could not load ledger data.
       </div>
-      <div style={{ color: W.text2, fontSize: 12.5 }}>
+      <div style={{ color: W.text2, fontSize: 14 }}>
         The participant did not answer. Check the instance is running, then
         retry.
       </div>
@@ -2043,10 +2043,10 @@ function EmptyPanel({
         padding: "14px 16px",
       }}
     >
-      <h3 style={{ color: W.warn, fontSize: 14, marginTop: 0, marginBottom: 8 }}>
+      <h3 style={{ color: W.warn, fontSize: 15, marginTop: 0, marginBottom: 8 }}>
         {title}
       </h3>
-      <p style={{ color: W.text2, fontSize: 13, lineHeight: 1.5, margin: 0 }}>
+      <p style={{ color: W.text2, fontSize: 14, lineHeight: 1.5, margin: 0 }}>
         {body}
       </p>
       <p style={{ color: W.dim, fontSize: 12, marginTop: 12, marginBottom: 0 }}>

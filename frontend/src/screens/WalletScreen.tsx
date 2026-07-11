@@ -123,10 +123,10 @@ export function WalletScreen() {
               marginBottom: 4,
             }}
           >
-            <h2 style={{ color: W.text, fontSize: 18, margin: 0 }}>Wallet</h2>
+            <h2 style={{ color: W.text, fontSize: 22, margin: 0 }}>Wallet</h2>
             <Pill>provided by Splice</Pill>
           </div>
-          <div style={{ color: W.dim, fontSize: 12.5 }}>
+          <div style={{ color: W.dim, fontSize: 15 }}>
             Embedded Splice Wallet · DevKit handles auth + party selection so
             you don't juggle browser tabs.
           </div>
@@ -251,7 +251,7 @@ export function WalletScreen() {
         {walletUnreachable ? (
           <div
             role="alert"
-            style={{ flex: 1, padding: 24, color: W.text2, fontSize: 13, lineHeight: 1.6 }}
+            style={{ flex: 1, padding: 24, color: W.text2, fontSize: 14, lineHeight: 1.6 }}
           >
             <div
               style={{

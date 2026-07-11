@@ -100,7 +100,7 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
       <div onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} style={modalStyle}>
         <header style={headerStyle}>
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14, color: W.text }}>
+            <div style={{ fontWeight: 600, fontSize: 16, color: W.text }}>
               Logs · <code style={{ color: W.brand, fontFamily: wMono }}>{container}</code>
             </div>
             <div style={{ color: W.dim, fontSize: 11.5, marginTop: 2, fontFamily: wMono }}>

@@ -117,7 +117,7 @@ function JwtPanel({ name }: { name: string }) {
         <p
           style={{
             color: W.warn,
-            fontSize: 11.5,
+            fontSize: 14,
             marginTop: 12,
             marginBottom: 0,
             lineHeight: 1.5,
@@ -224,7 +224,7 @@ function Card({ title, subtitle, children }: CardProps) {
       }}
     >
       <header style={{ marginBottom: 12 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, color: W.text }}>{title}</div>
+        <div style={{ fontWeight: 600, fontSize: 15, color: W.text }}>{title}</div>
         {subtitle && (
           <div style={{ color: W.dim, fontSize: 12, marginTop: 2 }}>
             {subtitle}
