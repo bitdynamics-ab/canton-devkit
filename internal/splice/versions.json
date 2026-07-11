@@ -1,7 +1,7 @@
 {
   "$schema": "Splice version catalogue. See versions.go for field semantics.",
   "_comment": "Maintainer flow: scripts/add-splice-version.sh <tag> resolves the tag → commit, downloads the archive, computes ContentSHA, and appends an entry here. Reviewer checks the diff before merging.",
-  "latest_alias": "0.6.9",
+  "latest_alias": "0.6.12",
   "versions": [
     {
       "tag": "0.5.18",
@@ -53,6 +53,15 @@
       "commit": "fd93f86ac42ce3a08985dcd0baae530b4f235f60",
       "content_sha": "3fdb3d0667923febd80cf0a2ff225ba29acff14276459c195914057b6eee5528",
       "size": 174548209,
+      "major": "0.6",
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
+    },
+    {
+      "tag": "0.6.12",
+      "commit": "17fd29aad170e8f20074aa64624c4506177ea7bd",
+      "content_sha": "3fdb3d0667923febd80cf0a2ff225ba29acff14276459c195914057b6eee5528",
+      "size": 184815106,
       "major": "0.6",
       "min_memory_bytes": 8000000000,
       "recommended_memory_bytes": 12000000000
