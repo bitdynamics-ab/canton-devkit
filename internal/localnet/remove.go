@@ -242,6 +242,12 @@ func removeOne(ctx context.Context, out io.Writer, errw io.Writer, opts *RemoveO
 				"containers already gone): %s\n", name, derr)
 	}
 
+	// Re-adopted/external volumes survive compose down --volumes; scrub by prefix.
+	if verr := docker.RemoveProjectVolumes(ctx, state.ComposeProject); verr != nil {
+		_, _ = fmt.Fprintf(errw, "%s: Warning: could not remove lingering volumes for project %q: %s\n",
+			name, state.ComposeProject, verr)
+	}
+
 	if err := registry.Delete(name); err != nil {
 		_, _ = fmt.Fprintf(errw, "%s: remove instance state: %s\n", name, err)
 		return ExitRuntimeFailure
