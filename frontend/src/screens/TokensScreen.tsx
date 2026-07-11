@@ -31,7 +31,7 @@ import {
   type TokenRef,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { W, wMono, tableCaps, wideCaps, tint, R, FAST } from "../tokens";
+import { W, wMono, tableCaps, wideCaps, tint, R, FAST, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { MonoId } from "../components/MonoId";
 import {
@@ -380,7 +380,7 @@ export function TokensScreen() {
             key={v}
             onClick={() => setView(v)}
             style={{
-              padding: "5px 14px", fontSize: 12, borderRadius: 2, border: "none", cursor: "pointer",
+              padding: "5px 14px", fontSize: fs.meta, borderRadius: 2, border: "none", cursor: "pointer",
               fontWeight: 600,
               background: view === v ? W.brand : "transparent",
               color: view === v ? W.onAccent : W.dim,
@@ -395,10 +395,10 @@ export function TokensScreen() {
         <MatrixLens matrix={matrix} err={matrixErr} aliases={aliases} />
       ) : list.length === 0 ? (
         <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 4, padding: 24, textAlign: "center" }}>
-          <div style={{ color: W.text, fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+          <div style={{ color: W.text, fontSize: fs.lead, fontWeight: 600, marginBottom: 4 }}>
             No tokens on <code>{instance}</code> yet
           </div>
-          <div style={{ color: W.dim, fontSize: 14, marginBottom: 16 }}>
+          <div style={{ color: W.dim, fontSize: fs.body, marginBottom: 16 }}>
             Go from empty to a live, transferable token in one click. No party ids to paste.
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
@@ -409,7 +409,7 @@ export function TokensScreen() {
               Create token manually
             </Button>
           </div>
-          <div style={{ color: W.faint, fontSize: 11.5, marginTop: 14 }}>
+          <div style={{ color: W.faint, fontSize: fs.label, marginTop: 14 }}>
             One click provisions an issuer party, a DEMO instrument with supply, and a funded holder.
             Or run <code>dpm localnet token demo --instance {instance}</code>.
           </div>
@@ -431,10 +431,10 @@ export function TokensScreen() {
                     transition: `background-color ${FAST}`,
                   }}
                 >
-                  <div style={{ fontWeight: 600, fontSize: 13, color: W.text }}>
+                  <div style={{ fontWeight: 600, fontSize: fs.data, color: W.text }}>
                     {sym} {t.name && <span style={{ color: W.dim, fontWeight: 400 }}>· {t.name}</span>}
                   </div>
-                  <div style={{ color: W.dim, fontSize: 11, marginTop: 2 }}>
+                  <div style={{ color: W.dim, fontSize: fs.label, marginTop: 2 }}>
                     {t.standard}{t.on_ledger ? " · on-ledger" : " · recorded"}
                   </div>
                 </button>
@@ -450,7 +450,7 @@ export function TokensScreen() {
               <>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                   <h3 style={{ color: W.text, margin: 0 }}>{active.name ?? sym}</h3>
-                  <span style={{ color: W.dim, fontFamily: wMono, fontSize: 12 }}>
+                  <span style={{ color: W.dim, fontFamily: wMono, fontSize: fs.meta }}>
                     {sym} · {active.standard}
                   </span>
                   <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
@@ -475,7 +475,7 @@ export function TokensScreen() {
                     <Button variant="secondary" size="sm" icon={<IcCheck />} onClick={() => setModal({ kind: "accept" })}>Accept transfer</Button>
                   </span>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, color: W.dim, fontSize: 12, marginTop: 4, fontFamily: wMono }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, color: W.dim, fontSize: fs.meta, marginTop: 4, fontFamily: wMono }}>
                   <span>admin {partyLabel(aliases, active.admin)}</span>
                   <span>· id</span>
                   <MonoId value={active.instrument_id} size={12} color={W.dim} />
@@ -492,7 +492,7 @@ export function TokensScreen() {
                         borderBottom: `2px solid ${detailTab === tab ? W.brand : "transparent"}`,
                         color: detailTab === tab ? W.text : W.dim,
                         padding: "6px 12px",
-                        fontSize: 13,
+                        fontSize: fs.data,
                         fontWeight: detailTab === tab ? 600 : 400,
                         cursor: "pointer",
                         textTransform: "capitalize",
@@ -509,7 +509,7 @@ export function TokensScreen() {
                     {summary && summary.holders.length > 0 && <HolderDistribution s={summary} aliases={aliases} />}
 
                     <h4 style={{ color: W.text2, margin: "16px 0 8px" }}>
-                      Holdings <span style={{ color: W.dim, fontWeight: 400, fontSize: 12 }}>· a balance sums its Holding contracts. Click a row to expand.</span>
+                      Holdings <span style={{ color: W.dim, fontWeight: 400, fontSize: fs.meta }}>· a balance sums its Holding contracts. Click a row to expand.</span>
                     </h4>
                     {holdingsSource === "registry" && (
                       <div role="status" style={{ ...notice("warn"), marginBottom: 8 }}>
@@ -519,8 +519,8 @@ export function TokensScreen() {
                         Start the instance to see real balances.
                       </div>
                     )}
-                    {holdingsErr && <div role="alert" style={{ color: W.err, fontSize: 12 }}>{holdingsErr}</div>}
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    {holdingsErr && <div role="alert" style={{ color: W.err, fontSize: fs.meta }}>{holdingsErr}</div>}
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data }}>
                       <thead>
                         <tr style={{ color: W.dim, textAlign: "left" }}>
                           <th style={th}>PARTY</th>
@@ -545,12 +545,12 @@ export function TokensScreen() {
                             </tr>
                             {expanded === h.party && contracts.map((c) => (
                               <tr key={c.contract_id} style={{ background: W.bg }}>
-                                <td style={{ ...td, paddingLeft: 34, fontSize: 11 }}>
+                                <td style={{ ...td, paddingLeft: 34, fontSize: fs.label }}>
                                   <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                                     <span style={{ color: W.dim, fontFamily: wMono }}>└</span>
                                     <MonoId value={c.contract_id} size={11} color={W.mag} />
                                     {c.locked && (
-                                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: W.warn, fontSize: 10, border: `1px solid ${tint(W.warn, 34)}`, background: tint(W.warn, 13), borderRadius: R.control, padding: "0 5px", height: 16 }}>
+                                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: W.warn, fontSize: fs.micro, border: `1px solid ${tint(W.warn, 34)}`, background: tint(W.warn, 13), borderRadius: R.control, padding: "0 5px", height: 16 }}>
                                         <Dot color={W.warn} size={5} /> Locked
                                       </span>
                                     )}
@@ -560,7 +560,7 @@ export function TokensScreen() {
                               </tr>
                             ))}
                             {expanded === h.party && contracts.length === 0 && (
-                              <tr><td colSpan={2} style={{ ...td, paddingLeft: 34, color: W.dim, fontSize: 11 }}>Loading contracts…</td></tr>
+                              <tr><td colSpan={2} style={{ ...td, paddingLeft: 34, color: W.dim, fontSize: fs.label }}>Loading contracts…</td></tr>
                             )}
                           </>
                         ))}
@@ -752,18 +752,18 @@ function TransferModal({
         </Field>
         <Field label="Amount"><input value={amount} onChange={(e) => setAmount(e.target.value)} style={input} required /></Field>
         <Field label="Reason (optional)"><input value={reason} onChange={(e) => setReason(e.target.value)} style={input} /></Field>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, color: W.text2, fontSize: 12, cursor: "pointer" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, color: W.text2, fontSize: fs.meta, cursor: "pointer" }}>
           <input type="checkbox" checked={autoAccept} onChange={(e) => setAutoAccept(e.target.checked)} />
           Auto-accept (settle in one step. You own the receiver on LocalNet.)
         </label>
 
         {plan && (
           <div style={{ background: W.surface2, border: `1px solid ${W.border}`, borderRadius: 4, padding: "10px 12px" }}>
-            <div style={{ color: W.dim, fontSize: 12, fontWeight: 500, marginBottom: 6 }}>
+            <div style={{ color: W.dim, fontSize: fs.meta, fontWeight: 500, marginBottom: 6 }}>
               Coin selection preview
             </div>
             {plan.sufficient ? (
-              <div style={{ display: "grid", gap: 4, fontFamily: wMono, fontSize: 11.5 }}>
+              <div style={{ display: "grid", gap: 4, fontFamily: wMono, fontSize: fs.label }}>
                 {plan.inputs.map((i) => (
                   <div key={i.contract_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: W.text2 }}>
@@ -788,7 +788,7 @@ function TransferModal({
                 </div>
               </div>
             ) : (
-              <div style={{ color: W.warn, fontSize: 12 }}>
+              <div style={{ color: W.warn, fontSize: fs.meta }}>
                 Insufficient: holds {plan.total_input}, short {plan.shortfall}.
               </div>
             )}
@@ -838,14 +838,14 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
             padding: "10px 12px",
           }}
         >
-          <div style={{ ...wideCaps, color: W.dim, fontSize: 11, marginBottom: 6 }}>
+          <div style={{ ...wideCaps, color: W.dim, fontSize: fs.label, marginBottom: 6 }}>
             {c.label}
           </div>
           <div
             title={c.full && c.full !== c.value ? c.full : undefined}
             style={{
               color: W.text,
-              fontSize: 20,
+              fontSize: fs.title,
               fontFamily: wMono,
               fontVariantNumeric: "tabular-nums",
               // Ellipsize an oversized value (full precision in the title).
@@ -856,7 +856,7 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
           >
             {c.value}
           </div>
-          {c.hint && <div style={{ color: W.dim, fontSize: 10, marginTop: 2 }}>{c.hint}</div>}
+          {c.hint && <div style={{ color: W.dim, fontSize: fs.micro, marginTop: 2 }}>{c.hint}</div>}
         </div>
       ))}
     </div>
@@ -876,9 +876,9 @@ function HolderDistribution({ s, aliases }: { s: InstrumentSummary; aliases: Ali
     <>
       <h4 style={{ color: W.text2, margin: "16px 0 6px" }}>
         Holder distribution{" "}
-        <span style={{ color: W.dim, fontWeight: 400, fontSize: 12 }}>· share of total supply</span>
+        <span style={{ color: W.dim, fontWeight: 400, fontSize: fs.meta }}>· share of total supply</span>
       </h4>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data }}>
         <thead>
           <tr style={{ color: W.dim, textAlign: "left" }}>
             <th style={th}>HOLDER</th>
@@ -906,7 +906,7 @@ function HolderDistribution({ s, aliases }: { s: InstrumentSummary; aliases: Ali
                         }}
                       />
                     </div>
-                    <span style={{ fontFamily: wMono, fontVariantNumeric: "tabular-nums", color: W.text2, fontSize: 12, minWidth: 44, textAlign: "right" }}>
+                    <span style={{ fontFamily: wMono, fontVariantNumeric: "tabular-nums", color: W.text2, fontSize: fs.meta, minWidth: 44, textAlign: "right" }}>
                       {h.pct_of_supply}%
                     </span>
                   </div>
@@ -923,10 +923,10 @@ function HolderDistribution({ s, aliases }: { s: InstrumentSummary; aliases: Ali
 
 // Transfer/mint/burn history from the ledger stream; one netted transaction per row.
 function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null; err: string | null; aliases: AliasMap }) {
-  if (err) return <div role="alert" style={{ color: W.err, fontSize: 13, marginTop: 12 }}>{err}</div>;
-  if (events === null) return <div style={{ color: W.dim, fontSize: 13, marginTop: 12 }}>Scanning ledger history…</div>;
+  if (err) return <div role="alert" style={{ color: W.err, fontSize: fs.data, marginTop: 12 }}>{err}</div>;
+  if (events === null) return <div style={{ color: W.dim, fontSize: fs.data, marginTop: 12 }}>Scanning ledger history…</div>;
   if (events.length === 0)
-    return <div style={{ color: W.dim, fontSize: 13, marginTop: 12 }}>No activity for this instrument yet.</div>;
+    return <div style={{ color: W.dim, fontSize: fs.data, marginTop: 12 }}>No activity for this instrument yet.</div>;
 
   const tone: Record<ActivityEvent["kind"], string> = {
     mint: W.brand,
@@ -943,7 +943,7 @@ function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null
       ? "·"
       : ps.map((p) => `${partyLabel(aliases, p.party)} ${p.amount}`).join(", ");
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 12 }}>
+    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data, marginTop: 12 }}>
       <thead>
         <tr style={{ color: W.dim, textAlign: "left" }}>
           <th style={th}>TIME</th>
@@ -956,7 +956,7 @@ function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null
       <tbody>
         {events.map((e) => (
           <tr key={e.offset}>
-            <td style={{ ...td, color: W.dim, fontSize: 11, fontFamily: wMono, fontVariantNumeric: "tabular-nums" }}>
+            <td style={{ ...td, color: W.dim, fontSize: fs.label, fontFamily: wMono, fontVariantNumeric: "tabular-nums" }}>
               {e.record_time ? e.record_time.replace("T", " ").slice(0, 19) : `@${e.offset}`}
             </td>
             <td style={td}>
@@ -970,7 +970,7 @@ function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null
                   background: tint(tone[e.kind], 13),
                   borderRadius: R.control,
                   padding: "1px 7px",
-                  fontSize: 11,
+                  fontSize: fs.label,
                 }}
               >
                 <Dot color={tone[e.kind]} size={5} />
@@ -990,8 +990,8 @@ function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null
 // Party × instrument balance table from one ACS scan; only parties the
 // role's JWT can read appear.
 function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; err: string | null; aliases: AliasMap }) {
-  if (err) return <div role="alert" style={{ color: W.err, fontSize: 13 }}>{err}</div>;
-  if (!matrix) return <div style={{ color: W.dim, fontSize: 13 }}>Scanning ACS…</div>;
+  if (err) return <div role="alert" style={{ color: W.err, fontSize: fs.data }}>{err}</div>;
+  if (!matrix) return <div style={{ color: W.dim, fontSize: fs.data }}>Scanning ACS…</div>;
 
   const syms = matrix.instruments.map((i) => i.symbol ?? i.instrument_id);
   const symByInst: Record<string, string> = {};
@@ -1006,11 +1006,11 @@ function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; er
 
   return (
     <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 4, padding: 16, overflowX: "auto" }}>
-      <div style={{ color: W.dim, fontSize: 12, marginBottom: 10 }}>
+      <div style={{ color: W.dim, fontSize: fs.meta, marginBottom: 10 }}>
         {parties.length} {parties.length === 1 ? "party" : "parties"} × {syms.length} {syms.length === 1 ? "instrument" : "instruments"}.
         Every readable party's balance of every instrument, in one ACS scan.
       </div>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data }}>
         <thead>
           <tr style={{ color: W.dim, textAlign: "left" }}>
             <th style={th}>PARTY ╲ TOKEN</th>
@@ -1029,7 +1029,7 @@ function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; er
             </tr>
           ))}
           <tr>
-            <td style={{ ...td, color: W.dim, fontWeight: 600, fontSize: 12 }}>Σ total</td>
+            <td style={{ ...td, color: W.dim, fontWeight: 600, fontSize: fs.meta }}>Σ total</td>
             {syms.map((s) => (
               <td key={s} style={{ ...tdNum, fontWeight: 600 }}>{totals[s] ?? ""}</td>
             ))}
@@ -1046,8 +1046,8 @@ function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; er
 function Header({ right }: { right?: React.ReactNode }) {
   return (
     <header style={{ display: "flex", alignItems: "center", gap: 12 }}>
-      <h2 style={{ color: W.text, fontSize: 22, margin: 0 }}>Tokens</h2>
-      <span style={{ color: W.dim, fontSize: 15 }}>Token Standard instruments + actions</span>
+      <h2 style={{ color: W.text, fontSize: fs.title, margin: 0 }}>Tokens</h2>
+      <span style={{ color: W.dim, fontSize: fs.lead }}>Token Standard instruments + actions</span>
       <span style={{ marginLeft: "auto" }}>{right}</span>
     </header>
   );
@@ -1100,11 +1100,11 @@ function PartyManagerModal({
 
   return (
     <ModalShell title="Parties" onClose={onClose}>
-      <p style={{ color: W.dim, fontSize: 15, marginTop: 0 }}>
+      <p style={{ color: W.dim, fontSize: fs.lead, marginTop: 0 }}>
         On LocalNet you own every party. Name one here and use the alias anywhere
         a party is accepted — it appears in the matrix and activity automatically.
       </p>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginBottom: 12 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data, marginBottom: 12 }}>
         <thead>
           <tr style={{ color: W.dim, textAlign: "left" }}>
             <th style={th}>ALIAS</th>
@@ -1140,7 +1140,7 @@ function PartyManagerModal({
           value={alias}
           onChange={(e) => setAlias(e.target.value)}
           placeholder="new alias (e.g. bob)"
-          style={{ flex: 1, background: W.bg, border: `1px solid ${W.border}`, borderRadius: 2, padding: "8px 10px", color: W.text, fontSize: 13 }}
+          style={{ flex: 1, background: W.bg, border: `1px solid ${W.border}`, borderRadius: 2, padding: "8px 10px", color: W.text, fontSize: fs.data }}
         />
         <Button variant="primary" size="md" type="submit" icon={<IcPlus />} disabled={busy || !alias.trim()}>
           {busy ? "…" : "Allocate"}
@@ -1208,7 +1208,7 @@ function CreateTokenModal({
             placeholder="Select issuer party"
           />
         </Field>
-        {err && <div role="alert" style={{ color: W.err, fontSize: 12 }}>{err}</div>}
+        {err && <div role="alert" style={{ color: W.err, fontSize: fs.meta }}>{err}</div>}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
           <Button variant="ghost" size="md" onClick={onClose}>Cancel</Button>
           <Button variant="primary" size="md" type="submit" disabled={busy}>{busy ? "Creating…" : "Create"}</Button>
@@ -1281,7 +1281,7 @@ function ActionModal({
             )}
           </Field>
         ))}
-        {err && <div role="alert" style={{ color: W.err, fontSize: 12 }}>{err}</div>}
+        {err && <div role="alert" style={{ color: W.err, fontSize: fs.meta }}>{err}</div>}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
           <Button variant="ghost" size="md" onClick={onClose}>Cancel</Button>
           <Button variant="primary" size="md" type="submit" disabled={busy}>{busy ? "Submitting…" : "Submit"}</Button>
@@ -1369,7 +1369,7 @@ function PartyPicker({
             {busy ? "…" : "Create"}
           </Button>
         </div>
-        {err && <span role="alert" style={{ color: W.err, fontSize: 11 }}>{err}</span>}
+        {err && <span role="alert" style={{ color: W.err, fontSize: fs.label }}>{err}</span>}
         <Button
           variant="ghost"
           size="sm"
@@ -1389,7 +1389,7 @@ function PartyPicker({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="party id (alias::fingerprint)"
-          style={{ ...input, fontFamily: wMono, fontSize: 12 }}
+          style={{ ...input, fontFamily: wMono, fontSize: fs.meta }}
         />
         {all.length > 0 && (
           <Button
@@ -1439,7 +1439,7 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
         borderRadius: 8, padding: 18, width: 420, maxWidth: "92vw",
       }}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
-          <h3 style={{ color: W.text, margin: 0, fontSize: 16 }}>{title}</h3>
+          <h3 style={{ color: W.text, margin: 0, fontSize: fs.strong }}>{title}</h3>
           <Button
             variant="ghost"
             size="sm"
@@ -1458,7 +1458,7 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label style={{ display: "grid", gap: 4 }}>
-      <span style={{ color: W.dim, fontSize: 11 }}>{label}</span>
+      <span style={{ color: W.dim, fontSize: fs.label }}>{label}</span>
       {children}
     </label>
   );
@@ -1466,9 +1466,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const input: React.CSSProperties = {
   background: W.surface2, color: W.text, border: `1px solid ${W.border}`,
-  borderRadius: 2, padding: "6px 8px", fontSize: 13,
+  borderRadius: 2, padding: "6px 8px", fontSize: fs.data,
 };
-const th: React.CSSProperties = { ...tableCaps, padding: "6px 10px", borderBottom: `1px solid ${W.border}`, fontSize: 11 };
+const th: React.CSSProperties = { ...tableCaps, padding: "6px 10px", borderBottom: `1px solid ${W.border}`, fontSize: fs.label };
 const td: React.CSSProperties = { padding: "6px 10px", borderBottom: `1px solid ${W.border}`, color: W.text };
 const thNum: React.CSSProperties = { ...th, textAlign: "right" };
 const tdNum: React.CSSProperties = { ...td, textAlign: "right", fontFamily: wMono, fontVariantNumeric: "tabular-nums" };
@@ -1477,6 +1477,6 @@ function notice(tone: "ok" | "warn" | "err"): React.CSSProperties {
   const c = tone === "ok" ? W.ok : tone === "warn" ? W.warn : W.err;
   return {
     background: tint(c, 10), color: c, border: `1px solid ${tint(c, 40)}`,
-    borderRadius: R.control, padding: "8px 12px", fontSize: 12.5,
+    borderRadius: R.control, padding: "8px 12px", fontSize: fs.meta,
   };
 }

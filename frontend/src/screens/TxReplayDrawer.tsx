@@ -6,7 +6,7 @@ import {
   type TxReplayEvent,
   type TxReplayResponse,
 } from "../api";
-import { W, wMono, R } from "../tokens";
+import { W, wMono, R, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { MonoId } from "../components/MonoId";
 import { IcX } from "../components/icons";
@@ -111,7 +111,7 @@ export function TxReplayDrawer({
         }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ color: W.text, fontSize: 15, fontWeight: 600 }}>
+          <div style={{ color: W.text, fontSize: fs.lead, fontWeight: 600 }}>
             Replay · per-party projection
           </div>
           <MonoId value={updateId} head={10} tail={8} size={11} color={W.mag} />
@@ -134,7 +134,7 @@ export function TxReplayDrawer({
           gap: 8,
         }}
       >
-        <span style={{ color: W.dim, fontSize: 11.5 }}>visible to</span>
+        <span style={{ color: W.dim, fontSize: fs.label }}>visible to</span>
         <select
           value={party}
           onChange={(e) => setParty(e.target.value)}
@@ -144,7 +144,7 @@ export function TxReplayDrawer({
             border: `1px solid ${W.border}`,
             color: W.text,
             fontFamily: wMono,
-            fontSize: 11.5,
+            fontSize: fs.label,
             padding: "4px 8px",
             borderRadius: R.control,
             cursor: "pointer",
@@ -161,22 +161,22 @@ export function TxReplayDrawer({
       </div>
 
       {state.kind === "loading" && (
-        <div style={{ padding: 16, color: W.dim, fontSize: 13 }}>
+        <div style={{ padding: 16, color: W.dim, fontSize: fs.data }}>
           Replaying transaction…
         </div>
       )}
       {state.kind === "err" && (
-        <div style={{ padding: 16, color: W.err, fontSize: 13 }}>
+        <div style={{ padding: 16, color: W.err, fontSize: fs.data }}>
           {state.error}
         </div>
       )}
       {state.kind === "not-visible" && (
-        <div style={{ padding: 16, color: W.dim, fontSize: 14 }}>
+        <div style={{ padding: 16, color: W.dim, fontSize: fs.body }}>
           This transaction is not visible to the selected party.
         </div>
       )}
       {state.kind === "needs-jwt" && (
-        <div style={{ padding: 16, color: W.dim, fontSize: 14 }}>
+        <div style={{ padding: 16, color: W.dim, fontSize: fs.body }}>
           {state.remediation}
         </div>
       )}
@@ -186,7 +186,7 @@ export function TxReplayDrawer({
             style={{
               padding: "10px 16px",
               color: W.dim,
-              fontSize: 11.5,
+              fontSize: fs.label,
               borderBottom: `1px solid ${W.border}`,
             }}
           >
@@ -206,7 +206,7 @@ export function TxReplayDrawer({
           </div>
           <div style={{ padding: "10px 16px" }}>
             {state.data.events.length === 0 ? (
-              <div style={{ color: W.dim, fontSize: 14 }}>
+              <div style={{ color: W.dim, fontSize: fs.body }}>
                 No events in this transaction are visible to the selected
                 party.
               </div>
@@ -244,10 +244,10 @@ function ReplayNode({ ev, last }: { ev: TxReplayEvent; last: boolean }) {
         gap: 10,
         alignItems: "baseline",
         marginBottom: 5,
-        fontSize: 11.5,
+        fontSize: fs.label,
       }}
     >
-      <span style={{ color: W.dim, fontFamily: wMono, fontSize: 11, width: 14 }}>
+      <span style={{ color: W.dim, fontFamily: wMono, fontSize: fs.label, width: 14 }}>
         {last ? "└─" : "├─"}
       </span>
       <span
@@ -268,7 +268,7 @@ function ReplayNode({ ev, last }: { ev: TxReplayEvent; last: boolean }) {
         {ev.template_id ? ev.template_id.split(":").slice(1).join(":") : "—"}
       </span>
       {detail && (
-        <span style={{ color: W.text2, fontSize: 11 }}>{detail}</span>
+        <span style={{ color: W.text2, fontSize: fs.label }}>{detail}</span>
       )}
       <MonoId
         value={ev.contract_id}
