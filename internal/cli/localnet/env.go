@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildEnv wires `dpm localnet env --name <inst>`.
+// buildEnv wires `dpm localnet env <inst>`.
 //
 // Emits a block of exported KEY=value lines describing every endpoint and
 // credential of the instance, designed for the common shell idiom:
@@ -52,7 +52,7 @@ Formats:
   shell       POSIX single-quoted export KEY='value'  (default; eval-safe)
   dotenv      double-quoted KEY="value" with $/\/" escapes (dotenv spec)
   github-env  bare KEY=value lines for the GitHub Actions environment file:
-                dpm localnet env --name ci --format github-env >> "$GITHUB_ENV"
+                dpm localnet env ci --format github-env >> "$GITHUB_ENV"
               (shell/dotenv carry comments + quotes that $GITHUB_ENV rejects)
   json        machine-readable shape; matches the Web UI handler
 
@@ -177,7 +177,7 @@ func writeEnvDotenv(w io.Writer, ex apitypes.EnvExport) error {
 // writeEnvGithub prints bare KEY=value lines for the GitHub Actions
 // environment file. A workflow step appends them with
 //
-//	dpm localnet env --name ci --format github-env >> "$GITHUB_ENV"
+//	dpm localnet env ci --format github-env >> "$GITHUB_ENV"
 //
 // and every subsequent step sees them as env vars. This is a distinct
 // format because the runner parses $GITHUB_ENV itself, NOT through a

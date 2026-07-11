@@ -85,7 +85,7 @@ func RunStop(ctx context.Context, out, errw io.Writer, opts *StopOptions) int {
 	state, err := registry.Read(opts.Name)
 	if err == registry.ErrNotFound {
 		_, _ = fmt.Fprintf(errw,
-			"No instance named %q is registered. Run `localnet up --name %s` first.\n",
+			"No instance named %q is registered. Run `localnet up %s` first.\n",
 			opts.Name, opts.Name)
 		return ExitUserError
 	}
@@ -258,7 +258,7 @@ func fastStart(ctx context.Context, out, errw io.Writer, opts *StartOptions, sta
 			return ExitTimeout
 		}
 		_, _ = fmt.Fprintf(errw,
-			"%s\nIf containers were removed, run `localnet up --name %s` instead.\n",
+			"%s\nIf containers were removed, run `localnet up %s` instead.\n",
 			err, state.Name)
 		return ExitRuntimeFailure
 	}

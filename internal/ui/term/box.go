@@ -29,7 +29,7 @@ const BoxLeftBorderRune = '┃'
 // "BREAKING" callout style from the mockups:
 //
 //	┃  ✓  LocalNet "hubble" is ready.
-//	┃     Run `dpm localnet env --name hubble` to export config.
+//	┃     Run `dpm localnet env hubble` to export config.
 //
 // The right edge is left open so content flows naturally and the
 // renderer never needs to know the terminal width.

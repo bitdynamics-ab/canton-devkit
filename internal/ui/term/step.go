@@ -76,7 +76,7 @@ func KV(key string, value string, keyWidth int) string {
 
 // Prompt renders a zsh-ish prompt + command:
 //
-//	dev@devnet:~/canton-app ❯ dpm localnet up --name hubble
+//	dev@devnet:~/canton-app ❯ dpm localnet up hubble
 //
 // Used to head a transcript-style screen. The actual command is
 // printed bright; surrounding chrome (user@host:dir ❯) is colored.

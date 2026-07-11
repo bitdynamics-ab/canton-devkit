@@ -93,7 +93,7 @@ func (f *connectFlags) resolve() (admin.Config, error) {
 
 	state, err := registry.Read(f.Instance)
 	if err == registry.ErrNotFound {
-		return admin.Config{}, fmt.Errorf("instance %q not registered (run `localnet up` first)", f.Instance)
+		return admin.Config{}, fmt.Errorf("instance %q not registered (run `localnet up <name>` first)", f.Instance)
 	}
 	if err != nil {
 		return admin.Config{}, fmt.Errorf("read instance state: %w", err)
@@ -147,7 +147,7 @@ func (f *connectFlags) resolveState() (*registry.State, error) {
 	}
 	state, err := registry.Read(f.Instance)
 	if err == registry.ErrNotFound {
-		return nil, fmt.Errorf("instance %q not registered (run `localnet up` first)", f.Instance)
+		return nil, fmt.Errorf("instance %q not registered (run `localnet up <name>` first)", f.Instance)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read instance state: %w", err)
