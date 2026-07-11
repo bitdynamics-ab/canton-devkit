@@ -274,7 +274,7 @@ func TestUIReachabilityCheck_UnreachableWarnsWithRemediation(t *testing.T) {
 			t.Errorf("detail missing %q\ndetail: %s", want, got.Detail)
 		}
 	}
-	for _, want := range []string{"dpm localnet up --name old-instance", "Recreate in the Web UI"} {
+	for _, want := range []string{"dpm localnet up old-instance", "Recreate in the Web UI"} {
 		if !strings.Contains(got.Remediation, want) {
 			t.Errorf("remediation missing %q\nremediation: %s", want, got.Remediation)
 		}

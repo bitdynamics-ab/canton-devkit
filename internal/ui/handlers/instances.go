@@ -631,7 +631,7 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 			writeErrorWithCode(w, http.StatusConflict,
 				"INSTANCE_EXISTS",
 				"instance "+req.Name+" already exists",
-				"pick a different name, or stop the existing one first via `dpm localnet down --name "+req.Name+"`")
+				"pick a different name, or stop the existing one first via `dpm localnet down "+req.Name+"`")
 			return
 		}
 		if jobs.Active(req.Name) {
@@ -1145,7 +1145,7 @@ func handleDownInstance() http.HandlerFunc {
 			"DOWN_FAILED",
 			"failed to stop "+name+": "+firstNonWarningLine(cause),
 			"the docker compose down output is in the server log; "+
-				"try `dpm localnet down --name "+name+"` from a terminal for full output")
+				"try `dpm localnet down "+name+"` from a terminal for full output")
 	}
 }
 
@@ -1690,7 +1690,7 @@ func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
 			writeErrorWithCode(w, http.StatusConflict,
 				"INSTANCE_RUNNING",
 				"instance "+name+" is running — stop it first",
-				"run `dpm localnet down --name "+name+"` from a terminal")
+				"run `dpm localnet down "+name+"` from a terminal")
 			return
 		}
 

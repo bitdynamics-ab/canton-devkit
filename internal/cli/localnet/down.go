@@ -17,7 +17,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildDown wires `dpm localnet down --name <inst>`. The state
+// buildDown wires `dpm localnet down <inst>`. The state
 // machine it drives:
 //
 //	docker compose down → NO --volumes (preserves state)
@@ -49,7 +49,7 @@ For a lighter-weight halt that keeps the containers around for a
 fast restart, use ` + "`dpm localnet stop <name>`" + ` instead.
 
 To remove docker volumes (destructive — drops all ledger state),
-use ` + "`dpm localnet remove --name <name>`" + ` after down.
+use ` + "`dpm localnet remove <name>`" + ` after down.
 
 If a normal down fails (e.g. a container is unhealthy or
 restart-looping after an out-of-memory kill, or the cached compose
@@ -177,8 +177,7 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 	}
 
 	_, _ = fmt.Fprintln(out, term.Prompt("", "", "", fmt.Sprintf(
-		"dpm localnet down %s %s",
-		term.Amberc("--name"), opts.Name)))
+		"dpm localnet down %s", opts.Name)))
 	_, _ = fmt.Fprintln(out)
 
 	// Persist transitional state BEFORE compose. If we crash or
@@ -251,7 +250,7 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 			term.Dimc("· state preserved."),
 			term.Dimc(fmt.Sprintf("Run %s to resume, or %s to remove volumes.",
 				term.Textc(fmt.Sprintf("localnet up %s", opts.Name)),
-				term.Textc("localnet remove"))))))
+				term.Textc(fmt.Sprintf("localnet remove %s", opts.Name)))))))
 
 	return localnet.ExitSuccess
 }

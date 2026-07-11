@@ -116,7 +116,7 @@ type Client struct {
 // Use Close when done; the returned Client is safe for concurrent use.
 //
 // On LocalNet, opts.Endpoint is typically "localhost:5001" (or whatever
-// the per-participant gRPC port is — see `localnet env --name foo` for the
+// the per-participant gRPC port is — see `localnet env foo` for the
 // canonical list). opts.Token wraps splice.SignToken with the per-role
 // claims from the registry State.Credentials map.
 func Dial(ctx context.Context, opts DialOptions) (*Client, error) {

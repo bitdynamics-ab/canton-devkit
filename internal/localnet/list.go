@@ -54,7 +54,7 @@ func RunList(ctx context.Context, out io.Writer, errw io.Writer, opts *ListOptio
 			return ExitSuccess
 		}
 		_, _ = fmt.Fprintln(out, "No LocalNet instances registered.")
-		_, _ = fmt.Fprintln(out, "Start one with: canton-devkit localnet up --name <name>")
+		_, _ = fmt.Fprintln(out, "Start one with: canton-devkit localnet up <name>")
 		return ExitSuccess
 	}
 

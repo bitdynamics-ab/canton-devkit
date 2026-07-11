@@ -93,7 +93,7 @@ func resolveMetricsInstance(name string) (*registry.State, error) {
 	}
 	switch len(idx.Entries) {
 	case 0:
-		return nil, fmt.Errorf("no registered instances — run `dpm localnet up --profile observability` first")
+		return nil, fmt.Errorf("no registered instances — run `dpm localnet up <name> --profile observability` first")
 	case 1:
 		return registry.Read(idx.Entries[0].Name)
 	default:
@@ -132,7 +132,7 @@ func resolvePrometheusEndpoint(ctx context.Context, state *registry.State, host 
 			continue
 		}
 		return "", 0, "", fmt.Errorf("prometheus is running for instance %q but its host port was not recorded — "+
-			"restart the instance with `dpm localnet restart --name %s` or pass --prometheus-port explicitly",
+			"restart the instance with `dpm localnet restart %s` or pass --prometheus-port explicitly",
 			state.Name, state.Name)
 	}
 	return "", 0, "", fmt.Errorf("no Prometheus for instance %q — "+

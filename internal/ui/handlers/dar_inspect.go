@@ -262,8 +262,8 @@ func requireParticipantAccess(w http.ResponseWriter, state *registry.State, name
 		writeErrorWithCode(w, http.StatusServiceUnavailable,
 			"PARTICIPANT_PORT_NOT_RECORDED",
 			"instance "+name+" was started before participant ports were recorded",
-			"restart the instance with `dpm localnet down --name "+name+
-				"` followed by `dpm localnet up --name "+name+
+			"restart the instance with `dpm localnet down "+name+
+				"` followed by `dpm localnet up "+name+
 				"` — the new up flow captures all Canton API ports")
 		return admin.Config{}, false
 	}
