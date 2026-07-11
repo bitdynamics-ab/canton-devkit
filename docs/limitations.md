@@ -84,10 +84,10 @@ resolved.
     multi-instance scenarios.
 
   The preflight check enforces a per-version hard floor: 8 GB for the
-  0.6 line (0.6.3, 0.6.4/`latest`, the V2 alpha — and any uncurated
-  0.6.x tag, which inherits the strictest catalogued floor for its
-  major), 4 GB for 0.5.18 and only for tags whose major has no
-  catalogued entry. The 12 GB figure is the coded recommendation
+  0.6 line (0.6.3, 0.6.4, 0.6.9/`latest`, 0.6.10, 0.6.11, the V2 alpha —
+  and any uncurated 0.6.x tag, which inherits the strictest catalogued
+  floor for its major), 4 GB for 0.5.18 and only for tags whose major
+  has no catalogued entry. The 12 GB figure is the coded recommendation
   threshold (`recommended_memory_bytes`) — below it preflight WARNs
   but does not refuse.
 
