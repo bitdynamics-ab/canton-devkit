@@ -14,7 +14,7 @@ import { ExplorerScreen } from "./screens/ExplorerScreen";
 import { WalletScreen } from "./screens/WalletScreen";
 import { AgentSkillsScreen } from "./screens/AgentSkillsScreen";
 import { TokensScreen } from "./screens/TokensScreen";
-import { W } from "./tokens";
+import { W, fs } from "./tokens";
 
 // Boots with a schema-version handshake and renders the shell only on a
 // match, so the bundle never mis-decodes a mismatched backend's responses.
@@ -141,7 +141,7 @@ function BootGate({ status, serverVersion }: BootGateProps) {
   return (
     <div style={containerStyle}>
       <div style={cardStyle}>
-        <h2 style={{ marginTop: 0, fontSize: 16, fontWeight: 600 }}>{title}</h2>
+        <h2 style={{ marginTop: 0, fontSize: fs.strong, fontWeight: 600 }}>{title}</h2>
         {body}
       </div>
     </div>

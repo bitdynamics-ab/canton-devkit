@@ -5,7 +5,7 @@ import {
   restoreSnapshot,
   type RestoreResponse,
 } from "../api";
-import { W, wMono, tint, R, FAST } from "../tokens";
+import { W, wMono, tint, R, FAST, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { IcCheck, IcDownload } from "../components/icons";
 
@@ -97,10 +97,10 @@ export function BackupRestore({ instanceName }: Props) {
           gap: 12,
         }}
       >
-        <div style={{ fontWeight: 600, fontSize: 14, color: W.text }}>
+        <div style={{ fontWeight: 600, fontSize: fs.lead, color: W.text }}>
           Backup &amp; restore
         </div>
-        <span style={{ color: W.dim, fontSize: 11.5 }}>
+        <span style={{ color: W.dim, fontSize: fs.label }}>
           logical database dump + registry state
         </span>
       </header>
@@ -114,7 +114,7 @@ export function BackupRestore({ instanceName }: Props) {
         >
           {downloading ? "Preparing…" : "Download snapshot"}
         </Button>
-        <span style={{ color: W.dim, fontSize: 12 }}>
+        <span style={{ color: W.dim, fontSize: fs.meta }}>
           mirrors{" "}
           <code style={{ fontFamily: wMono, color: W.text2 }}>
             dpm localnet snapshot --name {instanceName} --to ./
@@ -132,7 +132,7 @@ export function BackupRestore({ instanceName }: Props) {
             border: `1px solid ${W.err}`,
             borderRadius: R.control,
             padding: "8px 12px",
-            fontSize: 12,
+            fontSize: fs.meta,
             color: W.err,
           }}
         >
@@ -144,7 +144,7 @@ export function BackupRestore({ instanceName }: Props) {
         <div
           style={{
             color: W.text,
-            fontSize: 12.5,
+            fontSize: fs.lead,
             fontWeight: 600,
             marginBottom: 6,
           }}
@@ -174,7 +174,7 @@ export function BackupRestore({ instanceName }: Props) {
             padding: "14px 16px",
             cursor: "pointer",
             color: W.dim,
-            fontSize: 12.5,
+            fontSize: fs.meta,
             textAlign: "center",
             transition: `background-color ${FAST}, border-color ${FAST}`,
           }}
@@ -189,7 +189,7 @@ export function BackupRestore({ instanceName }: Props) {
               <div style={{ color: W.text2, marginBottom: 4 }}>
                 Drop a .tgz here or click to choose
               </div>
-              <div style={{ fontSize: 11, color: W.dim }}>
+              <div style={{ fontSize: fs.label, color: W.dim }}>
                 will restore to instance{" "}
                 <code style={{ fontFamily: wMono, color: W.text2 }}>
                   {targetName || "—"}
@@ -213,7 +213,7 @@ export function BackupRestore({ instanceName }: Props) {
             alignItems: "center",
             gap: 14,
             flexWrap: "wrap",
-            fontSize: 12,
+            fontSize: fs.meta,
           }}
         >
           <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -228,7 +228,7 @@ export function BackupRestore({ instanceName }: Props) {
                 border: `1px solid ${W.border}`,
                 borderRadius: R.control,
                 padding: "2px 6px",
-                fontSize: 12,
+                fontSize: fs.meta,
                 fontFamily: wMono,
                 width: 140,
               }}
@@ -265,7 +265,7 @@ export function BackupRestore({ instanceName }: Props) {
               border: `1px solid ${W.brand}`,
               borderRadius: R.control,
               padding: "8px 12px",
-              fontSize: 12,
+              fontSize: fs.meta,
               color: W.text2,
             }}
           >
@@ -293,7 +293,7 @@ export function BackupRestore({ instanceName }: Props) {
               border: `1px solid ${W.err}`,
               borderRadius: R.control,
               padding: "8px 12px",
-              fontSize: 12,
+              fontSize: fs.meta,
               color: W.err,
             }}
           >

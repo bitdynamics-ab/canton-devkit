@@ -8,14 +8,13 @@ import {
   type PrometheusRangeResponse,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { W, wMono, tint, R } from "../tokens";
+import { W, wMono, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { IcX } from "../components/icons";
 import { MetricCard } from "../components/MetricCard";
 import { AreaChart } from "../components/charts/AreaChart";
 import { MultiLine } from "../components/charts/MultiLine";
 import { BarChart, type Bar } from "../components/charts/BarChart";
-import { Heatmap, type Cell } from "../components/charts/Heatmap";
 import {
   CHART_PALETTE,
   decodePrometheusRange,
@@ -28,7 +27,7 @@ interface CardState<T> {
   error?: string;
 }
 
-const Q = {
+export const Q = {
   // Substitute: indexer-update counter, same as HeadlineLedgerTPS.
   throughputSeries:
     "sum(rate(daml_participant_api_indexer_updates[1m])) or vector(0)",
@@ -36,6 +35,11 @@ const Q = {
   // histogram_quantile is NaN; use the mean (sum/count), x1000 -> ms.
   avgLatency:
     "1000 * sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_sum[5m])) / sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_count[5m]))",
+  // Participant/ledger-API command latency (submission → completion), ms
+  // per node. A real average (sum/count) — Canton's documented command
+  // duration signal, computable where the percentile buckets aren't.
+  cmdLatency:
+    "1000 * sum by (node) (rate(daml_participant_api_commands_submissions_duration_seconds_sum[5m])) / sum by (node) (rate(daml_participant_api_commands_submissions_duration_seconds_count[5m]))",
   // No total-ACS-cardinality metric on 0.6.4 (old proxy gone); the
   // active-contracts buffer gauge is the closest present signal.
   acsLookupBuffer:
@@ -105,7 +109,9 @@ export function MetricsScreen() {
   const [cpuSeries, setCpuSeries] = useState<CardState<Series[]>>({
     kind: "loading",
   });
-  const [heatmap, setHeatmap] = useState<CardState<Cell[]>>({ kind: "loading" });
+  const [cmdLatency, setCmdLatency] = useState<CardState<Series[]>>({
+    kind: "loading",
+  });
   const [topErrors, setTopErrors] = useState<CardState<Bar[]>>({
     kind: "loading",
   });
@@ -175,10 +181,11 @@ export function MetricsScreen() {
           setCpuSeries,
           signal,
         ),
-        loadHeatmap(
+        loadMultiSeriesGrouped(
           name,
-          scopeQ('sum(increase(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[1m])) by (le)', scope),
-          setHeatmap,
+          scopeQ(Q.cmdLatency, scope),
+          (m) => m.node ?? "node",
+          setCmdLatency,
           signal,
         ),
       ]);
@@ -204,10 +211,10 @@ export function MetricsScreen() {
   if (!name) {
     return (
       <section style={{ padding: "14px 16px" }}>
-        <p style={{ color: W.text2, fontSize: 13, margin: 0 }}>
+        <p style={{ color: W.text2, fontSize: fs.data, margin: 0 }}>
           No instance selected.
         </p>
-        <p style={{ color: W.dim, fontSize: 12.5, margin: "4px 0 0" }}>
+        <p style={{ color: W.dim, fontSize: fs.body, margin: "4px 0 0" }}>
           Pick an instance from the topbar switcher, or create one from
           Overview.
         </p>
@@ -366,20 +373,17 @@ export function MetricsScreen() {
         </ChartCard>
 
         <ChartCard
-          title="Submit-to-commit heatmap"
-          subtitle="latency density · 1m buckets · 1h"
+          title="Command latency"
+          subtitle="ledger API · submit → complete · avg per node"
         >
-          {heatmap.kind === "err" ? (
-            <ErrLine msg={heatmap.error ?? "failed"} />
+          {cmdLatency.kind === "err" ? (
+            <ErrLine msg={cmdLatency.error ?? "failed"} />
           ) : (
-            <Heatmap
-              rows={6}
-              cols={60}
-              cells={heatmap.data ?? []}
-              rowLabels={["<5ms", "<25ms", "<100ms", "<500ms", "<2s", ">2s"]}
+            <MultiLine
+              series={cmdLatency.data ?? []}
               width={420}
               height={170}
-              color={CHART_PALETTE[2]}
+              format={(v) => (v >= 1000 ? (v / 1000).toFixed(2) + "s" : v.toFixed(0) + "ms")}
             />
           )}
         </ChartCard>
@@ -429,7 +433,7 @@ function LatencyStrip(props: {
     border: `1px solid ${W.border}`,
     borderRadius: R.control,
     fontFamily: wMono,
-    fontSize: 13,
+    fontSize: fs.data,
     fontVariantNumeric: "tabular-nums",
     color: W.text,
   };
@@ -470,7 +474,7 @@ function DashboardsBlock(props: { url?: string }) {
     border: `1px solid ${W.border}`,
     borderRadius: R.control,
     fontFamily: wMono,
-    fontSize: 13,
+    fontSize: fs.data,
     color: W.text,
   };
   if (!props.url) {
@@ -496,11 +500,11 @@ function DashboardsBlock(props: { url?: string }) {
 function Header({ name }: { name: string }) {
   return (
     <header style={{ marginBottom: 16 }}>
-      <h2 style={{ color: W.text, fontSize: 18, margin: 0 }}>
+      <h2 style={{ color: W.text, fontSize: fs.title, margin: 0 }}>
         Metrics —{" "}
         <code style={{ fontFamily: wMono, color: W.brand }}>{name}</code>
       </h2>
-      <p style={{ color: W.dim, fontSize: 12.5, margin: "3px 0 0" }}>
+      <p style={{ color: W.dim, fontSize: fs.lead, margin: "3px 0 0" }}>
         Live Canton + Splice metrics scraped from Prometheus. Auto-refresh 5 s.
       </p>
     </header>
@@ -529,11 +533,11 @@ function ChartCard({
       }}
     >
       <div style={{ marginBottom: 12 }}>
-        <div style={{ color: W.text, fontSize: 13.5, fontWeight: 600 }}>
+        <div style={{ color: W.text, fontSize: fs.lead, fontWeight: 600 }}>
           {title}
         </div>
         {subtitle && (
-          <div style={{ color: W.dim, fontSize: 11.5, marginTop: 2 }}>
+          <div style={{ color: W.dim, fontSize: fs.label, marginTop: 2 }}>
             {subtitle}
           </div>
         )}
@@ -545,10 +549,10 @@ function ChartCard({
 
 function ErrLine({ msg }: { msg: string }) {
   return (
-    <div role="alert" style={{ padding: "14px 0", fontSize: 12 }}>
+    <div role="alert" style={{ padding: "14px 0", fontSize: fs.meta }}>
       <div style={{ color: W.err }}>Query failed. Retrying every 5 s.</div>
       <details style={{ marginTop: 6 }}>
-        <summary style={{ cursor: "pointer", color: W.dim, fontSize: 11 }}>
+        <summary style={{ cursor: "pointer", color: W.dim, fontSize: fs.label }}>
           Server message
         </summary>
         <div
@@ -556,7 +560,7 @@ function ErrLine({ msg }: { msg: string }) {
             marginTop: 4,
             color: W.text2,
             fontFamily: wMono,
-            fontSize: 11,
+            fontSize: fs.label,
           }}
         >
           {msg}
@@ -598,10 +602,10 @@ function ObservabilityOffPanel({
         padding: 20,
       }}
     >
-      <h3 style={{ color: W.warn, fontSize: 14, marginTop: 0, marginBottom: 8 }}>
+      <h3 style={{ color: W.warn, fontSize: fs.lead, marginTop: 0, marginBottom: 8 }}>
         Observability profile not enabled
       </h3>
-      <p style={{ color: W.text2, fontSize: 13, lineHeight: 1.5 }}>
+      <p style={{ color: W.text2, fontSize: fs.body, lineHeight: 1.5 }}>
         Instance{" "}
         <code style={{ fontFamily: wMono, color: W.brand }}>{name}</code>{" "}
         was started without the observability profile. Prometheus and Grafana
@@ -612,14 +616,14 @@ function ObservabilityOffPanel({
         <Button variant="primary" size="md" onClick={enable} disabled={busy}>
           {busy ? "Enabling…" : "Enable observability now"}
         </Button>
-        <span style={{ color: W.dim, fontSize: 11.5 }}>
+        <span style={{ color: W.dim, fontSize: fs.label }}>
           Brings up Prometheus + Grafana on this instance without
           restarting Canton.
         </span>
       </div>
 
       {err && (
-        <div role="alert" style={{ color: W.err, fontSize: 12, marginTop: 8 }}>
+        <div role="alert" style={{ color: W.err, fontSize: fs.meta, marginTop: 8 }}>
           <span
             style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
           >
@@ -628,7 +632,7 @@ function ObservabilityOffPanel({
         </div>
       )}
 
-      <p style={{ color: W.dim, fontSize: 12, marginTop: 14 }}>
+      <p style={{ color: W.dim, fontSize: fs.meta, marginTop: 14 }}>
         Or from the CLI (same hot toggle, no restart):{" "}
         <code
           style={{
@@ -752,54 +756,6 @@ async function loadBars(
       .sort((a, b) => b.value - a.value)
       .slice(0, 8);
     set({ kind: "ok", data: bars });
-  } catch (e) {
-    if (isAborted(signal, e)) return;
-    set({
-      kind: "err",
-      error: e instanceof ApiError ? e.message : "failed",
-    });
-  }
-}
-
-async function loadHeatmap(
-  name: string,
-  query: string,
-  set: (s: CardState<Cell[]>) => void,
-  signal: AbortSignal,
-) {
-  try {
-    const r = await fetchMetricsRange(name, query, "1h", "1m", signal);
-    if (signal.aborted) return;
-    const decoded = decodePrometheusRange(
-      r as unknown as PrometheusRangeResponse,
-      (m) => m.le ?? "+Inf",
-    );
-    const rowFor = (le: string): number | null => {
-      const n = Number(le);
-      if (!Number.isFinite(n)) return 5; // +Inf
-      if (n <= 0.005) return 0;
-      if (n <= 0.025) return 1;
-      if (n <= 0.1) return 2;
-      if (n <= 0.5) return 3;
-      if (n <= 2) return 4;
-      return 5;
-    };
-    let max = 0;
-    for (const s of decoded) {
-      for (const p of s.points) {
-        if (p.v > max) max = p.v;
-      }
-    }
-    if (max === 0) max = 1;
-    const cells: Cell[] = [];
-    for (const s of decoded) {
-      const r = rowFor(s.label);
-      if (r === null) continue;
-      s.points.forEach((p, c) => {
-        cells.push({ r, c, i: p.v / max });
-      });
-    }
-    set({ kind: "ok", data: cells });
   } catch (e) {
     if (isAborted(signal, e)) return;
     set({

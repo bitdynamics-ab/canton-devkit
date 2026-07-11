@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { W, wMono, wSans, tint, R, wideCaps } from "../tokens";
+import { W, wMono, wSans, tint, R, wideCaps, fs } from "../tokens";
 import { useInstanceSelection } from "./useInstanceSelection";
 import { NAV, isInstanceScoped, linkTo } from "./routes";
 
@@ -168,7 +168,7 @@ export function CommandPalette() {
             border: "none",
             borderBottom: `1px solid ${W.border}`,
             color: W.text,
-            fontSize: 14,
+            fontSize: fs.body,
             padding: "14px 18px",
             outline: "none",
             fontFamily: wSans,
@@ -186,7 +186,7 @@ export function CommandPalette() {
           }}
         >
           {filtered.length === 0 && (
-            <li style={{ padding: "16px 12px", color: W.dim, fontSize: 13 }}>
+            <li style={{ padding: "16px 12px", color: W.dim, fontSize: fs.data }}>
               No matches for <code style={{ color: W.text2, fontFamily: wMono }}>{query}</code>
             </li>
           )}
@@ -197,7 +197,7 @@ export function CommandPalette() {
             borderTop: `1px solid ${W.border}`,
             padding: "8px 14px",
             color: W.dim,
-            fontSize: 11,
+            fontSize: fs.label,
             display: "flex",
             gap: 16,
           }}
@@ -228,7 +228,7 @@ function renderGroups(
             ...wideCaps,
             padding: "10px 12px 4px",
             color: W.dim,
-            fontSize: 10.5,
+            fontSize: fs.micro,
           }}
         >
           {a.group}
@@ -256,7 +256,7 @@ function renderGroups(
             textAlign: "left",
             cursor: "pointer",
             fontFamily: wSans,
-            fontSize: 13,
+            fontSize: fs.data,
           }}
         >
           <span style={{ flex: 1 }}>{a.label}</span>
@@ -265,7 +265,7 @@ function renderGroups(
               style={{
                 color: W.dim,
                 fontFamily: wMono,
-                fontSize: 11,
+                fontSize: fs.label,
                 fontVariantNumeric: "tabular-nums",
               }}
             >
@@ -289,7 +289,7 @@ function Hotkey({ label, hint }: { label: string; hint: string }) {
           borderRadius: 2,
           padding: "1px 5px",
           fontFamily: wMono,
-          fontSize: 10,
+          fontSize: fs.micro,
           color: W.text2,
         }}
       >

@@ -8,7 +8,7 @@ import {
   type DARPackageInspect,
   type Role,
 } from "../api";
-import { W, wMono, R, tint } from "../tokens";
+import { W, wMono, R, tint, fs } from "../tokens";
 import { MonoId } from "../components/MonoId";
 import { IcChevronDown, IcChevronRight } from "../components/icons";
 
@@ -91,7 +91,7 @@ export function DARPackageTree({ instance, mainID, role }: Props) {
       <div
         style={{
           color: W.dim,
-          fontSize: 11.5,
+          fontSize: fs.label,
           marginBottom: 8,
           display: "flex",
           alignItems: "center",
@@ -123,7 +123,7 @@ const paneStyle: React.CSSProperties = {
   border: `1px solid ${W.border}`,
   borderRadius: R.card,
   padding: 12,
-  fontSize: 12,
+  fontSize: fs.meta,
   maxHeight: "60vh",
   overflowY: "auto",
 };
@@ -189,7 +189,7 @@ function PackageNode({
             fontFamily: wMono,
             color: W.dim,
             marginLeft: 8,
-            fontSize: 10.5,
+            fontSize: fs.micro,
             fontVariantNumeric: "tabular-nums",
           }}
           title={pkg.package_id}
@@ -251,7 +251,7 @@ function ModuleNode({
           )}
         </span>
         <span style={{ fontFamily: wMono, color: W.text }}>{mod.name}</span>
-        <span style={{ marginLeft: 8, color: W.dim, fontSize: 10.5 }}>
+        <span style={{ marginLeft: 8, color: W.dim, fontSize: fs.micro }}>
           {tplCount}T · {ifCount}I · {dtCount}D
         </span>
       </button>
@@ -309,7 +309,7 @@ function treeRowStyle(highlight: boolean): React.CSSProperties {
     background: "transparent",
     border: "none",
     padding: "3px 6px",
-    fontSize: 12,
+    fontSize: fs.meta,
     fontFamily: "inherit",
     color: highlight ? W.brand : W.text,
     cursor: "pointer",
@@ -320,7 +320,7 @@ function treeRowStyle(highlight: boolean): React.CSSProperties {
 
 const leafRow: React.CSSProperties = {
   padding: "2px 6px",
-  fontSize: 11.5,
+  fontSize: fs.label,
   color: W.text2,
 };
 
@@ -345,7 +345,7 @@ function Chip({
         borderRadius: R.control,
         background: tone.bg,
         color: tone.fg,
-        fontSize: 10.5,
+        fontSize: fs.micro,
         fontFamily: wMono,
       }}
     >

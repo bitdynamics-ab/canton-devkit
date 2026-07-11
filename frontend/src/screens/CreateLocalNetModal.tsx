@@ -13,7 +13,7 @@ import {
   type PreflightReport,
   type SpliceVersionEntry,
 } from "../api";
-import { W, wMono, wSans, tint, R } from "../tokens";
+import { W, wMono, wSans, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcAlert, IcCheck, IcStop, IcX } from "../components/icons";
 import { remediationForCode } from "./remediation";
@@ -319,8 +319,8 @@ function ModalHeader({
         borderBottom: `1px solid ${W.border}`,
       }}
     >
-      <div style={{ fontWeight: 600, fontSize: 15, color: W.text }}>{title}</div>
-      <div style={{ color: W.dim, fontSize: 12, marginTop: 3 }}>{subtitle}</div>
+      <div style={{ fontWeight: 600, fontSize: fs.strong, color: W.text }}>{title}</div>
+      <div style={{ color: W.dim, fontSize: fs.lead, marginTop: 3 }}>{subtitle}</div>
     </header>
   );
 }
@@ -357,7 +357,7 @@ function ModalFooter({
         <span
           style={{
             color: W.dim,
-            fontSize: 11.5,
+            fontSize: fs.label,
             marginRight: "auto",
             fontFamily: wMono,
           }}
@@ -501,12 +501,12 @@ function FormBody({
           style={{ marginTop: 2 }}
           aria-label="Enable Prometheus"
         />
-        <div style={{ flex: 1, fontSize: 12.5, color: W.text2 }}>
+        <div style={{ flex: 1, fontSize: fs.meta, color: W.text2 }}>
           <strong style={{ color: W.text }}>Enable Prometheus</strong>
           <span
             style={{
               marginLeft: 8,
-              fontSize: 10.5,
+              fontSize: fs.micro,
               padding: "1px 6px",
               borderRadius: 2,
               background: `${tint(W.brand, 10)}`,
@@ -516,7 +516,7 @@ function FormBody({
           >
             metrics scrape
           </span>
-          <div style={{ color: W.dim, fontSize: 11.5, marginTop: 3, lineHeight: 1.5 }}>
+          <div style={{ color: W.dim, fontSize: fs.label, marginTop: 3, lineHeight: 1.5 }}>
             Scrapes Canton + Splice JMX / admin metrics on a loopback-
             only host port. Adds ~150 MB image + ~100 MB RAM. Required
             for the Metrics screen's live charts (throughput, latency,
@@ -546,12 +546,12 @@ function FormBody({
           style={{ marginTop: 2 }}
           aria-label="Enable Grafana"
         />
-        <div style={{ flex: 1, fontSize: 12.5, color: W.text2 }}>
+        <div style={{ flex: 1, fontSize: fs.meta, color: W.text2 }}>
           <strong style={{ color: W.text }}>Enable Grafana</strong>
           <span
             style={{
               marginLeft: 8,
-              fontSize: 10.5,
+              fontSize: fs.micro,
               padding: "1px 6px",
               borderRadius: 2,
               background: `${tint(W.brand, 10)}`,
@@ -561,7 +561,7 @@ function FormBody({
           >
             dashboards
           </span>
-          <div style={{ color: W.dim, fontSize: 11.5, marginTop: 3, lineHeight: 1.5 }}>
+          <div style={{ color: W.dim, fontSize: fs.label, marginTop: 3, lineHeight: 1.5 }}>
             Provisioned with the canton-localnet dashboard on a loopback-
             only host port. Adds ~250 MB image + ~200 MB RAM. Equivalent
             to{" "}
@@ -577,7 +577,7 @@ function FormBody({
                 background: `${tint(W.warn, 8)}`,
                 border: `1px solid ${W.warn}`,
                 borderRadius: 2,
-                fontSize: 11.5,
+                fontSize: fs.label,
                 color: W.warn,
                 lineHeight: 1.5,
               }}
@@ -609,12 +609,12 @@ function FormBody({
           onChange={(e) => setTokensV2(e.target.checked)}
           style={{ marginTop: 2 }}
         />
-        <div style={{ flex: 1, fontSize: 12.5, color: W.text2 }}>
+        <div style={{ flex: 1, fontSize: fs.meta, color: W.text2 }}>
           <strong style={{ color: W.text }}>Token Standard V2 (alpha)</strong>
           <span
             style={{
               marginLeft: 8,
-              fontSize: 10.5,
+              fontSize: fs.micro,
               padding: "1px 6px",
               borderRadius: 2,
               background: `${tint(W.brand, 10)}`,
@@ -624,7 +624,7 @@ function FormBody({
           >
             protocol 35
           </span>
-          <div style={{ color: W.dim, fontSize: 11.5, marginTop: 3, lineHeight: 1.5 }}>
+          <div style={{ color: W.dim, fontSize: fs.label, marginTop: 3, lineHeight: 1.5 }}>
             Injects the alpha-protocol Canton config for CIP-0112 token
             flows. Requires a V2-capable Splice version (e.g.{" "}
             <code style={{ fontFamily: wMono }}>token-standard-v2</code>). The
@@ -644,7 +644,7 @@ function FormBody({
           style={{
             cursor: "pointer",
             color: W.text2,
-            fontSize: 12,
+            fontSize: fs.meta,
             fontWeight: 600,
             padding: "6px 0",
           }}
@@ -667,9 +667,9 @@ function FormBody({
             checked={allowUncurated}
             onChange={(e) => setAllowUncurated(e.target.checked)}
           />
-          <div style={{ flex: 1, fontSize: 12, color: W.text2 }}>
+          <div style={{ flex: 1, fontSize: fs.meta, color: W.text2 }}>
             <strong>Allow uncurated Splice tags</strong>
-            <div style={{ color: W.dim, fontSize: 11, marginTop: 2 }}>
+            <div style={{ color: W.dim, fontSize: fs.label, marginTop: 2 }}>
               Resolve <code style={{ fontFamily: wMono }}>--version</code>{" "}
               upstream when not in the catalogue. DevKit hasn't reviewed
               those bits. Experiments only.
@@ -697,7 +697,7 @@ function FormBody({
               width: 88,
               fontFamily: wMono,
               fontVariantNumeric: "tabular-nums",
-              fontSize: 12,
+              fontSize: fs.meta,
               padding: "4px 6px",
               background: W.surface,
               color: W.text,
@@ -705,9 +705,9 @@ function FormBody({
               borderRadius: R.control,
             }}
           />
-          <div style={{ flex: 1, fontSize: 12, color: W.text2 }}>
+          <div style={{ flex: 1, fontSize: fs.meta, color: W.text2 }}>
             <strong>Fixed port base</strong>
-            <div style={{ color: W.dim, fontSize: 11, marginTop: 2 }}>
+            <div style={{ color: W.dim, fontSize: fs.label, marginTop: 2 }}>
               Pin deterministic host ports from this base (
               <code style={{ fontFamily: wMono }}>--port-base</code>) for
               reproducible multi-instance / CI layouts. Empty = auto-allocate.
@@ -718,7 +718,7 @@ function FormBody({
 
       <div
         style={{
-          fontSize: 11.5,
+          fontSize: fs.label,
           color: W.dim,
           marginTop: 4,
           padding: "8px 10px",
@@ -748,13 +748,13 @@ function SubmittingBody({ name }: { name: string }) {
         padding: "32px 24px",
         textAlign: "center",
         color: W.dim,
-        fontSize: 13,
+        fontSize: fs.data,
       }}
     >
       <div style={{ marginBottom: 8 }}>
         Validating + queuing <strong style={{ color: W.text }}>{name}</strong>…
       </div>
-      <div style={{ color: W.faint, fontSize: 11 }}>
+      <div style={{ color: W.faint, fontSize: fs.label }}>
         Server will hand back an events URL we'll subscribe to next.
       </div>
     </div>
@@ -780,7 +780,7 @@ function ProgressBody({
             color: W.warn,
             borderRadius: 2,
             padding: "6px 10px",
-            fontSize: 11.5,
+            fontSize: fs.label,
             margin: "6px 0",
           }}
         >
@@ -800,7 +800,7 @@ function ProgressBody({
       </div>
       {progress.terminal.length > 0 && (
         <details open style={{ marginTop: 14 }}>
-          <summary style={{ cursor: "pointer", color: W.dim, fontSize: 11.5 }}>
+          <summary style={{ cursor: "pointer", color: W.dim, fontSize: fs.label }}>
             Terminal output · {progress.terminal.length} line(s)
           </summary>
           <pre
@@ -811,7 +811,7 @@ function ProgressBody({
               borderRadius: 2,
               padding: "10px 12px",
               fontFamily: wMono,
-              fontSize: 10.5,
+              fontSize: fs.micro,
               color: W.text2,
               maxHeight: 180,
               overflow: "auto",
@@ -833,7 +833,7 @@ function ProgressBody({
         style={{
           marginTop: 10,
           fontFamily: wMono,
-          fontSize: 10.5,
+          fontSize: fs.micro,
           color: W.faint,
         }}
       >
@@ -866,7 +866,7 @@ function ErrorBody({
             marginTop: 10,
             paddingLeft: 18,
             color: W.text2,
-            fontSize: 12.5,
+            fontSize: fs.meta,
             lineHeight: 1.6,
           }}
         >
@@ -889,7 +889,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
           color: W.brand,
           border: `1px solid ${tint(W.brand, 27)}`,
           borderRadius: 2,
-          fontSize: 12,
+          fontSize: fs.meta,
           fontFamily: wMono,
         }}
       >
@@ -908,7 +908,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
           color: W.ok,
           border: `1px solid ${W.ok}`,
           borderRadius: 2,
-          fontSize: 13,
+          fontSize: fs.data,
           fontWeight: 600,
         }}
       >
@@ -928,7 +928,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
           color: W.err,
           border: `1px solid ${W.err}`,
           borderRadius: 2,
-          fontSize: 12.5,
+          fontSize: fs.meta,
         }}
       >
         <strong
@@ -937,7 +937,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
           <IcX size={12} /> {banner.summary ?? "failed"}
         </strong>
         {banner.cause && (
-          <div style={{ color: W.text2, marginTop: 4, fontFamily: wMono, fontSize: 11 }}>
+          <div style={{ color: W.text2, marginTop: 4, fontFamily: wMono, fontSize: fs.label }}>
             {banner.cause}
           </div>
         )}
@@ -949,7 +949,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
               background: tint(W.warn, 8),
               borderRadius: R.control,
               color: W.text2,
-              fontSize: 11.5,
+              fontSize: fs.label,
             }}
           >
             <strong style={{ color: W.warn }}>{remediation.title}</strong>
@@ -971,7 +971,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
         color: W.warn,
         border: `1px solid ${W.warn}`,
         borderRadius: 2,
-        fontSize: 12.5,
+        fontSize: fs.meta,
       }}
     >
       <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -1009,7 +1009,7 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
         gap: 10,
         padding: "6px 4px",
         borderBottom: `1px solid ${W.border}`,
-        fontSize: 12.5,
+        fontSize: fs.meta,
       }}
     >
       <span
@@ -1030,7 +1030,7 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
           <div
             style={{
               color: state.status === "fail" ? W.err : W.dim,
-              fontSize: 11,
+              fontSize: fs.label,
               fontFamily: wMono,
               marginTop: 2,
             }}
@@ -1179,7 +1179,7 @@ const selectStyle: React.CSSProperties = {
   border: `1px solid ${W.border}`,
   borderRadius: R.control,
   padding: "7px 10px",
-  fontSize: 13,
+  fontSize: fs.data,
   fontFamily: wMono,
   fontVariantNumeric: "tabular-nums",
   outline: "none",
@@ -1198,7 +1198,7 @@ function PreflightPanel({ state }: { state: PreflightState }) {
           color: W.dim,
           border: `1px solid ${W.border}`,
           borderRadius: 2,
-          fontSize: 11.5,
+          fontSize: fs.label,
           fontFamily: wMono,
         }}
       >
@@ -1218,7 +1218,7 @@ function PreflightPanel({ state }: { state: PreflightState }) {
           color: W.dim,
           border: `1px solid ${W.border}`,
           borderRadius: 2,
-          fontSize: 11.5,
+          fontSize: fs.label,
         }}
       >
         Pre-flight probe couldn't reach the server ({state.message}). The
@@ -1257,7 +1257,7 @@ function PreflightPanel({ state }: { state: PreflightState }) {
           color: W.ok,
           border: `1px solid ${tint(W.ok, 27)}`,
           borderRadius: 2,
-          fontSize: 11.5,
+          fontSize: fs.label,
           fontFamily: wMono,
         }}
       >
@@ -1275,7 +1275,7 @@ function PreflightPanel({ state }: { state: PreflightState }) {
         background: tint(accent, 6),
         border: `1px solid ${accent}`,
         borderRadius: R.control,
-        fontSize: 12,
+        fontSize: fs.meta,
       }}
     >
       <div
@@ -1291,7 +1291,7 @@ function PreflightPanel({ state }: { state: PreflightState }) {
         {headingIcon} {heading}
       </div>
       {state.report.summary && (
-        <div style={{ color: W.text2, marginBottom: 8, fontSize: 11.5 }}>
+        <div style={{ color: W.text2, marginBottom: 8, fontSize: fs.label }}>
           {state.report.summary}
         </div>
       )}
@@ -1306,7 +1306,7 @@ function PreflightPanel({ state }: { state: PreflightState }) {
             borderRadius: 2,
           }}
         >
-          <div style={{ fontFamily: wMono, fontSize: 11.5 }}>
+          <div style={{ fontFamily: wMono, fontSize: fs.label }}>
             <span
               style={{
                 color: check.result === "fail" ? W.err : W.warn,
@@ -1330,7 +1330,7 @@ function PreflightPanel({ state }: { state: PreflightState }) {
             <div
               style={{
                 color: W.text2,
-                fontSize: 11,
+                fontSize: fs.label,
                 marginTop: 3,
                 fontFamily: wMono,
               }}
@@ -1344,7 +1344,7 @@ function PreflightPanel({ state }: { state: PreflightState }) {
                 margin: "4px 0 0 0",
                 paddingLeft: 18,
                 color: W.text2,
-                fontSize: 11,
+                fontSize: fs.label,
                 lineHeight: 1.5,
               }}
             >
@@ -1375,7 +1375,7 @@ function Field({
       <div
         style={{
           color: W.dim,
-          fontSize: 12,
+          fontSize: fs.meta,
           fontWeight: 500,
           marginBottom: 4,
         }}
@@ -1384,10 +1384,10 @@ function Field({
       </div>
       {children}
       {error && (
-        <div style={{ color: W.err, fontSize: 11, marginTop: 4 }}>{error}</div>
+        <div style={{ color: W.err, fontSize: fs.label, marginTop: 4 }}>{error}</div>
       )}
       {hint && !error && (
-        <div style={{ color: W.dim, fontSize: 11, marginTop: 4 }}>{hint}</div>
+        <div style={{ color: W.dim, fontSize: fs.label, marginTop: 4 }}>{hint}</div>
       )}
     </label>
   );
@@ -1433,7 +1433,7 @@ const inputStyle: React.CSSProperties = {
   border: `1px solid ${W.border}`,
   borderRadius: R.control,
   padding: "7px 10px",
-  fontSize: 13,
+  fontSize: fs.data,
   fontFamily: wMono,
   fontVariantNumeric: "tabular-nums",
   outline: "none",

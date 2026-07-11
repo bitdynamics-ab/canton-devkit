@@ -2,7 +2,7 @@
 // stays visible; full value on hover, copies on click.
 
 import { useState, type CSSProperties } from "react";
-import { W, wMono } from "../tokens";
+import { W, wMono, fs } from "../tokens";
 
 function truncateMid(s: string, head: number, tail: number): string {
   if (s.length <= head + tail + 1) return s;
@@ -14,7 +14,7 @@ interface MonoIdProps {
   head?: number;
   tail?: number;
   full?: boolean;
-  size?: number;
+  size?: number | string;
   color?: string;
   style?: CSSProperties;
 }
@@ -24,7 +24,7 @@ export function MonoId({
   head = 8,
   tail = 6,
   full = false,
-  size = 12,
+  size = fs.meta,
   color = W.text2,
   style,
 }: MonoIdProps) {

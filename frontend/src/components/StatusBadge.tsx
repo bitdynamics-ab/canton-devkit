@@ -1,7 +1,7 @@
 // Pairs a colored dot with a text label so color is never the only cue.
 
 import type { CSSProperties } from "react";
-import { W, tint, R } from "../tokens";
+import { W, tint, R, fs } from "../tokens";
 import { Dot } from "./icons";
 
 type Tone = "ok" | "warn" | "danger" | "muted";
@@ -73,7 +73,7 @@ export function StatusBadge({
           border: `1px solid ${tint(color, 34)}`,
           background: tint(color, 13),
           color,
-          fontSize: 11,
+          fontSize: fs.label,
           fontWeight: 500,
           ...style,
         }}
@@ -90,7 +90,7 @@ export function StatusBadge({
         alignItems: "center",
         gap: 6,
         color,
-        fontSize: 12.5,
+        fontSize: fs.meta,
         ...style,
       }}
     >
