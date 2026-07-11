@@ -26,6 +26,9 @@ interface CardState<T> {
   kind: "loading" | "ok" | "err";
   data?: T;
   error?: string;
+  // Non-error reason the panel is empty (e.g. the metric isn't resolvable
+  // on this Splice version). Rendered as a plain note, not an error.
+  note?: string;
 }
 
 const Q = {
@@ -371,6 +374,18 @@ export function MetricsScreen() {
         >
           {heatmap.kind === "err" ? (
             <ErrLine msg={heatmap.error ?? "failed"} />
+          ) : heatmap.note ? (
+            <p
+              style={{
+                margin: 0,
+                padding: "18px 4px",
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: W.dim,
+              }}
+            >
+              {heatmap.note}
+            </p>
           ) : (
             <Heatmap
               rows={6}
@@ -774,32 +789,12 @@ async function loadHeatmap(
       r as unknown as PrometheusRangeResponse,
       (m) => m.le ?? "+Inf",
     );
-    const rowFor = (le: string): number | null => {
-      const n = Number(le);
-      if (!Number.isFinite(n)) return 5; // +Inf
-      if (n <= 0.005) return 0;
-      if (n <= 0.025) return 1;
-      if (n <= 0.1) return 2;
-      if (n <= 0.5) return 3;
-      if (n <= 2) return 4;
-      return 5;
-    };
-    let max = 0;
-    for (const s of decoded) {
-      for (const p of s.points) {
-        if (p.v > max) max = p.v;
-      }
-    }
-    if (max === 0) max = 1;
-    const cells: Cell[] = [];
-    for (const s of decoded) {
-      const r = rowFor(s.label);
-      if (r === null) continue;
-      s.points.forEach((p, c) => {
-        cells.push({ r, c, i: p.v / max });
-      });
-    }
-    set({ kind: "ok", data: cells });
+    const out = heatmapCellsOrNote(decoded);
+    set(
+      "note" in out
+        ? { kind: "ok", data: [], note: out.note }
+        : { kind: "ok", data: out.cells },
+    );
   } catch (e) {
     if (isAborted(signal, e)) return;
     set({
@@ -807,6 +802,47 @@ async function loadHeatmap(
       error: e instanceof ApiError ? e.message : "failed",
     });
   }
+}
+
+export const HEATMAP_NO_FINITE_BUCKETS_NOTE =
+  "Not available on Splice 0.6.4 — its latency histogram has a single bucket. The average above is the reliable signal.";
+
+// Build heatmap cells from decoded per-`le` bucket series, or a note when
+// the histogram has no finite buckets. Splice 0.6.4 exports this histogram
+// with only the +Inf bucket, which would collapse every observation into
+// the top (>2s) row — a density map that reads ">2s" for ~100ms latency.
+export function heatmapCellsOrNote(
+  decoded: Series[],
+): { cells: Cell[] } | { note: string } {
+  if (!decoded.some((s) => Number.isFinite(Number(s.label)))) {
+    return { note: HEATMAP_NO_FINITE_BUCKETS_NOTE };
+  }
+  const rowFor = (le: string): number | null => {
+    const n = Number(le);
+    if (!Number.isFinite(n)) return 5; // +Inf
+    if (n <= 0.005) return 0;
+    if (n <= 0.025) return 1;
+    if (n <= 0.1) return 2;
+    if (n <= 0.5) return 3;
+    if (n <= 2) return 4;
+    return 5;
+  };
+  let max = 0;
+  for (const s of decoded) {
+    for (const p of s.points) {
+      if (p.v > max) max = p.v;
+    }
+  }
+  if (max === 0) max = 1;
+  const cells: Cell[] = [];
+  for (const s of decoded) {
+    const row = rowFor(s.label);
+    if (row === null) continue;
+    s.points.forEach((p, c) => {
+      cells.push({ r: row, c, i: p.v / max });
+    });
+  }
+  return { cells };
 }
 
 // Latest value minus the point nearest 5 minutes back.
