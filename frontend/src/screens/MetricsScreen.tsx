@@ -805,12 +805,13 @@ async function loadHeatmap(
 }
 
 export const HEATMAP_NO_FINITE_BUCKETS_NOTE =
-  "Not available on Splice 0.6.4 — its latency histogram has a single bucket. The average above is the reliable signal.";
+  "Not available on this Splice version — its latency histogram has a single bucket. The average above is the reliable signal.";
 
 // Build heatmap cells from decoded per-`le` bucket series, or a note when
-// the histogram has no finite buckets. Splice 0.6.4 exports this histogram
-// with only the +Inf bucket, which would collapse every observation into
-// the top (>2s) row — a density map that reads ">2s" for ~100ms latency.
+// the histogram has no finite buckets. Stock Splice 0.6.x (verified 0.6.4
+// and 0.6.9) exports this histogram with only the +Inf bucket, which would
+// collapse every observation into the top (>2s) row — a density map that
+// reads ">2s" for ~100ms latency.
 export function heatmapCellsOrNote(
   decoded: Series[],
 ): { cells: Cell[] } | { note: string } {
