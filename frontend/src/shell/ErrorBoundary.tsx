@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { W, wMono, tint, R } from "../tokens";
+import { W, wMono, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
 
 // Catches render-time exceptions per-route so one crashed screen doesn't
@@ -74,14 +74,14 @@ function Fallback({ error, onRetry }: FallbackProps) {
       }}
     >
       <header style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-        <strong style={{ color: W.err, fontSize: 16 }}>
+        <strong style={{ color: W.err, fontSize: fs.body }}>
           This screen hit a render error
         </strong>
-        <code style={{ color: W.dim, fontSize: 13, fontFamily: wMono }}>
+        <code style={{ color: W.dim, fontSize: fs.small, fontFamily: wMono }}>
           {error.name}
         </code>
       </header>
-      <p style={{ color: W.text2, fontSize: 16, marginTop: 8, marginBottom: 12 }}>
+      <p style={{ color: W.text2, fontSize: fs.body, marginTop: 8, marginBottom: 12 }}>
         The rest of the console still works. Switch screens from the
         sidebar or ⌘K. Retry re-mounts this screen. If it throws again,
         open the browser dev-tools console for the full stack.
@@ -93,7 +93,7 @@ function Fallback({ error, onRetry }: FallbackProps) {
       </div>
       <details style={{ marginTop: 8 }}>
         <summary
-          style={{ cursor: "pointer", color: W.dim, fontSize: 13 }}
+          style={{ cursor: "pointer", color: W.dim, fontSize: fs.small }}
         >
           Error details
         </summary>
@@ -104,7 +104,7 @@ function Fallback({ error, onRetry }: FallbackProps) {
             borderRadius: R.control,
             padding: "10px 12px",
             fontFamily: wMono,
-            fontSize: 13,
+            fontSize: fs.small,
             color: W.text2,
             margin: "8px 0 0",
             maxHeight: 120,

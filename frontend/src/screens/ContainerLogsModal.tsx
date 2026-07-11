@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, fetchContainerLogs } from "../api";
-import { W, wMono, wSans, tint, R } from "../tokens";
+import { W, wMono, wSans, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { IcX } from "../components/icons";
 
@@ -100,10 +100,10 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
       <div onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} style={modalStyle}>
         <header style={headerStyle}>
           <div>
-            <div style={{ fontWeight: 600, fontSize: 16, color: W.text }}>
+            <div style={{ fontWeight: 600, fontSize: fs.body, color: W.text }}>
               Logs · <code style={{ color: W.brand, fontFamily: wMono }}>{container}</code>
             </div>
-            <div style={{ color: W.dim, fontSize: 13, marginTop: 2, fontFamily: wMono }}>
+            <div style={{ color: W.dim, fontSize: fs.small, marginTop: 2, fontFamily: wMono }}>
               {instance} · polled every {LOG_POLL_MS / 1000}s {loading && "· refreshing"}
             </div>
           </div>
@@ -131,7 +131,7 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
               background: `${tint(W.err, 6)}`,
               borderBottom: `1px solid ${W.err}`,
               padding: "8px 16px",
-              fontSize: 13,
+              fontSize: fs.small,
             }}
           >
             {err}
@@ -147,7 +147,7 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
             background: W.bg,
             color: W.text2,
             fontFamily: wMono,
-            fontSize: 13,
+            fontSize: fs.small,
             lineHeight: 1.55,
             whiteSpace: "pre-wrap",
             wordBreak: "break-all",
@@ -176,7 +176,7 @@ function Toolbar({
 }) {
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-      <label style={{ color: W.dim, fontSize: 13, fontFamily: wMono }}>
+      <label style={{ color: W.dim, fontSize: fs.small, fontFamily: wMono }}>
         tail
         <select
           value={tail}
@@ -190,7 +190,7 @@ function Toolbar({
           ))}
         </select>
       </label>
-      <label style={{ color: W.dim, fontSize: 13, fontFamily: wMono }}>
+      <label style={{ color: W.dim, fontSize: fs.small, fontFamily: wMono }}>
         since
         <select
           value={since}
@@ -245,7 +245,7 @@ const selectStyle: React.CSSProperties = {
   border: `1px solid ${W.border}`,
   borderRadius: R.control,
   padding: "2px 6px",
-  fontSize: 13,
+  fontSize: fs.small,
   fontFamily: wMono,
   marginLeft: 4,
 };

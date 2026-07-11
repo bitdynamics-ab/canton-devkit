@@ -7,7 +7,7 @@ import {
   fetchDoctor,
   fetchSpliceVersions,
 } from "../api";
-import { W, wMono, wideCaps, tint, R } from "../tokens";
+import { W, wMono, wideCaps, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { SkeletonTable, useLoadingDelay } from "../components/Skeleton";
 import { Dot, IcAlert, IcCheck, IcRefresh, IcX } from "../components/icons";
@@ -98,7 +98,7 @@ function DoctorError({
         border: `1px solid ${W.err}`,
         borderRadius: R.control,
         color: W.text,
-        fontSize: 16,
+        fontSize: fs.body,
       }}
     >
       <strong style={{ color: W.err }}>Couldn't run host checks.</strong>{" "}
@@ -110,7 +110,7 @@ function DoctorError({
         </Button>
       </div>
       <details style={{ marginTop: 8 }}>
-        <summary style={{ cursor: "pointer", color: W.dim, fontSize: 13 }}>
+        <summary style={{ cursor: "pointer", color: W.dim, fontSize: fs.small }}>
           Server message
         </summary>
         <div
@@ -118,7 +118,7 @@ function DoctorError({
             marginTop: 6,
             color: W.text2,
             fontFamily: wMono,
-            fontSize: 13,
+            fontSize: fs.small,
           }}
         >
           {message}
@@ -161,10 +161,10 @@ function Header({
       }}
     >
       <div style={{ flex: 1 }}>
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: W.text }}>
+        <h1 style={{ margin: 0, fontSize: fs.h3, fontWeight: 600, color: W.text }}>
           Doctor
         </h1>
-        <p style={{ margin: "4px 0 0", color: W.dim, fontSize: 16 }}>
+        <p style={{ margin: "4px 0 0", color: W.dim, fontSize: fs.body }}>
           Host readiness for Canton LocalNet — Docker, resources, network,
           platform support. Same checks as{" "}
           <code style={{ color: W.text2, fontFamily: wMono }}>
@@ -180,7 +180,7 @@ function Header({
             flexDirection: "column",
             gap: 4,
             color: W.dim,
-            fontSize: 13,
+            fontSize: fs.small,
           }}
         >
           version thresholds
@@ -194,7 +194,7 @@ function Header({
               border: `1px solid ${W.border}`,
               borderRadius: R.control,
               padding: "5px 8px",
-              fontSize: 13,
+              fontSize: fs.small,
               fontFamily: wMono,
               fontVariantNumeric: "tabular-nums",
             }}
@@ -244,7 +244,7 @@ function SummaryBanner({ report }: { report: PreflightReport }) {
         border: `1px solid ${accent}`,
         borderRadius: R.control,
         color: accent,
-        fontSize: 16,
+        fontSize: fs.body,
         fontWeight: 600,
         display: "flex",
         gap: 8,
@@ -275,7 +275,7 @@ function Section({
         style={{
           ...wideCaps,
           margin: "0 0 8px",
-          fontSize: 13,
+          fontSize: fs.small,
           color: W.dim,
         }}
       >
@@ -321,12 +321,12 @@ function CheckRow({ check, last }: { check: PreflightCheck; last: boolean }) {
         <ResultGlyph result={check.result} />
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ color: W.text, fontSize: 16 }}>
+        <div style={{ color: W.text, fontSize: fs.body }}>
           {check.label}
           <span
             style={{
               marginLeft: 8,
-              fontSize: 11,
+              fontSize: fs.caption,
               fontFamily: wMono,
               color: glyphColor(check.result),
             }}
@@ -338,7 +338,7 @@ function CheckRow({ check, last }: { check: PreflightCheck; last: boolean }) {
           <div
             style={{
               color: W.dim,
-              fontSize: 13,
+              fontSize: fs.small,
               fontFamily: wMono,
               fontVariantNumeric: "tabular-nums",
               marginTop: 2,
@@ -353,7 +353,7 @@ function CheckRow({ check, last }: { check: PreflightCheck; last: boolean }) {
               margin: "8px 0 0",
               paddingLeft: 18,
               color: W.text2,
-              fontSize: 13,
+              fontSize: fs.small,
               lineHeight: 1.6,
             }}
           >

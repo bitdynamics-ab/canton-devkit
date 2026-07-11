@@ -8,7 +8,7 @@ import {
   type PrometheusRangeResponse,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { W, wMono, tint, R } from "../tokens";
+import { W, wMono, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { IcX } from "../components/icons";
 import { MetricCard } from "../components/MetricCard";
@@ -204,10 +204,10 @@ export function MetricsScreen() {
   if (!name) {
     return (
       <section style={{ padding: "14px 16px" }}>
-        <p style={{ color: W.text2, fontSize: 16, margin: 0 }}>
+        <p style={{ color: W.text2, fontSize: fs.body, margin: 0 }}>
           No instance selected.
         </p>
-        <p style={{ color: W.dim, fontSize: 13, margin: "4px 0 0" }}>
+        <p style={{ color: W.dim, fontSize: fs.small, margin: "4px 0 0" }}>
           Pick an instance from the topbar switcher, or create one from
           Overview.
         </p>
@@ -429,7 +429,7 @@ function LatencyStrip(props: {
     border: `1px solid ${W.border}`,
     borderRadius: R.control,
     fontFamily: wMono,
-    fontSize: 16,
+    fontSize: fs.body,
     fontVariantNumeric: "tabular-nums",
     color: W.text,
   };
@@ -470,7 +470,7 @@ function DashboardsBlock(props: { url?: string }) {
     border: `1px solid ${W.border}`,
     borderRadius: R.control,
     fontFamily: wMono,
-    fontSize: 16,
+    fontSize: fs.body,
     color: W.text,
   };
   if (!props.url) {
@@ -496,11 +496,11 @@ function DashboardsBlock(props: { url?: string }) {
 function Header({ name }: { name: string }) {
   return (
     <header style={{ marginBottom: 16 }}>
-      <h2 style={{ color: W.text, fontSize: 18, margin: 0 }}>
+      <h2 style={{ color: W.text, fontSize: fs.h3, margin: 0 }}>
         Metrics —{" "}
         <code style={{ fontFamily: wMono, color: W.brand }}>{name}</code>
       </h2>
-      <p style={{ color: W.dim, fontSize: 13, margin: "3px 0 0" }}>
+      <p style={{ color: W.dim, fontSize: fs.small, margin: "3px 0 0" }}>
         Live Canton + Splice metrics scraped from Prometheus. Auto-refresh 5 s.
       </p>
     </header>
@@ -529,11 +529,11 @@ function ChartCard({
       }}
     >
       <div style={{ marginBottom: 12 }}>
-        <div style={{ color: W.text, fontSize: 16, fontWeight: 600 }}>
+        <div style={{ color: W.text, fontSize: fs.body, fontWeight: 600 }}>
           {title}
         </div>
         {subtitle && (
-          <div style={{ color: W.dim, fontSize: 13, marginTop: 2 }}>
+          <div style={{ color: W.dim, fontSize: fs.small, marginTop: 2 }}>
             {subtitle}
           </div>
         )}
@@ -545,10 +545,10 @@ function ChartCard({
 
 function ErrLine({ msg }: { msg: string }) {
   return (
-    <div role="alert" style={{ padding: "14px 0", fontSize: 13 }}>
+    <div role="alert" style={{ padding: "14px 0", fontSize: fs.small }}>
       <div style={{ color: W.err }}>Query failed. Retrying every 5 s.</div>
       <details style={{ marginTop: 6 }}>
-        <summary style={{ cursor: "pointer", color: W.dim, fontSize: 13 }}>
+        <summary style={{ cursor: "pointer", color: W.dim, fontSize: fs.small }}>
           Server message
         </summary>
         <div
@@ -556,7 +556,7 @@ function ErrLine({ msg }: { msg: string }) {
             marginTop: 4,
             color: W.text2,
             fontFamily: wMono,
-            fontSize: 13,
+            fontSize: fs.small,
           }}
         >
           {msg}
@@ -598,10 +598,10 @@ function ObservabilityOffPanel({
         padding: 20,
       }}
     >
-      <h3 style={{ color: W.warn, fontSize: 16, marginTop: 0, marginBottom: 8 }}>
+      <h3 style={{ color: W.warn, fontSize: fs.body, marginTop: 0, marginBottom: 8 }}>
         Observability profile not enabled
       </h3>
-      <p style={{ color: W.text2, fontSize: 16, lineHeight: 1.5 }}>
+      <p style={{ color: W.text2, fontSize: fs.body, lineHeight: 1.5 }}>
         Instance{" "}
         <code style={{ fontFamily: wMono, color: W.brand }}>{name}</code>{" "}
         was started without the observability profile. Prometheus and Grafana
@@ -612,14 +612,14 @@ function ObservabilityOffPanel({
         <Button variant="primary" size="md" onClick={enable} disabled={busy}>
           {busy ? "Enabling…" : "Enable observability now"}
         </Button>
-        <span style={{ color: W.dim, fontSize: 13 }}>
+        <span style={{ color: W.dim, fontSize: fs.small }}>
           Brings up Prometheus + Grafana on this instance without
           restarting Canton.
         </span>
       </div>
 
       {err && (
-        <div role="alert" style={{ color: W.err, fontSize: 13, marginTop: 8 }}>
+        <div role="alert" style={{ color: W.err, fontSize: fs.small, marginTop: 8 }}>
           <span
             style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
           >
@@ -628,7 +628,7 @@ function ObservabilityOffPanel({
         </div>
       )}
 
-      <p style={{ color: W.dim, fontSize: 13, marginTop: 14 }}>
+      <p style={{ color: W.dim, fontSize: fs.small, marginTop: 14 }}>
         Or from the CLI (same hot toggle, no restart):{" "}
         <code
           style={{

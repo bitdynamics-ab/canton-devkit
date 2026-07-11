@@ -19,7 +19,7 @@ import { Dot, IcRefresh } from "../components/icons";
 import { MonoId } from "../components/MonoId";
 import { StatusBadge } from "../components/StatusBadge";
 import { SkeletonTable, useLoadingDelay } from "../components/Skeleton";
-import { TX_KIND_COLOR, W, wMono, tableCaps, wideCaps, tint, R, FAST } from "../tokens";
+import { TX_KIND_COLOR, W, wMono, tableCaps, wideCaps, tint, R, FAST, fs } from "../tokens";
 import { ContractDetailDrawer } from "./ContractDetailDrawer";
 import { TxReplayDrawer } from "./TxReplayDrawer";
 
@@ -301,8 +301,8 @@ export function ExplorerScreen() {
   return (
     <section style={{ padding: 24 }}>
       <header style={{ marginBottom: 10 }}>
-        <h2 style={{ color: W.text, fontSize: 18, margin: 0 }}>Explorer</h2>
-        <p style={{ color: W.dim, fontSize: 13, margin: "3px 0 0" }}>
+        <h2 style={{ color: W.text, fontSize: fs.h3, margin: 0 }}>Explorer</h2>
+        <p style={{ color: W.dim, fontSize: fs.small, margin: "3px 0 0" }}>
           Live Active Contract Set, transaction history, and per-party visibility.
         </p>
       </header>
@@ -400,13 +400,13 @@ export function ExplorerScreen() {
                   padding: "4px 0",
                 }}
               >
-                <span style={{ color: W.dim, fontSize: 13, fontWeight: 500 }}>
+                <span style={{ color: W.dim, fontSize: fs.small, fontWeight: 500 }}>
                   Stream
                 </span>
                 <StatusBadge
                   status={streamStatus}
                   pulse={streamStatus === "reconnecting"}
-                  style={{ fontSize: 13 }}
+                  style={{ fontSize: fs.small }}
                 />
               </div>
               <div
@@ -418,13 +418,13 @@ export function ExplorerScreen() {
                   padding: "4px 0",
                 }}
               >
-                <span style={{ color: W.dim, fontSize: 13, fontWeight: 500 }}>
+                <span style={{ color: W.dim, fontSize: fs.small, fontWeight: 500 }}>
                   Ledger end
                 </span>
                 <span
                   style={{
                     fontFamily: wMono,
-                    fontSize: 13,
+                    fontSize: fs.small,
                     color: W.text2,
                     fontVariantNumeric: "tabular-nums",
                   }}
@@ -453,10 +453,10 @@ export function ExplorerScreen() {
               }}
             >
               <div>
-                <div style={{ color: W.text, fontSize: 16, fontWeight: 600 }}>
+                <div style={{ color: W.text, fontSize: fs.body, fontWeight: 600 }}>
                   Active Contract Set
                 </div>
-                <div style={{ color: W.dim, fontSize: 13, marginTop: 2 }}>
+                <div style={{ color: W.dim, fontSize: fs.small, marginTop: 2 }}>
                   {filtered.length} of {state.data.contracts.length} contracts ·{" "}
                   {streamStatus === "live"
                     ? "streaming creates and archives"
@@ -479,7 +479,7 @@ export function ExplorerScreen() {
                     background: W.border,
                     border: `1px solid ${W.border}`,
                     color: W.text,
-                    fontSize: 13,
+                    fontSize: fs.small,
                     padding: "5px 32px 5px 10px",
                     borderRadius: 2,
                     width: 240,
@@ -492,7 +492,7 @@ export function ExplorerScreen() {
                     right: 8,
                     top: 5,
                     color: W.dim,
-                    fontSize: 11,
+                    fontSize: fs.caption,
                     fontFamily: wMono,
                     background: W.surface,
                     border: `1px solid ${W.border}`,
@@ -512,7 +512,7 @@ export function ExplorerScreen() {
                 gap: 14,
                 padding: "9px 14px",
                 color: W.dim,
-                fontSize: 11,
+                fontSize: fs.caption,
                 ...tableCaps,
                 borderBottom: `1px solid ${W.border}`,
               }}
@@ -538,7 +538,7 @@ export function ExplorerScreen() {
                     style={{
                       padding: "14px 16px",
                       color: W.dim,
-                      fontSize: 13,
+                      fontSize: fs.small,
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "flex-start",
@@ -572,7 +572,7 @@ export function ExplorerScreen() {
                         <code
                           style={{
                             fontFamily: wMono,
-                            fontSize: 13,
+                            fontSize: fs.small,
                             color: W.text2,
                           }}
                         >
@@ -597,7 +597,7 @@ export function ExplorerScreen() {
               style={{
                 padding: "10px 14px",
                 color: W.dim,
-                fontSize: 13,
+                fontSize: fs.small,
                 display: "flex",
                 justifyContent: "space-between",
                 borderTop: `1px solid ${W.border}`,
@@ -671,7 +671,7 @@ function ProjectionBar({
       <span
         style={{
           color: W.dim,
-          fontSize: 13,
+          fontSize: fs.small,
           fontWeight: 500,
         }}
       >
@@ -684,7 +684,7 @@ function ProjectionBar({
             border: `1px solid ${W.border}`,
             color: W.text,
             fontFamily: wMono,
-            fontSize: 13,
+            fontSize: fs.small,
             padding: "5px 10px",
             borderRadius: 2,
           }}
@@ -702,7 +702,7 @@ function ProjectionBar({
             border: `1px solid ${W.border}`,
             color: W.text,
             fontFamily: wMono,
-            fontSize: 13,
+            fontSize: fs.small,
             padding: "5px 10px",
             borderRadius: 2,
             cursor: "pointer",
@@ -720,7 +720,7 @@ function ProjectionBar({
           borderLeft: `1px solid ${W.border}`,
           paddingLeft: 16,
           color: W.dim,
-          fontSize: 13,
+          fontSize: fs.small,
           lineHeight: 1.4,
         }}
       >
@@ -750,7 +750,7 @@ function ProjectionBar({
             onClick={() => onViewChange(v)}
             style={{
               padding: "5px 12px",
-              fontSize: 13,
+              fontSize: fs.small,
               borderRadius: R.control,
               border: "none",
               background: v === view ? W.brand : "transparent",
@@ -814,7 +814,7 @@ function FilterChip({
       <span
         style={{
           flex: 1,
-          fontSize: 13,
+          fontSize: fs.small,
           color: active ? W.text : W.text2,
           fontWeight: active ? 600 : 500,
           overflow: "hidden",
@@ -824,7 +824,7 @@ function FilterChip({
       >
         {label}
       </span>
-      <span style={{ color: W.dim, fontSize: 13, fontFamily: wMono }}>
+      <span style={{ color: W.dim, fontSize: fs.small, fontFamily: wMono }}>
         {count}
       </span>
     </button>
@@ -869,7 +869,7 @@ function AcsRow({
         </span>
         <span
           style={{
-            fontSize: 13,
+            fontSize: fs.small,
             fontWeight: active ? 600 : 500,
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -881,11 +881,11 @@ function AcsRow({
           {shortTpl}
         </span>
       </div>
-      <MonoId value={row.contract_id} head={8} tail={6} size={13} color={W.mag} />
+      <MonoId value={row.contract_id} head={8} tail={6} size={fs.small} color={W.mag} />
       <span
         style={{
           color: W.text2,
-          fontSize: 13,
+          fontSize: fs.small,
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
@@ -897,7 +897,7 @@ function AcsRow({
       <span
         style={{
           fontFamily: wMono,
-          fontSize: 13,
+          fontSize: fs.small,
           color: W.text,
           fontVariantNumeric: "tabular-nums",
           textAlign: "right",
@@ -912,7 +912,7 @@ function AcsRow({
           gap: 8,
           justifyContent: "space-between",
           color: W.dim,
-          fontSize: 13,
+          fontSize: fs.small,
         }}
       >
         <span>{row.created_at ? ago(row.created_at) : "—"}</span>
@@ -1060,13 +1060,13 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
           }}
         >
           <div>
-            <div style={{ color: W.text, fontSize: 16, fontWeight: 600 }}>
+            <div style={{ color: W.text, fontSize: fs.body, fontWeight: 600 }}>
               Transactions
             </div>
             <div
               style={{
                 color: W.dim,
-                fontSize: 13,
+                fontSize: fs.small,
                 marginTop: 2,
                 fontVariantNumeric: "tabular-nums",
               }}
@@ -1087,7 +1087,7 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
             gap: 14,
             padding: "9px 14px",
             color: W.dim,
-            fontSize: 11,
+            fontSize: fs.caption,
             ...tableCaps,
             borderBottom: `1px solid ${W.border}`,
           }}
@@ -1106,7 +1106,7 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
             style={{
               padding: "14px 16px",
               color: W.dim,
-              fontSize: 13,
+              fontSize: fs.small,
               display: "flex",
               flexDirection: "column",
               alignItems: "flex-start",
@@ -1124,7 +1124,7 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
               <>
                 <span>No updates in the current ledger window.</span>
                 <code
-                  style={{ fontFamily: wMono, fontSize: 13, color: W.text2 }}
+                  style={{ fontFamily: wMono, fontSize: fs.small, color: W.text2 }}
                 >
                   dpm localnet tx ls
                 </code>
@@ -1158,7 +1158,7 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
           style={{
             padding: "10px 14px",
             color: W.dim,
-            fontSize: 13,
+            fontSize: fs.small,
             borderTop: `1px solid ${W.border}`,
           }}
         >
@@ -1253,7 +1253,7 @@ function TxFilterBar({
         background: W.border,
         border: `1px solid ${W.border}`,
         color: W.text,
-        fontSize: 13,
+        fontSize: fs.small,
         fontFamily: wMono,
         padding: "5px 8px",
         borderRadius: 2,
@@ -1278,7 +1278,7 @@ function TxFilterBar({
       <span
         style={{
           color: W.dim,
-          fontSize: 13,
+          fontSize: fs.small,
           fontWeight: 500,
         }}
       >
@@ -1330,7 +1330,7 @@ function TxRowComponent({
           style={{
             color: TX_KIND_COLOR[tx.kind],
             fontFamily: wMono,
-            fontSize: 13,
+            fontSize: fs.small,
             fontWeight: 600,
           }}
         >
@@ -1340,23 +1340,23 @@ function TxRowComponent({
           style={{
             fontFamily: wMono,
             color: W.text2,
-            fontSize: 13,
+            fontSize: fs.small,
             fontVariantNumeric: "tabular-nums",
           }}
         >
           {tx.offset.toLocaleString()}
         </code>
         {tx.command_id ? (
-          <MonoId value={tx.command_id} head={8} tail={6} size={13} color={W.mag} />
+          <MonoId value={tx.command_id} head={8} tail={6} size={fs.small} color={W.mag} />
         ) : tx.update_id ? (
-          <MonoId value={tx.update_id} head={8} tail={6} size={13} color={W.mag} />
+          <MonoId value={tx.update_id} head={8} tail={6} size={fs.small} color={W.mag} />
         ) : (
-          <span style={{ color: W.dim, fontSize: 13 }}>—</span>
+          <span style={{ color: W.dim, fontSize: fs.small }}>—</span>
         )}
         <span
           style={{
             color: W.text2,
-            fontSize: 13,
+            fontSize: fs.small,
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -1364,14 +1364,14 @@ function TxRowComponent({
         >
           {tx.workflow_id || (tx.synchronizer ? `→ ${tx.synchronizer}` : "—")}
         </span>
-        <span style={{ color: W.dim, fontSize: 13, fontFamily: wMono }}>
+        <span style={{ color: W.dim, fontSize: fs.small, fontFamily: wMono }}>
           {tx.record_time ? hhmmss(tx.record_time) : "—"}
         </span>
         <span
           style={{
             color: W.text,
             fontFamily: wMono,
-            fontSize: 13,
+            fontSize: fs.small,
             textAlign: "right",
             fontVariantNumeric: "tabular-nums",
           }}
@@ -1397,7 +1397,7 @@ function TxRowComponent({
               replay
             </Button>
           ) : (
-            <span style={{ color: W.dim, fontSize: 13 }}>—</span>
+            <span style={{ color: W.dim, fontSize: fs.small }}>—</span>
           )}
         </span>
       </div>
@@ -1437,14 +1437,14 @@ function EventTreeNode({
         gap: 10,
         alignItems: "baseline",
         marginBottom: 3,
-        fontSize: 13,
+        fontSize: fs.small,
       }}
     >
       <span
         style={{
           color: W.dim,
           fontFamily: wMono,
-          fontSize: 13,
+          fontSize: fs.small,
           width: 14,
         }}
       >
@@ -1465,7 +1465,7 @@ function EventTreeNode({
         value={ev.contract_id}
         head={8}
         tail={6}
-        size={13}
+        size={fs.small}
         color={W.mag}
         style={{ marginLeft: "auto" }}
       />
@@ -1582,10 +1582,10 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
             borderBottom: `1px solid ${W.border}`,
           }}
         >
-          <div style={{ color: W.text, fontSize: 16, fontWeight: 600 }}>
+          <div style={{ color: W.text, fontSize: fs.body, fontWeight: 600 }}>
             Timeline
           </div>
-          <div style={{ color: W.dim, fontSize: 13, marginTop: 2 }}>
+          <div style={{ color: W.dim, fontSize: fs.small, marginTop: 2 }}>
             {txs.length} updates · {buckets.length}-bucket density strip ·
             hover any glyph for details
           </div>
@@ -1622,7 +1622,7 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
           style={{
             padding: "4px 14px 0",
             color: W.dim,
-            fontSize: 11,
+            fontSize: fs.caption,
             fontFamily: wMono,
             display: "flex",
             justifyContent: "space-between",
@@ -1698,7 +1698,7 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
           style={{
             padding: "10px 14px",
             color: W.dim,
-            fontSize: 13,
+            fontSize: fs.small,
             display: "flex",
             justifyContent: "space-between",
             borderTop: `1px solid ${W.border}`,
@@ -1752,7 +1752,7 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
               <span
                 style={{
                   color: W.dim,
-                  fontSize: 13,
+                  fontSize: fs.small,
                   fontFamily: wMono,
                   fontVariantNumeric: "tabular-nums",
                 }}
@@ -1764,7 +1764,7 @@ function TimelineView({ name, role }: { name: string; role: Role }) {
               <div
                 style={{
                   color: W.text2,
-                  fontSize: 13,
+                  fontSize: fs.small,
                   fontFamily: wMono,
                   marginTop: 6,
                 }}
@@ -1804,7 +1804,7 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 5, marginRight: 12 }}>
       <span style={{ width: 8, height: 8, borderRadius: 2, background: color }} />
-      <span style={{ color: W.dim, fontSize: 13 }}>{label}</span>
+      <span style={{ color: W.dim, fontSize: fs.small }}>{label}</span>
     </span>
   );
 }
@@ -1815,7 +1815,7 @@ function Mono({ children }: { children: React.ReactNode }) {
       style={{
         fontFamily: wMono,
         color: W.text2,
-        fontSize: 13,
+        fontSize: fs.small,
         fontVariantNumeric: "tabular-nums",
         wordBreak: "break-word",
       }}
@@ -1879,11 +1879,11 @@ function Card({
       }}
     >
       <div style={{ padding: "0 4px 8px", borderBottom: `1px solid ${W.border}` }}>
-        <div style={{ color: W.text, fontSize: 13, fontWeight: 600 }}>
+        <div style={{ color: W.text, fontSize: fs.small, fontWeight: 600 }}>
           {title}
         </div>
         {subtitle && (
-          <div style={{ color: W.dim, fontSize: 13, marginTop: 1 }}>
+          <div style={{ color: W.dim, fontSize: fs.small, marginTop: 1 }}>
             {subtitle}
           </div>
         )}
@@ -1905,7 +1905,7 @@ function Section({
       <div
         style={{
           color: W.dim,
-          fontSize: 11,
+          fontSize: fs.caption,
           ...wideCaps,
           marginBottom: 6,
         }}
@@ -1926,7 +1926,7 @@ function Pill({ color, children }: { color: string; children: React.ReactNode })
         color,
         padding: "1px 8px",
         borderRadius: R.control,
-        fontSize: 11,
+        fontSize: fs.caption,
         fontWeight: 600,
         fontFamily: wMono,
       }}
@@ -1993,10 +1993,10 @@ function ErrorPanel({ msg, onRetry }: { msg: string; onRetry?: () => void }) {
         gap: 8,
       }}
     >
-      <div style={{ color: W.err, fontSize: 16, fontWeight: 600 }}>
+      <div style={{ color: W.err, fontSize: fs.body, fontWeight: 600 }}>
         Could not load ledger data.
       </div>
-      <div style={{ color: W.text2, fontSize: 13 }}>
+      <div style={{ color: W.text2, fontSize: fs.small }}>
         The participant did not answer. Check the instance is running, then
         retry.
       </div>
@@ -2005,7 +2005,7 @@ function ErrorPanel({ msg, onRetry }: { msg: string; onRetry?: () => void }) {
           Retry
         </Button>
       )}
-      <details style={{ color: W.dim, fontSize: 13 }}>
+      <details style={{ color: W.dim, fontSize: fs.small }}>
         <summary style={{ cursor: "pointer" }}>Details</summary>
         <code
           style={{
@@ -2013,7 +2013,7 @@ function ErrorPanel({ msg, onRetry }: { msg: string; onRetry?: () => void }) {
             marginTop: 6,
             fontFamily: wMono,
             color: W.text2,
-            fontSize: 13,
+            fontSize: fs.small,
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
           }}
@@ -2043,13 +2043,13 @@ function EmptyPanel({
         padding: "14px 16px",
       }}
     >
-      <h3 style={{ color: W.warn, fontSize: 16, marginTop: 0, marginBottom: 8 }}>
+      <h3 style={{ color: W.warn, fontSize: fs.body, marginTop: 0, marginBottom: 8 }}>
         {title}
       </h3>
-      <p style={{ color: W.text2, fontSize: 16, lineHeight: 1.5, margin: 0 }}>
+      <p style={{ color: W.text2, fontSize: fs.body, lineHeight: 1.5, margin: 0 }}>
         {body}
       </p>
-      <p style={{ color: W.dim, fontSize: 13, marginTop: 12, marginBottom: 0 }}>
+      <p style={{ color: W.dim, fontSize: fs.small, marginTop: 12, marginBottom: 0 }}>
         {remediation}
       </p>
     </div>
@@ -2058,7 +2058,7 @@ function EmptyPanel({
 
 function Hint({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ color: W.dim, fontSize: 13, padding: "6px 4px" }}>
+    <div style={{ color: W.dim, fontSize: fs.small, padding: "6px 4px" }}>
       {children}
     </div>
   );

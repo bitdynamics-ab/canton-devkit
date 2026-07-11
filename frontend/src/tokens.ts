@@ -95,3 +95,17 @@ export const TX_KIND_COLOR: Record<
   topology: W.warn,
   checkpoint: W.dim,
 };
+
+// Type scale — the Canton Design System ramp, shared with the docs site
+// (website/src/styles/custom.css). Values are rem so the Web UI respects the
+// reader's browser / OS font-size preference, exactly like the docs site does.
+// At the default 16px root these render pixel-identical to the raw ramp
+// (11 · 13 · 16 · 18 · 22 · 28).
+export const fs = {
+  caption: "0.6875rem", // 11px — meta, timestamps, chart micro-labels
+  small: "0.8125rem",   // 13px — labels, nav, code, dense cells, mono id chips
+  body: "1rem",         // 16px — default reading size
+  h3: "1.125rem",       // 18px — subsection
+  h2: "1.375rem",       // 22px — section
+  h1: "1.75rem",        // 28px — page title / display
+} as const;

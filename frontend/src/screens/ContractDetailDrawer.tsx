@@ -6,7 +6,7 @@ import {
   type ContractRow,
   type Role,
 } from "../api";
-import { W, wMono, wideCaps, tint, R } from "../tokens";
+import { W, wMono, wideCaps, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { MonoId } from "../components/MonoId";
 import { IcX } from "../components/icons";
@@ -150,7 +150,7 @@ export function ContractDetailDrawer({
             flexWrap: "wrap",
           }}
         >
-          <span style={{ fontWeight: 600, fontSize: 16, color: W.text }}>
+          <span style={{ fontWeight: 600, fontSize: fs.body, color: W.text }}>
             {shortTemplateLabel(detail.template_id)}
           </span>
           {detail.package_name && (
@@ -158,7 +158,7 @@ export function ContractDetailDrawer({
               href={`#/packages/${encodeURIComponent(detail.package_name)}`}
               style={{
                 color: W.dim,
-                fontSize: 13,
+                fontSize: fs.small,
                 fontFamily: wMono,
                 textDecoration: "none",
               }}
@@ -180,7 +180,7 @@ export function ContractDetailDrawer({
             value={detail.contract_id}
             head={10}
             tail={8}
-            size={13}
+            size={fs.small}
             color={W.mag}
           />
         </div>
@@ -189,7 +189,7 @@ export function ContractDetailDrawer({
             style={{
               marginTop: 6,
               color: W.dim,
-              fontSize: 13,
+              fontSize: fs.small,
               fontFamily: wMono,
             }}
           >
@@ -201,7 +201,7 @@ export function ContractDetailDrawer({
             style={{
               marginTop: 6,
               color: W.err,
-              fontSize: 13,
+              fontSize: fs.small,
             }}
           >
             {state.message}
@@ -228,7 +228,7 @@ export function ContractDetailDrawer({
       </Section>
       {detail.created_at && (
         <Section label="Created">
-          <div style={{ fontFamily: wMono, fontSize: 13, color: W.text }}>
+          <div style={{ fontFamily: wMono, fontSize: fs.small, color: W.text }}>
             {detail.created_at}
           </div>
           {detail.created_update_id && (
@@ -240,7 +240,7 @@ export function ContractDetailDrawer({
                 display: "inline-block",
                 color: W.brand,
                 fontFamily: wMono,
-                fontSize: 13,
+                fontSize: fs.small,
                 fontVariantNumeric: "tabular-nums",
                 textDecoration: "none",
               }}
@@ -254,7 +254,7 @@ export function ContractDetailDrawer({
         <Section label="Archived">
           {detail.archived_at && (
             <div
-              style={{ fontFamily: wMono, fontSize: 13, color: W.text }}
+              style={{ fontFamily: wMono, fontSize: fs.small, color: W.text }}
             >
               {detail.archived_at}
             </div>
@@ -263,7 +263,7 @@ export function ContractDetailDrawer({
             <div
               style={{
                 color: W.dim,
-                fontSize: 13,
+                fontSize: fs.small,
                 marginTop: 3,
                 fontVariantNumeric: "tabular-nums",
               }}
@@ -280,7 +280,7 @@ export function ContractDetailDrawer({
                 display: "inline-block",
                 color: W.brand,
                 fontFamily: wMono,
-                fontSize: 13,
+                fontSize: fs.small,
                 fontVariantNumeric: "tabular-nums",
                 textDecoration: "none",
               }}
@@ -295,7 +295,7 @@ export function ContractDetailDrawer({
           padding: "10px 14px",
           borderTop: `1px solid ${W.border}`,
           color: W.dim,
-          fontSize: 13,
+          fontSize: fs.small,
           fontFamily: wMono,
           display: "flex",
           justifyContent: "space-between",
@@ -332,7 +332,7 @@ function Section({
       <div
         style={{
           color: W.dim,
-          fontSize: 11,
+          fontSize: fs.caption,
           ...wideCaps,
           marginBottom: 6,
         }}
@@ -359,7 +359,7 @@ function Pill({
         color,
         padding: "1px 8px",
         borderRadius: R.control,
-        fontSize: 11,
+        fontSize: fs.caption,
         fontWeight: 600,
         fontFamily: wMono,
       }}
@@ -371,7 +371,7 @@ function Pill({
 
 function Hint({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ color: W.dim, fontSize: 13, padding: "2px 0" }}>
+    <div style={{ color: W.dim, fontSize: fs.small, padding: "2px 0" }}>
       {children}
     </div>
   );
@@ -398,7 +398,7 @@ function PartyChip({ party, kind }: { party: string; kind: "sig" | "obs" }) {
           flexShrink: 0,
         }}
       />
-      <MonoId value={party} head={12} tail={8} size={13} color={W.text2} />
+      <MonoId value={party} head={12} tail={8} size={fs.small} color={W.text2} />
     </div>
   );
 }
@@ -447,7 +447,7 @@ function PayloadNode({
               style={{
                 color: W.dim,
                 fontFamily: wMono,
-                fontSize: 13,
+                fontSize: fs.small,
               }}
             >
               {k}:
@@ -464,7 +464,7 @@ function PayloadNode({
 function primStyle(kind: "text" | "num" | "dim"): React.CSSProperties {
   return {
     fontFamily: wMono,
-    fontSize: 13,
+    fontSize: fs.small,
     color: kind === "dim" ? W.dim : kind === "num" ? W.warn : W.text2,
     fontVariantNumeric: kind === "num" ? "tabular-nums" : undefined,
     wordBreak: "break-word",

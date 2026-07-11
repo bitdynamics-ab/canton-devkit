@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { W, wMono } from "../../tokens";
+import { W, wMono, fs } from "../../tokens";
 import { extent, niceTicks } from "./scale";
 
 // BarChart — categorical bar chart. Used for per-template throughput,
@@ -65,7 +65,7 @@ export function BarChart({
           x={width / 2}
           y={computedHeight / 2}
           textAnchor="middle"
-          fontSize={11}
+          fontSize={fs.caption}
           fill={W.dim}
           fontFamily={wMono}
         >
@@ -101,7 +101,7 @@ export function BarChart({
               x={x(t)}
               y={innerH + 14}
               textAnchor="middle"
-              fontSize={11}
+              fontSize={fs.caption}
               fill={W.dim}
               fontFamily={wMono}
             >
@@ -119,7 +119,7 @@ export function BarChart({
                 x={-8}
                 y={yy + barH / 2 + 3}
                 textAnchor="end"
-                fontSize={11}
+                fontSize={fs.caption}
                 fill={W.text2}
               >
                 {b.label}
@@ -135,7 +135,7 @@ export function BarChart({
               <text
                 x={x(b.value) + 5}
                 y={yy + barH / 2 + 3}
-                fontSize={11}
+                fontSize={fs.caption}
                 fill={W.text}
                 fontFamily={wMono}
               >
