@@ -15,7 +15,6 @@ import { MetricCard } from "../components/MetricCard";
 import { AreaChart } from "../components/charts/AreaChart";
 import { MultiLine } from "../components/charts/MultiLine";
 import { BarChart, type Bar } from "../components/charts/BarChart";
-import { Heatmap, type Cell } from "../components/charts/Heatmap";
 import {
   CHART_PALETTE,
   decodePrometheusRange,
@@ -26,12 +25,9 @@ interface CardState<T> {
   kind: "loading" | "ok" | "err";
   data?: T;
   error?: string;
-  // Non-error reason the panel is empty (e.g. the metric isn't resolvable
-  // on this Splice version). Rendered as a plain note, not an error.
-  note?: string;
 }
 
-const Q = {
+export const Q = {
   // Substitute: indexer-update counter, same as HeadlineLedgerTPS.
   throughputSeries:
     "sum(rate(daml_participant_api_indexer_updates[1m])) or vector(0)",
@@ -39,6 +35,11 @@ const Q = {
   // histogram_quantile is NaN; use the mean (sum/count), x1000 -> ms.
   avgLatency:
     "1000 * sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_sum[5m])) / sum(rate(daml_sequencer_client_submissions_sequencing_duration_seconds_count[5m]))",
+  // Participant/ledger-API command latency (submission → completion), ms
+  // per node. A real average (sum/count) — Canton's documented command
+  // duration signal, computable where the percentile buckets aren't.
+  cmdLatency:
+    "1000 * sum by (node) (rate(daml_participant_api_commands_submissions_duration_seconds_sum[5m])) / sum by (node) (rate(daml_participant_api_commands_submissions_duration_seconds_count[5m]))",
   // No total-ACS-cardinality metric on 0.6.4 (old proxy gone); the
   // active-contracts buffer gauge is the closest present signal.
   acsLookupBuffer:
@@ -108,7 +109,9 @@ export function MetricsScreen() {
   const [cpuSeries, setCpuSeries] = useState<CardState<Series[]>>({
     kind: "loading",
   });
-  const [heatmap, setHeatmap] = useState<CardState<Cell[]>>({ kind: "loading" });
+  const [cmdLatency, setCmdLatency] = useState<CardState<Series[]>>({
+    kind: "loading",
+  });
   const [topErrors, setTopErrors] = useState<CardState<Bar[]>>({
     kind: "loading",
   });
@@ -178,10 +181,11 @@ export function MetricsScreen() {
           setCpuSeries,
           signal,
         ),
-        loadHeatmap(
+        loadMultiSeriesGrouped(
           name,
-          scopeQ('sum(increase(daml_sequencer_client_submissions_sequencing_duration_seconds_bucket[1m])) by (le)', scope),
-          setHeatmap,
+          scopeQ(Q.cmdLatency, scope),
+          (m) => m.node ?? "node",
+          setCmdLatency,
           signal,
         ),
       ]);
@@ -369,32 +373,17 @@ export function MetricsScreen() {
         </ChartCard>
 
         <ChartCard
-          title="Submit-to-commit heatmap"
-          subtitle="latency density · 1m buckets · 1h"
+          title="Command latency"
+          subtitle="ledger API · submit → complete · avg per node"
         >
-          {heatmap.kind === "err" ? (
-            <ErrLine msg={heatmap.error ?? "failed"} />
-          ) : heatmap.note ? (
-            <p
-              style={{
-                margin: 0,
-                padding: "18px 4px",
-                fontSize: 12,
-                lineHeight: 1.5,
-                color: W.dim,
-              }}
-            >
-              {heatmap.note}
-            </p>
+          {cmdLatency.kind === "err" ? (
+            <ErrLine msg={cmdLatency.error ?? "failed"} />
           ) : (
-            <Heatmap
-              rows={6}
-              cols={60}
-              cells={heatmap.data ?? []}
-              rowLabels={["<5ms", "<25ms", "<100ms", "<500ms", "<2s", ">2s"]}
+            <MultiLine
+              series={cmdLatency.data ?? []}
               width={420}
               height={170}
-              color={CHART_PALETTE[2]}
+              format={(v) => (v >= 1000 ? (v / 1000).toFixed(2) + "s" : v.toFixed(0) + "ms")}
             />
           )}
         </ChartCard>
@@ -774,76 +763,6 @@ async function loadBars(
       error: e instanceof ApiError ? e.message : "failed",
     });
   }
-}
-
-async function loadHeatmap(
-  name: string,
-  query: string,
-  set: (s: CardState<Cell[]>) => void,
-  signal: AbortSignal,
-) {
-  try {
-    const r = await fetchMetricsRange(name, query, "1h", "1m", signal);
-    if (signal.aborted) return;
-    const decoded = decodePrometheusRange(
-      r as unknown as PrometheusRangeResponse,
-      (m) => m.le ?? "+Inf",
-    );
-    const out = heatmapCellsOrNote(decoded);
-    set(
-      "note" in out
-        ? { kind: "ok", data: [], note: out.note }
-        : { kind: "ok", data: out.cells },
-    );
-  } catch (e) {
-    if (isAborted(signal, e)) return;
-    set({
-      kind: "err",
-      error: e instanceof ApiError ? e.message : "failed",
-    });
-  }
-}
-
-export const HEATMAP_NO_FINITE_BUCKETS_NOTE =
-  "Not available on this Splice version — its latency histogram has a single bucket. The average above is the reliable signal.";
-
-// Build heatmap cells from decoded per-`le` bucket series, or a note when
-// the histogram has no finite buckets. Stock Splice 0.6.x (verified 0.6.4
-// and 0.6.9) exports this histogram with only the +Inf bucket, which would
-// collapse every observation into the top (>2s) row — a density map that
-// reads ">2s" for ~100ms latency.
-export function heatmapCellsOrNote(
-  decoded: Series[],
-): { cells: Cell[] } | { note: string } {
-  if (!decoded.some((s) => Number.isFinite(Number(s.label)))) {
-    return { note: HEATMAP_NO_FINITE_BUCKETS_NOTE };
-  }
-  const rowFor = (le: string): number | null => {
-    const n = Number(le);
-    if (!Number.isFinite(n)) return 5; // +Inf
-    if (n <= 0.005) return 0;
-    if (n <= 0.025) return 1;
-    if (n <= 0.1) return 2;
-    if (n <= 0.5) return 3;
-    if (n <= 2) return 4;
-    return 5;
-  };
-  let max = 0;
-  for (const s of decoded) {
-    for (const p of s.points) {
-      if (p.v > max) max = p.v;
-    }
-  }
-  if (max === 0) max = 1;
-  const cells: Cell[] = [];
-  for (const s of decoded) {
-    const row = rowFor(s.label);
-    if (row === null) continue;
-    s.points.forEach((p, c) => {
-      cells.push({ r: row, c, i: p.v / max });
-    });
-  }
-  return { cells };
 }
 
 // Latest value minus the point nearest 5 minutes back.
