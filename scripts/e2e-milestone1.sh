@@ -68,9 +68,9 @@ cleanup() {
   echo ""
   section "CLEANUP"
   for name in e2e-test-default e2e-named-test e2e-version-test e2e-bad-version; do
-    cli clean --name "$name" --force 2>/dev/null || true
+    cli remove "$name" --force 2>/dev/null || true
     # Belt-and-suspenders: remove containers+volumes directly in case
-    # `clean` missed them (known down→clean orphan-volume bug).
+    # `remove` missed them (known down→remove orphan-volume bug).
     docker compose -p "canton-${name}" down --volumes 2>/dev/null || true
   done
   rm -f "$SNAPSHOT_PATH"
@@ -137,9 +137,9 @@ docker info >/dev/null 2>&1 || {
 cli down e2e-test-default 2>/dev/null || true
 cli down e2e-named-test 2>/dev/null || true
 cli down e2e-version-test 2>/dev/null || true
-cli clean --name e2e-test-default --force 2>/dev/null || true
-cli clean --name e2e-named-test --force 2>/dev/null || true
-cli clean --name e2e-version-test --force 2>/dev/null || true
+cli remove e2e-test-default --force 2>/dev/null || true
+cli remove e2e-named-test --force 2>/dev/null || true
+cli remove e2e-version-test --force 2>/dev/null || true
 
 echo "Canton DevKit E2E — Milestone 1"
 echo "Platform: macOS ($(uname -m))"
@@ -170,8 +170,8 @@ TEST_ID="M1-INST-003"
   done
   # 'unpause' is an alias of 'resume' — verify its --help resolves.
   cli unpause --help >/dev/null 2>&1
-  # 'clean' is an alias of 'remove' — verify its --help resolves.
-  cli clean --help >/dev/null 2>&1
+  # 'remove' — verify its --help resolves.
+  cli remove --help >/dev/null 2>&1
 
   # Step 3: binary is a compiled executable (platform-specific)
   case "$(uname -s)" in
@@ -423,9 +423,9 @@ echo "  Snapshot/restore cycle (may take a few minutes)..."
   [ -f "$SNAPSHOT_PATH" ] && [ -s "$SNAPSHOT_PATH" ] \
     || { echo "FAIL step 1: snapshot file missing or empty" >&2; exit 1; }
 
-  # Step 2: tear down (use clean --force directly; down→clean leaves orphaned
+  # Step 2: tear down (use remove --force directly; down→remove leaves orphaned
   # volumes due to a known registry-deregistration bug).
-  cli clean --name e2e-test-default --force 2>/dev/null || true
+  cli remove e2e-test-default --force 2>/dev/null || true
   # Belt-and-suspenders: ensure Docker resources are gone
   docker compose -p "canton-e2e-test-default" down --volumes 2>/dev/null || true
 
@@ -489,34 +489,34 @@ else
   fail "$TEST_ID: Down stops instance cleanly" "down failed or containers remain"
 fi
 
-# ── M1-CLN-001: Clean removes all resources ─────────────────────────
-TEST_ID="M1-CLN-001"
-echo "  Clean test (up + clean --force cycle)..."
+# ── M1-RMV-001: Remove deletes all resources ────────────────────────
+TEST_ID="M1-RMV-001"
+echo "  Remove test (up + remove --force cycle)..."
 (
   # Step 1: start an instance (reuse if already running)
   cli status e2e-test-default 2>&1 | grep -qiE "(healthy|ready|running)" || \
     timed 600 "$CDK" localnet up e2e-test-default \
-    || { echo "FAIL step 1: could not bring instance up for clean test" >&2; exit 1; }
+    || { echo "FAIL step 1: could not bring instance up for remove test" >&2; exit 1; }
 
-  # Step 2: clean --force on the running instance (tears down + removes volumes)
-  cli clean --name e2e-test-default --force \
-    || { echo "FAIL step 2: clean --force exited $?" >&2; exit 1; }
+  # Step 2: remove --force on the running instance (tears down + removes volumes)
+  cli remove e2e-test-default --force \
+    || { echo "FAIL step 2: remove --force exited $?" >&2; exit 1; }
 
   # Step 3: verify all resources removed
   if docker ps -a --filter "label=com.docker.compose.project=canton-e2e-test-default" --format '{{.Names}}' | grep -qE "e2e-test-default"; then
-    echo "FAIL step 3a: containers remain after clean" >&2; exit 1
+    echo "FAIL step 3a: containers remain after remove" >&2; exit 1
   fi
   if docker volume ls --format '{{.Name}}' | grep -qE "e2e-test-default"; then
-    echo "FAIL step 3b: volumes remain after clean" >&2; exit 1
+    echo "FAIL step 3b: volumes remain after remove" >&2; exit 1
   fi
   if docker network ls --format '{{.Name}}' | grep -qE "e2e-test-default"; then
-    echo "FAIL step 3c: networks remain after clean" >&2; exit 1
+    echo "FAIL step 3c: networks remain after remove" >&2; exit 1
   fi
 )
 if [ $? -eq 0 ]; then
-  pass "$TEST_ID: Clean removes all resources"
+  pass "$TEST_ID: Remove deletes all resources"
 else
-  fail "$TEST_ID: Clean removes all resources" "clean failed or resources remain"
+  fail "$TEST_ID: Remove deletes all resources" "remove failed or resources remain"
   # Force-remove leftover resources so Phase 3 doesn't compete with a
   # stale instance for memory / ports.
   docker compose -p "canton-e2e-test-default" down --volumes 2>/dev/null || true
@@ -553,7 +553,7 @@ else
 fi
 
 # Tear down e2e-named-test before starting the next instance
-cli clean --name e2e-named-test --force 2>/dev/null || true
+cli remove e2e-named-test --force 2>/dev/null || true
 docker compose -p "canton-e2e-named-test" down --volumes 2>/dev/null || true
 
 # ── M1-UP-003: LocalNet up with --version ───────────────────────────
@@ -572,7 +572,7 @@ echo "  Starting e2e-version-test with --version $SPLICE_VERSION (may take 3-5 m
 
   # Step 3: invalid version should fail
   if "$CDK" localnet up e2e-bad-version --version "0.0.0-nonexistent" >/dev/null 2>&1; then
-    cli clean --name e2e-bad-version --force 2>/dev/null || true
+    cli remove e2e-bad-version --force 2>/dev/null || true
     echo "FAIL step 3: invalid version should have been rejected" >&2; exit 1
   fi
 )
