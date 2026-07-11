@@ -201,7 +201,7 @@ func runObservabilityToggleResolved(cmd *cobra.Command, state *registry.State, f
 	if state.Status != registry.StatusRunning {
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 			"instance %q is not running (status=%s) — bring it up first with "+
-				"`dpm localnet up --name %s` (the observability profile is re-enabled automatically once it has been set once)\n",
+				"`dpm localnet up %s` (the observability profile is re-enabled automatically once it has been set once)\n",
 			state.Name, state.Status, state.Name)
 		return localnet.AsExitError(localnet.ExitUserError)
 	}

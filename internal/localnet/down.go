@@ -134,7 +134,7 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 		}
 		_, _ = fmt.Fprintf(errw,
 			"docker compose down failed: %s\nRegistry state preserved at %s. "+
-				"Re-run `localnet down --name %s` once the host is healthy.\n",
+				"Re-run `localnet down %s` once the host is healthy.\n",
 			err, state.DataDir, state.Name)
 		state.Status = registry.StatusFailed
 		if werr := registry.Write(state); werr != nil {

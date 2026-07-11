@@ -50,6 +50,23 @@ func TestRunListEmptyJSONShape(t *testing.T) {
 	}
 }
 
+func TestRunListEmptyTextHintUsesPositionalName(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+
+	var out, errw bytes.Buffer
+	code := RunList(context.Background(), &out, &errw, &ListOptions{Format: "text"})
+	if code != ExitSuccess {
+		t.Fatalf("RunList exit = %d, want %d; stderr=%s", code, ExitSuccess, errw.String())
+	}
+	body := out.String()
+	if !strings.Contains(body, "Start one with: canton-devkit localnet up <name>") {
+		t.Fatalf("hint = %q, want positional up syntax", body)
+	}
+	if strings.Contains(body, "--name") {
+		t.Fatalf("hint should not mention --name:\n%s", body)
+	}
+}
+
 func TestRunListJSONSerialisesWarningAndPorts(t *testing.T) {
 	regRoot := t.TempDir()
 	t.Setenv("CANTON_DEVKIT_REGISTRY", regRoot)

@@ -341,7 +341,7 @@ func RunBalanceMatrix(ctx context.Context, opts BalanceOptions) (*BalanceMatrix,
 		// instance-specific remedy here instead of falling through to
 		// dialLedger's generic "ledger endpoint is required (host:port)".
 		if opts.Endpoint == "" {
-			return nil, fmt.Errorf("instance %q has no reachable participant ledger port — is it running? run localnet up --name %s, or pass --endpoint host:port", opts.Instance, opts.Instance)
+			return nil, fmt.Errorf("instance %q has no reachable participant ledger port — is it running? run localnet up %s, or pass --endpoint host:port", opts.Instance, opts.Instance)
 		}
 	}
 	ws, err := scanWorkspace(ctx, opts)
