@@ -246,7 +246,7 @@ export function DARScreen() {
           <h2 style={{ color: W.text, fontSize: 18, margin: 0 }}>
             DAR Manager
           </h2>
-          <div style={{ color: W.dim, fontSize: 12.5, marginTop: 3 }}>
+          <div style={{ color: W.dim, fontSize: 13, marginTop: 3 }}>
             {state.kind === "ok"
               ? `${state.data.dars.length} packages on ${role} participant`
               : "loading…"}
@@ -325,13 +325,13 @@ export function DARScreen() {
                       style={{
                         fontWeight: 600,
                         marginBottom: 3,
-                        fontSize: 13,
+                        fontSize: 16,
                         color: W.text,
                       }}
                     >
                       Drop DAR here
                     </div>
-                    <div style={{ color: W.dim, fontSize: 11.5 }}>
+                    <div style={{ color: W.dim, fontSize: 13 }}>
                       or click to browse · multiple .dar accepted
                     </div>
                   </>
@@ -374,7 +374,7 @@ export function DARScreen() {
                     padding: "8px 10px",
                     background: W.border,
                     borderRadius: 2,
-                    fontSize: 11.5,
+                    fontSize: 13,
                     color: selectedRoles.length === 0 ? W.warn : W.text2,
                     lineHeight: 1.5,
                   }}
@@ -440,11 +440,11 @@ export function DARScreen() {
             >
               <div>
                 <div
-                  style={{ color: W.text, fontSize: 13, fontWeight: 600 }}
+                  style={{ color: W.text, fontSize: 16, fontWeight: 600 }}
                 >
                   Packages on {role} participant
                 </div>
-                <div style={{ color: W.dim, fontSize: 11.5, marginTop: 2 }}>
+                <div style={{ color: W.dim, fontSize: 13, marginTop: 2 }}>
                   {filter === "app" ? "filter: app DARs only" : "all packages"}{" "}
                   · {rows.length} results
                 </div>
@@ -471,7 +471,7 @@ export function DARScreen() {
                 gap: 14,
                 padding: "9px 14px",
                 color: W.dim,
-                fontSize: 10.5,
+                fontSize: 11,
                 ...tableCaps,
                 borderBottom: `1px solid ${W.border}`,
               }}
@@ -483,7 +483,7 @@ export function DARScreen() {
             </div>
 
             {rows.length === 0 && (
-              <div style={{ padding: 18, color: W.dim, fontSize: 12.5 }}>
+              <div style={{ padding: 18, color: W.dim, fontSize: 13 }}>
                 No packages match the current filter.
               </div>
             )}
@@ -502,7 +502,7 @@ export function DARScreen() {
               style={{
                 padding: "10px 14px",
                 color: W.dim,
-                fontSize: 11.5,
+                fontSize: 13,
                 display: "flex",
                 justifyContent: "space-between",
                 borderTop: `1px solid ${W.border}`,
@@ -558,7 +558,7 @@ function WatchModeCard({ instance }: { instance: string }) {
           display: "flex",
           flexDirection: "column",
           gap: 8,
-          fontSize: 12,
+          fontSize: 13,
           fontFamily: wMono,
         }}
       >
@@ -570,7 +570,7 @@ function WatchModeCard({ instance }: { instance: string }) {
               gap: 6,
               padding: "2px 8px",
               borderRadius: R.control,
-              fontSize: 12,
+              fontSize: 13,
               background: active ? tint(W.ok, 13) : W.border,
               color: active ? W.ok : W.dim,
               fontWeight: 500,
@@ -580,13 +580,13 @@ function WatchModeCard({ instance }: { instance: string }) {
             {active ? "Watching" : "Idle"}
           </span>
           {last && (
-            <span style={{ color: W.dim, fontSize: 11 }}>{last.event}</span>
+            <span style={{ color: W.dim, fontSize: 13 }}>{last.event}</span>
           )}
         </div>
         <Row k="last event" v={ago} vColor={last ? W.text : W.dim} />
         <Row k="detail" v={last?.detail ?? "—"} vColor={W.dim} />
         <div style={{ height: 1, background: W.border, margin: "4px 0" }} />
-        <div style={{ color: W.dim, fontSize: 11.5, fontFamily: "inherit" }}>
+        <div style={{ color: W.dim, fontSize: 13, fontFamily: "inherit" }}>
           Start a watcher with:
           <pre
             style={{
@@ -595,7 +595,7 @@ function WatchModeCard({ instance }: { instance: string }) {
               marginTop: 4,
               borderRadius: 2,
               fontFamily: wMono,
-              fontSize: 11,
+              fontSize: 13,
               color: W.text2,
               whiteSpace: "pre-wrap",
             }}
@@ -654,7 +654,7 @@ function PkgRow({
         style={{
           fontFamily: wMono,
           color: W.text,
-          fontSize: 12.5,
+          fontSize: 13,
           fontWeight: active ? 600 : 500,
           overflow: "hidden",
           textOverflow: "ellipsis",
@@ -668,13 +668,13 @@ function PkgRow({
         style={{
           fontFamily: wMono,
           color: W.brand,
-          fontSize: 11.5,
+          fontSize: 13,
           fontVariantNumeric: "tabular-nums",
         }}
       >
         {row.version}
       </code>
-      <MonoId value={row.main} head={12} tail={6} size={11} color={W.dim} />
+      <MonoId value={row.main} head={12} tail={6} size={13} color={W.dim} />
       <VettingCell vet={vet} />
     </div>
   );
@@ -685,13 +685,13 @@ function PkgRow({
 function VettingCell({ vet }: { vet: VetState | undefined }) {
   if (!vet || vet.kind === "loading") {
     return (
-      <span style={{ fontSize: 11, color: W.dim, fontFamily: wMono }}>…</span>
+      <span style={{ fontSize: 13, color: W.dim, fontFamily: wMono }}>…</span>
     );
   }
   if (vet.kind === "err" || vet.rows.length === 0) {
     return (
       <span
-        style={{ fontSize: 11, color: W.warn, fontFamily: wMono }}
+        style={{ fontSize: 13, color: W.warn, fontFamily: wMono }}
         title="vetting state unavailable"
       >
         unknown
@@ -705,7 +705,7 @@ function VettingCell({ vet }: { vet: VetState | undefined }) {
         alignItems: "center",
         gap: 8,
         fontFamily: wMono,
-        fontSize: 10.5,
+        fontSize: 11,
       }}
     >
       {vet.rows.map((r) => {
@@ -758,7 +758,7 @@ function InspectDrawer({
           padding: 14,
           textAlign: "left",
           color: W.dim,
-          fontSize: 13,
+          fontSize: 16,
           lineHeight: 1.5,
         }}
       >
@@ -778,15 +778,15 @@ function InspectDrawer({
     >
       <header style={{ padding: "14px 16px", borderBottom: `1px solid ${W.border}` }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-          <span style={{ color: W.text, fontWeight: 600, fontSize: 13 }}>
+          <span style={{ color: W.text, fontWeight: 600, fontSize: 16 }}>
             {row.name}
           </span>
-          <span style={{ color: W.brand, fontWeight: 400, fontSize: 12, fontFamily: wMono }}>
+          <span style={{ color: W.brand, fontWeight: 400, fontSize: 13, fontFamily: wMono }}>
             {row.version}
           </span>
         </div>
         {row.description && row.description !== `${row.name}-${row.version}` && (
-          <div style={{ color: W.dim, fontSize: 12, marginTop: 4 }}>
+          <div style={{ color: W.dim, fontSize: 13, marginTop: 4 }}>
             {row.description}
           </div>
         )}
@@ -801,8 +801,8 @@ function InspectDrawer({
             alignItems: "center",
           }}
         >
-          <span style={{ color: W.dim, fontSize: 12 }}>pkg-id</span>
-          <MonoId value={row.main} head={10} tail={8} size={11} color={W.mag} />
+          <span style={{ color: W.dim, fontSize: 13 }}>pkg-id</span>
+          <MonoId value={row.main} head={10} tail={8} size={13} color={W.mag} />
         </div>
         <KV label="name" value={row.name} mono />
         <KV label="version" value={row.version} mono />
@@ -860,7 +860,7 @@ function CompareSelector({
   if (others.length === 0) return null;
   return (
     <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
-      <span style={{ color: W.dim, fontSize: 11.5 }}>Compare with</span>
+      <span style={{ color: W.dim, fontSize: 13 }}>Compare with</span>
       <select
         onChange={(e) => {
           if (e.target.value) onPick(e.target.value);
@@ -872,7 +872,7 @@ function CompareSelector({
           border: `1px solid ${W.border}`,
           borderRadius: 2,
           padding: "3px 6px",
-          fontSize: 11.5,
+          fontSize: 13,
           fontFamily: wMono,
         }}
         aria-label="compare current DAR with another"
@@ -946,10 +946,10 @@ function VettingPanel({
   }
 
   if (state.kind === "loading") {
-    return <div style={{ color: W.dim, fontSize: 12 }}>Loading vetting state…</div>;
+    return <div style={{ color: W.dim, fontSize: 13 }}>Loading vetting state…</div>;
   }
   if (state.kind === "err") {
-    return <div style={{ color: W.err, fontSize: 12 }}>Vetting: {state.msg}</div>;
+    return <div style={{ color: W.err, fontSize: 13 }}>Vetting: {state.msg}</div>;
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -961,12 +961,12 @@ function VettingPanel({
             alignItems: "center",
             gap: 10,
             fontFamily: wMono,
-            fontSize: 12,
+            fontSize: 13,
           }}
         >
           <span style={{ width: 100, color: W.text2 }}>{r.role}</span>
           {r.error ? (
-            <span style={{ color: W.warn, fontSize: 11.5 }}>{r.error}</span>
+            <span style={{ color: W.warn, fontSize: 13 }}>{r.error}</span>
           ) : (
             <button
               type="button"
@@ -1015,7 +1015,7 @@ function VettingPanel({
         </div>
       ))}
       {error && (
-        <div style={{ color: W.err, fontSize: 11.5, marginTop: 4 }}>{error}</div>
+        <div style={{ color: W.err, fontSize: 13, marginTop: 4 }}>{error}</div>
       )}
     </div>
   );
@@ -1034,7 +1034,7 @@ function UploadProgress({
           color: W.text,
           marginBottom: 6,
           fontFamily: wMono,
-          fontSize: 12,
+          fontSize: 13,
         }}
       >
         Uploading {state.filenames.length} file{state.filenames.length === 1 ? "" : "s"} ({pct}%)
@@ -1085,7 +1085,7 @@ function UploadResultBanner({
         border: `1px solid ${accent}`,
         borderRadius: R.control,
         padding: "8px 12px",
-        fontSize: 12,
+        fontSize: 13,
         color: W.text2,
       }}
     >
@@ -1110,7 +1110,7 @@ function UploadResultBanner({
             alignItems: "center",
             gap: 8,
             fontFamily: wMono,
-            fontSize: 11,
+            fontSize: 13,
             marginTop: 3,
             color: r.ok ? W.text2 : W.err,
           }}
@@ -1146,7 +1146,7 @@ function ErrorBanner({ msg }: { msg: string }) {
         border: `1px solid ${W.err}`,
         borderRadius: 2,
         padding: "8px 12px",
-        fontSize: 12,
+        fontSize: 13,
         color: W.err,
       }}
     >
@@ -1184,7 +1184,7 @@ function RoleSwitcher({
               border: "none",
               borderRadius: R.control,
               padding: "5px 12px",
-              fontSize: 12,
+              fontSize: 13,
               fontFamily: wMono,
               fontWeight: active ? 600 : 500,
               cursor: active ? "default" : "pointer",
@@ -1223,7 +1223,7 @@ function VetToggle({
         background: W.border,
         border: "none",
         borderRadius: 2,
-        fontSize: 12,
+        fontSize: 13,
         cursor: "pointer",
         width: "100%",
         textAlign: "left",
@@ -1273,7 +1273,7 @@ function FilterBtn({
       onClick={onClick}
       style={{
         padding: "4px 10px",
-        fontSize: 11.5,
+        fontSize: 13,
         borderRadius: 2,
         border: `1px solid ${active ? W.brand : W.border}`,
         background: active ? `${tint(W.brand, 10)}` : "transparent",
@@ -1313,11 +1313,11 @@ function Card({
             borderBottom: `1px solid ${W.border}`,
           }}
         >
-          <div style={{ color: W.text, fontSize: 12.5, fontWeight: 600 }}>
+          <div style={{ color: W.text, fontSize: 13, fontWeight: 600 }}>
             {title}
           </div>
           {subtitle && (
-            <div style={{ color: W.dim, fontSize: 11, marginTop: 1 }}>
+            <div style={{ color: W.dim, fontSize: 13, marginTop: 1 }}>
               {subtitle}
             </div>
           )}
@@ -1348,7 +1348,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     <div
       style={{
         color: W.dim,
-        fontSize: 10.5,
+        fontSize: 11,
         ...tableCaps,
       }}
     >
@@ -1377,11 +1377,11 @@ function KV({
         padding: "4px 0",
       }}
     >
-      <span style={{ color: W.dim, fontSize: 12 }}>{label}</span>
+      <span style={{ color: W.dim, fontSize: 13 }}>{label}</span>
       <span
         style={{
           color: color ?? W.text2,
-          fontSize: mono ? 11 : 12,
+          fontSize: mono ? 13 : 13,
           fontFamily: mono ? wMono : undefined,
           fontVariantNumeric: mono ? "tabular-nums" : undefined,
           wordBreak: "break-word",
@@ -1411,7 +1411,7 @@ function Row({
         padding: "4px 0",
       }}
     >
-      <span style={{ color: W.dim, fontSize: 12 }}>{k}</span>
+      <span style={{ color: W.dim, fontSize: 13 }}>{k}</span>
       <span style={{ color: vColor ?? W.text }}>{v}</span>
     </div>
   );
@@ -1434,7 +1434,7 @@ function DARListLoading() {
           padding: "11px 14px",
           borderBottom: `1px solid ${W.border}`,
           color: W.dim,
-          fontSize: 12,
+          fontSize: 13,
         }}
       >
         Loading package list
@@ -1462,7 +1462,7 @@ function ErrorPanel({ msg }: { msg: string }) {
         borderRadius: 4,
         padding: 16,
         color: W.err,
-        fontSize: 13,
+        fontSize: 16,
       }}
     >
       {msg}
@@ -1486,10 +1486,10 @@ function EmptyPanel({
         padding: 20,
       }}
     >
-      <h3 style={{ color: W.warn, fontSize: 14, marginTop: 0, marginBottom: 8 }}>
+      <h3 style={{ color: W.warn, fontSize: 16, marginTop: 0, marginBottom: 8 }}>
         {title}
       </h3>
-      <p style={{ color: W.text2, fontSize: 13 }}>{remediation}</p>
+      <p style={{ color: W.text2, fontSize: 16 }}>{remediation}</p>
     </div>
   );
 }

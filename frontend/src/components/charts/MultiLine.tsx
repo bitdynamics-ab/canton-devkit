@@ -102,7 +102,7 @@ export function MultiLine({
                   x={-6}
                   y={yy + 3}
                   textAnchor="end"
-                  fontSize={9}
+                  fontSize={11}
                   fill={W.dim}
                   fontFamily={wMono}
                 >
@@ -119,7 +119,7 @@ export function MultiLine({
               textAnchor={
                 i === 0 ? "start" : i === xTicks.length - 1 ? "end" : "middle"
               }
-              fontSize={9}
+              fontSize={11}
               fill={W.dim}
               fontFamily={wMono}
             >
@@ -191,7 +191,7 @@ export function MultiLine({
             gap: 14,
             flexWrap: "wrap",
             padding: "4px 12px 0",
-            fontSize: 11,
+            fontSize: 13,
             fontFamily: wMono,
             color: W.text2,
           }}

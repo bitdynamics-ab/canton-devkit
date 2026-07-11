@@ -13,10 +13,10 @@ export function Placeholder({ name }: { name: string }) {
         maxWidth: 480,
       }}
     >
-      <h2 style={{ color: W.text2, marginTop: 0, marginBottom: 6, fontSize: 15 }}>
+      <h2 style={{ color: W.text2, marginTop: 0, marginBottom: 6, fontSize: 16 }}>
         {name}
       </h2>
-      <p style={{ margin: 0, fontSize: 13 }}>
+      <p style={{ margin: 0, fontSize: 16 }}>
         That route doesn’t exist. Pick another screen from the sidebar or
         press ⌘K.
       </p>

@@ -73,7 +73,7 @@ export function StatusBadge({
           border: `1px solid ${tint(color, 34)}`,
           background: tint(color, 13),
           color,
-          fontSize: 11,
+          fontSize: 13,
           fontWeight: 500,
           ...style,
         }}
@@ -90,7 +90,7 @@ export function StatusBadge({
         alignItems: "center",
         gap: 6,
         color,
-        fontSize: 12.5,
+        fontSize: 13,
         ...style,
       }}
     >

@@ -67,7 +67,7 @@ export function MetricCard({
           style={{
             ...wideCaps,
             color: W.dim,
-            fontSize: 11,
+            fontSize: 13,
           }}
         >
           {title}
@@ -76,7 +76,7 @@ export function MetricCard({
           <span
             style={{
               fontFamily: wMono,
-              fontSize: 11,
+              fontSize: 13,
               fontVariantNumeric: "tabular-nums",
               color: deltaColor,
               fontWeight: 600,
@@ -99,7 +99,7 @@ export function MetricCard({
       </div>
 
       {error ? (
-        <div style={{ color: W.err, fontSize: 12 }} role="alert">
+        <div style={{ color: W.err, fontSize: 13 }} role="alert">
           {error}
         </div>
       ) : (
@@ -118,7 +118,7 @@ export function MetricCard({
               <span
                 style={{
                   color: W.text,
-                  fontSize: 26,
+                  fontSize: 28,
                   fontWeight: 600,
                   lineHeight: 1.1,
                   fontFamily: wMono,
@@ -132,7 +132,7 @@ export function MetricCard({
                 <span
                   style={{
                     color: W.text,
-                    fontSize: 26,
+                    fontSize: 28,
                     fontWeight: 600,
                     fontFamily: wMono,
                     fontVariantNumeric: "tabular-nums",
@@ -142,7 +142,7 @@ export function MetricCard({
                   {format(value)}
                 </span>
                 {unit && (
-                  <span style={{ color: W.dim, fontSize: 12 }}>{unit}</span>
+                  <span style={{ color: W.dim, fontSize: 13 }}>{unit}</span>
                 )}
               </>
             )}

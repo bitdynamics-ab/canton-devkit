@@ -142,7 +142,7 @@ export function AreaChart({
                 x={-6}
                 y={yy + 3}
                 textAnchor="end"
-                fontSize={9}
+                fontSize={11}
                 fill={W.dim}
                 fontFamily={wMono}
               >
@@ -158,7 +158,7 @@ export function AreaChart({
             x={x(t)}
             y={innerH + 14}
             textAnchor={i === 0 ? "start" : i === xTicks.length - 1 ? "end" : "middle"}
-            fontSize={9}
+            fontSize={11}
             fill={W.dim}
             fontFamily={wMono}
           >
@@ -231,7 +231,7 @@ export function AreaChart({
               borderRadius: 2,
               padding: "3px 7px",
               fontFamily: wMono,
-              fontSize: 10.5,
+              fontSize: 11,
               color: W.text,
               textAlign: "center",
             }}
@@ -240,7 +240,7 @@ export function AreaChart({
               {format(hover.p.v)}
               {yLabel ? " " + yLabel : ""}
             </div>
-            <div style={{ color: W.dim, fontSize: 9 }}>{fmtTime(hover.p.t)}</div>
+            <div style={{ color: W.dim, fontSize: 11 }}>{fmtTime(hover.p.t)}</div>
           </div>
         </foreignObject>
       )}

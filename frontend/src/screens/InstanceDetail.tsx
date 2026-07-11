@@ -224,15 +224,15 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
       }}
     >
       <header style={{ marginBottom: 12, display: "flex", alignItems: "baseline", gap: 12 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, color: W.text }}>
+        <div style={{ fontWeight: 600, fontSize: 16, color: W.text }}>
           Instance detail
         </div>
-        <code style={{ color: W.brand, fontFamily: wMono, fontSize: 12 }}>{name}</code>
+        <code style={{ color: W.brand, fontFamily: wMono, fontSize: 13 }}>{name}</code>
         {state.kind === "ok" && state.instance.live_probe_failed && (
           <span
             style={{
               color: W.warn,
-              fontSize: 11,
+              fontSize: 13,
               border: `1px solid ${tint(W.warn, 34)}`,
               background: tint(W.warn, 13),
               borderRadius: R.control,
@@ -267,7 +267,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
             border: `1px solid ${W.err}`,
             borderRadius: R.control,
             padding: "6px 10px",
-            fontSize: 12,
+            fontSize: 13,
             marginBottom: 10,
           }}
         >
@@ -284,7 +284,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
             border: `1px solid ${W.warn}`,
             borderRadius: R.control,
             padding: "6px 10px",
-            fontSize: 12,
+            fontSize: 13,
             marginBottom: 10,
           }}
         >
@@ -302,7 +302,7 @@ export function InstanceDetail({ name, statusHint, onChanged }: Props) {
 
       {state.kind === "loading" && showSkeleton && <DetailGridLoading />}
       {state.kind === "err" && (
-        <div role="alert" style={{ color: W.err, fontSize: 13 }}>{state.error}</div>
+        <div role="alert" style={{ color: W.err, fontSize: 16 }}>{state.error}</div>
       )}
       {state.kind === "ok" && <DetailGrid instance={state.instance} />}
       {/* Rendered even on loading/error so a broken instance can still be snapshotted. */}
@@ -332,7 +332,7 @@ function DetailGrid({ instance }: { instance: Instance }) {
         gridTemplateColumns: "160px 1fr",
         rowGap: 6,
         columnGap: 16,
-        fontSize: 12.5,
+        fontSize: 13,
       }}
     >
       {rows.map(([k, v, mono]) => (

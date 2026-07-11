@@ -87,10 +87,10 @@ export function ConfirmHost() {
         }}
       >
         <div style={{ padding: "16px 18px 14px" }}>
-          <h2 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 600, color: W.text }}>
+          <h2 style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 600, color: W.text }}>
             {p.title}
           </h2>
-          <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: W.text2 }}>
+          <p style={{ margin: 0, fontSize: 16, lineHeight: 1.5, color: W.text2 }}>
             {p.body}
           </p>
           {p.detail && (
@@ -98,7 +98,7 @@ export function ConfirmHost() {
               style={{
                 marginTop: 10,
                 fontFamily: wMono,
-                fontSize: 11.5,
+                fontSize: 13,
                 color: W.dim,
                 background: W.inset,
                 border: `1px solid ${W.border}`,

@@ -36,7 +36,7 @@ export function Dashboard() {
           marginBottom: 12,
         }}
       >
-        <h1 style={{ fontSize: 20, fontWeight: 600, marginTop: 0, marginBottom: 0 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 600, marginTop: 0, marginBottom: 0 }}>
           LocalNet instances
         </h1>
         <Button
@@ -79,7 +79,7 @@ export function Dashboard() {
                 borderRadius: R.control,
                 padding: "6px 12px",
                 marginBottom: 12,
-                fontSize: 12,
+                fontSize: 13,
               }}
             >
               Couldn’t refresh. Showing last known state.
@@ -94,7 +94,7 @@ export function Dashboard() {
                 borderRadius: R.control,
                 padding: "8px 12px",
                 marginBottom: 16,
-                fontSize: 13,
+                fontSize: 16,
               }}
             >
               {sel.warning}
@@ -159,7 +159,7 @@ function InstanceTable({ instances, selected, onSelect }: InstanceTableProps) {
         style={{
           width: "100%",
           borderCollapse: "collapse",
-          fontSize: 13,
+          fontSize: 16,
         }}
       >
         <thead>
@@ -223,7 +223,7 @@ function InstanceTableLoading() {
 const th: React.CSSProperties = {
   ...tableCaps,
   padding: "8px 12px",
-  fontSize: 11,
+  fontSize: 13,
 };
 
 const td: React.CSSProperties = {
@@ -248,7 +248,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
         color: W.dim,
       }}
     >
-      <p style={{ marginTop: 0, fontSize: 14, color: W.text }}>
+      <p style={{ marginTop: 0, fontSize: 16, color: W.text }}>
         No LocalNet instances yet.
       </p>
       <Button
@@ -260,7 +260,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       >
         Create your first instance
       </Button>
-      <p style={{ marginBottom: 0, fontSize: 11.5 }}>
+      <p style={{ marginBottom: 0, fontSize: 13 }}>
         Or run{" "}
         <code style={{ fontFamily: wMono, color: W.text2 }}>
           dpm localnet up --name demo
@@ -358,8 +358,8 @@ function RecentActivity({ name }: { name: string }) {
       }}
     >
       <header style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: W.text }}>Recent activity</h3>
-        <span style={{ color: W.dim, fontSize: 12 }}>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: W.text }}>Recent activity</h3>
+        <span style={{ color: W.dim, fontSize: 13 }}>
           ledger events · as seen by the app-provider participant
         </span>
         <Button
@@ -374,16 +374,16 @@ function RecentActivity({ name }: { name: string }) {
       </header>
 
       {state.kind === "loading" && (
-        <div style={{ color: W.dim, fontSize: 13, padding: "8px 0" }}>Scanning recent ledger updates…</div>
+        <div style={{ color: W.dim, fontSize: 16, padding: "8px 0" }}>Scanning recent ledger updates…</div>
       )}
       {state.kind === "needs-jwt" && (
-        <div style={{ color: W.dim, fontSize: 12.5, padding: "8px 0" }}>
+        <div style={{ color: W.dim, fontSize: 13, padding: "8px 0" }}>
           Ledger activity needs a party-rights JWT. Splice LocalNet signs user-id tokens by
           default. Open the Explorer to project through a specific party.
         </div>
       )}
       {state.kind === "err" && (
-        <div style={{ color: W.dim, fontSize: 12.5, padding: "8px 0" }}>
+        <div style={{ color: W.dim, fontSize: 13, padding: "8px 0" }}>
           {/no jwt recorded/i.test(state.error)
             ? "Ledger activity needs recorded role JWTs. Restart the instance to capture them (older instances predate JWT capture)."
             : `Ledger activity unavailable. ${state.error}.`}{" "}
@@ -391,12 +391,12 @@ function RecentActivity({ name }: { name: string }) {
         </div>
       )}
       {state.kind === "ok" && events.length === 0 && (
-        <div style={{ color: W.dim, fontSize: 13, padding: "8px 0" }}>
+        <div style={{ color: W.dim, fontSize: 16, padding: "8px 0" }}>
           No recent ledger activity. Run a token or DAR operation to see updates.
         </div>
       )}
       {state.kind === "ok" && events.length > 0 && (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 8 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 16, marginTop: 8 }}>
           <thead>
             <tr style={{ color: W.dim, textAlign: "left" }}>
               <th style={actTh}>TIME</th>
@@ -408,7 +408,7 @@ function RecentActivity({ name }: { name: string }) {
           <tbody>
             {events.map((e) => (
               <tr key={e.key} style={{ borderTop: `1px solid ${W.border}` }}>
-                <td style={{ ...actTd, color: W.dim, fontFamily: wMono, fontVariantNumeric: "tabular-nums", fontSize: 11 }}>{e.time}</td>
+                <td style={{ ...actTd, color: W.dim, fontFamily: wMono, fontVariantNumeric: "tabular-nums", fontSize: 13 }}>{e.time}</td>
                 <td style={actTd}>
                   <span
                     style={{
@@ -417,7 +417,7 @@ function RecentActivity({ name }: { name: string }) {
                       background: tint(kindColor[e.kind], 13),
                       borderRadius: R.control,
                       padding: "1px 6px",
-                      fontSize: 11,
+                      fontSize: 13,
                     }}
                   >
                     {e.kind}
@@ -425,7 +425,7 @@ function RecentActivity({ name }: { name: string }) {
                 </td>
                 <td style={{ ...actTd, fontFamily: wMono, color: W.text2 }}>{e.event}</td>
                 <td style={actTd}>
-                  <MonoId value={e.cid} head={6} tail={6} size={11} color={W.info} />
+                  <MonoId value={e.cid} head={6} tail={6} size={13} color={W.info} />
                 </td>
               </tr>
             ))}
@@ -433,7 +433,7 @@ function RecentActivity({ name }: { name: string }) {
         </table>
       )}
       {state.kind === "ok" && state.truncated && (
-        <div style={{ color: W.dim, fontSize: 11, marginTop: 8 }}>
+        <div style={{ color: W.dim, fontSize: 13, marginTop: 8 }}>
           Showing the newest events of a clipped scan.
         </div>
       )}
@@ -448,5 +448,5 @@ function shortTemplate(t?: string): string {
   return parts.length >= 3 ? `${parts[parts.length - 2]}:${parts[parts.length - 1]}` : t;
 }
 
-const actTh: React.CSSProperties = { ...tableCaps, padding: "6px 10px 6px 0", fontSize: 11 };
+const actTh: React.CSSProperties = { ...tableCaps, padding: "6px 10px 6px 0", fontSize: 13 };
 const actTd: React.CSSProperties = { padding: "8px 10px 8px 0", verticalAlign: "middle" };

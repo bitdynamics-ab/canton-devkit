@@ -77,7 +77,7 @@ export function WalletScreen() {
   if (state.kind === "loading") {
     return (
       <section style={{ padding: 24 }}>
-        <p style={{ color: W.dim, fontSize: 13 }}>Loading wallet…</p>
+        <p style={{ color: W.dim, fontSize: 16 }}>Loading wallet…</p>
       </section>
     );
   }
@@ -85,7 +85,7 @@ export function WalletScreen() {
   if (state.kind === "err") {
     return (
       <section style={{ padding: 24 }}>
-        <p style={{ color: W.err, fontSize: 13 }}>{state.error}</p>
+        <p style={{ color: W.err, fontSize: 16 }}>{state.error}</p>
       </section>
     );
   }
@@ -126,7 +126,7 @@ export function WalletScreen() {
             <h2 style={{ color: W.text, fontSize: 18, margin: 0 }}>Wallet</h2>
             <Pill>provided by Splice</Pill>
           </div>
-          <div style={{ color: W.dim, fontSize: 12.5 }}>
+          <div style={{ color: W.dim, fontSize: 13 }}>
             Embedded Splice Wallet · DevKit handles auth + party selection so
             you don't juggle browser tabs.
           </div>
@@ -145,7 +145,7 @@ export function WalletScreen() {
           display: "flex",
           alignItems: "center",
           gap: 12,
-          fontSize: 12,
+          fontSize: 13,
           color: W.text2,
         }}
       >
@@ -184,16 +184,16 @@ export function WalletScreen() {
         <RoleAvatar role={role} />
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontWeight: 600, fontSize: 14, color: W.text }}>
+            <span style={{ fontWeight: 600, fontSize: 16, color: W.text }}>
               {role}
             </span>
-            <span style={{ color: W.dim, fontSize: 12 }}>@{name}</span>
+            <span style={{ color: W.dim, fontSize: 13 }}>@{name}</span>
             <Dot color={W.brand} />
           </div>
           <div
             style={{
               color: W.dim,
-              fontSize: 11.5,
+              fontSize: 13,
               fontFamily: wMono,
               marginTop: 4,
             }}
@@ -237,21 +237,21 @@ export function WalletScreen() {
             display: "flex",
             alignItems: "center",
             gap: 8,
-            fontSize: 11.5,
+            fontSize: 13,
             fontFamily: wMono,
             color: W.text2,
           }}
         >
           <Dot color={W.brand} />
           <span style={{ color: W.dim }}>{walletURL ?? "—"}</span>
-          <span style={{ marginLeft: "auto", color: W.dim, fontSize: 10.5 }}>
+          <span style={{ marginLeft: "auto", color: W.dim, fontSize: 11 }}>
             signed in as {role} via DevKit JWT
           </span>
         </div>
         {walletUnreachable ? (
           <div
             role="alert"
-            style={{ flex: 1, padding: 24, color: W.text2, fontSize: 13, lineHeight: 1.6 }}
+            style={{ flex: 1, padding: 24, color: W.text2, fontSize: 16, lineHeight: 1.6 }}
           >
             <div
               style={{
@@ -353,7 +353,7 @@ function RoleSwitcher({
               border: "none",
               background: active ? tint(W.brand, 16) : "transparent",
               cursor: active ? "default" : "pointer",
-              fontSize: 12.5,
+              fontSize: 13,
               fontFamily: wMono,
               fontWeight: active ? 600 : 500,
               color: active ? W.text : W.dim,
@@ -383,7 +383,7 @@ function RoleAvatar({ role }: { role: Role }) {
         alignItems: "center",
         justifyContent: "center",
         fontWeight: 600,
-        fontSize: 13,
+        fontSize: 16,
       }}
     >
       {role[0].toUpperCase()}
@@ -405,7 +405,7 @@ function RoleAvatarMini({ role }: { role: Role }) {
         alignItems: "center",
         justifyContent: "center",
         fontWeight: 600,
-        fontSize: 9,
+        fontSize: 11,
       }}
     >
       {role[0].toUpperCase()}
@@ -421,7 +421,7 @@ function Pill({ children }: { children: React.ReactNode }) {
         border: `1px solid ${W.border}`,
         padding: "1px 7px",
         borderRadius: 2,
-        fontSize: 10.5,
+        fontSize: 11,
         fontFamily: wMono,
         background: `${tint(W.border, 25)}`,
       }}

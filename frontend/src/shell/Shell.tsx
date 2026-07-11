@@ -124,7 +124,7 @@ function TopBar() {
       {title && (
         <span
           style={{
-            fontSize: 14,
+            fontSize: 16,
             fontWeight: 600,
             fontStretch: "104%",
             color: W.text,
@@ -152,7 +152,7 @@ function TopBar() {
           borderRadius: 2,
           border: `1px solid ${W.border}`,
           color: W.text2,
-          fontSize: 12,
+          fontSize: 13,
           textDecoration: "none",
         }}
       >
@@ -225,7 +225,7 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
         <span
           style={{
             ...wideCaps,
-            fontSize: 10,
+            fontSize: 11,
             color: W.dim,
           }}
         >
@@ -235,7 +235,7 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
           style={{
             color: W.text,
             fontFamily: wMono,
-            fontSize: 12,
+            fontSize: 13,
             fontVariantNumeric: "tabular-nums",
           }}
         >
@@ -285,7 +285,7 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
                   borderRadius: R.control,
                   color: i.name === sel.selected ? W.brandText : W.text,
                   fontFamily: wMono,
-                  fontSize: 12,
+                  fontSize: 13,
                   textAlign: "left",
                   cursor: "pointer",
                 }}
@@ -295,7 +295,7 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
                 <span
                   style={{
                     color: W.dim,
-                    fontSize: 11,
+                    fontSize: 13,
                     fontVariantNumeric: "tabular-nums",
                   }}
                 >
@@ -344,7 +344,7 @@ function PaletteHint() {
         border: `1px solid ${W.border}`,
         background: "transparent",
         color: W.dim,
-        fontSize: 12,
+        fontSize: 13,
         cursor: "pointer",
       }}
     >
@@ -356,7 +356,7 @@ function PaletteHint() {
           borderRadius: 2,
           padding: "1px 5px",
           fontFamily: wMono,
-          fontSize: 10,
+          fontSize: 11,
           color: W.text2,
         }}
       >
@@ -377,7 +377,7 @@ function pillStyle(color: string): React.CSSProperties {
     border: `1px solid ${W.border}`,
     color,
     fontFamily: wMono,
-    fontSize: 11,
+    fontSize: 13,
   };
 }
 
@@ -420,7 +420,7 @@ function HealthPill({ conn }: { conn: ConnectionState }) {
         border: `1px solid ${tint(color, 40)}`,
         background: tint(color, 10),
         color,
-        fontSize: 12,
+        fontSize: 13,
         cursor: "help",
       }}
     >
@@ -451,7 +451,7 @@ function Sidebar() {
       <div
         style={{
           ...wideCaps,
-          fontSize: 10,
+          fontSize: 11,
           color: W.faint,
           padding: "0 8px 8px",
         }}
@@ -480,7 +480,7 @@ function Sidebar() {
           display: "flex",
           flexDirection: "column",
           gap: 4,
-          fontSize: 11,
+          fontSize: 13,
           color: W.faint,
           fontFamily: wMono,
         }}
@@ -513,7 +513,7 @@ function LogoLockup() {
           color: W.text,
           fontWeight: 600,
           letterSpacing: "0.14em",
-          fontSize: 14,
+          fontSize: 16,
         }}
       >
         CANTON DEVKIT

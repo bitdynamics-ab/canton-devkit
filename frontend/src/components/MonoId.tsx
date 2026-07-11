@@ -24,7 +24,7 @@ export function MonoId({
   head = 8,
   tail = 6,
   full = false,
-  size = 12,
+  size = 13,
   color = W.text2,
   style,
 }: MonoIdProps) {

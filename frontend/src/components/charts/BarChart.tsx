@@ -101,7 +101,7 @@ export function BarChart({
               x={x(t)}
               y={innerH + 14}
               textAnchor="middle"
-              fontSize={9}
+              fontSize={11}
               fill={W.dim}
               fontFamily={wMono}
             >
@@ -135,7 +135,7 @@ export function BarChart({
               <text
                 x={x(b.value) + 5}
                 y={yy + barH / 2 + 3}
-                fontSize={10.5}
+                fontSize={11}
                 fill={W.text}
                 fontFamily={wMono}
               >

@@ -108,7 +108,7 @@ export function Heatmap({
             x={-6}
             y={r * cellH + cellH / 2 + 3}
             textAnchor="end"
-            fontSize={9.5}
+            fontSize={11}
             fill={W.dim}
             fontFamily={wMono}
           >
@@ -123,7 +123,7 @@ export function Heatmap({
               x={c * cellW + cellW / 2}
               y={innerH + 14}
               textAnchor={c === 0 ? "start" : c === cols - 1 ? "end" : "middle"}
-              fontSize={9}
+              fontSize={11}
               fill={W.dim}
               fontFamily={wMono}
             >

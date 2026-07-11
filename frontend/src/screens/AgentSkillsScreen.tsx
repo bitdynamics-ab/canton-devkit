@@ -74,7 +74,7 @@ export function AgentSkillsScreen() {
     return (
       <section style={{ padding: 24 }}>
         <Header />
-        <p style={{ color: W.dim, fontSize: 13 }}>Loading skills…</p>
+        <p style={{ color: W.dim, fontSize: 16 }}>Loading skills…</p>
       </section>
     );
   }
@@ -82,7 +82,7 @@ export function AgentSkillsScreen() {
     return (
       <section style={{ padding: 24 }}>
         <Header />
-        <p role="alert" style={{ color: W.err, fontSize: 13 }}>{state.error}</p>
+        <p role="alert" style={{ color: W.err, fontSize: 16 }}>{state.error}</p>
       </section>
     );
   }
@@ -113,7 +113,7 @@ export function AgentSkillsScreen() {
           flexWrap: "wrap",
         }}
       >
-        <span style={{ color: W.text2, fontSize: 12.5 }}>
+        <span style={{ color: W.text2, fontSize: 13 }}>
           Install all {state.skills.length} skills into:
         </span>
         <InstallButton
@@ -133,7 +133,7 @@ export function AgentSkillsScreen() {
               alignItems: "center",
               gap: 6,
               color: W.ok,
-              fontSize: 12,
+              fontSize: 13,
               fontFamily: wMono,
             }}
           >
@@ -148,7 +148,7 @@ export function AgentSkillsScreen() {
               alignItems: "center",
               gap: 8,
               color: W.warn,
-              fontSize: 12,
+              fontSize: 13,
               fontFamily: wMono,
             }}
           >
@@ -170,7 +170,7 @@ export function AgentSkillsScreen() {
               alignItems: "center",
               gap: 6,
               color: W.err,
-              fontSize: 12,
+              fontSize: 13,
             }}
           >
             <IcX size={12} /> {install.message}
@@ -213,8 +213,8 @@ export function AgentSkillsScreen() {
                   transition: `background-color ${FAST}`,
                 }}
               >
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{s.name}</div>
-                <div style={{ color: W.dim, fontSize: 11, marginTop: 2, lineHeight: 1.4 }}>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>{s.name}</div>
+                <div style={{ color: W.dim, fontSize: 13, marginTop: 2, lineHeight: 1.4 }}>
                   {s.description}
                 </div>
               </button>
@@ -238,7 +238,7 @@ export function AgentSkillsScreen() {
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word",
                 fontFamily: wMono,
-                fontSize: 12.5,
+                fontSize: 13,
                 lineHeight: 1.6,
                 color: W.text2,
               }}
@@ -265,14 +265,14 @@ function Header() {
             border: `1px solid ${W.border}`,
             padding: "1px 7px",
             borderRadius: 2,
-            fontSize: 10.5,
+            fontSize: 11,
             fontFamily: wMono,
           }}
         >
           editor-agnostic
         </span>
       </div>
-      <div style={{ color: W.dim, fontSize: 12.5, marginTop: 3 }}>
+      <div style={{ color: W.dim, fontSize: 13, marginTop: 3 }}>
         Safe `dpm localnet` workflows for AI agents. Same docs as the CLI
         `localnet skills` command. Install into your agent and let it drive
         DevKit.

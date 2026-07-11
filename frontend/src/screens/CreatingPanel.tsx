@@ -87,10 +87,10 @@ export function CreatingPanel({ name, onRefresh }: Props) {
           marginBottom: 12,
         }}
       >
-        <div style={{ fontWeight: 600, fontSize: 14, color: W.text }}>
+        <div style={{ fontWeight: 600, fontSize: 16, color: W.text }}>
           Bring-up in progress
         </div>
-        <code style={{ color: W.brand, fontFamily: wMono, fontSize: 12 }}>
+        <code style={{ color: W.brand, fontFamily: wMono, fontSize: 13 }}>
           {name}
         </code>
         <span style={{ flex: 1 }} />
@@ -113,7 +113,7 @@ export function CreatingPanel({ name, onRefresh }: Props) {
                     color: W.warn,
                     borderRadius: R.control,
                     padding: "6px 10px",
-                    fontSize: 11.5,
+                    fontSize: 13,
                     marginBottom: 4,
                   }}
                 >
@@ -145,7 +145,7 @@ export function CreatingPanel({ name, onRefresh }: Props) {
           )}
           {progress.terminal.length > 0 && (
             <details open style={{ marginTop: 14 }}>
-              <summary style={{ cursor: "pointer", color: W.dim, fontSize: 11.5 }}>
+              <summary style={{ cursor: "pointer", color: W.dim, fontSize: 13 }}>
                 Terminal output · {progress.terminal.length} line(s)
               </summary>
               <pre
@@ -156,7 +156,7 @@ export function CreatingPanel({ name, onRefresh }: Props) {
                   borderRadius: R.control,
                   padding: "10px 12px",
                   fontFamily: wMono,
-                  fontSize: 10.5,
+                  fontSize: 11,
                   color: W.text2,
                   maxHeight: 160,
                   overflow: "auto",
@@ -224,7 +224,7 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
         gap: 10,
         padding: "6px 4px",
         borderBottom: `1px solid ${W.border}`,
-        fontSize: 12.5,
+        fontSize: 13,
       }}
     >
       <span
@@ -246,7 +246,7 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
           <div
             style={{
               color: state.status === "fail" ? W.err : W.dim,
-              fontSize: 11,
+              fontSize: 13,
               fontFamily: wMono,
               marginTop: 2,
             }}
@@ -319,7 +319,7 @@ function ZombieHint({
         borderRadius: R.card,
         padding: "12px 14px",
         color: W.text,
-        fontSize: 12.5,
+        fontSize: 13,
         lineHeight: 1.6,
       }}
     >

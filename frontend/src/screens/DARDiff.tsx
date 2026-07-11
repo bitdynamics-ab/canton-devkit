@@ -85,7 +85,7 @@ export function DARDiff({ instance, a, b, role }: Props) {
           </span>
           <Side label="b" side={d.b ?? null} />
         </div>
-        <div style={{ color: W.dim, fontSize: 11, marginTop: 6 }}>
+        <div style={{ color: W.dim, fontSize: 13, marginTop: 6 }}>
           {totalDelta === 0
             ? "no structural changes"
             : `${totalDelta} structural change${totalDelta === 1 ? "" : "s"}`}
@@ -200,7 +200,7 @@ const paneStyle: React.CSSProperties = {
   border: `1px solid ${W.border}`,
   borderRadius: R.card,
   padding: 12,
-  fontSize: 12,
+  fontSize: 13,
   maxHeight: "60vh",
   overflowY: "auto",
 };
@@ -208,7 +208,7 @@ const paneStyle: React.CSSProperties = {
 const mono: React.CSSProperties = {
   fontFamily: wMono,
   color: W.text,
-  fontSize: 11.5,
+  fontSize: 13,
 };
 
 function Side({
@@ -220,20 +220,20 @@ function Side({
 }) {
   if (!side) {
     return (
-      <span style={{ color: W.dim, fontSize: 11 }}>
+      <span style={{ color: W.dim, fontSize: 13 }}>
         {label}: <code style={mono}>unknown</code>
       </span>
     );
   }
   return (
     <span
-      style={{ fontSize: 11, display: "inline-flex", alignItems: "baseline", gap: 6 }}
+      style={{ fontSize: 13, display: "inline-flex", alignItems: "baseline", gap: 6 }}
     >
       <span style={{ color: W.dim }}>{label}:</span>
       <code style={mono}>
         {side.name}@{side.version}
       </code>
-      <MonoId value={side.main} head={8} tail={6} size={11} color={W.dim} />
+      <MonoId value={side.main} head={8} tail={6} size={13} color={W.dim} />
     </span>
   );
 }
@@ -277,7 +277,7 @@ function Section<T>({
           background: "transparent",
           border: "none",
           color: c.fg,
-          fontSize: 11.5,
+          fontSize: 13,
           cursor: "pointer",
           padding: "2px 0",
           ...tableCaps,
@@ -326,7 +326,7 @@ function ChipGroup({
   return (
     <span style={{ display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: 3 }}>
       {label && (
-        <span style={{ color: W.dim, fontSize: 10.5, marginLeft: 6 }}>{label}:</span>
+        <span style={{ color: W.dim, fontSize: 11, marginLeft: 6 }}>{label}:</span>
       )}
       {labels.map((l) => (
         <span
@@ -336,7 +336,7 @@ function ChipGroup({
             borderRadius: R.control,
             background: c.bg,
             color: c.fg,
-            fontSize: 10.5,
+            fontSize: 11,
             fontFamily: wMono,
           }}
         >
