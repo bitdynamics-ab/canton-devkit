@@ -209,9 +209,51 @@ func TestMinMemoryFor_ExplicitOverrideWins(t *testing.T) {
 func TestSupportedIsSorted(t *testing.T) {
 	got := Supported()
 	for i := 1; i < len(got); i++ {
-		if got[i-1] > got[i] {
-			t.Errorf("Supported() not sorted: %v", got)
+		if compareTags(got[i-1], got[i]) > 0 {
+			t.Errorf("Supported() not in version order: %v", got)
 			break
+		}
+	}
+}
+
+// TestSupportedOrderIsNumeric guards the double-digit-patch regression:
+// with lexical sorting "0.6.10" sorts before "0.6.3", which is wrong.
+func TestSupportedOrderIsNumeric(t *testing.T) {
+	got := Supported()
+	pos := map[string]int{}
+	for i, tag := range got {
+		pos[tag] = i
+	}
+	// 0.6.9 must precede 0.6.10, which must precede 0.6.11.
+	for _, pair := range [][2]string{{"0.6.9", "0.6.10"}, {"0.6.10", "0.6.11"}, {"0.6.4", "0.6.9"}} {
+		lo, okLo := pos[pair[0]]
+		hi, okHi := pos[pair[1]]
+		if okLo && okHi && lo > hi {
+			t.Errorf("Supported() ordered %q after %q: %v", pair[0], pair[1], got)
+		}
+	}
+	// token-standard-v2 (non-semver) sorts last.
+	if p, ok := pos["token-standard-v2"]; ok && p != len(got)-1 {
+		t.Errorf("token-standard-v2 should sort last, got position %d in %v", p, got)
+	}
+}
+
+func TestCompareTags(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want int // sign of the expected result
+	}{
+		{"0.6.9", "0.6.10", -1},
+		{"0.6.10", "0.6.9", 1},
+		{"0.6.4", "0.6.4", 0},
+		{"0.5.18", "0.6.3", -1},
+		{"0.6.11", "token-standard-v2", -1}, // semver before non-semver
+		{"token-standard-v2", "0.6.3", 1},
+	}
+	for _, c := range cases {
+		got := compareTags(c.a, c.b)
+		if (got < 0) != (c.want < 0) || (got > 0) != (c.want > 0) {
+			t.Errorf("compareTags(%q, %q) = %d, want sign %d", c.a, c.b, got, c.want)
 		}
 	}
 }
