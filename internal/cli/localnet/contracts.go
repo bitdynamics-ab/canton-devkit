@@ -68,7 +68,7 @@ func buildContractsLs() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "ls",
 		Short:         "Snapshot the participant's current Active Contract Set",
-		Long:          "Calls StateService.GetActiveContracts at the participant's current ledger end and prints one row per contract. `--party` filters to contracts visible to that party; pass multiple times. `--template` accepts Module:Entity or pkg:Module:Entity.",
+		Long:          "Calls StateService.GetActiveContracts at the participant's current ledger end and prints one row per contract. `--party` filters to contracts visible to that party; pass multiple times. `--template` selects by template: use a package-name reference `#pkg-name:Module:Entity` (the LF-v2 form a Splice 0.6.x participant resolves by name) or an exact `<package-id>:Module:Entity` pin.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -96,7 +96,7 @@ func buildContractsLs() *cobra.Command {
 			// through the JWT's own act/read parties (mirrors the Web
 			// UI's per-party filter) so the default filter is a shape
 			// the participant accepts even for user-id tokens.
-			effParties, err := resolveDefaultParties(cmd.Context(), cmd.ErrOrStderr(), client, parties, templates)
+			effParties, err := resolveDefaultParties(cmd.Context(), cmd.ErrOrStderr(), client, parties)
 			if err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitRuntimeFailure)
@@ -117,7 +117,7 @@ func buildContractsLs() *cobra.Command {
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "Participant gRPC endpoint host:port (overrides registry auto-discovery)")
 	cmd.Flags().StringVar(&role, "role", "", "Participant role to read from: sv, app-provider, or app-user (default: app-user)")
 	cmd.Flags().StringSliceVar(&parties, "party", nil, "Party ID filter; repeat or comma-separate for multi-party. Omit to project through the JWT's own parties.")
-	cmd.Flags().StringSliceVar(&templates, "template", nil, "Template filter — \"Module:Entity\" or \"pkg:Module:Entity\". Repeat for multiple.")
+	cmd.Flags().StringSliceVar(&templates, "template", nil, "Template filter — \"#pkg-name:Module:Entity\" (LF-v2 package-name reference) or \"<pkg-id>:Module:Entity\" (exact pin). Repeat for multiple.")
 	cmd.Flags().StringVar(&format, "format", "text", "output format: text or json")
 	cmd.Flags().StringVar(&token, "token", "", "Bearer JWT (default: resolved per-role from the registry)")
 	return cmd
@@ -161,7 +161,7 @@ func buildContractsWatch() *cobra.Command {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "ledger end query failed:", err)
 				return localnet.AsExitError(localnet.ExitRuntimeFailure)
 			}
-			effParties, err := resolveDefaultParties(cmd.Context(), cmd.ErrOrStderr(), client, parties, templates)
+			effParties, err := resolveDefaultParties(cmd.Context(), cmd.ErrOrStderr(), client, parties)
 			if err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitRuntimeFailure)
@@ -182,7 +182,7 @@ func buildContractsWatch() *cobra.Command {
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "Participant gRPC endpoint host:port (overrides registry auto-discovery)")
 	cmd.Flags().StringVar(&role, "role", "", "Participant role to read from: sv, app-provider, or app-user (default: app-user)")
 	cmd.Flags().StringSliceVar(&parties, "party", nil, "Party ID filter (repeatable). Omit to project through the JWT's own parties.")
-	cmd.Flags().StringSliceVar(&templates, "template", nil, "Template filter — \"Module:Entity\" or \"pkg:Module:Entity\"")
+	cmd.Flags().StringSliceVar(&templates, "template", nil, "Template filter — \"#pkg-name:Module:Entity\" (LF-v2 package-name reference) or \"<pkg-id>:Module:Entity\" (exact pin). Repeatable.")
 	cmd.Flags().StringVar(&format, "format", "text", "output format: text or json (NDJSON in stream mode)")
 	cmd.Flags().StringVar(&token, "token", "", "Bearer JWT (default: resolved per-role from the registry)")
 	cmd.Flags().IntVar(&limit, "limit", 0, "Stop after N updates (0 = unbounded; Ctrl-C also works)")
@@ -263,7 +263,7 @@ func buildTxLs() *cobra.Command {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
-			effParties, err := resolveDefaultParties(cmd.Context(), cmd.ErrOrStderr(), client, parties, templates)
+			effParties, err := resolveDefaultParties(cmd.Context(), cmd.ErrOrStderr(), client, parties)
 			if err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitRuntimeFailure)
@@ -290,7 +290,7 @@ func buildTxLs() *cobra.Command {
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "Participant gRPC endpoint host:port (overrides registry auto-discovery)")
 	cmd.Flags().StringVar(&role, "role", "", "Participant role to read from: sv, app-provider, or app-user (default: app-user)")
 	cmd.Flags().StringSliceVar(&parties, "party", nil, "Party ID filter (repeatable). Omit to project through the JWT's own parties.")
-	cmd.Flags().StringSliceVar(&templates, "template", nil, "Template filter — \"Module:Entity\" or \"pkg:Module:Entity\"")
+	cmd.Flags().StringSliceVar(&templates, "template", nil, "Template filter — \"#pkg-name:Module:Entity\" (LF-v2 package-name reference) or \"<pkg-id>:Module:Entity\" (exact pin). Repeatable.")
 	cmd.Flags().StringVar(&format, "format", "text", "output format: text or json")
 	cmd.Flags().StringVar(&token, "token", "", "Bearer JWT (default: resolved per-role from the registry)")
 	cmd.Flags().IntVar(&limit, "limit", 50, "Max transactions to return (newest first)")
@@ -601,18 +601,18 @@ func dialLedger(ctx context.Context, instance, endpoint, token, role string) (*l
 }
 
 // resolveDefaultParties picks the party set the EventFormat is built
-// from. When the user gave an explicit --party (or any --template,
-// which already pins a valid wildcard-for-any-party shape) we honour
-// it verbatim. Otherwise — the flag-less default — we project through
-// the JWT's own act/read parties, mirroring the Web UI Explorer's
-// resolveLedgerForRole → ResolveActAndReadParties flow.
+// from. An explicit --party is honoured verbatim. Otherwise — including
+// a --template with no --party — we project through the JWT's own
+// act/read parties, mirroring the Web UI Explorer's resolveLedgerForRole
+// → ResolveActAndReadParties flow.
 //
 // Why this matters: Splice LocalNet signs user-id JWTs by default. A
 // bare FiltersForAnyParty wildcard is accepted by request validation
 // but the participant then PermissionDenies the stream for a user-id
-// token that lacks a wildcard-read claim. Resolving the user's
-// concrete parties and filtering by-party is the shape that actually
-// returns data — the same reason the UI does it.
+// token that lacks a wildcard-read claim — even when a --template is
+// present. Resolving the user's concrete parties and filtering by-party
+// (with the template filter applied per party) is the shape that
+// actually returns data — the same reason the UI does it.
 //
 // Best-effort: if the rights lookup fails or returns no parties we
 // fall back to the wildcard (empty party set). That keeps the
@@ -625,9 +625,9 @@ func resolveDefaultParties(
 	ctx context.Context,
 	errw io.Writer,
 	client *ledger.Client,
-	parties, templates []string,
+	parties []string,
 ) ([]string, error) {
-	if len(parties) > 0 || len(templates) > 0 {
+	if len(parties) > 0 {
 		return parties, nil
 	}
 	resolved, err := client.ResolveActAndReadParties(ctx)

@@ -61,14 +61,15 @@ func TestBuildTemplateFilters_Forms(t *testing.T) {
 	if tid.GetPackageId() != "" || tid.GetModuleName() != "Token" || tid.GetEntityName() != "Holding" {
 		t.Errorf("Module:Entity parsed wrong: %+v", tid)
 	}
-	// "pkg:Module:Entity" — package pinned.
+	// "pkg:Module:Entity" — a bare package name becomes a "#name"
+	// LF-v2 package-name reference.
 	f, err = BuildTemplateFilters([]string{"mypkg:Token:Holding"})
 	if err != nil {
 		t.Fatalf("pkg:Module:Entity: %v", err)
 	}
 	tid = f.GetCumulative()[0].GetTemplateFilter().GetTemplateId()
-	if tid.GetPackageId() != "mypkg" {
-		t.Errorf("package id = %q, want mypkg", tid.GetPackageId())
+	if tid.GetPackageId() != "#mypkg" {
+		t.Errorf("package id = %q, want #mypkg", tid.GetPackageId())
 	}
 	// nil/empty → nil, no error.
 	if f, err := BuildTemplateFilters(nil); f != nil || err != nil {
