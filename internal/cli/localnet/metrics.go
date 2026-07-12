@@ -61,7 +61,7 @@ func buildMetrics() *cobra.Command {
 					"prometheus query failed: "+err.Error())
 				return localnet.AsExitError(localnet.ExitRuntimeFailure)
 			}
-			report.Dashboards.GrafanaURL = grafanaURLFor(state)
+			report.Dashboards.GrafanaURL = grafanaURLFor(ctx, state)
 			if format == "json" {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
@@ -227,17 +227,21 @@ func scrapeMetrics(ctx context.Context, host string, port int, instance string) 
 	}, nil
 }
 
-// grafanaURLFor deep-links to the bundled dashboard when the grafana_ui port
-// is registered (obs on), else "" so the caller can render a hint.
-func grafanaURLFor(state *registry.State) string {
+// sharedGrafanaURL resolves the host-shared Grafana deep link; a package var
+// so tests can stub the docker lookup.
+var sharedGrafanaURL = localnet.SharedGrafanaURL
+
+// grafanaURLFor deep-links to the bundled dashboard: the per-instance Grafana
+// when its port is registered, else the host-shared Grafana filtered to this
+// instance, else "" so the caller can render a hint.
+func grafanaURLFor(ctx context.Context, state *registry.State) string {
 	if state == nil {
 		return ""
 	}
-	port, ok := state.Ports["grafana_ui"]
-	if !ok || port == 0 {
-		return ""
+	if port, ok := state.Ports["grafana_ui"]; ok && port > 0 {
+		return fmt.Sprintf("http://localhost:%d/d/%s", port, grafanaDashboardUID)
 	}
-	return fmt.Sprintf("http://localhost:%d/d/%s", port, grafanaDashboardUID)
+	return sharedGrafanaURL(ctx, state.Name)
 }
 
 // promQuery executes one PromQL query and returns the scalar result (or nil

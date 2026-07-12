@@ -112,18 +112,19 @@ refcounted by target file. See
 [Observability](observability.md#stack-topology--host-shared-with-a-transitional-per-instance-overlay)
 for the topology.
 
-- **Each observability-enabled instance still *also* runs a
-  per-instance Prometheus + Grafana overlay** alongside the shared
-  stack, so while running it has **two** Prometheus and **two** Grafana
-  containers — roughly **~600 MiB** of duplicated overhead per extra
-  environment.
-- **Why it's kept (for now).** The per-instance overlay is a deliberate
-  fallback: both the CLI and the Web UI read shared-first and fall back
-  to the per-instance Prometheus when the shared stack isn't up, and the
-  per-instance scrape uses in-network service DNS (`canton:10013`)
-  rather than `host.docker.internal`, so it works on any platform
-  regardless of the Linux `host-gateway` mapping.
-- **Removal pending validation.** The per-instance overlay stays enabled
-  until the shared-only path is validated end-to-end on a native Linux
-  Docker host. When that validation completes, the overlay can be gated
-  off without changing the CLI or Web UI observability commands.
+- **`up --observability-mode` selects the sidecar stack.** `auto`
+  (default) serves metrics from the shared stack and skips the
+  per-instance Prometheus + Grafana overlay when the shared stack is
+  reachable — avoiding roughly **~600 MiB** of duplicated overhead per
+  environment. `shared` forces shared-only; `per-instance` forces the
+  overlay. The choice is persisted, so a re-up preserves it.
+- **Why the per-instance fallback is kept.** The per-instance scrape
+  uses in-network service DNS (`canton:10013`) rather than
+  `host.docker.internal`, so it works on any platform regardless of the
+  Linux `host-gateway` mapping; `auto` falls back to it when the shared
+  stack can't be started.
+- **Native-Linux validation pending.** Making `shared` the default (and
+  dropping the per-instance overlay entirely) waits on validating the
+  shared stack's `host.docker.internal` scrape path end-to-end on a
+  native Linux Docker host. Until then `auto` is the default and
+  `per-instance` is the platform-independent escape hatch.
