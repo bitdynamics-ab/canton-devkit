@@ -456,27 +456,40 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 		fmt.Sprintf("schema %d · %d database(s) · captured %s",
 			meta.SchemaVersion, meta.Database.DatabaseCount, meta.CreatedAt), ""))
 
-	// Distinguish ErrNotFound (legitimate "no existing instance") from
-	// every other error so a permission/parse failure can't be mistaken
-	// for "fresh restore".
+	// The instance must already be registered — restore loads a dump into
+	// the instance's EXISTING Postgres volume, and that volume only exists
+	// (as a Docker-Compose-owned volume) after at least one `up`. Restoring
+	// into a never-`up` instance would force the loader to create the volume
+	// out of band (`docker run -v <vol>:...`), producing a volume Compose
+	// does not own — which `down --volumes` / `remove --force` then refuse
+	// to reclaim, stranding it. So require a prior `up` and never create a
+	// volume here. (Includes cross-name restore: the target name must have
+	// been `up` too.) See docs/limitations.md "Restore requires a prior up".
+	//
+	// Distinguish ErrNotFound from every other error so a permission/parse
+	// failure can't be mistaken for "not registered".
 	existing, rerr := registry.Read(name)
 	if rerr != nil && !errors.Is(rerr, registry.ErrNotFound) {
 		_, _ = fmt.Fprintf(errw, "read existing registry state for %q: %s\n", name, rerr)
 		return localnet.ExitRuntimeFailure
 	}
-	if existing != nil {
-		if existing.Status == registry.StatusRunning {
-			_, _ = fmt.Fprintf(errw,
-				"instance %q is running — run `localnet down %s` first\n", name, name)
-			return localnet.ExitUserError
-		}
-		if existing.SpliceVersion != meta.SpliceVersion && !force {
-			_, _ = fmt.Fprintf(errw,
-				"Splice version mismatch: existing instance is %s, snapshot is %s. "+
-					"Pass --force to override.\n",
-				existing.SpliceVersion, meta.SpliceVersion)
-			return localnet.ExitUserError
-		}
+	if existing == nil {
+		_, _ = fmt.Fprintf(errw,
+			"instance %q not found — restore loads into an existing instance's "+
+				"data volume. Run `localnet up %s` first, then restore.\n", name, name)
+		return localnet.ExitUserError
+	}
+	if existing.Status == registry.StatusRunning {
+		_, _ = fmt.Fprintf(errw,
+			"instance %q is running — run `localnet down %s` first\n", name, name)
+		return localnet.ExitUserError
+	}
+	if existing.SpliceVersion != meta.SpliceVersion && !force {
+		_, _ = fmt.Fprintf(errw,
+			"Splice version mismatch: existing instance is %s, snapshot is %s. "+
+				"Pass --force to override.\n",
+			existing.SpliceVersion, meta.SpliceVersion)
+		return localnet.ExitUserError
 	}
 
 	// Build the registry record we'll commit only after a successful
@@ -784,11 +797,13 @@ func (dockerPgArchiver) RestoreInto(ctx context.Context, image, volume, user str
 	// Clear any leftover from a previous interrupted restore.
 	_ = exec.CommandContext(ctx, "docker", "rm", "-f", tmpName).Run()
 
-	// Throwaway Postgres on the target volume. HOST_AUTH_METHOD=trust
-	// makes the (only) case where the volume is empty — restore into a
-	// never-started instance — initialise without a password and accept
-	// the local psql connection; for an already-initialised volume the
-	// env is ignored.
+	// Throwaway Postgres on the target volume. RunRestore guarantees the
+	// volume already exists (Compose created it on a prior `up`), so this
+	// never brings a volume into being out of band. HOST_AUTH_METHOD=trust
+	// is kept as a belt-and-braces: if the volume's data dir is somehow
+	// uninitialised, Postgres initialises without a password and accepts
+	// the local psql connection; for an already-initialised volume (the
+	// normal case) the env is ignored.
 	if err := exec.CommandContext(ctx, "docker", "run", "-d", "--name", tmpName,
 		"-v", volume+":"+pgDataDir,
 		"-e", "POSTGRES_USER="+user,

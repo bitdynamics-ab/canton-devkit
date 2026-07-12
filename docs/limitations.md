@@ -95,6 +95,43 @@ resolved.
   snapshot in its error so the stuck service + state are visible
   without re-running anything.
 
+## Snapshot restore
+
+- **`restore` requires the target instance to already exist (was `up`
+  at least once).** A restore loads a `pg_dumpall` stream into the
+  instance's EXISTING Postgres volume via a throwaway loader container.
+  That volume is only a Docker-Compose-owned volume after an `up`
+  created it. Restoring into a never-`up` instance would force the
+  loader's `docker run -v <vol>:...` to CREATE the volume out of band —
+  producing a volume Compose does not own. `docker compose down
+  --volumes` (used by `localnet down` and `localnet remove --force`)
+  only removes volumes Compose itself created, so such an orphan volume
+  survives teardown and is silently adopted (with a "volume … already
+  exists but was not created by Docker Compose" warning) on the next
+  `up`. To keep the "never create a volume outside Compose" invariant,
+  restore now refuses when the instance is not registered and tells the
+  user to run `localnet up <name>` first. This also applies to
+  cross-name restore: the target name must have been `up` too.
+  *Workaround:* run `localnet up <name>` (or `up <newname>` for a
+  cross-name restore) before `localnet restore`.
+
+- **The restore precondition is enforced via the registry, not a Docker
+  volume-ownership check (known gap).** The guard checks that a registry
+  record exists for the target instance, which is a PROXY for "the
+  Compose-owned volume exists". `up` writes `state.json` early (at
+  "creating" time, before the volume is guaranteed to exist), so a
+  crashed/half-finished `up` can leave a registry entry with no volume —
+  in which case restore would still proceed and the loader would
+  re-create the volume out of band, reintroducing the orphan. The
+  robust check is to verify the volume carries Compose's ownership
+  labels (`com.docker.compose.project=canton-<name>` and
+  `com.docker.compose.volume=postgres`) via a label-filtered
+  `docker volume ls` — a bare `docker volume inspect <name>` is NOT
+  sufficient because a detached `docker run -v` volume exists under the
+  same name yet lacks those labels. That label-based volume-ownership
+  check is intentionally deferred for now; the registry gate covers the
+  common case. Tracked as a follow-up.
+
 ## Platform parity
 
 - **Homebrew formula targets macOS arm64 and Linux x86_64 only.**
