@@ -435,6 +435,7 @@ function Sidebar() {
   // clicks don't drop the selection.
   const [params] = useSearchParams();
   const instance = params.get("instance");
+  const conn = useConnectionHealth();
   return (
     <nav
       style={{
@@ -486,6 +487,11 @@ function Sidebar() {
       >
         <span>
           ui {typeof __UI_COMMIT__ !== "undefined" ? __UI_COMMIT__ : "dev"}
+        </span>
+        <span>
+          {conn.serverVersion != null
+            ? `schema v${conn.serverVersion}`
+            : "connecting…"}
         </span>
       </div>
     </nav>
