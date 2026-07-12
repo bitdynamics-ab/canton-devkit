@@ -259,6 +259,7 @@ func observabilityStatusJSON(ctx context.Context, state *registry.State, cur loc
 		"grafana":       cur.Grafana,
 		"prometheus_ui": cur.PrometheusPort,
 		"grafana_ui":    cur.GrafanaPort,
+		"shared":        cur.Shared,
 		"grafana_url":   grafanaURLFor(ctx, state),
 	}
 }
@@ -291,6 +292,7 @@ func renderObservabilityStatus(ctx context.Context, out io.Writer, state *regist
 		term.KV("Instance status", string(state.Status), 16),
 		term.KV("Prometheus", onOff(cur.Prometheus), 16),
 		term.KV("Grafana", onOff(cur.Grafana), 16),
+		term.KV("Shared stack", sharedLabel(cur.Shared), 16),
 	}
 	if url := grafanaURLFor(ctx, state); url != "" {
 		rows = append(rows, term.KV("Grafana URL", url, 16))
@@ -299,7 +301,7 @@ func renderObservabilityStatus(ctx context.Context, out io.Writer, state *regist
 		rows = append(rows, term.KV("Prometheus URL",
 			fmt.Sprintf("http://localhost:%d", cur.PrometheusPort), 16))
 	}
-	if !cur.Prometheus && !cur.Grafana {
+	if !cur.Prometheus && !cur.Grafana && !cur.Shared {
 		rows = append(rows, "",
 			term.Dimc("enable with `dpm localnet observability enable --name "+state.Name+"`"))
 	}
@@ -312,4 +314,11 @@ func onOff(b bool) string {
 		return term.Successc("on")
 	}
 	return term.Dimc("off")
+}
+
+func sharedLabel(b bool) string {
+	if b {
+		return term.Successc("registered")
+	}
+	return term.Dimc("—")
 }

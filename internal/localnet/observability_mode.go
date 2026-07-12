@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
+	"time"
 )
 
 // ObservabilityMode selects how the Prometheus + Grafana sidecars are
@@ -63,9 +65,52 @@ func usePerInstanceOverlay(mode ObservabilityMode, sharedReachable bool) bool {
 	}
 }
 
+const (
+	sharedHealthTimeout      = 12 * time.Second
+	sharedHealthPollInterval = time.Second
+)
+
 // sharedStackReachable brings the host-shared observability stack up
-// (idempotent) and reports whether it is running.
+// (idempotent) and reports whether its Prometheus is actually serving. A stack
+// that is up but corrupt/unhealthy is treated as unreachable so auto falls back
+// to the per-instance overlay rather than binding to a broken data source.
 func sharedStackReachable(ctx context.Context, logw io.Writer) bool {
-	_, err := EnsureSharedStack(ctx, logw)
-	return err == nil
+	if _, err := EnsureSharedStack(ctx, logw); err != nil {
+		return false
+	}
+	host, port, err := SharedPrometheusEndpoint(ctx)
+	if err != nil {
+		return false
+	}
+	return sharedPrometheusHealthy(ctx, fmt.Sprintf("http://%s:%d/-/healthy", host, port))
+}
+
+// sharedPrometheusHealthy polls a Prometheus readiness URL, retrying briefly so
+// a just-started stack isn't misread as unhealthy.
+func sharedPrometheusHealthy(ctx context.Context, url string) bool {
+	probeCtx, cancel := context.WithTimeout(ctx, sharedHealthTimeout)
+	defer cancel()
+	for {
+		if httpOK(probeCtx, url) {
+			return true
+		}
+		select {
+		case <-probeCtx.Done():
+			return false
+		case <-time.After(sharedHealthPollInterval):
+		}
+	}
+}
+
+func httpOK(ctx context.Context, url string) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = resp.Body.Close() }()
+	return resp.StatusCode == http.StatusOK
 }
