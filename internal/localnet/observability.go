@@ -30,10 +30,16 @@ type ObservabilityState struct {
 	Grafana        bool
 	PrometheusPort int
 	GrafanaPort    int
+	// Shared reports that the instance is registered with the host-shared
+	// stack (its scrape target file exists). A shared-only instance has
+	// Shared true with Prometheus/Grafana false — metrics come from the
+	// shared stack, not a per-instance overlay.
+	Shared bool
 }
 
-// ReadObservabilityState derives the current per-component state from
-// the instance's persisted port map. Nil-safe.
+// ReadObservabilityState derives the current state from the instance's
+// persisted port map (per-instance overlay) and its shared-stack
+// registration. Nil-safe.
 func ReadObservabilityState(state *registry.State) ObservabilityState {
 	var s ObservabilityState
 	if state == nil {
@@ -47,6 +53,7 @@ func ReadObservabilityState(state *registry.State) ObservabilityState {
 		s.Grafana = true
 		s.GrafanaPort = p
 	}
+	s.Shared = InstanceObservabilityEnabled(state.Name)
 	return s
 }
 

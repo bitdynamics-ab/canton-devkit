@@ -27,6 +27,7 @@ on:
       - main
     paths:
       - scripts/e2e/**
+      - scripts/e2e-observability.sh
       - .github/workflows/e2e-test-devkit-functions.yml
       - .github/actions/e2e-m1-test/**
 
@@ -277,3 +278,57 @@ jobs:
               | xargs -r docker volume rm -f 2>/dev/null || true
           done
           rm -f /tmp/e2e-m1-snapshot.tgz
+
+  e2e-observability:
+    name: e2e-observability
+    if: |
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        # actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Set up Go
+        # actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Build binary
+        run: make build
+
+      - name: Verify Docker daemon
+        run: |
+          docker version
+          docker compose version
+
+      - name: Clean stale state from prior runs
+        run: |
+          docker compose -p canton-e2e-obs-shared down --volumes 2>/dev/null || true
+          docker volume ls -q --filter "name=^canton-e2e-obs-shared_" \
+            | xargs -r docker volume rm -f 2>/dev/null || true
+          rm -rf "$HOME/.canton-devkit/localnet/e2e-obs-shared"
+
+      - name: Run E2E observability tests
+        run: scripts/e2e-observability.sh
+
+      - name: Dump container state on failure
+        if: failure()
+        run: |
+          docker ps -a || true
+          docker compose ls || true
+
+      - name: Force cleanup
+        if: always()
+        run: |
+          docker compose -p canton-e2e-obs-shared down --volumes 2>/dev/null || true
+          docker volume ls -q --filter "name=^canton-e2e-obs-shared_" \
+            | xargs -r docker volume rm -f 2>/dev/null || true

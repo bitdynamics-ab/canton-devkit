@@ -123,8 +123,10 @@ for the topology.
   `host.docker.internal`, so it works on any platform regardless of the
   Linux `host-gateway` mapping; `auto` falls back to it when the shared
   stack can't be started.
-- **Native-Linux validation pending.** Making `shared` the default (and
-  dropping the per-instance overlay entirely) waits on validating the
-  shared stack's `host.docker.internal` scrape path end-to-end on a
-  native Linux Docker host. Until then `auto` is the default and
+- **Native-Linux validation.** `scripts/e2e-observability.sh` (self-hosted
+  Linux CI) brings up a shared-mode instance and asserts the shared
+  Prometheus scrapes it via `host.docker.internal`. `auto` also
+  health-probes the shared Prometheus and falls back to the per-instance
+  overlay when it is up but not serving. Making `shared` the default (and
+  dropping the overlay entirely) follows that e2e going green; until then
   `per-instance` is the platform-independent escape hatch.

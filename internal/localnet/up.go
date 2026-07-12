@@ -372,7 +372,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			sharedReachable = sharedStackReachable(ctx, prog.Err())
 			if mode == ObservabilityModeShared && !sharedReachable {
 				prog.Warn("--observability-mode shared: the host-shared " +
-					"observability stack could not be started; metrics stay " +
+					"observability stack is not reachable; metrics stay " +
 					"unavailable until it is.")
 			}
 		}
