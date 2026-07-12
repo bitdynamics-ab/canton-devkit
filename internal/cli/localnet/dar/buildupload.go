@@ -164,6 +164,28 @@ func pickBuilder(pref string) (string, error) {
 	return "", fmt.Errorf("--builder must be one of: auto, dpm, daml (got %q)", pref)
 }
 
+// buildEnv returns the process environment with DPM's injected
+// resolution-file variable stripped.
+//
+// When DevKit runs under `dpm localnet …`, DPM writes a temporary
+// resolution file and passes its path in DPM_RESOLUTION_FILE. A nested
+// `dpm build` (which build-upload/watch shell out to) inherits that var
+// and aborts with "open <path>: file exists" because it tries to
+// re-create the already-written file. Dropping the var makes the child
+// build resolve fresh from daml.yaml — exactly what the standalone
+// `canton-devkit … --project` path already does. See issue #230.
+func buildEnv() []string {
+	env := os.Environ()
+	out := env[:0]
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "DPM_RESOLUTION_FILE=") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
+}
+
 // runBuild invokes the build tool and returns the path of the
 // resulting .dar. Both dpm and daml put the DAR in .daml/dist/ by
 // convention; we glob for the freshest .dar there after the build
@@ -171,6 +193,7 @@ func pickBuilder(pref string) (string, error) {
 func runBuild(tool, project string, stderr io.Writer) (string, error) {
 	c := exec.Command(tool, "build")
 	c.Dir = project
+	c.Env = buildEnv()
 	var stderrBuf bytes.Buffer
 	c.Stderr = &stderrBuf
 	if err := c.Run(); err != nil {

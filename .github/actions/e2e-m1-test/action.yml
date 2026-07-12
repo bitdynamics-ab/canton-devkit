@@ -1,0 +1,33 @@
+name: Run Milestone 1 E2E test
+description: Download the built binary and run one Milestone 1 E2E test script.
+
+inputs:
+  script:
+    description: Script filename under scripts/e2e/ (for example m1-up-001.sh)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Download built binary
+      # actions/download-artifact@v4.1.7
+      uses: actions/download-artifact@65a9edc5881444af0b9093a5e628f2fe47ea3b2e
+      with:
+        name: canton-devkit-binary
+        path: bin
+
+    - name: Make scripts executable
+      shell: bash
+      run: chmod +x bin/canton-devkit scripts/e2e/*.sh
+
+    - name: Run test
+      shell: bash
+      run: scripts/e2e/${{ inputs.script }}
+
+    - name: Dump container state on failure
+      if: failure()
+      shell: bash
+      run: |
+        docker ps -a || true
+        docker compose ls || true
+        docker volume ls || true

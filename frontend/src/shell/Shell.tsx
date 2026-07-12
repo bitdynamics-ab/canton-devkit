@@ -35,6 +35,7 @@ const NAV_ICON: Record<string, (p: { size?: number }) => JSX.Element> = {
 };
 
 const DOCS_URL = "https://bitdynamics-ab.github.io/canton-devkit/";
+const REPO_URL = "https://github.com/bitdynamics-ab/canton-devkit";
 
 interface ShellProps {
   children: React.ReactNode;
@@ -485,7 +486,9 @@ function Sidebar() {
           fontFamily: wMono,
         }}
       >
-        <span>loopback only</span>
+        <span>
+          UI version: <UiVersion />
+        </span>
         <span>
           {conn.serverVersion != null
             ? `schema v${conn.serverVersion}`
@@ -493,6 +496,28 @@ function Sidebar() {
         </span>
       </div>
     </nav>
+  );
+}
+
+// UiVersion renders the build commit id, linking to the GitHub commit
+// when it's a real sha. The "dev" fallback (no git checkout, or Vitest
+// where Vite's `define` doesn't apply) has no commit to point at, so it
+// renders as plain text.
+function UiVersion() {
+  const commit = typeof __UI_COMMIT__ !== "undefined" ? __UI_COMMIT__ : "dev";
+  if (commit === "dev") {
+    return <>{commit}</>;
+  }
+  return (
+    <a
+      href={`${REPO_URL}/commit/${commit}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`View commit ${commit} on GitHub`}
+      style={{ color: "inherit", textDecoration: "underline" }}
+    >
+      {commit}
+    </a>
   );
 }
 
