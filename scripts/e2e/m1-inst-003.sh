@@ -20,7 +20,7 @@ run_test() {
     echo "$HELP" | grep -qiE "$cmd"
   done
   cli unpause --help >/dev/null 2>&1
-  cli clean --help >/dev/null 2>&1
+  cli remove --help >/dev/null 2>&1
 
   case "$(uname -s)" in
     Darwin) file "$CDK" 2>/dev/null | grep -qiE "Mach-O" ;;

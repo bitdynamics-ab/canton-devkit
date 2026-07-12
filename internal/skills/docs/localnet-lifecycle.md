@@ -58,9 +58,9 @@ if the network is healthy", or "tear it down".
 - Always run `doctor` before `up` if the user reports trouble.
 - Reach for the lightest teardown that fits: `pause` for a short break,
   `stop` for a clean shutdown you'll resume soon, `down` to free
-  container resources, `remove --name <n>` (alias: `clean`) only to
+  container resources, `remove <n>` (alias: `clean`) only to
   reclaim data volumes and registry state (`--force` for a running
   instance).
 - Never pass secrets on the command line — JWTs come from `localnet env`.
-- The instance name can be passed as a positional arg (`localnet up dev`)
-  or via `--name` (`localnet up --name dev`). Both forms are equivalent.
+- The instance name is passed as a positional arg (`localnet up dev`).
+  `--name` is still accepted for backward compatibility.

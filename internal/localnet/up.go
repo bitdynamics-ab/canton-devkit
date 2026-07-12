@@ -416,7 +416,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		if prior.Status == registry.StatusRunning {
 			prog.FailStep(StepPersistState, fmt.Sprintf(
 				"instance %q is already running — stop it first with "+
-					"`localnet down --name %s`, or bounce it with `localnet restart --name %s`",
+					"`localnet down %s`, or bounce it with `localnet restart %s`",
 				opts.Name, opts.Name, opts.Name), nil)
 			return ExitUserError
 		}

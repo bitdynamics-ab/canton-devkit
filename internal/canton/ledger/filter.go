@@ -21,10 +21,22 @@ import (
 // BuildTemplateFilters parses user-supplied template selectors into
 // the proto Filters shape. Accepts:
 //
-//	"Module:Entity"              — package-name match (any vetted
-//	                               package containing this template).
-//	"pkg-name:Module:Entity"     — same, more verbose.
-//	"<package-id>:Module:Entity" — exact package-id pin.
+//	"Module:Entity"               — no package selector; PackageId is
+//	                                left empty. A Daml-LF-v2 participant
+//	                                (Splice 0.6.x) REJECTS an empty
+//	                                package id — give a package name to
+//	                                get a filter that resolves.
+//	"pkg-name:Module:Entity"      — package-NAME reference. Emitted in
+//	                                the LF-v2 "#pkg-name" form so the
+//	                                participant resolves it to the highest
+//	                                vetted version of that package.
+//	"#pkg-name:Module:Entity"     — same, already in the "#name" form;
+//	                                passed through unchanged.
+//	"<package-id>:Module:Entity"  — exact pin on a concrete 64-hex
+//	                                Daml-LF package-id.
+//
+// The package selector is normalised by [packageRef]: a bare name gains
+// the LF-v2 "#" prefix; a "#name" or a 64-hex package-id passes through.
 //
 // Returns nil for an empty/nil input — the caller interprets that as
 // "wildcard, no template restriction".
@@ -41,7 +53,7 @@ func BuildTemplateFilters(templates []string) (*lapiv2.Filters, error) {
 		parts := strings.Split(t, ":")
 		if len(parts) < 2 {
 			return nil, fmt.Errorf(
-				"--template %q invalid: expected Module:Entity or pkg:Module:Entity", t)
+				"--template %q invalid: expected \"#pkg-name:Module:Entity\" or \"Module:Entity\"", t)
 		}
 		var pkg, mod, entity string
 		switch len(parts) {
@@ -59,7 +71,7 @@ func BuildTemplateFilters(templates []string) (*lapiv2.Filters, error) {
 				IdentifierFilter: &lapiv2.CumulativeFilter_TemplateFilter{
 					TemplateFilter: &lapiv2.TemplateFilter{
 						TemplateId: &lapiv2.Identifier{
-							PackageId:  pkg,
+							PackageId:  packageRef(pkg),
 							ModuleName: mod,
 							EntityName: entity,
 						},
@@ -69,6 +81,36 @@ func BuildTemplateFilters(templates []string) (*lapiv2.Filters, error) {
 			})
 	}
 	return filters, nil
+}
+
+// packageRef normalises the package selector from a "pkg:Module:Entity"
+// template into the value Canton's LF-v2 Ledger API expects in
+// Identifier.PackageId. A concrete 64-hex package-id is an exact pin and
+// passes through untouched; any other non-empty value is a package NAME,
+// which LF-v2 references with a leading "#" (a value already
+// "#"-prefixed is passed through as-is). An empty selector — the bare
+// "Module:Entity" form — stays empty; there is no name to reference.
+func packageRef(pkg string) string {
+	if pkg == "" || strings.HasPrefix(pkg, "#") || isHexPackageID(pkg) {
+		return pkg
+	}
+	return "#" + pkg
+}
+
+// isHexPackageID reports whether s is a concrete Daml-LF package-id: the
+// 64-char hex SHA-256 of the package. Package names never take this
+// shape, so a match means the caller pinned an exact package id rather
+// than a name to resolve.
+func isHexPackageID(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, r := range s {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') && (r < 'A' || r > 'F') {
+			return false
+		}
+	}
+	return true
 }
 
 // BuildEventFormat constructs the EventFormat that ActiveContracts +

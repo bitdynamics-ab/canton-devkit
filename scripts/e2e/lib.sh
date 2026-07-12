@@ -109,14 +109,14 @@ e2e_preclean_instances() {
   local name
   for name in "${E2E_INSTANCE_NAMES[@]}"; do
     cli down "$name" 2>/dev/null || true
-    cli clean --name "$name" --force 2>/dev/null || true
+    cli remove "$name" --force 2>/dev/null || true
   done
 }
 
 e2e_force_cleanup_instances() {
   local name
   for name in "${E2E_INSTANCE_NAMES[@]}"; do
-    cli clean --name "$name" --force 2>/dev/null || true
+    cli remove "$name" --force 2>/dev/null || true
     docker compose -p "canton-${name}" down --volumes 2>/dev/null || true
   done
   rm -f "$SNAPSHOT_PATH"

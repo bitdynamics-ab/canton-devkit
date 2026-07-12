@@ -232,7 +232,7 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 	if state.Status != registry.StatusRunning {
 		_, _ = fmt.Fprintf(errw,
 			"instance %q is not running — a database snapshot reads from a live Postgres. "+
-				"Run `localnet up --name %s` first.\n", name, name)
+				"Run `localnet up %s` first.\n", name, name)
 		return localnet.ExitUserError
 	}
 
@@ -243,8 +243,8 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 	}
 
 	_, _ = fmt.Fprintln(out, term.Prompt("", "", "", fmt.Sprintf(
-		"dpm localnet snapshot %s %s %s %s",
-		term.Amberc("--name"), name, term.Amberc("--to"), dest)))
+		"dpm localnet snapshot %s %s %s",
+		name, term.Amberc("--to"), dest)))
 	_, _ = fmt.Fprintln(out, term.Step(term.StepCheck, "Reading registry state", state.ComposeProject, ""))
 
 	// Quiesce writers before the dump. pg_dumpall is a single-step
@@ -356,7 +356,7 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 			term.Bold(dest),
 			term.Dimc(fmt.Sprintf("%s · run %s to restore.",
 				header.CreatedAt,
-				term.Textc(fmt.Sprintf("localnet restore --name %s --from %s", name, dest)))))))
+				term.Textc(fmt.Sprintf("localnet restore %s --from %s", name, dest)))))))
 	return localnet.ExitSuccess
 }
 
@@ -450,8 +450,8 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 	}
 
 	_, _ = fmt.Fprintln(out, term.Prompt("", "", "", fmt.Sprintf(
-		"dpm localnet restore %s %s %s %s",
-		term.Amberc("--name"), name, term.Amberc("--from"), src)))
+		"dpm localnet restore %s %s %s",
+		name, term.Amberc("--from"), src)))
 	_, _ = fmt.Fprintln(out, term.Step(term.StepCheck, "Validated header",
 		fmt.Sprintf("schema %d · %d database(s) · captured %s",
 			meta.SchemaVersion, meta.Database.DatabaseCount, meta.CreatedAt), ""))
@@ -467,7 +467,7 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 	if existing != nil {
 		if existing.Status == registry.StatusRunning {
 			_, _ = fmt.Fprintf(errw,
-				"instance %q is running — run `localnet down --name %s` first\n", name, name)
+				"instance %q is running — run `localnet down %s` first\n", name, name)
 			return localnet.ExitUserError
 		}
 		if existing.SpliceVersion != meta.SpliceVersion && !force {
@@ -499,7 +499,7 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 	// target project is still up (a stale/half-down instance), refuse.
 	if running, _ := archiverFn.AnyContainerRunning(ctx, toWrite.ComposeProject); running {
 		_, _ = fmt.Fprintf(errw,
-			"instance %q still has running containers — run `localnet down --name %s` first\n",
+			"instance %q still has running containers — run `localnet down %s` first\n",
 			name, name)
 		return localnet.ExitUserError
 	}
@@ -574,7 +574,7 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 			term.Bold(src),
 			meta.Database.DatabaseCount,
 			term.Dimc(fmt.Sprintf("Run %s to bring it up.",
-				term.Textc(fmt.Sprintf("localnet up --name %s", name)))))))
+				term.Textc(fmt.Sprintf("localnet up %s", name)))))))
 	return localnet.ExitSuccess
 }
 

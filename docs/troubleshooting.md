@@ -23,8 +23,8 @@ this before the stack starts.
 **Symptom:** `PORTS_IN_USE` error envelope on `up`.
 
 **Fix:** Another instance (or a stale container) holds the port block.
-`localnet list` to find it, `localnet down --name <other>` to free it, or
-pass a different `--name` (each name gets its own block). Note: Docker may
+`localnet list` to find it, `localnet down <other>` to free it, or
+pass a different instance name (each name gets its own block). Note: Docker may
 reassign ephemeral host ports across a restart — re-read them from
 `localnet status` rather than caching old values.
 
@@ -52,7 +52,7 @@ ready until the Splice app fully boots.
   while the scan app is still coming up. Only **Amulet** transfers depend
   on the scan registry.
 - If the participant port is genuinely down, `localnet status` will show
-  it; restart with `localnet restart --name <i>`.
+  it; restart with `localnet restart <i>`.
 
 ## Token: "package not vetted" / manual DAR upload
 
@@ -76,7 +76,7 @@ no mint/burn surface — create your own token to exercise them.
 
 **Symptom:** token/ledger commands can't find a JWT for a role.
 
-**Fix:** `localnet creds --name <i> --role <role> --format raw`
+**Fix:** `localnet creds <i> --role <role> --format raw`
 prints the JWT captured at `up` time from `state.json`. If no
 credentials were captured (e.g. the `up` failed before JWT capture),
 re-run `localnet up` to completion. The token commands also auto-issue
@@ -93,10 +93,10 @@ to `down` first.
 
 ## Still stuck?
 
-- `localnet logs --name <i> [--service <svc>]` — tail container logs
+- `localnet logs <i> [--service <svc>]` — tail container logs
   (repeat `--service` to filter to specific services).
 - `localnet doctor` — host readiness diagnostics (docker, resources,
-  network); use `localnet status --name <i>` for per-instance state.
+  network); use `localnet status <i>` for per-instance state.
 - File a [GitHub issue](https://github.com/bitdynamics-ab/canton-devkit/issues)
   with the `doctor` output and the failing command.
 

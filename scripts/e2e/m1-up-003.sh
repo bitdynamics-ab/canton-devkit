@@ -21,7 +21,7 @@ run_test() {
     || { echo "FAIL step 2: status missing version $SPLICE_VERSION" >&2; return 1; }
 
   if "$CDK" localnet up e2e-bad-version --version "0.0.0-nonexistent" >/dev/null 2>&1; then
-    cli clean --name e2e-bad-version --force 2>/dev/null || true
+    cli remove e2e-bad-version --force 2>/dev/null || true
     echo "FAIL step 3: invalid version should have been rejected" >&2
     return 1
   fi

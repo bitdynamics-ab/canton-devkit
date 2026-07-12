@@ -2,7 +2,7 @@
 
 // Package canton's integration tests exercise the ledger gRPC client and
 // the registry HTTP client against a real LocalNet brought up by
-// `dpm localnet up --name dev` (or `canton-devkit localnet up --name dev`).
+// `dpm localnet up dev` (or `canton-devkit localnet up dev`).
 //
 // Run with:
 //
@@ -132,7 +132,7 @@ func TestIntegration_LedgerEnd(t *testing.T) {
 		// CI line.
 		if strings.Contains(err.Error(), "connection refused") ||
 			strings.Contains(err.Error(), "Unavailable") {
-			t.Skipf("LocalNet not reachable at %s — run `localnet up --name dev` first: %v",
+			t.Skipf("LocalNet not reachable at %s — run `localnet up dev` first: %v",
 				localnetParticipantEndpoint(), err)
 		}
 		t.Fatalf("LedgerEnd: %v", err)
@@ -164,7 +164,7 @@ func TestIntegration_ListKnownParties(t *testing.T) {
 	resp, err := c.ListKnownParties(ctx)
 	if err != nil {
 		if strings.Contains(err.Error(), "connection refused") {
-			t.Skipf("LocalNet not reachable; run `localnet up --name dev`: %v", err)
+			t.Skipf("LocalNet not reachable; run `localnet up dev`: %v", err)
 		}
 		t.Fatalf("ListKnownParties: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestIntegration_ScanDsoInfo(t *testing.T) {
 	dso, err := c.GetDsoInfo(ctx)
 	if err != nil {
 		if strings.Contains(err.Error(), "connection refused") {
-			t.Skipf("Splice scan app not reachable at %s — run `localnet up --name dev`: %v",
+			t.Skipf("Splice scan app not reachable at %s — run `localnet up dev`: %v",
 				localnetScanBaseURL(), err)
 		}
 		t.Fatalf("GetDsoInfo: %v", err)

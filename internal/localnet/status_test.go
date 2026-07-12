@@ -241,7 +241,7 @@ func TestStatus_UIUnreachableWarnsWithRemediation(t *testing.T) {
 		"unreachable",
 		"not serving HTTP",
 		"connection accepted but no HTTP response (empty reply)",
-		"dpm localnet up --name demo",
+		"dpm localnet up demo",
 		"Recreate in the Web UI",
 	} {
 		if !strings.Contains(body, want) {

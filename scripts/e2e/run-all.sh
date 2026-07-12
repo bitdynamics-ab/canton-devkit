@@ -70,8 +70,8 @@ source "${E2E_DIR}/m1-stp-001.sh"
 source "${E2E_DIR}/m1-snp-001.sh"
 # shellcheck source=m1-dwn-001.sh
 source "${E2E_DIR}/m1-dwn-001.sh"
-# shellcheck source=m1-cln-001.sh
-source "${E2E_DIR}/m1-cln-001.sh"
+# shellcheck source=m1-rmv-001.sh
+source "${E2E_DIR}/m1-rmv-001.sh"
 
 section "PHASE 3: Named instance and version tests"
 # shellcheck source=m1-up-002.sh

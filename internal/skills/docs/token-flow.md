@@ -36,7 +36,7 @@ The user asks to "create a test token", "mint/transfer/burn tokens", or
    ```
 
 3. **Common operations** (parties are full party ids — get them from
-   `dpm localnet status --name dev`):
+   `dpm localnet status dev`):
    ```
    dpm localnet token mint --instance dev --instrument RTK --to <party-id> --amount 1000
    dpm localnet token transfer --instance dev --instrument RTK --from <sender> --to <receiver> --amount 250
