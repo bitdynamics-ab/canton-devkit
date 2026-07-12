@@ -1,6 +1,18 @@
 /// <reference types="vitest/config" />
+import { execSync } from "node:child_process";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+
+// Short git commit the UI bundle was built from. Surfaced in the side
+// nav footer so screenshots reveal which UI commit a user is on.
+// Falls back to "dev" outside a git checkout (e.g. release tarballs).
+const uiCommit = (() => {
+  try {
+    return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
+  } catch {
+    return "dev";
+  }
+})();
 
 // Vite config for the canton-devkit Web UI.
 //
@@ -16,6 +28,9 @@ import react from "@vitejs/plugin-react";
 // for the dev loop to work.
 export default defineConfig({
   plugins: [react()],
+  define: {
+    __UI_COMMIT__: JSON.stringify(uiCommit),
+  },
   build: {
     outDir: "../internal/ui/dist",
     emptyOutDir: true,
