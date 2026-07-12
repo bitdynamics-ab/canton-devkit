@@ -74,6 +74,10 @@ type State struct {
 	// Profiles == nil and callers re-derive from the version adapter.
 	Profiles []string `json:"profiles,omitempty"`
 
+	// ObservabilityMode records the shared/per-instance sidecar choice so a
+	// re-up preserves it. Empty on older state.json files == auto.
+	ObservabilityMode string `json:"observability_mode,omitempty"`
+
 	// Filesystem locations
 	ProjectDir string `json:"project_dir"` // ~/.canton-devkit/cache/splice-<tag>/
 	DataDir    string `json:"data_dir"`    // ~/.canton-devkit/localnet/<name>/
