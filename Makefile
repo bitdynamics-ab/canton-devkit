@@ -3,7 +3,7 @@ VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)
 
-.PHONY: build clean docker-build lint test frontend frontend-install frontend-test ui
+.PHONY: build clean docker-build lint test frontend frontend-install frontend-test ui e2e-dpm
 
 # frontend-install: sync frontend/node_modules with the lockfile.
 # Separate target so CI runners with pre-cached deps can build only.
@@ -38,6 +38,17 @@ test:
 
 lint:
 	golangci-lint run
+
+# e2e-dpm: run the `dpm localnet` bats e2e suite. bats-core and its
+# helper libs are vendored as git submodules under e2e-tests/; this
+# target initializes them on demand so a fresh checkout just works.
+# Requires `dpm` on PATH (the suite skips gracefully otherwise).
+e2e-dpm:
+	@if [ ! -x e2e-tests/bats/bin/bats ]; then \
+		git submodule update --init --recursive e2e-tests; \
+	fi
+	BATS_LIB_PATH="$(CURDIR)/e2e-tests/test_helper" \
+		e2e-tests/bats/bin/bats e2e-tests/
 
 docker-build:
 	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) -t $(BINARY_NAME):$(VERSION) .
