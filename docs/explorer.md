@@ -132,7 +132,9 @@ applied **server-side** over the participant's offset window:
 
 - **party** — comma-separate to project through specific parties.
   Omit to project through the role JWT's own parties.
-- **template** — `Module:Entity` or `pkg:Module:Entity`,
+- **template** — `#pkg-name:Module:Entity` (a package-name reference
+  the participant resolves to the highest vetted version) or
+  `<pkg-id>:Module:Entity` (an exact 64-hex package-id pin),
   comma-separated for multiple.
 - **from / to** — bound the scanned ledger-offset window (`from` is
   exclusive, `to` inclusive). Leave blank for a generous recent
@@ -211,13 +213,14 @@ Every view in the Explorer has a CLI equivalent that returns the
 same data as JSON, suitable for `jq` and scripting:
 
 ```bash
-# Snapshot the ACS. --party is repeatable; --template accepts
-# Module:Entity or pkg:Module:Entity.
+# Snapshot the ACS. --party is repeatable; --template takes a
+# package-name reference "#pkg-name:Module:Entity" (quote it — a bare
+# leading # is a shell comment) or an exact "<pkg-id>:Module:Entity".
 canton-devkit localnet contracts ls \
   --name demo \
   --endpoint localhost:<ledger-port> \
   --party alice \
-  --template Token:Holding
+  --template '#my-token:Token:Holding'
 
 # Stream ACS changes from the current ledger end.
 canton-devkit localnet contracts watch \
@@ -230,7 +233,7 @@ canton-devkit localnet tx ls \
   --name demo \
   --endpoint localhost:<ledger-port> \
   --party alice \
-  --template Token:Holding
+  --template '#my-token:Token:Holding'
 
 # Replay one transaction's per-party visibility projection — the
 # CLI mirror of the Transactions view's "replay" button.

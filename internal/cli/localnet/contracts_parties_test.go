@@ -56,13 +56,14 @@ func dialFakeUserMgmt(t *testing.T, parties []string) *ledger.Client {
 }
 
 // TestResolveDefaultParties covers the parity helper:
-// no --party projects through the JWT's resolved parties; an explicit
-// --party (or --template) is honoured verbatim; and an empty/failed
-// resolution falls back to the wildcard so admin tokens still work.
+// no --party projects through the JWT's resolved parties (even when a
+// --template is present, so a user-id token isn't PermissionDenied); an
+// explicit --party is honoured verbatim; and an empty/failed resolution
+// falls back to the wildcard so admin tokens still work.
 func TestResolveDefaultParties(t *testing.T) {
 	t.Run("no party → resolved JWT parties", func(t *testing.T) {
 		client := dialFakeUserMgmt(t, []string{"alice", "bob"})
-		got, err := resolveDefaultParties(context.Background(), io.Discard, client, nil, nil)
+		got, err := resolveDefaultParties(context.Background(), io.Discard, client, nil)
 		if err != nil {
 			t.Fatalf("resolveDefaultParties: %v", err)
 		}
@@ -73,7 +74,7 @@ func TestResolveDefaultParties(t *testing.T) {
 
 	t.Run("explicit --party is honoured verbatim (no resolution)", func(t *testing.T) {
 		client := dialFakeUserMgmt(t, []string{"alice", "bob"})
-		got, err := resolveDefaultParties(context.Background(), io.Discard, client, []string{"carol"}, nil)
+		got, err := resolveDefaultParties(context.Background(), io.Discard, client, []string{"carol"})
 		if err != nil {
 			t.Fatalf("resolveDefaultParties: %v", err)
 		}
@@ -82,20 +83,9 @@ func TestResolveDefaultParties(t *testing.T) {
 		}
 	})
 
-	t.Run("--template present → wildcard kept (parties unchanged)", func(t *testing.T) {
-		client := dialFakeUserMgmt(t, []string{"alice"})
-		got, err := resolveDefaultParties(context.Background(), io.Discard, client, nil, []string{"M:E"})
-		if err != nil {
-			t.Fatalf("resolveDefaultParties: %v", err)
-		}
-		if len(got) != 0 {
-			t.Errorf("got %v, want [] (wildcard with template filter)", got)
-		}
-	})
-
 	t.Run("no resolved parties → wildcard fallback (warns, no error)", func(t *testing.T) {
 		client := dialFakeUserMgmt(t, nil) // JWT has no party rights
-		got, err := resolveDefaultParties(context.Background(), io.Discard, client, nil, nil)
+		got, err := resolveDefaultParties(context.Background(), io.Discard, client, nil)
 		if err != nil {
 			t.Fatalf("resolveDefaultParties should not fail on empty rights: %v", err)
 		}
