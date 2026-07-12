@@ -167,9 +167,9 @@ func buildObservabilityStatus() *cobra.Command {
 			if format == "json" {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
-				return enc.Encode(observabilityStatusJSON(state, cur))
+				return enc.Encode(observabilityStatusJSON(cmd.Context(), state, cur))
 			}
-			renderObservabilityStatus(cmd.OutOrStdout(), state, cur)
+			renderObservabilityStatus(cmd.Context(), cmd.OutOrStdout(), state, cur)
 			return nil
 		},
 	}
@@ -251,7 +251,7 @@ func runObservabilityToggleResolved(cmd *cobra.Command, state *registry.State, f
 
 // observabilityStatusJSON is the stable shape `status --format json`
 // emits. Keys mirror the toggle response so a script can read either.
-func observabilityStatusJSON(state *registry.State, cur localnet.ObservabilityState) map[string]any {
+func observabilityStatusJSON(ctx context.Context, state *registry.State, cur localnet.ObservabilityState) map[string]any {
 	return map[string]any{
 		"instance":      state.Name,
 		"status":        string(state.Status),
@@ -259,7 +259,7 @@ func observabilityStatusJSON(state *registry.State, cur localnet.ObservabilitySt
 		"grafana":       cur.Grafana,
 		"prometheus_ui": cur.PrometheusPort,
 		"grafana_ui":    cur.GrafanaPort,
-		"grafana_url":   grafanaURLFor(state),
+		"grafana_url":   grafanaURLFor(ctx, state),
 	}
 }
 
@@ -286,13 +286,13 @@ func renderObservabilityResult(out io.Writer, instance string, res localnet.Obse
 }
 
 // renderObservabilityStatus prints the read-only status report.
-func renderObservabilityStatus(out io.Writer, state *registry.State, cur localnet.ObservabilityState) {
+func renderObservabilityStatus(ctx context.Context, out io.Writer, state *registry.State, cur localnet.ObservabilityState) {
 	rows := []string{
 		term.KV("Instance status", string(state.Status), 16),
 		term.KV("Prometheus", onOff(cur.Prometheus), 16),
 		term.KV("Grafana", onOff(cur.Grafana), 16),
 	}
-	if url := grafanaURLFor(state); url != "" {
+	if url := grafanaURLFor(ctx, state); url != "" {
 		rows = append(rows, term.KV("Grafana URL", url, 16))
 	}
 	if cur.PrometheusPort != 0 {

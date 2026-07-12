@@ -261,26 +261,31 @@ func TestMetricsReport_JSONShape(t *testing.T) {
 	}
 }
 
-// The URL is emitted only when state.Ports has a grafana_ui entry (obs on).
+// A registered grafana_ui port deep-links to the per-instance Grafana;
+// otherwise (shared-only or obs off) it falls back to the shared Grafana.
 func TestGrafanaURLFor(t *testing.T) {
-	t.Run("obs-on", func(t *testing.T) {
+	old := sharedGrafanaURL
+	sharedGrafanaURL = func(context.Context, string) string { return "SHARED" }
+	t.Cleanup(func() { sharedGrafanaURL = old })
+
+	t.Run("per-instance-port", func(t *testing.T) {
 		state := &registry.State{Ports: map[string]int{"grafana_ui": 3001}}
-		got := grafanaURLFor(state)
+		got := grafanaURLFor(context.Background(), state)
 		want := "http://localhost:3001/d/canton-localnet-v1"
 		if got != want {
 			t.Errorf("grafanaURLFor = %q, want %q", got, want)
 		}
 	})
-	t.Run("obs-off-no-port", func(t *testing.T) {
+	t.Run("no-port-falls-back-to-shared", func(t *testing.T) {
 		state := &registry.State{Ports: map[string]int{}}
-		if got := grafanaURLFor(state); got != "" {
-			t.Errorf("grafanaURLFor with no grafana_ui = %q, want empty", got)
+		if got := grafanaURLFor(context.Background(), state); got != "SHARED" {
+			t.Errorf("grafanaURLFor with no grafana_ui = %q, want shared fallback", got)
 		}
 	})
-	t.Run("obs-off-zero-port", func(t *testing.T) {
+	t.Run("zero-port-falls-back-to-shared", func(t *testing.T) {
 		state := &registry.State{Ports: map[string]int{"grafana_ui": 0}}
-		if got := grafanaURLFor(state); got != "" {
-			t.Errorf("grafanaURLFor with zero port = %q, want empty", got)
+		if got := grafanaURLFor(context.Background(), state); got != "SHARED" {
+			t.Errorf("grafanaURLFor with zero port = %q, want shared fallback", got)
 		}
 	})
 }
