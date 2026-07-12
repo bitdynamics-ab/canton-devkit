@@ -105,6 +105,43 @@ wait_for_healthy() {
   $ok
 }
 
+# Returns 0 (true) when ANY docker resource for canton-<name> still
+# exists: containers (running or stopped), named volumes, or networks.
+# Used to gate the docker fallback so we only shell out to docker when
+# `canton-devkit remove` actually left something behind.
+e2e_instance_resources_remain() {
+  local name="$1"
+
+  docker ps -a --filter "label=com.docker.compose.project=canton-${name}" --format '{{.Names}}' \
+    | grep -qE "${name}" && return 0
+  docker volume ls -q --filter "name=^canton-${name}_" | grep -q . && return 0
+  docker network ls --format '{{.Name}}' | grep -qE "${name}" && return 0
+  return 1
+}
+
+# Complete docker teardown for canton-<name>. `compose down --volumes`
+# only removes volumes Compose itself created; a volume re-created out of
+# band (e.g. the restore path's `docker run -v <vol>:...`) is adopted as
+# external and skipped. Follow up with a name-prefix `volume rm -f` sweep
+# so no detached volumes are left behind. All best-effort.
+e2e_force_docker_cleanup() {
+  local name="$1"
+
+  docker compose -p "canton-${name}" down --volumes --remove-orphans 2>/dev/null || true
+  docker volume ls -q --filter "name=^canton-${name}_" \
+    | xargs -r docker volume rm -f 2>/dev/null || true
+}
+
+# CLI-first cleanup: always use `canton-devkit remove` first; fall back to
+# the complete docker teardown ONLY if remove failed or resources remain.
+e2e_cleanup_instance() {
+  local name="$1"
+
+  if ! cli remove "$name" --force 2>/dev/null || e2e_instance_resources_remain "$name"; then
+    e2e_force_docker_cleanup "$name"
+  fi
+}
+
 e2e_preclean_instances() {
   local name
   for name in "${E2E_INSTANCE_NAMES[@]}"; do
@@ -116,8 +153,7 @@ e2e_preclean_instances() {
 e2e_force_cleanup_instances() {
   local name
   for name in "${E2E_INSTANCE_NAMES[@]}"; do
-    cli remove "$name" --force 2>/dev/null || true
-    docker compose -p "canton-${name}" down --volumes 2>/dev/null || true
+    e2e_cleanup_instance "$name"
   done
   rm -f "$SNAPSHOT_PATH"
 }
