@@ -27,6 +27,7 @@ export const docsMap = [
   { src: 'telemetry.md', dest: 'reference/telemetry', description: "The complete reference for canton-devkit's anonymous, aggregate usage counters — what is collected, what is never collected, and how to inspect or disable it." },
   { src: 'limitations.md', dest: 'reference/limitations', description: 'Things DevKit does not (yet) do well, with the rationale and workarounds where applicable.' },
   { src: 'troubleshooting.md', dest: 'reference/troubleshooting', description: 'Failure modes and fixes for LocalNet bring-up, ports, V2 token instances, credentials, and snapshots.' },
+  { src: 'e2e-testing.md', dest: 'reference/e2e-testing', description: 'How canton-devkit runs end-to-end tests — the bats-core `dpm localnet` suite and the Milestone 1 LocalNet lifecycle suite: layout, running them locally with `make e2e-dpm`, writing new tests, and CI.' },
 ];
 
 // Hand-authored pages the sync must never touch or prune.

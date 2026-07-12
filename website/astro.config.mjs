@@ -65,6 +65,7 @@ export default defineConfig({
 						{ slug: 'reference/limitations' },
 						{ slug: 'reference/faq' },
 						{ slug: 'reference/troubleshooting' },
+						{ slug: 'reference/e2e-testing' },
 					],
 				},
 				{
