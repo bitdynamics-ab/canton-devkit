@@ -486,7 +486,8 @@ function Sidebar() {
         }}
       >
         <span>
-          ui {typeof __UI_COMMIT__ !== "undefined" ? __UI_COMMIT__ : "dev"}
+          UI version:{" "}
+          {typeof __UI_COMMIT__ !== "undefined" ? __UI_COMMIT__ : "dev"}
         </span>
         <span>
           {conn.serverVersion != null
