@@ -1,5 +1,5 @@
 name: Run dpm localnet E2E test
-description: Download the built binary, install the DPM CLI, and run one dpm localnet E2E test script.
+description: Build the binary, install the DPM CLI, and run one dpm localnet E2E test script.
 
 # Keep dpm-version / dpm-linux-sha256 defaults in sync with release.yml
 # and e2e-test-dpm-installation.yml.
@@ -19,12 +19,11 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Download built binary
-      # actions/download-artifact@v4.1.7
-      uses: actions/download-artifact@65a9edc128165405c983346fd356e6d4c448ac4
-      with:
-        name: canton-devkit-binary
-        path: bin
+    - name: Build binary
+      # All jobs run on the same single self-hosted runner, so the binary is
+      # built here rather than passed between jobs via a GitHub artifact.
+      shell: bash
+      run: make build
 
     - name: Install DPM CLI (sha256-verified)
       shell: bash

@@ -5,9 +5,10 @@ name: "E2E: dpm localnet"
 # without replaying the whole suite (mirrors e2e-test-devkit-functions.yml).
 #
 # The component under test is the binary built in this run: each test job
-# assembles a file-based component from that binary and the test project
-# installs it via a {name, path} reference. That keeps the suite hermetic
-# (no OCI registry) and exercises the PR's binary, not a released one.
+# builds the binary (make build), assembles a file-based component from it,
+# and the test project installs it via a {name, path} reference. That keeps
+# the suite hermetic (no OCI registry, no cross-job artifact) and exercises
+# the PR's binary, not a released one.
 #
 # First test: DPM-DAR-001 -- `dpm localnet dar build-upload` inside a Daml
 # project (regression for issue #230). It runs --build-only, so no
@@ -34,8 +35,8 @@ permissions:
   contents: read
 
 jobs:
-  setup:
-    name: setup
+  dpm-dar-001:
+    name: DPM-DAR-001
     if: |
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch' ||
@@ -55,29 +56,6 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: Build binary
-        run: make build
-
-      - name: Upload built binary
-        # actions/upload-artifact@v4.6.2
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: canton-devkit-binary
-          path: bin/canton-devkit
-          retention-days: 1
-
-  dpm-dar-001:
-    name: DPM-DAR-001
-    needs: setup
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
-    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       - uses: ./.github/actions/e2e-dpm-test
         with:
           script: dpm-dar-001.sh
