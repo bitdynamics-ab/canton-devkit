@@ -96,7 +96,7 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	if _, err := ledger.BuildTemplateFilters(reqTemplates); err != nil {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest,
 			"invalid template filter: "+err.Error(),
-			"template accepts Module:Entity or pkg:Module:Entity")
+			"template accepts #pkg-name:Module:Entity (package-name reference) or <pkg-id>:Module:Entity (exact pin)")
 		return
 	}
 	fromOff, fromSet, ferr := parseOffsetParam(r.URL.Query().Get("from"))
@@ -154,13 +154,13 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = client.Close() }()
 
-	// Party scope: an explicit ?party / ?template is honoured verbatim
-	// (mirrors the CLI's `tx ls --party/--template`, where any explicit
-	// filter pins a valid shape the participant accepts). With neither,
-	// project through the JWT's own act/read parties — Splice LocalNet
-	// signs user-id JWTs by default, so a bare wildcard would be
-	// PermissionDenied; resolving the user's concrete parties is the
-	// shape that returns data.
+	// Party scope: an explicit ?party is honoured verbatim (mirrors the
+	// CLI's `tx ls --party`). Otherwise — including a ?template with no
+	// ?party — project through the JWT's own act/read parties. Splice
+	// LocalNet signs user-id JWTs by default, so a bare wildcard would be
+	// PermissionDenied even with a template filter; resolving the user's
+	// concrete parties and applying the template per party is the shape
+	// that returns data.
 	//
 	// Disambiguate the three failure modes (mirrors
 	// handlers/contracts.go):
@@ -168,7 +168,7 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	//   - PermissionDenied        → 503 EXPLORER_NEEDS_PARTY_JWT
 	//   - no party rights granted → 503 EXPLORER_NEEDS_PARTY_JWT
 	effParties := reqParties
-	if len(reqParties) == 0 && len(reqTemplates) == 0 {
+	if len(reqParties) == 0 {
 		resolved, err := client.ResolveActAndReadParties(ctx)
 		if err != nil {
 			if isPermissionDenied(err) {

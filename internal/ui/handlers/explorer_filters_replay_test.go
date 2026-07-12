@@ -66,6 +66,55 @@ func TestTransactions_FilterParamsBuildByPartyFilter(t *testing.T) {
 	}
 }
 
+// TestTransactions_TemplateOnlyResolvesParties pins the fix for the
+// user-id-token wart: a ?template with NO ?party must resolve the JWT's
+// own parties and build a FiltersByParty EventFormat (the template
+// attached per party), NOT a bare FiltersForAnyParty wildcard — which a
+// Splice user-id JWT would be PermissionDenied on. Also pins that the
+// bare package name is emitted as an LF-v2 "#name" reference. Mirrors
+// the CLI's resolveDefaultParties + BuildTemplateFilters, keeping the
+// two surfaces in parity.
+func TestTransactions_TemplateOnlyResolvesParties(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	fake := &fakeParticipant{
+		ledgerEnd: 50,
+		parties:   []string{"alice"}, // JWT resolves to alice
+		updates:   []*lapiv2.GetUpdatesResponse{txUpdate(20, "tx-20", "c20")},
+	}
+	port := startFakeParticipant(t, fake)
+	seedInstanceWithCreds(t, "dev", port)
+	srv := contractsTxMux(t)
+
+	resp, err := http.Get(srv.URL +
+		"/api/instances/dev/transactions?role=app-user&template=splice-amulet:Splice.Amulet:Amulet")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (template-only must resolve JWT parties)", resp.StatusCode)
+	}
+
+	ef := fake.lastUpdatesReq.GetUpdateFormat().GetIncludeTransactions().GetEventFormat()
+	if ef == nil {
+		t.Fatal("no EventFormat built")
+	}
+	if ef.GetFiltersForAnyParty() != nil {
+		t.Errorf("template-only must NOT use the any-party wildcard: %v", ef.GetFiltersForAnyParty())
+	}
+	f, ok := ef.GetFiltersByParty()["alice"]
+	if !ok {
+		t.Fatalf("FiltersByParty missing resolved party alice: %v", ef.GetFiltersByParty())
+	}
+	cum := f.GetCumulative()
+	if len(cum) == 0 || cum[0].GetTemplateFilter() == nil {
+		t.Fatalf("alice filter has no template cumulative filter: %v", cum)
+	}
+	if got := cum[0].GetTemplateFilter().GetTemplateId().GetPackageId(); got != "#splice-amulet" {
+		t.Errorf("PackageId = %q, want #splice-amulet (LF-v2 package-name reference)", got)
+	}
+}
+
 // TestTransactions_FromToWindow pins that ?from/?to set the exact
 // scanned offset window (mirrors the CLI's --from/--to), overriding
 // the default recent window.
