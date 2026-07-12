@@ -33,7 +33,7 @@ cleanup() { cli remove "$INST" --force >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 echo "== up $INST (--observability-mode shared, Splice $SPLICE_VERSION) =="
-if ! timed 1200 cli up "$INST" --profile observability --observability-mode shared --version "$SPLICE_VERSION"; then
+if ! timed 1200 "$CDK" localnet up "$INST" --profile observability --observability-mode shared --version "$SPLICE_VERSION"; then
   fail "OBS-SHARED-001: bring-up" "up failed or timed out"
   exit 1
 fi
