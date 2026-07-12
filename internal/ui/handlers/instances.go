@@ -548,6 +548,8 @@ type upRequest struct {
 	AllowUncurated bool     `json:"allow_uncurated,omitempty"` // resolve unknown tags upstream
 	Profiles       []string `json:"profiles,omitempty"`        // docker-compose profiles; e.g. ["observability"]
 	PortBase       int      `json:"port_base,omitempty"`       // >0 → deterministic ports from this base (CLI --port-base parity)
+	// ObservabilityMode is the CLI --observability-mode parity: auto | shared | per-instance. Empty == auto.
+	ObservabilityMode string `json:"observability_mode,omitempty"`
 }
 
 // allowedProfiles is derived from localnet.KnownProfiles() so it can
@@ -617,6 +619,14 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 				ErrCodeInvalidRequest,
 				"invalid instance name: "+err.Error(),
 				"names must be lowercase DNS labels (a-z, 0-9, hyphen); 1–63 chars; can't start or end with hyphen")
+			return
+		}
+
+		if err := localnet.ValidateObservabilityMode(localnet.ObservabilityMode(req.ObservabilityMode)); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				err.Error(),
+				"observability_mode must be one of: auto, shared, per-instance")
 			return
 		}
 
@@ -732,11 +742,12 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 		}
 
 		opts := &localnet.UpOptions{
-			Name:           req.Name,
-			Version:        req.Version,
-			AllowUncurated: req.AllowUncurated,
-			Profiles:       req.Profiles,
-			PortBase:       req.PortBase,
+			Name:              req.Name,
+			Version:           req.Version,
+			AllowUncurated:    req.AllowUncurated,
+			Profiles:          req.Profiles,
+			PortBase:          req.PortBase,
+			ObservabilityMode: localnet.ObservabilityMode(req.ObservabilityMode),
 		}
 
 		go func() {
