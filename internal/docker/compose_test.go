@@ -310,6 +310,48 @@ func contains(argv []string, want string) bool {
 	return false
 }
 
+// PruneProjectVolumes lists volumes by project prefix and removes them —
+// reclaiming the adopted/external volumes `compose down --volumes` leaves.
+func TestPruneProjectVolumesRemovesAdopted(t *testing.T) {
+	if _, err := os.Stat("/bin/sh"); err != nil {
+		t.Skip("needs /bin/sh")
+	}
+	var rmArgv []string
+	rec := &scriptedRecorder{script: func(args []string) (string, int) {
+		if contains(args, "ls") {
+			return "canton-test_postgres\ncanton-test_domain-upgrade-dump\n", 0
+		}
+		rmArgv = args
+		return "", 0
+	}}
+	c := &ComposeRunner{ProjectName: "canton-test", commandFn: rec.factory}
+	if err := c.PruneProjectVolumes(context.Background()); err != nil {
+		t.Fatalf("PruneProjectVolumes: %v", err)
+	}
+	if len(rec.argvs) != 2 {
+		t.Fatalf("expected ls + rm (2 calls), got %d: %v", len(rec.argvs), rec.argvs)
+	}
+	assertArgvContains(t, rec.argvs[0],
+		[]string{"docker", "volume", "ls", "-q", "--filter", "name=^canton-test_"}, "ls")
+	assertArgvContains(t, rmArgv,
+		[]string{"docker", "volume", "rm", "-f",
+			"canton-test_postgres", "canton-test_domain-upgrade-dump"}, "rm")
+}
+
+func TestPruneProjectVolumesNoopWhenEmpty(t *testing.T) {
+	if _, err := os.Stat("/bin/sh"); err != nil {
+		t.Skip("needs /bin/sh")
+	}
+	rec := &scriptedRecorder{script: func([]string) (string, int) { return "", 0 }}
+	c := &ComposeRunner{ProjectName: "canton-test", commandFn: rec.factory}
+	if err := c.PruneProjectVolumes(context.Background()); err != nil {
+		t.Fatalf("PruneProjectVolumes: %v", err)
+	}
+	if len(rec.argvs) != 1 {
+		t.Fatalf("no volumes → only the ls call; got %d: %v", len(rec.argvs), rec.argvs)
+	}
+}
+
 func TestRestartArgvShape(t *testing.T) {
 	rec := &recorder{}
 	c := runnerForWiring(t, rec)

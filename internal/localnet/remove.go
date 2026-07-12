@@ -132,6 +132,13 @@ type containerLister interface {
 	RemainingContainers(ctx context.Context) ([]string, error)
 }
 
+// volumePruner reclaims volumes `compose down --volumes` leaves behind —
+// ones it adopted as external (created by a prior run). Optional: the real
+// *docker.ComposeRunner implements it; test fakes need not.
+type volumePruner interface {
+	PruneProjectVolumes(ctx context.Context) error
+}
+
 // removeOne removes a single instance under its per-instance lock.
 func removeOne(ctx context.Context, out io.Writer, errw io.Writer, opts *RemoveOptions, name string) int {
 	indexed, err := removeIndexHasEntry(name)
@@ -240,6 +247,15 @@ func removeOne(ctx context.Context, out io.Writer, errw io.Writer, opts *RemoveO
 		_, _ = fmt.Fprintf(errw,
 			"%s: docker compose down reported an error (continuing — "+
 				"containers already gone): %s\n", name, derr)
+	}
+
+	// compose down --volumes won't drop volumes it adopted as external
+	// (created by an earlier run of the same project); prune them by project
+	// prefix so remove reclaims everything. Best-effort.
+	if pruner, ok := runner.(volumePruner); ok {
+		if perr := pruner.PruneProjectVolumes(ctx); perr != nil {
+			_, _ = fmt.Fprintf(errw, "%s: warning: leftover volumes not fully pruned: %s\n", name, perr)
+		}
 	}
 
 	if err := registry.Delete(name); err != nil {

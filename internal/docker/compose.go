@@ -516,6 +516,30 @@ func (c *ComposeRunner) Down(ctx context.Context) error {
 	return c.Stop(ctx, true)
 }
 
+// PruneProjectVolumes removes volumes named "<project>_*" that a
+// `compose down --volumes` leaves behind — ones Compose adopted as external
+// (a volume created by an earlier run) rather than created, so it declines to
+// delete them. `remove`'s "reclaim everything" contract needs them gone.
+// Best-effort and project-label scoped; containers are already down when this
+// runs, so the volumes are free to drop. Uses the full-env command so a pruned
+// project dir/env can't strand the cleanup.
+func (c *ComposeRunner) PruneProjectVolumes(ctx context.Context) error {
+	list := c.forceCommand(ctx, "volume", "ls", "-q", "--filter", "name=^"+c.ProjectName+"_")
+	out, err := list.Output()
+	if err != nil {
+		return fmt.Errorf("list project volumes: %w", err)
+	}
+	vols := strings.Fields(string(out))
+	if len(vols) == 0 {
+		return nil
+	}
+	rm := c.forceCommand(ctx, append([]string{"volume", "rm", "-f"}, vols...)...)
+	if out, err := rm.CombinedOutput(); err != nil {
+		return fmt.Errorf("remove project volumes: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 // forceCommand builds a docker invocation that inherits the FULL process
 // environment (PATH for the compose plugin, etc.) and does not pin Dir or
 // Env to the cached project. Force teardown must not depend on the
