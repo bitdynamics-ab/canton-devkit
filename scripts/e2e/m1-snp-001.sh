@@ -19,7 +19,12 @@ run_test() {
   [ -f "$SNAPSHOT_PATH" ] && [ -s "$SNAPSHOT_PATH" ] \
     || { echo "FAIL step 1: snapshot file missing or empty" >&2; return 1; }
 
-  e2e_cleanup_instance e2e-test-default
+  # Tear down with `down` (NOT `remove`): restore loads a dump into the
+  # instance's EXISTING Compose-owned Postgres volume, so the volume must
+  # survive. `remove` reclaims volumes and would leave restore with nothing
+  # to load into (restore refuses to create a volume out of band).
+  cli down e2e-test-default \
+    || { echo "FAIL step 2: down before restore failed" >&2; return 1; }
 
   cli restore e2e-test-default --from "$SNAPSHOT_PATH" \
     || { echo "FAIL step 3: restore command failed" >&2; return 1; }
