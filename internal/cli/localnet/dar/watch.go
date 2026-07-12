@@ -269,6 +269,7 @@ func buildAndUploadWithPublish(
 func runBuildCtx(ctx context.Context, tool, project string, stderr io.Writer) (string, error) {
 	c := exec.CommandContext(ctx, tool, "build")
 	c.Dir = project
+	c.Env = buildEnv()
 	c.Stderr = stderr
 	if err := c.Run(); err != nil {
 		return "", err

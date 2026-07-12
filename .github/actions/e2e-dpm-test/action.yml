@@ -1,0 +1,71 @@
+name: Run dpm localnet E2E test
+description: Download the built binary, install the DPM CLI, and run one dpm localnet E2E test script.
+
+# Keep dpm-version / dpm-linux-sha256 defaults in sync with release.yml
+# and e2e-test-dpm-installation.yml.
+inputs:
+  script:
+    description: Script filename under scripts/e2e/ (for example dpm-dar-001.sh)
+    required: true
+  dpm-version:
+    description: DPM CLI version to install
+    required: false
+    default: "1.0.16"
+  dpm-linux-sha256:
+    description: SHA-256 of the linux/amd64 DPM tarball
+    required: false
+    default: "387421d4b3d0e799f05cde1f5c2adc704acd2824796d436861602eb2be759874"
+
+runs:
+  using: composite
+  steps:
+    - name: Download built binary
+      # actions/download-artifact@v4.1.7
+      uses: actions/download-artifact@65a9edc128165405c983346fd356e6d4c448ac4
+      with:
+        name: canton-devkit-binary
+        path: bin
+
+    - name: Install DPM CLI (sha256-verified)
+      shell: bash
+      run: |
+        set -euo pipefail
+        tar="${RUNNER_TEMP}/dpm-${{ inputs.dpm-version }}-linux-amd64.tar.gz"
+        curl -sSfL \
+          "https://github.com/digital-asset/dpm/releases/download/${{ inputs.dpm-version }}/dpm-${{ inputs.dpm-version }}-linux-amd64.tar.gz" \
+          -o "$tar"
+        echo "${{ inputs.dpm-linux-sha256 }}  ${tar}" | sha256sum --check --strict -
+        bindir="${RUNNER_TEMP}/dpm-bin"
+        mkdir -p "$bindir"
+        tar -xzf "$tar" -C "$bindir" dpm
+        chmod 0755 "$bindir/dpm"
+        echo "$bindir" >> "$GITHUB_PATH"
+        "$bindir/dpm" --version
+
+    - name: Make binary and scripts executable
+      shell: bash
+      run: chmod +x bin/canton-devkit scripts/e2e/*.sh
+
+    - name: Assemble local DevKit component
+      id: component
+      shell: bash
+      run: |
+        set -euo pipefail
+        # File-based component from the binary built in this run — hermetic,
+        # no OCI registry. The test project installs it via {name, path}.
+        dir="$(scripts/e2e/dpm-build-component.sh)"
+        echo "dir=${dir}" >> "$GITHUB_OUTPUT"
+
+    - name: Run test
+      shell: bash
+      env:
+        COMPONENT_DIR: ${{ steps.component.outputs.dir }}
+      run: scripts/e2e/${{ inputs.script }}
+
+    - name: Dump container state on failure
+      if: failure()
+      shell: bash
+      run: |
+        docker ps -a || true
+        docker compose ls || true
+        docker volume ls || true

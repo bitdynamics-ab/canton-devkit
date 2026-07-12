@@ -2,6 +2,9 @@
 bin/
 dist/
 
+# Scratch dir for local validation / temporary files
+.tmp/
+
 # Local environment
 .env
 .env.*
