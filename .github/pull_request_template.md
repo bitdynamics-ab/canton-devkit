@@ -10,7 +10,7 @@
 
 - [ ] `make test`
 - [ ] `make lint`
-- [ ] `scripts/e2e-milestone1.sh`
+- [ ] `scripts/e2e/run-all.sh`
 - [ ] <!-- manual verification steps -->
 
 ## Checklist

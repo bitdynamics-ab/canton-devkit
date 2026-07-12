@@ -1,16 +1,20 @@
 name: "E2E: canton-devkit Functions"
 
-# Shell-based end-to-end tests. Each milestone adds a job to this
-# workflow. Currently: Milestone 1 (LocalNet CLI lifecycle).
+# Shell-based end-to-end tests. Milestone 1 runs one job per test so a
+# failed case can be re-run without replaying the whole suite.
 #
 # Triggers:
 #   - schedule: nightly at 04:00 UTC (offset from integration.yml's 03:00).
 #   - workflow_dispatch: manual trigger for ad-hoc validation.
 #   - pull_request: only when the PR carries the `run-e2e` label.
-#   - push to main: when scripts/e2e-milestone1.sh changes.
+#   - push to main: when Milestone 1 E2E scripts or workflow change.
+#
+# The run-e2e gate lives on the setup job only. Downstream jobs inherit
+# skip/cancel behavior via needs; cleanup uses needs.setup.result so it
+# does not run on label-less PR pushes.
 #
 # Platform: Linux only (self-hosted Proxmox e2e runner). macOS runners
-# lack Docker; run scripts/e2e-milestone1.sh locally for macOS validation.
+# lack Docker; run scripts/e2e/run-all.sh locally for macOS validation.
 
 on:
   schedule:
@@ -22,14 +26,16 @@ on:
     branches:
       - main
     paths:
-      - scripts/e2e-milestone1.sh
+      - scripts/e2e/**
+      - .github/workflows/e2e-test-devkit-functions.yml
+      - .github/actions/e2e-m1-test/**
 
 permissions:
   contents: read
 
 jobs:
-  e2e:
-    name: e2e-milestone1
+  setup:
+    name: setup
     if: |
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch' ||
@@ -37,8 +43,7 @@ jobs:
       (github.event_name == 'pull_request' &&
        contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
-    timeout-minutes: 60
-
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         # actions/checkout@v5
@@ -54,6 +59,14 @@ jobs:
       - name: Build binary
         run: make build
 
+      - name: Upload built binary
+        # actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: canton-devkit-binary
+          path: bin/canton-devkit
+          retention-days: 1
+
       - name: Verify Docker daemon
         run: |
           docker version
@@ -63,34 +76,203 @@ jobs:
         run: |
           for name in e2e-test-default e2e-named-test e2e-version-test e2e-bad-version; do
             docker compose -p "canton-${name}" down --volumes 2>/dev/null || true
-            # `compose down --volumes` only removes volumes Compose itself
-            # created; volumes left by a prior run get re-adopted as
-            # external and survive. On this persistent self-hosted runner
-            # that strands canton-<name>_postgres / _domain-upgrade-dump and
-            # trips M1-CLN-001's "volumes remain after clean" check. Remove
-            # them explicitly by project-name prefix to guarantee a clean slate.
             docker volume ls -q --filter "name=^canton-${name}_" \
               | xargs -r docker volume rm -f 2>/dev/null || true
             rm -f "$HOME/.canton-devkit/localnet/${name}/.lock"
           done
 
-      - name: Run E2E Milestone 1 tests
-        run: scripts/e2e-milestone1.sh
+  m1-inst-003:
+    name: M1-INST-003
+    needs: setup
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: ./.github/actions/e2e-m1-test
+        with:
+          script: m1-inst-003.sh
 
-      - name: Dump container + compose state on failure
-        if: failure()
-        run: |
-          docker ps -a || true
-          docker compose ls || true
-          docker volume ls || true
+  m1-doc-001:
+    name: M1-DOC-001
+    needs: setup
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: ./.github/actions/e2e-m1-test
+        with:
+          script: m1-doc-001.sh
 
-      - name: Force cleanup on failure
-        if: always()
+  m1-doc-002:
+    name: M1-DOC-002
+    needs: setup
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: ./.github/actions/e2e-m1-test
+        with:
+          script: m1-doc-002.sh
+
+  m1-up-001:
+    name: M1-UP-001
+    needs: [setup, m1-inst-003, m1-doc-001, m1-doc-002]
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: ./.github/actions/e2e-m1-test
+        with:
+          script: m1-up-001.sh
+
+  m1-sts-001:
+    name: M1-STS-001
+    needs: m1-up-001
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: ./.github/actions/e2e-m1-test
+        with:
+          script: m1-sts-001.sh
+
+  m1-log-001:
+    name: M1-LOG-001
+    needs: m1-sts-001
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: ./.github/actions/e2e-m1-test
+        with:
+          script: m1-log-001.sh
+
+  m1-env-001:
+    name: M1-ENV-001
+    needs: m1-log-001
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: ./.github/actions/e2e-m1-test
+        with:
+          script: m1-env-001.sh
+
+  m1-rst-001:
+    name: M1-RST-001
+    needs: m1-env-001
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: ./.github/actions/e2e-m1-test
+        with:
+          script: m1-rst-001.sh
+
+  m1-stp-001:
+    name: M1-STP-001
+    needs: m1-rst-001
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: ./.github/actions/e2e-m1-test
+        with:
+          script: m1-stp-001.sh
+
+  m1-snp-001:
+    name: M1-SNP-001
+    needs: m1-stp-001
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: ./.github/actions/e2e-m1-test
+        with:
+          script: m1-snp-001.sh
+
+  m1-dwn-001:
+    name: M1-DWN-001
+    needs: m1-snp-001
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: ./.github/actions/e2e-m1-test
+        with:
+          script: m1-dwn-001.sh
+
+  m1-rmv-001:
+    name: M1-RMV-001
+    needs: m1-dwn-001
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: ./.github/actions/e2e-m1-test
+        with:
+          script: m1-rmv-001.sh
+
+  m1-up-002:
+    name: M1-UP-002
+    needs: m1-rmv-001
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: ./.github/actions/e2e-m1-test
+        with:
+          script: m1-up-002.sh
+
+  m1-up-003:
+    name: M1-UP-003
+    needs: m1-up-002
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: ./.github/actions/e2e-m1-test
+        with:
+          script: m1-up-003.sh
+
+  m1-lst-001:
+    name: M1-LST-001
+    needs: m1-up-003
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: ./.github/actions/e2e-m1-test
+        with:
+          script: m1-lst-001.sh
+
+  cleanup:
+    name: cleanup
+    needs:
+      - setup
+      - m1-inst-003
+      - m1-doc-001
+      - m1-doc-002
+      - m1-up-001
+      - m1-sts-001
+      - m1-log-001
+      - m1-env-001
+      - m1-rst-001
+      - m1-stp-001
+      - m1-snp-001
+      - m1-dwn-001
+      - m1-rmv-001
+      - m1-up-002
+      - m1-up-003
+      - m1-lst-001
+    if: always() && !cancelled() && needs.setup.result != 'skipped'
+    runs-on: [self-hosted, Linux, X64, proxmox, e2e]
+    timeout-minutes: 10
+    steps:
+      - name: Force cleanup
         run: |
           for name in e2e-test-default e2e-named-test e2e-version-test e2e-bad-version; do
             docker compose -p "canton-${name}" down --volumes 2>/dev/null || true
-            # Also drop adopted/external volumes Compose won't remove, so the
-            # next run on this persistent runner starts from a clean slate.
             docker volume ls -q --filter "name=^canton-${name}_" \
               | xargs -r docker volume rm -f 2>/dev/null || true
           done
