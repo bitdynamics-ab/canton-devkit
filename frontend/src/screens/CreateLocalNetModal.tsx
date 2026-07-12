@@ -46,6 +46,7 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
   const [allowUncurated, setAllowUncurated] = useState(false);
   const [prometheus, setPrometheus] = useState(false);
   const [grafana, setGrafana] = useState(false);
+  const [observabilityMode, setObservabilityMode] = useState("auto");
   const [tokensV2, setTokensV2] = useState(false);
   const [portBase, setPortBase] = useState("");
   const [versions, setVersions] = useState<SpliceVersionEntry[]>([]);
@@ -190,6 +191,9 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
           ];
           return profiles.length ? { profiles } : {};
         })(),
+        ...((prometheus || grafana) && observabilityMode !== "auto"
+          ? { observability_mode: observabilityMode }
+          : {}),
         ...(portBase.trim() ? { port_base: Number(portBase.trim()) } : {}),
       });
       setStage({ kind: "progress", accepted });
@@ -251,6 +255,8 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
               setPrometheus={setPrometheus}
               grafana={grafana}
               setGrafana={setGrafana}
+              observabilityMode={observabilityMode}
+              setObservabilityMode={setObservabilityMode}
               tokensV2={tokensV2}
               setTokensV2={setTokensV2}
               portBase={portBase}
@@ -417,6 +423,8 @@ interface FormBodyProps {
   setPrometheus: (b: boolean) => void;
   grafana: boolean;
   setGrafana: (b: boolean) => void;
+  observabilityMode: string;
+  setObservabilityMode: (s: string) => void;
   tokensV2: boolean;
   setTokensV2: (b: boolean) => void;
   portBase: string;
@@ -441,6 +449,8 @@ function FormBody({
   setPrometheus,
   grafana,
   setGrafana,
+  observabilityMode,
+  setObservabilityMode,
   tokensV2,
   setTokensV2,
   portBase,
@@ -590,6 +600,25 @@ function FormBody({
           )}
         </div>
       </label>
+
+      {(prometheus || grafana) && (
+        <Field
+          label="Sidecar stack"
+          hint="auto skips the per-instance overlay when the host-shared stack is reachable"
+        >
+          <select
+            value={observabilityMode}
+            onChange={(e) => setObservabilityMode(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="auto">auto — shared when reachable (recommended)</option>
+            <option value="shared">shared — always the host-shared stack</option>
+            <option value="per-instance">
+              per-instance — dedicated Prometheus + Grafana
+            </option>
+          </select>
+        </Field>
+      )}
 
       <label
         style={{
