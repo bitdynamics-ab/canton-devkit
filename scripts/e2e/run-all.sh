@@ -1,9 +1,23 @@
 #!/usr/bin/env bash
 # Run all Milestone 1 E2E tests in order (local / full-suite use).
 #
+# Platform:  macOS (Apple Silicon) and Linux
+# CLI mode:  canton-devkit localnet (standalone -- no DPM)
+#
+# Skipped tests:
+#   M1-INST-001  Install via DPM component (DPM excluded)
+#   M1-INST-002  Install standalone binary (binary already built)
+#   M1-DOC-003   Doctor -- insufficient resources (requires Docker Desktop config changes)
+#   M1-ISO-001   Two named instances (resource-heavy, skipped by request)
+#
 # Usage:
 #   scripts/e2e/run-all.sh
 #   CDK=./canton-devkit scripts/e2e/run-all.sh
+#
+# Individual tests (CI jobs):
+#   scripts/e2e/m1-up-001.sh
+#
+# Exit 0 = all tests passed; 1 = one or more failures.
 
 set -u
 

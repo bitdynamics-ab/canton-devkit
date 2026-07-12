@@ -822,7 +822,7 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
 **Binary version:** dev
 **Splice version (default/latest):** 0.6.4
 **Splice version (explicit):** 0.6.3
-**Script:** `scripts/e2e-milestone1.sh`
+**Script:** `scripts/e2e/run-all.sh` (full suite) or `scripts/e2e/m1-*.sh` (individual tests)
 
 ### CLI Syntax Adaptations
 
@@ -860,7 +860,7 @@ The test plan assumes command syntax that differs from the actual CLI implementa
 | M1-LOG-001 | **PASS** | <10s | Full logs: 308 lines. Service-filtered (`canton`): 20 lines. |
 | M1-ENV-001 | **PASS** | <1s | `export CANTON_*` format. Contains JWT (redacted), audience, port variables. |
 | M1-RST-001 | **PASS** | ~5-8 min | Full restart + single-service (`--service canton`) restart. Readiness wait is slow post-restart. |
-| M1-STP-001 | **NOT RUN** | — | Added after this run (PR #201 standalone `stop`/`start`). Covered by `scripts/e2e-milestone1.sh`. |
+| M1-STP-001 | **NOT RUN** | — | Added after this run (PR #201 standalone `stop`/`start`). Covered by `scripts/e2e/run-all.sh`. |
 | M1-SNP-001 | **PASS*** | ~10 min | Snapshot: 78 MB .tgz. Restore + re-up works but splice re-sync can exceed 5 min (crash-consistent, not app-consistent). |
 | M1-DWN-001 | **PASS** | ~5s | Containers stopped, non-devkit containers unaffected. |
 | M1-CLN-001 | **PASS*** | ~10 min | See finding below. `clean --force` on running instance removes all resources (containers, volumes, networks). |

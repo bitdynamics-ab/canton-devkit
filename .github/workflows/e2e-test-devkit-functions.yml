@@ -8,8 +8,12 @@ name: "E2E: canton-devkit Functions"
 #   - workflow_dispatch: manual trigger for ad-hoc validation.
 #   - pull_request: only when the PR carries the `run-e2e` label.
 #
+# The run-e2e gate lives on the setup job only. Downstream jobs inherit
+# skip/cancel behavior via needs; cleanup uses needs.setup.result so it
+# does not run on label-less PR pushes.
+#
 # Platform: Linux only (self-hosted Proxmox e2e runner). macOS runners
-# lack Docker; run scripts/e2e-milestone1.sh locally for macOS validation.
+# lack Docker; run scripts/e2e/run-all.sh locally for macOS validation.
 
 on:
   schedule:
@@ -71,11 +75,6 @@ jobs:
   m1-inst-003:
     name: M1-INST-003
     needs: setup
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 10
     steps:
@@ -87,11 +86,6 @@ jobs:
   m1-doc-001:
     name: M1-DOC-001
     needs: setup
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 10
     steps:
@@ -103,11 +97,6 @@ jobs:
   m1-doc-002:
     name: M1-DOC-002
     needs: setup
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 10
     steps:
@@ -119,11 +108,6 @@ jobs:
   m1-up-001:
     name: M1-UP-001
     needs: [setup, m1-inst-003, m1-doc-001, m1-doc-002]
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 20
     steps:
@@ -135,11 +119,6 @@ jobs:
   m1-sts-001:
     name: M1-STS-001
     needs: m1-up-001
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 10
     steps:
@@ -151,11 +130,6 @@ jobs:
   m1-log-001:
     name: M1-LOG-001
     needs: m1-sts-001
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 10
     steps:
@@ -167,11 +141,6 @@ jobs:
   m1-env-001:
     name: M1-ENV-001
     needs: m1-log-001
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 10
     steps:
@@ -183,11 +152,6 @@ jobs:
   m1-rst-001:
     name: M1-RST-001
     needs: m1-env-001
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 20
     steps:
@@ -199,11 +163,6 @@ jobs:
   m1-stp-001:
     name: M1-STP-001
     needs: m1-rst-001
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 20
     steps:
@@ -215,11 +174,6 @@ jobs:
   m1-snp-001:
     name: M1-SNP-001
     needs: m1-stp-001
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 25
     steps:
@@ -231,11 +185,6 @@ jobs:
   m1-dwn-001:
     name: M1-DWN-001
     needs: m1-snp-001
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 20
     steps:
@@ -247,11 +196,6 @@ jobs:
   m1-cln-001:
     name: M1-CLN-001
     needs: m1-dwn-001
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 20
     steps:
@@ -263,11 +207,6 @@ jobs:
   m1-up-002:
     name: M1-UP-002
     needs: m1-cln-001
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 20
     steps:
@@ -279,11 +218,6 @@ jobs:
   m1-up-003:
     name: M1-UP-003
     needs: m1-up-002
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 20
     steps:
@@ -295,11 +229,6 @@ jobs:
   m1-lst-001:
     name: M1-LST-001
     needs: m1-up-003
-    if: |
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 10
     steps:
@@ -311,6 +240,7 @@ jobs:
   cleanup:
     name: cleanup
     needs:
+      - setup
       - m1-inst-003
       - m1-doc-001
       - m1-doc-002
@@ -326,13 +256,7 @@ jobs:
       - m1-up-002
       - m1-up-003
       - m1-lst-001
-    if: |
-      always() && !cancelled() && (
-        github.event_name == 'schedule' ||
-        github.event_name == 'workflow_dispatch' ||
-        (github.event_name == 'pull_request' &&
-         contains(github.event.pull_request.labels.*.name, 'run-e2e'))
-      )
+    if: always() && !cancelled() && needs.setup.result != 'skipped'
     runs-on: [self-hosted, Linux, X64, proxmox, e2e]
     timeout-minutes: 10
     steps:
