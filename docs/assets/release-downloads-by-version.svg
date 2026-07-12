@@ -31,7 +31,7 @@
 <text x="542.6" y="336" font-size="11" fill="#6b7280" text-anchor="middle">v0.15.1</text>
 <text x="580.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">v0.15.2</text>
 <text x="318" y="368" font-size="12" fill="#374151" text-anchor="middle">Release tag (oldest -> newest)</text>
-<polyline points="56.0,291.6 93.4,242.9 130.9,218.5 168.3,291.6 205.7,291.6 243.1,316.0 280.6,194.2 318.0,48.0 355.4,291.6 392.9,316.0 430.3,291.6 467.7,291.6 505.1,291.6 542.6,291.6 580.0,316.0" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+<polyline points="56.0,291.6 93.4,242.9 130.9,218.5 168.3,291.6 205.7,291.6 243.1,316.0 280.6,194.2 318.0,48.0 355.4,291.6 392.9,316.0 430.3,291.6 467.7,291.6 505.1,291.6 542.6,291.6 580.0,291.6" fill="none" stroke="#2563eb" stroke-width="2.5"/>
 <circle cx="56.0" cy="291.6" r="3.5" fill="#2563eb"/>
 <circle cx="93.4" cy="242.9" r="3.5" fill="#2563eb"/>
 <circle cx="130.9" cy="218.5" r="3.5" fill="#2563eb"/>
@@ -46,7 +46,7 @@
 <circle cx="467.7" cy="291.6" r="3.5" fill="#2563eb"/>
 <circle cx="505.1" cy="291.6" r="3.5" fill="#2563eb"/>
 <circle cx="542.6" cy="291.6" r="3.5" fill="#2563eb"/>
-<circle cx="580.0" cy="316.0" r="3.5" fill="#2563eb"/>
+<circle cx="580.0" cy="291.6" r="3.5" fill="#2563eb"/>
 <rect x="596" y="48" width="14" height="14" rx="2" fill="#2563eb"/>
 <text x="616" y="60" font-size="12" fill="#374151">Total downloads</text>
 </svg>
