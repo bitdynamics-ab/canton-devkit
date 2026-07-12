@@ -35,14 +35,16 @@ run_test() {
 
 if e2e_is_aggregate_mode; then
   if ! e2e_run_with_result "$TEST_ID" "Remove deletes all resources" run_test "remove failed or resources remain"; then
-    docker compose -p "canton-e2e-test-default" down --volumes 2>/dev/null || true
+    # remove already failed/left resources -- complete docker teardown
+    # (incl. detached volumes) so later tests get a clean slate.
+    e2e_force_docker_cleanup e2e-test-default
   fi
 else
   if ( set -e; run_test ); then
     echo "PASS ${TEST_ID}"
     exit 0
   fi
-  docker compose -p "canton-e2e-test-default" down --volumes 2>/dev/null || true
+  e2e_force_docker_cleanup e2e-test-default
   echo "FAIL ${TEST_ID}" >&2
   exit 1
 fi

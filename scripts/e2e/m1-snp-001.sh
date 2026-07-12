@@ -19,8 +19,7 @@ run_test() {
   [ -f "$SNAPSHOT_PATH" ] && [ -s "$SNAPSHOT_PATH" ] \
     || { echo "FAIL step 1: snapshot file missing or empty" >&2; return 1; }
 
-  cli remove e2e-test-default --force 2>/dev/null || true
-  docker compose -p "canton-e2e-test-default" down --volumes 2>/dev/null || true
+  e2e_cleanup_instance e2e-test-default
 
   cli restore e2e-test-default --from "$SNAPSHOT_PATH" \
     || { echo "FAIL step 3: restore command failed" >&2; return 1; }

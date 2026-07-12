@@ -23,8 +23,7 @@ run_test() {
   cli status e2e-named-test 2>&1 | grep -qiE "e2e-named-test" \
     || { echo "FAIL step 3: status output missing instance name" >&2; return 1; }
 
-  cli remove e2e-named-test --force 2>/dev/null || true
-  docker compose -p "canton-e2e-named-test" down --volumes 2>/dev/null || true
+  e2e_cleanup_instance e2e-named-test
 }
 
 if e2e_is_aggregate_mode; then
