@@ -72,7 +72,7 @@ func ResolveLedgerEndpoint(instance, role string) (LedgerEndpoint, error) {
 		// version doesn't expose the role. Point at the same remedy.
 		return LedgerEndpoint{}, fmt.Errorf(
 			"instance %q has no recorded participant ledger port for role %q — "+
-				"restart it (`localnet down --name %s --keep-data` then `localnet up --name %s`) "+
+				"restart it (`localnet down %s` then `localnet up %s`) "+
 				"so the new up flow captures Canton API ports, or pass --endpoint host:port",
 			name, role, name, name)
 	}
@@ -106,7 +106,7 @@ func resolveInstanceName(instance string) (string, error) {
 	}
 	switch len(idx.Entries) {
 	case 0:
-		return "", fmt.Errorf("no LocalNet instances registered — run `localnet up` or pass --name")
+		return "", fmt.Errorf("no LocalNet instances registered — run `localnet up <name>`")
 	case 1:
 		return idx.Entries[0].Name, nil
 	default:
@@ -138,7 +138,7 @@ func resolveLedgerJWT(state *registry.State, role string) (string, error) {
 	if err != nil {
 		return "", redactLedgerJWTs(fmt.Errorf(
 			"no captured credentials for role %q and could not load env files (%w); "+
-				"run `localnet creds --name %s --role %s --format raw` to confirm token "+
+				"run `localnet creds %s --role %s --format raw` to confirm token "+
 				"issuance, or pass --token explicitly",
 			role, err, state.Name, role))
 	}
@@ -153,7 +153,7 @@ func resolveLedgerJWT(state *registry.State, role string) (string, error) {
 	}
 	return "", redactLedgerJWTs(fmt.Errorf(
 		"no captured credentials and no env entry for role %q on instance %q; "+
-			"run `localnet creds --name %s --role %s --format raw` to confirm what's "+
+			"run `localnet creds %s --role %s --format raw` to confirm what's "+
 			"available, or pass --token explicitly",
 		role, state.Name, state.Name, role))
 }

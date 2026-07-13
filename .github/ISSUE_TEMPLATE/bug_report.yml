@@ -1,0 +1,106 @@
+name: Bug report
+description: Report a problem with canton-devkit or a LocalNet instance
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, run `canton-devkit localnet doctor` and check [troubleshooting](https://github.com/bitdynamics-ab/canton-devkit/blob/main/docs/troubleshooting.md).
+        Redact JWTs, party IDs, and other secrets from pasted output.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What went wrong?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps to trigger the issue.
+      placeholder: |
+        1. Run `canton-devkit localnet up demo`
+        2. Run `canton-devkit localnet status --name demo`
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: canton-devkit version
+      description: Output of `canton-devkit version` or `dpm version`.
+      placeholder: e.g. v0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: splice_version
+    attributes:
+      label: Splice / LocalNet version
+      description: If applicable.
+      placeholder: e.g. 0.6.4, token-standard-v2
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - CLI
+        - Web UI
+        - Both
+        - Unsure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: OS / platform
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: instance
+    attributes:
+      label: Instance name
+      description: If applicable.
+      placeholder: e.g. demo
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Diagnostic output
+      description: Paste `canton-devkit localnet doctor` output (redact secrets).
+      render: shell
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / command output
+      description: stderr, docker compose output, or other relevant output.
+      render: shell

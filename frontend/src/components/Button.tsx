@@ -1,16 +1,10 @@
-// The one button system for the Web UI (visuals in index.css under
-// .bd-btn). Four variants with a strict usage contract:
-//
-//   primary   — THE one dominant action of a view or dialog (cobalt
-//               fill, ink text). At most one visible per context.
-//   secondary — the default: bordered, quiet (Refresh, Pause, Mint…).
-//   ghost     — low-emphasis inline actions (Edit, close ×, chips).
-//   danger    — destructive and irreversible only (Down, Burn,
-//               Scrub, force-restore). Filled red; use sparingly —
-//               recoverable actions like Stop/Pause stay secondary.
-//
-// Sizes: sm 28px (row/table actions — the console default) and
-// md 36px (forms, dialog footers).
+// Visuals in index.css under .bd-btn. Variant contract:
+//   primary   — at most one dominant action per view/dialog.
+//   secondary — the default (bordered, quiet).
+//   ghost     — low-emphasis inline actions.
+//   danger    — destructive AND irreversible only; recoverable
+//               actions like Stop/Pause stay secondary.
+// Sizes: sm 28px (default, row/table), md 36px (forms, dialog footers).
 
 import type {
   CSSProperties,
@@ -24,7 +18,7 @@ export type ButtonSize = "sm" | "md";
 interface ButtonProps {
   variant?: ButtonVariant;
   size?: ButtonSize;
-  /** Icon slot — pass an icons.tsx glyph; it inherits text color. */
+  /** Icon slot — pass an icons.tsx glyph. */
   icon?: ReactNode;
   disabled?: boolean;
   fullWidth?: boolean;

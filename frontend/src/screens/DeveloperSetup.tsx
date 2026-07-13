@@ -7,29 +7,15 @@ import {
   fetchAppConfigText,
   issueJwt,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, fs } from "../tokens";
 import { Button } from "../components/Button";
+import { MonoId } from "../components/MonoId";
 
-// DeveloperSetup — the "Developer setup" card. Two sub-panels:
-//
-//  1. JWT generator: role/audience picker + a usable token preview +
-//     copy button. LocalNet is loopback-only with dev-secret tokens
-//     (the dev-secret warning renders below), so the raw token is
-//     surfaced directly — no redaction toggle.
-//
-//  2. App config exporter: format tabs (env / json / yaml) + monospace
-//     preview + copy button, all backed by
-//     /api/instances/{name}/app-config?format=.
-//
-// The Dashboard owns instance selection; this component just receives
-// `name` as a prop.
+// Two panels: a JWT generator and an app-config exporter (env/json/yaml).
 
 const ROLES = ["app-provider", "app-user", "sv"] as const;
 type Role = (typeof ROLES)[number];
 
-// The backend redacts JWTs by default; this LocalNet-only UI opts
-// into the raw token (?include_jwt=true) so the generated token is
-// usable as-is. The dev-secret warning makes the trade-off explicit.
 export function DeveloperSetup({ name }: { name: string }) {
   return (
     <div
@@ -53,8 +39,7 @@ function JwtPanel({ name }: { name: string }) {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Issue a usable JWT on mount + whenever role/audience/name changes.
-  // include_jwt=true so the raw token is returned — LocalNet only.
+  // include_jwt=true returns the raw token, usable as-is (LocalNet only).
   useEffect(() => {
     let cancelled = false;
     setBusy(true);
@@ -97,15 +82,17 @@ function JwtPanel({ name }: { name: string }) {
             border: `1px solid ${W.border}`,
             borderRadius: 2,
             padding: "6px 10px",
-            fontSize: 13,
+            fontSize: fs.data,
             fontFamily: wMono,
           }}
         />
       </Row>
       <Row label="party">
-        <code style={{ color: W.text2, fontFamily: wMono, fontSize: 12 }}>
-          {jwt?.party ?? "—"}
-        </code>
+        {jwt?.party ? (
+          <MonoId value={jwt.party} size={12} color={W.text2} />
+        ) : (
+          <code style={{ color: W.dim, fontFamily: wMono, fontSize: fs.meta }}>—</code>
+        )}
       </Row>
       <div style={{ marginTop: 12 }}>
         <TokenBox token={busy ? "…" : token ?? "—"} revealed={!!token} />
@@ -130,7 +117,7 @@ function JwtPanel({ name }: { name: string }) {
         <p
           style={{
             color: W.warn,
-            fontSize: 11.5,
+            fontSize: fs.body,
             marginTop: 12,
             marginBottom: 0,
             lineHeight: 1.5,
@@ -196,7 +183,7 @@ function AppConfigPanel({ name }: { name: string }) {
           borderRadius: 2,
           padding: "10px 12px",
           fontFamily: wMono,
-          fontSize: 11.5,
+          fontSize: fs.label,
           color: W.text2,
           lineHeight: 1.5,
           maxHeight: 200,
@@ -220,11 +207,6 @@ function AppConfigPanel({ name }: { name: string }) {
   );
 }
 
-// ──────────────────────── shared primitives ─────────────────────────
-//
-// Kept inline while this screen is the only consumer; promote to a
-// shared module when a second screen needs them.
-
 interface CardProps {
   title: string;
   subtitle?: string;
@@ -242,9 +224,9 @@ function Card({ title, subtitle, children }: CardProps) {
       }}
     >
       <header style={{ marginBottom: 12 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, color: W.text }}>{title}</div>
+        <div style={{ fontWeight: 600, fontSize: fs.lead, color: W.text }}>{title}</div>
         {subtitle && (
-          <div style={{ color: W.dim, fontSize: 12, marginTop: 2 }}>
+          <div style={{ color: W.dim, fontSize: fs.meta, marginTop: 2 }}>
             {subtitle}
           </div>
         )}
@@ -272,7 +254,7 @@ function Row({ label, children }: RowProps) {
       <span
         style={{
           color: W.dim,
-          fontSize: 12,
+          fontSize: fs.meta,
           width: 80,
           flexShrink: 0,
         }}
@@ -299,11 +281,11 @@ function ChipRow({ options, value, onChange }: ChipRowProps) {
           onClick={() => onChange(opt)}
           style={{
             background: opt === value ? W.brand : W.surface2,
-            color: opt === value ? "#0B0F1A" : W.text2,
+            color: opt === value ? W.onAccent : W.text2,
             border: `1px solid ${opt === value ? W.brand : W.border}`,
             borderRadius: 2,
             padding: "4px 10px",
-            fontSize: 11.5,
+            fontSize: fs.label,
             fontWeight: opt === value ? 600 : 400,
             cursor: "pointer",
           }}
@@ -316,9 +298,8 @@ function ChipRow({ options, value, onChange }: ChipRowProps) {
 }
 
 function TokenBox({ token, revealed }: { token: string; revealed: boolean }) {
-  // Split the JWT into header.payload.signature for the colored
-  // preview. Placeholders ("—", "…") aren't 3-part tokens, so they
-  // render as plain text.
+  // header.payload.signature for the colored preview; placeholders
+  // ("—", "…") aren't 3-part tokens and render as plain text.
   const parts = token.split(".");
   const isJwt = parts.length === 3 && revealed;
   return (
@@ -329,7 +310,7 @@ function TokenBox({ token, revealed }: { token: string; revealed: boolean }) {
         borderRadius: 2,
         padding: "10px 12px",
         fontFamily: wMono,
-        fontSize: 11,
+        fontSize: fs.label,
         wordBreak: "break-all",
         lineHeight: 1.5,
         color: W.text2,
@@ -356,7 +337,7 @@ function ErrorLine({ msg }: { msg: string }) {
       style={{
         color: W.err,
         marginTop: 8,
-        fontSize: 12,
+        fontSize: fs.meta,
       }}
     >
       {msg}

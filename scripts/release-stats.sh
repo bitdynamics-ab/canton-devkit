@@ -14,14 +14,14 @@
 # the only way to build a real time series later.
 #
 # Outputs (into docs/assets/):
-#   release-downloads-by-platform.svg  — per-platform downloads over time
-#   release-downloads-by-version.svg   — per-version total downloads over time
-#   release-downloads-totals.svg       — all-time totals per version + per platform (bars)
+#   release-downloads-by-version.svg   — per-version total downloads over time (line)
+#   release-downloads-by-platform.svg  — all-time total downloads per platform (bars, no .deb)
 #   release-downloads.md               — per-version + per-platform summary tables
 #   release-downloads-history.jsonl    — appended daily snapshot (total + per platform + per version)
 #
 # Environment:
-#   STATS_REPO    target repo (default: bitdynamics-ab/homebrew-canton-devkit)
+#   STATS_REPOS   space-separated repos (default: bitdynamics-ab/canton-devkit
+#                 bitdynamics-ab/homebrew-canton-devkit)
 #   OUT_DIR       output directory (default: docs/assets)
 #   SNAPSHOT_DATE override snapshot date, UTC YYYY-MM-DD (default: today; for testing)
 #   GITHUB_TOKEN  optional; raises the GitHub API rate limit when set
@@ -30,7 +30,7 @@
 
 set -euo pipefail
 
-STATS_REPO="${STATS_REPO:-bitdynamics-ab/homebrew-canton-devkit}"
+STATS_REPOS="${STATS_REPOS:-bitdynamics-ab/canton-devkit bitdynamics-ab/homebrew-canton-devkit}"
 
 # Resolve OUT_DIR relative to the repo root (parent of this script's dir),
 # so the script works from any CWD.
@@ -45,36 +45,49 @@ mkdir -p "${OUT_DIR}"
 # --- Fetch releases -------------------------------------------------------
 # Prefer `gh` (handles auth + pagination); fall back to curl for local runs.
 fetch_releases() {
+  local repo="$1"
   if command -v gh >/dev/null 2>&1; then
-    gh api "repos/${STATS_REPO}/releases" --paginate 2>/dev/null && return 0
+    gh api "repos/${repo}/releases" --paginate 2>/dev/null && return 0
   fi
   local auth=()
   [ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
   curl -sSfL "${auth[@]}" \
     -H "Accept: application/vnd.github+json" \
-    "https://api.github.com/repos/${STATS_REPO}/releases?per_page=100"
+    "https://api.github.com/repos/${repo}/releases?per_page=100"
 }
 
-raw="$(fetch_releases)"
+all_releases="[]"
+for repo in ${STATS_REPOS}; do
+  raw="$(fetch_releases "${repo}" || true)"
+  if [ -z "${raw}" ]; then
+    echo "warning: no releases returned for ${repo}" >&2
+    continue
+  fi
+  # `gh --paginate` concatenates JSON arrays; normalise to one flat array.
+  batch="$(printf '%s' "${raw}" | jq -s 'add // []')"
+  count="$(printf '%s' "${batch}" | jq 'length')"
+  if [ "${count}" -eq 0 ]; then
+    echo "warning: no releases found for ${repo}" >&2
+    continue
+  fi
+  echo "fetched ${count} releases from ${repo}" >&2
+  all_releases="$(jq -s 'add' <<< "${all_releases}" <<< "${batch}")"
+done
 
-# `gh --paginate` concatenates JSON arrays; normalise to one flat array
-# (works whether the input is one array or several).
-releases="$(printf '%s' "${raw}" | jq -s 'add // []')"
-
-count="$(printf '%s' "${releases}" | jq 'length')"
-if [ "${count}" -eq 0 ]; then
-  echo "error: no releases found for ${STATS_REPO}" >&2
+release_count="$(printf '%s' "${all_releases}" | jq 'length')"
+if [ "${release_count}" -eq 0 ]; then
+  echo "error: no releases found in any of: ${STATS_REPOS}" >&2
   exit 1
 fi
 
-# --- Classify assets into platforms + compute all views -------------------
+# --- Classify assets into platforms + merge by tag across repos -----------
 # Platform classification is regex-based (not literal filenames) because the
 # asset naming drifted across historical releases. Checksum files
 # (SHA256SUMS / checksums.txt) are excluded from platform totals.
 #
-# Emits a compact JSON model consumed by the SVG/markdown renderers below.
-# Releases are ordered oldest -> newest (chronological), matching a time axis.
-model="$(printf '%s' "${releases}" | jq '
+# Releases with the same tag from multiple repos have their per-platform
+# download counts summed. The earliest published_at date is kept for ordering.
+model="$(printf '%s' "${all_releases}" | jq '
   def platform_of($name):
     if   ($name | test("_darwin_arm64\\."))       then "macOS (arm64)"
     elif ($name | test("_linux_amd64\\."))         then "Linux (amd64)"
@@ -84,22 +97,32 @@ model="$(printf '%s' "${releases}" | jq '
     else null
     end;
 
+  def normalize:
+    { tag: .tag_name,
+      date: (.published_at // .created_at),
+      byPlatform: (
+        reduce (.assets[]? | { p: platform_of(.name), dl: .download_count })
+               as $a ( {};
+                 if $a.p == null then . else .[$a.p] = ((.[$a.p] // 0) + $a.dl) end
+               )
+      )
+    };
+
   # Fixed platform order for stable legends / stable diffs.
   ["macOS (arm64)", "Linux (amd64)", "Windows (amd64)", "Debian (.deb)"] as $platforms
 
-  | [ .[]
-      | { tag: .tag_name,
-          date: (.published_at // .created_at),
-          # per-platform download counts for this release
-          byPlatform: (
-            reduce (.assets[]? | { p: platform_of(.name), dl: .download_count })
-                   as $a ( {};
-                     if $a.p == null then . else .[$a.p] = ((.[$a.p] // 0) + $a.dl) end
-                   )
-          )
-        }
+  | [ .[] | normalize ]
+  | group_by(.tag)
+  | map(
+      { tag: .[0].tag,
+        date: (map(.date) | min),
+        byPlatform: (
+          reduce (.[] | .byPlatform | to_entries[]) as $e ( {};
+            .[$e.key] = ((.[$e.key] // 0) + $e.value) )
+        )
+      }
       | .total = ([ .byPlatform[] ] | add // 0)
-    ]
+    )
   # oldest first
   | sort_by(.date)
   | { platforms: $platforms,
@@ -140,7 +163,6 @@ render_line_chart() {
   ph=$(( H - mt - mb ))
 
   local labels n maxv
-  labels="$(printf '%s' "${data}" | jq -r '.labels | join("\u0001")')"
   n="$(printf '%s' "${data}" | jq '.labels | length')"
   maxv="$(printf '%s' "${data}" | jq '[.series[].values[]] | max // 0')"
   maxv="$(nice_max "${maxv}")"
@@ -170,8 +192,7 @@ render_line_chart() {
 
     # X labels
     local idx=0 lbl xx
-    IFS=$'\001' read -ra _labels <<< "${labels}"
-    for lbl in "${_labels[@]}"; do
+    while IFS= read -r lbl; do
       if [ "$n" -gt 1 ]; then
         xx=$(awk -v ml="$ml" -v pw="$pw" -v i="$idx" -v n="$n" 'BEGIN{printf "%.1f", ml + pw*i/(n-1)}')
       else
@@ -180,7 +201,7 @@ render_line_chart() {
       printf '<text x="%s" y="%d" font-size="11" fill="#6b7280" text-anchor="middle">%s</text>\n' \
         "$xx" $(( mt + ph + 20 )) "$(svg_escape "${lbl}")"
       idx=$(( idx + 1 ))
-    done
+    done < <(printf '%s' "${data}" | jq -r '.labels[]')
     printf '<text x="%d" y="%d" font-size="12" fill="#374151" text-anchor="middle">Release tag (oldest -> newest)</text>\n' \
       $(( ml + pw/2 )) $(( H - 12 ))
 
@@ -224,7 +245,7 @@ render_line_chart() {
 }
 
 # ------------------------------------------------------------------------
-# Horizontal bar chart renderer (used for all-time totals).
+# Horizontal bar chart renderer.
 #   $1 = output file
 #   $2 = chart title
 #   $3 = JSON: { bars: [ {label, value} ] }
@@ -270,21 +291,7 @@ render_bar_chart() {
   echo "wrote ${out}"
 }
 
-# --- View 1: per-platform downloads over time -----------------------------
-by_platform_data="$(printf '%s' "${model}" | jq --argjson pal "$(printf '%s\n' "${PALETTE[@]}" | jq -R . | jq -s .)" '
-  . as $m
-  | { labels: [ $m.releases[].tag ],
-      series: [ $m.platforms | to_entries[] as $p
-        | select($p.value != "Debian (.deb)")
-        | { name: $p.value,
-            color: ($pal[$p.key] // "#666666"),
-            values: [ $m.releases[] | (.byPlatform[$p.value] // 0) ] } ]
-    }
-')"
-render_line_chart "${OUT_DIR}/release-downloads-by-platform.svg" \
-  "Downloads per platform, by release" "${by_platform_data}"
-
-# --- View 2: per-version total downloads over time ------------------------
+# --- View 1: per-version total downloads over time ------------------------
 by_version_data="$(printf '%s' "${model}" | jq '
   { labels: [ .releases[].tag ],
     series: [ { name: "Total downloads",
@@ -295,55 +302,17 @@ by_version_data="$(printf '%s' "${model}" | jq '
 render_line_chart "${OUT_DIR}/release-downloads-by-version.svg" \
   "Total downloads, by release" "${by_version_data}"
 
-# --- Views 3 & 4: all-time totals per version + per platform (bars) -------
-# Render both into a single combined-height SVG by stacking two bar charts
-# vertically is complex; instead emit one bar chart that shows per-version
-# totals, and per-platform totals share the same file via a divider.
-totals_version_bars="$(printf '%s' "${model}" | jq '
-  { bars: [ .totalsByVersion[] | { label: .tag, value: .total } ] }
-')"
-totals_platform_bars="$(printf '%s' "${model}" | jq '
+# --- View 2: all-time total downloads per platform (bars, no .deb) -------
+platform_bars="$(printf '%s' "${model}" | jq '
   { bars: [ .platforms[] as $p | select($p != "Debian (.deb)") | { label: $p, value: (.totalsByPlatform[$p] // 0) } ] }
 ')"
-
-# Render two separate bar SVGs, then combine into one file so the README
-# embeds a single "totals" image.
-render_bar_chart "${OUT_DIR}/.totals-version.svg" \
-  "All-time downloads per version" "${totals_version_bars}"
-render_bar_chart "${OUT_DIR}/.totals-platform.svg" \
-  "All-time downloads per platform" "${totals_platform_bars}"
-
-combine_svgs() {
-  local out="$1" top="$2" bottom="$3"
-  local tw th bw bh
-  tw="$(grep -o 'width="[0-9]*"' "${top}" | head -1 | tr -dc '0-9')"
-  th="$(grep -o 'height="[0-9]*"' "${top}" | head -1 | tr -dc '0-9')"
-  bw="$(grep -o 'width="[0-9]*"' "${bottom}" | head -1 | tr -dc '0-9')"
-  bh="$(grep -o 'height="[0-9]*"' "${bottom}" | head -1 | tr -dc '0-9')"
-  local gap=24
-  local W=$(( tw > bw ? tw : bw ))
-  local H=$(( th + gap + bh ))
-  {
-    printf '<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">\n' \
-      "$W" "$H" "$W" "$H"
-    printf '<rect width="%d" height="%d" fill="#ffffff"/>\n' "$W" "$H"
-    printf '<g>'
-    # strip the outer <svg ...> and </svg> from each child, wrap in <g transform>
-    sed -e '1d' -e '$d' "${top}"
-    printf '</g>\n<g transform="translate(0,%d)">' $(( th + gap ))
-    sed -e '1d' -e '$d' "${bottom}"
-    printf '</g>\n</svg>\n'
-  } > "${out}"
-  echo "wrote ${out}"
-}
-combine_svgs "${OUT_DIR}/release-downloads-totals.svg" \
-  "${OUT_DIR}/.totals-version.svg" "${OUT_DIR}/.totals-platform.svg"
-rm -f "${OUT_DIR}/.totals-version.svg" "${OUT_DIR}/.totals-platform.svg"
+render_bar_chart "${OUT_DIR}/release-downloads-by-platform.svg" \
+  "All-time downloads per platform" "${platform_bars}"
 
 # --- Markdown summary tables ---------------------------------------------
 {
   echo "<!-- Generated by scripts/release-stats.sh. Do not edit by hand. -->"
-  echo "<!-- Source repo: ${STATS_REPO} -->"
+  echo "<!-- Source repos: ${STATS_REPOS} -->"
   echo
   printf '**Total downloads:** %s across %s releases.\n\n' \
     "$(printf '%s' "${model}" | jq -r '.grandTotal')" \
@@ -361,7 +330,7 @@ rm -f "${OUT_DIR}/.totals-version.svg" "${OUT_DIR}/.totals-platform.svg"
   echo "| Platform | Downloads |"
   echo "|---|---|"
   printf '%s' "${model}" | jq -r '
-    .platforms[] as $p | "| \($p) | \(.totalsByPlatform[$p] // 0) |"'
+    .platforms[] as $p | select($p != "Debian (.deb)") | "| \($p) | \(.totalsByPlatform[$p] // 0) |"'
   echo
 } > "${OUT_DIR}/release-downloads.md"
 echo "wrote ${OUT_DIR}/release-downloads.md"

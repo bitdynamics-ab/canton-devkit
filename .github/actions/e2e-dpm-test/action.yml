@@ -1,0 +1,60 @@
+name: Run dpm localnet bats E2E test
+description: Build the binary, install the DPM CLI, and run one dpm localnet bats e2e file.
+
+# Keep dpm-version / dpm-linux-sha256 defaults in sync with release.yml
+# and e2e-test-dpm-installation.yml.
+inputs:
+  bats-file:
+    description: Bats file under e2e-tests/ (for example dpm-dar-001.bats)
+    required: true
+  dpm-version:
+    description: DPM CLI version to install
+    required: false
+    default: "1.0.16"
+  dpm-linux-sha256:
+    description: SHA-256 of the linux/amd64 DPM tarball
+    required: false
+    default: "387421d4b3d0e799f05cde1f5c2adc704acd2824796d436861602eb2be759874"
+
+runs:
+  using: composite
+  steps:
+    - name: Build binary
+      # All jobs run on the same single self-hosted runner, so the binary
+      # is built here rather than passed between jobs via a GitHub
+      # artifact. CDK_BIN then lets bats skip its own rebuild.
+      shell: bash
+      run: make build
+
+    - name: Install DPM CLI (sha256-verified)
+      shell: bash
+      run: |
+        set -euo pipefail
+        tar="${RUNNER_TEMP}/dpm-${{ inputs.dpm-version }}-linux-amd64.tar.gz"
+        curl -sSfL \
+          "https://github.com/digital-asset/dpm/releases/download/${{ inputs.dpm-version }}/dpm-${{ inputs.dpm-version }}-linux-amd64.tar.gz" \
+          -o "$tar"
+        echo "${{ inputs.dpm-linux-sha256 }}  ${tar}" | sha256sum --check --strict -
+        bindir="${RUNNER_TEMP}/dpm-bin"
+        mkdir -p "$bindir"
+        tar -xzf "$tar" -C "$bindir" dpm
+        chmod 0755 "$bindir/dpm"
+        echo "$bindir" >> "$GITHUB_PATH"
+        "$bindir/dpm" --version
+
+    - name: Run bats test (TAP)
+      shell: bash
+      env:
+        # Use the binary built above; skips the in-bats `make build`.
+        CDK_BIN: ${{ github.workspace }}/bin/canton-devkit
+        BATS_LIB_PATH: ${{ github.workspace }}/e2e-tests/test_helper
+      run: |
+        e2e-tests/bats/bin/bats --formatter tap "e2e-tests/${{ inputs.bats-file }}"
+
+    - name: Dump container state on failure
+      if: failure()
+      shell: bash
+      run: |
+        docker ps -a || true
+        docker compose ls || true
+        docker volume ls || true

@@ -106,6 +106,12 @@ docker-compose code path that could drift. With neither `--prometheus`
 nor `--grafana`, the verb acts on both sidecars (the legacy umbrella
 semantics); pass one flag to operate on a single component.
 
+`status` also reports the metrics source: `Shared stack: registered`
+(`"shared": true` in JSON) means the host-shared stack serves the
+instance. A shared-only instance shows the per-instance sidecars off with
+the shared stack registered — its Grafana URL points at the shared
+Grafana, filtered to that instance.
+
 ## Survives a down → up cycle
 
 The profile set an instance was brought up with — whether via
@@ -118,6 +124,10 @@ so you can deliberately drop observability. (Earlier releases did not
 persist profiles, so Prometheus/Grafana silently vanished on every
 restart even though the stable-port contract kept the bookmarked Grafana
 URL alive.)
+
+The `--observability-mode` choice persists the same way
+(`state.json`'s `observability_mode`), so a re-up keeps shared-only vs
+per-instance without re-passing the flag.
 
 ## Stack topology — host-shared, with a transitional per-instance overlay
 
@@ -139,16 +149,20 @@ Prometheus service carries `extra_hosts: ["host.docker.internal:host-gateway"]`
 so the loopback-published ports resolve; on Docker Desktop the name is
 auto-provided.
 
-**Transitional dual stack (known trade-off).** Each observability-enabled
-instance currently *also* still runs its own per-instance Prometheus +
-Grafana overlay alongside the shared stack — so while running, an obs
-instance has **two** Prometheus and **two** Grafana containers. This is a
-deliberate, kept fallback: both the CLI and the Web UI read **shared-first**
-and fall back to the per-instance Prometheus when the shared stack isn't
-up, and the per-instance scrape uses in-network service DNS
-(`canton:10013`) rather than `host.docker.internal`, so it works on any
-platform regardless of the Linux `host-gateway` mapping. The per-instance
-overlay remains enabled until the shared-only path is validated end-to-end
-on a native Linux Docker host — see [Known limitations](limitations.md#observability-transitional-dual-stack). The
-extra resource cost (a second Prometheus+Grafana per instance) is the price
-of that fallback on a dev machine; it carries no correctness impact.
+**Per-instance overlay (opt-out).** `up --observability-mode` (and the
+matching **Sidecar stack** picker in the Web UI create modal) selects the
+sidecar stack: `auto` (default) serves metrics from the shared stack and
+skips the per-instance Prometheus + Grafana overlay when the shared stack
+is reachable — `auto` health-probes the shared Prometheus and falls back
+to the overlay when it is up but not serving; `shared` forces shared-only;
+`per-instance` forces the overlay. The mode is persisted, so a re-up
+preserves it. When the overlay
+runs (per-instance mode, or auto with the shared stack unreachable), an obs
+instance has **two** Prometheus and **two** Grafana containers — a
+deliberate fallback: the CLI and Web UI read **shared-first** and fall back
+to the per-instance Prometheus, and the per-instance scrape uses in-network
+service DNS (`canton:10013`) rather than `host.docker.internal`, so it works
+on any platform regardless of the Linux `host-gateway` mapping. `shared`
+becomes the default (dropping the overlay) once the shared-only path is
+validated end-to-end on a native Linux Docker host — see
+[Known limitations](limitations.md#observability-transitional-dual-stack).

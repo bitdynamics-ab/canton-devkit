@@ -167,9 +167,9 @@ func buildObservabilityStatus() *cobra.Command {
 			if format == "json" {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
-				return enc.Encode(observabilityStatusJSON(state, cur))
+				return enc.Encode(observabilityStatusJSON(cmd.Context(), state, cur))
 			}
-			renderObservabilityStatus(cmd.OutOrStdout(), state, cur)
+			renderObservabilityStatus(cmd.Context(), cmd.OutOrStdout(), state, cur)
 			return nil
 		},
 	}
@@ -201,7 +201,7 @@ func runObservabilityToggleResolved(cmd *cobra.Command, state *registry.State, f
 	if state.Status != registry.StatusRunning {
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 			"instance %q is not running (status=%s) — bring it up first with "+
-				"`dpm localnet up --name %s` (the observability profile is re-enabled automatically once it has been set once)\n",
+				"`dpm localnet up %s` (the observability profile is re-enabled automatically once it has been set once)\n",
 			state.Name, state.Status, state.Name)
 		return localnet.AsExitError(localnet.ExitUserError)
 	}
@@ -251,7 +251,7 @@ func runObservabilityToggleResolved(cmd *cobra.Command, state *registry.State, f
 
 // observabilityStatusJSON is the stable shape `status --format json`
 // emits. Keys mirror the toggle response so a script can read either.
-func observabilityStatusJSON(state *registry.State, cur localnet.ObservabilityState) map[string]any {
+func observabilityStatusJSON(ctx context.Context, state *registry.State, cur localnet.ObservabilityState) map[string]any {
 	return map[string]any{
 		"instance":      state.Name,
 		"status":        string(state.Status),
@@ -259,7 +259,8 @@ func observabilityStatusJSON(state *registry.State, cur localnet.ObservabilitySt
 		"grafana":       cur.Grafana,
 		"prometheus_ui": cur.PrometheusPort,
 		"grafana_ui":    cur.GrafanaPort,
-		"grafana_url":   grafanaURLFor(state),
+		"shared":        cur.Shared,
+		"grafana_url":   grafanaURLFor(ctx, state),
 	}
 }
 
@@ -286,20 +287,21 @@ func renderObservabilityResult(out io.Writer, instance string, res localnet.Obse
 }
 
 // renderObservabilityStatus prints the read-only status report.
-func renderObservabilityStatus(out io.Writer, state *registry.State, cur localnet.ObservabilityState) {
+func renderObservabilityStatus(ctx context.Context, out io.Writer, state *registry.State, cur localnet.ObservabilityState) {
 	rows := []string{
 		term.KV("Instance status", string(state.Status), 16),
 		term.KV("Prometheus", onOff(cur.Prometheus), 16),
 		term.KV("Grafana", onOff(cur.Grafana), 16),
+		term.KV("Shared stack", sharedLabel(cur.Shared), 16),
 	}
-	if url := grafanaURLFor(state); url != "" {
+	if url := grafanaURLFor(ctx, state); url != "" {
 		rows = append(rows, term.KV("Grafana URL", url, 16))
 	}
 	if cur.PrometheusPort != 0 {
 		rows = append(rows, term.KV("Prometheus URL",
 			fmt.Sprintf("http://localhost:%d", cur.PrometheusPort), 16))
 	}
-	if !cur.Prometheus && !cur.Grafana {
+	if !cur.Prometheus && !cur.Grafana && !cur.Shared {
 		rows = append(rows, "",
 			term.Dimc("enable with `dpm localnet observability enable --name "+state.Name+"`"))
 	}
@@ -312,4 +314,11 @@ func onOff(b bool) string {
 		return term.Successc("on")
 	}
 	return term.Dimc("off")
+}
+
+func sharedLabel(b bool) string {
+	if b {
+		return term.Successc("registered")
+	}
+	return term.Dimc("—")
 }

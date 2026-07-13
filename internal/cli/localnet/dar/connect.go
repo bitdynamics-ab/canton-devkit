@@ -51,7 +51,7 @@ func (f *connectFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.CACertFile, "ca-cert", "",
 		"PEM-encoded CA bundle for TLS verification (when --insecure=false).")
 	cmd.Flags().StringVar(&f.Instance, "instance", "",
-		"DevKit LocalNet instance name; resolves --admin-host + --token from the registry.")
+		"DevKit LocalNet instance name")
 	cmd.Flags().StringVar(&f.Role, "role", "app-user",
 		"Participant role within --instance: sv, app-provider, or app-user.")
 	// Accept --name as an alias for --instance so the dar verbs take the
@@ -93,7 +93,7 @@ func (f *connectFlags) resolve() (admin.Config, error) {
 
 	state, err := registry.Read(f.Instance)
 	if err == registry.ErrNotFound {
-		return admin.Config{}, fmt.Errorf("instance %q not registered (run `localnet up` first)", f.Instance)
+		return admin.Config{}, fmt.Errorf("instance %q not registered (run `localnet up <name>` first)", f.Instance)
 	}
 	if err != nil {
 		return admin.Config{}, fmt.Errorf("read instance state: %w", err)
@@ -147,7 +147,7 @@ func (f *connectFlags) resolveState() (*registry.State, error) {
 	}
 	state, err := registry.Read(f.Instance)
 	if err == registry.ErrNotFound {
-		return nil, fmt.Errorf("instance %q not registered (run `localnet up` first)", f.Instance)
+		return nil, fmt.Errorf("instance %q not registered (run `localnet up <name>` first)", f.Instance)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read instance state: %w", err)

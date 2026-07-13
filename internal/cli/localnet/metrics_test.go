@@ -17,10 +17,8 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// fakePromHandler is a minimal Prometheus stand-in for the CLI's
-// metrics scraper. Returns hard-coded values keyed off the headline
-// query so the test can assert on rendered text without depending
-// on a real container.
+// fakePromHandler is a minimal Prometheus stand-in returning hard-coded values
+// keyed off the headline query.
 func fakePromHandler(t *testing.T, vals map[metricsq.Headline]float64) http.Handler {
 	t.Helper()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -50,12 +48,10 @@ func fakePromHandler(t *testing.T, vals map[metricsq.Headline]float64) http.Hand
 	})
 }
 
-// TestScrapeMetrics_PopulatesLatencyBlock pins the p50/p95/p99 fan-out:
-// scrapeMetrics should run every SummaryQuery and project the three
-// quantiles into the milliseconds-scaled LatencyReport block.
 func TestScrapeMetrics_PopulatesLatencyBlock(t *testing.T) {
 	srv := httptest.NewServer(fakePromHandler(t, map[metricsq.Headline]float64{
 		metricsq.HeadlineLedgerTPS:    12.5,
+		metricsq.HeadlineMediatorAvg:  0.100, // 100 ms
 		metricsq.HeadlineMediatorP50:  0.012, // 12 ms
 		metricsq.HeadlineMediatorP95:  0.045, // 45 ms
 		metricsq.HeadlineMediatorP99:  0.120, // 120 ms
@@ -76,6 +72,9 @@ func TestScrapeMetrics_PopulatesLatencyBlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scrapeMetrics: %v", err)
 	}
+	if report.Latency.AvgMs == nil || *report.Latency.AvgMs < 99.9 || *report.Latency.AvgMs > 100.1 {
+		t.Errorf("avg = %v, want ~100 ms", report.Latency.AvgMs)
+	}
 	if report.Latency.P50Ms == nil || *report.Latency.P50Ms < 11.9 || *report.Latency.P50Ms > 12.1 {
 		t.Errorf("p50 = %v, want ~12 ms", report.Latency.P50Ms)
 	}
@@ -87,17 +86,10 @@ func TestScrapeMetrics_PopulatesLatencyBlock(t *testing.T) {
 	}
 }
 
-// TestScrapeMetrics_TransportFailureSurfacesError: when
-// Prometheus is unreachable (here: a closed listener) EVERY query
-// fails at the transport layer, so scrapeMetrics must return a
-// non-nil error rather than an all-nil report. This is the contract
-// the RunE failure branch ("prometheus query failed", exit 4)
-// depends on — without it the CLI prints all-dashes and exits 0
-// whether observability is off, the port is wrong, or the instance
-// is healthy.
+// When every query fails at the transport layer, scrapeMetrics must return an
+// error, not an all-nil report — the contract the exit-4 RunE branch depends on.
 func TestScrapeMetrics_TransportFailureSurfacesError(t *testing.T) {
-	// Bind then immediately close so the port is almost certainly
-	// refused (no listener) for the duration of the test.
+	// Bind then immediately close so the port is refused for the test.
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	u, err := url.Parse(srv.URL)
 	if err != nil {
@@ -105,7 +97,7 @@ func TestScrapeMetrics_TransportFailureSurfacesError(t *testing.T) {
 	}
 	host := u.Hostname()
 	port, _ := strconv.Atoi(u.Port())
-	srv.Close() // now connections to host:port are refused
+	srv.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -118,14 +110,9 @@ func TestScrapeMetrics_TransportFailureSurfacesError(t *testing.T) {
 	}
 }
 
-// TestScrapeMetrics_EmptyButReachableIsNotError: a healthy
-// Prometheus that simply has no samples yet (fresh instance) returns
-// (nil,nil) per query. scrapeMetrics must treat that as a valid empty
-// report — NOT a failure — so a just-started instance doesn't trip the
-// exit-4 branch. The headline fields are nil; the call succeeds.
+// A reachable Prometheus with no samples yet returns (nil,nil) per query;
+// scrapeMetrics must treat that as a valid empty report, not an error.
 func TestScrapeMetrics_EmptyButReachableIsNotError(t *testing.T) {
-	// fakePromHandler with an empty value map answers every query with
-	// an empty Prometheus result vector (status success, no samples).
 	srv := httptest.NewServer(fakePromHandler(t, map[metricsq.Headline]float64{}))
 	defer srv.Close()
 	u, err := url.Parse(srv.URL)
@@ -181,11 +168,8 @@ func TestPromQuery_TreatsNaNAsMissingSample(t *testing.T) {
 	}
 }
 
-// TestRenderMetricsText_IncludesLatencyAndGrafana confirms the text
-// renderer prints the Latency block (p50/p95/p99) and a Grafana URL
-// when one is populated. The CLI's UX contract is checked here so a
-// silent regression to the previous "p95 only" layout fails fast.
 func TestRenderMetricsText_IncludesLatencyAndGrafana(t *testing.T) {
+	avg := 100.0
 	p50 := 12.0
 	p95 := 45.0
 	p99 := 120.0
@@ -193,13 +177,13 @@ func TestRenderMetricsText_IncludesLatencyAndGrafana(t *testing.T) {
 	report := &MetricsReport{
 		SchemaVersion: metricsq.SchemaVersion,
 		LedgerTPS:     &tps,
-		Latency:       LatencyReport{P50Ms: &p50, P95Ms: &p95, P99Ms: &p99},
+		Latency:       LatencyReport{AvgMs: &avg, P50Ms: &p50, P95Ms: &p95, P99Ms: &p99},
 		Dashboards:    DashboardsBlock{GrafanaURL: "http://localhost:3001/d/canton-localnet-v1"},
 	}
 	var buf bytes.Buffer
 	renderMetricsText(&buf, "demo", "127.0.0.1", 9090, report)
 	out := buf.String()
-	for _, want := range []string{"Latency:", "p50", "p95", "p99",
+	for _, want := range []string{"Latency:", "avg", "p50", "p95", "p99",
 		"Dashboards:", "Grafana", "http://localhost:3001/d/canton-localnet-v1"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("text output missing %q\n%s", want, out)
@@ -207,10 +191,29 @@ func TestRenderMetricsText_IncludesLatencyAndGrafana(t *testing.T) {
 	}
 }
 
-// TestRenderMetricsText_GrafanaHintWhenObsOff: with no Grafana URL
-// the renderer should still print a Dashboards block, but with the
-// "enable observability" hint so the operator knows the profile is
-// off.
+// Splice 0.6.4 case: percentiles nil (only +Inf bucket), avg exact. The
+// renderer prints the avg row but no p50/p95/p99 rows of dashes.
+func TestRenderMetricsText_OmitsPercentilesWhenAbsent(t *testing.T) {
+	avg := 113.0
+	report := &MetricsReport{
+		SchemaVersion: metricsq.SchemaVersion,
+		Latency:       LatencyReport{AvgMs: &avg},
+	}
+	var buf bytes.Buffer
+	renderMetricsText(&buf, "demo", "127.0.0.1", 9090, report)
+	out := buf.String()
+	if !strings.Contains(out, "avg") || !strings.Contains(out, "113.00 ms") {
+		t.Errorf("expected the avg row; got\n%s", out)
+	}
+	for _, unwanted := range []string{"p50", "p95", "p99"} {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("expected no %q row when percentiles are absent; got\n%s", unwanted, out)
+		}
+	}
+}
+
+// With no Grafana URL the renderer still prints a Dashboards block, with the
+// "enable observability" hint.
 func TestRenderMetricsText_GrafanaHintWhenObsOff(t *testing.T) {
 	report := &MetricsReport{SchemaVersion: metricsq.SchemaVersion}
 	var buf bytes.Buffer
@@ -224,14 +227,12 @@ func TestRenderMetricsText_GrafanaHintWhenObsOff(t *testing.T) {
 	}
 }
 
-// TestMetricsReport_JSONShape pins the JSON envelope so CI assertions
-// (`jq .latency.p99_ms`) won't break silently. We marshal a populated
-// report and unmarshal into a generic map to inspect the keys.
+// Pins the JSON envelope so CI assertions (`jq .latency.p99_ms`) don't break.
 func TestMetricsReport_JSONShape(t *testing.T) {
-	p50, p95, p99 := 1.0, 2.0, 3.0
+	avg, p50, p95, p99 := 0.5, 1.0, 2.0, 3.0
 	report := &MetricsReport{
 		SchemaVersion: metricsq.SchemaVersion,
-		Latency:       LatencyReport{P50Ms: &p50, P95Ms: &p95, P99Ms: &p99},
+		Latency:       LatencyReport{AvgMs: &avg, P50Ms: &p50, P95Ms: &p95, P99Ms: &p99},
 		Dashboards:    DashboardsBlock{GrafanaURL: "http://localhost:3001/d/canton-localnet-v1"},
 	}
 	b, err := json.Marshal(report)
@@ -246,7 +247,7 @@ func TestMetricsReport_JSONShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing latency block; got %s", b)
 	}
-	for _, k := range []string{"p50_ms", "p95_ms", "p99_ms"} {
+	for _, k := range []string{"avg_ms", "p50_ms", "p95_ms", "p99_ms"} {
 		if _, ok := lat[k]; !ok {
 			t.Errorf("latency.%s missing; got %s", k, b)
 		}
@@ -260,28 +261,31 @@ func TestMetricsReport_JSONShape(t *testing.T) {
 	}
 }
 
-// TestGrafanaURLFor: the URL is only emitted when state.Ports has a
-// grafana_ui entry (signal that the obs profile is on). The dashboard
-// UID is the one we provision under assets/grafana/dashboards/.
+// A registered grafana_ui port deep-links to the per-instance Grafana;
+// otherwise (shared-only or obs off) it falls back to the shared Grafana.
 func TestGrafanaURLFor(t *testing.T) {
-	t.Run("obs-on", func(t *testing.T) {
+	old := sharedGrafanaURL
+	sharedGrafanaURL = func(context.Context, string) string { return "SHARED" }
+	t.Cleanup(func() { sharedGrafanaURL = old })
+
+	t.Run("per-instance-port", func(t *testing.T) {
 		state := &registry.State{Ports: map[string]int{"grafana_ui": 3001}}
-		got := grafanaURLFor(state)
+		got := grafanaURLFor(context.Background(), state)
 		want := "http://localhost:3001/d/canton-localnet-v1"
 		if got != want {
 			t.Errorf("grafanaURLFor = %q, want %q", got, want)
 		}
 	})
-	t.Run("obs-off-no-port", func(t *testing.T) {
+	t.Run("no-port-falls-back-to-shared", func(t *testing.T) {
 		state := &registry.State{Ports: map[string]int{}}
-		if got := grafanaURLFor(state); got != "" {
-			t.Errorf("grafanaURLFor with no grafana_ui = %q, want empty", got)
+		if got := grafanaURLFor(context.Background(), state); got != "SHARED" {
+			t.Errorf("grafanaURLFor with no grafana_ui = %q, want shared fallback", got)
 		}
 	})
-	t.Run("obs-off-zero-port", func(t *testing.T) {
+	t.Run("zero-port-falls-back-to-shared", func(t *testing.T) {
 		state := &registry.State{Ports: map[string]int{"grafana_ui": 0}}
-		if got := grafanaURLFor(state); got != "" {
-			t.Errorf("grafanaURLFor with zero port = %q, want empty", got)
+		if got := grafanaURLFor(context.Background(), state); got != "SHARED" {
+			t.Errorf("grafanaURLFor with zero port = %q, want shared fallback", got)
 		}
 	})
 }

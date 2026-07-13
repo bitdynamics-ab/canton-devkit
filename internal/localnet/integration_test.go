@@ -65,7 +65,7 @@ func TestIntegrationUpStatusCredsDown(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	t.Logf("Bringing up instance %q (this can take 3-5 min)...", name)
-	if code := RunUp(ctx, os.Stdout, os.Stderr, &UpOptions{Name: name}); code != ExitSuccess {
+	if code := RunUp(ctx, NewTextProgress(os.Stdout, os.Stderr), &UpOptions{Name: name}); code != ExitSuccess {
 		t.Fatalf("up: exit %d", code)
 	}
 	defer func() {

@@ -20,47 +20,26 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// MountMetrics wires the metrics Web UI face: a per-instance
-// Prometheus passthrough so the Metrics screen can render live
-// charts without the browser scraping Prometheus directly (avoids
-// CORS + lets the handler enforce auth/JWT once that lands).
-//
-//	GET /api/instances/{name}/metrics?query=<PromQL>
-//
-// Returns Prometheus's `/api/v1/query` response verbatim when the
-// scrape succeeds. Returns 503 with a structured envelope when
-// the observability profile isn't running for the instance —
-// frontend renders a "raise observability" remediation panel.
-//
-// Per CONTRIBUTING.md "CLI ↔ Web UI parity": this handler shares the
-// scrape config and PromQL grammar with `dpm localnet metrics`.
-// Adding a new built-in panel updates both surfaces.
+// MountMetrics wires the metrics Web UI face: a per-instance Prometheus
+// passthrough so the browser doesn't scrape Prometheus directly (avoids CORS,
+// lets the handler enforce auth later). Returns 503 with a structured envelope
+// when the observability profile isn't running. Shares scrape config + PromQL
+// grammar with `dpm localnet metrics` (CLI ↔ Web UI parity).
 func MountMetrics(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/instances/{name}/metrics", handleMetricsQuery())
 	mux.HandleFunc("GET /api/instances/{name}/metrics/summary", handleMetricsSummary())
-	// Range query — backs every chart on the Web UI Metrics screen.
-	// Wraps Prometheus's /api/v1/query_range so the frontend gets a
-	// time series instead of a scalar. Inputs are bounded by the
-	// same promQueryRE allowlist as the instant query handler.
 	mux.HandleFunc("GET /api/instances/{name}/metrics/range", handleMetricsRange())
 }
 
-// metricsTimeout caps how long the handler will wait on the
-// Prometheus subprocess + HTTP request chain. 10s matches the
-// CLI's per-call timeout.
+// metricsTimeout matches the CLI's per-call timeout.
 const metricsTimeout = 10 * time.Second
 
-// maxQueryLen caps PromQL input length before it ever reaches the
-// regex matcher. Defence against catastrophic backtracking + a
-// trivial sanity bound — the largest panel we ship is ~280 bytes.
+// maxQueryLen bounds PromQL input before the regex, guarding against
+// catastrophic backtracking (largest panel we ship is ~280 bytes).
 const maxQueryLen = 4096
 
-// promQueryRE pins the allowed character set for the `query`
-// param — alphanumeric + PromQL operators + whitespace. Blocks
-// shell metachars and request-smuggling attempts before we hand
-// the string to net/url.QueryEscape (defence-in-depth: even
-// though we URL-encode, refusing weird input early gives clearer
-// 400s than a confusing Prometheus error).
+// promQueryRE allows only PromQL grammar, blocking shell metachars and
+// request-smuggling before the string reaches url.QueryEscape.
 var promQueryRE = regexp.MustCompile(`^[a-zA-Z0-9_{}\[\]:".,= \-+*/()<>!^]+$`)
 
 func handleMetricsQuery() http.HandlerFunc {
@@ -80,9 +59,6 @@ func handleMetricsQuery() http.HandlerFunc {
 				"pass ?query=<PromQL> — e.g. ?query=up")
 			return
 		}
-		// Guard the regex from pathological inputs: a
-		// 4 KiB ceiling is generous for any panel we ship and stops
-		// catastrophic-backtracking probes early.
 		if len(query) > maxQueryLen {
 			writeErrorWithCode(w, http.StatusBadRequest,
 				ErrCodeInvalidRequest,
@@ -134,24 +110,9 @@ func handleMetricsQuery() http.HandlerFunc {
 	}
 }
 
-// handleMetricsRange wraps Prometheus's range-query endpoint
-// (/api/v1/query_range). Returned shape matches Prometheus's own
-// response so the frontend can decode {data.result[].values[][t,v]}
-// without an extra projection layer.
-//
-// Parameters:
-//   - query    : PromQL expression (same allowlist as the instant
-//     handler; promQueryRE)
-//   - window   : duration string ("5m", "1h", "24h"); clamped to
-//     [1m, 24h]
-//   - step     : duration string ("10s", "1m"); clamped to [5s, 1h];
-//     defaults to window/60 so a default window yields
-//     ~60 samples (good chart resolution without
-//     hammering Prometheus)
-//
-// Same OBSERVABILITY_PROFILE_OFF semantics as the summary endpoint:
-// 503 with structured envelope when Prometheus isn't running for
-// the project.
+// handleMetricsRange wraps Prometheus's /api/v1/query_range verbatim. step
+// defaults to window/60 (~60 samples) when unset. Same
+// OBSERVABILITY_PROFILE_OFF semantics as the other endpoints.
 func handleMetricsRange() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
@@ -248,10 +209,7 @@ func handleMetricsRange() http.HandlerFunc {
 }
 
 // handleMetricsSummary returns the same headline summary the CLI's
-// `dpm localnet metrics --format json` prints. Lets the Web UI
-// render a status card without doing four round-trips for the four
-// queries (and ensures the two surfaces always show the same set
-// of headline numbers).
+// `dpm localnet metrics --format json` prints, from the shared metricsq set.
 func handleMetricsSummary() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
@@ -275,16 +233,11 @@ func handleMetricsSummary() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), metricsTimeout)
 		defer cancel()
 
-		// Scope the queries to this instance when it's served by the
-		// shared multi-instance stack; "" sums over the single-instance
-		// per-instance Prometheus (the fallback). The frontend reads the
-		// returned scope to scope its own chart queries identically.
-		// Resolved from the SAME cached discovery the fan-out queries use
-		// (keyed by compose project) so scope and endpoint can't disagree.
+		// Scope to this instance on the shared stack, "" on the per-instance
+		// fallback. Resolved from the SAME cached discovery the fan-out uses
+		// so scope and endpoint can't disagree; the frontend mirrors it.
 		scope := promScopeFor(ctx, state.ComposeProject)
 
-		// Queries come from the shared metricsq package so CLI
-		// + handler can't drift.
 		out := map[string]*float64{}
 		queries := metricsq.SummaryQueriesFor(scope)
 		type res struct {
@@ -307,9 +260,8 @@ func handleMetricsSummary() http.HandlerFunc {
 			}
 		}
 		if !anyFound {
-			// Best signal that observability isn't running — no
-			// queries returned data. Surface the structured code
-			// so the UI can offer the "enable profile" CTA.
+			// No data from any query — probe `up` to distinguish "obs off"
+			// (structured code for the CTA) from a genuinely empty instance.
 			if _, err := proxyPrometheus(ctx, state.ComposeProject, "/api/v1/query?query=up"); errors.Is(err, errPrometheusNotRunning) {
 				writeErrorWithCode(w, http.StatusServiceUnavailable,
 					"OBSERVABILITY_PROFILE_OFF",
@@ -319,10 +271,10 @@ func handleMetricsSummary() http.HandlerFunc {
 				return
 			}
 		}
-		// Build the latency block in milliseconds — same scaling
-		// as the CLI's `--format json` shape so the two surfaces
-		// stay byte-identical for the curated panels.
+		// avg_ms is the always-computable mean; percentiles are nil on Splice
+		// 0.6.4 (no finite histogram buckets). Same ms scaling as the CLI.
 		latency := map[string]*float64{
+			"avg_ms": secondsToMs(out[string(metricsq.HeadlineMediatorAvg)]),
 			"p50_ms": secondsToMs(out[string(metricsq.HeadlineMediatorP50)]),
 			"p95_ms": secondsToMs(out[string(metricsq.HeadlineMediatorP95)]),
 			"p99_ms": secondsToMs(out[string(metricsq.HeadlineMediatorP99)]),
@@ -333,10 +285,8 @@ func handleMetricsSummary() http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"schema_version": 1,
 			"instance":       name,
-			// scope is the instance label to filter chart queries by when
-			// non-empty (shared multi-instance stack); "" means the
-			// single-instance per-instance Prometheus, so the frontend
-			// leaves its chart queries unscoped.
+			// scope is the instance label the frontend filters chart queries by;
+			// "" (per-instance Prometheus) leaves them unscoped.
 			"scope":      scope,
 			"metrics":    out,
 			"latency":    latency,
@@ -345,35 +295,22 @@ func handleMetricsSummary() http.HandlerFunc {
 	}
 }
 
-// promScopeFor reports the instance label the metrics queries should be
-// filtered by, derived from the SAME cached discovery the chart/range
-// queries use (discoverPrometheus, keyed by compose project) rather than
-// re-resolving independently. The instance name when served by the shared
-// multi-instance stack, or "" on the per-instance fallback (which
-// holds only that instance, so no filter is needed). The frontend mirrors
-// this via the summary response's `scope` field.
-//
-// Resolving through the shared cache closes a skew window: discoverPrometheus
-// caches host:port for a TTL, so a freshly-toggled instance could otherwise
-// have its summary report scope=name (uncached, live) while the cached
-// endpoint still points at the per-instance Prometheus for up to the TTL —
-// transiently filtering charts against series that lack the label. Sharing
-// the cached decision keeps scope and endpoint moving together.
+// promScopeFor reports the instance label to filter queries by, read from the
+// SAME cached discovery the chart queries use rather than re-resolving. This
+// closes a skew window: an independent lookup could report scope=name while
+// the cached endpoint still points at the per-instance Prometheus for a TTL,
+// transiently filtering charts against series that lack the label.
 func promScopeFor(ctx context.Context, project string) string {
-	// Resolve (and cache) the endpoint, then read the scope that same
-	// cached decision recorded.
 	_, _, _ = discoverPrometheus(ctx, project)
 	return lookupPromScope(project)
 }
 
-// grafanaDashboardUID pins the bundled Canton LocalNet dashboard UID.
-// Mirrors the CLI's constant so both surfaces deep-link to the same
-// view. See assets/grafana/dashboards/canton-localnet.json.
+// grafanaDashboardUID mirrors the CLI's constant so both surfaces deep-link
+// to the same view. See assets/grafana/dashboards/canton-localnet.json.
 const grafanaDashboardUID = "canton-localnet-v1"
 
-// grafanaURLForState returns the Web UI deep link to the bundled
-// dashboard when observability is on for the instance, or "" so the
-// frontend can render a "enable observability profile" CTA.
+// grafanaURLForState deep-links to the bundled dashboard when obs is on, or ""
+// so the frontend can render an "enable observability" CTA.
 func grafanaURLForState(state *registry.State) string {
 	if state == nil {
 		return ""
@@ -385,9 +322,8 @@ func grafanaURLForState(state *registry.State) string {
 	return fmt.Sprintf("http://localhost:%d/d/%s", port, grafanaDashboardUID)
 }
 
-// secondsToMs converts a seconds-valued Prometheus scalar into the
-// milliseconds the frontend expects for latency cards. nil-safe so
-// "no samples yet" stays distinguishable from "0 ms".
+// secondsToMs converts seconds to milliseconds, nil-safe so "no sample" stays
+// distinct from "0 ms".
 func secondsToMs(v *float64) *float64 {
 	if v == nil {
 		return nil
@@ -396,21 +332,10 @@ func secondsToMs(v *float64) *float64 {
 	return &ms
 }
 
-// proxyPrometheus does the actual HTTP call against the
-// per-instance prometheus container. Returns errPrometheusNotRunning
-// when no prometheus is present in the project so the caller can
-// map to the OBSERVABILITY_PROFILE_OFF code.
-//
-// Discovery: walks `compose ps` for a service named "prometheus".
-// When found we hit it via 127.0.0.1:<host-port>.
-//
-// Defence:
-//   - dedicated http.Client with Timeout = metricsTimeout, so a
-//     misbehaving upstream can't hold the request open unboundedly
-//   - response body bounded by io.LimitReader so a runaway Prometheus
-//     cannot OOM the devkit. 16 MiB is well above the largest range
-//     response we observe in practice (a 24h × 5s step × 50-series
-//     scrape is ~6 MiB) but small enough to fail closed.
+// proxyPrometheus does the HTTP call against the per-instance prometheus
+// container. Returns errPrometheusNotRunning when none is present so the
+// caller can map to OBSERVABILITY_PROFILE_OFF. The body is capped at 16 MiB
+// (well above a 24h×5s×50-series ~6 MiB response) so a runaway can't OOM us.
 func proxyPrometheus(ctx context.Context, project, path string) ([]byte, error) {
 	host, port, err := discoverPrometheus(ctx, project)
 	if err != nil {
@@ -427,7 +352,6 @@ func proxyPrometheus(ctx context.Context, project, path string) ([]byte, error) 
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	// Cap body at 16 MiB + 1 so we can detect overrun.
 	const maxBody = 16 << 20
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
 	if err != nil {
@@ -442,31 +366,19 @@ func proxyPrometheus(ctx context.Context, project, path string) ([]byte, error) 
 	return body, nil
 }
 
-// discoverPrometheus resolves the per-instance Prometheus address.
-// 9090 is the CONTAINER-internal port; the host port is whatever
-// Docker ephemerally assigned, captured into state.Ports["prometheus_ui"]
-// during `localnet up`.
-//
-// The project→state reverse lookup goes through the authoritative
-// registry index (not a brittle "canton-<name>" prefix trim), and the
-// whole result is cached for 5s — without the cache, the Metrics
-// screen polling 9 charts every 5s would fire 9 `docker compose ps`
-// subprocesses per second per instance. The host:port pair doesn't
-// change between Prometheus restarts.
+// discoverPrometheus resolves the per-instance Prometheus host:port, cached
+// for 5s so the Metrics screen's 9-chart 5s polling doesn't fire 9 `docker
+// compose ps` per second per instance.
 func discoverPrometheus(ctx context.Context, project string) (string, int, error) {
 	if host, port, err, ok := lookupPromCache(project); ok {
 		return host, port, err
 	}
-	// Shared host-level stack first: when this project's instance
-	// is registered with it and the stack is up, every metrics surface
-	// reads from the one shared Prometheus. Falls through to the
-	// per-instance Prometheus below otherwise (no regression for
-	// instances brought up before the shared stack existed).
+	// Shared host-level stack first; falls through to per-instance below.
 	if st, err := registry.LookupByComposeProject(project); err == nil {
 		if localnet.InstanceObservabilityEnabled(st.Name) {
 			if h, p, e := localnet.SharedPrometheusEndpoint(ctx); e == nil {
-				// scope = instance name: the shared Prometheus scrapes
-				// every instance, so headlines/charts must filter to one.
+				// scope = instance name: the shared Prometheus scrapes every
+				// instance, so headlines/charts must filter to one.
 				storePromCache(project, h, p, st.Name, nil)
 				return h, p, nil
 			}
@@ -484,8 +396,7 @@ func discoverPrometheus(ctx context.Context, project string) (string, int, error
 		}
 	}
 	if !running {
-		// Cache the negative result too — observability-off
-		// screens hammer this just as hard as -on screens.
+		// Cache the negative too — obs-off screens hammer this just as hard.
 		storePromCache(project, "", 0, "", errPrometheusNotRunning)
 		return "", 0, errPrometheusNotRunning
 	}
@@ -503,20 +414,15 @@ func discoverPrometheus(ctx context.Context, project string) (string, int, error
 	return "127.0.0.1", port, nil
 }
 
-// promCache caches the (host, port) discovery result with a short
-// TTL so the Metrics screen's 9-chart, 5-second polling cadence
-// doesn't run 1.8 docker-compose-ps subprocesses per second per
-// instance. TTL chosen to match the polling interval — a stopped
-// Prometheus surfaces within one tick.
+// promCacheTTL matches the polling interval so a stopped Prometheus surfaces
+// within one tick.
 const promCacheTTL = 5 * time.Second
 
 type promCacheEntry struct {
 	host string
 	port int
-	// scope is the instance label the chart/summary queries should filter
-	// by when this project is served by the shared multi-instance stack
-	// (the instance name), or "" for the per-instance Prometheus. Stored
-	// alongside host:port so promScopeFor reads the same cached decision.
+	// scope is the instance label to filter by (shared stack) or "" (per-
+	// instance), stored so promScopeFor reads the same cached decision.
 	scope   string
 	err     error
 	expires time.Time
@@ -537,11 +443,8 @@ func lookupPromCache(project string) (host string, port int, err error, ok bool)
 	return e.host, e.port, e.err, true
 }
 
-// lookupPromScope returns the instance label the cached discovery decided
-// the queries should filter by (the shared multi-instance stack), or ""
-// for the per-instance path or a missing/expired entry. Same cache as
-// discoverPrometheus so the summary's reported scope and the endpoint the
-// charts query can't disagree within a TTL.
+// lookupPromScope returns the cached discovery's scope label, or "" for the
+// per-instance path or a missing/expired entry.
 func lookupPromScope(project string) string {
 	promCacheMu.Lock()
 	defer promCacheMu.Unlock()

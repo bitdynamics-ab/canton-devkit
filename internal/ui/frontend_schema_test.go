@@ -2,6 +2,7 @@ package ui
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -67,27 +68,32 @@ func TestFrontend_DistContainsRealBuildOrPlaceholder(t *testing.T) {
 	}
 }
 
-// TestFrontend_DistIndexReferencesExistingAssets catches stale Vite
-// hash references before they ship.
-func TestFrontend_DistIndexReferencesExistingAssets(t *testing.T) {
-	body, err := os.ReadFile(filepath.Join("dist", "index.html"))
+// TestFrontend_TrackedDistIsPlaceholder pins the git-tracked content of
+// dist/index.html to the placeholder. The working-tree file is
+// legitimately overwritten by `make frontend`, so this checks what's
+// committed (git show HEAD:...) rather than the file on disk.
+//
+// Why this matters: a real Vite build's index.html references hashed
+// /assets/index-*.js and *.css files that are git-ignored. Committing
+// such a build over the placeholder means a fresh checkout points at
+// files that were never committed. Keep the placeholder tracked; let
+// `make frontend` produce the real bundle at build time.
+func TestFrontend_TrackedDistIsPlaceholder(t *testing.T) {
+	// Package dir is internal/ui; repo root is two levels up.
+	cmd := exec.Command("git", "show", "HEAD:internal/ui/dist/index.html")
+	cmd.Dir = filepath.Join("..", "..")
+	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("dist/index.html: %v", err)
+		// No git (source tarball) or path not tracked: nothing to
+		// assert about committed content. Skip, consistent with the
+		// other frontend tests that tolerate a missing source tree.
+		t.Skipf("cannot read git-tracked dist/index.html, skipping: %v", err)
 	}
-	html := string(body)
-	if strings.Contains(html, placeholderSentinel) {
-		t.Skip("placeholder index has no generated asset references")
-	}
-
-	re := regexp.MustCompile(`/(assets/[^"'>[:space:]]+)`)
-	matches := re.FindAllStringSubmatch(html, -1)
-	if len(matches) == 0 {
-		t.Fatal("dist/index.html has no /assets/... references")
-	}
-	for _, match := range matches {
-		assetPath := filepath.FromSlash(match[1])
-		if _, err := os.Stat(filepath.Join("dist", assetPath)); err != nil {
-			t.Errorf("dist/index.html references missing asset %q: %v", match[1], err)
-		}
+	if !strings.Contains(string(out), placeholderSentinel) {
+		t.Errorf("git-tracked internal/ui/dist/index.html is not the placeholder "+
+			"(missing %q). A real Vite build was likely committed over it; the "+
+			"hashed /assets/*.js and *.css it references are git-ignored, so a "+
+			"fresh checkout breaks. Restore the placeholder version.\n%s",
+			placeholderSentinel, string(out[:min(200, len(out))]))
 	}
 }

@@ -1,0 +1,32 @@
+name: Static Analysis
+
+on:
+  pull_request:
+    paths:
+      - "scripts/e2e/**"
+      - ".github/workflows/static-analysis.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/e2e/**"
+      - ".github/workflows/static-analysis.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-shell:
+    name: e2e scripts syntax
+    runs-on: [self-hosted, Linux]
+
+    steps:
+      - name: Check out repository
+        # actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Validate Milestone 1 E2E script syntax
+        run: |
+          for script in scripts/e2e/*.sh; do
+            bash -n "$script"
+          done

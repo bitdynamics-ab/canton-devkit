@@ -282,7 +282,7 @@ func resolveLedgerTokenRaw(conn LedgerConn) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf(
 			"no captured credentials for role %q and could not load env files (%w); "+
-				"run `canton-devkit localnet creds --name %s --role %s --format raw` "+
+				"run `canton-devkit localnet creds %s --role %s --format raw` "+
 				"to confirm token issuance, or pass --token explicitly",
 			role, err, conn.Instance, role)
 	}
@@ -297,7 +297,7 @@ func resolveLedgerTokenRaw(conn LedgerConn) (string, error) {
 	}
 	return "", fmt.Errorf(
 		"no captured credentials AND no env entry for role %q on instance %q; "+
-			"run `canton-devkit localnet creds --name %s --role %s --format raw` "+
+			"run `canton-devkit localnet creds %s --role %s --format raw` "+
 			"to confirm what's available, or pass --token explicitly",
 		role, conn.Instance, conn.Instance, role)
 }

@@ -1,14 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, fetchContainerLogs } from "../api";
-import { W, wMono, wSans } from "../tokens";
+import { W, wMono, wSans, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { IcX } from "../components/icons";
 
-// ContainerLogsModal — opens when the user clicks a row in
-// ContainerHealth. Polls docker logs for the selected container at
-// LOG_POLL_MS and renders them in a terminal-styled <pre>. Tail size
-// and since duration are toolbar-tunable; auto-scroll-to-bottom is on
-// by default but disabled once the user scrolls up.
+// Polls docker logs for the selected container at LOG_POLL_MS. Tail
+// and since are toolbar-tunable; auto-scroll disables once the user
+// scrolls up.
 
 const LOG_POLL_MS = 3000;
 
@@ -27,12 +25,10 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
   const [loading, setLoading] = useState(false);
   const preRef = useRef<HTMLPreElement>(null);
   const autoScrollRef = useRef(true);
-  // Only close when both mousedown AND click originated on the overlay;
-  // otherwise the click that opened the modal (mousedown on a row cell,
-  // mouseup after the modal mounted) would immediately close it.
+  // Close only when both mousedown AND click landed on the overlay, else
+  // the opening click (mouseup after the modal mounts) closes it instantly.
   const downOnOverlayRef = useRef(false);
 
-  // Esc closes.
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
@@ -73,8 +69,6 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
     };
   }, [open, instance, container, tail, since]);
 
-  // Auto-scroll to bottom on new content unless the user scrolled up;
-  // tracked via a ref to avoid a state update per scroll event.
   useEffect(() => {
     if (!preRef.current || !autoScrollRef.current) return;
     preRef.current.scrollTop = preRef.current.scrollHeight;
@@ -106,10 +100,10 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
       <div onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} style={modalStyle}>
         <header style={headerStyle}>
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14, color: W.text }}>
+            <div style={{ fontWeight: 600, fontSize: fs.strong, color: W.text }}>
               Logs · <code style={{ color: W.brand, fontFamily: wMono }}>{container}</code>
             </div>
-            <div style={{ color: W.dim, fontSize: 11.5, marginTop: 2, fontFamily: wMono }}>
+            <div style={{ color: W.dim, fontSize: fs.label, marginTop: 2, fontFamily: wMono }}>
               {instance} · polled every {LOG_POLL_MS / 1000}s {loading && "· refreshing"}
             </div>
           </div>
@@ -134,10 +128,10 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
             role="alert"
             style={{
               color: W.err,
-              background: `${W.err}10`,
+              background: `${tint(W.err, 6)}`,
               borderBottom: `1px solid ${W.err}`,
               padding: "8px 16px",
-              fontSize: 12,
+              fontSize: fs.meta,
             }}
           >
             {err}
@@ -153,7 +147,7 @@ export function ContainerLogsModal({ open, instance, container, onClose }: Props
             background: W.bg,
             color: W.text2,
             fontFamily: wMono,
-            fontSize: 11,
+            fontSize: fs.label,
             lineHeight: 1.55,
             whiteSpace: "pre-wrap",
             wordBreak: "break-all",
@@ -182,7 +176,7 @@ function Toolbar({
 }) {
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-      <label style={{ color: W.dim, fontSize: 11, fontFamily: wMono }}>
+      <label style={{ color: W.dim, fontSize: fs.label, fontFamily: wMono }}>
         tail
         <select
           value={tail}
@@ -196,7 +190,7 @@ function Toolbar({
           ))}
         </select>
       </label>
-      <label style={{ color: W.dim, fontSize: 11, fontFamily: wMono }}>
+      <label style={{ color: W.dim, fontSize: fs.label, fontFamily: wMono }}>
         since
         <select
           value={since}
@@ -230,9 +224,8 @@ const modalStyle: React.CSSProperties = {
   width: "min(900px, 95vw)",
   height: "min(700px, 88vh)",
   background: W.surface,
-  border: `1px solid ${W.border}`,
-  borderRadius: 4,
-  boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+  border: `1px solid ${W.borderHi}`,
+  borderRadius: R.card,
   display: "flex",
   flexDirection: "column",
   overflow: "hidden",
@@ -250,9 +243,9 @@ const selectStyle: React.CSSProperties = {
   background: W.bg,
   color: W.text,
   border: `1px solid ${W.border}`,
-  borderRadius: 2,
+  borderRadius: R.control,
   padding: "2px 6px",
-  fontSize: 11,
+  fontSize: fs.label,
   fontFamily: wMono,
   marginLeft: 4,
 };

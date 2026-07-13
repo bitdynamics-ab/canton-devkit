@@ -7,44 +7,30 @@ import {
   fetchDoctor,
   fetchSpliceVersions,
 } from "../api";
-import { W, wMono, wideCaps } from "../tokens";
+import { W, wMono, wideCaps, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
+import { SkeletonTable, useLoadingDelay } from "../components/Skeleton";
 import { Dot, IcAlert, IcCheck, IcRefresh, IcX } from "../components/icons";
 
-// DoctorScreen — the Web UI surface for `dpm localnet doctor`.
-//
-// GET /api/doctor runs the same shared localnet.CollectDoctor collector
-// as the CLI verb: the resource/Docker gate /api/preflight exposes,
-// plus two advisory checks (platform-support matrix + host-port
-// availability). The report shape is types.PreflightReport — identical
-// to the create-modal preflight panel — so the two surfaces can't
-// drift.
-//
-// Not instance-scoped: doctor diagnoses the HOST, so it sits in the nav
-// alongside Overview rather than under an instance selector.
-
+// Web UI surface for `dpm localnet doctor`: GET /api/doctor runs the
+// same shared CollectDoctor collector as the CLI. Host-scoped, not per-instance.
 export function DoctorScreen() {
   const [report, setReport] = useState<PreflightReport | null>(null);
   const [versions, setVersions] = useState<SpliceVersionEntry[]>([]);
-  // "" → server's "latest" alias. The picker lets an operator grade
-  // the memory checks against a heavier Splice version's floor before
-  // they commit to creating an instance on that version.
+  // "" → server's "latest" alias; the picker grades memory checks
+  // against a chosen Splice version's floor before committing to it.
   const [version, setVersion] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  // Load the curated version list once so the picker can offer the
-  // same tags the create modal does. A failure here is non-fatal: the
-  // doctor still runs against "latest", we just hide the picker.
+  // Non-fatal: on failure the picker hides and doctor runs against "latest".
   useEffect(() => {
     let cancelled = false;
     fetchSpliceVersions()
       .then((r) => {
         if (!cancelled) setVersions(r.versions);
       })
-      .catch(() => {
-        /* picker stays hidden; doctor still works against latest */
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -70,8 +56,6 @@ export function DoctorScreen() {
     };
   }, []);
 
-  // Re-run whenever the selected version changes (including the first
-  // mount with the default "latest").
   useEffect(() => run(version), [run, version]);
 
   return (
@@ -86,31 +70,70 @@ export function DoctorScreen() {
 
       {report && <SummaryBanner report={report} />}
 
-      {err && (
-        <div
-          style={{
-            marginTop: 16,
-            padding: "12px 14px",
-            background: `${W.err}1A`,
-            border: `1px solid ${W.err}`,
-            borderRadius: 4,
-            color: W.err,
-            fontSize: 13,
-          }}
-        >
-          {err}
-        </div>
-      )}
+      {err && <DoctorError message={err} onRetry={() => run(version)} />}
 
-      {loading && !report && (
-        <div style={{ marginTop: 24, color: W.dim, fontSize: 13 }}>
-          Running host checks…
-        </div>
-      )}
+      {loading && !report && !err && <DoctorLoading />}
 
       {report?.sections.map((sec) => (
         <Section key={sec.title} title={sec.title} checks={sec.checks} />
       ))}
+    </div>
+  );
+}
+
+function DoctorError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div
+      role="alert"
+      style={{
+        marginTop: 16,
+        padding: "12px 14px",
+        background: `${tint(W.err, 8)}`,
+        border: `1px solid ${W.err}`,
+        borderRadius: R.control,
+        color: W.text,
+        fontSize: fs.body,
+      }}
+    >
+      <strong style={{ color: W.err }}>Couldn't run host checks.</strong>{" "}
+      The doctor endpoint didn't respond. Confirm the devkit server is up,
+      then retry.
+      <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+        <Button variant="secondary" size="sm" icon={<IcRefresh />} onClick={onRetry}>
+          Retry
+        </Button>
+      </div>
+      <details style={{ marginTop: 8 }}>
+        <summary style={{ cursor: "pointer", color: W.dim, fontSize: fs.label }}>
+          Server message
+        </summary>
+        <div
+          style={{
+            marginTop: 6,
+            color: W.text2,
+            fontFamily: wMono,
+            fontSize: fs.label,
+          }}
+        >
+          {message}
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function DoctorLoading() {
+  const shown = useLoadingDelay(true);
+  if (!shown) return null;
+  return (
+    <div style={{ marginTop: 20 }}>
+      <SkeletonTable columns={["18px", 3, "60px"]} rows={4} rowHeight={40} />
     </div>
   );
 }
@@ -138,10 +161,10 @@ function Header({
       }}
     >
       <div style={{ flex: 1 }}>
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: W.text }}>
+        <h1 style={{ margin: 0, fontSize: fs.title, fontWeight: 600, color: W.text }}>
           Doctor
         </h1>
-        <p style={{ margin: "4px 0 0", color: W.dim, fontSize: 13 }}>
+        <p style={{ margin: "4px 0 0", color: W.dim, fontSize: fs.lead }}>
           Host readiness for Canton LocalNet — Docker, resources, network,
           platform support. Same checks as{" "}
           <code style={{ color: W.text2, fontFamily: wMono }}>
@@ -157,7 +180,7 @@ function Header({
             flexDirection: "column",
             gap: 4,
             color: W.dim,
-            fontSize: 11,
+            fontSize: fs.label,
           }}
         >
           version thresholds
@@ -169,10 +192,11 @@ function Header({
               background: W.surface,
               color: W.text,
               border: `1px solid ${W.border}`,
-              borderRadius: 2,
+              borderRadius: R.control,
               padding: "5px 8px",
-              fontSize: 12,
+              fontSize: fs.meta,
               fontFamily: wMono,
+              fontVariantNumeric: "tabular-nums",
             }}
           >
             <option value="">latest</option>
@@ -197,9 +221,7 @@ function Header({
   );
 }
 
-// SummaryBanner colors itself by the worst result: failing → red,
-// warning → amber, all-pass → brand. Mirrors the CLI's colored summary
-// Box so the two surfaces read the same.
+// Colored by the worst result: fail → red, warn → amber, all-pass → brand.
 function SummaryBanner({ report }: { report: PreflightReport }) {
   const warned = report.sections.some((s) =>
     s.checks.some((c) => c.result === "warn"),
@@ -218,11 +240,11 @@ function SummaryBanner({ report }: { report: PreflightReport }) {
       style={{
         marginTop: 16,
         padding: "12px 14px",
-        background: `${accent}14`,
+        background: tint(accent, 8),
         border: `1px solid ${accent}`,
-        borderRadius: 4,
+        borderRadius: R.control,
         color: accent,
-        fontSize: 13,
+        fontSize: fs.data,
         fontWeight: 600,
         display: "flex",
         gap: 8,
@@ -253,7 +275,7 @@ function Section({
         style={{
           ...wideCaps,
           margin: "0 0 8px",
-          fontSize: 12,
+          fontSize: fs.meta,
           color: W.dim,
         }}
       >
@@ -263,7 +285,7 @@ function Section({
         style={{
           background: W.surface,
           border: `1px solid ${W.border}`,
-          borderRadius: 4,
+          borderRadius: R.card,
           overflow: "hidden",
         }}
       >
@@ -299,12 +321,12 @@ function CheckRow({ check, last }: { check: PreflightCheck; last: boolean }) {
         <ResultGlyph result={check.result} />
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ color: W.text, fontSize: 13 }}>
+        <div style={{ color: W.text, fontSize: fs.data }}>
           {check.label}
           <span
             style={{
               marginLeft: 8,
-              fontSize: 10.5,
+              fontSize: fs.micro,
               fontFamily: wMono,
               color: glyphColor(check.result),
             }}
@@ -316,8 +338,9 @@ function CheckRow({ check, last }: { check: PreflightCheck; last: boolean }) {
           <div
             style={{
               color: W.dim,
-              fontSize: 11.5,
+              fontSize: fs.label,
               fontFamily: wMono,
+              fontVariantNumeric: "tabular-nums",
               marginTop: 2,
             }}
           >
@@ -330,7 +353,7 @@ function CheckRow({ check, last }: { check: PreflightCheck; last: boolean }) {
               margin: "8px 0 0",
               paddingLeft: 18,
               color: W.text2,
-              fontSize: 11.5,
+              fontSize: fs.label,
               lineHeight: 1.6,
             }}
           >

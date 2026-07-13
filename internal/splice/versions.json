@@ -1,7 +1,7 @@
 {
   "$schema": "Splice version catalogue. See versions.go for field semantics.",
   "_comment": "Maintainer flow: scripts/add-splice-version.sh <tag> resolves the tag → commit, downloads the archive, computes ContentSHA, and appends an entry here. Reviewer checks the diff before merging.",
-  "latest_alias": "0.6.4",
+  "latest_alias": "0.6.12",
   "versions": [
     {
       "tag": "0.5.18",
@@ -26,6 +26,42 @@
       "commit": "578b7822d62947763a48334d556aefebc7ffacec",
       "content_sha": "db1e1336dc4e33abe7011a0df29e5becd141d11c84cdf42849e48bf2106066af",
       "size": 137576613,
+      "major": "0.6",
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
+    },
+    {
+      "tag": "0.6.9",
+      "commit": "bc6a3587e7ea94230ba0c36c638945282c52b304",
+      "content_sha": "75b6197e9aa59afb5a527df7ec05f82f1d35f3cde2ccfe96f8c4ead5fd705e80",
+      "size": 153739520,
+      "major": "0.6",
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
+    },
+    {
+      "tag": "0.6.10",
+      "commit": "63cfb340ce0f8f254386d2d5df58905d695de902",
+      "content_sha": "3fdb3d0667923febd80cf0a2ff225ba29acff14276459c195914057b6eee5528",
+      "size": 154222474,
+      "major": "0.6",
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
+    },
+    {
+      "tag": "0.6.11",
+      "commit": "fd93f86ac42ce3a08985dcd0baae530b4f235f60",
+      "content_sha": "3fdb3d0667923febd80cf0a2ff225ba29acff14276459c195914057b6eee5528",
+      "size": 174548209,
+      "major": "0.6",
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
+    },
+    {
+      "tag": "0.6.12",
+      "commit": "17fd29aad170e8f20074aa64624c4506177ea7bd",
+      "content_sha": "3fdb3d0667923febd80cf0a2ff225ba29acff14276459c195914057b6eee5528",
+      "size": 184815106,
       "major": "0.6",
       "min_memory_bytes": 8000000000,
       "recommended_memory_bytes": 12000000000

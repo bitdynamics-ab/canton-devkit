@@ -1,15 +1,75 @@
 <!doctype html>
+<!-- DEVKIT_FRONTEND_PLACEHOLDER -->
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#0B0F1A" />
-  <title>canton-devkit</title>
-  <script type="module" crossorigin src="/assets/index-D7oNXGjZ.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CwXIBNIR.css">
+  <meta charset="utf-8">
+  <title>canton-devkit Web UI — frontend not built</title>
+  <!--
+    Placeholder dist/index.html — tracked in git on purpose.
+
+    go:embed (internal/ui/assets.go) requires at least one file under
+    dist/; an empty match is a compile error. A real Vite build
+    overwrites this file and adds hashed assets under dist/assets/,
+    which are git-ignored. Do NOT commit a production build over this
+    placeholder — a fresh clone would reference files that are not
+    tracked.
+
+    IsPlaceholderBundle() scans for the DEVKIT_FRONTEND_PLACEHOLDER
+    sentinel above; dpm localnet ui prints a stderr warning when it
+    is still present.
+
+    What to run (see CONTRIBUTING.md):
+
+      make build
+        Go-only workflow. The binary embeds this placeholder; that is
+        expected. You do not need the Web UI bundle for CLI or backend
+        work.
+
+      make ui
+        Build the production Vite bundle and the Go binary in one step
+        (same as make frontend && make build). Use this when you want
+        dpm localnet ui to serve the real embedded UI.
+
+      Web UI dev loop (hot reload — no make frontend needed):
+        Terminal 1: go run ./cmd/canton-devkit localnet ui --port 7777
+        Terminal 2: cd frontend && npm install && npm run dev
+        Open http://localhost:5173 (Vite proxies /api and /events).
+  -->
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font: 15px/1.6 system-ui,-apple-system,sans-serif; max-width: 640px; margin: 4em auto; padding: 0 1.2em; color: #1d2434; }
+    code { background: #f0f3f7; padding: .1em .4em; border-radius: 4px; }
+    pre  { background: #0b0e13; color: #e6edf3; padding: 1em; border-radius: 8px; overflow:auto; }
+    .muted { color: #6b7588; }
+    h2 { font-size: 1.05em; margin-top: 1.6em; }
+  </style>
 </head>
 <body>
-  <div id="root"></div>
+  <h1>canton-devkit Web UI</h1>
+  <p>This is the <strong>placeholder</strong> page embedded at build time.
+     The production Vite/React bundle was not built, so only this committed
+     <code>index.html</code> is inside the binary (JS/CSS assets are
+     git-ignored and produced by <code>make frontend</code>).</p>
+  <p class="muted">Seeing this after <code>make build</code> alone is
+     expected for Go-only work. See <code>CONTRIBUTING.md</code> for the
+     full contributor setup.</p>
+
+  <h2>Embed the production UI in the binary</h2>
+  <pre>make ui
+# equivalent: make frontend &amp;&amp; make build</pre>
+
+  <h2>Develop the UI with hot reload</h2>
+  <p>No <code>make frontend</code> needed — run the backend and Vite side
+     by side, then open port 5173:</p>
+  <pre># terminal 1 (repo root)
+go run ./cmd/canton-devkit localnet ui --port 7777
+
+# terminal 2
+cd frontend &amp;&amp; npm install &amp;&amp; npm run dev
+
+# browser: http://localhost:5173</pre>
+
+  <h2>Go-only contributors</h2>
+  <pre>make build    # → bin/canton-devkit; placeholder UI is fine</pre>
 </body>
 </html>

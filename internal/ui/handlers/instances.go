@@ -548,6 +548,8 @@ type upRequest struct {
 	AllowUncurated bool     `json:"allow_uncurated,omitempty"` // resolve unknown tags upstream
 	Profiles       []string `json:"profiles,omitempty"`        // docker-compose profiles; e.g. ["observability"]
 	PortBase       int      `json:"port_base,omitempty"`       // >0 → deterministic ports from this base (CLI --port-base parity)
+	// ObservabilityMode is the CLI --observability-mode parity: auto | shared | per-instance. Empty == auto.
+	ObservabilityMode string `json:"observability_mode,omitempty"`
 }
 
 // allowedProfiles is derived from localnet.KnownProfiles() so it can
@@ -620,6 +622,14 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 			return
 		}
 
+		if err := localnet.ValidateObservabilityMode(localnet.ObservabilityMode(req.ObservabilityMode)); err != nil {
+			writeErrorWithCode(w, http.StatusBadRequest,
+				ErrCodeInvalidRequest,
+				err.Error(),
+				"observability_mode must be one of: auto, shared, per-instance")
+			return
+		}
+
 		// Reject duplicates against BOTH the registry (an
 		// already-running instance) AND the jobs registry (a
 		// bring-up that hasn't finished yet). The two failure
@@ -631,7 +641,7 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 			writeErrorWithCode(w, http.StatusConflict,
 				"INSTANCE_EXISTS",
 				"instance "+req.Name+" already exists",
-				"pick a different name, or stop the existing one first via `dpm localnet down --name "+req.Name+"`")
+				"pick a different name, or stop the existing one first via `dpm localnet down "+req.Name+"`")
 			return
 		}
 		if jobs.Active(req.Name) {
@@ -732,11 +742,12 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 		}
 
 		opts := &localnet.UpOptions{
-			Name:           req.Name,
-			Version:        req.Version,
-			AllowUncurated: req.AllowUncurated,
-			Profiles:       req.Profiles,
-			PortBase:       req.PortBase,
+			Name:              req.Name,
+			Version:           req.Version,
+			AllowUncurated:    req.AllowUncurated,
+			Profiles:          req.Profiles,
+			PortBase:          req.PortBase,
+			ObservabilityMode: localnet.ObservabilityMode(req.ObservabilityMode),
 		}
 
 		go func() {
@@ -1145,7 +1156,7 @@ func handleDownInstance() http.HandlerFunc {
 			"DOWN_FAILED",
 			"failed to stop "+name+": "+firstNonWarningLine(cause),
 			"the docker compose down output is in the server log; "+
-				"try `dpm localnet down --name "+name+"` from a terminal for full output")
+				"try `dpm localnet down "+name+"` from a terminal for full output")
 	}
 }
 
@@ -1690,7 +1701,7 @@ func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
 			writeErrorWithCode(w, http.StatusConflict,
 				"INSTANCE_RUNNING",
 				"instance "+name+" is running — stop it first",
-				"run `dpm localnet down --name "+name+"` from a terminal")
+				"run `dpm localnet down "+name+"` from a terminal")
 			return
 		}
 
@@ -1965,10 +1976,12 @@ func (r observabilityToggleRequest) resolveTargets() (prom, graf bool, ok bool) 
 //
 //	enabled=true  → MaterializeObservabilityOverlay into dataDir,
 //	                append the overlay to state.ComposeFiles if
-//	                absent, run `docker compose ... --profile
-//	                observability up -d prometheus grafana`,
-//	                discover the new host port, persist into
-//	                state.Ports["prometheus_ui"].
+//	                absent, then bring up each requested sidecar with
+//	                its own `docker compose ... up -d --no-deps <svc>`
+//	                under the profile set the service needs (grafana
+//	                also activates the prometheus profile so its
+//	                `depends_on: prometheus` resolves). Discover the
+//	                new host port, persist into state.Ports[...].
 //	enabled=false → `docker compose ... stop prometheus grafana`
 //	                then `... rm -f prometheus grafana`. Clear the
 //	                port from state.json. Canton + splice are

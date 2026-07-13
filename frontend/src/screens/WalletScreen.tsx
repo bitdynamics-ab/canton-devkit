@@ -1,43 +1,31 @@
 import { useEffect, useState } from "react";
 import { ApiError, fetchInstance, type Instance, type Role } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { ROLE_COLOR, W, wMono } from "../tokens";
+import { ROLE_COLOR, W, wMono, tint, R, FAST, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcAlert, IcRefresh } from "../components/icons";
 
-// WalletScreen embeds Splice's per-role Wallet UI inside the DevKit
-// shell so users don't juggle three browser tabs (one per party).
-// The iframe target is the `<role>_ui` host port from state.json —
-// Splice already exposes its wallet there; we just frame it with a
-// role switcher.
-//
-// X-Frame-Options is empty on Splice 0.6.4's wallet UI (nginx sends
-// no frame-options header), so the iframe loads directly. If a future
-// Splice release ships SAMEORIGIN, the "Open in new tab" fallback
-// covers it.
+// Embeds Splice's per-role Wallet UI (the `<role>_ui` host port from
+// state.json) in an iframe. Splice 0.6.4 sends no X-Frame-Options, so it
+// loads directly; the "Open in new tab" fallback covers a future SAMEORIGIN.
 const ROLES: Role[] = ["app-user", "app-provider", "sv"];
 
-// LocalNet wallet login user names — the hardcoded
-// AUTH_<ROLE>_WALLET_ADMIN_USER_NAME values from
-// `env/<role>-auth-on.env`. Password is ignored: LocalNet auth is
-// dev-only HS-256 with the literal secret "unsafe" (no MetaMask,
-// no real OAuth provider).
+// Hardcoded AUTH_<ROLE>_WALLET_ADMIN_USER_NAME values from env/<role>-auth-on.env.
+// Password is ignored: LocalNet auth is dev-only HS-256 with the secret "unsafe".
 const LOGIN_USER_FOR: Record<Role, string> = {
   "app-user": "app-user",
   "app-provider": "app-provider",
   sv: "sv",
 };
 
-// Per-role wallet endpoint keys — the logical port names from
-// state.json. Endpoints are matched by key; labels are display-only.
+// Logical port names from state.json; endpoints match by key, labels are display-only.
 const WALLET_ENDPOINT_KEY: Record<Role, string> = {
   "app-user": "app_user_ui",
   "app-provider": "app_provider_ui",
   sv: "sv_ui",
 };
 
-// walletEndpointFor returns the whole endpoint so callers can read
-// both the URL and the backend's reachability verdict.
+// Returns the whole endpoint so callers get both URL and reachability verdict.
 function walletEndpointFor(role: Role, endpoints: Instance["endpoints"]) {
   if (!endpoints) return null;
   const want = WALLET_ENDPOINT_KEY[role];
@@ -53,8 +41,7 @@ export function WalletScreen() {
     | { kind: "ok"; instance: Instance }
     | { kind: "err"; error: string }
   >({ kind: "loading" });
-  // Bumped by Retry to re-fetch the instance, which re-runs the
-  // backend reachability probe.
+  // Bumped by Retry to re-fetch and re-run the backend reachability probe.
   const [refetchNonce, setRefetchNonce] = useState(0);
 
   useEffect(() => {
@@ -90,7 +77,7 @@ export function WalletScreen() {
   if (state.kind === "loading") {
     return (
       <section style={{ padding: 24 }}>
-        <p style={{ color: W.dim, fontSize: 13 }}>Loading wallet…</p>
+        <p style={{ color: W.dim, fontSize: fs.data }}>Loading wallet…</p>
       </section>
     );
   }
@@ -98,17 +85,15 @@ export function WalletScreen() {
   if (state.kind === "err") {
     return (
       <section style={{ padding: 24 }}>
-        <p style={{ color: W.err, fontSize: 13 }}>{state.error}</p>
+        <p style={{ color: W.err, fontSize: fs.data }}>{state.error}</p>
       </section>
     );
   }
 
-  // null when the instance doesn't yet have endpoints surfaced.
   const walletEndpoint = walletEndpointFor(role, state.instance.endpoints);
   const walletURL = walletEndpoint?.url ?? null;
-  // Backend status probe verdict. An iframe pointed at a dead port
-  // renders the browser's own gray error page; own the failure state
-  // instead and point at the fix.
+  // Own the failure state rather than let an iframe render the browser's
+  // gray error page on a dead port.
   const walletUnreachable = walletEndpoint?.reachability === "unreachable";
 
   return (
@@ -121,7 +106,6 @@ export function WalletScreen() {
         gap: 14,
       }}
     >
-      {/* Header */}
       <header
         style={{
           display: "flex",
@@ -139,10 +123,10 @@ export function WalletScreen() {
               marginBottom: 4,
             }}
           >
-            <h2 style={{ color: W.text, fontSize: 18, margin: 0 }}>Wallet</h2>
+            <h2 style={{ color: W.text, fontSize: fs.title, margin: 0 }}>Wallet</h2>
             <Pill>provided by Splice</Pill>
           </div>
-          <div style={{ color: W.dim, fontSize: 12.5 }}>
+          <div style={{ color: W.dim, fontSize: fs.lead }}>
             Embedded Splice Wallet · DevKit handles auth + party selection so
             you don't juggle browser tabs.
           </div>
@@ -151,18 +135,17 @@ export function WalletScreen() {
         <RoleSwitcher role={role} onChange={setRole} />
       </header>
 
-      {/* Login help — surface the dev-mode credentials inline so
-          users don't have to dig through env files. */}
+      {/* Login help — dev-mode credentials inline, no env-file digging. */}
       <div
         style={{
-          background: `${W.brand}10`,
-          border: `1px solid ${W.brand}40`,
+          background: `${tint(W.brand, 6)}`,
+          border: `1px solid ${tint(W.brand, 25)}`,
           borderRadius: 4,
           padding: "10px 14px",
           display: "flex",
           alignItems: "center",
           gap: 12,
-          fontSize: 12,
+          fontSize: fs.meta,
           color: W.text2,
         }}
       >
@@ -180,13 +163,12 @@ export function WalletScreen() {
           >
             {LOGIN_USER_FOR[role]}
           </code>
-          . Password is unused — LocalNet auth is dev-mode HS-256 with the
+          . Password is unused. LocalNet auth is dev-mode HS-256 with the
           shared secret <code style={{ fontFamily: wMono }}>"unsafe"</code>.
           No MetaMask required.
         </div>
       </div>
 
-      {/* Active wallet info strip */}
       <div
         style={{
           background: W.surface,
@@ -202,16 +184,16 @@ export function WalletScreen() {
         <RoleAvatar role={role} />
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontWeight: 600, fontSize: 14, color: W.text }}>
+            <span style={{ fontWeight: 600, fontSize: fs.body, color: W.text }}>
               {role}
             </span>
-            <span style={{ color: W.dim, fontSize: 12 }}>@{name}</span>
+            <span style={{ color: W.dim, fontSize: fs.meta }}>@{name}</span>
             <Dot color={W.brand} />
           </div>
           <div
             style={{
               color: W.dim,
-              fontSize: 11.5,
+              fontSize: fs.label,
               fontFamily: wMono,
               marginTop: 4,
             }}
@@ -234,7 +216,6 @@ export function WalletScreen() {
         </div>
       </div>
 
-      {/* Embedded wallet iframe */}
       <div
         style={{
           flex: 1,
@@ -247,8 +228,7 @@ export function WalletScreen() {
           flexDirection: "column",
         }}
       >
-        {/* Fake browser chrome so devs know they're looking at the
-            real Splice UI inside our shell, not a re-implementation. */}
+        {/* Fake browser chrome: signals this is the real Splice UI, not a reimplementation. */}
         <div
           style={{
             background: W.border,
@@ -257,21 +237,21 @@ export function WalletScreen() {
             display: "flex",
             alignItems: "center",
             gap: 8,
-            fontSize: 11.5,
+            fontSize: fs.label,
             fontFamily: wMono,
             color: W.text2,
           }}
         >
           <Dot color={W.brand} />
           <span style={{ color: W.dim }}>{walletURL ?? "—"}</span>
-          <span style={{ marginLeft: "auto", color: W.dim, fontSize: 10.5 }}>
+          <span style={{ marginLeft: "auto", color: W.dim, fontSize: fs.micro }}>
             signed in as {role} via DevKit JWT
           </span>
         </div>
         {walletUnreachable ? (
           <div
             role="alert"
-            style={{ flex: 1, padding: 24, color: W.text2, fontSize: 13, lineHeight: 1.6 }}
+            style={{ flex: 1, padding: 24, color: W.text2, fontSize: fs.body, lineHeight: 1.6 }}
           >
             <div
               style={{
@@ -315,19 +295,10 @@ export function WalletScreen() {
             key={walletURL}
             src={walletURL}
             title={`Splice Wallet — ${role}`}
-            // Sandbox rationale: the "allow-same-origin +
-            // allow-scripts neutralises the sandbox" foot-gun only
-            // applies when the iframe origin EQUALS the parent's.
-            // Here the parent (127.0.0.1:<port>) and the iframe
-            // (wallet.localhost:<per-role port>) differ in host AND
-            // port, so they are cross-origin: `allow-same-origin`
-            // lets the wallet's scripts read ITS OWN cookies /
-            // localStorage (needed for its auth session) but not the
-            // parent's origin or `window.top`. Without it the iframe
-            // would get a unique opaque origin and the wallet's
-            // cookie-based auth would break. Deliberately omitted:
-            // allow-top-navigation, allow-modals, allow-downloads,
-            // allow-popups-to-escape-sandbox.
+            // The allow-same-origin + allow-scripts foot-gun only bites when
+            // iframe and parent share an origin; here they differ in host and
+            // port, so allow-same-origin only lets the wallet reach its own
+            // cookies/localStorage (needed for its auth), not the parent.
             sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
             referrerPolicy="no-referrer"
             style={{ flex: 1, border: 0, background: "#FCFCFD" }}
@@ -337,7 +308,7 @@ export function WalletScreen() {
             No wallet endpoint recorded for{" "}
             <code style={{ fontFamily: wMono, color: W.text2 }}>{role}</code>{" "}
             on this instance. Splice publishes a per-role wallet UI on a host
-            port — re-run{" "}
+            port. Re-run{" "}
             <code style={{ fontFamily: wMono, color: W.text2 }}>
               dpm localnet up --name {name}
             </code>{" "}
@@ -378,15 +349,15 @@ function RoleSwitcher({
               alignItems: "center",
               gap: 8,
               padding: "6px 11px",
-              borderRadius: 2,
+              borderRadius: R.control,
               border: "none",
-              background: active ? W.surface : "transparent",
+              background: active ? tint(W.brand, 16) : "transparent",
               cursor: active ? "default" : "pointer",
-              fontSize: 12.5,
+              fontSize: fs.meta,
               fontFamily: wMono,
               fontWeight: active ? 600 : 500,
               color: active ? W.text : W.dim,
-              boxShadow: active ? `0 0 0 1px ${W.brand}` : "none",
+              transition: `background-color ${FAST}`,
             }}
           >
             <RoleAvatarMini role={id} />
@@ -406,13 +377,13 @@ function RoleAvatar({ role }: { role: Role }) {
         width: 36,
         height: 36,
         borderRadius: "50%",
-        background: `linear-gradient(135deg, ${color}, ${W.brand})`,
-        color: "#0B0F1A",
+        background: color,
+        color: W.onAccent,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         fontWeight: 600,
-        fontSize: 13,
+        fontSize: fs.data,
       }}
     >
       {role[0].toUpperCase()}
@@ -428,13 +399,13 @@ function RoleAvatarMini({ role }: { role: Role }) {
         width: 16,
         height: 16,
         borderRadius: "50%",
-        background: `linear-gradient(135deg, ${color}, ${W.brand})`,
-        color: "#0B0F1A",
+        background: color,
+        color: W.onAccent,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         fontWeight: 600,
-        fontSize: 9,
+        fontSize: fs.micro,
       }}
     >
       {role[0].toUpperCase()}
@@ -450,9 +421,9 @@ function Pill({ children }: { children: React.ReactNode }) {
         border: `1px solid ${W.border}`,
         padding: "1px 7px",
         borderRadius: 2,
-        fontSize: 10.5,
+        fontSize: fs.micro,
         fontFamily: wMono,
-        background: `${W.border}40`,
+        background: `${tint(W.border, 25)}`,
       }}
     >
       {children}

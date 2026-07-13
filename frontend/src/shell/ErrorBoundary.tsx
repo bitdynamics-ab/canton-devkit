@@ -1,31 +1,21 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { W, wMono } from "../tokens";
+import { W, wMono, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
 
-// ErrorBoundary — catches render-time exceptions from descendants and
-// renders a fallback so one crashed screen doesn't take the whole UI
-// down. Wrapped per-route so the shell stays interactive and sibling
-// routes stay renderable. Class component because React's
-// error-boundary API has no hook equivalent.
-//
-// No automatic recovery: a render that threw once will almost
-// certainly throw again on the same state, so auto-retry would
-// busy-loop. The "Retry" button instead forces a re-mount via a reset
-// key so transient state corruption gets a fresh shot.
+// Catches render-time exceptions per-route so one crashed screen doesn't
+// take the whole UI down. Class component because the error-boundary API
+// has no hook equivalent. No auto-retry (would busy-loop on the same
+// state); Retry forces a re-mount via resetCount.
 
 interface Props {
-  // routeKey lets the parent force a reset when navigating to a
-  // new screen — without this, an error from /explorer would
-  // stick around when the user clicks /overview because the
-  // boundary itself stays mounted across the Routes switch.
+  // Force a reset on navigation; the boundary stays mounted across the
+  // Routes switch, so without this a crashed screen's error persists.
   routeKey?: string;
   children: ReactNode;
 }
 
 interface State {
   error: Error | null;
-  // Bump to force the boundary to drop its error and re-render
-  // children. Used by the Retry button.
   resetCount: number;
 }
 
@@ -37,16 +27,13 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // The fallback shows only .name/.message; the full stack goes to
-    // the console. Don't ship to a remote telemetry endpoint without
-    // explicit user consent.
+    // Full stack to the console only; no remote telemetry without consent.
     // eslint-disable-next-line no-console
     console.error("ErrorBoundary caught a render error:", error, info);
   }
 
   componentDidUpdate(prev: Props) {
-    // Route change → drop the error; otherwise navigating away from a
-    // crashed screen keeps showing the fallback.
+    // Route change → drop the error, else the fallback persists after nav.
     if (prev.routeKey !== this.props.routeKey && this.state.error) {
       this.setState({ error: null });
     }
@@ -57,9 +44,8 @@ export class ErrorBoundary extends Component<Props, State> {
       return <Fallback error={this.state.error} onRetry={this.handleRetry} />;
     }
     return (
-      // The reset key forces a clean remount of children when
-      // the user clicks Retry — without remount, a stale closure
-      // or torn fetch can re-throw the same error immediately.
+      // resetCount key forces a clean remount on Retry; without it a stale
+      // closure or torn fetch re-throws the same error immediately.
       <div key={this.state.resetCount}>{this.props.children}</div>
     );
   }
@@ -79,50 +65,56 @@ function Fallback({ error, onRetry }: FallbackProps) {
     <div
       role="alert"
       style={{
-        background: `${W.err}10`,
+        background: `${tint(W.err, 6)}`,
         border: `1px solid ${W.err}`,
-        borderRadius: 4,
-        padding: 20,
+        borderRadius: R.control,
+        padding: 16,
         margin: "8px 0",
         color: W.text,
       }}
     >
       <header style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-        <strong style={{ color: W.err, fontSize: 14 }}>
+        <strong style={{ color: W.err, fontSize: fs.strong }}>
           This screen hit a render error
         </strong>
-        <code style={{ color: W.dim, fontSize: 11, fontFamily: wMono }}>
+        <code style={{ color: W.dim, fontSize: fs.label, fontFamily: wMono }}>
           {error.name}
         </code>
       </header>
-      <p style={{ color: W.text2, fontSize: 13, marginTop: 8, marginBottom: 12 }}>
-        The rest of the UI is still usable — switch screens via the
-        sidebar or ⌘K. If the error keeps coming back, capture this
-        block in a screenshot and the full stack from your browser's
-        dev-tools console.
+      <p style={{ color: W.text2, fontSize: fs.lead, marginTop: 8, marginBottom: 12 }}>
+        The rest of the console still works. Switch screens from the
+        sidebar or ⌘K. Retry re-mounts this screen. If it throws again,
+        open the browser dev-tools console for the full stack.
       </p>
-      <pre
-        style={{
-          background: W.bg,
-          border: `1px solid ${W.border}`,
-          borderRadius: 2,
-          padding: "10px 12px",
-          fontFamily: wMono,
-          fontSize: 11.5,
-          color: W.text2,
-          margin: 0,
-          maxHeight: 120,
-          overflow: "auto",
-          whiteSpace: "pre-wrap",
-        }}
-      >
-        {error.message || "(no message)"}
-      </pre>
-      <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
         <Button variant="secondary" size="md" onClick={onRetry}>
           Retry
         </Button>
       </div>
+      <details style={{ marginTop: 8 }}>
+        <summary
+          style={{ cursor: "pointer", color: W.dim, fontSize: fs.label }}
+        >
+          Error details
+        </summary>
+        <pre
+          style={{
+            background: W.bg,
+            border: `1px solid ${W.border}`,
+            borderRadius: R.control,
+            padding: "10px 12px",
+            fontFamily: wMono,
+            fontSize: fs.label,
+            color: W.text2,
+            margin: "8px 0 0",
+            maxHeight: 120,
+            overflow: "auto",
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {error.message || "(no message)"}
+        </pre>
+      </details>
     </div>
   );
 }

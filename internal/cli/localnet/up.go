@@ -40,6 +40,10 @@ Supported Splice versions: %s
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
+			if err := localnet.ValidateObservabilityMode(opts.ObservabilityMode); err != nil {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
+				return localnet.AsExitError(localnet.ExitUserError)
+			}
 			// TextProgress renders RunUp's typed step events as
 			// terminal lines (the Web UI handler passes an
 			// SSEProgress instead). NewTextProgress auto-detects
@@ -66,6 +70,11 @@ Supported Splice versions: %s
 			"`--profile observability` (legacy umbrella) activates both at once. "+
 			"Each adds ~250-350 MiB; host ports are allocated and persisted so "+
 			"re-up preserves bookmarked URLs. Repeatable for multiple profiles.")
+	cmd.Flags().StringVar((*string)(&opts.ObservabilityMode), "observability-mode", "",
+		"With an observability profile, choose the sidecar stack: `auto` (default) "+
+			"serves metrics from the host-shared Prometheus+Grafana and skips the "+
+			"redundant per-instance overlay when that stack is reachable; `shared` "+
+			"forces shared-only; `per-instance` forces a dedicated overlay.")
 	cmd.Flags().IntVar(&opts.PortBase, "port-base", 0,
 		"Pin host ports deterministically from this base instead of auto-allocating "+
 			"(e.g. --port-base 20000 → each service gets base+N). Use for reproducible "+

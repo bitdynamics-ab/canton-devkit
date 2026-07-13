@@ -30,10 +30,16 @@ type ObservabilityState struct {
 	Grafana        bool
 	PrometheusPort int
 	GrafanaPort    int
+	// Shared reports that the instance is registered with the host-shared
+	// stack (its scrape target file exists). A shared-only instance has
+	// Shared true with Prometheus/Grafana false — metrics come from the
+	// shared stack, not a per-instance overlay.
+	Shared bool
 }
 
-// ReadObservabilityState derives the current per-component state from
-// the instance's persisted port map. Nil-safe.
+// ReadObservabilityState derives the current state from the instance's
+// persisted port map (per-instance overlay) and its shared-stack
+// registration. Nil-safe.
 func ReadObservabilityState(state *registry.State) ObservabilityState {
 	var s ObservabilityState
 	if state == nil {
@@ -47,6 +53,7 @@ func ReadObservabilityState(state *registry.State) ObservabilityState {
 		s.Grafana = true
 		s.GrafanaPort = p
 	}
+	s.Shared = InstanceObservabilityEnabled(state.Name)
 	return s
 }
 
@@ -106,7 +113,7 @@ func SetObservability(ctx context.Context, state *registry.State, wantProm, want
 
 	var promPort int
 	if wantProm && !cur.Prometheus {
-		out, port, err := enableObservabilitySidecar(ctx, state, PrometheusProfileName, "prometheus", 9090, logw)
+		out, port, err := enableObservabilitySidecar(ctx, state, "prometheus", 9090, logw)
 		if err != nil {
 			return res, fmt.Errorf("enable prometheus: %w\noutput:\n%s", err, out)
 		}
@@ -119,7 +126,7 @@ func SetObservability(ctx context.Context, state *registry.State, wantProm, want
 
 	var grafPort int
 	if wantGraf && !cur.Grafana {
-		out, port, err := enableObservabilitySidecar(ctx, state, GrafanaProfileName, "grafana", 3000, logw)
+		out, port, err := enableObservabilitySidecar(ctx, state, "grafana", 3000, logw)
 		if err != nil {
 			return res, fmt.Errorf("enable grafana: %w\noutput:\n%s", err, out)
 		}
@@ -200,13 +207,54 @@ func syncObservabilityProfiles(existing []string, prom, graf bool) []string {
 	return out
 }
 
+// observabilityUpProfiles returns the docker-compose profile set that
+// must be ACTIVE for a valid `up` of the named sidecar. Grafana declares
+// `depends_on: prometheus` in the overlay, so the prometheus profile has
+// to be active whenever grafana is started — otherwise Compose filters
+// prometheus out of the project model and rejects the whole project with
+// "grafana depends on undefined service prometheus". Prometheus stands
+// alone. The `--no-deps` on the `up` (see observabilityUpArgs) keeps
+// activating the prometheus profile from actually starting a Prometheus
+// container in a grafana-only (external-scrape) setup — it only makes
+// the dependency target *defined*.
+func observabilityUpProfiles(service string) []string {
+	if service == "grafana" {
+		return []string{PrometheusProfileName, GrafanaProfileName}
+	}
+	return []string{PrometheusProfileName}
+}
+
+// observabilityUpArgs builds the `docker compose … up` argv that brings
+// up a single observability sidecar. It activates every profile the
+// service's compose project needs to be valid (observabilityUpProfiles)
+// and passes `--no-deps` so the up is scoped to exactly the named
+// service — activating the prometheus profile for a grafana up makes
+// grafana's dependency resolvable without dragging a Prometheus
+// container up when the user only asked for Grafana.
+func observabilityUpArgs(project string, envFiles, composeFiles []string, service string) []string {
+	args := []string{"compose", "-p", project}
+	for _, f := range envFiles {
+		args = append(args, "--env-file", f)
+	}
+	for _, f := range composeFiles {
+		args = append(args, "-f", f)
+	}
+	for _, p := range observabilityUpProfiles(service) {
+		args = append(args, "--profile", p)
+	}
+	return append(args, "up", "-d", "--no-deps", service)
+}
+
 // enableObservabilitySidecar runs the docker-compose subcommands that
 // materialize the observability overlay and bring up a single named
-// sidecar service under the matching per-component profile. Returns the
-// captured combined output (for the error path) and the discovered host
-// port. portInternal is the in-container port to look up via
-// `docker compose port <svc> <port>` after the up succeeds.
-func enableObservabilitySidecar(ctx context.Context, state *registry.State, profile, service string, portInternal int, logw io.Writer) (string, int, error) {
+// sidecar service. The up activates the profile set the service needs to
+// form a valid compose project (grafana pulls in the prometheus profile
+// to satisfy its `depends_on`) and is scoped with `--no-deps` so only
+// the named service is touched. Returns the captured combined output
+// (for the error path) and the discovered host port. portInternal is the
+// in-container port to look up via `docker compose port <svc> <port>`
+// after the up succeeds.
+func enableObservabilitySidecar(ctx context.Context, state *registry.State, service string, portInternal int, logw io.Writer) (string, int, error) {
 	// Capture the overlay's "preserving local edits" drift notices so a
 	// caller toggling a sidecar still learns their local dashboard /
 	// scrape-config copy diverges from the bundled default.
@@ -254,14 +302,7 @@ func enableObservabilitySidecar(ctx context.Context, state *registry.State, prof
 		return "", 0, fmt.Errorf("rebuild compose env: %w", err)
 	}
 
-	args := []string{"compose", "-p", state.ComposeProject}
-	for _, f := range cenv.EnvFiles {
-		args = append(args, "--env-file", f)
-	}
-	for _, f := range state.ComposeFiles {
-		args = append(args, "-f", f)
-	}
-	args = append(args, "--profile", profile, "up", "-d", service)
+	args := observabilityUpArgs(state.ComposeProject, cenv.EnvFiles, state.ComposeFiles, service)
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Dir = state.ProjectDir

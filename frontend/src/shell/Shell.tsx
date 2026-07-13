@@ -1,17 +1,41 @@
-import { NavLink, useSearchParams } from "react-router-dom";
+import { NavLink, useLocation, useSearchParams } from "react-router-dom";
 import { useState } from "react";
-import { W, wMono, wSans } from "../tokens";
-import { IcChevronDown } from "../components/icons";
+import { W, wMono, wSans, wideCaps, tint, R, fs } from "../tokens";
+import { StatusBadge } from "../components/StatusBadge";
+import {
+  Dot,
+  IcOverview,
+  IcDoctor,
+  IcWallet,
+  IcExplorer,
+  IcPackage,
+  IcMetrics,
+  IcTokens,
+  IcAgent,
+  IcSun,
+  IcMoon,
+  IcBook,
+  IcChevronDown,
+} from "../components/icons";
+import { useTheme, toggleTheme } from "../theme";
 import { type ConnectionState, useConnectionHealth } from "./useConnectionHealth";
 import { type InstanceSelection, useInstanceSelection } from "./useInstanceSelection";
-import { CommandPalette } from "./CommandPalette";
+import { CommandPalette, openPalette } from "./CommandPalette";
 import { NAV, linkTo } from "./routes";
 
-// Shell — sidebar + topbar layout; children render in the main
-// content area. The sidebar order comes from the shared NAV table
-// (./routes), a design decision rather than an alphabetical accident.
-// The logo is drawn as an inline SVG so the shell renders correctly
-// even before public/assets/ files are served.
+const NAV_ICON: Record<string, (p: { size?: number }) => JSX.Element> = {
+  "/": IcOverview,
+  "/doctor": IcDoctor,
+  "/wallet": IcWallet,
+  "/explorer": IcExplorer,
+  "/dar": IcPackage,
+  "/metrics": IcMetrics,
+  "/tokens": IcTokens,
+  "/agent": IcAgent,
+};
+
+const DOCS_URL = "https://bitdynamics-ab.github.io/canton-devkit/";
+const REPO_URL = "https://github.com/bitdynamics-ab/canton-devkit";
 
 interface ShellProps {
   children: React.ReactNode;
@@ -22,10 +46,11 @@ export function Shell({ children }: ShellProps) {
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "240px 1fr",
+        gridTemplateColumns: "232px 1fr",
         gridTemplateRows: "52px 1fr",
         height: "100vh",
         fontFamily: wSans,
+        background: W.bg,
       }}
     >
       <SkipLink />
@@ -33,9 +58,7 @@ export function Shell({ children }: ShellProps) {
       <Sidebar />
       <main
         id="main-content"
-        // tabIndex=-1 so the SkipLink can programmatically focus
-        // it; without this the link jumps the scroll but
-        // keyboard focus stays in the topbar.
+        // tabIndex=-1 so the SkipLink can programmatically focus it.
         tabIndex={-1}
         style={{
           gridColumn: "2",
@@ -43,25 +66,18 @@ export function Shell({ children }: ShellProps) {
           overflow: "auto",
           padding: 24,
           background: W.bg,
-          // Suppress the focus outline on the scroll container —
-          // the SkipLink target getting outlined is visual noise;
-          // it's a focus *destination*, not a focusable control.
+          // SkipLink target is a focus destination, not a control; no outline.
           outline: "none",
         }}
       >
         {children}
       </main>
-      {/* Palette is a portal-style overlay (position: fixed),
-          rendered inside the grid but escaping it visually. */}
       <CommandPalette />
     </div>
   );
 }
 
 function SkipLink() {
-  // First focusable element on the page; visually hidden until
-  // focused. Anchor (not button) so screen readers announce
-  // "main, region" after activation — the standard pattern.
   return (
     <a
       href="#main-content"
@@ -81,9 +97,17 @@ function SkipLink() {
   );
 }
 
+// Match on pathname only; instance-scoped routes carry a query string.
+function currentRouteLabel(pathname: string): string {
+  const hit = NAV.find((n) => n.to === pathname);
+  return hit ? hit.label : "";
+}
+
 function TopBar() {
   const conn = useConnectionHealth();
   const sel = useInstanceSelection();
+  const { pathname } = useLocation();
+  const title = currentRouteLabel(pathname);
   return (
     <header
       style={{
@@ -91,59 +115,134 @@ function TopBar() {
         gridRow: "1",
         display: "flex",
         alignItems: "center",
-        gap: 12,
+        gap: 14,
         padding: "0 16px",
         background: W.bg,
         borderBottom: `1px solid ${W.border}`,
       }}
     >
       <LogoLockup />
-      <span style={{ color: W.dim, fontSize: 12 }}>
-        canton-devkit · local development
-      </span>
+      {title && (
+        <span
+          style={{
+            fontSize: fs.body,
+            fontWeight: 600,
+            fontStretch: "104%",
+            color: W.text,
+          }}
+        >
+          {title}
+        </span>
+      )}
       <InstanceSwitcher sel={sel} />
       <div style={{ flex: 1 }} />
       <PaletteHint />
-      <span style={{ color: W.faint, fontSize: 11 }}>
-        loopback only · ssh -L for remote
-      </span>
       <HealthPill conn={conn} />
+      <ThemeToggle />
+      <a
+        href={DOCS_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Open the documentation"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "0 10px",
+          height: 28,
+          borderRadius: 2,
+          border: `1px solid ${W.border}`,
+          color: W.text2,
+          fontSize: fs.meta,
+          textDecoration: "none",
+        }}
+      >
+        <IcBook size={13} />
+        Docs
+      </a>
     </header>
+  );
+}
+
+function ThemeToggle() {
+  const theme = useTheme();
+  const next = theme === "dark" ? "light" : "dark";
+  return (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      title={`Switch to ${next} theme`}
+      aria-label={`Switch to ${next} theme`}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 28,
+        height: 28,
+        borderRadius: 2,
+        border: `1px solid ${W.border}`,
+        background: "transparent",
+        color: W.text2,
+        cursor: "pointer",
+      }}
+    >
+      {theme === "dark" ? <IcSun size={14} /> : <IcMoon size={14} />}
+    </button>
   );
 }
 
 function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
   const [open, setOpen] = useState(false);
-  // Empty / loading / error states all degrade to a muted label
-  // rather than a dropdown. The Dashboard owns the "go run dpm
-  // localnet up" empty-state messaging; the topbar just shrugs.
   if (sel.loading) {
-    return <span style={pillStyle(W.dim)}>loading instances…</span>;
+    return <span style={pillStyle(W.dim)}>Loading instances…</span>;
   }
   if (sel.error || sel.instances.length === 0) {
-    return <span style={pillStyle(W.dim)}>no instances</span>;
+    return <span style={pillStyle(W.dim)}>No instances</span>;
   }
+  const selected = sel.instances.find((i) => i.name === sel.selected);
   return (
     <div style={{ position: "relative" }}>
       <button
         onClick={() => setOpen((v) => !v)}
         onBlur={() => {
-          // Defer so a click on a menu item registers before we
-          // unmount. 100ms = below the click-vs-tap perception
-          // threshold.
+          // Defer so a click on a menu item registers before we unmount.
           setTimeout(() => setOpen(false), 100);
         }}
         aria-haspopup="listbox"
         aria-expanded={open}
         style={{
-          ...pillStyle(W.brand),
-          background: `${W.brand}1A`,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          height: 28,
+          padding: "0 10px",
+          borderRadius: 2,
+          border: `1px solid ${W.border}`,
+          background: W.surface,
           cursor: "pointer",
         }}
       >
-        <span style={{ color: W.brand }}>instance:</span>{" "}
-        <strong style={{ color: W.text }}>{sel.selected ?? "—"}</strong>
-        <IcChevronDown size={12} style={{ marginLeft: 6, color: W.dim }} />
+        <StatusDot status={selected?.status ?? "stopped"} />
+        <span
+          style={{
+            ...wideCaps,
+            fontSize: fs.micro,
+            color: W.dim,
+          }}
+        >
+          instance
+        </span>
+        <strong
+          style={{
+            color: W.text,
+            fontFamily: wMono,
+            fontSize: fs.meta,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {sel.selected ?? "—"}
+        </strong>
+        <IcChevronDown size={12} style={{ color: W.dim }} />
       </button>
       {open && (
         <ul
@@ -157,10 +256,10 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
             listStyle: "none",
             background: W.surface,
             border: `1px solid ${W.border}`,
-            borderRadius: 4,
-            minWidth: 220,
+            borderRadius: R.card,
+            minWidth: 240,
             zIndex: 10,
-            boxShadow: "0 6px 24px rgba(0,0,0,0.4)",
+            boxShadow: "0 6px 20px rgba(0,0,0,0.16)",
           }}
         >
           {sel.instances.map((i) => (
@@ -169,9 +268,8 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
                 role="option"
                 aria-selected={i.name === sel.selected}
                 onMouseDown={(e) => {
-                  // mouseDown beats the button's own onBlur from
-                  // firing first and closing the menu. Without
-                  // this the click never lands.
+                  // mouseDown fires before the button's onBlur, so the
+                  // menu doesn't close before the click lands.
                   e.preventDefault();
                   sel.select(i.name);
                   setOpen(false);
@@ -179,23 +277,29 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 8,
+                  gap: 10,
                   width: "100%",
-                  padding: "6px 10px",
+                  padding: "7px 10px",
                   background:
-                    i.name === sel.selected ? W.surface2 : "transparent",
+                    i.name === sel.selected ? W.brandSoft : "transparent",
                   border: "none",
-                  borderRadius: 2,
-                  color: W.text,
+                  borderRadius: R.control,
+                  color: i.name === sel.selected ? W.brandText : W.text,
                   fontFamily: wMono,
-                  fontSize: 12,
+                  fontSize: fs.meta,
                   textAlign: "left",
                   cursor: "pointer",
                 }}
               >
-                <StatusDot status={i.status} />
                 <span style={{ flex: 1 }}>{i.name}</span>
-                <span style={{ color: W.dim, fontSize: 11 }}>
+                <StatusBadge status={i.status} />
+                <span
+                  style={{
+                    color: W.dim,
+                    fontSize: fs.label,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
                   {i.splice_version}
                 </span>
               </button>
@@ -207,48 +311,45 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
   );
 }
 
-function StatusDot({ status }: { status: string }) {
-  const color =
-    status === "running"
-      ? W.ok
-      : status === "failed"
+function statusColor(status: string): string {
+  return status === "running"
+    ? W.ok
+    : status === "failed"
       ? W.err
       : status === "stopped"
-      ? W.dim
-      : W.warn;
-  return (
-    <span
-      aria-hidden
-      style={{
-        width: 6,
-        height: 6,
-        borderRadius: "50%",
-        background: color,
-        flexShrink: 0,
-      }}
-    />
-  );
+        ? W.dim
+        : W.warn;
+}
+
+function StatusDot({ status }: { status: string }) {
+  return <Dot color={statusColor(status)} size={6} />;
 }
 
 function PaletteHint() {
-  // Static visual hint that the ⌘K palette exists. Not a button —
-  // pressing the actual key opens the modal; this is purely for
-  // discovery. UA-sniff for the glyph because Mac users expect ⌘
-  // and Windows/Linux users expect Ctrl.
+  // ⌘ on Mac, Ctrl elsewhere.
   const isMac =
     typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
   const mod = isMac ? "⌘" : "Ctrl";
   return (
-    <span
+    <button
+      type="button"
+      onClick={openPalette}
+      title="Open the command palette"
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 4,
+        gap: 8,
+        height: 28,
+        padding: "0 10px",
+        borderRadius: 2,
+        border: `1px solid ${W.border}`,
+        background: "transparent",
         color: W.dim,
-        fontSize: 11,
+        fontSize: fs.meta,
+        cursor: "pointer",
       }}
-      aria-hidden
     >
+      Commands
       <kbd
         style={{
           background: W.surface2,
@@ -256,14 +357,13 @@ function PaletteHint() {
           borderRadius: 2,
           padding: "1px 5px",
           fontFamily: wMono,
-          fontSize: 10,
+          fontSize: fs.micro,
           color: W.text2,
         }}
       >
         {mod} K
       </kbd>
-      <span>commands</span>
-    </span>
+    </button>
   );
 }
 
@@ -272,12 +372,13 @@ function pillStyle(color: string): React.CSSProperties {
     display: "inline-flex",
     alignItems: "center",
     gap: 6,
-    padding: "3px 10px",
+    height: 28,
+    padding: "0 10px",
     borderRadius: 2,
-    border: `1px solid ${color}`,
+    border: `1px solid ${W.border}`,
     color,
     fontFamily: wMono,
-    fontSize: 11,
+    fontSize: fs.label,
   };
 }
 
@@ -287,7 +388,7 @@ function HealthPill({ conn }: { conn: ConnectionState }) {
       case "ok":
         return {
           color: W.ok,
-          label: `v${conn.serverVersion}`,
+          label: "Connected",
           tooltip: `Connected · schema v${conn.serverVersion}`,
         };
       case "mismatch":
@@ -299,7 +400,7 @@ function HealthPill({ conn }: { conn: ConnectionState }) {
       case "offline":
         return {
           color: W.err,
-          label: "offline",
+          label: "Offline",
           tooltip:
             conn.serverVersion != null
               ? `Lost connection · last seen schema v${conn.serverVersion}`
@@ -313,63 +414,110 @@ function HealthPill({ conn }: { conn: ConnectionState }) {
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 6,
-        padding: "3px 9px",
+        gap: 7,
+        height: 28,
+        padding: "0 11px",
         borderRadius: 2,
-        border: `1px solid ${color}`,
-        background: `${color}1A`,
+        border: `1px solid ${tint(color, 40)}`,
+        background: tint(color, 10),
         color,
-        fontFamily: wMono,
-        fontSize: 11,
+        fontSize: fs.meta,
         cursor: "help",
       }}
     >
-      <span
-        aria-hidden
-        style={{
-          width: 7,
-          height: 7,
-          borderRadius: "50%",
-          background: color,
-          // Pulse only when degraded so a healthy connection
-          // doesn't add ambient motion to the chrome.
-          animation: conn.health === "ok" ? undefined : "pulse 1.6s ease-in-out infinite",
-        }}
-      />
+      <Dot color={color} size={7} pulse={conn.health !== "ok"} />
       {label}
     </span>
   );
 }
 
 function Sidebar() {
-  // Thread the currently-selected instance into per-instance routes
-  // so sidebar clicks don't drop the selection. NAV + linkTo live in
-  // ./routes so the ⌘K palette shares the same table.
+  // Thread the selected instance into per-instance routes so sidebar
+  // clicks don't drop the selection.
   const [params] = useSearchParams();
   const instance = params.get("instance");
+  const conn = useConnectionHealth();
   return (
     <nav
       style={{
         gridColumn: "1",
         gridRow: "2",
+        display: "flex",
+        flexDirection: "column",
         background: W.sunken,
         borderRight: `1px solid ${W.border}`,
-        padding: "12px 8px",
+        padding: "16px 10px 10px",
       }}
     >
-      {NAV.map((item) => (
-        <NavLink
-          key={item.to}
-          to={linkTo(item.to, item.instanceScoped, instance)}
-          end={item.to === "/"}
-          // Visuals live in index.css (.side-nav-link) so :hover and
-          // the router-managed .active class can carry the states.
-          className="side-nav-link"
-        >
-          {item.label}
-        </NavLink>
-      ))}
+      <div
+        style={{
+          ...wideCaps,
+          fontSize: fs.micro,
+          color: W.faint,
+          padding: "0 8px 8px",
+        }}
+      >
+        LocalNet
+      </div>
+      {NAV.map((item) => {
+        const Icon = NAV_ICON[item.to] ?? IcOverview;
+        return (
+          <NavLink
+            key={item.to}
+            to={linkTo(item.to, item.instanceScoped, instance)}
+            end={item.to === "/"}
+            className="side-nav-link"
+          >
+            <Icon size={15} />
+            {item.label}
+          </NavLink>
+        );
+      })}
+      <div style={{ flex: 1 }} />
+      <div
+        style={{
+          borderTop: `1px solid ${W.border}`,
+          padding: "10px 8px 2px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
+          fontSize: fs.label,
+          color: W.faint,
+          fontFamily: wMono,
+        }}
+      >
+        <span>
+          UI version: <UiVersion />
+        </span>
+        <span>
+          {conn.serverVersion != null
+            ? `schema v${conn.serverVersion}`
+            : "connecting…"}
+        </span>
+      </div>
     </nav>
+  );
+}
+
+// UiVersion renders the build commit id, linking to the GitHub commit
+// when it's a real sha. The "dev" fallback (no git checkout, or Vitest
+// where Vite's `define` doesn't apply) has no commit to point at, so it
+// renders as plain text.
+function UiVersion() {
+  const commit = typeof __UI_COMMIT__ !== "undefined" ? __UI_COMMIT__ : "dev";
+  if (commit === "dev") {
+    return <>{commit}</>;
+  }
+  return (
+    <a
+      href={`${REPO_URL}/commit/${commit}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`View commit ${commit} on GitHub`}
+      style={{ color: "inherit", textDecoration: "underline" }}
+    >
+      {commit}
+    </a>
   );
 }
 
@@ -383,24 +531,17 @@ function LogoLockup() {
         lineHeight: 1,
       }}
     >
-      <svg width="22" height="22" viewBox="0 0 64 64" aria-label="BitDynamics">
-        <rect x="10" y="10" width="44" height="44" fill="none" stroke={W.dim} strokeWidth="3" />
-        <rect x="22" y="22" width="20" height="20" fill={W.brand} />
-        <line x1="32" y1="0" x2="32" y2="8" stroke={W.brand} strokeWidth="4" />
-        <line x1="32" y1="56" x2="32" y2="64" stroke={W.dim} strokeWidth="3" />
-      </svg>
       <span
         style={{
-          // The brand's structural wide caps: 118% width, tracked out.
           fontFamily: wSans,
           fontStretch: "118%",
           color: W.text,
           fontWeight: 600,
           letterSpacing: "0.14em",
-          fontSize: 12,
+          fontSize: fs.body,
         }}
       >
-        BITDYNAMICS
+        CANTON DEVKIT
       </span>
     </span>
   );

@@ -89,6 +89,13 @@ type UpOptions struct {
 	// as before this field existed.
 	Profiles []string
 
+	// ObservabilityMode selects shared vs per-instance sidecars when an
+	// observability profile is enabled: auto (default) prefers the
+	// host-shared stack and skips the per-instance overlay when it is
+	// reachable, shared forces shared-only, per-instance forces the
+	// overlay. Empty == auto.
+	ObservabilityMode ObservabilityMode
+
 	// PortBase, when > 0, switches host-port assignment from automatic
 	// (ephemeral, stable-reuse) to DETERMINISTIC: each service is pinned
 	// to PortBase+N (see DeriveUIPorts). Used for reproducible
@@ -234,8 +241,8 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	// re-adds the base below, so there's no double-counting. An explicit
 	// --profile still wins (overrides, never merges). Best-effort: a
 	// missing/old state.json leaves opts.Profiles empty.
-	if len(opts.Profiles) == 0 {
-		if prior, rerr := registry.Read(opts.Name); rerr == nil {
+	if prior, rerr := registry.Read(opts.Name); rerr == nil {
+		if len(opts.Profiles) == 0 {
 			if optIns := subtractProfiles(prior.Profiles, adapter.Profiles()); len(optIns) > 0 {
 				opts.Profiles = optIns
 				prog.Warn(fmt.Sprintf(
@@ -243,6 +250,9 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 						"(pass --profile explicitly to change the set)",
 					opts.Name, strings.Join(optIns, ", ")))
 			}
+		}
+		if opts.ObservabilityMode == "" && prior.ObservabilityMode != "" {
+			opts.ObservabilityMode = ObservabilityMode(prior.ObservabilityMode)
 		}
 	}
 
@@ -354,14 +364,28 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			"--profile prometheus, or configure an external Prometheus " +
 			"manually before relying on the dashboards.")
 	}
+	perInstanceOverlay := false
 	if hasObservabilityProfile {
-		overlay, err := MaterializeObservabilityOverlay(dataDir, projectDir, prog.Err())
-		if err != nil {
-			prog.FailStep(StepPersistState,
-				"Failed to extract observability overlay", err)
-			return ExitRuntimeFailure
+		mode := normalizeObservabilityMode(opts.ObservabilityMode)
+		sharedReachable := false
+		if mode != ObservabilityModePerInstance {
+			sharedReachable = sharedStackReachable(ctx, prog.Err())
+			if mode == ObservabilityModeShared && !sharedReachable {
+				prog.Warn("--observability-mode shared: the host-shared " +
+					"observability stack is not reachable; metrics stay " +
+					"unavailable until it is.")
+			}
 		}
-		composeFiles = append(composeFiles, overlay)
+		perInstanceOverlay = usePerInstanceOverlay(mode, sharedReachable)
+		if perInstanceOverlay {
+			overlay, err := MaterializeObservabilityOverlay(dataDir, projectDir, prog.Err())
+			if err != nil {
+				prog.FailStep(StepPersistState,
+					"Failed to extract observability overlay", err)
+				return ExitRuntimeFailure
+			}
+			composeFiles = append(composeFiles, overlay)
+		}
 	}
 
 	// tokens-v2 profile materializes the alpha-protocol
@@ -416,7 +440,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		if prior.Status == registry.StatusRunning {
 			prog.FailStep(StepPersistState, fmt.Sprintf(
 				"instance %q is already running — stop it first with "+
-					"`localnet down --name %s`, or bounce it with `localnet restart --name %s`",
+					"`localnet down %s`, or bounce it with `localnet restart %s`",
 				opts.Name, opts.Name, opts.Name), nil)
 			return ExitUserError
 		}
@@ -438,6 +462,9 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	state.ComposeProject = "canton-" + opts.Name
 	state.ComposeFiles = composeFiles
 	state.Profiles = enabledProfiles
+	if hasObservabilityProfile {
+		state.ObservabilityMode = string(normalizeObservabilityMode(opts.ObservabilityMode))
+	}
 	state.DockerNetwork = opts.Name
 	state.ContainerPrefix = containerPrefix
 	state.ProjectDir = projectDir
@@ -500,10 +527,10 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	state.Ports["sv_ui"] = uiOverrides["SV_UI_PORT"]
 	state.Ports["swagger_ui"] = uiOverrides["SWAGGER_UI_PORT"]
 	state.Ports["postgres"] = uiOverrides["DB_PORT"]
-	if wantPrometheus {
+	if wantPrometheus && perInstanceOverlay {
 		state.Ports["prometheus_ui"] = uiOverrides["PROMETHEUS_HOST_PORT"]
 	}
-	if wantGrafana {
+	if wantGrafana && perInstanceOverlay {
 		state.Ports["grafana_ui"] = uiOverrides["GRAFANA_HOST_PORT"]
 	}
 	prog.FinishStep(StepPersistState, "")

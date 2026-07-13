@@ -53,6 +53,58 @@ func TestBuild_RootHelpMentionsKeyVerbs(t *testing.T) {
 	}
 }
 
+func TestUploadHelpUsesShortInstanceDescription(t *testing.T) {
+	root := Build(false)
+	root.SetArgs([]string{"upload", "--help"})
+	var buf bytes.Buffer
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute(): %v", err)
+	}
+	help := buf.String()
+	if !strings.Contains(help, "DevKit LocalNet instance name") {
+		t.Fatalf("help text missing short --instance description\n%s", help)
+	}
+	if strings.Contains(help, "resolves --admin-host + --token") {
+		t.Fatalf("help text contains overly detailed --instance description\n%s", help)
+	}
+}
+
+func TestSubcommandHelpAvoidsRPCImplementationDetails(t *testing.T) {
+	commands := [][]string{
+		{"upload", "--help"},
+		{"list", "--help"},
+		{"info", "--help"},
+		{"remove", "--help"},
+	}
+	for _, args := range commands {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			root := Build(false)
+			root.SetArgs(args)
+			var buf bytes.Buffer
+			root.SetOut(&buf)
+			root.SetErr(&buf)
+			if err := root.Execute(); err != nil {
+				t.Fatalf("Execute(): %v", err)
+			}
+			help := buf.String()
+			for _, unwanted := range []string{
+				"PackageService",
+				"ValidateDar",
+				"UploadDar",
+				"RemoveDar",
+				"UnvetDar",
+				"GetPackageReferences",
+			} {
+				if strings.Contains(help, unwanted) {
+					t.Errorf("help text should not expose implementation detail %q\nfull:\n%s", unwanted, help)
+				}
+			}
+		})
+	}
+}
+
 // TestUpload_RequiresArg: `dar upload` without a path argument
 // must fail with a clear usage error, not segfault or hang.
 func TestUpload_RequiresArg(t *testing.T) {

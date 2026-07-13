@@ -86,7 +86,7 @@ func runPauseTransition(ctx context.Context, out, errw io.Writer, opts *PauseOpt
 	state, err := registry.Read(opts.Name)
 	if err == registry.ErrNotFound {
 		_, _ = fmt.Fprintf(errw,
-			"No instance named %q is registered. Run `localnet up --name %s` first.\n",
+			"No instance named %q is registered. Run `localnet up %s` first.\n",
 			opts.Name, opts.Name)
 		return ExitUserError
 	}

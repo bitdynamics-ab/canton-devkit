@@ -13,8 +13,8 @@
 # guaranteed (GitLab's equivalent of GitHub's if: always()).
 
 variables:
-  DEVKIT_VERSION: "v0.7"
-  SPLICE_VERSION: "0.6.4"
+  DEVKIT_VERSION: "v0.15.1"
+  SPLICE_VERSION: "0.6.12"
   INSTANCE: "ci"
 
 localnet-tests:

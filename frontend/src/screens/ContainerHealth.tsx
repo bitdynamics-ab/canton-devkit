@@ -5,18 +5,14 @@ import {
   fetchContainers,
   restartContainer,
 } from "../api";
-import { W, wMono, tableCaps } from "../tokens";
+import { W, wMono, tableCaps, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcRefresh } from "../components/icons";
+import { confirmDialog } from "../components/ConfirmDialog";
 import { ContainerLogsModal } from "./ContainerLogsModal";
 
-// ContainerHealth — live per-container status panel. Polls
-// /api/instances/{name}/containers every POLL_MS so the user sees
-// real-time docker truth ("is canton in a restart loop, or did
-// postgres crash?") instead of the coarse registry status enum.
-//
-// Renders nothing when the instance has no docker project (backend
-// returns 503) — the InstanceDetail card stays usable.
+// Live per-container status, polled every POLL_MS. Renders nothing
+// when the instance has no docker project (backend returns 503).
 
 const POLL_MS = 3000;
 
@@ -27,22 +23,26 @@ export function ContainerHealth({ name }: { name: string }) {
     | { kind: "err"; message: string; status: number }
     | { kind: "absent" } // 503 — no docker project / daemon down
   >({ kind: "loading" });
-  // Selected container for the logs modal. Null = closed.
   const [logsOpen, setLogsOpen] = useState<string | null>(null);
-  // Containers with a restart in flight; a Set so rapid clicks on
-  // different rows each show their own pending state.
   const [restarting, setRestarting] = useState<Set<string>>(new Set());
   const [restartErr, setRestartErr] = useState<string | null>(null);
 
   async function onRestart(container: string) {
-    if (!confirm(`Restart ${container}? Container will be stopped + started; in-flight requests may drop.`)) {
+    if (
+      !(await confirmDialog({
+        title: "Restart container?",
+        body: `Stops then starts ${container}. In-flight requests to it may drop.`,
+        detail: `docker restart ${container}`,
+        confirmLabel: "Restart",
+        danger: true,
+      }))
+    ) {
       return;
     }
     setRestarting((s) => new Set([...s, container]));
     setRestartErr(null);
     try {
       await restartContainer(name, container);
-      // The poll loop picks up the new status; no manual refresh needed.
     } catch (e) {
       setRestartErr(
         `Restart ${container} failed: ` +
@@ -98,7 +98,7 @@ export function ContainerHealth({ name }: { name: string }) {
         marginTop: 16,
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 14,
       }}
     >
@@ -110,10 +110,10 @@ export function ContainerHealth({ name }: { name: string }) {
           marginBottom: 10,
         }}
       >
-        <div style={{ fontWeight: 600, fontSize: 13, color: W.text }}>
+        <div style={{ fontWeight: 600, fontSize: fs.lead, color: W.text }}>
           Container health
         </div>
-        <code style={{ color: W.dim, fontSize: 11, fontFamily: wMono }}>
+        <code style={{ color: W.dim, fontSize: fs.label, fontFamily: wMono }}>
           live · polled every {POLL_MS / 1000}s
         </code>
         <span style={{ marginLeft: "auto" }} />
@@ -123,7 +123,7 @@ export function ContainerHealth({ name }: { name: string }) {
       </header>
 
       {state.kind === "loading" && (
-        <div style={{ color: W.dim, fontSize: 12 }}>Querying docker…</div>
+        <div style={{ color: W.dim, fontSize: fs.meta }}>Querying docker…</div>
       )}
 
       {state.kind === "err" && (
@@ -131,11 +131,11 @@ export function ContainerHealth({ name }: { name: string }) {
           role="alert"
           style={{
             color: W.err,
-            background: `${W.err}10`,
+            background: `${tint(W.err, 6)}`,
             border: `1px solid ${W.err}`,
-            borderRadius: 2,
+            borderRadius: R.control,
             padding: "6px 10px",
-            fontSize: 12,
+            fontSize: fs.meta,
           }}
         >
           Docker probe failed: {state.message}
@@ -147,11 +147,11 @@ export function ContainerHealth({ name }: { name: string }) {
           role="alert"
           style={{
             color: W.err,
-            background: `${W.err}10`,
+            background: `${tint(W.err, 6)}`,
             border: `1px solid ${W.err}`,
-            borderRadius: 2,
+            borderRadius: R.control,
             padding: "6px 10px",
-            fontSize: 12,
+            fontSize: fs.meta,
             marginBottom: 8,
           }}
         >
@@ -178,14 +178,10 @@ export function ContainerHealth({ name }: { name: string }) {
   );
 }
 
-// Dense-panel micro-labels: sentence case, muted — wide caps are
-// reserved for real table/card headers.
-// Table column headers use the quiet caps cut — match every other
-// table in the app.
 const colHeader: React.CSSProperties = {
   ...tableCaps,
   color: W.dim,
-  fontSize: 11,
+  fontSize: fs.label,
 };
 
 function ContainersTable({
@@ -201,12 +197,11 @@ function ContainersTable({
 }) {
   if (containers.length === 0) {
     return (
-      <div style={{ color: W.dim, fontSize: 12, padding: "8px 0" }}>
+      <div style={{ color: W.dim, fontSize: fs.body, padding: "8px 0" }}>
         No containers found for this compose project.
       </div>
     );
   }
-  // Failure-mode rows sort to the top.
   const sorted = [...containers].sort((a, b) => severity(a) - severity(b));
   return (
     <div
@@ -214,7 +209,7 @@ function ContainersTable({
         display: "grid",
         gridTemplateColumns: "auto 1fr 1fr auto auto",
         gap: "4px 12px",
-        fontSize: 11.5,
+        fontSize: fs.label,
         fontFamily: wMono,
         alignItems: "center",
       }}
@@ -227,8 +222,6 @@ function ContainersTable({
       {sorted.map((c) => {
         const color = signalFor(c);
         const onLogs = (e: React.MouseEvent) => {
-          // Don't let the opening click double as a backdrop click on
-          // the modal overlay (which would close it immediately).
           e.stopPropagation();
           onPickLogs(c.name);
         };
@@ -237,9 +230,7 @@ function ContainersTable({
           onRestart(c.name);
         };
         const isRestarting = restarting.has(c.name);
-        // display:contents rows can't carry click handlers, so each
-        // cell gets its own onClick; the restart cell stops propagation
-        // so the button doesn't also open the logs modal.
+        // display:contents rows can't carry a click handler, so each cell wires its own.
         const cellBase: React.CSSProperties = {
           cursor: "pointer",
           padding: "2px 0",
@@ -270,7 +261,7 @@ function ContainersTable({
                 <span style={{ color: W.dim }}> · {c.health}</span>
               )}
             </div>
-            <div onClick={onLogs} style={{ ...cellBase, color: W.dim, fontSize: 10.5 }}>{c.status}</div>
+            <div onClick={onLogs} style={{ ...cellBase, color: W.dim, fontSize: fs.micro }}>{c.status}</div>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <Button
                 variant="ghost"
@@ -307,12 +298,13 @@ function SummaryPills({ counts }: { counts: ContainersResponse }) {
             key={label}
             style={{
               padding: "2px 8px",
-              borderRadius: 2,
-              border: `1px solid ${color}`,
-              background: `${color}1A`,
+              borderRadius: R.control,
+              border: `1px solid ${tint(color, 34)}`,
+              background: tint(color, 13),
               color,
-              fontSize: 10.5,
+              fontSize: fs.micro,
               fontFamily: wMono,
+              fontVariantNumeric: "tabular-nums",
             }}
           >
             {n} {label}
@@ -322,19 +314,16 @@ function SummaryPills({ counts }: { counts: ContainersResponse }) {
   );
 }
 
-// severity orders rows so failure-mode containers come first
-// (lower sorts earlier).
+// Lower sorts earlier, so failure-mode containers come first.
 function severity(c: { state: string; health?: string }): number {
   if (c.state === "restarting") return 0;
   if (c.state === "dead" || c.state === "exited") return 1;
   if (c.health === "unhealthy") return 2;
   if (c.health === "starting") return 3;
   if (c.state === "paused") return 4;
-  return 5; // healthy / running with no healthcheck
+  return 5;
 }
 
-// signalFor maps a container's docker state/health to its status-dot
-// color (the state word next to it carries the same color).
 function signalFor(c: { state: string; health?: string }): string {
   if (c.state === "restarting") return W.warn;
   if (c.state === "dead" || c.state === "exited") return W.err;
@@ -342,7 +331,6 @@ function signalFor(c: { state: string; health?: string }): string {
   if (c.health === "unhealthy") return W.err;
   if (c.health === "starting") return W.brand;
   if (c.health === "healthy") return W.ok;
-  // running with no healthcheck
   if (c.state === "running") return W.ok;
   return W.dim;
 }

@@ -31,14 +31,14 @@ func buildRemove() *cobra.Command {
 		Short: "Unvet (or fully remove) a DAR on a participant",
 		Long: `Revoke the vetting of a DAR on the targeted participant.
 
-By default this is a reversible "unvet" — the bytes stay on the
+By default this is a reversible "unvet". The bytes stay on the
 participant, but the synchronizer stops accepting new uses of the
 packages. Re-enable with a fresh upload (which auto-vets) or a manual
 vet call.
 
-Pass --purge to call RemoveDar instead, which unvets AND deletes the
-bytes. Upstream Canton warns that --purge is unsafe if any contracts
-still reference the packages, so DevKit defaults to the safer path.
+Pass --purge to unvet the DAR and delete its bytes. This is unsafe if
+any contracts still reference the packages, so DevKit defaults to the
+reversible path.
 
 Exit codes:
   0  Operation completed
@@ -78,8 +78,8 @@ Exit codes:
 	}
 	conn.register(cmd)
 	cmd.Flags().BoolVar(&purge, "purge", false,
-		"Delete the DAR bytes too (RemoveDar instead of UnvetDar). Unsafe if any contracts still reference the packages.")
+		"Delete the DAR bytes too. Unsafe if any contracts still reference the packages.")
 	cmd.Flags().BoolVar(&synchronize, "synchronize", false,
-		"Reserved: wait for the topology change to be observed (UnvetDar may add this in a future Canton version).")
+		"Reserved for future Canton versions.")
 	return cmd
 }

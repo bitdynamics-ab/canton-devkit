@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { W, wMono } from "../../tokens";
+import { useId, useMemo, useState } from "react";
+import { W, wMono, fs } from "../../tokens";
 import type { Point, Series } from "./types";
 import { extent, linearScale, niceTicks } from "./scale";
 
@@ -40,6 +40,10 @@ export function AreaChart({
   const innerW = Math.max(1, width - PADDING.left - PADDING.right);
   const innerH = Math.max(1, height - PADDING.top - PADDING.bottom);
   const hasData = series.points.length > 0;
+  // Unique, id-safe gradient handle. Deriving it from series.label breaks
+  // when the label has spaces (e.g. "ACS lookup buffer"): url(#area-ACS
+  // lookup buffer) is an invalid reference, so the fill falls back to black.
+  const gradId = `area-${useId().replace(/:/g, "")}`;
 
   const { x, y, xTicks, yTicks } = useMemo(() => {
     if (!hasData) {
@@ -113,7 +117,7 @@ export function AreaChart({
       style={{ display: "block" }}
     >
       <defs>
-        <linearGradient id={`area-${series.label}`} x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={series.color} stopOpacity={0.32} />
           <stop offset="100%" stopColor={series.color} stopOpacity={0} />
         </linearGradient>
@@ -138,7 +142,7 @@ export function AreaChart({
                 x={-6}
                 y={yy + 3}
                 textAnchor="end"
-                fontSize={9}
+                fontSize={fs.micro}
                 fill={W.dim}
                 fontFamily={wMono}
               >
@@ -154,7 +158,7 @@ export function AreaChart({
             x={x(t)}
             y={innerH + 14}
             textAnchor={i === 0 ? "start" : i === xTicks.length - 1 ? "end" : "middle"}
-            fontSize={9}
+            fontSize={fs.micro}
             fill={W.dim}
             fontFamily={wMono}
           >
@@ -164,7 +168,7 @@ export function AreaChart({
 
         {hasData ? (
           <>
-            <path d={areaPath} fill={`url(#area-${series.label})`} />
+            <path d={areaPath} fill={`url(#${gradId})`} />
             <path
               d={linePath}
               fill="none"
@@ -203,7 +207,7 @@ export function AreaChart({
             x={innerW / 2}
             y={innerH / 2}
             textAnchor="middle"
-            fontSize={11}
+            fontSize={fs.label}
             fill={W.dim}
             fontFamily={wMono}
           >
@@ -227,7 +231,7 @@ export function AreaChart({
               borderRadius: 2,
               padding: "3px 7px",
               fontFamily: wMono,
-              fontSize: 10.5,
+              fontSize: fs.micro,
               color: W.text,
               textAlign: "center",
             }}
@@ -236,7 +240,7 @@ export function AreaChart({
               {format(hover.p.v)}
               {yLabel ? " " + yLabel : ""}
             </div>
-            <div style={{ color: W.dim, fontSize: 9 }}>{fmtTime(hover.p.t)}</div>
+            <div style={{ color: W.dim, fontSize: fs.micro }}>{fmtTime(hover.p.t)}</div>
           </div>
         </foreignObject>
       )}

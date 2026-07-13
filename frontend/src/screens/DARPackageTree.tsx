@@ -1,8 +1,5 @@
-// DAR package-tree explorer. Renders a /api/instances/:name/dar/:id/
-// inspect response as an expandable tree: package → module → (template
-// | interface | data type), with choices and methods as inline chips.
-// Self-contained — fetches its own data and owns its expand/collapse
-// state. Embedded as a drawer inside DARScreen.
+// Expandable package → module → (template | interface | data type) tree
+// for a DAR inspect response, with choices and methods as inline chips.
 import { useEffect, useState } from "react";
 import {
   fetchDARInspect,
@@ -11,8 +8,16 @@ import {
   type DARPackageInspect,
   type Role,
 } from "../api";
-import { W, wMono } from "../tokens";
+import { W, wMono, R, tint, fs } from "../tokens";
+import { MonoId } from "../components/MonoId";
 import { IcChevronDown, IcChevronRight } from "../components/icons";
+
+// Middle-truncate for ids inside a toggle button, where a MonoId (itself
+// a button) would nest interactive elements.
+function midId(s: string, head = 10, tail = 6): string {
+  if (s.length <= head + tail + 1) return s;
+  return `${s.slice(0, head)}…${s.slice(-tail)}`;
+}
 
 interface Props {
   instance: string;
@@ -38,8 +43,6 @@ export function DARPackageTree({ instance, mainID, role }: Props) {
       .then((data) => {
         if (cancelled) return;
         setState({ kind: "ok", data });
-        // Auto-expand the main package so the most useful tree is
-        // visible on first render.
         const main = data.packages.find((p) => p.is_main);
         if (main) setExpandedPkgs(new Set([main.package_id]));
       })
@@ -85,12 +88,21 @@ export function DARPackageTree({ instance, mainID, role }: Props) {
 
   return (
     <div style={paneStyle} data-testid="dar-package-tree">
-      <div style={{ color: W.dim, fontSize: 11.5, marginBottom: 8 }}>
-        {state.data.packages.length} package
-        {state.data.packages.length === 1 ? "" : "s"} · sha256{" "}
-        <code style={{ fontFamily: wMono, color: W.text2 }}>
-          {state.data.sha256.slice(0, 12)}…
-        </code>
+      <div
+        style={{
+          color: W.dim,
+          fontSize: fs.label,
+          marginBottom: 8,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}
+      >
+        <span>
+          {state.data.packages.length} package
+          {state.data.packages.length === 1 ? "" : "s"} · sha256
+        </span>
+        <MonoId value={state.data.sha256} head={10} tail={8} size={11} color={W.text2} />
       </div>
       {state.data.packages.map((pkg) => (
         <PackageNode
@@ -109,9 +121,9 @@ export function DARPackageTree({ instance, mainID, role }: Props) {
 const paneStyle: React.CSSProperties = {
   background: W.surface,
   border: `1px solid ${W.border}`,
-  borderRadius: 4,
+  borderRadius: R.card,
   padding: 12,
-  fontSize: 12,
+  fontSize: fs.meta,
   maxHeight: "60vh",
   overflowY: "auto",
 };
@@ -154,16 +166,35 @@ function PackageNode({
             <IcChevronRight size={12} />
           )}
         </span>
-        <span style={{ fontFamily: wMono, color: pkg.is_main ? W.brand : W.text }}>
-          {pkg.name || pkg.package_id.slice(0, 12)}
+        <span
+          style={{ fontFamily: wMono, color: pkg.is_main ? W.brand : W.text }}
+          title={pkg.package_id}
+        >
+          {pkg.name || midId(pkg.package_id)}
         </span>
         {pkg.version && (
-          <span style={{ fontFamily: wMono, color: W.dim, marginLeft: 6 }}>
+          <span
+            style={{
+              fontFamily: wMono,
+              color: W.dim,
+              marginLeft: 6,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
             {pkg.version}
           </span>
         )}
-        <span style={{ fontFamily: wMono, color: W.dim, marginLeft: 8, fontSize: 10.5 }}>
-          {pkg.lf_version} · {pkg.package_id.slice(0, 10)}…
+        <span
+          style={{
+            fontFamily: wMono,
+            color: W.dim,
+            marginLeft: 8,
+            fontSize: fs.micro,
+            fontVariantNumeric: "tabular-nums",
+          }}
+          title={pkg.package_id}
+        >
+          {pkg.lf_version} · {midId(pkg.package_id)}
         </span>
       </button>
       {expanded &&
@@ -220,7 +251,7 @@ function ModuleNode({
           )}
         </span>
         <span style={{ fontFamily: wMono, color: W.text }}>{mod.name}</span>
-        <span style={{ marginLeft: 8, color: W.dim, fontSize: 10.5 }}>
+        <span style={{ marginLeft: 8, color: W.dim, fontSize: fs.micro }}>
           {tplCount}T · {ifCount}I · {dtCount}D
         </span>
       </button>
@@ -228,7 +259,7 @@ function ModuleNode({
         <div style={{ marginLeft: 28, marginTop: 3 }}>
           {(mod.templates ?? []).map((t) => (
             <div key={"t-" + t.name} style={leafRow}>
-              <span style={{ color: "#8FA3EE", fontFamily: wMono }}>template</span>{" "}
+              <span style={{ color: W.mag, fontFamily: wMono }}>template</span>{" "}
               <span style={{ color: W.text, fontFamily: wMono }}>{t.name}</span>
               {t.choices && t.choices.length > 0 && (
                 <span style={{ marginLeft: 8 }}>
@@ -241,7 +272,7 @@ function ModuleNode({
           ))}
           {(mod.interfaces ?? []).map((i) => (
             <div key={"i-" + i.name} style={leafRow}>
-              <span style={{ color: "#7BD2C6", fontFamily: wMono }}>interface</span>{" "}
+              <span style={{ color: W.teal, fontFamily: wMono }}>interface</span>{" "}
               <span style={{ color: W.text, fontFamily: wMono }}>{i.name}</span>
               {i.choices && i.choices.length > 0 && (
                 <span style={{ marginLeft: 8 }}>
@@ -261,7 +292,7 @@ function ModuleNode({
           ))}
           {(mod.data_types ?? []).map((dt) => (
             <div key={"d-" + dt} style={leafRow}>
-              <span style={{ color: "#7CC89A", fontFamily: wMono }}>data</span>{" "}
+              <span style={{ color: W.ok, fontFamily: wMono }}>data</span>{" "}
               <span style={{ color: W.text2, fontFamily: wMono }}>{dt}</span>
             </div>
           ))}
@@ -278,7 +309,7 @@ function treeRowStyle(highlight: boolean): React.CSSProperties {
     background: "transparent",
     border: "none",
     padding: "3px 6px",
-    fontSize: 12,
+    fontSize: fs.meta,
     fontFamily: "inherit",
     color: highlight ? W.brand : W.text,
     cursor: "pointer",
@@ -289,7 +320,7 @@ function treeRowStyle(highlight: boolean): React.CSSProperties {
 
 const leafRow: React.CSSProperties = {
   padding: "2px 6px",
-  fontSize: 11.5,
+  fontSize: fs.label,
   color: W.text2,
 };
 
@@ -301,7 +332,9 @@ function Chip({
   kind: "choice" | "method";
 }) {
   const tone =
-    kind === "choice" ? { bg: `${W.brand}1A`, fg: W.brand } : { bg: "#8FA3EE22", fg: "#8FA3EE" };
+    kind === "choice"
+      ? { bg: tint(W.brand, 10), fg: W.brand }
+      : { bg: tint(W.mag, 13), fg: W.mag };
   return (
     <span
       style={{
@@ -309,10 +342,10 @@ function Chip({
         padding: "0 6px",
         marginRight: 4,
         marginTop: 2,
-        borderRadius: 2,
+        borderRadius: R.control,
         background: tone.bg,
         color: tone.fg,
-        fontSize: 10.5,
+        fontSize: fs.micro,
         fontFamily: wMono,
       }}
     >

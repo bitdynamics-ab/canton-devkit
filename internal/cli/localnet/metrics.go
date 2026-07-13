@@ -22,13 +22,9 @@ import (
 
 var metricsContainersList = containers.List
 
-// buildMetrics wires `dpm localnet metrics`. Scrapes the instance's
-// Prometheus (started by the `--profile observability` compose
-// overlay) and prints a small, curated set of headline values. The
-// richer Grafana view lives at http://127.0.0.1:<grafana-port>/ but
-// the CLI shape is for CI assertions (`--format json | jq`) and
-// SSH-only operators who can't open a browser. The Web UI's Metrics
-// screen shares the same scrape config (assets/compose/prometheus.yml).
+// buildMetrics wires `dpm localnet metrics`: scrapes the instance's
+// Prometheus and prints a curated set of headline values. The JSON shape is
+// for CI assertions; the Web UI Metrics screen shares the same scrape config.
 func buildMetrics() *cobra.Command {
 	var (
 		instance string
@@ -39,7 +35,7 @@ func buildMetrics() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "metrics",
 		Short:         "Scrape live metrics from an instance's Prometheus",
-		Long:          "Reads headline numbers (TPS, submission p95, JVM heap, DB conns) from the per-instance Prometheus. Requires the instance to have been started with --profile observability. JSON output is stable for CI assertions. The wire JSON keys (ledger_tps_5m, mediator_p95_seconds, jvm_heap_used_bytes, postgres_conn_count) are kept stable; what they MEASURE is documented in internal/metricsq/queries.go.",
+		Long:          "Reads headline numbers (TPS, sequencing latency, JVM heap, DB conns) from the per-instance Prometheus. Requires the instance to have been started with --profile observability. JSON output is stable for CI assertions. The wire JSON keys (ledger_tps_5m, mediator_p95_seconds, jvm_heap_used_bytes, postgres_conn_count) are kept stable; what they MEASURE is documented in internal/metricsq/queries.go.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -65,7 +61,7 @@ func buildMetrics() *cobra.Command {
 					"prometheus query failed: "+err.Error())
 				return localnet.AsExitError(localnet.ExitRuntimeFailure)
 			}
-			report.Dashboards.GrafanaURL = grafanaURLFor(state)
+			report.Dashboards.GrafanaURL = grafanaURLFor(ctx, state)
 			if format == "json" {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
@@ -85,9 +81,8 @@ func buildMetrics() *cobra.Command {
 	return cmd
 }
 
-// resolveMetricsInstance mirrors resolveLogsInstance — picks the
-// single registered instance when --name is empty, otherwise
-// requires an explicit choice.
+// resolveMetricsInstance picks the single registered instance when --name is
+// empty, otherwise requires an explicit choice.
 func resolveMetricsInstance(name string) (*registry.State, error) {
 	if name != "" {
 		return resolveInstance(name)
@@ -98,7 +93,7 @@ func resolveMetricsInstance(name string) (*registry.State, error) {
 	}
 	switch len(idx.Entries) {
 	case 0:
-		return nil, fmt.Errorf("no registered instances — run `dpm localnet up --profile observability` first")
+		return nil, fmt.Errorf("no registered instances — run `dpm localnet up <name> --profile observability` first")
 	case 1:
 		return registry.Read(idx.Entries[0].Name)
 	default:
@@ -111,22 +106,15 @@ func resolveMetricsInstance(name string) (*registry.State, error) {
 	}
 }
 
-// resolvePrometheusEndpoint locates the Prometheus to scrape and reports
-// which instance to scope queries to. It prefers the SHARED host-level
-// stack when this instance is registered with it — returning the
-// instance name so scrapeMetrics filters by instance=<name> across the
-// multi-instance Prometheus. Otherwise it falls back to a per-instance
-// Prometheus (state.Ports["prometheus_ui"], persisted by `up`, or an
-// explicit --prometheus-port), where queries stay unscoped ("") because
-// that Prometheus only holds one instance. We only shell out to docker
-// when no port is recorded, to distinguish "observability is off" from
-// "state is stale".
+// resolvePrometheusEndpoint locates the Prometheus to scrape and the scope to
+// filter by. It prefers the SHARED host-level stack (returning the instance
+// name so queries filter by instance=<name>), else falls back to the
+// per-instance Prometheus (unscoped, since it holds one instance). Docker is
+// probed only when no port is recorded, to tell "obs off" from "stale state".
 func resolvePrometheusEndpoint(ctx context.Context, state *registry.State, host string, explicitPort int) (rhost string, rport int, scope string, rerr error) {
 	if explicitPort > 0 {
 		return host, explicitPort, "", nil
 	}
-	// Shared stack first: only when this instance is registered with it
-	// (its file_sd target exists) AND the stack is actually running.
 	if localnet.InstanceObservabilityEnabled(state.Name) {
 		if h, p, err := localnet.SharedPrometheusEndpoint(ctx); err == nil {
 			return h, p, state.Name, nil
@@ -144,7 +132,7 @@ func resolvePrometheusEndpoint(ctx context.Context, state *registry.State, host 
 			continue
 		}
 		return "", 0, "", fmt.Errorf("prometheus is running for instance %q but its host port was not recorded — "+
-			"restart the instance with `dpm localnet restart --name %s` or pass --prometheus-port explicitly",
+			"restart the instance with `dpm localnet restart %s` or pass --prometheus-port explicitly",
 			state.Name, state.Name)
 	}
 	return "", 0, "", fmt.Errorf("no Prometheus for instance %q — "+
@@ -153,11 +141,8 @@ func resolvePrometheusEndpoint(ctx context.Context, state *registry.State, host 
 		state.Name, state.Name)
 }
 
-// MetricsReport is the stable JSON shape `--format json` emits.
-// Each field is a query against the shared scrape config; missing
-// data (no samples yet) is represented as null in JSON / "—" in
-// text rather than 0 — distinguishes "value is zero" from "we
-// couldn't ask Prometheus."
+// MetricsReport is the stable JSON shape `--format json` emits. Missing data
+// is null (not 0) so "value is zero" stays distinct from "no sample".
 type MetricsReport struct {
 	SchemaVersion int             `json:"schema_version"`
 	LedgerTPS     *float64        `json:"ledger_tps_5m,omitempty"`
@@ -168,48 +153,33 @@ type MetricsReport struct {
 	Dashboards    DashboardsBlock `json:"dashboards"`
 }
 
-// LatencyReport groups the mediator-approval latency quantiles in
-// milliseconds. Each field is a pointer so a missing scrape
-// (Prometheus has no samples yet) is distinguishable from a true
-// zero. The JSON keys match what the Web UI's MetricsSummary
-// renders so the two surfaces stay in lock-step.
+// LatencyReport groups the sequencing-latency figures in milliseconds. AvgMs
+// is the headline mean; the percentiles come back nil on Splice 0.6.4 whose
+// histogram exports only the +Inf bucket. JSON keys match the Web UI's.
 type LatencyReport struct {
+	AvgMs *float64 `json:"avg_ms,omitempty"`
 	P50Ms *float64 `json:"p50_ms,omitempty"`
 	P95Ms *float64 `json:"p95_ms,omitempty"`
 	P99Ms *float64 `json:"p99_ms,omitempty"`
 }
 
-// DashboardsBlock is the discoverability hand-off — the CLI surface
-// can't render charts, so we point at where they live (Grafana).
-// GrafanaURL is empty when the instance was started without the
-// observability profile; the text renderer turns that into a hint.
+// DashboardsBlock points at Grafana since the CLI can't render charts.
+// GrafanaURL is empty when the observability profile is off.
 type DashboardsBlock struct {
 	GrafanaURL string `json:"grafana_url,omitempty"`
 }
 
-// grafanaDashboardUID pins the UID of the bundled Canton LocalNet
-// dashboard provisioned under assets/grafana/dashboards/. The UID is
-// baked into the JSON so a deep link is stable across restarts —
-// hardcoding here keeps `dpm localnet metrics` from having to read
-// the asset at runtime.
+// grafanaDashboardUID is the bundled dashboard's UID (assets/grafana/
+// dashboards/), hardcoded so the deep link is stable without reading the asset.
 const grafanaDashboardUID = "canton-localnet-v1"
 
-// scrapeMetrics runs the curated Prometheus queries in parallel and
-// assembles them into a MetricsReport. Queries live in
-// internal/metricsq so CLI + handler share one canonical map.
-// instance scopes the queries to a single LocalNet when non-empty
-// (the shared host-level Prometheus serves many); "" sums across
-// whatever Prometheus holds.
+// scrapeMetrics runs the curated queries in parallel into a MetricsReport.
+// instance scopes them to one LocalNet when non-empty.
 //
-// Error model: "Prometheus answered but the metric has no samples
-// yet" (promQuery returns (nil, nil)) must NOT fail the call — a
-// fresh instance legitimately has empty headlines. A TRANSPORT
-// failure (connection refused, non-200, malformed body) means we
-// could not ask Prometheus at all; if EVERY query fails that way we
-// return an error so the CLI exits non-zero instead of printing
-// all-dashes and exiting 0. Requiring ALL queries to fail keeps a
-// single flaky query from sinking a report against a healthy
-// Prometheus — a real outage takes every query down together.
+// Error model: "no samples yet" (promQuery returns nil,nil) is a valid empty
+// headline, not a failure. Only when EVERY query fails at the transport layer
+// do we return an error — a single flaky query must not sink a report against
+// a healthy Prometheus, while a real outage takes them all down together.
 func scrapeMetrics(ctx context.Context, host string, port int, instance string) (*MetricsReport, error) {
 	base := fmt.Sprintf("http://%s:%d", host, port)
 	queries := metricsq.SummaryQueriesFor(instance)
@@ -231,20 +201,14 @@ func scrapeMetrics(ctx context.Context, host string, port int, instance string) 
 	for range queries {
 		r := <-ch
 		if r.err != nil {
-			// Transport-level failure (could not reach Prometheus).
-			// Count it; remember the first for the surfaced message.
 			transportFailures++
 			if firstErr == nil {
 				firstErr = r.err
 			}
 			continue
 		}
-		// Prometheus answered; r.val may be nil ("no samples yet"),
-		// which is a genuine empty result, not a failure.
 		results[r.key] = r.val
 	}
-	// All queries failed at the transport layer → Prometheus is
-	// unreachable. Surface it rather than masquerading as empty data.
 	if transportFailures == len(queries) && firstErr != nil {
 		return nil, firstErr
 	}
@@ -255,6 +219,7 @@ func scrapeMetrics(ctx context.Context, host string, port int, instance string) 
 		HeapBytes:     results[metricsq.HeadlineHeapUsed],
 		PostgresConn:  results[metricsq.HeadlinePostgresConn],
 		Latency: LatencyReport{
+			AvgMs: scaleSeconds(results[metricsq.HeadlineMediatorAvg]),
 			P50Ms: scaleSeconds(results[metricsq.HeadlineMediatorP50]),
 			P95Ms: scaleSeconds(results[metricsq.HeadlineMediatorP95]),
 			P99Ms: scaleSeconds(results[metricsq.HeadlineMediatorP99]),
@@ -262,25 +227,25 @@ func scrapeMetrics(ctx context.Context, host string, port int, instance string) 
 	}, nil
 }
 
-// grafanaURLFor returns the deep link to the bundled Canton LocalNet
-// dashboard when the instance was started with the observability
-// profile (signal: grafana_ui port is registered). Returns "" when
-// observability is off so the caller can render a hint instead.
-func grafanaURLFor(state *registry.State) string {
+// sharedGrafanaURL resolves the host-shared Grafana deep link; a package var
+// so tests can stub the docker lookup.
+var sharedGrafanaURL = localnet.SharedGrafanaURL
+
+// grafanaURLFor deep-links to the bundled dashboard: the per-instance Grafana
+// when its port is registered, else the host-shared Grafana filtered to this
+// instance, else "" so the caller can render a hint.
+func grafanaURLFor(ctx context.Context, state *registry.State) string {
 	if state == nil {
 		return ""
 	}
-	port, ok := state.Ports["grafana_ui"]
-	if !ok || port == 0 {
-		return ""
+	if port, ok := state.Ports["grafana_ui"]; ok && port > 0 {
+		return fmt.Sprintf("http://localhost:%d/d/%s", port, grafanaDashboardUID)
 	}
-	return fmt.Sprintf("http://localhost:%d/d/%s", port, grafanaDashboardUID)
+	return sharedGrafanaURL(ctx, state.Name)
 }
 
-// promQuery executes one PromQL query and returns the scalar
-// result (or nil if no samples). Tiny client — pulling
-// prometheus/client_golang for one query would balloon the
-// binary; the JSON shape is stable and trivially decoded.
+// promQuery executes one PromQL query and returns the scalar result (or nil
+// if no samples).
 func promQuery(ctx context.Context, base, query string) (*float64, error) {
 	u := base + "/api/v1/query?" + url.Values{"query": {query}}.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
@@ -310,9 +275,6 @@ func promQuery(ctx context.Context, base, query string) (*float64, error) {
 	if body.Status != "success" || len(body.Data.Result) == 0 {
 		return nil, nil
 	}
-	// Prometheus vector result: each entry is
-	// {"metric": {...}, "value": [timestamp, "value"]}. Take
-	// the first sample's value.
 	entry := body.Data.Result[0].Value
 	if len(entry) < 2 {
 		return nil, nil
@@ -331,9 +293,7 @@ func promQuery(ctx context.Context, base, query string) (*float64, error) {
 	return &v, nil
 }
 
-// renderMetricsText prints the report in a compact human-readable
-// form. Uses the term primitives so the visual style matches the
-// rest of the CLI surface (Section header + KV rows).
+// renderMetricsText prints the report in a compact human-readable form.
 func renderMetricsText(out io.Writer, instance, host string, port int, r *MetricsReport) {
 	kv := func(k string, v *float64, unit string) string {
 		val := "—"
@@ -348,12 +308,18 @@ func renderMetricsText(out io.Writer, instance, host string, port int, r *Metric
 		kv("DB conns (used)", r.PostgresConn, ""),
 		"",
 		"Latency:",
-		kv("  p50", r.Latency.P50Ms, "ms"),
-		kv("  p95", r.Latency.P95Ms, "ms"),
-		kv("  p99", r.Latency.P99Ms, "ms"),
-		"",
-		"Dashboards:",
+		kv("  avg", r.Latency.AvgMs, "ms"),
 	}
+	// Splice 0.6.4's +Inf-only histogram yields no percentiles; print them
+	// only when present rather than a row of dashes (the avg is always exact).
+	if r.Latency.P50Ms != nil || r.Latency.P95Ms != nil || r.Latency.P99Ms != nil {
+		rows = append(rows,
+			kv("  p50", r.Latency.P50Ms, "ms"),
+			kv("  p95", r.Latency.P95Ms, "ms"),
+			kv("  p99", r.Latency.P99Ms, "ms"),
+		)
+	}
+	rows = append(rows, "", "Dashboards:")
 	if r.Dashboards.GrafanaURL != "" {
 		rows = append(rows, term.KV("  Grafana", r.Dashboards.GrafanaURL, 22))
 	} else {
@@ -365,8 +331,7 @@ func renderMetricsText(out io.Writer, instance, host string, port int, r *Metric
 	_, _ = fmt.Fprintln(out, term.Section("metrics · "+instance, right, body, 0))
 }
 
-// scaleSeconds converts a seconds-valued metric to milliseconds
-// for friendlier human display (canton's p95 is typically 10-500ms).
+// scaleSeconds converts a seconds-valued metric to milliseconds.
 func scaleSeconds(v *float64) *float64 {
 	if v == nil {
 		return nil
@@ -375,7 +340,6 @@ func scaleSeconds(v *float64) *float64 {
 	return &ms
 }
 
-// scaleBytes converts bytes to MiB.
 func scaleBytes(v *float64) *float64 {
 	if v == nil {
 		return nil

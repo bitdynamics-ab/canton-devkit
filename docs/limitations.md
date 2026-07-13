@@ -84,16 +84,53 @@ resolved.
     multi-instance scenarios.
 
   The preflight check enforces a per-version hard floor: 8 GB for the
-  0.6 line (0.6.3, 0.6.4/`latest`, the V2 alpha — and any uncurated
-  0.6.x tag, which inherits the strictest catalogued floor for its
-  major), 4 GB for 0.5.18 and only for tags whose major has no
-  catalogued entry. The 12 GB figure is the coded recommendation
+  0.6 line (0.6.3, 0.6.4, 0.6.9/`latest`, 0.6.10, 0.6.11, the V2 alpha —
+  and any uncurated 0.6.x tag, which inherits the strictest catalogued
+  floor for its major), 4 GB for 0.5.18 and only for tags whose major
+  has no catalogued entry. The 12 GB figure is the coded recommendation
   threshold (`recommended_memory_bytes`) — below it preflight WARNs
   but does not refuse.
 
   On timeout, `WaitForHealthy` now dumps the last `docker compose ps`
   snapshot in its error so the stuck service + state are visible
   without re-running anything.
+
+## Snapshot restore
+
+- **`restore` requires the target instance to already exist (was `up`
+  at least once).** A restore loads a `pg_dumpall` stream into the
+  instance's EXISTING Postgres volume via a throwaway loader container.
+  That volume is only a Docker-Compose-owned volume after an `up`
+  created it. Restoring into a never-`up` instance would force the
+  loader's `docker run -v <vol>:...` to CREATE the volume out of band —
+  producing a volume Compose does not own. `docker compose down
+  --volumes` (used by `localnet down` and `localnet remove --force`)
+  only removes volumes Compose itself created, so such an orphan volume
+  survives teardown and is silently adopted (with a "volume … already
+  exists but was not created by Docker Compose" warning) on the next
+  `up`. To keep the "never create a volume outside Compose" invariant,
+  restore now refuses when the instance is not registered and tells the
+  user to run `localnet up <name>` first. This also applies to
+  cross-name restore: the target name must have been `up` too.
+  *Workaround:* run `localnet up <name>` (or `up <newname>` for a
+  cross-name restore) before `localnet restore`.
+
+- **The restore precondition is enforced via the registry, not a Docker
+  volume-ownership check (known gap).** The guard checks that a registry
+  record exists for the target instance, which is a PROXY for "the
+  Compose-owned volume exists". `up` writes `state.json` early (at
+  "creating" time, before the volume is guaranteed to exist), so a
+  crashed/half-finished `up` can leave a registry entry with no volume —
+  in which case restore would still proceed and the loader would
+  re-create the volume out of band, reintroducing the orphan. The
+  robust check is to verify the volume carries Compose's ownership
+  labels (`com.docker.compose.project=canton-<name>` and
+  `com.docker.compose.volume=postgres`) via a label-filtered
+  `docker volume ls` — a bare `docker volume inspect <name>` is NOT
+  sufficient because a detached `docker run -v` volume exists under the
+  same name yet lacks those labels. That label-based volume-ownership
+  check is intentionally deferred for now; the registry gate covers the
+  common case. Tracked as a follow-up.
 
 ## Platform parity
 
@@ -112,18 +149,21 @@ refcounted by target file. See
 [Observability](observability.md#stack-topology--host-shared-with-a-transitional-per-instance-overlay)
 for the topology.
 
-- **Each observability-enabled instance still *also* runs a
-  per-instance Prometheus + Grafana overlay** alongside the shared
-  stack, so while running it has **two** Prometheus and **two** Grafana
-  containers — roughly **~600 MiB** of duplicated overhead per extra
-  environment.
-- **Why it's kept (for now).** The per-instance overlay is a deliberate
-  fallback: both the CLI and the Web UI read shared-first and fall back
-  to the per-instance Prometheus when the shared stack isn't up, and the
-  per-instance scrape uses in-network service DNS (`canton:10013`)
-  rather than `host.docker.internal`, so it works on any platform
-  regardless of the Linux `host-gateway` mapping.
-- **Removal pending validation.** The per-instance overlay stays enabled
-  until the shared-only path is validated end-to-end on a native Linux
-  Docker host. When that validation completes, the overlay can be gated
-  off without changing the CLI or Web UI observability commands.
+- **`up --observability-mode` selects the sidecar stack.** `auto`
+  (default) serves metrics from the shared stack and skips the
+  per-instance Prometheus + Grafana overlay when the shared stack is
+  reachable — avoiding roughly **~600 MiB** of duplicated overhead per
+  environment. `shared` forces shared-only; `per-instance` forces the
+  overlay. The choice is persisted, so a re-up preserves it.
+- **Why the per-instance fallback is kept.** The per-instance scrape
+  uses in-network service DNS (`canton:10013`) rather than
+  `host.docker.internal`, so it works on any platform regardless of the
+  Linux `host-gateway` mapping; `auto` falls back to it when the shared
+  stack can't be started.
+- **Native-Linux validation.** `scripts/e2e-observability.sh` (self-hosted
+  Linux CI) brings up a shared-mode instance and asserts the shared
+  Prometheus scrapes it via `host.docker.internal`. `auto` also
+  health-probes the shared Prometheus and falls back to the per-instance
+  overlay when it is up but not serving. Making `shared` the default (and
+  dropping the overlay entirely) follows that e2e going green; until then
+  `per-instance` is the platform-independent escape hatch.

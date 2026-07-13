@@ -355,6 +355,9 @@ export interface CreateInstanceRequest {
   // port_base > 0 pins deterministic host ports from this base
   // (`dpm localnet up --port-base`). Omit / 0 → auto-allocate.
   port_base?: number;
+  // observability_mode maps to `--observability-mode`: auto | shared |
+  // per-instance. Omit → auto.
+  observability_mode?: string;
 }
 
 // CreateInstanceAcceptedResponse is what POST /api/instances

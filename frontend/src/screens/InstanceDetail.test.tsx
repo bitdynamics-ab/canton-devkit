@@ -1,13 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { InstanceDetail } from "./InstanceDetail";
-
-// InstanceDetail tests — surfaces every field the /api/instances/:name
-// endpoint returns beyond the summary. Three states:
-//
-//   1. ok with full payload → grid populated
-//   2. ok with live_probe_failed=true → warning pill in header
-//   3. fetch error → red error line
+import { ConfirmHost } from "../components/ConfirmDialog";
 
 function mockInstanceFetch(
   body: object | { status: number; error: string },
@@ -44,14 +38,10 @@ describe("InstanceDetail", () => {
 
     render(<InstanceDetail name="demo" />);
 
-    // Wait for the loading state to clear.
     await waitFor(() => {
       expect(screen.getByText("0.4.12")).toBeInTheDocument();
     });
-    // Identity + runtime + paths — pin one from each block to
-    // catch a future refactor that drops a section. "cdk-demo"
-    // appears in both compose-project and container-prefix
-    // fields, so use getAllByText and assert the count.
+    // "cdk-demo" is both compose-project and container-prefix, hence count 2.
     expect(screen.getAllByText("cdk-demo")).toHaveLength(2);
     expect(screen.getByText("2h 14m")).toBeInTheDocument();
     expect(
@@ -152,8 +142,7 @@ describe("InstanceDetail", () => {
   });
 
   it("shows em-dash for missing uptime", async () => {
-    // Uptime is optional in the type — a freshly-stopped instance
-    // may not carry it. The grid uses "—" as the muted fallback.
+    // Uptime is optional; the grid uses "—" as the muted fallback.
     mockInstanceFetch({
       schema_version: 1,
       name: "demo",
@@ -169,10 +158,8 @@ describe("InstanceDetail", () => {
     });
 
     render(<InstanceDetail name="demo" />);
-    // Find the row labelled "uptime" and check its sibling.
     await waitFor(() => {
       const uptimeLabel = screen.getByText("uptime");
-      // Sibling is the next div under the same grid-row.
       expect(uptimeLabel.nextElementSibling?.textContent).toBe("—");
     });
   });
@@ -230,10 +217,6 @@ describe("InstanceDetail", () => {
   });
 
   it("posts to /recreate and fires onChanged when the Recreate button is clicked", async () => {
-    // The restart button is offered on running / paused / failed /
-    // partial. The click invokes recreateInstance which POSTs to the
-    // backend; on the 202 response the detail card refetches and
-    // bubbles onChanged so the dashboard's row updates.
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (typeof url === "string" && url.endsWith("/recreate")) {
         return Promise.resolve(
@@ -266,17 +249,23 @@ describe("InstanceDetail", () => {
       );
     });
     vi.stubGlobal("fetch", fetchMock);
-    vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
 
     const onChanged = vi.fn();
     render(
-      <InstanceDetail name="demo" statusHint="running" onChanged={onChanged} />,
+      <>
+        <InstanceDetail name="demo" statusHint="running" onChanged={onChanged} />
+        <ConfirmHost />
+      </>,
     );
 
     // Wait for the Recreate button to appear (the action-button
     // bar renders once statusHint resolves).
     const restartBtn = await screen.findByRole("button", { name: /recreate/i });
     fireEvent.click(restartBtn);
+
+    // Recreate routes through the confirm dialog; approve it.
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /recreate/i }));
 
     await waitFor(() => {
       const calls = fetchMock.mock.calls.map((c) => c[0]);
@@ -293,8 +282,6 @@ describe("InstanceDetail", () => {
   });
 
   it("posts to /stop (not /down) when the Stop button is clicked on a running instance", async () => {
-    // Gentle Stop = docker compose stop, containers kept. Distinct
-    // from the Down button (docker compose down, removes containers).
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (typeof url === "string" && url.endsWith("/stop")) {
         return Promise.resolve(new Response(null, { status: 204 }));
@@ -335,7 +322,6 @@ describe("InstanceDetail", () => {
             typeof u === "string" && u.endsWith("/api/instances/demo/stop"),
         ),
       ).toBe(true);
-      // Must NOT have hit /down.
       expect(
         calls.some(
           (u: string) => typeof u === "string" && u.endsWith("/down"),
@@ -348,7 +334,6 @@ describe("InstanceDetail", () => {
   it("posts to /start when the Start button is clicked on a stopped instance", async () => {
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (typeof url === "string" && url.endsWith("/start")) {
-        // 204 fast-start path.
         return Promise.resolve(new Response(null, { status: 204 }));
       }
       return Promise.resolve(
@@ -415,15 +400,21 @@ describe("InstanceDetail", () => {
       );
     });
     vi.stubGlobal("fetch", fetchMock);
-    vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
 
     const onChanged = vi.fn();
     render(
-      <InstanceDetail name="demo" statusHint="stopped" onChanged={onChanged} />,
+      <>
+        <InstanceDetail name="demo" statusHint="stopped" onChanged={onChanged} />
+        <ConfirmHost />
+      </>,
     );
 
     const downBtn = await screen.findByRole("button", { name: /^Down$/ });
     fireEvent.click(downBtn);
+
+    // Down routes through the confirm dialog; approve it.
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Down$/ }));
 
     await waitFor(() => {
       const calls = fetchMock.mock.calls.map((c) => c[0]);
@@ -438,9 +429,7 @@ describe("InstanceDetail", () => {
   });
 
   it("re-fetches when the name prop changes", async () => {
-    // The Dashboard hands a new name when the user switches
-    // instances. Without the useEffect dep on `name`, the
-    // first-fetched detail would stick forever.
+    // Without the useEffect dep on `name`, the first detail would stick forever.
     let i = 0;
     vi.stubGlobal(
       "fetch",

@@ -148,11 +148,11 @@ func TestSnapshot_RoundTrip(t *testing.T) {
 		t.Errorf("snapshot must quiesce+resume writers: quiesced=%v resumed=%v", faSnap.Quiesced, faSnap.Resumed)
 	}
 
-	// Restore into a FRESH registry root with no prior `demo`.
+	// Restore into a FRESH registry root. Restore requires the target
+	// instance to already exist (it was `up`, so its Compose volume
+	// exists) — so seed a STOPPED `demo` before restoring.
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
-	if _, err := registry.Read("demo"); !errors.Is(err, registry.ErrNotFound) {
-		t.Fatalf("setup: registry should be empty, got %v", err)
-	}
+	seedInstance(t, "demo", "0.6.4", registry.StatusStopped)
 	fa2 := &FakeArchiver{}
 	installFake(t, fa2)
 	out.Reset()
@@ -283,6 +283,22 @@ func TestRestore_RefusesRunningInstance(t *testing.T) {
 	}
 }
 
+func TestRestore_RefusesUnknownInstance(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir()) // empty registry — no instance
+	installFake(t, &FakeArchiver{})
+	dst := filepath.Join(t.TempDir(), "a.tgz")
+	dump := []byte("dump")
+	writeArchive(t, dst, validHeader("ghost", "0.6.4", dump), stateFor(t, "ghost", "0.6.4"), dump)
+
+	var out, errBuf bytes.Buffer
+	if code := RunRestore(context.Background(), &out, &errBuf, "ghost", dst, false); code != localnet.ExitUserError {
+		t.Fatalf("code=%d want ExitUserError (instance never up)", code)
+	}
+	if !strings.Contains(errBuf.String(), "not found") || !strings.Contains(errBuf.String(), "localnet up") {
+		t.Errorf("expected 'not found / run localnet up first', stderr=%q", errBuf.String())
+	}
+}
+
 func TestRestore_RefusesSpliceVersionMismatch(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo", "0.6.3", registry.StatusStopped) // existing is 0.6.3
@@ -322,6 +338,7 @@ func TestRestore_RefusesIfContainersRunning(t *testing.T) {
 
 func TestRestore_VerifiesContentSHA(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "demo", "0.6.4", registry.StatusStopped)
 	installFake(t, &FakeArchiver{})
 	dst := filepath.Join(t.TempDir(), "tamper.tgz")
 	dump := []byte("the real dump bytes")
@@ -350,7 +367,12 @@ func TestRestore_CrossNameRewritesProject(t *testing.T) {
 		t.Fatalf("snapshot code=%d stderr=%q", code, errBuf.String())
 	}
 
+	// Cross-name restore still requires the TARGET name to already exist
+	// (it was `up`, so `canton-clone_postgres` exists). Seed a stopped
+	// `clone`; the embedded snapshot name stays `demo`, so the rename
+	// warning still fires below.
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "clone", "0.6.4", registry.StatusStopped)
 	fa2 := &FakeArchiver{}
 	installFake(t, fa2)
 	out.Reset()

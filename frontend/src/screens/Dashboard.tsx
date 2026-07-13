@@ -6,9 +6,12 @@ import {
   type TransactionEvent,
   type TransactionRow,
 } from "../api";
-import { W, wMono, tableCaps } from "../tokens";
+import { W, wMono, tableCaps, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
-import { Dot, IcPlus, IcRefresh } from "../components/icons";
+import { IcPlus, IcRefresh } from "../components/icons";
+import { StatusBadge } from "../components/StatusBadge";
+import { MonoId } from "../components/MonoId";
+import { SkeletonTable, useLoadingDelay } from "../components/Skeleton";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { ContainerHealth } from "./ContainerHealth";
 import { CreateLocalNetModal } from "./CreateLocalNetModal";
@@ -16,16 +19,12 @@ import { CreatingPanel } from "./CreatingPanel";
 import { DeveloperSetup } from "./DeveloperSetup";
 import { InstanceDetail } from "./InstanceDetail";
 
-// Dashboard — the Overview screen. Renders the registered-instance
-// table from GET /api/instances.
-//
-// Selection state lives in the URL (?instance=<name>) via
-// useInstanceSelection so the topbar switcher and Dashboard agree on a
-// single source of truth — and so shared links preserve the user's
-// pick.
+// Selection state lives in the URL (?instance=<name>) so the topbar
+// switcher and Dashboard share one source of truth and links survive.
 export function Dashboard() {
   const sel = useInstanceSelection();
   const [createOpen, setCreateOpen] = useState(false);
+  const showSkeleton = useLoadingDelay(sel.loading);
 
   return (
     <div>
@@ -37,12 +36,11 @@ export function Dashboard() {
           marginBottom: 12,
         }}
       >
-        <h1 style={{ fontSize: 20, fontWeight: 600, marginTop: 0, marginBottom: 0 }}>
+        <h1 style={{ fontSize: fs.title, fontWeight: 600, marginTop: 0, marginBottom: 0 }}>
           LocalNet instances
         </h1>
         <Button
-          // The empty-state hero CTA is the primary while the list is
-          // empty — never two cobalt fills for the same action at once.
+          // Steps down to secondary when the empty-state hero CTA owns primary.
           variant={sel.instances.length === 0 ? "secondary" : "primary"}
           icon={<IcPlus />}
           onClick={() => setCreateOpen(true)}
@@ -56,10 +54,8 @@ export function Dashboard() {
         onClose={useCallback(() => setCreateOpen(false), [])}
         onCreated={useCallback(
           (name: string) => {
-            // Refresh the list and promote the new instance to the
-            // URL-driven selection so the detail card pops when the
-            // modal closes. useCallback'd so the modal's done-effect
-            // doesn't see a new identity each render and refire.
+            // useCallback'd so the modal's done-effect keeps a stable
+            // identity and doesn't refire each render.
             sel.refresh();
             sel.select(name);
           },
@@ -67,7 +63,7 @@ export function Dashboard() {
         )}
       />
 
-      {sel.loading && <p style={{ color: W.dim }}>Loading…</p>}
+      {sel.loading && showSkeleton && <InstanceTableLoading />}
 
       {sel.error && <ErrorPanel error={sel.error} />}
 
@@ -77,28 +73,28 @@ export function Dashboard() {
             <div
               role="status"
               style={{
-                background: `${W.dim}1A`,
+                background: `${tint(W.dim, 10)}`,
                 border: `1px solid ${W.dim}`,
                 color: W.dim,
-                borderRadius: 4,
+                borderRadius: R.control,
                 padding: "6px 12px",
                 marginBottom: 12,
-                fontSize: 12,
+                fontSize: fs.meta,
               }}
             >
-              Couldn’t refresh — showing last known state.
+              Couldn’t refresh. Showing last known state.
             </div>
           )}
           {sel.warning && (
             <div
               style={{
-                background: `${W.warn}1A`,
+                background: `${tint(W.warn, 10)}`,
                 border: `1px solid ${W.warn}`,
                 color: W.warn,
-                borderRadius: 4,
+                borderRadius: R.control,
                 padding: "8px 12px",
                 marginBottom: 16,
-                fontSize: 13,
+                fontSize: fs.data,
               }}
             >
               {sel.warning}
@@ -117,9 +113,8 @@ export function Dashboard() {
       )}
 
       {sel.selected && (() => {
-        // Mid-bring-up: show the live progress panel above the static
-        // detail and hide the JWT generator — no point signing tokens
-        // for an instance that isn't running yet.
+        // While creating, show the live progress panel and hide the JWT
+        // generator — no point signing tokens before it's running.
         const selectedRow = sel.instances.find((i) => i.name === sel.selected);
         const isCreating = selectedRow?.status === "creating";
         return (
@@ -156,7 +151,7 @@ function InstanceTable({ instances, selected, onSelect }: InstanceTableProps) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         overflow: "hidden",
       }}
     >
@@ -164,48 +159,63 @@ function InstanceTable({ instances, selected, onSelect }: InstanceTableProps) {
         style={{
           width: "100%",
           borderCollapse: "collapse",
-          fontSize: 13,
+          fontSize: fs.data,
         }}
       >
         <thead>
           <tr style={{ background: W.surface2, color: W.dim, textAlign: "left" }}>
-            <th style={th}>NAME</th>
-            <th style={th}>STATE</th>
-            <th style={th}>SPLICE</th>
-            <th style={th}>PORTS</th>
+            <th style={th}>Name</th>
+            <th style={th}>State</th>
+            <th style={{ ...th, textAlign: "right" }}>Splice</th>
+            <th style={{ ...th, textAlign: "right" }}>Ports</th>
           </tr>
         </thead>
         <tbody>
-          {instances.map((i) => (
-            <tr
-              key={i.name}
-              onClick={() => onSelect(i.name)}
-              style={{
-                borderTop: `1px solid ${W.border}`,
-                background: i.name === selected ? W.surface2 : undefined,
-                cursor: "pointer",
-              }}
-            >
-              <td style={td}>
-                <strong
-                  style={{
-                    color: i.name === selected ? W.brand : W.text,
-                  }}
-                >
-                  {i.name}
-                </strong>
-              </td>
-              <td style={td}>
-                <StatusBadge status={i.status} />
-              </td>
-              <td style={{ ...td, color: W.text2 }}>{i.splice_version}</td>
-              <td style={{ ...td, color: W.text2, fontFamily: "monospace" }}>
-                {i.ports}
-              </td>
-            </tr>
-          ))}
+          {instances.map((i) => {
+            const isSel = i.name === selected;
+            return (
+              <tr
+                key={i.name}
+                onClick={() => onSelect(i.name)}
+                style={{
+                  borderTop: `1px solid ${W.border}`,
+                  // Flat fill, no padding swap, so the row never shifts on select.
+                  background: isSel ? W.selRow : undefined,
+                  cursor: "pointer",
+                }}
+              >
+                <td style={td}>
+                  <strong style={{ color: isSel ? W.brand : W.text }}>
+                    {i.name}
+                  </strong>
+                </td>
+                <td style={td}>
+                  <StatusBadge status={i.status} />
+                </td>
+                <td style={{ ...td, ...numCell, color: W.text2 }}>
+                  {i.splice_version}
+                </td>
+                <td style={{ ...td, ...numCell, color: W.text2 }}>{i.ports}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function InstanceTableLoading() {
+  return (
+    <div
+      style={{
+        background: W.surface,
+        border: `1px solid ${W.border}`,
+        borderRadius: R.card,
+        overflow: "hidden",
+      }}
+    >
+      <SkeletonTable columns={[2, 1.4, 1, 1.4]} rows={3} rowHeight={40} />
     </div>
   );
 }
@@ -213,7 +223,7 @@ function InstanceTable({ instances, selected, onSelect }: InstanceTableProps) {
 const th: React.CSSProperties = {
   ...tableCaps,
   padding: "8px 12px",
-  fontSize: 11,
+  fontSize: fs.label,
 };
 
 const td: React.CSSProperties = {
@@ -221,31 +231,11 @@ const td: React.CSSProperties = {
   verticalAlign: "middle",
 };
 
-function StatusBadge({ status }: { status: string }) {
-  const color = (() => {
-    switch (status) {
-      case "running":
-        return W.ok;
-      case "creating":
-      case "stopping":
-      case "partial":
-        return W.warn;
-      case "failed":
-        return W.err;
-      case "stopped":
-      default:
-        return W.dim;
-    }
-  })();
-  return (
-    <span
-      style={{ color, display: "inline-flex", alignItems: "center", gap: 6 }}
-    >
-      <Dot color={color} />
-      <span>{status}</span>
-    </span>
-  );
-}
+const numCell: React.CSSProperties = {
+  textAlign: "right",
+  fontFamily: wMono,
+  fontVariantNumeric: "tabular-nums",
+};
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
@@ -253,13 +243,12 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
-        padding: 32,
+        borderRadius: R.card,
+        padding: 16,
         color: W.dim,
-        textAlign: "center",
       }}
     >
-      <p style={{ marginTop: 0, fontSize: 14, color: W.text }}>
+      <p style={{ marginTop: 0, fontSize: fs.body, color: W.text }}>
         No LocalNet instances yet.
       </p>
       <Button
@@ -271,9 +260,11 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       >
         Create your first instance
       </Button>
-      <p style={{ marginBottom: 0, fontSize: 11.5 }}>
+      <p style={{ marginBottom: 0, fontSize: fs.label }}>
         Or run{" "}
-        <code style={{ color: W.text2 }}>dpm localnet up --name demo</code>{" "}
+        <code style={{ fontFamily: wMono, color: W.text2 }}>
+          dpm localnet up --name demo
+        </code>{" "}
         in your terminal.
       </p>
     </div>
@@ -283,10 +274,11 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 function ErrorPanel({ error }: { error: string }) {
   return (
     <div
+      role="alert"
       style={{
-        background: `${W.err}1A`,
+        background: `${tint(W.err, 10)}`,
         border: `1px solid ${W.err}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 16,
         color: W.err,
       }}
@@ -297,12 +289,7 @@ function ErrorPanel({ error }: { error: string }) {
   );
 }
 
-// RecentActivity — instance-scoped ledger activity on the Overview.
-// Reuses GET /api/instances/{name}/transactions (the same offset-window
-// scan the Explorer and CLI `tx ls` use), flattened to one row per
-// ledger event and projected through the app-provider participant. A
-// snapshot with manual refresh — the transactions endpoint is a window
-// scan, not an SSE stream.
+// Snapshot with manual refresh — /transactions is a window scan, not an SSE stream.
 function RecentActivity({ name }: { name: string }) {
   const [tick, setTick] = useState(0);
   const [state, setState] = useState<
@@ -365,14 +352,14 @@ function RecentActivity({ name }: { name: string }) {
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 16,
         marginBottom: 16,
       }}
     >
       <header style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-        <h3 style={{ margin: 0, fontSize: 14, color: W.text }}>Recent activity</h3>
-        <span style={{ color: W.dim, fontSize: 12 }}>
+        <h3 style={{ margin: 0, fontSize: fs.lead, fontWeight: 600, color: W.text }}>Recent activity</h3>
+        <span style={{ color: W.dim, fontSize: fs.meta }}>
           ledger events · as seen by the app-provider participant
         </span>
         <Button
@@ -387,29 +374,29 @@ function RecentActivity({ name }: { name: string }) {
       </header>
 
       {state.kind === "loading" && (
-        <div style={{ color: W.dim, fontSize: 13, padding: "8px 0" }}>Scanning recent ledger updates…</div>
+        <div style={{ color: W.dim, fontSize: fs.data, padding: "8px 0" }}>Scanning recent ledger updates…</div>
       )}
       {state.kind === "needs-jwt" && (
-        <div style={{ color: W.dim, fontSize: 12.5, padding: "8px 0" }}>
-          Ledger activity needs a party-rights JWT — Splice LocalNet signs user-id tokens by
+        <div style={{ color: W.dim, fontSize: fs.body, padding: "8px 0" }}>
+          Ledger activity needs a party-rights JWT. Splice LocalNet signs user-id tokens by
           default. Open the Explorer to project through a specific party.
         </div>
       )}
       {state.kind === "err" && (
-        <div style={{ color: W.dim, fontSize: 12.5, padding: "8px 0" }}>
+        <div style={{ color: W.dim, fontSize: fs.body, padding: "8px 0" }}>
           {/no jwt recorded/i.test(state.error)
-            ? "Ledger activity needs recorded role JWTs — restart the instance to capture them (older instances predate JWT capture)."
-            : `Ledger activity unavailable — ${state.error}.`}{" "}
+            ? "Ledger activity needs recorded role JWTs. Restart the instance to capture them (older instances predate JWT capture)."
+            : `Ledger activity unavailable. ${state.error}.`}{" "}
           Open the Explorer for the full ledger view.
         </div>
       )}
       {state.kind === "ok" && events.length === 0 && (
-        <div style={{ color: W.dim, fontSize: 13, padding: "8px 0" }}>
+        <div style={{ color: W.dim, fontSize: fs.body, padding: "8px 0" }}>
           No recent ledger activity. Run a token or DAR operation to see updates.
         </div>
       )}
       {state.kind === "ok" && events.length > 0 && (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 8 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data, marginTop: 8 }}>
           <thead>
             <tr style={{ color: W.dim, textAlign: "left" }}>
               <th style={actTh}>TIME</th>
@@ -421,23 +408,24 @@ function RecentActivity({ name }: { name: string }) {
           <tbody>
             {events.map((e) => (
               <tr key={e.key} style={{ borderTop: `1px solid ${W.border}` }}>
-                <td style={{ ...actTd, color: W.dim, fontFamily: wMono, fontSize: 11 }}>{e.time}</td>
+                <td style={{ ...actTd, color: W.dim, fontFamily: wMono, fontVariantNumeric: "tabular-nums", fontSize: fs.label }}>{e.time}</td>
                 <td style={actTd}>
                   <span
                     style={{
                       color: kindColor[e.kind],
-                      border: `1px solid ${kindColor[e.kind]}`,
-                      borderRadius: 2,
+                      border: `1px solid ${tint(kindColor[e.kind], 34)}`,
+                      background: tint(kindColor[e.kind], 13),
+                      borderRadius: R.control,
                       padding: "1px 6px",
-                      fontSize: 11,
+                      fontSize: fs.label,
                     }}
                   >
                     {e.kind}
                   </span>
                 </td>
                 <td style={{ ...actTd, fontFamily: wMono, color: W.text2 }}>{e.event}</td>
-                <td style={{ ...actTd, fontFamily: wMono, color: W.info, fontSize: 11 }}>
-                  {e.cid.slice(0, 10)}…
+                <td style={actTd}>
+                  <MonoId value={e.cid} head={6} tail={6} size={11} color={W.info} />
                 </td>
               </tr>
             ))}
@@ -445,7 +433,7 @@ function RecentActivity({ name }: { name: string }) {
         </table>
       )}
       {state.kind === "ok" && state.truncated && (
-        <div style={{ color: W.dim, fontSize: 11, marginTop: 8 }}>
+        <div style={{ color: W.dim, fontSize: fs.label, marginTop: 8 }}>
           Showing the newest events of a clipped scan.
         </div>
       )}
@@ -453,14 +441,12 @@ function RecentActivity({ name }: { name: string }) {
   );
 }
 
-// shortTemplate drops the package-id prefix from a fully-qualified
-// template id (`<pkg>:Module:Entity` → `Module:Entity`) for a compact,
-// readable EVENT column.
+// `<pkg>:Module:Entity` → `Module:Entity` for a compact EVENT column.
 function shortTemplate(t?: string): string {
   if (!t) return "—";
   const parts = t.split(":");
   return parts.length >= 3 ? `${parts[parts.length - 2]}:${parts[parts.length - 1]}` : t;
 }
 
-const actTh: React.CSSProperties = { ...tableCaps, padding: "6px 10px 6px 0", fontSize: 11 };
+const actTh: React.CSSProperties = { ...tableCaps, padding: "6px 10px 6px 0", fontSize: fs.label };
 const actTd: React.CSSProperties = { padding: "8px 10px 8px 0", verticalAlign: "middle" };
