@@ -51,7 +51,7 @@ func (f *connectFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.CACertFile, "ca-cert", "",
 		"PEM-encoded CA bundle for TLS verification (when --insecure=false).")
 	cmd.Flags().StringVar(&f.Instance, "instance", "",
-		"DevKit LocalNet instance name; resolves --admin-host + --token from the registry.")
+		"DevKit LocalNet instance name")
 	cmd.Flags().StringVar(&f.Role, "role", "app-user",
 		"Participant role within --instance: sv, app-provider, or app-user.")
 	// Accept --name as an alias for --instance so the dar verbs take the
