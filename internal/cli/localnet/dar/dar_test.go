@@ -53,6 +53,24 @@ func TestBuild_RootHelpMentionsKeyVerbs(t *testing.T) {
 	}
 }
 
+func TestUploadHelpUsesShortInstanceDescription(t *testing.T) {
+	root := Build(false)
+	root.SetArgs([]string{"upload", "--help"})
+	var buf bytes.Buffer
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute(): %v", err)
+	}
+	help := buf.String()
+	if !strings.Contains(help, "DevKit LocalNet instance name") {
+		t.Fatalf("help text missing short --instance description\n%s", help)
+	}
+	if strings.Contains(help, "resolves --admin-host + --token") {
+		t.Fatalf("help text contains overly detailed --instance description\n%s", help)
+	}
+}
+
 // TestUpload_RequiresArg: `dar upload` without a path argument
 // must fail with a clear usage error, not segfault or hang.
 func TestUpload_RequiresArg(t *testing.T) {
