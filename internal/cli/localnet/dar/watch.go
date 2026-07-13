@@ -133,7 +133,7 @@ Exit codes:
 	cmd.Flags().StringVar(&builder, "builder", "auto", "Build tool: auto, dpm, or daml.")
 	cmd.Flags().DurationVar(&interval, "interval", time.Second, "Polling interval for source changes.")
 	cmd.Flags().BoolVar(&vet, "vet", true, "Vet packages on each upload.")
-	cmd.Flags().StringVar(&publishTo, "publish-to", "", "Base URL of a running `dpm localnet ui` to publish hot-deploy events to (e.g. http://127.0.0.1:7777). Best-effort; failures are logged to stderr and do not abort the watch loop. Uses --instance to tag events.")
+	cmd.Flags().StringVar(&publishTo, "publish-to", "", "Base URL of a running `dpm localnet ui` for hot-deploy events, for example http://127.0.0.1:7777.")
 	return cmd
 }
 

@@ -33,14 +33,11 @@ func buildInfo() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "info <dar-path|package-id>",
 		Short: "Inspect a local DAR file or an uploaded package on a participant",
-		Long: `Inspect a Daml package by package id (queries a participant)
-or by local DAR file path (parses bytes on disk).
+		Long: `Inspect a Daml package by package id or local DAR file path.
 
 Routing:
-  dar info /path/to/foo.dar          → offline file parser
-  dar info <64-hex package id>       → participant query via Admin API
-                                       (PackageService.GetPackageContents +
-                                       PackageService.GetPackageReferences)
+  dar info /path/to/foo.dar          inspect a local DAR file
+  dar info <64-hex package id>       inspect a package on a participant
 
 Offline path output:
   - SDK version that built the DAR
@@ -49,10 +46,9 @@ Offline path output:
   - SHA256 of the DAR for tamper checks
 
 Participant-query path output:
-  - module list (names only — Canton's Admin API doesn't yet emit
-    templates/choices/fields)
+  - module list
   - language version (Daml-LF) and is_utility_package flag
-  - DARs that reference the package (from GetPackageReferences)
+  - DARs that reference the package
 
 Deep inspection (--deep, offline path): parses the Daml-LF directly to
 list each module's templates (with their choices), interfaces (choices +
@@ -92,7 +88,7 @@ Exit codes:
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false,
 		"Offline path: show every dependency. Participant path: include every referenced DAR.")
 	cmd.Flags().BoolVar(&deep, "deep", false,
-		"Offline path: parse Daml-LF and list the main package's modules → templates (+ choices), interfaces, and data types.")
+		"Offline path: list the main package's modules, templates, choices, interfaces, and data types.")
 	conn.register(cmd)
 	return cmd
 }

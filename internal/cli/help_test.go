@@ -45,6 +45,30 @@ func TestLocalnetHelp_RendersMockupShape(t *testing.T) {
 	}
 }
 
+func TestLocalnetHelp_AvoidsImplementationDetails(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	var out, errBuf bytes.Buffer
+	app := New(&out, &errBuf, "test", "")
+	code := app.Run([]string{"localnet", "--help"})
+	if code != 0 {
+		t.Fatalf("help returned %d, want 0; stderr=%q", code, errBuf.String())
+	}
+	body := out.String()
+	for _, unwanted := range []string{
+		"docker compose stop",
+		"docker compose pause",
+		"docker compose unpause",
+		"registry state",
+		"docker reality",
+		"AI-agent",
+		"curated + upstream",
+	} {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("help body should not expose implementation detail %q\nfull:\n%s", unwanted, body)
+		}
+	}
+}
+
 // TestLocalnetHelp_MatchesWiredCommandSet pins the hand-written
 // helpCategories() list to the live cobra tree in BOTH directions:
 //

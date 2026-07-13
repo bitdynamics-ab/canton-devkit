@@ -43,17 +43,13 @@ func buildListUploaded() *cobra.Command {
 		Use:   "list",
 		Short: "List uploaded DARs (or packages with --packages) on a participant",
 		Args:  cobra.NoArgs,
-		Long: `List uploaded DARs on the targeted participant. Useful for
-"what's deployed right now?" sanity checks during dev.
+		Long: `List uploaded DARs on the targeted participant.
 
-By default lists DARs (PackageService.ListDars). Pass --packages to
-switch to the per-.dalf view (PackageService.ListPackages) — handy
-for chasing down which dependency is missing.
+By default, the command lists DARs. Pass --packages to list individual
+.dalf packages instead.
 
 Pass --vetting (requires --instance) to add a per-participant vetting
-column probing all three participants (app-user / app-provider / sv),
-so you can see where a package is vetted after a "dar remove" unvet —
-the same vetting signal the Web UI DAR screen shows.
+column for app-user, app-provider, and sv.
 
 Exit codes:
   0  Listing returned (even if empty)
@@ -141,9 +137,9 @@ Exit codes:
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json.")
 	cmd.Flags().BoolVar(&packages, "packages", false, "List individual .dalf packages instead of DARs.")
 	cmd.Flags().BoolVar(&enrich, "enrich", false,
-		"Add Daml-LF version + module count to each row by calling GetPackageContents per package. Adds latency.")
+		"Add Daml-LF version and module count to each row. Adds latency.")
 	cmd.Flags().BoolVar(&vetting, "vetting", false,
-		"Add a per-participant vetting column (probes sv, app-provider, app-user). Requires --instance; ignored with --packages.")
+		"Add a per-participant vetting column for sv, app-provider, and app-user. Requires --instance; ignored with --packages.")
 	cmd.Flags().StringVar(&filterName, "filter-name", "", "Server-side name substring filter.")
 	cmd.Flags().Int32Var(&limit, "limit", 0, "Max rows to return (0 = server default).")
 	return cmd
