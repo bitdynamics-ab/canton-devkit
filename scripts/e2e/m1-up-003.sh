@@ -11,6 +11,11 @@ e2e_require_docker
 TEST_ID="M1-UP-003"
 
 run_test() {
+  # Precondition: this test brings up a fresh e2e-version-test. Clear any
+  # instance left running by a prior/aborted run so `up` does not abort with
+  # "instance already running". Best-effort; failures here are non-fatal.
+  e2e_cleanup_instance e2e-version-test
+
   echo "  Starting e2e-version-test with --version $SPLICE_VERSION (may take 3-5 minutes)..."
   timed 600 "$CDK" localnet up e2e-version-test --version "$SPLICE_VERSION" \
     || { echo "FAIL step 1: up --version exited $?" >&2; return 1; }
