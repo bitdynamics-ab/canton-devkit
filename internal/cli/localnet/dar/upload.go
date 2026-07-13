@@ -31,16 +31,13 @@ func buildUpload() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "upload <dar-path>",
 		Short: "Upload a DAR to one or all participants of a LocalNet",
-		Long: `Upload a DAR file to a Canton participant via its Admin API
-(PackageService.UploadDar). Optionally vet all packages so they're
-ready for use immediately.
+		Long: `Upload a DAR file to a Canton participant. Optionally vet all
+packages so they are ready for use immediately.
 
 Targeting modes:
-  --admin-host <h:p> --token <jwt>      → direct, single participant
-  --instance <name> --role <role>       → DevKit registry, single
-                                          participant
-  --instance <name> --all-participants  → fan out to sv,
-                                          app-provider, app-user
+  --admin-host <h:p> --token <jwt>      direct, single participant
+  --instance <name> --role <role>       named LocalNet, single participant
+  --instance <name> --all-participants  named LocalNet, all participants
 
 For Splice LocalNet on default ports, app-user is localhost:2902,
 app-provider localhost:3902, sv localhost:4902.
@@ -98,10 +95,10 @@ Exit codes:
 	}
 	conn.register(cmd)
 	cmd.Flags().BoolVar(&allPpt, "all-participants", false,
-		"Fan out to every known participant role on --instance (sv, app-provider, app-user). Requires --instance.")
+		"Upload to all participant roles on --instance (sv, app-provider, app-user). Requires --instance.")
 	cmd.Flags().BoolVar(&vet, "vet", true, "Vet all packages in the DAR after upload (default true).")
 	cmd.Flags().BoolVar(&sync, "synchronize", false, "Wait for the vetting transaction to be observed before returning.")
-	cmd.Flags().BoolVar(&dry, "dry-run", false, "Validate without uploading. Calls ValidateDar instead of UploadDar.")
+	cmd.Flags().BoolVar(&dry, "dry-run", false, "Validate without uploading.")
 	cmd.Flags().StringVar(&desc, "description", "", "Optional human-readable description recorded with the upload.")
 	return cmd
 }

@@ -194,6 +194,20 @@ func TestCompare_SnapshotToRelease_NotBlocked(t *testing.T) {
 	}
 }
 
+func TestCompare_AdvisorySignalUsesOperatorFacingLanguage(t *testing.T) {
+	a := infoFixture("a.dar", "splice-wallet", "0.1.5", "id1", "2", "1")
+	b := infoFixture("b.dar", "splice-wallet", "0.1.5", "id1", "2", "1")
+	d := Compare(a, b)
+	if !hasSignal(d, "info", "Compatibility notes are advisory") {
+		t.Fatal("missing advisory compatibility signal")
+	}
+	for _, s := range d.SCUSignals {
+		if strings.Contains(s.Message, "best-effort signals") || strings.Contains(s.Message, "Ledger API") {
+			t.Fatalf("SCU signal exposes implementation-heavy language: %q", s.Message)
+		}
+	}
+}
+
 func hasSignal(d *Diff, severity, substr string) bool {
 	for _, s := range d.SCUSignals {
 		if s.Severity == severity && strings.Contains(s.Message, substr) {

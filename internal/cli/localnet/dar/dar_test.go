@@ -71,6 +71,40 @@ func TestUploadHelpUsesShortInstanceDescription(t *testing.T) {
 	}
 }
 
+func TestSubcommandHelpAvoidsRPCImplementationDetails(t *testing.T) {
+	commands := [][]string{
+		{"upload", "--help"},
+		{"list", "--help"},
+		{"info", "--help"},
+		{"remove", "--help"},
+	}
+	for _, args := range commands {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			root := Build(false)
+			root.SetArgs(args)
+			var buf bytes.Buffer
+			root.SetOut(&buf)
+			root.SetErr(&buf)
+			if err := root.Execute(); err != nil {
+				t.Fatalf("Execute(): %v", err)
+			}
+			help := buf.String()
+			for _, unwanted := range []string{
+				"PackageService",
+				"ValidateDar",
+				"UploadDar",
+				"RemoveDar",
+				"UnvetDar",
+				"GetPackageReferences",
+			} {
+				if strings.Contains(help, unwanted) {
+					t.Errorf("help text should not expose implementation detail %q\nfull:\n%s", unwanted, help)
+				}
+			}
+		})
+	}
+}
+
 // TestUpload_RequiresArg: `dar upload` without a path argument
 // must fail with a clear usage error, not segfault or hang.
 func TestUpload_RequiresArg(t *testing.T) {

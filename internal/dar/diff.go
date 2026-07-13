@@ -389,7 +389,7 @@ func computeSCUSignals(d *Diff, leftMain, rightMain *PackageMeta) []SCUSignal {
 
 	out = append(out, SCUSignal{
 		Severity: "info",
-		Message:  "best-effort signals — authoritative SCU validation lives with daml damlc / the Ledger API",
+		Message:  "Compatibility notes are advisory. Validate with Daml tooling before deployment.",
 	})
 	return out
 }
