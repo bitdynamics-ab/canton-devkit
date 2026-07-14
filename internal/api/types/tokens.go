@@ -39,6 +39,20 @@ type TokenRef struct {
 	Status string `json:"status"`
 }
 
+// TokenIdentityResponse is the act-as identity picker payload served by
+// GET /api/tokens/identity. AvailableRoles is the full set of roles a
+// LocalNet bring-up issues tokens for (UI-ordered, default first);
+// CurrentRole echoes the role the request was made under (?role=,
+// defaulting to app-user) so the switcher can highlight the active
+// identity without a second round-trip. Same shape backs the CLI
+// `token identity --format json`.
+type TokenIdentityResponse struct {
+	SchemaVersion  int      `json:"schema_version"`
+	Instance       string   `json:"instance"`
+	AvailableRoles []string `json:"available_roles"`
+	CurrentRole    string   `json:"current_role"`
+}
+
 // TokenCreateRequest is the input shape for both `token create
 // --non-interactive` (CLI) and `POST /api/tokens` (Web UI). Same struct
 // so the CLI's --json output and the Web UI handler's request body are

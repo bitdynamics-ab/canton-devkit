@@ -75,6 +75,16 @@ type TransferOptions struct {
 	// Ignored when NoWait is set (the two are contradictory).
 	AutoAccept bool
 
+	// Atomic routes an AutoAccept on-ledger transfer through the wallet's
+	// BatchingUtilityV2 so the transfer + receiver-accept commit in ONE
+	// all-or-nothing transaction (see batch.go). Default (false) keeps the
+	// sequential offer→accept path, which preserves partial-recovery: a
+	// committed offer whose accept later fails is retryable, whereas a
+	// failed batch rolls back entirely with nothing to resume. Only takes
+	// effect for on-ledger (splice-test-token-v2) instruments with
+	// AutoAccept set and NoWait clear; ignored otherwise.
+	Atomic bool
+
 	// Live-submit fields. When Endpoint is set, RunTransfer performs
 	// the full V2 flow: ACS query → POST /transfer-factory → ledger
 	// exercise. Empty Endpoint surfaces the legacy ErrNeedsV2LocalNet

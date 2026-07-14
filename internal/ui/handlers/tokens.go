@@ -45,6 +45,7 @@ const tokensBodyMax = 64 << 10 // 64 KiB
 // call when that lands.
 func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	mux.HandleFunc("GET /api/tokens", handleTokensList)
+	mux.HandleFunc("GET /api/tokens/identity", handleTokenIdentity)
 	mux.HandleFunc("GET /api/tokens/matrix", handleTokenMatrix)
 	mux.HandleFunc("GET /api/tokens/{symbol}", handleTokenDetail)
 	mux.HandleFunc("GET /api/tokens/{symbol}/summary", handleTokenSummary)
@@ -61,6 +62,15 @@ func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	mux.HandleFunc("POST /api/tokens/transfers/{id}/accept", idem.wrap(handleTokenAccept))
 	mux.HandleFunc("POST /api/tokens/{symbol}/burn", idem.wrap(handleTokenBurn))
 	mux.HandleFunc("POST /api/tokens/{symbol}/faucet", idem.wrap(handleTokenFaucet))
+	// V2 DvP allocations. list is a GET (ACS scan); allocate + the
+	// per-allocation actions are idempotent-wrapped POSTs (a retry can't
+	// double-allocate/settle). Same RunX functions the `token allocate /
+	// allocations / settle` CLI verbs call — CLI ↔ UI parity is automatic.
+	mux.HandleFunc("GET /api/tokens/allocations", handleAllocationsList)
+	mux.HandleFunc("POST /api/tokens/{symbol}/allocate", idem.wrap(handleTokenAllocate))
+	mux.HandleFunc("POST /api/tokens/allocations/{id}/settle", idem.wrap(handleAllocationSettle))
+	mux.HandleFunc("POST /api/tokens/allocations/{id}/withdraw", idem.wrap(handleAllocationWithdraw))
+	mux.HandleFunc("POST /api/tokens/allocations/{id}/cancel", idem.wrap(handleAllocationCancel))
 	// Party alias registry — the workspace's god-mode
 	// party manager. Same RunPartyX functions the `token party` CLI calls.
 	mux.HandleFunc("GET /api/parties", handlePartiesList)
@@ -156,6 +166,26 @@ func handlePartiesRemove(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- read paths ------------------------------------------------------
+
+// handleTokenIdentity serves the act-as identity picker: the roles a
+// LocalNet bring-up issues tokens for plus the role the request was made
+// under. Backs the Web UI's top-level role switcher on the Tokens screen
+// and the CLI `token identity` verb (same token.Roles() source, so both
+// surfaces list the same set in the same order). Read-only; no ledger
+// dial, so it answers even when the instance is down.
+func handleTokenIdentity(w http.ResponseWriter, r *http.Request) {
+	instance, err := instanceFromQuery(r)
+	if err != nil {
+		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, types.TokenIdentityResponse{
+		SchemaVersion:  types.SchemaVersion,
+		Instance:       instance,
+		AvailableRoles: token.Roles(),
+		CurrentRole:    roleFromQuery(r),
+	})
+}
 
 func handleTokensList(w http.ResponseWriter, r *http.Request) {
 	instance, err := instanceFromQuery(r)
@@ -531,6 +561,7 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 		Amount     string `json:"amount"`
 		NoWait     bool   `json:"no_wait"`
 		AutoAccept bool   `json:"auto_accept"`
+		Atomic     bool   `json:"atomic"`
 		Reason     string `json:"reason"`
 	}
 	if err := decodeJSON(r.Body, &body); err != nil {
@@ -569,6 +600,9 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 	// Live-submit: opts already carries the resolved endpoint/role.
 	opts.NoWait = body.NoWait
 	opts.AutoAccept = body.AutoAccept
+	// Atomic batches transfer+accept into one BatchingUtilityV2 transaction
+	// (opt-in; sequential remains the default — see TransferOptions.Atomic).
+	opts.Atomic = body.Atomic
 	opts.Reason = body.Reason
 	// Capture RunTransfer's emitted events so we can return the created
 	// TransferInstruction id to the client. Without it the two-step

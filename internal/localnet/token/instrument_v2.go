@@ -71,6 +71,14 @@ func ensureTokenRules(opts CreateOptions) error {
 // The issuer party (ref.IssuerParty) is the admin; we dial as the
 // instrument's role and auto-grant covers acting as both admin and
 // receiver (LocalNet hosts them on the same participant).
+//
+// Not batched (unlike transfer+accept): TokenRules_OfferMint is an
+// asset-specific choice, and BatchingUtilityV2's TokenStandardAction set
+// only wraps standard token-interface choices (TransferFactory / Transfer
+// Instruction / AllocationFactory / …) — there is no TSA_ variant for an
+// arbitrary asset choice, so the offer step can't be a batch action. The
+// lone accept that follows is a single submit, so batching would save no
+// round-trip. Mint therefore stays sequential.
 func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regstate.TokenRef) error {
 	conn := LedgerConn{
 		Endpoint: opts.Endpoint,

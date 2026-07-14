@@ -44,6 +44,14 @@ function stubFetch(
           instances: [{ name: "demo", status: "running" }],
         });
       }
+      if (url.startsWith("/api/tokens/identity")) {
+        return json({
+          schema_version: 1,
+          instance: "demo",
+          available_roles: ["app-user", "app-provider", "sv"],
+          current_role: "app-user",
+        });
+      }
       if (url.startsWith("/api/tokens/matrix")) {
         return json({
           schema_version: 1,
@@ -82,12 +90,12 @@ function stubFetch(
           events: [
             {
               offset: 1106, update_id: "u1106", record_time: "2026-05-30T16:50:45Z",
-              instrument_id: "RTK", kind: "mint", amount: "1000",
+              instrument_id: "RTK", kind: "mint", source: "event_log", amount: "1000",
               receivers: [{ party: "bob::def", amount: "1000" }],
             },
             {
               offset: 1200, update_id: "u1200", record_time: "2026-05-30T17:00:00Z",
-              instrument_id: "RTK", kind: "transfer", amount: "100",
+              instrument_id: "RTK", kind: "transfer", source: "event_log", amount: "100",
               senders: [{ party: "bob::def", amount: "100" }],
               receivers: [{ party: "alice::abc", amount: "100" }],
             },
@@ -358,6 +366,51 @@ describe("TokensScreen", () => {
     // The "not on-ledger holdings" copy is split across <b> tags, so the
     // trailing fragment lands in its own text node — match that.
     expect(screen.queryByText(/on-ledger holdings/i)).toBeInTheDocument();
+  });
+
+  // The top-level identity switcher must re-plumb the chosen role
+  // through the token API calls: after selecting "app-provider" the
+  // screen refetches its lenses with role=app-provider in the query.
+  // Before the switch, calls default to app-user (role omitted, matching
+  // the backend default / DEFAULT_ROLE).
+  it("threads the selected identity through token API calls", async () => {
+    const user = userEvent.setup();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+
+    const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>;
+    const calledWith = (needle: string) =>
+      fetchMock.mock.calls.some(([u]) => String(u).includes(needle));
+
+    // Instruments load under the default identity first.
+    await waitFor(
+      () => expect(screen.queryAllByText(/Retail Token/).length).toBeGreaterThan(0),
+      { timeout: 4000 },
+    );
+    // Default calls carry no explicit role (app-user is the omitted default).
+    expect(calledWith("role=app-provider")).toBe(false);
+
+    // Switch identity via the header segmented control.
+    await user.click(
+      await screen.findByRole("button", { name: /app-provider/i }, { timeout: 4000 }),
+    );
+
+    // The switch triggers a refetch of the token list under the new role.
+    await waitFor(
+      () => expect(calledWith("/api/tokens?instance=demo&role=app-provider")).toBe(true),
+      { timeout: 4000 },
+    );
+  });
+
+  it("populates the switcher from GET /api/tokens/identity", async () => {
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    // available_roles from the identity endpoint render as switcher buttons.
+    await waitFor(
+      () => expect(screen.getByRole("button", { name: /app-provider/i })).toBeInTheDocument(),
+      { timeout: 4000 },
+    );
+    expect(screen.getByRole("button", { name: /^sv$/i })).toBeInTheDocument();
   });
 
   it("does NOT show the disclaimer when holdings are live on-ledger", async () => {

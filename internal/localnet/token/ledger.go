@@ -25,6 +25,7 @@ import (
 type LedgerClient interface {
 	LedgerEnd(ctx context.Context) (ledger.LedgerEnd, error)
 	ActiveContracts(ctx context.Context, req ledger.ActiveContractsRequest) (<-chan ledger.StreamItem[*lapiv2.GetActiveContractsResponse], error)
+	Updates(ctx context.Context, req ledger.UpdatesRequest) (<-chan ledger.StreamItem[*lapiv2.GetUpdatesResponse], error)
 	ResolveActAndReadParties(ctx context.Context) ([]string, error)
 	ListKnownParties(ctx context.Context) (*adminv2.ListKnownPartiesResponse, error)
 	GrantUserActAndReadAs(ctx context.Context, userID string, parties []string) error
@@ -327,6 +328,14 @@ func (g Generation) String() string {
 type Surfaces struct {
 	HasV1 bool
 	HasV2 bool
+
+	// HasEventLog is set when splice-api-token-transfer-events-v2 is
+	// vetted — the package carrying the EventLog interface an instrument
+	// admin exercises (EventLog_HoldingsChange) to report holdings
+	// changes. When present, the activity feed can read the admin's
+	// authoritative change history instead of netting HoldingV2
+	// create/archive deltas itself.
+	HasEventLog bool
 }
 
 // Any reports whether any token-standard holding package is vetted.
@@ -349,6 +358,8 @@ func discoverTokenSurfaces(ctx context.Context, client LedgerClient) (Surfaces, 
 			s.HasV1 = true
 		case "splice-api-token-holding-v2":
 			s.HasV2 = true
+		case "splice-api-token-transfer-events-v2":
+			s.HasEventLog = true
 		}
 	}
 	return s, nil

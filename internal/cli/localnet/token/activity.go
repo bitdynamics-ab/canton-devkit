@@ -49,6 +49,7 @@ Requires --endpoint (the participant ledger gRPC host:port) and
 				{Label: "OFFSET"},
 				{Label: "TIME"},
 				{Label: "KIND"},
+				{Label: "SOURCE"},
 				{Label: "AMOUNT"},
 				{Label: "FROM"},
 				{Label: "TO"},
@@ -59,6 +60,7 @@ Requires --endpoint (the participant ledger gRPC host:port) and
 					fmt.Sprintf("%d", e.Offset),
 					e.RecordTime,
 					e.Kind,
+					sourceLabel(e.Source),
 					e.Amount,
 					partyList(e.Senders),
 					partyList(e.Receivers),
@@ -84,6 +86,16 @@ Requires --endpoint (the participant ledger gRPC host:port) and
 	_ = cmd.MarkFlagRequired("endpoint")
 	_ = cmd.MarkFlagRequired("instrument")
 	return cmd
+}
+
+// sourceLabel renders an ActivityEvent.Source for the text table:
+// "EventLog" for the admin's authoritative holdings-change events,
+// "derived" for the HoldingV2-netting fallback.
+func sourceLabel(source string) string {
+	if source == "event_log" {
+		return "EventLog"
+	}
+	return "derived"
 }
 
 // partyList renders a slice of party deltas as "alice +100, bob +5" with

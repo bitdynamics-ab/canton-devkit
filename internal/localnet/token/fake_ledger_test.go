@@ -20,6 +20,7 @@ import (
 type fakeLedger struct {
 	LedgerEndFn                func(ctx context.Context) (ledger.LedgerEnd, error)
 	ActiveContractsFn          func(ctx context.Context, req ledger.ActiveContractsRequest) (<-chan ledger.StreamItem[*lapiv2.GetActiveContractsResponse], error)
+	UpdatesFn                  func(ctx context.Context, req ledger.UpdatesRequest) (<-chan ledger.StreamItem[*lapiv2.GetUpdatesResponse], error)
 	ResolveActAndReadPartiesFn func(ctx context.Context) ([]string, error)
 	ListKnownPartiesFn         func(ctx context.Context) (*adminv2.ListKnownPartiesResponse, error)
 	GrantUserActAndReadAsFn    func(ctx context.Context, userID string, parties []string) error
@@ -38,6 +39,13 @@ func (f *fakeLedger) ActiveContracts(ctx context.Context, req ledger.ActiveContr
 		return f.ActiveContractsFn(ctx, req)
 	}
 	return newStream(nil, nil), nil
+}
+
+func (f *fakeLedger) Updates(ctx context.Context, req ledger.UpdatesRequest) (<-chan ledger.StreamItem[*lapiv2.GetUpdatesResponse], error) {
+	if f.UpdatesFn != nil {
+		return f.UpdatesFn(ctx, req)
+	}
+	return newUpdatesStream(nil, nil), nil
 }
 
 func (f *fakeLedger) ResolveActAndReadParties(ctx context.Context) ([]string, error) {
@@ -88,6 +96,22 @@ func newStream(items []*lapiv2.GetActiveContractsResponse, termErr error) <-chan
 	}
 	if termErr != nil {
 		out <- ledger.StreamItem[*lapiv2.GetActiveContractsResponse]{Err: termErr}
+	}
+	close(out)
+	return out
+}
+
+// newUpdatesStream is newStream's GetUpdatesResponse twin: a closed
+// channel pre-populated with the updates, then (if termErr != nil) one
+// final error item before close. Feeds the EventLog / netting activity
+// consumers without a live participant.
+func newUpdatesStream(items []*lapiv2.GetUpdatesResponse, termErr error) <-chan ledger.StreamItem[*lapiv2.GetUpdatesResponse] {
+	out := make(chan ledger.StreamItem[*lapiv2.GetUpdatesResponse], len(items)+1)
+	for _, it := range items {
+		out <- ledger.StreamItem[*lapiv2.GetUpdatesResponse]{Value: it}
+	}
+	if termErr != nil {
+		out <- ledger.StreamItem[*lapiv2.GetUpdatesResponse]{Err: termErr}
 	}
 	close(out)
 	return out

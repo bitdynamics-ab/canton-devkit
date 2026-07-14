@@ -46,7 +46,11 @@ Quick start (on a running instance):
 	cmd.AddCommand(buildSummary())
 	cmd.AddCommand(buildActivity())
 	cmd.AddCommand(buildParty())
+	cmd.AddCommand(buildIdentity())
 	cmd.AddCommand(buildFaucet())
+	cmd.AddCommand(buildAllocate())
+	cmd.AddCommand(buildAllocations())
+	cmd.AddCommand(buildSettle())
 	return cmd
 }
 

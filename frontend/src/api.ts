@@ -1728,6 +1728,21 @@ function tokenQuery(instance: string, role?: string): string {
 export const fetchTokens = (instance: string, role?: string) =>
   apiFetch<TokensListResponse>(`/api/tokens?${tokenQuery(instance, role)}`);
 
+// TokenIdentity mirrors api/types.TokenIdentityResponse (GET
+// /api/tokens/identity): the act-as identities the instance's token
+// commands can run under, plus the one the request was made under. Backs
+// the Tokens screen's top-level identity switcher; the CLI counterpart is
+// `dpm localnet token identity`.
+export interface TokenIdentity {
+  schema_version: number;
+  instance: string;
+  available_roles: Role[];
+  current_role: Role;
+}
+
+export const fetchTokenIdentity = (instance: string, role?: string) =>
+  apiFetch<TokenIdentity>(`/api/tokens/identity?${tokenQuery(instance, role)}`);
+
 export const fetchHoldings = (
   instance: string,
   symbol: string,
@@ -1915,9 +1930,11 @@ export const fetchInstrumentSummary = (
   ).then((r) => r.summary);
 
 // PartyDelta / ActivityEvent — the instrument activity feed
-// (Activity tab). Each event is one ledger transaction netted into
-// senders/receivers + a kind (mint | burn | transfer), reconstructed
-// from HoldingV2 create/archive events (no off-ledger registry).
+// (Activity tab). Each event is one movement netted into
+// senders/receivers + a kind (mint | burn | transfer). Two paths
+// produce it: the instrument admin's EventLog_HoldingsChange events
+// (source="event_log") or HoldingV2 create/archive netting
+// (source="transaction"). Mirrors internal/localnet/token.ActivityEvent.
 export interface PartyDelta {
   party: string;
   amount: string;
@@ -1929,6 +1946,7 @@ export interface ActivityEvent {
   record_time: string;
   instrument_id: string;
   kind: "mint" | "burn" | "transfer";
+  source: TokenActivitySource;
   amount: string;
   senders?: PartyDelta[];
   receivers?: PartyDelta[];
@@ -2054,13 +2072,25 @@ export const transferToken = async (
   reason?: string,
   role?: string,
   autoAccept?: boolean,
+  // atomic (with autoAccept) batches transfer+accept into one
+  // all-or-nothing BatchingUtilityV2 transaction; on-ledger test tokens
+  // only. Default (undefined/false) keeps the sequential, partially
+  // recoverable offer→accept path. Mirrors the CLI's --atomic flag.
+  atomic?: boolean,
 ): Promise<{ transferInstructionId: string; settled: boolean }> => {
   const resp = await fetch(
     `/api/tokens/${encodeURIComponent(symbol)}/transfer?${tokenQuery(instance, role)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json", ...idempotencyHeader() },
-      body: JSON.stringify({ from, to, amount, reason: reason ?? "", auto_accept: !!autoAccept }),
+      body: JSON.stringify({
+        from,
+        to,
+        amount,
+        reason: reason ?? "",
+        auto_accept: !!autoAccept,
+        atomic: !!atomic,
+      }),
     },
   );
   if (!resp.ok) {
@@ -2158,6 +2188,125 @@ export const acceptTransfer = (
     {},
     idempotencyHeader(),
   );
+
+// --- V2 DvP allocations ---------------------------------------------
+// Mirror the POST /api/tokens/{symbol}/allocate + GET /api/tokens/
+// allocations + POST /api/tokens/allocations/{id}/{settle,withdraw,cancel}
+// handlers. Same RunX orchestration the `token allocate/allocations/settle`
+// CLI verbs call — CLI ↔ UI parity.
+
+interface AllocationsListResponse {
+  schema_version: number;
+  allocations: AllocationSummary[];
+  aliases: AliasMap;
+}
+
+// fetchAllocations lists the ready-to-settle V2 allocations, optionally
+// filtered to one authorizer. Returns the summaries plus the alias map so
+// the panel can label party ids.
+export async function fetchAllocations(
+  instance: string,
+  party?: string,
+  role?: string,
+): Promise<{ allocations: AllocationSummary[]; aliases: AliasMap }> {
+  const params = new URLSearchParams({ instance });
+  if (party) params.set("party", party);
+  if (role && role !== DEFAULT_ROLE) params.set("role", role);
+  const r = await apiFetch<AllocationsListResponse>(
+    `/api/tokens/allocations?${params}`,
+  );
+  return { allocations: r.allocations ?? [], aliases: r.aliases ?? {} };
+}
+
+export interface AllocateInput {
+  from: string;
+  to: string;
+  amount: string;
+  executor?: string;
+  settlement_deadline?: string;
+  committed?: boolean;
+}
+
+// allocateToken creates a V2 allocation and returns the resulting
+// Allocation (or pending AllocationInstruction) contract id.
+export async function allocateToken(
+  instance: string,
+  symbol: string,
+  body: AllocateInput,
+  role?: string,
+): Promise<{ allocationId: string }> {
+  const resp = await fetch(
+    `/api/tokens/${encodeURIComponent(symbol)}/allocate?${tokenQuery(instance, role)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...idempotencyHeader() },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!resp.ok) {
+    let parsed: ApiErrorBody = { code: "UNKNOWN", error: resp.statusText };
+    try {
+      parsed = await resp.json();
+    } catch {
+      /* keep default */
+    }
+    throw new ApiError(resp.status, parsed);
+  }
+  const b = (await resp.json().catch(() => ({}))) as { allocation_id?: string };
+  return { allocationId: b.allocation_id ?? "" };
+}
+
+// settleAllocation / withdrawAllocation / cancelAllocation exercise the
+// matching per-allocation choice. All return void on 2xx (settle currently
+// surfaces the not-yet-proven remediation as an ApiError — see RunSettle).
+export const settleAllocation = (
+  instance: string,
+  allocationID: string,
+  party?: string,
+  role?: string,
+): Promise<void> =>
+  apiFetchVoid(
+    allocationActionURL(instance, allocationID, "settle", party, role),
+    {},
+    idempotencyHeader(),
+  );
+
+export const withdrawAllocation = (
+  instance: string,
+  allocationID: string,
+  party?: string,
+  role?: string,
+): Promise<void> =>
+  apiFetchVoid(
+    allocationActionURL(instance, allocationID, "withdraw", party, role),
+    {},
+    idempotencyHeader(),
+  );
+
+export const cancelAllocation = (
+  instance: string,
+  allocationID: string,
+  party?: string,
+  role?: string,
+): Promise<void> =>
+  apiFetchVoid(
+    allocationActionURL(instance, allocationID, "cancel", party, role),
+    {},
+    idempotencyHeader(),
+  );
+
+function allocationActionURL(
+  instance: string,
+  allocationID: string,
+  action: "settle" | "withdraw" | "cancel",
+  party?: string,
+  role?: string,
+): string {
+  return `/api/tokens/allocations/${encodeURIComponent(allocationID)}/${action}?${tokenQuery(
+    instance,
+    role,
+  )}${party ? `&party=${encodeURIComponent(party)}` : ""}`;
+}
 
 // apiFetchVoid is a thin POST wrapper for 204-returning handlers. The
 // mint/transfer/burn/accept endpoints return 204 on success and an

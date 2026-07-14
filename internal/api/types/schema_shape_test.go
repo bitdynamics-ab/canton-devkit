@@ -90,6 +90,7 @@ func schemaShapeRoots() []any {
 		BatchResult{},
 		TokenActivityEvent{},
 		TokenCreateRequest{},
+		TokenIdentityResponse{},
 		TokenRef{},
 		TransactionsListResponse{},
 		TxReplayResponse{},
@@ -512,6 +513,13 @@ types.TokenCreateRequest {
   decimals int
   initial_supply string
   issuer string
+}
+
+types.TokenIdentityResponse {
+  schema_version int
+  instance string
+  available_roles []string
+  current_role string
 }
 
 types.TokenRef {

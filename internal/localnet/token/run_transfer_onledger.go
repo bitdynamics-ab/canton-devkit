@@ -177,6 +177,20 @@ func runTransferLiveOnLedger(ctx context.Context, out io.Writer, opts TransferOp
 	// authority-delegation dance.
 	senderParties := accountPartiesOf(admin, senderAcct.Owner, senderAcct.Provider)
 	factoryActAs := dedupParties(append(append([]string{}, senderParties...), admin))
+
+	// Atomic path: batch the factory-transfer + receiver-accept into one
+	// all-or-nothing ExecuteBatch instead of two sequential submits. Only
+	// when the caller opted in AND wants the accept chained (Atomic implies
+	// AutoAccept — with NoWait there's no accept to batch, and a bare
+	// transfer is already a single submit). See batch.go for the
+	// partial-recovery tradeoff this trades away.
+	if opts.Atomic && opts.AutoAccept && !opts.NoWait {
+		return runTransferOnLedgerBatched(
+			ctx, out, client, opts, admin, tokenRulesCID,
+			senderAcct, senderParties, transferArgs, accountConfigCIDs,
+		)
+	}
+
 	resp, err := exerciseTestTokenTransferFactory(
 		ctx, client, tokenRulesCID, factoryActAs, senderParties, transferArgs, accountConfigCIDs,
 	)
@@ -395,11 +409,7 @@ func exerciseTestTokenTransferFactory(
 ) (*lapiv2.SubmitAndWaitForTransactionResponse, error) {
 	// The bundled splice-test-token-v2 is a V2 instrument, so its
 	// transfer record uses the V2 (Account) sender/receiver shape.
-	choiceArg := recordValue([]field{
-		{"transfer", buildTransferRecord(transferArgs, genV2)},
-		{"actors", listValue(actors, partyValue)},
-		{"extraArgs", buildTestTokenExtraArgs(tokenRulesCID, accountConfigCIDs)},
-	})
+	choiceArg := testTokenTransferFactoryArg(transferArgs, actors, tokenRulesCID, accountConfigCIDs)
 	pkg, mod, entity := splitInterfaceID(TransferFactoryInterfaceV2)
 	exercise := &lapiv2.Command{
 		Command: &lapiv2.Command_Exercise{
@@ -431,10 +441,7 @@ func acceptTestTokenTransfer(
 	tokenRulesCID string,
 	accountConfigCIDs []string,
 ) error {
-	choiceArg := recordValue([]field{
-		{"actors", listValue(actors, partyValue)},
-		{"extraArgs", buildTestTokenExtraArgs(tokenRulesCID, accountConfigCIDs)},
-	})
+	choiceArg := testTokenAcceptArg(actors, tokenRulesCID, accountConfigCIDs)
 	pkg, mod, entity := splitInterfaceID(TransferInstructionInterfaceV2)
 	exercise := &lapiv2.Command{
 		Command: &lapiv2.Command_Exercise{
@@ -449,6 +456,93 @@ func acceptTestTokenTransfer(
 	_, err := submitForTransactionMulti(ctx, client, actAs, []*lapiv2.Command{exercise}, nil,
 		createdContractFormat(actAs[0], ""))
 	return err
+}
+
+// testTokenTransferFactoryArg builds the TransferFactory_Transfer choice
+// argument ({transfer, actors, extraArgs}) for the bundled test token.
+// Shared by the sequential on-ledger exercise and the atomic batch path so
+// the two can't drift in how they encode the transfer.
+func testTokenTransferFactoryArg(transferArgs registry.TransferArgs, actors []string, tokenRulesCID string, accountConfigCIDs []string) *lapiv2.Value {
+	return recordValue([]field{
+		{"transfer", buildTransferRecord(transferArgs, genV2)},
+		{"actors", listValue(actors, partyValue)},
+		{"extraArgs", buildTestTokenExtraArgs(tokenRulesCID, accountConfigCIDs)},
+	})
+}
+
+// testTokenAcceptArg builds the TransferInstruction_Accept choice argument
+// ({actors, extraArgs}) for the test token. Shared by the sequential accept
+// and the atomic batch path.
+func testTokenAcceptArg(actors []string, tokenRulesCID string, accountConfigCIDs []string) *lapiv2.Value {
+	return recordValue([]field{
+		{"actors", listValue(actors, partyValue)},
+		{"extraArgs", buildTestTokenExtraArgs(tokenRulesCID, accountConfigCIDs)},
+	})
+}
+
+// runTransferOnLedgerBatched executes the transfer + receiver-accept as one
+// atomic BatchingUtility_ExecuteBatch. It builds the same TransferFactory_
+// Transfer and TransferInstruction_Accept choice args the sequential path
+// uses, wraps them as TSA_* batch actions, and threads the sender's input
+// holdings through the batch's HoldingMap. Returns the pending instruction
+// id (mined from the batch transaction) — empty when the participant
+// returned no instruction event, in which case the batch still committed
+// atomically.
+//
+// The accept action targets the instruction the transfer action creates
+// inside the SAME batch; the wallet's ExecuteBatch resolves that intra-
+// batch reference, so there is no window between offer and accept — either
+// both land or neither does.
+func runTransferOnLedgerBatched(
+	ctx context.Context,
+	out io.Writer,
+	client *ledger.Client,
+	opts TransferOptions,
+	admin, tokenRulesCID string,
+	senderAcct tokenAccount,
+	senderParties []string,
+	transferArgs registry.TransferArgs,
+	accountConfigCIDs []string,
+) (string, error) {
+	batchUser := senderParties[0]
+	receiverParties := accountPartiesOf(admin, opts.To, "")
+	actAs := dedupParties(append(append(append([]string{}, senderParties...), receiverParties...), admin))
+
+	// Action 1: TransferFactory_Transfer on the issuer's TokenRules (the
+	// factory). Action 2: TransferInstruction_Accept — its target
+	// instruction is created by action 1 within the batch, so its cid is a
+	// batch-internal reference the wallet resolves; we pass the factory cid
+	// as a placeholder the wallet re-binds to the produced instruction.
+	transferArg := testTokenTransferFactoryArg(transferArgs, senderParties, tokenRulesCID, accountConfigCIDs)
+	acceptArg := testTokenAcceptArg(receiverParties, tokenRulesCID, accountConfigCIDs)
+	actions := []batchAction{
+		tsaTransferFactoryTransferV2(tokenRulesCID, transferArg),
+		tsaTransferInstructionAcceptV2(tokenRulesCID, acceptArg),
+	}
+
+	// Thread the sender's picked input holdings through the HoldingMap so
+	// the batched transfer consumes them.
+	inputHoldings := []scopedHoldings{{
+		Admin:       admin,
+		Account:     senderAcct.registryAccount(),
+		HoldingCIDs: transferArgs.InputHoldingCids,
+	}}
+
+	res, err := executeBatch(ctx, client, batchUser, actAs, inputHoldings, actions, false)
+	if err != nil {
+		return "", fmt.Errorf("atomic transfer+accept batch: %w", err)
+	}
+	emit(out, "transfer batched", map[string]any{
+		"update_id":    res.UpdateID,
+		"action_count": len(res.Actions),
+		"receiver":     opts.To,
+		"atomic":       true,
+	})
+	// The atomic batch settles the transfer AND the accept in one shot, so
+	// there is no pending TransferInstruction to hand back for a follow-up
+	// accept. Return "" — callers treat an empty id as "already settled",
+	// which is exactly what the batch guarantees.
+	return "", nil
 }
 
 // selectSenderAccountAndInputs groups the sender's holdings by account

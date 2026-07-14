@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
@@ -48,13 +49,19 @@ type PartyDelta struct {
 	Amount string `json:"amount"`
 }
 
-// ActivityEvent is one netted ledger transaction touching an instrument.
+// ActivityEvent is one ledger movement touching an instrument. Two
+// paths produce it: the HoldingV2 create/archive netting path
+// (Source="transaction") and the EventLog-native path
+// (Source="event_log", built from the admin's EventLog_HoldingsChange
+// events). Both render identically on the CLI --format json and the Web
+// UI feed; Source lets a surface label the row's provenance.
 type ActivityEvent struct {
 	Offset     int64        `json:"offset"`
 	UpdateID   string       `json:"update_id"`
 	RecordTime string       `json:"record_time"`
 	Instrument string       `json:"instrument_id"`
-	Kind       string       `json:"kind"` // mint | burn | transfer
+	Kind       string       `json:"kind"`   // mint | burn | transfer
+	Source     string       `json:"source"` // event_log | transaction (types.TokenActivitySource)
 	Amount     string       `json:"amount"`
 	Senders    []PartyDelta `json:"senders,omitempty"`
 	Receivers  []PartyDelta `json:"receivers,omitempty"`
@@ -179,6 +186,7 @@ func netTransaction(tx rawTx, instrument string, decimals int) (ActivityEvent, b
 		RecordTime: tx.recordTime,
 		Instrument: instrument,
 		Kind:       kind,
+		Source:     string(types.ActivitySourceTransaction),
 		Amount:     formatDecimal(amount, decimals),
 		Senders:    senders,
 		Receivers:  receivers,
@@ -204,13 +212,23 @@ func formatDecimal(r *big.Rat, decimals int) string {
 	return s
 }
 
-// RunActivityResult scans the ledger transaction stream (offset 0 →
-// ledger end) for HoldingV2 create/archive events and reconstructs the
-// instrument's activity history. opts.Instrument selects the instrument;
+// RunActivityResult reconstructs an instrument's transfer/mint/burn
+// history from the ledger. opts.Instrument selects the instrument;
 // opts.Limit caps the returned events (default 50). Truncated is set
-// when the underlying updates stream was cut short at maxActivityScan
-// to bound memory — on a busy ledger an unbounded consume would OOM the
-// UI server. Read-only; no submission.
+// when the underlying updates stream was cut short at maxActivityScan to
+// bound memory. Read-only; no submission.
+//
+// Two paths produce the feed, and RunActivityResult picks one so the
+// same movement is never counted twice:
+//
+//   - EventLog-native (Source="event_log"): when the participant vets
+//     splice-api-token-transfer-events-v2 AND the instrument admin
+//     reports EventLog_HoldingsChange events (Amulet's admin is dso).
+//     Reads the admin's authoritative holdings-change events.
+//   - HoldingV2 netting (Source="transaction"): the fallback. Scans
+//     HoldingV2 create/archive events and nets per-party deltas. Used
+//     for instruments whose admin does not implement EventLog, and when
+//     the EventLog stream yields nothing for the instrument.
 func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult, error) {
 	limit := opts.Limit
 	if limit <= 0 {
@@ -223,7 +241,7 @@ func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult
 		Instance: opts.Instance,
 		Role:     opts.Role,
 	}
-	client, cleanup, err := dialLedger(ctx, conn)
+	client, cleanup, err := dialLedgerFn(ctx, conn)
 	if err != nil {
 		return ActivityResult{}, err
 	}
@@ -249,6 +267,20 @@ func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult
 	}
 	if !surfaces.Any() {
 		return ActivityResult{Events: []ActivityEvent{}}, nil
+	}
+
+	// EventLog-native path: the admin reports holdings changes directly.
+	// Take it only when the transfer-events package is vetted; if it
+	// yields events use them, otherwise fall through to netting so an
+	// instrument whose admin does not implement EventLog is never blank.
+	if surfaces.HasEventLog {
+		res, elErr := RunActivityViaEventLog(ctx, client, parties, opts)
+		if elErr != nil {
+			return ActivityResult{}, elErr
+		}
+		if len(res.Events) > 0 {
+			return res, nil
+		}
 	}
 
 	end, err := client.LedgerEnd(ctx)
