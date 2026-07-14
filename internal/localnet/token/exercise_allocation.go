@@ -10,20 +10,14 @@ import (
 )
 
 // V2 allocation / DvP exercise orchestration — assembles + submits the
-// on-ledger half of an allocation flow. The off-ledger registry calls
-// (allocation-factory, choice-contexts) have already happened; this file
-// turns a (factory/contract id, choice context, disclosed contracts) tuple
-// into a SubmitAndWaitForTransaction the participant accepts. Mirrors
-// exercise_v2.go's transfer/accept helpers.
+// on-ledger half of an allocation flow. The off-ledger registry calls have
+// already happened; this file turns a (factory/contract id, choice context,
+// disclosed contracts) tuple into a SubmitAndWaitForTransaction.
 
 // exerciseAllocationFactory submits AllocationFactory_Allocate against the
-// factory contract the registry returned. The choice argument mirrors the
-// upstream record:
-//
-//	{ settlement, allocation, requestedAt, inputHoldingCids, extraArgs, actors }
-//
-// Returns the submit response — caller mines it for the created Allocation
-// (finalized) or AllocationInstruction (pending) contract id.
+// factory contract the registry returned. Returns the submit response —
+// caller mines it for the created Allocation (finalized) or
+// AllocationInstruction (pending) contract id.
 func exerciseAllocationFactory(
 	ctx context.Context,
 	client *ledger.Client,
@@ -65,10 +59,9 @@ func exerciseAllocationFactory(
 }
 
 // exerciseAllocationChoice submits a nonconsuming Allocation choice —
-// Allocation_Withdraw or Allocation_Cancel — against a finalized
-// Allocation contract. Both take the same `{ extraArgs }` argument shape
-// (the choice context carries whatever the registry needs); the caller
-// passes the choice name.
+// Allocation_Withdraw or Allocation_Cancel — against a finalized Allocation.
+// Both take the same `{ extraArgs }` argument shape; the caller passes the
+// choice name.
 func exerciseAllocationChoice(
 	ctx context.Context,
 	client *ledger.Client,
@@ -103,9 +96,9 @@ func exerciseAllocationChoice(
 }
 
 // submitAllocation is the shared submission seam for the allocation
-// exercises. Requests the actAs party's created events with the Allocation
-// + AllocationInstruction interface views attached, so the caller can mine
-// the resulting contract id (finalized vs pending) from the response.
+// exercises. Requests the actAs party's created events with the Allocation +
+// AllocationInstruction interface views attached, so the caller can mine the
+// resulting contract id (finalized vs pending).
 func submitAllocation(
 	ctx context.Context,
 	client *ledger.Client,
@@ -131,9 +124,8 @@ func submitAllocation(
 }
 
 // allocationTxFormat requests the submit response with the actAs party's
-// created events + the Allocation and AllocationInstruction interface
-// views. findCreatedAllocationID walks those to surface the resulting
-// contract id (a finalized Allocation, or a pending AllocationInstruction).
+// created events + the Allocation and AllocationInstruction interface views,
+// which findCreatedAllocationID walks to surface the resulting contract id.
 func allocationTxFormat(actAs string) *lapiv2.TransactionFormat {
 	return &lapiv2.TransactionFormat{
 		TransactionShape: lapiv2.TransactionShape_TRANSACTION_SHAPE_ACS_DELTA,
@@ -151,9 +143,9 @@ func allocationTxFormat(actAs string) *lapiv2.TransactionFormat {
 
 // findCreatedAllocationID scans a submit response for a created event
 // implementing either the Allocation (finalized) or AllocationInstruction
-// (pending) interface. Prefers a finalized Allocation when both appear.
-// Returns (id, finalized, ok). Module + entity match is enough — the
-// package id rotates across V2 alpha snapshots.
+// (pending) interface, preferring finalized when both appear. Returns
+// (id, finalized, ok). Match on module + entity only — the package id
+// rotates across V2 alpha snapshots.
 func findCreatedAllocationID(resp *lapiv2.SubmitAndWaitForTransactionResponse) (string, bool, bool) {
 	tx := resp.GetTransaction()
 	if tx == nil {

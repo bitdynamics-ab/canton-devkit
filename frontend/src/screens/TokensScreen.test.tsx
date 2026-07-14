@@ -6,18 +6,14 @@ import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
 import { TokensScreen, createErrorText } from "./TokensScreen";
 import { ApiError } from "../api";
 
-// TokensScreen tests — minimal smoke that the screen mounts under the
-// shared providers App.tsx uses, and that the list/empty paths render.
-// The interactive modal flows are exercised by the live UI on a
-// running LocalNet, not by unit tests; replicating the InstanceSelection
-// + apiFetch + react-router timing here is brittle and low-value.
+// TokensScreen tests — smoke that the screen mounts under the shared
+// providers and the list/empty/modal paths render.
 
 afterEach(() => vi.unstubAllGlobals());
 
-// holdingsResponse lets a test drive the source banner: pass
-// { source: "registry", rows: [...] } to exercise the pseudo-balance
-// disclaimer. Defaults to a live empty ACS (no banner) so existing
-// callers are unaffected.
+// holdingsResponse drives the source banner: pass { source: "registry",
+// rows } to exercise the pseudo-balance disclaimer. Defaults to a live
+// empty ACS (no banner).
 function stubFetch(
   tokens: Array<{ symbol: string; name: string }>,
   holdingsResponse?: {
@@ -93,8 +89,7 @@ function stubFetch(
       }
       if (url.startsWith("/api/tokens/") && url.includes("/activity")) {
         // Honour ?limit so pagination tests can drive a full-page → "Load
-        // more" state: synthesize `limit` newest-first rows (offset
-        // descending) capped at a small pool.
+        // more" state: synthesize `limit` newest-first rows.
         const limit = Number(new URL(url, "http://x").searchParams.get("limit") ?? "50");
         const pool = 120; // more rows than one page → "Load more" appears
         const n = Math.min(limit, pool);
@@ -321,11 +316,8 @@ describe("TokensScreen", () => {
     expect(screen.queryAllByText(/transfer/i).length).toBeGreaterThan(0);
   });
 
-  // The Activity feed is newest-first + paginated: it shows a "Showing N
-  // movements, newest first" affordance and a "Load more" button that
-  // grows the requested limit (the stub returns limit-many rows, capped
-  // at a pool larger than one page, so a full first page is offered
-  // more).
+  // Newest-first + paginated: a "Showing N … newest first" affordance
+  // and a "Load more" that grows the requested limit.
   it("paginates the Activity feed with a Load more button", async () => {
     const user = userEvent.setup();
     stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
@@ -456,11 +448,8 @@ describe("TokensScreen", () => {
     expect(screen.queryByText(/on-ledger holdings/i)).toBeInTheDocument();
   });
 
-  // The top-level identity switcher must re-plumb the chosen role
-  // through the token API calls: after selecting "app-provider" the
-  // screen refetches its lenses with role=app-provider in the query.
-  // Before the switch, calls default to app-user (role omitted, matching
-  // the backend default / DEFAULT_ROLE).
+  // Selecting "app-provider" must re-plumb the role: the screen refetches
+  // with role=app-provider; before the switch, calls omit role (app-user default).
   it("threads the selected identity through token API calls", async () => {
     const user = userEvent.setup();
     stubFetch([{ symbol: "RTK", name: "Retail Token" }]);

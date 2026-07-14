@@ -8,20 +8,11 @@ import (
 	"testing"
 )
 
-// TestAllTopLevelResponses_CarrySchemaVersion pins: every top-level
-// response struct in this package MUST have a `SchemaVersion int`
-// field so consumers can detect format breaks. Reflection-driven
-// so a new response type added without the field fails LOUDLY here
-// rather than silently shipping without versioning.
-//
-// We hand-enumerate the "top-level" set because reflection over a
-// package's exported types isn't available at runtime in Go;
-// every entry corresponds to a struct callers serialize whole as
-// a JSON response body.
-//
-// Rule: when adding a new top-level response type, add it to the
-// hand-list AND give it a `SchemaVersion int` field. The test
-// fails either way if you forget.
+// TestAllTopLevelResponses_CarrySchemaVersion pins that every top-level
+// response struct has a `SchemaVersion int` field so consumers can
+// detect format breaks. The set is hand-enumerated (runtime reflection
+// can't list a package's exported types); a new response type added
+// without the field, or missing from the list, fails here.
 func TestAllTopLevelResponses_CarrySchemaVersion(t *testing.T) {
 	topLevel := []interface{}{
 		ContractsListResponse{},
@@ -52,22 +43,17 @@ func TestAllTopLevelResponses_CarrySchemaVersion(t *testing.T) {
 		if f.Type.Kind() != reflect.Int {
 			t.Errorf("%s.SchemaVersion is %s, want int", typ.Name(), f.Type.Kind())
 		}
-		// JSON tag must be snake_case `schema_version` so the
-		// wire shape stays consistent across types.
+		// JSON tag must be snake_case `schema_version` (consistent wire shape).
 		if tag := f.Tag.Get("json"); tag != "schema_version" && !strings.HasPrefix(tag, "schema_version,") {
 			t.Errorf("%s.SchemaVersion json tag = %q, want \"schema_version\"", typ.Name(), tag)
 		}
 	}
 }
 
-// TestSchemaVersion_ConsistentAcrossResponses pins: every top-level
-// response struct that carries a SchemaVersion field MUST be
-// populated by the package-level SchemaVersion constant when emitted
-// by a caller. We can't enforce the populate-at-marshal contract
-// from inside the type package, so we verify the structural
-// invariant: every struct with a SchemaVersion field uses the SAME
-// int type and is tagged identically. Drift here = drift in the
-// JSON shape downstream consumers parse.
+// TestSchemaVersion_ConsistentAcrossResponses verifies each top-level
+// response marshals the literal `"schema_version":N` shape. The
+// populate-at-marshal contract can't be enforced from inside the type
+// package, so this pins the structural invariant instead.
 func TestSchemaVersion_ConsistentAcrossResponses(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -195,9 +181,8 @@ func TestSchemaVersion_ConsistentAcrossResponses(t *testing.T) {
 				t.Fatalf("marshal: %v", err)
 			}
 			body := string(buf)
-			// All three MUST emit the literal "schema_version":N
-			// shape — anything else (e.g. omitempty hiding the
-			// field, or a renamed JSON tag) is a contract break.
+			// Anything but the literal "schema_version":N (omitempty
+			// hiding it, a renamed tag) is a contract break.
 			want := `"schema_version":` + strconv.Itoa(c.want)
 			if !strings.Contains(body, want) {
 				t.Errorf("%s: expected %q in JSON, got %s", c.name, want, body)

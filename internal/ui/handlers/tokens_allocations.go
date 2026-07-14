@@ -10,9 +10,9 @@ import (
 )
 
 // V2 DvP allocation HTTP surface. Every handler delegates to
-// internal/localnet/token.RunX — the same functions the `token allocate /
-// allocations / settle` CLI verbs call — so CLI ↔ Web UI parity is
-// automatic and the shared JSON shapes flow through internal/api/types.
+// internal/localnet/token.RunX — the same functions the CLI verbs call — so
+// CLI ↔ Web UI parity is automatic and shared JSON shapes flow through
+// internal/api/types.
 
 // handleTokenAllocate — POST /api/tokens/{symbol}/allocate. Creates a V2
 // allocation from the authorizer's holdings and returns the resulting
@@ -107,9 +107,9 @@ func handleAllocationCancel(w http.ResponseWriter, r *http.Request) {
 	runAllocationActionHandler(w, r, token.RunAllocationCancel, "cancel")
 }
 
-// runAllocationActionHandler is the shared body of the per-allocation
-// action handlers: build AllocationActionOptions from the path id +
-// ?party=, dispatch to the RunX, map the error.
+// runAllocationActionHandler is the shared body of the per-allocation action
+// handlers: build AllocationActionOptions from the path id + ?party=,
+// dispatch to the RunX, map the error.
 func runAllocationActionHandler(
 	w http.ResponseWriter, r *http.Request,
 	run func(context.Context, io.Writer, token.AllocationActionOptions) error,
@@ -132,8 +132,7 @@ func runAllocationActionHandler(
 	mapTokenError(w, err, op)
 }
 
-// runTokenAllocate is the indirection point for handleTokenAllocate so
-// tests can assert the handler threads instance/role/endpoint + the
-// allocation fields through to RunAllocate without a live ledger. Same
-// package-var pattern as runTokenCreate / runTokenTransfer.
+// runTokenAllocate is the indirection point for handleTokenAllocate so tests
+// can assert the threaded fields without a live ledger (same package-var
+// pattern as runTokenCreate / runTokenTransfer).
 var runTokenAllocate = token.RunAllocate

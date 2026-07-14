@@ -1,12 +1,7 @@
-// Act-as identity (role) selection for the Tokens screen. The chosen
-// role is threaded through every token API call so the whole screen
-// reads/writes the ledger as that identity — the top-level counterpart
-// of the per-field PartyPickers inside modals.
-//
-// Persisted per instance in localStorage so switching identity survives
-// a reload and a different instance keeps its own last-used role. Falls
-// back to "app-user" (the backend's roleFromQuery / token.DefaultRole)
-// when nothing is stored or storage is unavailable.
+// Act-as identity (role) selection for the Tokens screen, threaded
+// through every token API call. Persisted per instance in localStorage
+// so a reload (and each instance) keeps its own last-used role; falls
+// back to "app-user" (the backend default) when unset/unavailable.
 
 import { useCallback, useState } from "react";
 import type { Role } from "../api";

@@ -11,13 +11,10 @@ import (
 )
 
 // buildIdentity is the `token identity` verb: list the act-as identities
-// (roles) the instance's token commands can run under, and echo the one
-// --role selects. CLI counterpart of the Web UI Tokens screen's identity
-// switcher — both render token.Roles() so the surfaces stay in lockstep.
-//
-// The per-verb --role flag on mint/transfer/etc. is where you actually
-// switch identity; this just enumerates the choices (and, with --format
-// json, feeds a script the current selection).
+// the instance's token commands can run under and echo the one --role
+// selects. CLI counterpart of the Web UI identity switcher (both render
+// token.Roles()). Identity is switched per-verb via --role; this only
+// enumerates the choices.
 func buildIdentity() *cobra.Command {
 	var instance, role, format string
 	cmd := &cobra.Command{

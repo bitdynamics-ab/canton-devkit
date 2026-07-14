@@ -1,19 +1,10 @@
-// API client for the canton-devkit Web UI backend.
-//
-// Two contracts the backend (internal/ui) defines and this file
-// consumes:
-//
-//  1. SCHEMA_VERSION handshake on bootstrap. Every top-level
-//     response and event carries `schema_version`. If it doesn't
-//     match what this bundle was built against, the UI refuses
-//     to render and tells the user to restart `dpm localnet ui`.
-//
-//  2. Error envelope shape: { code, error, detail?, remediation? }.
-//     We surface `error` as a toast and `remediation` as a
-//     follow-up action.
-//
-// All API calls go through `apiFetch` so the schema check, error
-// envelope, and credentials posture stay in one place.
+// API client for the canton-devkit Web UI backend. Two backend
+// contracts this file consumes:
+//   1. SCHEMA_VERSION handshake — every top-level response/event carries
+//      `schema_version`; a mismatch means the bundle is stale.
+//   2. Error envelope { code, error, detail?, remediation? }.
+// All calls go through `apiFetch` so the schema check + envelope decoding
+// stay in one place.
 
 export const SCHEMA_VERSION = 1;
 
@@ -39,11 +30,8 @@ interface ApiErrorBody {
   remediation?: string[];
 }
 
-// apiFetch is the single chokepoint. Every API call routes through
-// here so:
-//   - same-origin policy is enforced (we never call cross-origin)
-//   - error envelope is decoded uniformly
-//   - schema version drift surfaces consistently
+// apiFetch is the single chokepoint: same-origin only, uniform error
+// envelope decoding, consistent schema-drift handling.
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   if (!path.startsWith("/")) {
     throw new Error(`apiFetch path must be absolute, got ${path}`);
@@ -1582,13 +1570,9 @@ export const installSkills = (target: "claude" | "codex", force = false) =>
     body: JSON.stringify({ target, force }),
   });
 
-// -------------------------------------------------------------------
-// Tokens — Web UI client for /api/tokens.
-//
-// Mirrors registry.TokenRef + the request shapes the backend handlers
-// expect. Every action is instance-scoped (`?instance=`); error mapping
-// matches handlers.mapTokenError so the UI can switch on the code.
-// -------------------------------------------------------------------
+// Tokens — Web UI client for /api/tokens. Mirrors api/types shapes;
+// every action is instance-scoped (`?instance=`) and error codes match
+// handlers.mapTokenError.
 
 export interface TokenRef {
   name: string;
@@ -1601,10 +1585,9 @@ export interface TokenRef {
   status: string;
 }
 
-// HoldingSource mirrors api/types.HoldingSource: "ledger" = summed
-// from the live ACS (real on-ledger balance); "registry" = the
-// registry pseudo-balance fallback shown when no live participant is
-// reachable (NOT on-ledger truth — the UI labels these rows).
+// HoldingSource: "ledger" = summed from the live ACS (real balance);
+// "registry" = pseudo-balance fallback when no participant is reachable
+// (NOT on-ledger truth — the UI labels these rows).
 export type HoldingSource = "ledger" | "registry";
 
 export interface TokenHolding {
@@ -1622,8 +1605,8 @@ export interface TokensListResponse {
 
 export interface TokenHoldingsResponse {
   schema_version: number;
-  // Response-level provenance — matches every row's source. The UI
-  // renders one disclaimer banner when this is "registry".
+  // Response-level provenance (matches every row's source); the UI
+  // renders one disclaimer banner when "registry".
   source: HoldingSource;
   holdings: TokenHolding[];
   // true when the live ACS scan stopped at its safety cap (partial view).
@@ -1631,14 +1614,11 @@ export interface TokenHoldingsResponse {
 }
 
 // --- V2 foundation shapes -------------------------------------------
-// Mirror internal/api/types/tokens.go. Emitted by the later V2 feature
-// surfaces (EventLog history, allocations/DvP, BatchingUtilityV2); a
-// feature wraps each in its own versioned response when it lands.
+// Mirror internal/api/types/tokens.go; each is wrapped in a feature's
+// own versioned response when it lands.
 
-// TokenActivitySource mirrors api/types.TokenActivitySource.
 export type TokenActivitySource = "event_log" | "transaction";
 
-// TokenTransferLeg mirrors api/types.TokenTransferLeg.
 export interface TokenTransferLeg {
   transfer_leg_id: string;
   side: string;
@@ -1647,8 +1627,7 @@ export interface TokenTransferLeg {
   instrument_id: string;
 }
 
-// TokenActivityEvent mirrors api/types.TokenActivityEvent — one row of
-// a V2 instrument's holdings-change history.
+// One row of a V2 instrument's holdings-change history.
 export interface TokenActivityEvent {
   source: TokenActivitySource;
   update_id: string;
@@ -1663,7 +1642,6 @@ export interface TokenActivityEvent {
   reason?: string;
 }
 
-// AllocationStatus mirrors api/types.AllocationStatus.
 export type AllocationStatus =
   | "pending"
   | "ready"
@@ -1671,7 +1649,7 @@ export type AllocationStatus =
   | "cancelled"
   | "withdrawn";
 
-// Allocation mirrors api/types.Allocation — a V2 DvP allocation detail.
+// A V2 DvP allocation detail.
 export interface Allocation {
   contract_id: string;
   status: AllocationStatus;
@@ -1685,7 +1663,7 @@ export interface Allocation {
   created_at?: string;
 }
 
-// AllocationSummary mirrors api/types.AllocationSummary — list-row form.
+// List-row form of an Allocation.
 export interface AllocationSummary {
   contract_id: string;
   status: AllocationStatus;
@@ -1695,30 +1673,24 @@ export interface AllocationSummary {
   committed: boolean;
 }
 
-// BatchActionResult mirrors api/types.BatchActionResult.
 export interface BatchActionResult {
   kind: string;
   ok: boolean;
   detail?: string;
 }
 
-// BatchResult mirrors api/types.BatchResult — outcome of a
-// BatchingUtility_ExecuteBatch exercise.
+// Outcome of a BatchingUtility_ExecuteBatch exercise.
 export interface BatchResult {
   update_id: string;
   actions: BatchActionResult[];
   ok: boolean;
 }
 
-// DEFAULT_ROLE matches the backend default in roleFromQuery — keep the
-// two in sync so the live-ledger endpoint discovery and JWT minting
-// pick the same participant for unrestricted UI calls.
+// Matches the backend default in roleFromQuery — keep in sync.
 const DEFAULT_ROLE = "app-user";
 
-// tokenQuery builds `?instance=...&role=...` (role omitted when it
-// would just repeat the default). Centralised so every token endpoint
-// forwards the role the same way the backend's handleTokenMint /
-// handleTokenTransfer already expect.
+// tokenQuery builds `?instance=...&role=...` (role omitted when it just
+// repeats the default), so every token endpoint forwards role uniformly.
 function tokenQuery(instance: string, role?: string): string {
   const params = new URLSearchParams({ instance });
   if (role && role !== DEFAULT_ROLE) params.set("role", role);
@@ -1728,11 +1700,8 @@ function tokenQuery(instance: string, role?: string): string {
 export const fetchTokens = (instance: string, role?: string) =>
   apiFetch<TokensListResponse>(`/api/tokens?${tokenQuery(instance, role)}`);
 
-// TokenIdentity mirrors api/types.TokenIdentityResponse (GET
-// /api/tokens/identity): the act-as identities the instance's token
-// commands can run under, plus the one the request was made under. Backs
-// the Tokens screen's top-level identity switcher; the CLI counterpart is
-// `dpm localnet token identity`.
+// GET /api/tokens/identity: the act-as identities plus the one the
+// request used. Backs the Tokens screen's identity switcher.
 export interface TokenIdentity {
   schema_version: number;
   instance: string;
@@ -1757,28 +1726,25 @@ export const fetchHoldings = (
   );
 };
 
-// token workspace — ACS-derived lenses (instrument discovery,
-// balance matrix, per-holding UTXO rows). These hit the live ledger;
-// when no endpoint is recorded the backend falls back to the recorded
-// token list (so `instruments` may be absent — callers handle both).
+// ACS-derived lenses (instrument discovery, balance matrix, per-holding
+// UTXO rows). These hit the live ledger; with no endpoint the backend
+// falls back to the recorded token list (`instruments` may be absent).
 
-// InstrumentRef is an on-chain-discovered instrument (workspace.go).
+// An on-chain-discovered instrument.
 export interface InstrumentRef {
   admin: string;
   instrument_id: string;
   name?: string;
   symbol?: string;
   decimals?: number;
-  // standard is the human label ("Splice Amulet" / "Token Standard V1
-  // (CIP-0056)" / "Token Standard V2 (CIP-0112)"); generation is the
-  // machine tag ("v1"/"v2") the UI gates mint/burn on — never gate on
-  // the display string.
+  // standard is the human label; generation ("v1"/"v2") is the machine
+  // tag the UI gates mint/burn on — never gate on the display string.
   standard?: string;
   generation?: string;
   on_ledger: boolean;
 }
 
-// HoldingContract is one HoldingV2 UTXO. A balance = sum of these.
+// One HoldingV2 UTXO; a balance = sum of these.
 export interface HoldingContract {
   contract_id: string;
   party: string;
@@ -1812,8 +1778,7 @@ interface MatrixResponse {
   matrix: BalanceMatrix;
 }
 
-// PartyRef — one registered party alias → its on-ledger party id.
-// The workspace's god-mode party registry.
+// One registered party alias → its on-ledger party id.
 export interface PartyRef {
   alias: string;
   party_id: string;
@@ -1827,15 +1792,13 @@ interface PartiesResponse {
   parties: PartyRef[];
 }
 
-// fetchParties lists the instance's registered party aliases (seeding the
-// role parties when a live endpoint is available).
+// Lists the instance's registered party aliases.
 export const fetchParties = (instance: string, role = "app-user") =>
   apiFetch<PartiesResponse>(
     `/api/parties?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
   ).then((r) => r.parties);
 
-// createParty allocates a party under an alias and grants the role's user
-// act/read-as for it.
+// Allocates a party under an alias and grants the role's user act/read-as.
 export const createParty = (instance: string, alias: string, role = "app-user") =>
   apiFetch<PartyRef>(`/api/parties?instance=${encodeURIComponent(instance)}`, {
     method: "POST",
@@ -1850,8 +1813,7 @@ export const removeParty = (instance: string, alias: string) =>
     { method: "DELETE" },
   );
 
-// AliasMap is partyID → alias, built from fetchParties for client-side
-// labelling of party ids in the matrix / holdings / activity views.
+// partyID → alias, for client-side labelling of party ids.
 export type AliasMap = Record<string, string>;
 
 export const aliasMapFrom = (parties: PartyRef[]): AliasMap => {
@@ -1865,9 +1827,8 @@ interface HoldingContractsResponse {
   contracts: HoldingContract[];
 }
 
-// fetchInstruments returns ACS-discovered instruments. Falls back to the
-// recorded TokenRef list (mapped into InstrumentRef shape) when the
-// backend couldn't reach the ledger.
+// Returns ACS-discovered instruments, falling back to the recorded
+// TokenRef list (mapped to InstrumentRef) when the ledger is unreachable.
 export async function fetchInstruments(
   instance: string,
   role = "app-user",
@@ -1894,9 +1855,8 @@ export const fetchMatrix = (instance: string, role = "app-user") =>
     `/api/tokens/matrix?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
   ).then((r) => r.matrix);
 
-// HolderRow / InstrumentSummary — the instrument-first KPI view.
-// Supply + holder/contract counts + per-holder distribution,
-// derived from one ACS scan (workspace.go).
+// Instrument KPI view: supply + holder/contract counts + per-holder
+// distribution, from one ACS scan.
 export interface HolderRow {
   party: string;
   balance: string;
@@ -1929,12 +1889,9 @@ export const fetchInstrumentSummary = (
     )}&role=${encodeURIComponent(role)}`,
   ).then((r) => r.summary);
 
-// PartyDelta / ActivityEvent — the instrument activity feed
-// (Activity tab). Each event is one movement netted into
-// senders/receivers + a kind (mint | burn | transfer). Two paths
-// produce it: the instrument admin's EventLog_HoldingsChange events
-// (source="event_log") or HoldingV2 create/archive netting
-// (source="transaction"). Mirrors internal/localnet/token.ActivityEvent.
+// Instrument activity feed. Each event is one movement netted into
+// senders/receivers + a kind (mint | burn | transfer), sourced from the
+// admin's EventLog events or HoldingV2 create/archive netting.
 export interface PartyDelta {
   party: string;
   amount: string;
@@ -1961,19 +1918,15 @@ interface ActivityResponse {
   truncated?: boolean;
 }
 
-// ActivityPage is the shape the Activity tab consumes: the newest-first
-// events plus the backend's truncation flag, so the UI can distinguish
-// "reached the end" (grow the limit for more) from "scan was capped".
+// What the Activity tab consumes: newest-first events + the truncation
+// flag, so the UI distinguishes "reached the end" from "scan was capped".
 export interface ActivityPage {
   events: ActivityEvent[];
   truncated: boolean;
 }
 
-// fetchActivity returns an instrument's movement feed, newest-first
-// (the backend sorts by ledger offset descending in one canonical place
-// — buildActivity / renderEventLogActivity — so the CLI `token activity`
-// and this feed agree). `limit` caps the rows; the pagination UI grows
-// it to fetch more. Returns the truncation flag alongside the events.
+// Returns an instrument's movement feed, newest-first (offset
+// descending), plus the truncation flag. `limit` caps the rows.
 export const fetchActivity = (
   instance: string,
   symbol: string,
@@ -2011,13 +1964,10 @@ export interface TokenCreateInput {
   issuer: string;
 }
 
-// idempotencyHeader returns a fresh per-submission Idempotency-Key
-// header for the value-moving token POSTs. The server dedupes retries
-// of the SAME key (idempotency.go), so we mint one key per logical
-// submission — a user-initiated retry that re-invokes the API function
-// gets a new key (a genuinely new attempt), while a transport-level
-// retry of the same fetch would reuse it. crypto.randomUUID is
-// available in every browser the UI targets (and in jsdom under test).
+// A fresh per-submission Idempotency-Key for value-moving token POSTs.
+// The server dedupes retries of the SAME key, so one key per logical
+// submission: a user-initiated retry mints a new key (a new attempt); a
+// transport-level retry of the same fetch reuses it.
 function idempotencyHeader(): Record<string, string> {
   return { "Idempotency-Key": crypto.randomUUID() };
 }
@@ -2036,8 +1986,7 @@ export const createToken = (
     },
   );
 
-// DemoResult mirrors token.DemoResult (POST /api/tokens/demo) and the CLI
-// `token demo --format json`: the created instrument, the issuer party,
+// POST /api/tokens/demo result: the created instrument, issuer party,
 // and (when seeded) the funded holder.
 export interface DemoResult {
   token: TokenRef;
@@ -2046,12 +1995,9 @@ export interface DemoResult {
   seeded: boolean;
 }
 
-// launchDemoToken provisions a live, transferable demo token in one call
-// — an issuer party, a V2 instrument with initial supply, and (by
-// default) a funded holder so a transfer works immediately. Throws
-// ApiError(412, NEEDS_V2_LOCALNET) when the instance has no live V2
-// endpoint, so the caller can disable the button with a "start a V2
-// instance first" hint.
+// Provisions a live demo token in one call (issuer + V2 instrument with
+// supply + a funded holder). Throws ApiError(412, NEEDS_V2_LOCALNET)
+// when the instance has no live V2 endpoint.
 export const launchDemoToken = (
   instance: string,
   opts?: { symbol?: string; initial_supply?: string; decimals?: number; seed_holder?: boolean },
@@ -2076,10 +2022,9 @@ export const mintToken = (
     idempotencyHeader(),
   );
 
-// transferToken submits a live transfer and returns the created
-// TransferInstruction id (Offer kind) so the caller can drive the
-// receiver-side Accept. settled is true when auto-accept already chained
-// the accept (or a Direct/self transfer needed none).
+// Submits a live transfer and returns the created TransferInstruction id
+// (Offer kind) so the caller can drive the receiver-side Accept. settled
+// is true when auto-accept chained it (or a Direct/self transfer needed none).
 export const transferToken = async (
   instance: string,
   symbol: string,
@@ -2129,8 +2074,8 @@ export const transferToken = async (
   return { transferInstructionId: body.transfer_instruction_id ?? "", settled: !!body.settled };
 };
 
-// faucetToken funds a party from a well-known source,
-// auto-accepted. Empty source defaults to the role's funded party.
+// Funds a party from a well-known source, auto-accepted. Empty source
+// defaults to the role's funded party.
 export const faucetToken = (
   instance: string,
   symbol: string,
@@ -2145,9 +2090,8 @@ export const faucetToken = (
     idempotencyHeader(),
   );
 
-// TransferPlan — dry-run coin selection. Which Holding
-// contracts a transfer would consume, the change, and whether the
-// sender can cover it. Read-only; no ledger mutation.
+// Dry-run coin selection: which Holding contracts a transfer consumes,
+// the change, and whether the sender can cover it. Read-only.
 export interface TransferPlan {
   instrument: string;
   from: string;
@@ -2210,10 +2154,8 @@ export const acceptTransfer = (
   );
 
 // --- V2 DvP allocations ---------------------------------------------
-// Mirror the POST /api/tokens/{symbol}/allocate + GET /api/tokens/
-// allocations + POST /api/tokens/allocations/{id}/{settle,withdraw,cancel}
-// handlers. Same RunX orchestration the `token allocate/allocations/settle`
-// CLI verbs call — CLI ↔ UI parity.
+// The allocate / list / settle-withdraw-cancel endpoints; same RunX
+// orchestration the `token allocate/allocations/settle` CLI verbs call.
 
 interface AllocationsListResponse {
   schema_version: number;
@@ -2221,9 +2163,8 @@ interface AllocationsListResponse {
   aliases: AliasMap;
 }
 
-// fetchAllocations lists the ready-to-settle V2 allocations, optionally
-// filtered to one authorizer. Returns the summaries plus the alias map so
-// the panel can label party ids.
+// Lists ready-to-settle V2 allocations (optionally filtered to one
+// authorizer), plus the alias map for labelling party ids.
 export async function fetchAllocations(
   instance: string,
   party?: string,
@@ -2247,8 +2188,8 @@ export interface AllocateInput {
   committed?: boolean;
 }
 
-// allocateToken creates a V2 allocation and returns the resulting
-// Allocation (or pending AllocationInstruction) contract id.
+// Creates a V2 allocation and returns the resulting Allocation (or
+// pending AllocationInstruction) contract id.
 export async function allocateToken(
   instance: string,
   symbol: string,
@@ -2276,9 +2217,8 @@ export async function allocateToken(
   return { allocationId: b.allocation_id ?? "" };
 }
 
-// settleAllocation / withdrawAllocation / cancelAllocation exercise the
-// matching per-allocation choice. All return void on 2xx (settle currently
-// surfaces the not-yet-proven remediation as an ApiError — see RunSettle).
+// settle / withdraw / cancel exercise the matching per-allocation choice;
+// all return void on 2xx.
 export const settleAllocation = (
   instance: string,
   allocationID: string,
@@ -2328,14 +2268,9 @@ function allocationActionURL(
   )}${party ? `&party=${encodeURIComponent(party)}` : ""}`;
 }
 
-// apiFetchVoid is a thin POST wrapper for 204-returning handlers. The
-// mint/transfer/burn/accept endpoints return 204 on success and an
-// ApiError on failure — no body to decode either way.
-//
-// extraHeaders lets value-moving callers attach an Idempotency-Key so a
-// network-blip retry or double-click can't mint/transfer/burn twice —
-// the server-side idempotency middleware (internal/ui/handlers/
-// idempotency.go) is opt-in on exactly that header.
+// A thin POST wrapper for 204-returning handlers (mint/transfer/burn/
+// accept: 204 on success, ApiError on failure). extraHeaders carries the
+// Idempotency-Key so a retry or double-click can't submit twice.
 async function apiFetchVoid(
   path: string,
   body: unknown,

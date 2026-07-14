@@ -37,8 +37,8 @@ type eventLogFix struct {
 	wrongChoice bool
 }
 
-// optPartyVal builds Some party (empty → None). Wraps the production
-// optionalPartyValue (*string) with a string-arg convenience.
+// optPartyVal builds Some party (empty → None), a string-arg convenience over
+// optionalPartyValue.
 func optPartyVal(p string) *lapiv2.Value {
 	if p == "" {
 		return optionalPartyValue(nil)
@@ -46,8 +46,7 @@ func optPartyVal(p string) *lapiv2.Value {
 	return optionalPartyValue(&p)
 }
 
-// accountValue builds an Account { owner: Optional Party, provider:
-// Optional Party, id: Text } record with the given owner.
+// accountValue builds an Account record with the given owner.
 func accountValue(owner string) *lapiv2.Value {
 	return recordValue([]field{
 		{"owner", optPartyVal(owner)},
@@ -114,8 +113,8 @@ func eventLogUpdate(f eventLogFix) *lapiv2.GetUpdatesResponse {
 	}
 }
 
-// consumeAndRender is the pure classification pipeline the live path
-// runs after opening the stream.
+// consumeAndRender runs the pure classification pipeline the live path uses
+// after opening the stream.
 func consumeAndRender(t *testing.T, updates []*lapiv2.GetUpdatesResponse, instrument string) []ActivityEvent {
 	t.Helper()
 	events, truncated, err := consumeEventLogStream(newUpdatesStream(updates, nil), instrument)
@@ -252,11 +251,7 @@ func TestConsumeEventLogStream_TruncatesAtCap(t *testing.T) {
 
 // --- dispatch: RunActivityResult picks EventLog vs netting ---
 
-// eventLogFixtures is a shared movement set expressed in BOTH the
-// EventLog exercised-event form and the equivalent HoldingV2
-// create/archive netting form, so a dispatch test can assert the two
-// paths classify identical movements the same way (never double-counted:
-// exactly one path runs per invocation).
+// mintUpdate is a synthetic EventLog mint used by the dispatch tests.
 func mintUpdate() *lapiv2.GetUpdatesResponse {
 	return eventLogUpdate(eventLogFix{
 		offset: 5, updateID: "u5", admin: "dso", account: "bob", createdCid: 1,
@@ -264,9 +259,8 @@ func mintUpdate() *lapiv2.GetUpdatesResponse {
 	})
 }
 
-// fakeForDispatch wires a fake ledger returning `parties` as readable
-// and vetting the given packages; updatesFn feeds whichever stream the
-// path under test opens.
+// fakeForDispatch wires a fake ledger returning `parties` as readable and
+// vetting `packages`; updatesFn feeds whichever stream the path under test opens.
 func fakeForDispatch(parties []string, packages []string, updatesFn func() *lapiv2.GetUpdatesResponse) *fakeLedger {
 	return &fakeLedger{
 		LedgerEndFn: func(context.Context) (ledger.LedgerEnd, error) {
@@ -315,19 +309,16 @@ func TestRunActivityResult_UsesEventLogWhenVetted(t *testing.T) {
 	}
 }
 
-// TestRunActivityResult_FallsBackToNettingWhenNoEventLogPackage: without
-// the transfer-events package vetted, the netting path runs (the
-// EventLog exercised event is invisible to the ACS_DELTA holding filter,
-// so the netting scan simply sees no holdings and returns empty — the
-// point is that Source is "transaction", never "event_log").
+// TestRunActivityResult_FallsBackToNettingWhenNoEventLogPackage: without the
+// transfer-events package vetted, the netting path runs and Source is
+// "transaction", never "event_log".
 func TestRunActivityResult_FallsBackToNettingWhenNoEventLogPackage(t *testing.T) {
 	fake := fakeForDispatch(
 		[]string{"bob"},
 		[]string{"splice-api-token-holding-v2"}, // no transfer-events
 		mintUpdate,
 	)
-	// Netting path: feed a HoldingV2 create so it classifies a mint via
-	// the create/archive delta path, proving Source="transaction".
+	// Feed a HoldingV2 create so the netting path classifies a mint.
 	fake.UpdatesFn = func(context.Context, ledger.UpdatesRequest) (<-chan ledger.StreamItem[*lapiv2.GetUpdatesResponse], error) {
 		return newUpdatesStream([]*lapiv2.GetUpdatesResponse{holdingCreateUpdate(7, "u7", "bob", "MYT", "500.0")}, nil), nil
 	}

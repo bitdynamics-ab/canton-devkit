@@ -16,12 +16,9 @@ import (
 	adminv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2/admin"
 )
 
-// LedgerClient is the narrow slice of *ledger.Client that the live-ACS
-// orchestration paths (runBalanceLive, scanWorkspace) actually use.
-// *ledger.Client is a concrete struct wrapping grpc.ClientConn, so this
-// interface is the seam that lets tests inject a fake without a real
-// participant. Deliberately small — add methods as new orchestration
-// paths come under test, not preemptively.
+// LedgerClient is the narrow slice of *ledger.Client the live-ACS
+// orchestration paths use. It's the seam that lets tests inject a fake
+// without a real participant. Add methods as paths come under test.
 type LedgerClient interface {
 	LedgerEnd(ctx context.Context) (ledger.LedgerEnd, error)
 	ActiveContracts(ctx context.Context, req ledger.ActiveContractsRequest) (<-chan ledger.StreamItem[*lapiv2.GetActiveContractsResponse], error)
@@ -34,15 +31,10 @@ type LedgerClient interface {
 }
 
 // dialLedgerFn is the test seam runBalanceLive and scanWorkspace dial
-// through. Defaults to upcasting dialLedger's concrete *ledger.Client
-// to LedgerClient; tests reassign it to return a fakeLedger.
-//
-// Kept as a package var rather than threaded through BalanceOptions so
-// the seam stays invisible to CLI / HTTP callers. The token package's
-// tests run sequentially, so the package-level mutation is safe.
-//
-// dialLedger itself keeps its concrete *ledger.Client return for the
-// callers that need methods outside this narrow interface.
+// through: it upcasts dialLedger's concrete *ledger.Client to
+// LedgerClient, and tests reassign it to return a fakeLedger. A package
+// var (rather than a BalanceOptions field) keeps the seam invisible to
+// callers; the package's tests run sequentially, so the mutation is safe.
 var dialLedgerFn = func(ctx context.Context, conn LedgerConn) (LedgerClient, func(), error) {
 	return dialLedger(ctx, conn)
 }
@@ -65,17 +57,10 @@ type LedgerConn struct {
 }
 
 // ResolveLedgerEndpoint returns the role's participant ledger gRPC
-// endpoint (host:port) captured in the instance's registry state, or
-// "" when no such port was recorded (the instance pre-dates port
-// capture, or the role isn't hosted). Empty role defaults to
-// "app-user" — matching the CLI's --role default and the Web UI's
-// roleFromQuery.
-//
-// This is the single source of truth for "where do I dial this
-// instance's ledger?" — both the CLI (`token balance` auto-discovery)
-// and the Web UI handler call it, so the two surfaces resolve the
-// same participant from the same key (`participant_ledger_<role>`,
-// the convention pinned in internal/localnet/canton_ports.go).
+// endpoint (host:port) recorded in the instance's registry state, or ""
+// when no such port was captured. Empty role defaults to "app-user". Both
+// the CLI and the Web UI handler call it, so the two surfaces resolve the
+// same participant from the same key (`participant_ledger_<role>`).
 func ResolveLedgerEndpoint(instance, role string) string {
 	if role == "" {
 		role = string(splice.RoleAppUser)
@@ -90,19 +75,14 @@ func ResolveLedgerEndpoint(instance, role string) string {
 	return ""
 }
 
-// dialLedger opens a ledger client against the given endpoint. Lives
-// here (not in cli/localnet) so the action layer — which the HTTP
-// handler also calls — can dial without pulling cli/localnet into the
-// import graph. Caller MUST defer the returned cleanup.
+// dialLedger opens a ledger client against the given endpoint. Caller
+// MUST defer the returned cleanup.
 //
 // Token resolution order:
 // 1. conn.Token explicit (`--token` flag wins).
-// 2. registry.State.Credentials[Role] — populated by `localnet up`'s
-// captureCredentials when the alpha boot is clean.
+// 2. registry.State.Credentials[Role] — captured by `localnet up`.
 // 3. splice.SignToken fallback — issues a fresh user-token from the
-// project's env/<role>-auth-on.env files; used when creds-capture
-// races / fails (the V2 alpha is wobbly on cold boots and step (2)
-// may be empty even after up succeeds).
+// project's env files; used when creds-capture races / fails.
 // 4. error pointing at `localnet creds --raw` for the user to override.
 func dialLedger(ctx context.Context, conn LedgerConn) (*ledger.Client, func(), error) {
 	if conn.Endpoint == "" {
@@ -117,10 +97,8 @@ func dialLedger(ctx context.Context, conn LedgerConn) (*ledger.Client, func(), e
 	defer cancel()
 	opts := ledger.DialOptions{
 		Endpoint: conn.Endpoint,
-		// PlainText defaults to true (LocalNet-first). We surface
-		// `Insecure` as a knob in our struct for symmetry with the
-		// other clients, but the underlying client's PlainText is
-		// the same gate.
+		// PlainText defaults to true (LocalNet-first); Insecure is the
+		// same gate exposed on our struct for symmetry.
 		PlainText: conn.Insecure || !strings.HasPrefix(conn.Endpoint, "https://"),
 	}
 	if token != "" {
@@ -130,12 +108,10 @@ func dialLedger(ctx context.Context, conn LedgerConn) (*ledger.Client, func(), e
 	if err != nil {
 		return nil, func() {}, fmt.Errorf("dial ledger %s: %w", conn.Endpoint, err)
 	}
-	// V2-alpha gap: the Splice `-dev` boot does NOT auto-grant
-	// `ledger-api-user` CanActAs/CanReadAs on the local party (stable
-	// 0.6.4 does). Without grants, every ACS / submit returns
-	// PermissionDenied even though the JWT is accepted. Probe the
-	// user's rights and grant the local party set on first dial.
-	// Idempotent: subsequent dials see existing grants and short-circuit.
+	// V2-alpha gap: the `-dev` boot does NOT auto-grant `ledger-api-user`
+	// CanActAs/CanReadAs on the local party (stable 0.6.4 does), so every
+	// ACS / submit returns PermissionDenied even with an accepted JWT.
+	// Grant the local party set on first dial; idempotent afterwards.
 	if err := ensureLocalPartyRights(ctx, client, conn.Role); err != nil {
 		_ = client.Close()
 		return nil, func() {}, err
@@ -143,41 +119,34 @@ func dialLedger(ctx context.Context, conn LedgerConn) (*ledger.Client, func(), e
 	return client, func() { _ = client.Close() }, nil
 }
 
-// jwtPattern matches a compact JWS (three base64url segments, header
-// starting with the conventional `eyJ`). Used by resolveLedgerToken to
-// scrub any bearer token that might otherwise ride out in an error
-// string toward the user's terminal or logs.
+// jwtPattern matches a compact JWS (three base64url segments, `eyJ`
+// header). Used by resolveLedgerToken to scrub any bearer token that
+// might otherwise ride out in an error string.
 var jwtPattern = regexp.MustCompile(`eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`)
 
 // redactJWTs replaces any JWT-shaped substring with a fixed marker.
-// Defence-in-depth: errors on the token-resolution path wrap file/role
-// context today (not the token itself — SignToken returns the token only
-// on success), but a future change to splice.SignToken or
-// LoadCredentialInputs could embed credential material in an error. This
-// guard ensures a bearer token can never reach the user via an error.
+// Defence-in-depth: today's token-resolution errors don't carry the token
+// itself, but a future change could, and this guard ensures a bearer
+// token can never reach the user via an error.
 func redactJWTs(err error) error {
 	if err == nil {
 		return nil
 	}
 	masked := jwtPattern.ReplaceAllString(err.Error(), "[redacted-jwt]")
 	if masked == err.Error() {
-		return err // nothing matched — preserve the original error (and its wrapping)
+		return err // nothing matched — preserve the original error and its wrapping
 	}
 	return errors.New(masked)
 }
 
-// ensureLocalPartyRights inspects the JWT's user-rights and, if no
-// per-party Act/Read rights are present, grants them for the parties
-// hosted on this participant whose names match the role. A no-op when
-// the user already has Act/Read rights (stable Splice grants these at
-// boot; second-and-later dials see prior grants).
+// ensureLocalPartyRights grants per-party Act/Read rights for the
+// role-matched local parties when the JWT carries none. A no-op when the
+// user already has Act/Read rights.
 func ensureLocalPartyRights(ctx context.Context, c LedgerClient, role string) error {
-	// Wildcard read: interface-filtered ACS queries (TokenRules, Allocation,
-	// Holding across all holders) must read contracts owned by parties we
-	// don't host — the DSO, instrument admins, other holders. Per-party
-	// CanReadAs can't cover those, so without this the streams
-	// PermissionDenied. Applied on every dial, ahead of the per-party
-	// fast-path below; best-effort + idempotent.
+	// Wildcard read: interface-filtered ACS queries must read contracts
+	// owned by parties we don't host (the DSO, instrument admins, other
+	// holders), which per-party CanReadAs can't cover. Best-effort +
+	// idempotent.
 	_ = c.GrantUserActAndReadAsAnyParty(ctx, exerciseUserID)
 
 	rights, err := c.ResolveActAndReadParties(ctx)
@@ -202,9 +171,8 @@ func ensureLocalPartyRights(ctx context.Context, c LedgerClient, role string) er
 }
 
 // localPartiesForRole returns the locally-hosted party IDs whose name
-// matches the role's expected prefix (e.g. role=app-user matches
-// `app_user_*`). IsLocal=true filters out cross-participant proxies —
-// only locally-hosted parties can be the subject of grants.
+// matches the role's prefix (e.g. role=app-user matches `app_user_*`).
+// Only locally-hosted parties can be the subject of grants.
 func localPartiesForRole(ctx context.Context, c LedgerClient, role string) ([]string, error) {
 	resp, err := c.ListKnownParties(ctx)
 	if err != nil {
@@ -224,17 +192,15 @@ func localPartiesForRole(ctx context.Context, c LedgerClient, role string) ([]st
 }
 
 // resolveReadableParties returns the parties a scan should cover. It
-// first widens the role's user with CanReadAs for every registered party
-// alias so the god-mode matrix / activity feed see ALL
-// aliased parties, not just the role's own — then re-resolves the
-// authoritative granted set via ResolveActAndReadParties.
+// widens the role's user with CanReadAs for every registered party alias
+// so the matrix / activity feed see all aliased parties, then re-resolves
+// the authoritative granted set via ResolveActAndReadParties.
 //
 // Granting before resolving is deliberate: ResolveActAndReadParties stays
-// the single source of truth for "what's safe to put in the ACS filter,"
-// so a party that couldn't be granted here (e.g. one hosted on another
-// participant) simply never enters the filter — querying an ungranted
-// party would otherwise PermissionDenied the entire stream. The grant is
-// best-effort; its failure doesn't fail the scan.
+// the source of truth for the ACS filter, so a party that couldn't be
+// granted (e.g. hosted on another participant) never enters the filter —
+// querying it would PermissionDenied the whole stream. The grant is
+// best-effort.
 func resolveReadableParties(ctx context.Context, c LedgerClient, instance, role string) ([]string, error) {
 	if extra := partiesFromState(instance); len(extra) > 0 {
 		_ = c.GrantUserActAndReadAs(ctx, exerciseUserID, extra)
@@ -267,14 +233,13 @@ func aliasSet(instance string) map[string]struct{} {
 }
 
 // dropPhantomAliases removes resolved "parties" that are bare registry
-// alias strings rather than real party ids. Earlier, pre-alias-resolution
-// commands could grant the participant's user act/read for an unresolved
-// alias (e.g. "issuer"); those grants persist, so ResolveActAndReadParties
-// surfaces them and they show as phantom, holdingless duplicate rows in
-// the balance matrix (alongside the real "issuer::fingerprint" party).
-// A real Canton party id always carries a "::"-separated fingerprint, so
-// a fingerprint-less string that matches a known alias is a phantom. Only
-// those are dropped — genuine fingerprint-less dev parties are kept.
+// alias strings rather than real party ids. Pre-alias-resolution commands
+// could grant act/read for an unresolved alias (e.g. "issuer"); those
+// grants persist and would otherwise show as phantom, holdingless
+// duplicate rows alongside the real "issuer::fingerprint" party. A real
+// party id always carries a "::"-separated fingerprint, so a
+// fingerprint-less string matching a known alias is a phantom; genuine
+// fingerprint-less dev parties are kept.
 func dropPhantomAliases(parties []string, aliases map[string]struct{}) []string {
 	out := make([]string, 0, len(parties))
 	for _, p := range parties {
@@ -290,9 +255,8 @@ func dropPhantomAliases(parties []string, aliases map[string]struct{}) []string 
 
 // resolveLedgerToken implements the four-step token resolution order
 // documented on dialLedger. Returns "" when no token is needed
-// (participant runs without auth) — the caller treats empty as "no
-// auth header" rather than an error. Any returned error is passed
-// through redactJWTs so a bearer token can never leak via the error path.
+// (participant runs without auth). Errors pass through redactJWTs so a
+// bearer token can never leak via the error path.
 func resolveLedgerToken(conn LedgerConn) (string, error) {
 	tok, err := resolveLedgerTokenRaw(conn)
 	return tok, redactJWTs(err)
@@ -304,9 +268,8 @@ func resolveLedgerTokenRaw(conn LedgerConn) (string, error) {
 	}
 	if conn.Instance == "" {
 		// No instance + no token: legitimate for an unauthenticated
-		// participant or a hand-injected ledger. The dial proceeds
-		// with no Authorization header; the participant errors with
-		// 401 if it wanted one and the caller surfaces that as-is.
+		// participant. The dial proceeds with no Authorization header;
+		// the participant 401s if it wanted one.
 		return "", nil
 	}
 	state, err := registry.Read(conn.Instance)
@@ -319,14 +282,14 @@ func resolveLedgerTokenRaw(conn LedgerConn) (string, error) {
 		role = string(splice.RoleAppUser)
 	}
 
-	// Path #2: captured credentials from RunUp's captureCredentials.
+	// Path #2: captured credentials from `localnet up`.
 	if c, ok := state.Credentials[role]; ok && c.JWT != "" {
 		return c.JWT, nil
 	}
 
-	// Path #3: fall back to signing a fresh token from the project's
-	// env files. This is the "creds were not captured / lost" path
-	// the V2 alpha hits when onboarding interrupts up's tail steps.
+	// Path #3: sign a fresh token from the project's env files — the
+	// "creds not captured / lost" path the V2 alpha hits when onboarding
+	// interrupts up's tail steps.
 	inputs, err := splice.LoadCredentialInputs(state.ProjectDir)
 	if err != nil {
 		return "", fmt.Errorf(
@@ -377,12 +340,10 @@ type Surfaces struct {
 	HasV1 bool
 	HasV2 bool
 
-	// HasEventLog is set when splice-api-token-transfer-events-v2 is
-	// vetted — the package carrying the EventLog interface an instrument
-	// admin exercises (EventLog_HoldingsChange) to report holdings
-	// changes. When present, the activity feed can read the admin's
-	// authoritative change history instead of netting HoldingV2
-	// create/archive deltas itself.
+	// HasEventLog is set when splice-api-token-transfer-events-v2 (the
+	// EventLog interface) is vetted. When present, the activity feed can
+	// read the admin's authoritative change history instead of netting
+	// HoldingV2 create/archive deltas itself.
 	HasEventLog bool
 }
 
@@ -391,9 +352,8 @@ func (s Surfaces) Any() bool { return s.HasV1 || s.HasV2 }
 
 // discoverTokenSurfaces checks which Holding interface packages the
 // participant has vetted — the basis for per-instrument generation
-// routing. Explicit: a generation is "available" only when its package
-// is present (no implicit fallback). Reuses the ListKnownPackages call
-// resolvePackageID is built on.
+// routing. A generation is available only when its package is present (no
+// implicit fallback).
 func discoverTokenSurfaces(ctx context.Context, client LedgerClient) (Surfaces, error) {
 	resp, err := client.ListKnownPackages(ctx)
 	if err != nil {
@@ -428,10 +388,9 @@ func interfaceFilterEntry(interfaceID string) *lapiv2.CumulativeFilter {
 }
 
 // generationInterfaceFilter builds the EventFormat matching the given
-// per-generation interface ids. Only the vetted generations' filters
-// are included, so we never reference an unvetted package (which the
-// participant would reject). Parties: empty → wildcard
-// (FiltersForAnyParty); non-empty → per-party.
+// per-generation interface ids. Only vetted generations' filters are
+// included, so we never reference an unvetted package. Parties: empty →
+// wildcard (FiltersForAnyParty); non-empty → per-party.
 func generationInterfaceFilter(surfaces Surfaces, v1ID, v2ID string, parties []string) *lapiv2.EventFormat {
 	var cumulative []*lapiv2.CumulativeFilter
 	if surfaces.HasV1 {
@@ -458,19 +417,17 @@ func holdingInterfaceFilter(surfaces Surfaces, parties []string) *lapiv2.EventFo
 }
 
 // transferInstructionInterfaceFilter builds the EventFormat matching a
-// pending TransferInstruction of either vetted generation, so a
-// contract can be classified by the interface it actually implements
-// (used to route accept by the instruction's own generation rather
-// than the participant's surfaces).
+// pending TransferInstruction of either vetted generation, so accept
+// routes by the instruction's own generation rather than the
+// participant's surfaces.
 func transferInstructionInterfaceFilter(surfaces Surfaces, parties []string) *lapiv2.EventFormat {
 	return generationInterfaceFilter(surfaces,
 		TransferInstructionInterfaceV1, TransferInstructionInterfaceV2, parties)
 }
 
-// holdingView is the generation-agnostic structured form of a Holding
-// InterfaceView (V1 or V2) — just the fields the balance / Web UI need.
-// Generation records which interface the view came from, for per-
-// instrument write routing.
+// holdingView is the generation-agnostic form of a Holding InterfaceView
+// (V1 or V2) — the fields balance / the Web UI need. Generation records
+// which interface the view came from, for per-instrument write routing.
 type holdingView struct {
 	Generation   Generation
 	Owner        string // the holding owner party
@@ -482,11 +439,9 @@ type holdingView struct {
 	Locked       bool   // lock present (Some) — held by an active allocation/proposal
 }
 
-// extractHoldingViewV2 walks a participant InterfaceView Record and
-// pulls out the four fields balance needs. Returns ok=false when the
-// view is unparseable — caller then skips that contract rather than
-// failing the whole ACS scan, since one badly-shaped view shouldn't
-// break the entire wallet display.
+// extractHoldingViewV2 walks a participant InterfaceView Record for the
+// fields balance needs. ok=false when the view is unparseable — the
+// caller skips that contract rather than failing the whole ACS scan.
 //
 // The Daml record shape this targets (per HoldingV2.daml):
 //
@@ -532,8 +487,8 @@ func extractHoldingViewV2(view *lapiv2.InterfaceView) (holdingView, bool) {
 		case "amount":
 			out.Amount = numericOf(f.Value)
 		case "lock":
-			// Optional Lock — Some(...) means the holding is locked
-			// into an active allocation/proposal and can't be spent.
+			// Some(lock) means the holding is locked into an active
+			// allocation/proposal and can't be spent.
 			if o, ok := f.Value.Sum.(*lapiv2.Value_Optional); ok && o.Optional != nil && o.Optional.Value != nil {
 				out.Locked = true
 			}
@@ -545,10 +500,9 @@ func extractHoldingViewV2(view *lapiv2.InterfaceView) (holdingView, bool) {
 	return out, true
 }
 
-// extractHoldingViewV1 walks a V1 HoldingView InterfaceView. The V1 view
-// shape (HoldingV1.daml) differs from V2 in exactly one field: owner is a
-// direct `Party`, not nested in an Account. instrumentId / amount / lock
-// are identical.
+// extractHoldingViewV1 walks a V1 HoldingView InterfaceView. It differs
+// from V2 in one field: owner is a direct `Party`, not nested in an
+// Account.
 //
 //	HoldingView { owner: Party, instrumentId: InstrumentId, amount, lock?, meta }
 func extractHoldingViewV1(view *lapiv2.InterfaceView) (holdingView, bool) {
@@ -587,11 +541,10 @@ func extractHoldingViewV1(view *lapiv2.InterfaceView) (holdingView, bool) {
 	return out, true
 }
 
-// interfaceGeneration classifies a returned InterfaceView's interface id
-// by its Daml module name. Covers both the Holding interfaces (read
-// path) and the TransferInstruction interfaces (so a pending instruction
-// can be classified by the contract it is, not by the participant's
-// vetted surfaces).
+// interfaceGeneration classifies an InterfaceView's interface id by its
+// Daml module name. Covers both the Holding interfaces (read path) and
+// the TransferInstruction interfaces (so a pending instruction is
+// classified by the contract it is, not by the vetted surfaces).
 func interfaceGeneration(id *lapiv2.Identifier) (Generation, bool) {
 	if id == nil {
 		return 0, false
@@ -634,9 +587,8 @@ func extractBestHoldingView(views []*lapiv2.InterfaceView) (holdingView, bool) {
 			return hv, true
 		}
 	}
-	// Safety net for a view whose interface id we couldn't classify
-	// (a participant that omits it, or a fixture): try the V2 shape, then
-	// V1. Real ledgers always set the interface id, so this rarely fires.
+	// Safety net for a view whose interface id we couldn't classify:
+	// try the V2 shape, then V1. Real ledgers always set the interface id.
 	if unclassified != nil {
 		if hv, ok := extractHoldingViewV2(unclassified); ok && hv.Owner != "" {
 			return hv, true

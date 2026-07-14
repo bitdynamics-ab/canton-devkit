@@ -58,15 +58,12 @@ import {
   IcX,
 } from "../components/icons";
 
-// Fallback identity list — the real set comes from GET
-// /api/tokens/identity (token.Roles()); this seeds the switcher for the
-// first render and covers an identity-fetch failure. Order matches the
-// backend (default app-user first) and the WalletScreen switcher.
+// Fallback identity list; the real set comes from GET
+// /api/tokens/identity. Seeds the switcher for the first render and
+// covers a fetch failure. Default (app-user) first.
 const IDENTITY_ROLES: Role[] = ["app-user", "app-provider", "sv"];
 
-// Activity feed page size. "Load more" grows the requested limit by this
-// step; the backend returns the newest N movements (offset-descending),
-// capped server-side at 500.
+// Activity feed page size; "Load more" grows the limit by this step.
 const ACTIVITY_PAGE = 50;
 
 function shortParty(p: string): string {
@@ -79,7 +76,7 @@ function partyLabel(aliases: AliasMap, p: string): string {
   return aliases[p] ?? shortParty(p);
 }
 
-// Capability guards keyed on the machine generation tag, not the display
+// Capability guard keyed on the machine generation tag, not the display
 // label: mint requires a native V2 (CIP-0112) instrument created on-ledger.
 export function mintDisabledReason(t: InstrumentRef): string | null {
   if (t.generation !== "v2")
@@ -108,12 +105,11 @@ export function createErrorText(e: unknown): string {
 export function TokensScreen() {
   const sel = useInstanceSelection();
   const instance = sel.selected;
-  // Top-level act-as identity. Threaded through every token API call so
+  // Top-level act-as identity, threaded through every token API call so
   // the whole screen reads/writes as this role; persisted per instance.
   const [role, setRole] = useIdentityRole(instance ?? "");
-  // Selectable identities come from GET /api/tokens/identity (single
-  // source of truth, shared with the CLI `token identity`). Seeded with
-  // the static default so the switcher renders before the fetch lands.
+  // Selectable identities from GET /api/tokens/identity; seeded with the
+  // static default so the switcher renders before the fetch lands.
   const [availableRoles, setAvailableRoles] = useState<Role[]>(IDENTITY_ROLES);
 
   const [list, setList] = useState<InstrumentRef[]>([]);
@@ -124,8 +120,7 @@ export function TokensScreen() {
 
   const [holdings, setHoldings] = useState<TokenHolding[]>([]);
   const [holdingsErr, setHoldingsErr] = useState<string | null>(null);
-  // "ledger" = real on-ledger balances; "registry" = pseudo-balance fallback
-  // when no live participant is reachable. Drives the disclaimer banner.
+  // "registry" (vs "ledger") drives the pseudo-balance disclaimer banner.
   const [holdingsSource, setHoldingsSource] = useState<HoldingSource>("ledger");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [contracts, setContracts] = useState<HoldingContract[]>([]);
@@ -141,10 +136,8 @@ export function TokensScreen() {
   const [detailTab, setDetailTab] = useState<"overview" | "activity" | "allocations">("overview");
   const [activity, setActivity] = useState<ActivityEvent[] | null>(null);
   const [activityErr, setActivityErr] = useState<string | null>(null);
-  // Requested activity page size. "Load more" grows it; the backend
-  // returns the newest `activityLimit` movements. activityTruncated is
-  // set when the ledger scan itself was capped (a distinct, rarer
-  // condition from "the page is full").
+  // Requested page size; "Load more" grows it. activityTruncated is set
+  // when the ledger scan itself was capped (distinct from a full page).
   const [activityLimit, setActivityLimit] = useState(ACTIVITY_PAGE);
   const [activityTruncated, setActivityTruncated] = useState(false);
   const [allocations, setAllocations] = useState<AllocationSummary[] | null>(null);
@@ -191,10 +184,8 @@ export function TokensScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instance, role, refreshTick]);
 
-  // Available identities from the backend (single source of truth,
-  // shared with the CLI). Best-effort: on failure the switcher keeps the
-  // static default list. Role-independent, so it only re-runs per
-  // instance.
+  // Available identities from the backend. Best-effort: on failure the
+  // switcher keeps the static default. Only re-runs per instance.
   useEffect(() => {
     if (!instance) return;
     let cancelled = false;
@@ -300,10 +291,8 @@ export function TokensScreen() {
     };
   }, [instance, activeSymbol, role, refreshTick]);
 
-  // Lazy: only fetched when the Activity tab is open, since it's a full
-  // historical scan, heavier than the other lenses' ACS snapshots.
-  // Re-runs when activityLimit grows ("Load more"), refetching the newest
-  // N movements — the backend returns them offset-descending.
+  // Lazy: only when the Activity tab is open (a full historical scan,
+  // heavier than the ACS-snapshot lenses). Re-runs when activityLimit grows.
   useEffect(() => {
     if (!instance || !activeSymbol || detailTab !== "activity") return;
     let cancelled = false;
@@ -331,9 +320,8 @@ export function TokensScreen() {
     setActivityTruncated(false);
   }, [activeSymbol, role, instance]);
 
-  // Lazy: only fetched when the Allocations tab is open (an ACS scan of
-  // the Allocation interface). Not instrument-scoped on the backend, so we
-  // show every visible allocation regardless of the active symbol.
+  // Lazy: only when the Allocations tab is open. Not instrument-scoped —
+  // shows every visible allocation regardless of the active symbol.
   useEffect(() => {
     if (!instance || detailTab !== "allocations") return;
     let cancelled = false;
@@ -847,8 +835,8 @@ export function TokensScreen() {
   );
 }
 
-// From/To/Amount plus a live coin-selection preview: dry-runs the transfer
-// as From + Amount fill in, showing which Holding contracts get consumed.
+// From/To/Amount plus a live coin-selection preview (dry-runs as From +
+// Amount fill in, showing which Holding contracts get consumed).
 function TransferModal({
   instance, symbol, role, parties, onPartiesChanged, onClose, onDone, onError,
 }: {
@@ -971,9 +959,8 @@ function TransferModal({
   );
 }
 
-// AllocateModal creates a V2 DvP allocation: authorizer + receiver + amount,
-// plus a settlement deadline and a committed toggle (committed locks funds
-// until the deadline). Mirrors the TransferModal shape.
+// Creates a V2 DvP allocation: authorizer + receiver + amount, a
+// settlement deadline, and a committed toggle (locks funds until then).
 function AllocateModal({
   instance, symbol, parties, onPartiesChanged, onClose, onDone, onError,
 }: {
@@ -1044,9 +1031,8 @@ function AllocateModal({
   );
 }
 
-// AllocationsPanel lists the ready-to-settle V2 allocations with per-row
-// settle / withdraw / cancel actions. Not instrument-scoped (the backend
-// scans every visible Allocation), so it shows all of them.
+// Lists ready-to-settle V2 allocations with per-row settle / withdraw /
+// cancel. Not instrument-scoped — shows every visible allocation.
 function AllocationsPanel({
   allocations, err, aliases, onAllocate, onSettle, onWithdraw, onCancel,
 }: {
@@ -1224,12 +1210,9 @@ function HolderDistribution({ s, aliases }: { s: InstrumentSummary; aliases: Ali
   );
 }
 
-// Transfer/mint/burn history from the ledger stream; one netted
-// transaction per row. Rows arrive newest-first (the backend sorts by
-// ledger offset descending — buildActivity / renderEventLogActivity — so
-// this feed and the CLI `token activity` agree). `limit` is the currently
-// requested page size; `onLoadMore` grows it. `truncated` means the
-// backend's ledger scan itself was capped (partial history).
+// Transfer/mint/burn history from the ledger stream, one netted
+// transaction per row, newest-first. `onLoadMore` grows `limit`;
+// `truncated` means the backend's scan was capped (partial history).
 function ActivityFeed({
   events,
   err,
@@ -1250,9 +1233,7 @@ function ActivityFeed({
   if (events.length === 0)
     return <div style={{ color: W.dim, fontSize: fs.data, marginTop: 12 }}>No activity for this instrument yet.</div>;
 
-  // A full page (events == the requested limit) means there may be older
-  // movements the backend clipped off — offer to grow the window. When the
-  // page is short, we've reached the start of history.
+  // A full page may have older movements clipped off — offer to grow it.
   const maybeMore = events.length >= limit;
 
   const tone: Record<ActivityEvent["kind"], string> = {
@@ -1269,10 +1250,8 @@ function ActivityFeed({
     !ps || ps.length === 0
       ? "·"
       : ps.map((p) => `${partyLabel(aliases, p.party)} ${p.amount}`).join(", ");
-  // Provenance: "event_log" rows are the instrument admin's authoritative
-  // holdings-change events; "transaction" rows are netted from HoldingV2
-  // create/archive deltas. Surface it so the feed matches the CLI --json
-  // (which carries the same `source`).
+  // Provenance: "event_log" = admin's authoritative events; "transaction"
+  // = netted from HoldingV2 create/archive deltas.
   const sourceLabel = (s: ActivityEvent["source"]) =>
     s === "event_log" ? "EventLog" : "derived";
   return (
@@ -1347,7 +1326,7 @@ function ActivityFeed({
 }
 
 // Party × instrument balance table from one ACS scan; only parties the
-// role's JWT can read appear.
+// role's JWT can read appear. Filterable to one token's column.
 function MatrixLens({
   matrix,
   err,
@@ -1452,10 +1431,9 @@ function Header({ right }: { right?: React.ReactNode }) {
   );
 }
 
-// Top-level act-as identity picker for the Tokens screen. Selecting a
-// role re-plumbs it through every token API call (read + write) so the
-// whole screen speaks the ledger as that identity — the counterpart of
-// the WalletScreen role switcher. Mirrors its segmented-control design.
+// Top-level act-as identity picker: selecting a role re-plumbs it
+// through every token API call (read + write) so the whole screen speaks
+// the ledger as that identity.
 function RoleSwitcher({
   role,
   roles,
@@ -1532,8 +1510,8 @@ function RoleDot({ role }: { role: Role }) {
   );
 }
 
-// List/allocate/forget aliased parties. New parties are immediately visible
-// in the matrix/activity (the scan grants read-as for every registered party).
+// List/allocate/forget aliased parties. New parties show immediately in
+// the matrix/activity (the scan grants read-as for every registered party).
 function PartyManagerModal({
   instance,
   role,
@@ -1790,8 +1768,7 @@ function ActionModal({
 }
 
 // Alias-aware party selector: pick a registered alias, create one inline,
-// or type a raw id. Always emits the resolved party_id (ResolveAlias passes
-// it through unchanged, so it's correct on both create and action paths).
+// or type a raw id. Always emits the resolved party_id.
 function PartyPicker({
   instance,
   parties,

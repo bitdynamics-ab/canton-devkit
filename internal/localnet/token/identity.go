@@ -8,14 +8,10 @@ import "github.com/bitdynamics-ab/canton-devkit/internal/splice"
 // and JWT minting pick the same participant.
 const DefaultRole = string(splice.RoleAppUser)
 
-// Roles returns the act-as identities a LocalNet bring-up issues tokens
-// for, in UI presentation order — the default (app-user) first. Both the
-// CLI `token identity` verb and the Web UI's identity switcher render
-// this list, so the two surfaces expose the same set in the same order.
-//
-// splice.AllRoles() is the underlying source of truth; this reorders it
-// so the default leads (AllRoles lists sv first, which is the wrong lead
-// for an act-as picker).
+// Roles returns the act-as identities a LocalNet issues tokens for, in
+// UI order with the default (app-user) first. Shared by the CLI `token
+// identity` verb and the Web UI switcher so both list the same set in
+// the same order. Reorders splice.AllRoles() (which leads with sv).
 func Roles() []string {
 	return []string{
 		string(splice.RoleAppUser),

@@ -14,22 +14,9 @@ import (
 
 // V2 allocation / DvP orchestration. An allocation is an authorizer's
 // ready-to-settle approval of one or more transfer legs of a settlement
-// batch. The wallet (authorizer) side:
-//
-//	RunAllocate           — pick holdings, POST allocation-factory, exercise
-//	                        AllocationFactory_Allocate → Allocation (or a
-//	                        pending AllocationInstruction) contract id.
-//	RunListAllocations    — ACS-query the Allocation interface for a summary
-//	                        list (the Allocations panel / `token allocations`).
-//	RunAllocationWithdraw — Allocation_Withdraw (committed: only after the
-//	                        settlement deadline; the choice enforces it).
-//	RunAllocationCancel   — Allocation_Cancel.
-//	RunSettle             — SettlementFactory_SettleBatch (executor-driven;
-//	                        TODO-flagged, wants a live instance to prove).
-//
-// The value shapes + exercise seams live in allocation_builders.go and
-// exercise_allocation.go; this file is the flow glue (resolve registry +
-// ledger, coin-select, emit progress) that mirrors run_transfer.go.
+// batch. This file is the flow glue (resolve registry + ledger, coin-select,
+// emit progress); value shapes + exercise seams live in
+// allocation_builders.go and exercise_allocation.go.
 
 // AllocationOptions is the input shape for RunAllocate — shared by the CLI
 // `token allocate` flags and the POST /api/tokens/{symbol}/allocate handler
@@ -41,12 +28,11 @@ type AllocationOptions struct {
 	To         string // receiver account owner of the transfer leg
 	Amount     string // decimal string
 	Executor   string // settlement executor party; empty defaults to From (LocalNet: you own everyone)
-	// SettlementDeadline is the optional RFC3339 (or duration) deadline. A
-	// committed allocation locks funds until this passes. Empty leaves it
-	// unset (a non-committed allocation withdrawable any time).
+	// SettlementDeadline is the optional RFC3339 (or duration) deadline.
+	// Committed allocations lock funds until it passes; empty leaves it unset.
 	SettlementDeadline string
-	// Committed marks the allocation committed: funds are locked and cannot
-	// be withdrawn before SettlementDeadline (the choice enforces it).
+	// Committed locks the funds until SettlementDeadline (the choice enforces
+	// the no-early-withdraw invariant).
 	Committed bool
 
 	// Live-submit envelope, same as TransferOptions.
@@ -58,14 +44,14 @@ type AllocationOptions struct {
 }
 
 // AllocationActionOptions is the input shape for the per-allocation
-// withdraw / cancel / settle verbs — just the target allocation id + the
+// withdraw / cancel / settle verbs — the target allocation id + the
 // live-submit envelope.
 type AllocationActionOptions struct {
 	Instance     string
 	AllocationID string
-	// Party is the actor exercising the choice (the authorizer for
-	// withdraw, an executor for cancel/settle). Empty falls back to the
-	// JWT's first granted party (single-party participant).
+	// Party is the actor exercising the choice (authorizer for withdraw,
+	// executor for cancel/settle). Empty falls back to the JWT's first
+	// granted party.
 	Party string
 
 	Endpoint    string
@@ -87,11 +73,10 @@ type ListAllocationsOptions struct {
 	Insecure bool
 }
 
-// RunAllocate performs the full authorizer-side allocation flow: resolve
-// registry + ledger, coin-select the authorizer's holdings, POST the
-// allocation-factory, and exercise AllocationFactory_Allocate. Returns the
-// resulting Allocation (finalized) or AllocationInstruction (pending)
-// contract id.
+// RunAllocate performs the full authorizer-side allocation flow: coin-select
+// the authorizer's holdings, POST the allocation-factory, and exercise
+// AllocationFactory_Allocate. Returns the resulting Allocation (finalized) or
+// AllocationInstruction (pending) contract id.
 func RunAllocate(ctx context.Context, out io.Writer, opts AllocationOptions) (string, error) {
 	if err := requireFields("allocate", opts.Instance, opts.Instrument, opts.From, opts.To, opts.Amount); err != nil {
 		return "", err
@@ -118,9 +103,8 @@ func RunAllocate(ctx context.Context, out io.Writer, opts AllocationOptions) (st
 	if opts.Role == "" {
 		opts.Role = "app-user"
 	}
-	// LocalNet single-operator default: the settlement executor is the
-	// authorizer unless the caller named one explicitly (you own every
-	// party on LocalNet, so self-executed settlement is the common case).
+	// LocalNet single-operator default: self-execute settlement unless the
+	// caller named an executor.
 	if opts.Executor == "" {
 		opts.Executor = opts.From
 	}
@@ -257,9 +241,7 @@ func RunListAllocations(ctx context.Context, opts ListAllocationsOptions) ([]typ
 		Role:     opts.Role,
 	}
 	// dialLedgerFn (not dialLedger): the list path uses only the narrow
-	// LedgerClient interface (LedgerEnd + ActiveContracts), so tests inject
-	// a fakeLedger through this seam. The write paths keep concrete
-	// dialLedger since they need SubmitAndWaitForTransaction.
+	// LedgerClient interface, so tests inject a fakeLedger through this seam.
 	client, cleanup, err := dialLedgerFn(ctx, conn)
 	if err != nil {
 		return nil, err
@@ -305,7 +287,7 @@ func RunListAllocations(ctx context.Context, opts ListAllocationsOptions) ([]typ
 		}
 		out = append(out, types.AllocationSummary{
 			ContractID:   created.GetContractId(),
-			Status:       types.AllocationStatusReady, // a live Allocation contract is ready-to-settle
+			Status:       types.AllocationStatusReady, // a live Allocation is ready-to-settle
 			SettlementID: av.SettlementID,
 			Authorizer:   av.Authorizer,
 			LegCount:     av.LegCount,
@@ -317,14 +299,14 @@ func RunListAllocations(ctx context.Context, opts ListAllocationsOptions) ([]typ
 
 // RunAllocationWithdraw exercises Allocation_Withdraw against a finalized
 // Allocation. For a committed allocation the choice refuses until the
-// settlement deadline has passed — the participant returns the assertion
-// failure, which the caller surfaces. Backs the CLI + the withdraw handler.
+// settlement deadline passes; the participant's assertion failure is
+// surfaced to the caller.
 func RunAllocationWithdraw(ctx context.Context, out io.Writer, opts AllocationActionOptions) error {
 	return runAllocationAction(ctx, out, opts, "withdraw", AllocationWithdrawPathV2, "Allocation_Withdraw")
 }
 
 // RunAllocationCancel exercises Allocation_Cancel against a finalized
-// Allocation. Backs the CLI + the cancel handler.
+// Allocation.
 func RunAllocationCancel(ctx context.Context, out io.Writer, opts AllocationActionOptions) error {
 	return runAllocationAction(ctx, out, opts, "cancel", AllocationCancelPathV2, "Allocation_Cancel")
 }
@@ -398,16 +380,13 @@ func runAllocationAction(ctx context.Context, out io.Writer, opts AllocationActi
 // RunSettle drives the executor-side SettlementFactory_SettleBatch for the
 // batch a finalized Allocation belongs to.
 //
-// TODO(BIT-ALLOC-SETTLE): end-to-end settlement is not yet proven — it
-// wants a live V2 instance. There is NO registry choice-contexts/settle
-// endpoint (settlement is executor-driven via the settlement-factory
-// context), so this fetches that factory context and assembles the
-// SettlementFactory_SettleBatch exercise, but the FinalizedAllocation list
-// + the batch's transferLegs must be reconstructed from live allocation
-// state, which needs a running ledger to validate against. Until then this
-// returns a clear not-proven error after wiring the factory lookup, so the
-// CLI/UI surface exists and the seam is exercised. The factory fetch is
-// real (proves the endpoint wiring); the batch assembly is the TODO.
+// TODO: end-to-end settlement is not yet proven. There is NO registry
+// choice-contexts/settle endpoint (settlement is executor-driven via the
+// settlement-factory context), so this fetches that factory context — real,
+// proving the endpoint wiring — but the FinalizedAllocation list + the
+// batch's transferLegs must be reconstructed from live allocation state,
+// which needs a running V2 instance to validate against. Until then it
+// returns a clear not-proven error so the CLI/UI surface and seam exist.
 func RunSettle(ctx context.Context, out io.Writer, opts AllocationActionOptions) error {
 	if err := requireFields("settle", opts.Instance, opts.AllocationID); err != nil {
 		return err
@@ -443,10 +422,9 @@ func RunSettle(ctx context.Context, out io.Writer, opts AllocationActionOptions)
 		"factory_id": factoryResp.FactoryID,
 		"disclosed":  len(factoryResp.DisclosedContractsList()),
 	})
-	// TODO(BIT-ALLOC-SETTLE): assemble + submit exerciseSettleBatch. The
-	// finalizedAllocations list + transferLegs the batch settles must be
-	// mined from the live Allocation contract(s) for this settlement id;
-	// that reconstruction wants a running V2 instance to validate against.
+	// TODO: assemble + submit exerciseSettleBatch. The finalizedAllocations
+	// list + transferLegs must be mined from the live Allocation contract(s)
+	// for this settlement id, which wants a running V2 instance to validate.
 	return fmt.Errorf("settle: SettlementFactory_SettleBatch end-to-end not yet proven " +
 		"(no registry settle choice-context endpoint — executor-driven; " +
 		"batch assembly needs a live V2 instance). Settlement-factory context " +
@@ -455,14 +433,13 @@ func RunSettle(ctx context.Context, out io.Writer, opts AllocationActionOptions)
 
 // --- helpers -------------------------------------------------------
 
-// newSettlementID returns a fresh settlement-ref id, reusing the
-// command-id random source (hex, collision-safe).
+// newSettlementID returns a fresh settlement-ref id, reusing the command-id
+// random source (hex, collision-safe).
 func newSettlementID() string {
 	id, err := newCommandID()
 	if err != nil {
-		// newCommandID only fails if crypto/rand fails, which is
-		// effectively never; fall back to a static prefix so the flow
-		// still submits (the registry only requires uniqueness per batch).
+		// crypto/rand failure (effectively never); the registry only
+		// requires uniqueness per batch, so a static fallback still submits.
 		return "settlement-fallback"
 	}
 	return "settlement-" + id
@@ -486,9 +463,8 @@ func parseSettlementDeadline(s string) (*time.Time, error) {
 	return nil, fmt.Errorf("--settlement-deadline %q is neither an RFC3339 timestamp nor a duration (e.g. 1h, 30m)", s)
 }
 
-// allocationView is the generation-agnostic structured form of an
-// Allocation InterfaceView (V2) — just the fields the summary/list surface
-// needs.
+// allocationView is the structured form of an Allocation InterfaceView (V2)
+// — just the fields the summary/list surface needs.
 type allocationView struct {
 	SettlementID string
 	Authorizer   string
@@ -517,15 +493,9 @@ func allocationInterfaceFilter(parties []string) *lapiv2.EventFormat {
 // summary fields. Best-effort: an unparseable view is skipped (ok=false)
 // rather than failing the whole scan.
 //
-// The AllocationView record (AllocationV2.daml) nests the settlement +
-// spec under an `allocation` field:
-//
-//	AllocationView { allocation : AllocationSpecification, holdingCids, meta }
-//
-// where AllocationSpecification carries admin / authorizer(Account) /
-// transferLegSides / settlementDeadline / committed. The settlement id
-// lives under the nested settlement's ref; some registries surface it
-// flat. We read whichever is present.
+// The AllocationView record (AllocationV2.daml) nests the spec under an
+// `allocation` field. The settlement id lives under the nested settlement's
+// ref; some registries surface it flat — we read whichever is present.
 func extractAllocationView(views []*lapiv2.InterfaceView) (allocationView, bool) {
 	for _, iv := range views {
 		id := iv.GetInterfaceId()
@@ -552,14 +522,14 @@ func walkAllocationFields(fields []*lapiv2.RecordField, out *allocationView) {
 	for _, f := range fields {
 		switch f.Label {
 		case "allocation":
-			// Nested AllocationSpecification — recurse.
 			if rec := recordOf(f.Value); rec != nil {
 				walkAllocationFields(rec.Fields, out)
 			}
 		case "admin":
 			out.Admin = partyOf(f.Value)
 		case "authorizer":
-			// Account record: owner is the funding party.
+			// Account record (owner = funding party), or a bare Party in
+			// some views.
 			if rec := recordOf(f.Value); rec != nil {
 				for _, af := range rec.Fields {
 					if af.Label == "owner" {
@@ -567,7 +537,6 @@ func walkAllocationFields(fields []*lapiv2.RecordField, out *allocationView) {
 					}
 				}
 			} else {
-				// Some views surface authorizer as a bare Party.
 				if p := partyOf(f.Value); p != "" {
 					out.Authorizer = p
 				}

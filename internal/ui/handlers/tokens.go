@@ -20,29 +20,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// tokensBodyMax caps any /api/tokens request body. Token bodies are
-// small structured JSON — multi-MiB requests are always a mistake.
+// tokensBodyMax caps any /api/tokens request body; token bodies are
+// small structured JSON.
 const tokensBodyMax = 64 << 10 // 64 KiB
 
-// MountTokens wires the /api/tokens HTTP surface for the Web UI
-// Tokens screen. All handlers delegate to
-// internal/localnet/token.RunX — the same functions the CLI
-// subcommands call — so CLI ↔ UI parity is automatic.
-//
-// Routes:
-//
-//	GET    /api/tokens                          ?instance=...  list instruments
-//	GET    /api/tokens/{symbol}                 ?instance=...  detail (symbol or raw id)
-//	GET    /api/tokens/{symbol}/holdings        ?instance=... [&party=]  per-party balances
-//	POST   /api/tokens                          create instrument (body: TokenCreateRequest)
-//	POST   /api/tokens/{symbol}/mint            mint to a recipient
-//	POST   /api/tokens/{symbol}/transfer        sender-initiated transfer
-//	POST   /api/tokens/transfers/{id}/accept    receiver-side accept
-//	POST   /api/tokens/{symbol}/burn            burn a holding
-//
-// The hub argument is reserved for future SSE-backed live updates;
-// accepted now so callers don't have to refactor their MountTokens
-// call when that lands.
+// MountTokens wires the /api/tokens HTTP surface for the Web UI Tokens
+// screen. All handlers delegate to internal/localnet/token.RunX (the
+// same functions the CLI calls), so CLI ↔ UI parity is automatic. The
+// hub arg is reserved for future SSE live updates.
 func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	mux.HandleFunc("GET /api/tokens", handleTokensList)
 	mux.HandleFunc("GET /api/tokens/identity", handleTokenIdentity)
@@ -51,9 +36,8 @@ func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	mux.HandleFunc("GET /api/tokens/{symbol}/summary", handleTokenSummary)
 	mux.HandleFunc("GET /api/tokens/{symbol}/activity", handleTokenActivity)
 	mux.HandleFunc("GET /api/tokens/{symbol}/holdings", handleTokenHoldings)
-	// State-changing POSTs are wrapped with Idempotency-Key dedup so a
-	// client retry can't mint/transfer/burn twice (opt-in: only requests
-	// carrying the header are deduplicated).
+	// State-changing POSTs are wrapped with Idempotency-Key dedup (opt-in
+	// on the header) so a client retry can't mint/transfer/burn twice.
 	idem := newIdemStore()
 	mux.HandleFunc("POST /api/tokens", idem.wrap(handleTokensCreate))
 	mux.HandleFunc("POST /api/tokens/demo", idem.wrap(handleTokensDemo))
@@ -62,17 +46,14 @@ func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	mux.HandleFunc("POST /api/tokens/transfers/{id}/accept", idem.wrap(handleTokenAccept))
 	mux.HandleFunc("POST /api/tokens/{symbol}/burn", idem.wrap(handleTokenBurn))
 	mux.HandleFunc("POST /api/tokens/{symbol}/faucet", idem.wrap(handleTokenFaucet))
-	// V2 DvP allocations. list is a GET (ACS scan); allocate + the
-	// per-allocation actions are idempotent-wrapped POSTs (a retry can't
-	// double-allocate/settle). Same RunX functions the `token allocate /
-	// allocations / settle` CLI verbs call — CLI ↔ UI parity is automatic.
+	// V2 DvP allocations: list is a GET (ACS scan); allocate + the
+	// per-allocation actions are idempotent-wrapped POSTs.
 	mux.HandleFunc("GET /api/tokens/allocations", handleAllocationsList)
 	mux.HandleFunc("POST /api/tokens/{symbol}/allocate", idem.wrap(handleTokenAllocate))
 	mux.HandleFunc("POST /api/tokens/allocations/{id}/settle", idem.wrap(handleAllocationSettle))
 	mux.HandleFunc("POST /api/tokens/allocations/{id}/withdraw", idem.wrap(handleAllocationWithdraw))
 	mux.HandleFunc("POST /api/tokens/allocations/{id}/cancel", idem.wrap(handleAllocationCancel))
-	// Party alias registry — the workspace's god-mode
-	// party manager. Same RunPartyX functions the `token party` CLI calls.
+	// Party alias registry. Same RunPartyX functions the `token party` CLI calls.
 	mux.HandleFunc("GET /api/parties", handlePartiesList)
 	mux.HandleFunc("POST /api/parties", handlePartiesCreate)
 	mux.HandleFunc("DELETE /api/parties/{alias}", handlePartiesRemove)
@@ -80,7 +61,7 @@ func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 
 // aliasMap returns partyID → alias for an instance's registered parties,
 // attached to scan responses so the UI can label party ids without a
-// second round-trip. Empty map for an unknown / alias-less instance.
+// second round-trip.
 func aliasMap(instance string) map[string]string {
 	out := map[string]string{}
 	state, err := registry.Read(instance)
@@ -167,12 +148,10 @@ func handlePartiesRemove(w http.ResponseWriter, r *http.Request) {
 
 // --- read paths ------------------------------------------------------
 
-// handleTokenIdentity serves the act-as identity picker: the roles a
-// LocalNet bring-up issues tokens for plus the role the request was made
-// under. Backs the Web UI's top-level role switcher on the Tokens screen
-// and the CLI `token identity` verb (same token.Roles() source, so both
-// surfaces list the same set in the same order). Read-only; no ledger
-// dial, so it answers even when the instance is down.
+// handleTokenIdentity serves the act-as identity picker (token.Roles()
+// plus the request's role), backing the Web UI switcher and the CLI
+// `token identity` verb. Read-only, no ledger dial, so it answers even
+// when the instance is down.
 func handleTokenIdentity(w http.ResponseWriter, r *http.Request) {
 	instance, err := instanceFromQuery(r)
 	if err != nil {
@@ -193,11 +172,9 @@ func handleTokensList(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
-	// On-chain instrument discovery: when a live ledger
-	// endpoint is available, list instruments seen in the ACS — so
-	// Amulet and any minted token appear without a state.Tokens seed.
-	// Falls back to the registry-recorded list when no endpoint (the
-	// instance pre-dates port capture, or the ledger is unreachable).
+	// On-chain instrument discovery: with a live endpoint, list ACS
+	// instruments (so Amulet and any minted token appear without a
+	// state.Tokens seed); otherwise fall back to the recorded list.
 	role := roleFromQuery(r)
 	if ep := liveLedgerEndpoint(instance, role); ep != "" {
 		instruments, derr := token.RunInstruments(r.Context(), token.BalanceOptions{
@@ -224,8 +201,7 @@ func handleTokensList(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleTokenMatrix returns the party × instrument balance matrix
-// — the god-mode reconciliation view.
+// handleTokenMatrix returns the party × instrument balance matrix.
 func handleTokenMatrix(w http.ResponseWriter, r *http.Request) {
 	instance, err := instanceFromQuery(r)
 	if err != nil {
@@ -268,10 +244,9 @@ func handleTokenDetail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, ref)
 }
 
-// handleTokenSummary returns the instrument-first KPI view: total
-// supply, holder + holding-contract counts, and the
-// per-holder distribution with share-of-supply. ACS-derived, same live
-// endpoint as the matrix.
+// handleTokenSummary returns the instrument KPI view: total supply,
+// holder + holding-contract counts, and the per-holder distribution.
+// ACS-derived, same live endpoint as the matrix.
 func handleTokenSummary(w http.ResponseWriter, r *http.Request) {
 	instance, err := instanceFromQuery(r)
 	if err != nil {
@@ -285,9 +260,8 @@ func handleTokenSummary(w http.ResponseWriter, r *http.Request) {
 			"no live ledger endpoint for instance "+instance+" — restart it so ports are captured")
 		return
 	}
-	// Resolve the symbol to its on-ledger instrument id so the scan's
-	// per-holding instrumentId filter lines up (the workspace keys on
-	// instrument_id, which for our native tokens == symbol).
+	// Resolve the symbol to its instrument id so the scan's per-holding
+	// instrumentId filter lines up (for native tokens id == symbol).
 	sym := r.PathValue("symbol")
 	instrumentID := sym
 	if ref, rerr := token.ResolveBySymbol(instance, sym); rerr == nil && ref.InstrumentID != "" {
@@ -309,9 +283,8 @@ func handleTokenSummary(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleTokenActivity reconstructs an instrument's transfer/mint/burn
-// history from the ledger transaction stream (Activity tab). No
-// off-ledger transfer-events registry needed — derived from HoldingV2
-// create/archive events. ?limit caps the result (default 50).
+// history from the ledger transaction stream (HoldingV2 create/archive
+// events). ?limit caps the result (default 50).
 func handleTokenActivity(w http.ResponseWriter, r *http.Request) {
 	instance, err := instanceFromQuery(r)
 	if err != nil {
@@ -358,15 +331,11 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
-	// Resolve the role's participant ledger endpoint once and thread it
-	// via opts.Endpoint, rather than letting the expand guard, RunBalance,
-	// and BalanceSource each re-resolve it independently (≈4 registry-file
-	// reads per request). A present endpoint means the live V2 ACS path
-	// (rows tagged SourceLedger); an absent one falls back to the registry
-	// pseudo-balance path (SourceRegistry), which the response source tags
-	// so the UI can flag it. Auto-grant + per-party filter inside
-	// dialLedger / runBalanceLive handle the V2 alpha permission gate
-	// transparently. Empty role defaults to app-user.
+	// Resolve the endpoint once and thread it via opts.Endpoint, rather
+	// than having the expand guard, RunBalance, and BalanceSource each
+	// re-resolve it (≈4 registry reads/request). Present endpoint → live
+	// ACS path (SourceLedger); absent → registry pseudo-balance
+	// (SourceRegistry), which the response source tags so the UI can flag it.
 	role := roleFromQuery(r)
 	endpoint := token.ResolveLedgerEndpoint(instance, role)
 	opts := token.BalanceOptions{
@@ -377,9 +346,8 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 		Insecure:   true,     // LocalNet default
 		Endpoint:   endpoint, // resolved once above; "" → registry fallback
 	}
-	// expand=contracts → return the individual Holding contracts
-	// (the UTXO units) instead of the summed-per-party balance.
-	// A party's balance is the sum of these. Requires a live endpoint.
+	// expand=contracts → return the individual Holding contracts (UTXO
+	// units) instead of the summed-per-party balance. Requires a live endpoint.
 	if r.URL.Query().Get("expand") == "contracts" && endpoint != "" {
 		contracts, cerr := token.RunWorkspaceHoldings(r.Context(), opts)
 		if cerr != nil {
@@ -397,13 +365,9 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 		mapTokenError(w, err, "balance")
 		return
 	}
-	// Tell the client whether these are live on-ledger balances or the
-	// registry pseudo-balance fallback, so the UI can flag the latter
-	// instead of presenting fabricated rows as real holdings. Derived from
-	// the same resolved endpoint — keyed on endpoint availability (not
-	// reachability), exactly as RunBalance branches. The response-level
-	// value lets the UI render one disclaimer banner without scanning
-	// every row.
+	// Tag whether these are live on-ledger balances or the registry
+	// pseudo-balance fallback so the UI can flag the latter. Keyed on
+	// endpoint availability (not reachability), exactly as RunBalance branches.
 	source := token.SourceRegistry
 	if endpoint != "" {
 		source = token.SourceLedger
@@ -416,11 +380,10 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// toHoldings converts the neutral token.BalanceRow slice into the
-// shared api/types.TokenHolding wire shape. The two structs mirror
-// each other field-for-field (same JSON tags); the conversion exists
-// so the package boundary stays one-directional (handlers → api/types,
-// localnet/token → neither) while the emitted bytes are identical.
+// toHoldings converts token.BalanceRow into the shared
+// api/types.TokenHolding wire shape (identical fields/tags). The
+// conversion keeps the package boundary one-directional (handlers →
+// api/types, localnet/token → neither).
 func toHoldings(rows []token.BalanceRow) []types.TokenHolding {
 	out := make([]types.TokenHolding, 0, len(rows))
 	for _, r := range rows {
@@ -448,11 +411,9 @@ func handleTokensCreate(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
-	// Thread Endpoint+Role through to RunCreate so the UI's
-	// create-on-ledger path matches the CLI: an instance with a captured
-	// participant port submits live, otherwise RunCreate falls back to
-	// the registry-only stub. Same role/endpoint discovery shape as the
-	// mint / transfer handlers below.
+	// Thread Endpoint+Role so the UI's create path matches the CLI: a
+	// captured participant port submits live, otherwise RunCreate falls
+	// back to the registry-only stub.
 	role := roleFromQuery(r)
 	res, err := runTokenCreate(token.CreateOptions{
 		Instance:      instance,
@@ -472,16 +433,12 @@ func handleTokensCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, res.TokenRef)
 }
 
-// handleTokensDemo provisions a live, transferable demo token in one
-// call (issuer party → V2 instrument → mint supply → faucet a holder) —
-// the server side of the Web UI's "Launch demo token" button and the
-// CLI `token demo` verb, both routed through token.RunDemo for parity.
-//
-// The request body is optional; an empty body provisions the defaults
-// (symbol DEMO, supply 1,000,000, decimals 6, seed a holder). Requires a
-// live V2 endpoint — without one RunDemo returns ErrNeedsV2LocalNet,
-// which maps to 412 so the UI can disable the button with a "start a V2
-// instance first" hint instead of producing an un-mintable stub.
+// handleTokensDemo provisions a live demo token in one call (issuer →
+// V2 instrument → mint → faucet a holder) — the server side of the
+// "Launch demo token" button and the CLI `token demo` verb, both via
+// token.RunDemo. The body is optional (defaults: symbol DEMO, supply
+// 1,000,000, decimals 6, seed a holder). Requires a live V2 endpoint;
+// without one RunDemo returns ErrNeedsV2LocalNet → 412.
 func handleTokensDemo(w http.ResponseWriter, r *http.Request) {
 	instance, err := instanceFromQuery(r)
 	if err != nil {
@@ -540,8 +497,8 @@ func handleTokenMint(w http.ResponseWriter, r *http.Request) {
 		Instrument: r.PathValue("symbol"),
 		To:         body.To,
 		Amount:     body.Amount,
-		// Live mint for on-ledger test-token instruments. Amulet /
-		// registry-only instruments still take the unsupported path.
+		// Live mint for on-ledger test-token instruments; Amulet /
+		// registry-only instruments take the unsupported path.
 		Endpoint: liveLedgerEndpoint(instance, role),
 		Role:     role,
 		Insecure: true,
@@ -600,18 +557,15 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 	// Live-submit: opts already carries the resolved endpoint/role.
 	opts.NoWait = body.NoWait
 	opts.AutoAccept = body.AutoAccept
-	// Atomic batches transfer+accept into one BatchingUtilityV2 transaction.
-	// EXPERIMENTAL — not yet supported on current Splice (RunTransfer returns
-	// an actionable error and nothing commits); sequential is the default.
-	// See TransferOptions.Atomic / runTransferOnLedgerBatched.
+	// Atomic batches transfer+accept into one BatchingUtilityV2
+	// transaction. EXPERIMENTAL — not yet supported on current Splice
+	// (RunTransfer returns an actionable error and nothing commits);
+	// sequential is the default.
 	opts.Atomic = body.Atomic
 	opts.Reason = body.Reason
-	// Capture RunTransfer's emitted events so we can return the created
-	// TransferInstruction id to the client. Without it the two-step
-	// offer→accept flow is unusable from the UI: the receiver has no way
-	// to learn the id the Accept action needs. (LocalNet single-operator
-	// fix — the sender, who owns the receiver, gets the id back and can
-	// accept it.)
+	// Capture RunTransfer's emitted events to return the created
+	// TransferInstruction id — without it the two-step offer→accept flow
+	// is unusable from the UI (the receiver can't learn the Accept id).
 	var buf bytes.Buffer
 	if err := runTokenTransfer(r.Context(), &buf, opts); err != nil {
 		mapTokenError(w, err, "transfer")
@@ -620,17 +574,15 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"schema_version":          types.SchemaVersion,
 		"transfer_instruction_id": extractEmittedID(buf.String()),
-		// settled is true when auto-accept chained the receiver-side
-		// accept (or a Direct/self transfer needed none) — the UI then
-		// skips the Accept step.
+		// settled → the UI skips the Accept step (auto-accept chained it,
+		// or a Direct/self transfer needed none).
 		"settled": opts.AutoAccept,
 	})
 }
 
 // extractEmittedID scans RunTransfer's emitted "<verb>: {json}" lines
-// for a transfer_instruction_id (emitted on the "transfer complete"
-// verb). Returns "" when absent — e.g. a Direct/self transfer that
-// settled with no pending instruction, or a path that doesn't emit one.
+// for a transfer_instruction_id. Returns "" when absent (e.g. a
+// Direct/self transfer that settled with no pending instruction).
 func extractEmittedID(emitted string) string {
 	for _, line := range strings.Split(emitted, "\n") {
 		brace := strings.Index(line, "{")
@@ -693,11 +645,10 @@ func handleTokenAccept(w http.ResponseWriter, r *http.Request) {
 	err = runTokenAccept(r.Context(), token.AcceptOptions{
 		Instance:              instance,
 		TransferInstructionID: r.PathValue("id"),
-		// Party targets the receiver on a multi-party participant — the
-		// TransferInstruction_Accept controller is transfer.receiver, so
-		// without it RunAccept falls back to the JWT's first granted
-		// party, which is usually the wrong one. Mirrors the CLI's
-		// `token transfer accept --party` flag (parity).
+		// Party targets the receiver on a multi-party participant: the
+		// Accept controller is transfer.receiver, so without it RunAccept
+		// falls back to the JWT's first granted party (usually wrong).
+		// Mirrors the CLI's `token transfer accept --party`.
 		Party:    r.URL.Query().Get("party"),
 		Endpoint: liveLedgerEndpoint(instance, role),
 		Role:     role,
@@ -736,17 +687,14 @@ func handleTokenBurn(w http.ResponseWriter, r *http.Request) {
 // --- helpers ---------------------------------------------------------
 
 // runTokenCreate is the indirection point for handleTokensCreate. Tests
-// override it to assert that the handler is wiring Endpoint+Role through
-// to the orchestration layer (the CLI gets them from flags; the UI must
-// derive them from the instance registry + request role).
+// override it to assert the handler threads Endpoint+Role through.
 var runTokenCreate = func(opts token.CreateOptions) (*token.CreateResult, error) {
 	return token.RunCreate(nil, opts)
 }
 
-// runTokenTransfer / runTokenAccept are indirection points for the
-// transfer + accept handlers so tests can assert the wiring — the
-// surfaced instruction id and the ?party= threading — without a live
-// ledger. Same package-var pattern as runTokenCreate.
+// runTokenTransfer / runTokenAccept are indirection points so tests can
+// assert the wiring (surfaced instruction id, ?party= threading)
+// without a live ledger.
 var runTokenTransfer = func(ctx context.Context, out io.Writer, opts token.TransferOptions) error {
 	return token.RunTransfer(ctx, out, opts)
 }
@@ -757,7 +705,7 @@ var runTokenAccept = func(ctx context.Context, opts token.AcceptOptions) error {
 
 // runTokenDemo is the indirection point for handleTokensDemo. Tests
 // override it to assert the handler threads instance/role/endpoint +
-// seed flag through to RunDemo without standing up a live ledger.
+// seed flag through to RunDemo.
 var runTokenDemo = token.RunDemo
 
 // roleFromQuery returns the `?role=` value, defaulting to app-user.
@@ -770,19 +718,11 @@ func roleFromQuery(r *http.Request) string {
 }
 
 // liveLedgerEndpoint resolves the role's participant ledger gRPC
-// endpoint (host:port) from the instance's recorded ports. Empty when
-// the port wasn't captured — callers then fall back to the not-wired
-// stub. Delegates to the neutral token.ResolveLedgerEndpoint so the
-// CLI's `token balance` auto-discovery and this handler resolve the
-// same participant from the same `participant_ledger_<role>` key.
-//
-// It's a package var (not a plain func), like runTokenCreate, so the
-// registry-only handler tests can force the offline path
-// deterministically. Those tests seed an instance with no recorded
-// port and assert the offline branch (201→409 create, 422 mint,
-// registry-tagged holdings); a port leaking in from a sibling test's
-// registry would otherwise flip them onto the live-dial branch and
-// flake the assertions.
+// endpoint from the instance's recorded ports (empty when uncaptured →
+// callers fall back to the not-wired stub). Delegates to
+// token.ResolveLedgerEndpoint so the CLI and this handler resolve the
+// same participant. A package var (like runTokenCreate) so registry-only
+// handler tests can force the offline path deterministically.
 var liveLedgerEndpoint = func(instance, role string) string {
 	return token.ResolveLedgerEndpoint(instance, role)
 }
@@ -813,16 +753,14 @@ func decodeJSON(r io.ReadCloser, into any) error {
 	return nil
 }
 
-// partyIDFingerprint matches the fingerprint half of a fully-qualified
-// Daml party id (`<hint>::<fingerprint>`). The hint is human-readable;
-// the fingerprint is the unique, enumeration-sensitive identifier.
+// partyIDFingerprint matches the fingerprint half of a Daml party id
+// (`<hint>::<fingerprint>`) — the enumeration-sensitive part to mask.
 var partyIDFingerprint = regexp.MustCompile(`([A-Za-z0-9._-]+::)[A-Za-z0-9]{8,}`)
 
-// sanitize400 masks party-id fingerprints in a user-facing 400 message.
-// Locally-constructed 400s are safe, but a gRPC InvalidArgument message
-// is built upstream and could embed a fully-qualified party id; keep the
-// readable hint, drop the fingerprint so an error body can't be used to
-// enumerate party ids.
+// sanitize400 masks party-id fingerprints in a user-facing 400: an
+// upstream gRPC InvalidArgument message may embed a fully-qualified party
+// id, so drop the fingerprint (keep the readable hint) to prevent
+// enumeration.
 func sanitize400(msg string) string {
 	return partyIDFingerprint.ReplaceAllString(msg, "$1…")
 }
@@ -843,9 +781,8 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 	case err == nil:
 		w.WriteHeader(http.StatusNoContent)
 	case errors.Is(err, token.ErrTokenDARUnavailable):
-		// On-ledger V2 create on a non-token-standard-v2 instance: the
-		// example DAR isn't published for that Splice version. Actionable
-		// 412 (the message names the remedy) instead of a raw GitHub 404.
+		// Example DAR not published for this Splice version: actionable
+		// 412 (message names the remedy) rather than a raw upstream 404.
 		writeErrorWithCode(w, http.StatusPreconditionFailed,
 			"TEST_TOKEN_DAR_UNAVAILABLE", err.Error())
 	case errors.Is(err, token.ErrNeedsV2LocalNet):
@@ -867,10 +804,9 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 		writeErrorWithCode(w, http.StatusNotFound,
 			"ALIAS_UNKNOWN", err.Error())
 	default:
-		// Off-ledger token-registry 4xx: surface the upstream status
-		// (so a 422 INSUFFICIENT_FUNDS stays a 422) and ship a short
-		// sanitized reason — never the raw 4 KiB body, which can embed
-		// party-ids / contract-ids / URLs.
+		// Off-ledger token-registry 4xx: preserve the upstream status
+		// (422 INSUFFICIENT_FUNDS stays 422) with a short sanitized reason
+		// — never the raw body, which can embed party-ids / URLs.
 		var apiErr *regclient.APIError
 		if errors.As(err, &apiErr) && apiErr.StatusCode >= 400 && apiErr.StatusCode < 500 {
 			reason := registryErrorReason(apiErr)
@@ -878,9 +814,8 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 				codeForStatus(apiErr.StatusCode), reason)
 			return
 		}
-		// Once the actions submit for real, failures arrive as gRPC
-		// status errors — map their codes to the matching HTTP status
-		// instead of flattening everything to 400.
+		// Live submits fail as gRPC status errors — map their codes to
+		// the matching HTTP status instead of flattening to 400.
 		if s, ok := status.FromError(err); ok && s.Code() != codes.OK {
 			switch s.Code() {
 			case codes.NotFound:
@@ -888,36 +823,28 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 			case codes.PermissionDenied, codes.Unauthenticated:
 				writeErrorWithCode(w, http.StatusForbidden, "PERMISSION_DENIED", s.Message())
 			case codes.InvalidArgument:
-				// s.Message() comes from upstream and may embed a
-				// fully-qualified party id; mask the fingerprint before it
-				// reaches the client.
+				// Upstream message may embed a party id — mask the fingerprint.
 				writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, sanitize400(s.Message()))
 			case codes.Unavailable, codes.DeadlineExceeded:
-				// Upstream participant unreachable / slow — redact the
-				// detail (5xx contract) and log the cause.
+				// Participant unreachable/slow — redact per 5xx contract, log the cause.
 				writeError(w, http.StatusServiceUnavailable, op, err)
 			default:
-				// Internal / Unknown / etc. — a genuine server-side
-				// failure, not a bad request. Redact like any 5xx.
+				// Internal / Unknown — a server-side failure; redact like any 5xx.
 				writeError(w, http.StatusBadGateway, op, err)
 			}
 			return
 		}
 		// Non-gRPC orchestration error: user-actionable (bad amount,
-		// unknown party, malformed instrument id). Surface the cause —
-		// `writeError` would redact it to just the op name, which is
-		// correct for 5xx but unhelpful for a 400.
+		// unknown party). Surface the cause — writeError would redact it
+		// to the op name, unhelpful for a 400.
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 	}
 }
 
-// registryErrorReason extracts a short, safe reason string from a
-// token-registry APIError. Splice error bodies are usually small JSON
-// of the form `{"code":"INSUFFICIENT_FUNDS","message":"..."}`; we try
-// to surface that code (very high signal, low risk) and otherwise fall
-// back to a sanitized snippet of the body capped to keep the response
-// small. Never returns the full 4 KiB body — that can leak party-ids,
-// contract-ids, and registry URLs.
+// registryErrorReason extracts a short, safe reason from a
+// token-registry APIError. Splice bodies are usually small JSON like
+// `{"code":"INSUFFICIENT_FUNDS","message":"..."}`; surface the code, else
+// a sanitized capped snippet. Never the full body (can leak party-ids / URLs).
 func registryErrorReason(e *regclient.APIError) string {
 	var probe struct {
 		Code    string `json:"code"`

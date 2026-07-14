@@ -8,49 +8,26 @@ import (
 	"time"
 )
 
-// V2 Token Standard allocation / DvP registry endpoints. These implement
-// the off-ledger half of the V2 allocation flow defined by upstream
-// Splice:
+// V2 Token Standard allocation / DvP registry endpoints — the off-ledger
+// half of the V2 allocation flow defined by upstream Splice
+// (splice-api-token-allocation-v2 and -allocation-instruction-v2). The
+// authorizer POSTs the allocation-factory, then exercises
+// AllocationFactory_Allocate on the ledger with the returned choice context,
+// producing a finalized Allocation or a pending AllocationInstruction.
 //
-//	token-standard/splice-api-token-allocation-instruction-v2/openapi/
-//	  allocation-instruction-v2.yaml
-//	token-standard/splice-api-token-allocation-v2/openapi/
-//	  allocation-v2.yaml
+// Note the upstream path inconsistency: per-instruction choice-contexts use
+// the singular `allocation-instruction`, but finalized-Allocation withdraw /
+// cancel use the *plural* `allocations` segment.
 //
-// Flow recap, authorizer (wallet) side:
+// Settlement is executor-driven and has NO registry choice-context endpoint:
+// the executor GETs the settlement-factory context and exercises
+// SettlementFactory_SettleBatch directly.
 //
-//	1. ACS-query for the authorizer's HoldingV2 contracts on the instrument
-//	2. POST /registry/allocation-instruction/v2/allocation-factory
-//	   → returns (factoryId, choiceContextData, disclosedContracts)
-//	3. Exercise AllocationFactory_Allocate on the ledger with the choice
-//	   context + disclosed contracts the registry handed back — producing
-//	   either a finalized Allocation or a pending AllocationInstruction.
-//
-// On a pending AllocationInstruction:
-//
-//	1. POST /registry/allocation-instruction/v2/{id}/choice-contexts/{accept,withdraw}
-//	2. Exercise AllocationInstruction_Accept / _Withdraw with that context
-//
-// On a finalized Allocation (withdraw / cancel — note the *plural*
-// `allocations` path segment upstream uses here):
-//
-//	1. POST /registry/allocations/v2/{id}/choice-contexts/{withdraw,cancel}
-//	2. Exercise Allocation_Withdraw / _Cancel with that context
-//
-// Settlement is executor-driven and has NO registry choice-context
-// endpoint: the executor fetches the settlement-factory context via
-//	GET /registry/allocation/v2/settlement-factory
-// and exercises SettlementFactory_SettleBatch directly.
+// The concrete registry-path consts live in the token package's
+// v2_surface.go (single source of truth for the exact segments); this client
+// is handed them so the two never drift.
 
-// The registry-path consts (AllocationFactoryPathV2, SettlementFactoryPathV2,
-// AllocationInstructionAcceptPathV2, AllocationInstructionWithdrawPathV2,
-// AllocationWithdrawPathV2, AllocationCancelPathV2) live in the token
-// package's v2_surface.go — the single source of truth for the exact
-// (singular/plural-inconsistent) upstream segments. This client is handed
-// the concrete paths so the two never drift.
-
-// SettlementInfo mirrors the standard's `Splice.Api.Token.AllocationV2.
-// SettlementInfo` record — the settlement this allocation belongs to. The
+// SettlementInfo mirrors Splice.Api.Token.AllocationV2.SettlementInfo. The
 // executor + settlement id correlate allocations of the same DvP batch.
 type SettlementInfo struct {
 	Executors []string `json:"executors"`
@@ -60,16 +37,15 @@ type SettlementInfo struct {
 }
 
 // Reference mirrors the standard's `Reference` record (an id + optional
-// contract-id pointer). Only the id text is load-bearing for our flows;
-// the optional cid is left null.
+// contract-id pointer). Only the id text is load-bearing; the cid is left null.
 type Reference struct {
 	ID  string  `json:"id"`
 	Cid *string `json:"cid"`
 }
 
 // TransferLegSide mirrors the standard's `TransferLegSide` — one directed
-// leg of a settlement the allocation authorizes. `transferLegId` correlates
-// the sender/receiver halves; `transferLeg` carries the movement.
+// leg the allocation authorizes. `transferLegId` correlates the
+// sender/receiver halves.
 type TransferLegSide struct {
 	TransferLegID string   `json:"transferLegId"`
 	Side          string   `json:"side"` // "SenderSide" | "ReceiverSide"
@@ -79,8 +55,7 @@ type TransferLegSide struct {
 	Meta          Metadata `json:"meta"`
 }
 
-// TransferLeg mirrors the standard's `TransferLeg` record: sender/receiver
-// Accounts, the amount, and the instrument being moved.
+// TransferLeg mirrors the standard's `TransferLeg` record.
 type TransferLeg struct {
 	Sender       Account      `json:"sender"`
 	Receiver     Account      `json:"receiver"`
@@ -90,9 +65,8 @@ type TransferLeg struct {
 }
 
 // AllocationSpecification mirrors the standard's `AllocationSpecification`
-// record — the DvP terms this allocation commits to. `authorizer` is the
-// account owner funding the transfer legs; `committed` locks the funds
-// until `settlementDeadline` (no early withdraw).
+// — the DvP terms. `authorizer` is the account owner funding the legs;
+// `committed` locks the funds until `settlementDeadline` (no early withdraw).
 type AllocationSpecification struct {
 	Admin              string            `json:"admin"`
 	Authorizer         Account           `json:"authorizer"`
@@ -100,7 +74,7 @@ type AllocationSpecification struct {
 	SettlementDeadline *time.Time        `json:"settlementDeadline"`
 	// NextIterationFunding is the optional per-leg funding for the next
 	// iteration of an iterated allocation (TextMap Decimal). Nil for the
-	// common one-shot allocation.
+	// common one-shot case.
 	NextIterationFunding map[string]string `json:"nextIterationFunding"`
 	Committed            bool              `json:"committed"`
 	Meta                 Metadata          `json:"meta"`
@@ -109,11 +83,7 @@ type AllocationSpecification struct {
 // AllocationFactoryChoiceArgs is the JSON encoding of the Daml
 // AllocationFactory_Allocate choice argument. The registry validates it
 // against the real choice signature, so the field set must match the
-// upstream `AllocationFactory_Allocate` record exactly:
-//
-//	{ settlement, allocation, requestedAt, inputHoldingCids, extraArgs, actors }
-//
-// The instrument admin travels inside `allocation`
+// upstream record exactly. The instrument admin travels inside `allocation`
 // (AllocationSpecification.admin), not as a top-level arg — unlike the
 // transfer V1 factory's expectedAdmin.
 type AllocationFactoryChoiceArgs struct {
@@ -126,17 +96,15 @@ type AllocationFactoryChoiceArgs struct {
 }
 
 // AllocationFactoryRequest is the body POST'd to the allocation-factory
-// endpoint. Mirrors TransferFactoryRequest: the registry validates
-// `choiceArguments` against its own policy before the authorizer ever
-// touches the ledger.
+// endpoint. The registry validates `choiceArguments` against its own policy
+// before the authorizer ever touches the ledger.
 type AllocationFactoryRequest struct {
 	ChoiceArguments AllocationFactoryChoiceArgs `json:"choiceArguments"`
 }
 
 // AllocationFactoryResponse is what the allocation-factory endpoint hands
-// back: the factory contract to exercise + the choice context (data blob
-// + disclosed contracts). Same nested `choiceContext` shape as the
-// transfer factory; the flat accessors below match TransferFactoryResponse.
+// back: the factory contract to exercise + the choice context (data blob +
+// disclosed contracts).
 type AllocationFactoryResponse struct {
 	FactoryID     string                `json:"factoryId"`
 	ChoiceContext ChoiceContextResponse `json:"choiceContext"`
@@ -154,8 +122,7 @@ func (r *AllocationFactoryResponse) DisclosedContractsList() []DisclosedContract
 
 // SettlementFactoryResponse is what the settlement-factory endpoint hands
 // back: the SettlementFactory contract the executor exercises
-// SettlementFactory_SettleBatch on, plus the choice context. Same shape as
-// AllocationFactoryResponse (factory id + nested choiceContext).
+// SettlementFactory_SettleBatch on, plus the choice context.
 type SettlementFactoryResponse struct {
 	FactoryID     string                `json:"factoryId"`
 	ChoiceContext ChoiceContextResponse `json:"choiceContext"`
@@ -171,15 +138,11 @@ func (r *SettlementFactoryResponse) DisclosedContractsList() []DisclosedContract
 	return r.ChoiceContext.DisclosedContracts
 }
 
-// GetAllocationFactory posts the authorizer's intended allocation to the
-// registry and returns the factory contract + choice context the
-// authorizer will exercise (AllocationFactory_Allocate). The path is the
-// caller-supplied allocation-factory path const (v2_surface.go) so the
-// singular/plural upstream inconsistency stays pinned in one place.
-//
-// A 4xx here means the allocation would have been rejected on-ledger
-// anyway (insufficient funds, admin mismatch); it round-trips via APIError
-// so the CLI / UI can print the registry's actual reason.
+// GetAllocationFactory posts the authorizer's intended allocation and
+// returns the factory contract + choice context to exercise
+// (AllocationFactory_Allocate). A 4xx here means the allocation would have
+// been rejected on-ledger anyway (insufficient funds, admin mismatch); it
+// round-trips via APIError so the CLI / UI can print the registry's reason.
 func (c *Client) GetAllocationFactory(ctx context.Context, path string, req AllocationFactoryRequest) (*AllocationFactoryResponse, error) {
 	var out AllocationFactoryResponse
 	if err := c.doJSON(ctx, "POST", path, req, &out); err != nil {
@@ -189,10 +152,8 @@ func (c *Client) GetAllocationFactory(ctx context.Context, path string, req Allo
 }
 
 // GetSettlementFactory fetches the SettlementFactory contract + choice
-// context the executor exercises SettlementFactory_SettleBatch on. This is
-// a GET with no per-instruction id (the executor settles a batch, not one
-// allocation). Per the OpenAPI it takes an optional `meta` map on the
-// query; we send none.
+// context the executor exercises SettlementFactory_SettleBatch on. GET with
+// no per-instruction id: the executor settles a batch, not one allocation.
 func (c *Client) GetSettlementFactory(ctx context.Context, path string) (*SettlementFactoryResponse, error) {
 	var out SettlementFactoryResponse
 	if err := c.doJSON(ctx, "GET", path, nil, &out); err != nil {
@@ -202,11 +163,9 @@ func (c *Client) GetSettlementFactory(ctx context.Context, path string) (*Settle
 }
 
 // GetAllocationChoiceContext fetches the choice context for a per-allocation
-// (or per-instruction) choice — withdraw / cancel / accept. `pathTemplate`
-// is the caller-supplied registry path const carrying a single
-// `{allocationId}` / `{allocationInstructionId}` placeholder, which this
-// substitutes with the url-escaped id (so a '#' / '?' in the id can't
-// truncate the path). Mirrors GetAcceptChoiceContext on the transfer side.
+// (or per-instruction) choice — withdraw / cancel / accept. The id is
+// substituted into pathTemplate url-escaped, so a '#' / '?' in the id can't
+// truncate the path.
 func (c *Client) GetAllocationChoiceContext(ctx context.Context, pathTemplate, id string, req ChoiceContextRequest) (*ChoiceContextResponse, error) {
 	if id == "" {
 		return nil, fmt.Errorf("GetAllocationChoiceContext: id is required")
@@ -218,11 +177,10 @@ func (c *Client) GetAllocationChoiceContext(ctx context.Context, pathTemplate, i
 	return &out, nil
 }
 
-// substituteID replaces the single `{...Id}` placeholder in a registry
-// path template with the url-escaped id. The upstream templates use
-// `{allocationId}` and `{allocationInstructionId}`; we replace whichever
-// `{...}` segment is present rather than matching the exact name, so a spec
-// rename doesn't silently leave the placeholder in the path.
+// substituteID replaces the single `{...}` placeholder in a registry path
+// template with the url-escaped id. Replaces whichever segment is present
+// rather than matching the exact name, so an upstream rename (e.g.
+// `{allocationId}` → `{allocationInstructionId}`) can't leave it in the path.
 func substituteID(pathTemplate, id string) string {
 	open := strings.IndexByte(pathTemplate, '{')
 	if open < 0 {

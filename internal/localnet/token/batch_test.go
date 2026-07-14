@@ -11,8 +11,7 @@ import (
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
 
-// fieldOf returns the value of the first record field labelled `label`, or
-// nil. Small helper local to the batch tests.
+// fieldOf returns the value of the first record field labelled `label`, or nil.
 func fieldOf(rec *lapiv2.Record, label string) *lapiv2.Value {
 	if rec == nil {
 		return nil
@@ -50,10 +49,8 @@ func TestBuildScopedAccountRecord(t *testing.T) {
 }
 
 // TestBuildChoiceCallRecord pins ChoiceCall = { cid : AnyContractId, arg }
-// and that `arg` is threaded through verbatim. AnyContractId is a bare
-// contract id (MetadataV1.daml `type AnyContractId = ContractId AnyContract`),
-// so ChoiceCall.cid must be a plain Value_ContractId, NOT a { contractId,
-// meta } record.
+// with `arg` threaded verbatim. AnyContractId is a bare contract id, so
+// ChoiceCall.cid must be a plain Value_ContractId, NOT a { contractId, meta } record.
 func TestBuildChoiceCallRecord(t *testing.T) {
 	arg := textValue("the-arg")
 	rec := recordOf(buildChoiceCallRecord("cid-1", arg))
@@ -144,9 +141,8 @@ func TestBuildHoldingMapValue(t *testing.T) {
 	if len(tm.TextMap.Entries) != 1 {
 		t.Fatalf("holding textmap has %d entries, want 1", len(tm.TextMap.Entries))
 	}
-	// The holdings TextMap MUST be keyed by the instrument id — ExecuteBatch
-	// looks holdings up with `TextMap.lookup instrumentId.id`. An index key
-	// ("0") would miss and the batched transfer would see inputAmount = 0.
+	// Keyed by instrument id, not an index — ExecuteBatch does
+	// `TextMap.lookup instrumentId.id`.
 	if got := tm.TextMap.Entries[0].Key; got != "CTKC" {
 		t.Errorf("holding textmap key = %q, want the instrument id CTKC", got)
 	}
@@ -176,9 +172,8 @@ func TestBuildHoldingMapValue(t *testing.T) {
 	}
 }
 
-// batchTxResponse builds a SubmitAndWaitForTransactionResponse carrying one
-// ExecuteBatch exercised event whose result record has an actionResults
-// list of `n` elements — the fixture parseBatchResult reads.
+// batchTxResponse builds a response carrying one ExecuteBatch exercised event
+// whose result record has an actionResults list of `n` elements.
 func batchTxResponse(updateID string, n int) *lapiv2.SubmitAndWaitForTransactionResponse {
 	results := make([]*lapiv2.Value, n)
 	for i := range results {
@@ -264,10 +259,9 @@ func TestParseBatchResult_NoEffects(t *testing.T) {
 	}
 }
 
-// TestRunTransfer_AtomicPropagatesToOnLedgerSeam: --atomic (with
-// --auto-accept) must reach the on-ledger orchestration via TransferOptions
-// so runTransferLiveOnLedger can branch to the batch path. The off-ledger
-// path must never be taken for an on-ledger instrument, batched or not.
+// TestRunTransfer_AtomicPropagatesToOnLedgerSeam: --atomic must reach the
+// on-ledger orchestration via TransferOptions so it can branch to the batch
+// path; the off-ledger path must never be taken for an on-ledger instrument.
 func TestRunTransfer_AtomicPropagatesToOnLedgerSeam(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo")
@@ -305,9 +299,8 @@ func TestRunTransfer_AtomicPropagatesToOnLedgerSeam(t *testing.T) {
 }
 
 // TestBatchResultMirrorsAPIType guards the local batchResult ↔
-// api/types.BatchResult mirror: the field access shape must stay stable so a
-// handler can re-encode without drift. The api/types side is pinned by
-// schema_shape_test; this is a cheap tripwire against renaming a field here.
+// api/types.BatchResult mirror: a cheap tripwire against renaming a field here
+// (the api/types side is pinned by schema_shape_test).
 func TestBatchResultMirrorsAPIType(t *testing.T) {
 	r := batchResult{
 		UpdateID: "u",

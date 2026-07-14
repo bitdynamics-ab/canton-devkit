@@ -65,10 +65,9 @@ func TestInstrumentsFromHoldings_DistinctAndLabeled(t *testing.T) {
 	}
 }
 
-// Regression: a token created but never minted (its TokenRules exists,
-// no Holding does) must still appear in the instrument list. Before the
-// fix, discovery was holdings-only, so a created-but-unminted instrument
-// was invisible whenever the ledger was live.
+// Regression: a token created but never minted (TokenRules exists, no
+// Holding does) must still appear in the instrument list. Discovery was
+// holdings-only before the fix, hiding it whenever the ledger was live.
 func TestMergeInstruments_IncludesRecordedWithoutHoldings(t *testing.T) {
 	holdings := []HoldingContract{
 		{ContractID: "c1", Party: "bob", Admin: "alice", InstrumentID: "MYT", Amount: "100.0", Gen: genV2},
@@ -187,12 +186,9 @@ func TestSummarizeInstrument_EmptyZeroSafe(t *testing.T) {
 	}
 }
 
-// TestBuildMatrix_PropagatesTruncated pins D1: when scanWorkspace
-// hits maxWorkspaceScan and returns truncated=true, buildMatrix
-// must carry the flag through so the UI can render
-// "matrix shows N of many" instead of misleading per-instrument
-// totals. The unbounded ACS read this guards against could otherwise
-// silently pump us into OOM.
+// TestBuildMatrix_PropagatesTruncated: when scanWorkspace hits
+// maxWorkspaceScan and returns truncated=true, buildMatrix must carry the
+// flag through so the UI can render "matrix shows N of many".
 func TestBuildMatrix_PropagatesTruncated(t *testing.T) {
 	ws := &Workspace{Truncated: true}
 	m := buildMatrix(ws)

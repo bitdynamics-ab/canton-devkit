@@ -8,11 +8,9 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
 )
 
-// TestTokenIdentity_ListsRolesAndEchoesCurrent covers the act-as
-// identity endpoint that backs the Web UI role switcher: it returns the
-// full role set (token.Roles(), shared with the CLI) and echoes the role
-// the request was made under via ?role=, defaulting to app-user. Table-
-// driven over the default + each explicit role.
+// TestTokenIdentity_ListsRolesAndEchoesCurrent covers the identity
+// endpoint: it returns the full role set (token.Roles()) and echoes the
+// ?role= the request used, defaulting to app-user.
 func TestTokenIdentity_ListsRolesAndEchoesCurrent(t *testing.T) {
 	seedForTokens(t, "demo")
 	srv := tokensSrv(t)
@@ -65,8 +63,8 @@ func TestTokenIdentity_ListsRolesAndEchoesCurrent(t *testing.T) {
 					t.Errorf("available_roles[%d] = %q, want %q (order matters)", i, got.AvailableRoles[i], r)
 				}
 			}
-			// The default (app-user) must lead so the switcher highlights
-			// the same identity roleFromQuery falls back to.
+			// app-user must lead so the switcher highlights the same
+			// identity roleFromQuery falls back to.
 			if got.AvailableRoles[0] != "app-user" {
 				t.Errorf("available_roles must lead with app-user; got %q", got.AvailableRoles[0])
 			}
@@ -88,14 +86,12 @@ func TestTokenIdentity_MissingInstanceIs400(t *testing.T) {
 	_ = resp.Body.Close()
 }
 
-// TestTokenReadPaths_ThreadRole pins that the read endpoints powering the
-// Web UI switcher forward ?role= to the orchestration layer's endpoint
-// resolution — so selecting a non-default identity dials that role's
-// participant, not app-user's. We assert via liveLedgerEndpoint, the seam
-// every read handler resolves its endpoint through: it must be called
-// with the request's role.
+// TestTokenReadPaths_ThreadRole pins that the read endpoints forward
+// ?role= to endpoint resolution, so a non-default identity dials that
+// role's participant. Asserted via the liveLedgerEndpoint seam every
+// read handler resolves through.
 func TestTokenReadPaths_ThreadRole(t *testing.T) {
-	seedForTokens(t, "demo") // pins liveLedgerEndpoint to a stub; we override it below
+	seedForTokens(t, "demo") // pins liveLedgerEndpoint to a stub; overridden below
 
 	var gotRole string
 	prev := liveLedgerEndpoint
@@ -107,13 +103,10 @@ func TestTokenReadPaths_ThreadRole(t *testing.T) {
 
 	srv := tokensSrv(t)
 
-	// Each entry is a read endpoint that resolves its endpoint via the
-	// liveLedgerEndpoint seam. A ?role=app-provider request must reach the
-	// resolver as app-provider (not the app-user default) — proof the
-	// switcher's role selection dials the chosen identity's participant.
-	// (handleTokenHoldings resolves via token.ResolveLedgerEndpoint
-	// directly, not this seam; its role threading is covered by
-	// TestTokens_HoldingsRegistryFallbackTagged.)
+	// Each is a read endpoint resolving via the liveLedgerEndpoint seam.
+	// A ?role=app-provider request must reach the resolver as
+	// app-provider. (handleTokenHoldings uses ResolveLedgerEndpoint
+	// directly — covered by TestTokens_HoldingsRegistryFallbackTagged.)
 	paths := []string{
 		"/api/tokens?instance=demo&role=app-provider",
 		"/api/tokens/matrix?instance=demo&role=app-provider",

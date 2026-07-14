@@ -11,10 +11,10 @@ import (
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
 
-// The token "workspace" is the god-mode, ACS-derived view of an
-// instance's token state: every instrument, every party's balance, and
-// the individual Holding contracts behind each balance. One read-only
-// ACS scan feeds three lenses:
+// The token "workspace" is the ACS-derived view of an instance's token
+// state: every instrument, every party's balance, and the Holding
+// contracts behind each balance. One read-only ACS scan feeds three
+// lenses:
 //
 // - instruments → on-chain instrument discovery (no state.Tokens seed)
 // - balance matrix → parties × instruments → summed amount
@@ -51,11 +51,9 @@ type InstrumentRef struct {
 	OnLedger   bool   `json:"on_ledger"` // discovered from the ACS
 }
 
-// maxWorkspaceScan caps how many ACS contracts scanWorkspace will
-// consume before declaring the result truncated. A real instance
-// rarely holds more than a few thousand HoldingV2 contracts; the
-// cap is a belt-and-braces guard against a runaway ledger pumping
-// us into OOM via the unbounded gRPC stream.
+// maxWorkspaceScan caps how many ACS contracts scanWorkspace consumes
+// before declaring the result truncated — a guard against a runaway
+// ledger pumping us into OOM via the unbounded gRPC stream.
 const maxWorkspaceScan = 10_000
 
 // Workspace is the full scanned state.
@@ -69,14 +67,13 @@ type Workspace struct {
 	Truncated bool `json:"truncated,omitempty"`
 }
 
-// scanWorkspace dials the participant and scans HoldingV2 across every
-// locally-hosted party (the parties this participant can read), keeping
-// each Holding contract. Roles' JWTs carry CanReadAs the local parties,
-// so a per-party filter returns them all without a super-reader claim.
+// scanWorkspace dials the participant and scans Holdings across every
+// readable party, keeping each Holding contract. Roles' JWTs carry
+// CanReadAs the local parties, so a per-party filter returns them all
+// without a super-reader claim.
 func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error) {
-	// Cancel the upstream stream pump on every return path so an
-	// early break (cap, decode error) doesn't leak the goroutine for
-	// the lifetime of the parent request context.
+	// Cancel the stream pump on every return path so an early break (cap,
+	// decode error) doesn't leak the goroutine.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	conn := LedgerConn{
@@ -92,12 +89,8 @@ func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error)
 	}
 	defer cleanup()
 
-	// Scan the parties the JWT is granted to read. resolveReadableParties
-	// first widens that set with CanReadAs for every registered party
-	// alias so the god-mode matrix sees ALL aliased parties,
-	// then re-resolves the authoritative granted set — a party that
-	// couldn't be granted never enters the filter (querying it would
-	// PermissionDenied the whole stream).
+	// Scan the parties the JWT is granted to read (resolveReadableParties
+	// widens the set to every registered alias first).
 	parties, err := resolveReadableParties(ctx, client, opts.Instance, opts.Role)
 	if err != nil {
 		return nil, err
@@ -106,9 +99,7 @@ func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error)
 		return &Workspace{}, nil
 	}
 
-	// Per-instrument generation: query every token-standard holding
-	// surface the participant has vetted (V1 and/or V2). A participant
-	// can carry both during the V1→V2 transition; querying only V2
+	// Query every vetted holding surface (V1 and/or V2): querying only V2
 	// would hide V1 tokens like Amulet on stable releases.
 	surfaces, err := discoverTokenSurfaces(ctx, client)
 	if err != nil {
@@ -150,9 +141,8 @@ func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error)
 		if ce == nil {
 			continue
 		}
-		// One holding per contract: a contract implementing both Holding
-		// interfaces returns two views; extractBestHoldingView picks one
-		// (prefers V2) so balances are never double-counted.
+		// One holding per contract (extractBestHoldingView picks one view,
+		// preferring V2) so balances are never double-counted.
 		if view, ok := extractBestHoldingView(ce.GetInterfaceViews()); ok {
 			holdings = append(holdings, HoldingContract{
 				ContractID:   ce.GetContractId(),
@@ -188,11 +178,10 @@ func instrumentsFromHoldings(holdings []HoldingContract, instance string) []Inst
 
 // mergeInstruments unions the instruments seen on-ledger (distinct
 // (admin, instrumentId) across holdings) with the registry-recorded
-// instruments. Holdings-derived rows are enriched with recorded metadata
-// (name/symbol/decimals). A recorded instrument that no holding backs yet
-// — a token that was created (its TokenRules exists) but never minted —
-// is added with zero supply, so it doesn't vanish from the list until its
-// first mint. Pure — unit-testable.
+// instruments, enriching holdings-derived rows with recorded metadata. A
+// recorded instrument no holding backs yet — created (TokenRules exists)
+// but never minted — is added with zero supply so it doesn't vanish until
+// its first mint. Pure — unit-testable.
 func mergeInstruments(holdings []HoldingContract, recorded map[string]registry.TokenRef) []InstrumentRef {
 	seen := map[string]*InstrumentRef{}
 	gen := map[string]Generation{} // richest generation seen per instrument
@@ -210,9 +199,9 @@ func mergeInstruments(holdings []HoldingContract, recorded map[string]registry.T
 		}
 	}
 
-	// Enrich holdings-derived rows from the registry (keyed by symbol;
-	// our on-ledger create sets symbol == instrumentId, so they line up),
-	// and add any recorded instrument no holding backs yet.
+	// Enrich holdings-derived rows from the registry (on-ledger create
+	// sets symbol == instrumentId, so they line up), and add any recorded
+	// instrument no holding backs yet.
 	for _, ref := range recorded {
 		matched := false
 		for _, k := range order {
@@ -227,10 +216,10 @@ func mergeInstruments(holdings []HoldingContract, recorded map[string]registry.T
 		if matched {
 			continue
 		}
-		// Unminted so far: surface the created instrument with zero
-		// supply. Admin = issuer party; on_ledger iff create anchored a
-		// TokenRules contract (status "on-ledger", vs the offline
-		// "recorded" path). Devkit create always issues a V2 test token.
+		// Unminted: surface the created instrument with zero supply.
+		// on_ledger iff create anchored a TokenRules contract (status
+		// "on-ledger" vs the offline "recorded" path). Create always
+		// issues a V2 test token.
 		k := keyOf(ref.IssuerParty, ref.InstrumentID)
 		if _, ok := seen[k]; ok {
 			continue
@@ -261,10 +250,8 @@ func mergeInstruments(holdings []HoldingContract, recorded map[string]registry.T
 	return out
 }
 
-// standardFor is the human label for an instrument's token standard.
-// Amulet is the Splice-native Canton Coin; other V1 instruments are
-// Token Standard V1 (CIP-0056); V2 instruments are Token Standard V2
-// (CIP-0112). Used for the per-instrument UI badge.
+// standardFor is the human label for an instrument's token standard, used
+// for the per-instrument UI badge.
 func standardFor(gen Generation, instrumentID string) string {
 	if instrumentID == "Amulet" {
 		return "Splice Amulet"
@@ -302,8 +289,8 @@ func buildMatrix(ws *Workspace) *BalanceMatrix {
 	totals := map[string]string{}
 	for _, h := range ws.Holdings {
 		k := key{h.Party, h.InstrumentID}
-		// addDecimal only errors on malformed input; ACS amounts are
-		// always well-formed Decimals, so a defensive skip is enough.
+		// ACS amounts are always well-formed Decimals; a defensive skip
+		// on the (impossible) error is enough.
 		if s, err := addDecimal(sums[k], h.Amount); err == nil {
 			sums[k] = s
 		}
@@ -373,15 +360,13 @@ func RunBalanceMatrix(ctx context.Context, opts BalanceOptions) (*BalanceMatrix,
 	if opts.Role == "" {
 		opts.Role = "app-user"
 	}
-	// Resolve the participant ledger endpoint from the instance when one
-	// wasn't passed explicitly, mirroring RunBalance — so `token balances`
-	// works with just --instance, like the single-party `token balance`.
+	// Resolve the endpoint from the instance when none was passed, so
+	// `token balances` works with just --instance.
 	if opts.Endpoint == "" {
 		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
-		// Resolution came back empty and the caller passed no explicit
-		// --endpoint: the instance is absent or stopped. Surface an
-		// instance-specific remedy here instead of falling through to
-		// dialLedger's generic "ledger endpoint is required (host:port)".
+		// Empty resolution + no explicit --endpoint: the instance is
+		// absent or stopped. Surface an instance-specific remedy instead
+		// of dialLedger's generic "ledger endpoint is required".
 		if opts.Endpoint == "" {
 			return nil, fmt.Errorf("instance %q has no reachable participant ledger port — is it running? run localnet up %s, or pass --endpoint host:port", opts.Instance, opts.Instance)
 		}

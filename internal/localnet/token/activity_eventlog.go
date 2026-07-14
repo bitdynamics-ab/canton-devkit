@@ -12,22 +12,17 @@ import (
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
 
-// EventLog-native activity path.
-//
-// The netting path in activity.go reconstructs an instrument's history
-// by scanning HoldingV2 create/archive events and netting per-party
-// deltas. That works on any UTXO ledger but re-derives movements the
-// instrument admin already reports authoritatively.
+// EventLog-native activity path — an alternative to activity.go's netting scan.
 //
 // At 0.6.12 AmuletRules implements the EventLog interface
 // (splice-api-token-transfer-events-v2), so the admin (dso for Amulet)
-// exercises a non-consuming EventLog_HoldingsChange choice on every
-// holdings movement. That event carries the authoritative account,
-// input/output holding counts and per-leg transfer sides — no netting
-// guesswork. When the package is vetted we read these events directly.
+// exercises a non-consuming EventLog_HoldingsChange choice on every holdings
+// movement. That event carries the authoritative account, input/output holding
+// counts and per-leg transfer sides — no netting guesswork. When the package is
+// vetted we read these events directly.
 //
-// EventLog_HoldingsChange (verified against Splice 0.6.12, commit
-// 17fd29aa) choice argument shape:
+// EventLog_HoldingsChange (verified against Splice 0.6.12, commit 17fd29aa)
+// choice argument shape:
 //
 //	EventLog_HoldingsChange with
 //	  admin            : Party
@@ -46,18 +41,16 @@ import (
 //	  instrumentId  : Text
 //	  meta          : Metadata
 //
-// The event is exercised on an interface, so it surfaces in the Updates
-// stream only under the LEDGER_EFFECTS transaction shape (ACS_DELTA
-// carries created/archived events, not exercised choices).
+// The choice is exercised on an interface, so it surfaces only under the
+// LEDGER_EFFECTS shape (ACS_DELTA carries created/archived, not exercised).
 
-// eventLogHoldingsChangeChoice is the non-consuming choice name the
-// instrument admin exercises to report a holdings change. Pinning it (in
-// addition to the interface id) keeps a future second EventLog choice
-// from being mis-parsed as a holdings change.
+// eventLogHoldingsChangeChoice is the choice name the admin exercises to report
+// a holdings change. Pinning it (alongside the interface id) keeps a future
+// second EventLog choice from being mis-parsed as a holdings change.
 const eventLogHoldingsChangeChoice = "EventLog_HoldingsChange"
 
-// Daml TransferSide enum constructors and their normalized leg-side
-// labels (the types.TokenTransferLeg.Side wire values).
+// Daml TransferSide enum constructors and their normalized leg-side labels
+// (the types.TokenTransferLeg.Side wire values).
 const (
 	transferSideSenderCtor   = "SenderSide"
 	transferSideReceiverCtor = "ReceiverSide"
@@ -66,18 +59,12 @@ const (
 )
 
 // RunActivityViaEventLog reads an instrument's activity from the admin's
-// EventLog_HoldingsChange events instead of netting HoldingV2 deltas. It
-// queries the Updates stream (LEDGER_EFFECTS shape) filtered to the
-// EventLog interface, decodes each exercised EventLog_HoldingsChange,
-// and folds it into the shared ActivityEvent rendering shape tagged
-// Source="event_log". Read-only; no submission.
+// EventLog_HoldingsChange events instead of netting HoldingV2 deltas, tagging
+// each as Source="event_log". Read-only; no submission.
 //
-// The caller (activity.go dispatch) decides whether to take this path:
-// the participant must vet splice-api-token-transfer-events-v2 AND the
-// instrument admin must report EventLog events. When the stream yields
-// no EventLog events for the instrument, Events is empty and the caller
-// falls back to the netting path so an instrument whose admin does not
-// implement EventLog is never silently blank.
+// When the stream yields no EventLog events for the instrument, Events is empty
+// and the caller falls back to the netting path, so an instrument whose admin
+// does not implement EventLog is never silently blank.
 func RunActivityViaEventLog(ctx context.Context, client LedgerClient, parties []string, opts BalanceOptions) (ActivityResult, error) {
 	limit := opts.Limit
 	if limit <= 0 {
@@ -90,9 +77,8 @@ func RunActivityViaEventLog(ctx context.Context, client LedgerClient, parties []
 	}
 	endInc := end.Offset
 
-	// Wrap before opening so an early break (cap hit, decode error)
-	// cancels the upstream pump instead of draining the ledger for the
-	// parent ctx's lifetime — same discipline as the netting path.
+	// Wrap so an early break (cap hit, decode error) cancels the upstream pump
+	// instead of draining the ledger for the parent ctx's lifetime.
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stream, err := client.Updates(streamCtx, ledger.UpdatesRequest{
@@ -101,8 +87,7 @@ func RunActivityViaEventLog(ctx context.Context, client LedgerClient, parties []
 		UpdateFormat: &lapiv2.UpdateFormat{
 			IncludeTransactions: &lapiv2.TransactionFormat{
 				EventFormat: eventLogInterfaceFilter(parties),
-				// Exercised (non-consuming) choices are only present in
-				// the ledger-effects tree, not the ACS-delta flat view.
+				// Exercised choices appear only in the ledger-effects tree.
 				TransactionShape: lapiv2.TransactionShape_TRANSACTION_SHAPE_LEDGER_EFFECTS,
 			},
 		},
@@ -123,11 +108,9 @@ func RunActivityViaEventLog(ctx context.Context, client LedgerClient, parties []
 	}, nil
 }
 
-// eventLogInterfaceFilter builds the EventFormat matching exercised
-// EventLog choices. IncludeInterfaceView is false — a holdings-change
-// classification needs only the exercised choice argument (carried in
-// the LEDGER_EFFECTS tree), not the interface view. Parties: empty →
-// wildcard; non-empty → per-party.
+// eventLogInterfaceFilter builds the EventFormat matching exercised EventLog
+// choices. IncludeInterfaceView is false — classification needs only the
+// exercised choice argument, not the interface view. Empty parties → wildcard.
 func eventLogInterfaceFilter(parties []string) *lapiv2.EventFormat {
 	pkg, mod, entity := splitInterfaceID(EventLogInterfaceV2)
 	entry := &lapiv2.CumulativeFilter{
@@ -151,11 +134,8 @@ func eventLogInterfaceFilter(parties []string) *lapiv2.EventFormat {
 
 // consumeEventLogStream drains a ledger updates channel into
 // types.TokenActivityEvent records for the given instrument, stopping at
-// maxActivityScan (truncated=true). Extracted so a fake channel can pin
-// classification without a live participant. Only exercised
-// EventLog_HoldingsChange events are decoded; every other event is
-// skipped. An event is retained only when at least one of its transfer
-// legs matches the instrument.
+// maxActivityScan (truncated=true). Only exercised EventLog_HoldingsChange
+// events with at least one leg matching the instrument are retained.
 func consumeEventLogStream(stream <-chan ledger.StreamItem[*lapiv2.GetUpdatesResponse], instrument string) ([]types.TokenActivityEvent, bool, error) {
 	var out []types.TokenActivityEvent
 	var scanned int
@@ -186,11 +166,9 @@ func consumeEventLogStream(stream <-chan ledger.StreamItem[*lapiv2.GetUpdatesRes
 	return out, truncated, nil
 }
 
-// isEventLogHoldingsChange reports whether an exercised event is the
-// EventLog interface's holdings-change choice. The interface id arrives
-// on ExercisedEvent.InterfaceId for an interface choice; we match the
-// EventLog module + entity (the package id rotates across V2 snapshots,
-// the module/entity don't) and pin the choice name.
+// isEventLogHoldingsChange reports whether an exercised event is the EventLog
+// interface's holdings-change choice. Matches on module + entity (the package
+// id rotates across V2 snapshots, module/entity don't) plus the choice name.
 func isEventLogHoldingsChange(x *lapiv2.ExercisedEvent) bool {
 	if x.GetChoice() != eventLogHoldingsChangeChoice {
 		return false
@@ -199,16 +177,15 @@ func isEventLogHoldingsChange(x *lapiv2.ExercisedEvent) bool {
 	if id := x.GetInterfaceId(); id != nil {
 		return id.GetModuleName() == mod && id.GetEntityName() == entity
 	}
-	// Some participants omit the interface id on an interface-choice
-	// exercise; the pinned choice name is then the sole discriminator.
+	// Some participants omit the interface id; the choice name is then the
+	// sole discriminator.
 	return true
 }
 
 // decodeHoldingsChange maps one exercised EventLog_HoldingsChange into a
-// types.TokenActivityEvent scoped to the target instrument. Returns
-// ok=false when the argument is unparseable or no leg touches the
-// instrument (the instrument only appears inside the legs, so a
-// leg-less or non-matching event is instrument-ambiguous and dropped).
+// types.TokenActivityEvent scoped to the target instrument. Returns ok=false
+// when the argument is unparseable or no leg touches the instrument (the
+// instrument only appears inside the legs, so a leg-less event is dropped).
 func decodeHoldingsChange(x *lapiv2.ExercisedEvent, t *lapiv2.Transaction, instrument string) (types.TokenActivityEvent, bool) {
 	rec := recordOf(x.GetChoiceArgument())
 	if rec == nil {
@@ -276,12 +253,9 @@ func decodeTransferLegs(v *lapiv2.Value, instrument string) []types.TokenTransfe
 	return out
 }
 
-// renderEventLogActivity folds decoded TokenActivityEvents into the
-// shared ActivityEvent rendering shape (kind + senders/receivers +
-// amount), newest-first, capped at limit (<=0 → no cap). Classification
-// mirrors the netting path so a mint/burn/transfer reads identically on
-// both feeds. decimals formats amounts exactly via the shared big.Rat
-// formatter.
+// renderEventLogActivity folds decoded TokenActivityEvents into the shared
+// ActivityEvent shape, newest-first, capped at limit (<=0 → no cap).
+// Classification mirrors the netting path so both feeds read identically.
 func renderEventLogActivity(events []types.TokenActivityEvent, decimals, limit int) []ActivityEvent {
 	out := make([]ActivityEvent, 0, len(events))
 	for _, ev := range events {
@@ -289,7 +263,6 @@ func renderEventLogActivity(events []types.TokenActivityEvent, decimals, limit i
 			out = append(out, rendered)
 		}
 	}
-	// Newest first by offset (descending) — matches buildActivity.
 	sortByOffsetDesc(out)
 	if limit > 0 && len(out) > limit {
 		out = out[:limit]
@@ -297,15 +270,13 @@ func renderEventLogActivity(events []types.TokenActivityEvent, decimals, limit i
 	return out
 }
 
-// renderOneEventLog classifies a single EventLog activity event into an
-// ActivityEvent. The account whose holdings changed owns the local side
-// of each leg; the leg's otherside is the counterparty:
+// renderOneEventLog classifies a single EventLog event into an ActivityEvent.
+// The account whose holdings changed owns the local side of each leg; the leg's
+// otherside is the counterparty:
 //
-//   - side=receiver → account is credited, otherside debited
-//   - side=sender    → account is debited, otherside credited
-//   - only credits    → mint (holdings created, none consumed)
-//   - only debits      → burn (holdings consumed, none created)
-//   - both              → transfer
+//   - side=receiver → account credited, otherside debited
+//   - side=sender   → account debited, otherside credited
+//   - only credits  → mint; only debits → burn; both → transfer
 //
 // Returns ok=false when the legs net to nothing.
 func renderOneEventLog(ev types.TokenActivityEvent, decimals int) (ActivityEvent, bool) {
@@ -344,10 +315,7 @@ func renderOneEventLog(ev types.TokenActivityEvent, decimals int) (ActivityEvent
 		return ActivityEvent{}, false
 	}
 
-	// Amount is the total value moved: the credited side for a
-	// mint/transfer (what arrived), the debited side for a burn (what
-	// left). Sum the map exactly rather than tracking a running total, so
-	// the figure matches the rendered rows.
+	// Amount is the total moved: credited side for mint/transfer, debited for burn.
 	kind := "transfer"
 	amount := sumRats(credit)
 	switch {
@@ -403,10 +371,8 @@ func sortByOffsetDesc(evs []ActivityEvent) {
 
 // --- tiny Value walkers specific to the EventLog choice argument ---
 
-// accountOwner pulls the owner party from an Account record value —
-// Account { owner: Optional Party, provider: Optional Party, id: Text }.
-// Returns "" when the account has no owner (a treasury / minting
-// account can legitimately omit it).
+// accountOwner pulls the owner party from an Account record value. Returns ""
+// when the account has no owner (a treasury / minting account may omit it).
 func accountOwner(v *lapiv2.Value) string {
 	rec := recordOf(v)
 	if rec == nil {

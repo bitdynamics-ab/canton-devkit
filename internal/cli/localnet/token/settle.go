@@ -13,12 +13,9 @@ import (
 // SettlementFactory_SettleBatch for the batch a finalized Allocation
 // belongs to. Web UI counterpart: POST /api/tokens/allocations/{id}/settle.
 //
-// TODO(BIT-ALLOC-SETTLE): end-to-end settlement is not yet proven — there
-// is no registry settle choice-context endpoint (settlement is
-// executor-driven), and the FinalizedAllocation batch assembly wants a
-// live V2 instance to validate against. RunSettle resolves the
-// settlement-factory context (proving the wiring) and returns a clear
-// not-proven error; see internal/localnet/token/run_allocation.go RunSettle.
+// TODO: end-to-end settlement is not yet proven; RunSettle resolves the
+// settlement-factory context and returns a clear not-proven error. See
+// internal/localnet/token/run_allocation.go RunSettle for the why.
 func buildSettle() *cobra.Command {
 	var opts token.AllocationActionOptions
 	cmd := &cobra.Command{

@@ -54,9 +54,9 @@ Quick start (on a running instance):
 	return cmd
 }
 
-// errSilent makes cobra exit non-zero without the usual usage-and-error
-// dump: the user already saw the friendly remediation on stderr. Its
-// empty Error() string makes cobra's default error renderer a no-op.
+// errSilent makes cobra exit non-zero without its usage-and-error dump
+// (the user already saw the remediation on stderr). The empty Error()
+// string makes cobra's default renderer a no-op.
 var errSilent silentError
 
 type silentError struct{}

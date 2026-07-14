@@ -9,9 +9,8 @@ import (
 )
 
 // buildTransfer returns the `token transfer` parent + its `accept`
-// sub-subcommand. Models the upstream Splice CLI split (which has
-// separate `transfer` and `acceptTransferInstruction` commands) so a
-// V2 wallet flow lines up 1:1 with our surface.
+// sub-subcommand, mirroring the upstream Splice CLI's separate
+// `transfer` / `acceptTransferInstruction` split.
 func buildTransfer() *cobra.Command {
 	parent := &cobra.Command{
 		Use:   "transfer",

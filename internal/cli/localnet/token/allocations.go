@@ -95,8 +95,7 @@ Requires --endpoint (the participant ledger gRPC host:port).`,
 type allocationActionFn func(context.Context, io.Writer, token.AllocationActionOptions) error
 
 // buildAllocationAction builds a per-allocation action subcommand
-// (withdraw / cancel) — both take the same --allocation + live-submit
-// envelope and dispatch to the passed RunX function.
+// (withdraw / cancel) dispatching to the passed RunX function.
 func buildAllocationAction(verb, short string, run allocationActionFn) *cobra.Command {
 	var opts token.AllocationActionOptions
 	cmd := &cobra.Command{

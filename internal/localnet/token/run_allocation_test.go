@@ -12,9 +12,8 @@ import (
 )
 
 // allocationContract builds an ACS response carrying one Allocation
-// interface view: the InterfaceId (EntityName "Allocation", so
-// extractAllocationView matches) + a nested `allocation`
-// AllocationSpecification record with the summary fields.
+// interface view (EntityName "Allocation") with a nested `allocation`
+// AllocationSpecification record holding the summary fields.
 func allocationContract(cid, authorizer, settlementID string, legCount int, committed bool) *lapiv2.GetActiveContractsResponse {
 	legs := make([]*lapiv2.Value, legCount)
 	for i := range legs {

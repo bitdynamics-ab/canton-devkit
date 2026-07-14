@@ -1,8 +1,6 @@
-// Click-to-copy affordance for a full party id (alias::fingerprint).
-// Party ids are long and must be pasted verbatim into mint/transfer
-// targets, so we copy the WHOLE id (never a truncation) and flash brief
-// "Copied!" feedback that reverts after ~1.5s. Built on the shared
-// Button so it inherits the dark design-token styling.
+// Click-to-copy for a full party id (alias::fingerprint). Copies the
+// WHOLE id (never a truncation) since it must be pasted verbatim, and
+// flashes "Copied!" for ~1.5s.
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./Button";

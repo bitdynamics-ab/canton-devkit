@@ -114,12 +114,9 @@ func TestRunMint_UnsupportedOnInstrument(t *testing.T) {
 	}
 }
 
-// TestRunMintLive_SelfMintRejected pins the self-mint guard: minting to the
-// issuer's own party (To == IssuerParty) is rejected BEFORE dialing the
-// ledger with a clear, actionable error. OfferMint pre-authorizes TIA_Accept
-// for the admin, so an owner==admin receiver collapses the auth state machine
-// straight to TIS_Accepted (a terminal state) — the receiver-side accept then
-// aborts with "unavailable action TIA_Accept" and no Token is ever created.
+// TestRunMintLive_SelfMintRejected pins the self-mint guard: minting to
+// the issuer's own party (To == IssuerParty) is rejected before any dial
+// with a clear, actionable error.
 func TestRunMintLive_SelfMintRejected(t *testing.T) {
 	ref := registry.TokenRef{
 		Symbol: "XYZ", InstrumentID: "XYZ", IssuerParty: "issuer::abc", Status: "on-ledger",
@@ -139,10 +136,8 @@ func TestRunMintLive_SelfMintRejected(t *testing.T) {
 
 // TestRunMintLive_DistinctReceiverPassesGuard confirms the guard does NOT
 // short-circuit a distinct-receiver mint: with To != IssuerParty the flow
-// proceeds past the guard to the ledger dial (which fails here because the
-// endpoint is bogus) — the error must be a dial/connection failure, never the
-// self-mint guard message. This guards against the guard regressing the
-// working distinct-receiver mint.
+// proceeds past the guard to the ledger dial (which fails on the bogus
+// endpoint), so the error must never be the self-mint guard message.
 func TestRunMintLive_DistinctReceiverPassesGuard(t *testing.T) {
 	ref := registry.TokenRef{
 		Symbol: "XYZ", InstrumentID: "XYZ", IssuerParty: "issuer::abc", Status: "on-ledger",
@@ -159,12 +154,9 @@ func TestRunMintLive_DistinctReceiverPassesGuard(t *testing.T) {
 	}
 }
 
-// TestRunTransfer_UnknownSymbol covers the no-endpoint path: when no
-// live endpoint is set, RunTransfer falls back to ErrNeedsV2LocalNet
-// after passing field-validation. With an unknown symbol AND no
-// endpoint, ErrNeedsV2LocalNet is the deliberate surface (so the user
-// adds --endpoint and re-runs, where the orchestration treats unknown
-// symbols as raw instrument ids).
+// TestRunTransfer_UnknownSymbol: with no endpoint, RunTransfer falls back
+// to ErrNeedsV2LocalNet after field-validation, even for an unknown symbol
+// (the user then adds --endpoint, where unknown symbols are raw ids).
 func TestRunTransfer_UnknownSymbol(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo")
@@ -239,10 +231,9 @@ func TestBalanceSource(t *testing.T) {
 	}
 }
 
-// TestRunBalanceLive_TagsRowsLedger covers the other half: when the
-// live ACS yields a holding, the summed row is tagged SourceLedger.
-// Uses the fakeLedger seam + a single HoldingViewV2-shaped created
-// event so we exercise the real row-construction path.
+// TestRunBalanceLive_TagsRowsLedger: when the live ACS yields a holding,
+// the summed row is tagged SourceLedger. Uses the fakeLedger seam and one
+// HoldingViewV2-shaped event to exercise the real row-construction path.
 func TestRunBalanceLive_TagsRowsLedger(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo")
@@ -276,11 +267,9 @@ func TestRunBalanceLive_TagsRowsLedger(t *testing.T) {
 	}
 }
 
-// holdingContract builds a GetActiveContractsResponse carrying a
-// single HoldingViewV2-shaped InterfaceView (account.owner,
-// instrumentId.{admin,id}, amount) so extractHoldingViewV2 parses it.
-// Reuses the production value_builders.go constructors so the test
-// view matches the shape the real participant emits.
+// holdingContract builds a GetActiveContractsResponse carrying one
+// HoldingViewV2-shaped InterfaceView. Reuses the production value builders
+// so the test view matches what the real participant emits.
 func holdingContract(owner, instrumentID, admin, amount string) *lapiv2.GetActiveContractsResponse {
 	view := recordValue([]field{
 		{"account", recordValue([]field{

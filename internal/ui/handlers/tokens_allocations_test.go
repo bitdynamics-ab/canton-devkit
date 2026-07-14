@@ -63,11 +63,9 @@ func TestHandleTokenAllocate_ThreadsFieldsAndReturnsID(t *testing.T) {
 	}
 }
 
-// TestHandleAllocationActions_ThreadIDAndParty pins that each per-allocation
-// action route (settle/withdraw/cancel) reaches the matching RunX with the
-// path id + ?party=. Uses the RunSettle route to exercise the settle seam;
-// withdraw/cancel go through the real RunX (which returns ErrNeedsV2LocalNet
-// with no endpoint → 412) so the routing itself is exercised.
+// TestHandleAllocationActions_Routing pins that each per-allocation action
+// route (settle/withdraw/cancel) reaches the matching RunX with the path id
+// + ?party=.
 func TestHandleAllocationActions_Routing(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DPM_REGISTRY_DIR", dir)

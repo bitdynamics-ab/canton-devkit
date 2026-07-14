@@ -8,15 +8,9 @@ import (
 	adminv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2/admin"
 )
 
-// fakeLedger satisfies LedgerClient for orchestration tests. Each
-// method is a function field so individual tests override only what
-// they care about; unset hooks return zero values + nil error, which
-// is the "happy default" most tests expect (empty parties / empty ACS).
-//
-// activeContractsItems is the stream the fake feeds back when a test
-// doesn't replace ActiveContractsFn — the helper newStream() wraps it
-// into a closed channel. ItemsErr, when set, is delivered as the
-// final stream item (terminal error path) before the channel closes.
+// fakeLedger satisfies LedgerClient for orchestration tests. Each method
+// is a function field so a test overrides only what it cares about; unset
+// hooks return the happy default (empty parties / empty ACS).
 type fakeLedger struct {
 	LedgerEndFn                func(ctx context.Context) (ledger.LedgerEnd, error)
 	ActiveContractsFn          func(ctx context.Context, req ledger.ActiveContractsRequest) (<-chan ledger.StreamItem[*lapiv2.GetActiveContractsResponse], error)
@@ -77,9 +71,8 @@ func (f *fakeLedger) ListKnownPackages(ctx context.Context) (*adminv2.ListKnownP
 	if f.ListKnownPackagesFn != nil {
 		return f.ListKnownPackagesFn(ctx)
 	}
-	// Happy default: both token-standard holding surfaces vetted, so
-	// existing fixtures (which feed holdings via ActiveContracts) flow
-	// through discovery unchanged.
+	// Happy default: both holding surfaces vetted, so fixtures that feed
+	// holdings via ActiveContracts flow through discovery unchanged.
 	return &adminv2.ListKnownPackagesResponse{
 		PackageDetails: []*adminv2.PackageDetails{
 			{Name: "splice-api-token-holding-v1"},
@@ -89,10 +82,8 @@ func (f *fakeLedger) ListKnownPackages(ctx context.Context) (*adminv2.ListKnownP
 }
 
 // newStream returns a closed channel pre-populated with the items, then
-// (if termErr != nil) one final StreamItem carrying that error before
-// close. Matches the production contract on Client.ActiveContracts:
-// terminal errors arrive as a StreamItem.Err and then the channel
-// closes — there's no out-of-band error path.
+// (if termErr != nil) one final error StreamItem before close — matching
+// Client.ActiveContracts, where terminal errors arrive as a StreamItem.Err.
 func newStream(items []*lapiv2.GetActiveContractsResponse, termErr error) <-chan ledger.StreamItem[*lapiv2.GetActiveContractsResponse] {
 	out := make(chan ledger.StreamItem[*lapiv2.GetActiveContractsResponse], len(items)+1)
 	for _, it := range items {
@@ -105,10 +96,8 @@ func newStream(items []*lapiv2.GetActiveContractsResponse, termErr error) <-chan
 	return out
 }
 
-// newUpdatesStream is newStream's GetUpdatesResponse twin: a closed
-// channel pre-populated with the updates, then (if termErr != nil) one
-// final error item before close. Feeds the EventLog / netting activity
-// consumers without a live participant.
+// newUpdatesStream is newStream's GetUpdatesResponse twin. Feeds the
+// EventLog / netting activity consumers without a live participant.
 func newUpdatesStream(items []*lapiv2.GetUpdatesResponse, termErr error) <-chan ledger.StreamItem[*lapiv2.GetUpdatesResponse] {
 	out := make(chan ledger.StreamItem[*lapiv2.GetUpdatesResponse], len(items)+1)
 	for _, it := range items {
@@ -136,10 +125,9 @@ func withFakeDial(tb interface {
 	tb.Cleanup(func() { dialLedgerFn = prev })
 }
 
-// emptyActiveContract is a no-op ContractEntry that decodes cleanly
-// past the type-assertion in runBalanceLive / scanWorkspace but yields
-// no interface views — used to flood the cap test without depending on
-// the HoldingViewV2 record-walker.
+// emptyActiveContract decodes past the type-assertion in runBalanceLive /
+// scanWorkspace but yields no interface views — used to flood the cap test
+// without depending on the HoldingViewV2 record-walker.
 func emptyActiveContract() *lapiv2.GetActiveContractsResponse {
 	return &lapiv2.GetActiveContractsResponse{
 		ContractEntry: &lapiv2.GetActiveContractsResponse_ActiveContract{
