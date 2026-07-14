@@ -26,9 +26,23 @@ import (
 // tokenBundleDARs are the prebuilt DARs (under the upstream repo's
 // `daml/dars/`) the test token needs. Keyed by package name (what
 // resolvePackageID checks) → the DAR filename at that path.
+//
+// Filenames verified against the daml/dars/ tree at the 0.6.12 commit
+// (host: canton-network). The wallet DAR ships three versions
+// (1.0.0 / 1.0.1 / 1.1.0); 1.1.0 is the one carrying BatchingUtilityV2
+// with the full V2 allocation action set — pin it, not the older two.
 var tokenBundleDARs = []struct{ pkg, file string }{
 	{"splice-api-token-burn-mint-v1", "splice-api-token-burn-mint-v1-1.0.0.dar"},
 	{"splice-test-token-v2", "splice-test-token-v2-1.0.0.dar"},
+
+	// V2 foundation packages for EventLog history, allocations/DvP and
+	// the BatchingUtilityV2 wallet. Separate allocation/instruction/request
+	// DARs mirror the three upstream token-standard packages.
+	{"splice-api-token-transfer-events-v2", "splice-api-token-transfer-events-v2-1.0.0.dar"},
+	{"splice-api-token-allocation-v2", "splice-api-token-allocation-v2-1.0.0.dar"},
+	{"splice-api-token-allocation-instruction-v2", "splice-api-token-allocation-instruction-v2-1.0.0.dar"},
+	{"splice-api-token-allocation-request-v2", "splice-api-token-allocation-request-v2-1.0.0.dar"},
+	{"splice-util-token-standard-wallet", "splice-util-token-standard-wallet-1.1.0.dar"},
 }
 
 const darFetchMaxBytes = 64 << 20 // 64 MiB — these DARs are well under 1 MiB

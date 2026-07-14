@@ -85,6 +85,10 @@ func schemaShapeRoots() []any {
 		SkillsInstallResponse{},
 		SkillsListResponse{},
 		Snapshot{},
+		Allocation{},
+		AllocationSummary{},
+		BatchResult{},
+		TokenActivityEvent{},
 		TokenCreateRequest{},
 		TokenRef{},
 		TransactionsListResponse{},
@@ -222,6 +226,40 @@ const wantSchemaShape = `skills.Skill {
   name string
   description string
   body string
+}
+
+types.Allocation {
+  contract_id string
+  status string
+  settlement_id string
+  admin string
+  authorizer string
+  executors []string
+  committed bool
+  settlement_deadline string
+  transfer_legs []types.TokenTransferLeg
+  created_at string
+}
+
+types.AllocationSummary {
+  contract_id string
+  status string
+  settlement_id string
+  authorizer string
+  leg_count int
+  committed bool
+}
+
+types.BatchActionResult {
+  kind string
+  ok bool
+  detail string
+}
+
+types.BatchResult {
+  update_id string
+  actions []types.BatchActionResult
+  ok bool
 }
 
 types.ContractDetail {
@@ -454,6 +492,20 @@ types.SnapshotDatabase {
   content_sha string
 }
 
+types.TokenActivityEvent {
+  source string
+  update_id string
+  offset int64
+  record_time string
+  instrument_id string
+  account string
+  admin string
+  consumed_holding_count int
+  created_holding_count int
+  transfer_legs []types.TokenTransferLeg
+  reason string
+}
+
 types.TokenCreateRequest {
   name string
   symbol string
@@ -471,6 +523,14 @@ types.TokenRef {
   instrument_id string
   created_at string
   status string
+}
+
+types.TokenTransferLeg {
+  transfer_leg_id string
+  side string
+  otherside string
+  amount string
+  instrument_id string
 }
 
 types.TransactionEvent {

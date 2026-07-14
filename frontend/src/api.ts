@@ -1630,6 +1630,86 @@ export interface TokenHoldingsResponse {
   truncated?: boolean;
 }
 
+// --- V2 foundation shapes -------------------------------------------
+// Mirror internal/api/types/tokens.go. Emitted by the later V2 feature
+// surfaces (EventLog history, allocations/DvP, BatchingUtilityV2); a
+// feature wraps each in its own versioned response when it lands.
+
+// TokenActivitySource mirrors api/types.TokenActivitySource.
+export type TokenActivitySource = "event_log" | "transaction";
+
+// TokenTransferLeg mirrors api/types.TokenTransferLeg.
+export interface TokenTransferLeg {
+  transfer_leg_id: string;
+  side: string;
+  otherside: string;
+  amount: string;
+  instrument_id: string;
+}
+
+// TokenActivityEvent mirrors api/types.TokenActivityEvent — one row of
+// a V2 instrument's holdings-change history.
+export interface TokenActivityEvent {
+  source: TokenActivitySource;
+  update_id: string;
+  offset: number;
+  record_time: string;
+  instrument_id: string;
+  account: string;
+  admin: string;
+  consumed_holding_count: number;
+  created_holding_count: number;
+  transfer_legs: TokenTransferLeg[];
+  reason?: string;
+}
+
+// AllocationStatus mirrors api/types.AllocationStatus.
+export type AllocationStatus =
+  | "pending"
+  | "ready"
+  | "settled"
+  | "cancelled"
+  | "withdrawn";
+
+// Allocation mirrors api/types.Allocation — a V2 DvP allocation detail.
+export interface Allocation {
+  contract_id: string;
+  status: AllocationStatus;
+  settlement_id: string;
+  admin: string;
+  authorizer: string;
+  executors: string[];
+  committed: boolean;
+  settlement_deadline?: string;
+  transfer_legs: TokenTransferLeg[];
+  created_at?: string;
+}
+
+// AllocationSummary mirrors api/types.AllocationSummary — list-row form.
+export interface AllocationSummary {
+  contract_id: string;
+  status: AllocationStatus;
+  settlement_id: string;
+  authorizer: string;
+  leg_count: number;
+  committed: boolean;
+}
+
+// BatchActionResult mirrors api/types.BatchActionResult.
+export interface BatchActionResult {
+  kind: string;
+  ok: boolean;
+  detail?: string;
+}
+
+// BatchResult mirrors api/types.BatchResult — outcome of a
+// BatchingUtility_ExecuteBatch exercise.
+export interface BatchResult {
+  update_id: string;
+  actions: BatchActionResult[];
+  ok: boolean;
+}
+
 // DEFAULT_ROLE matches the backend default in roleFromQuery — keep the
 // two in sync so the live-ledger endpoint discovery and JWT minting
 // pick the same participant for unrestricted UI calls.

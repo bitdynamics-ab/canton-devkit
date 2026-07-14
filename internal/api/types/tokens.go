@@ -113,3 +113,171 @@ type TokenHoldingsResponse struct {
 	// renders a "showing N of many" hint when set.
 	Truncated bool `json:"truncated,omitempty"`
 }
+
+// --- V2 foundation shapes -------------------------------------------
+//
+// Shared structs the later V2 feature surfaces (EventLog history,
+// allocations/DvP, BatchingUtilityV2) emit on BOTH the CLI --json and
+// the Web UI REST/SSE payloads. Declared here so the two surfaces
+// cannot drift; pinned by schema_shape_test's golden. None of these is
+// a top-level response body (no SchemaVersion) — a feature wraps them
+// in its own versioned response when it lands.
+
+// TokenActivitySource records what on-ledger construct produced a
+// TokenActivityEvent so the UI can label a row's provenance without the
+// feature agent inventing its own enum.
+type TokenActivitySource string
+
+const (
+	// ActivitySourceEventLog means the row was parsed from an
+	// EventLog_HoldingsChange event reported by the instrument admin
+	// (splice-api-token-transfer-events-v2). This is the authoritative
+	// holdings-change history for a V2 instrument.
+	ActivitySourceEventLog TokenActivitySource = "event_log"
+	// ActivitySourceTransaction means the row was derived from a raw
+	// ledger transaction/exercise, not an EventLog event — a fallback
+	// used when the instrument admin does not report EventLog events.
+	ActivitySourceTransaction TokenActivitySource = "transaction"
+)
+
+// TokenActivityEvent is one row of a V2 instrument's activity history —
+// a normalized view over an EventLog_HoldingsChange event (or a raw
+// transaction fallback). The EventLog history feature emits a stream of
+// these; the fields mirror EventLog_HoldingsChange's payload.
+type TokenActivityEvent struct {
+	// Source is where the row came from (EventLog vs raw transaction).
+	Source TokenActivitySource `json:"source"`
+	// UpdateID is the ledger update (transaction) id the event belongs to.
+	UpdateID string `json:"update_id"`
+	// Offset is the ledger offset for ordering/paging the history.
+	Offset int64 `json:"offset"`
+	// RecordTime is the ledger record time as RFC3339.
+	RecordTime string `json:"record_time"`
+	// InstrumentID is the V2 InstrumentId.id text the change is for.
+	InstrumentID string `json:"instrument_id"`
+	// Account is the party whose holdings changed (EventLog `account`).
+	Account string `json:"account"`
+	// Admin is the instrument admin that reported the change.
+	Admin string `json:"admin"`
+	// ConsumedHoldingCount is len(inputHoldingCids) — holdings archived.
+	ConsumedHoldingCount int `json:"consumed_holding_count"`
+	// CreatedHoldingCount is len(outputHoldingCids) — holdings created.
+	CreatedHoldingCount int `json:"created_holding_count"`
+	// TransferLegs are the transfer legs that caused the change; empty
+	// for pure merge/split events.
+	TransferLegs []TokenTransferLeg `json:"transfer_legs"`
+	// Reason is the free-text change reason from the event metadata
+	// (`splice.lfdecentralizedtrust.org/reason`), if present.
+	Reason string `json:"reason,omitempty"`
+}
+
+// TokenTransferLeg mirrors one TransferLegSide from an
+// EventLog_HoldingsChange (or an allocation transfer leg) — enough for
+// a UI row without the on-ledger contract-id plumbing.
+type TokenTransferLeg struct {
+	// TransferLegID correlates the sender and receiver sides of a leg.
+	TransferLegID string `json:"transfer_leg_id"`
+	// Side is "sender" or "receiver" (EventLog TransferSide).
+	Side string `json:"side"`
+	// Otherside is the party on the opposite side of the leg.
+	Otherside string `json:"otherside"`
+	// Amount is the leg amount as a Daml Decimal string.
+	Amount string `json:"amount"`
+	// InstrumentID is the leg's instrument id text.
+	InstrumentID string `json:"instrument_id"`
+}
+
+// AllocationStatus is the lifecycle state of a V2 allocation, derived
+// from its interface + registry state so both surfaces agree on the
+// label shown to the user.
+type AllocationStatus string
+
+const (
+	// AllocationStatusPending means an AllocationInstruction is created
+	// but the Allocation itself is not yet finalized.
+	AllocationStatusPending AllocationStatus = "pending"
+	// AllocationStatusReady means a finalized Allocation contract exists
+	// and can be settled.
+	AllocationStatusReady AllocationStatus = "ready"
+	// AllocationStatusSettled means the allocation was settled.
+	AllocationStatusSettled AllocationStatus = "settled"
+	// AllocationStatusCancelled means the executors cancelled it.
+	AllocationStatusCancelled AllocationStatus = "cancelled"
+	// AllocationStatusWithdrawn means the authorizer withdrew it.
+	AllocationStatusWithdrawn AllocationStatus = "withdrawn"
+)
+
+// Allocation is the shared detail view of one V2 allocation for DvP —
+// a normalized projection of AllocationView + AllocationSpecification
+// (splice-api-token-allocation-v2). Both surfaces render this; feature
+// wraps it in its own versioned response.
+type Allocation struct {
+	// ContractID is the on-ledger Allocation (or AllocationInstruction)
+	// contract id.
+	ContractID string `json:"contract_id"`
+	// Status is the lifecycle label.
+	Status AllocationStatus `json:"status"`
+	// SettlementID is SettlementInfo.id — correlates allocations of the
+	// same settlement.
+	SettlementID string `json:"settlement_id"`
+	// Admin is the instrument admin of the allocated instruments.
+	Admin string `json:"admin"`
+	// Authorizer is the party authorizing the transfers (the account
+	// owner funding the allocation).
+	Authorizer string `json:"authorizer"`
+	// Executors are the parties responsible for settling the batch.
+	Executors []string `json:"executors"`
+	// Committed is AllocationSpecification.committed — funds are locked
+	// until the settlement deadline and cannot be withdrawn early.
+	Committed bool `json:"committed"`
+	// SettlementDeadline is the optional TTL as RFC3339; empty when unset.
+	SettlementDeadline string `json:"settlement_deadline,omitempty"`
+	// TransferLegs are the transfer leg sides this allocation authorizes.
+	TransferLegs []TokenTransferLeg `json:"transfer_legs"`
+	// CreatedAt is when the allocation was originally created (RFC3339).
+	CreatedAt string `json:"created_at,omitempty"`
+}
+
+// AllocationSummary is the compact list-row form of an Allocation for
+// the allocations table — enough to render a row and link to the detail.
+type AllocationSummary struct {
+	// ContractID is the on-ledger contract id.
+	ContractID string `json:"contract_id"`
+	// Status is the lifecycle label.
+	Status AllocationStatus `json:"status"`
+	// SettlementID correlates allocations of the same settlement.
+	SettlementID string `json:"settlement_id"`
+	// Authorizer is the funding party.
+	Authorizer string `json:"authorizer"`
+	// LegCount is the number of transfer legs the allocation authorizes.
+	LegCount int `json:"leg_count"`
+	// Committed marks a committed (non-withdrawable) allocation.
+	Committed bool `json:"committed"`
+}
+
+// BatchActionResult is one action's outcome inside a BatchResult,
+// mirroring one TokenStandardActionResult from
+// BatchingUtility_ExecuteBatchResult.actionResults (order-preserved).
+type BatchActionResult struct {
+	// Kind names the token-standard action variant (e.g.
+	// "transfer_v2", "allocation_accept_v2") so the UI can label the row.
+	Kind string `json:"kind"`
+	// OK is true when the action produced a completed result (vs pending
+	// or failed).
+	OK bool `json:"ok"`
+	// Detail is an optional human-readable outcome note.
+	Detail string `json:"detail,omitempty"`
+}
+
+// BatchResult is the shared outcome of a BatchingUtility_ExecuteBatch
+// exercise — the per-action results in submission order. Both surfaces
+// render this; feature wraps it in its own versioned response.
+type BatchResult struct {
+	// UpdateID is the ledger update id of the batch transaction.
+	UpdateID string `json:"update_id"`
+	// Actions are the per-action results, in the same order as the
+	// submitted actions (BatchingUtility_ExecuteBatchResult.actionResults).
+	Actions []BatchActionResult `json:"actions"`
+	// OK is true when every action succeeded.
+	OK bool `json:"ok"`
+}

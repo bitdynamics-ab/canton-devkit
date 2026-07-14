@@ -73,6 +73,56 @@ const (
 	TransferFactoryInterfaceV1 = "#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferFactory"
 
 	TransferInstructionInterfaceV1 = "#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferInstruction"
+
+	// V2 foundation surfaces. Package-name-relative ids so they keep
+	// resolving across V2 alpha snapshot rotations. Signatures verified
+	// against Splice 0.6.12 (commit 17fd29aa) — see the token V2
+	// SIGNATURE REFERENCE for the exact choice/record shapes.
+
+	// EventLogInterfaceV2 is the non-consuming EventLog interface the
+	// instrument admin exercises (EventLog_HoldingsChange) to report
+	// holdings changes for the EventLog history feature. At 0.6.12 both
+	// AmuletRules and a standalone AmuletEventLog template implement it.
+	EventLogInterfaceV2 = "#splice-api-token-transfer-events-v2:Splice.Api.Token.TransferEventsV2:EventLog"
+
+	// AllocationInterfaceV2 is the on-ledger Allocation interface
+	// (Allocation_Settle / _Cancel / _Withdraw) representing an
+	// authorizer's ready-to-settle DvP approval.
+	AllocationInterfaceV2 = "#splice-api-token-allocation-v2:Splice.Api.Token.AllocationV2:Allocation"
+
+	// SettlementFactoryInterfaceV2 is the executor-facing factory whose
+	// SettlementFactory_SettleBatch nets and settles a batch of
+	// allocations for one instrument admin. Factory contract + disclosed
+	// contracts come from the registry's settlement-factory endpoint.
+	SettlementFactoryInterfaceV2 = "#splice-api-token-allocation-v2:Splice.Api.Token.AllocationV2:SettlementFactory"
+
+	// AllocationFactoryInterfaceV2 is the wallet-facing factory whose
+	// AllocationFactory_Allocate requests an allocation (or an
+	// AllocationInstruction). Factory + disclosed contracts come from the
+	// registry's allocation-factory endpoint.
+	AllocationFactoryInterfaceV2 = "#splice-api-token-allocation-instruction-v2:Splice.Api.Token.AllocationInstructionV2:AllocationFactory"
+
+	// AllocationInstructionInterfaceV2 is the pending-allocation-creation
+	// interface (AllocationInstruction_Accept / _Withdraw). Choice
+	// context comes from the registry's accept/withdraw endpoints.
+	AllocationInstructionInterfaceV2 = "#splice-api-token-allocation-instruction-v2:Splice.Api.Token.AllocationInstructionV2:AllocationInstruction"
+
+	// AllocationRequestInterfaceV2 is the request-for-allocation interface
+	// (AllocationRequest_Accept / _Reject / _Withdraw) an app raises for a
+	// wallet to fulfil.
+	AllocationRequestInterfaceV2 = "#splice-api-token-allocation-request-v2:Splice.Api.Token.AllocationRequestV2:AllocationRequest"
+
+	// BatchingUtilityTemplateV2 is the wallet's BatchingUtility template
+	// id. Its BatchingUtility_ExecuteBatch choice threads holdings through
+	// a list of TokenStandardAction in one transaction. Package-name form
+	// so create/exercise resolves the vetted wallet package (pinned to
+	// splice-util-token-standard-wallet 1.1.0).
+	BatchingUtilityTemplateV2 = "#splice-util-token-standard-wallet:Splice.Util.Token.Wallet.BatchingUtilityV2:BatchingUtility"
+
+	// BatchingUtilityExecuteBatchChoiceV2 is the batch-execute choice name
+	// exercised on BatchingUtilityTemplateV2 (args: inputHoldingMap,
+	// actions, archiveAfterExecution).
+	BatchingUtilityExecuteBatchChoiceV2 = "BatchingUtility_ExecuteBatch"
 )
 
 // transferFactoryInterface / transferInstructionInterface pick the
@@ -109,6 +159,27 @@ func registryVersionSeg(gen Generation) string {
 	}
 	return "v2"
 }
+
+// V2-foundation registry endpoint paths (host: scan-app registry).
+// Ground truth from the allocation-v2 / allocation-instruction-v2
+// OpenAPI at the 0.6.12 commit — note the upstream mixes singular
+// (`/allocation/`, `/allocation-instruction/`) and plural
+// (`/allocations/`) segments, so these are copied verbatim, not
+// normalized. `{id}` is filled by the caller.
+const (
+	// AllocationFactoryPathV2 → getAllocationFactory (AllocationFactory_Allocate context).
+	AllocationFactoryPathV2 = "/registry/allocation-instruction/v2/allocation-factory"
+	// AllocationInstructionAcceptPathV2 → getAllocationInstructionAcceptContext.
+	AllocationInstructionAcceptPathV2 = "/registry/allocation-instruction/v2/{allocationInstructionId}/choice-contexts/accept"
+	// AllocationInstructionWithdrawPathV2 → getAllocationInstructionWithdrawContext.
+	AllocationInstructionWithdrawPathV2 = "/registry/allocation-instruction/v2/{allocationInstructionId}/choice-contexts/withdraw"
+	// SettlementFactoryPathV2 → getSettlementFactory (SettlementFactory_SettleBatch context).
+	SettlementFactoryPathV2 = "/registry/allocation/v2/settlement-factory"
+	// AllocationWithdrawPathV2 → getAllocationWithdrawContext (Allocation_Withdraw).
+	AllocationWithdrawPathV2 = "/registry/allocations/v2/{allocationId}/choice-contexts/withdraw"
+	// AllocationCancelPathV2 → getAllocationCancelContext (Allocation_Cancel).
+	AllocationCancelPathV2 = "/registry/allocations/v2/{allocationId}/choice-contexts/cancel"
+)
 
 // Asset-specific choice / template names for the bundled
 // splice-test-token-v2 example token. These move with the upstream
