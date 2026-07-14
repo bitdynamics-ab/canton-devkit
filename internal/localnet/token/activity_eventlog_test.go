@@ -37,10 +37,6 @@ type eventLogFix struct {
 	wrongChoice bool
 }
 
-func enumValue(ctor string) *lapiv2.Value {
-	return &lapiv2.Value{Sum: &lapiv2.Value_Enum{Enum: &lapiv2.Enum{Constructor: ctor}}}
-}
-
 // optPartyVal builds Some party (empty → None). Wraps the production
 // optionalPartyValue (*string) with a string-arg convenience.
 func optPartyVal(p string) *lapiv2.Value {

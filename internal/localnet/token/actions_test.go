@@ -3,6 +3,7 @@ package token
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
@@ -110,6 +111,51 @@ func TestRunMint_UnsupportedOnInstrument(t *testing.T) {
 	})
 	if errors.Is(err, ErrUnsupportedOnInstrument) {
 		t.Errorf("missing --to should be a validation error, not unsupported-instrument; got %v", err)
+	}
+}
+
+// TestRunMintLive_SelfMintRejected pins the self-mint guard: minting to the
+// issuer's own party (To == IssuerParty) is rejected BEFORE dialing the
+// ledger with a clear, actionable error. OfferMint pre-authorizes TIA_Accept
+// for the admin, so an owner==admin receiver collapses the auth state machine
+// straight to TIS_Accepted (a terminal state) — the receiver-side accept then
+// aborts with "unavailable action TIA_Accept" and no Token is ever created.
+func TestRunMintLive_SelfMintRejected(t *testing.T) {
+	ref := registry.TokenRef{
+		Symbol: "XYZ", InstrumentID: "XYZ", IssuerParty: "issuer::abc", Status: "on-ledger",
+	}
+	// To == IssuerParty: guard must fire before any dial.
+	err := runMintLive(context.Background(), nil, MintOptions{
+		Instance: "demo", Instrument: "XYZ", To: "issuer::abc", Amount: "100",
+		Endpoint: "localhost:1", Role: "app-user",
+	}, ref)
+	if err == nil {
+		t.Fatal("self-mint (To == IssuerParty) must be rejected")
+	}
+	if !strings.Contains(err.Error(), "self-mint") || !strings.Contains(err.Error(), "distinct party") {
+		t.Errorf("self-mint error not actionable: %v", err)
+	}
+}
+
+// TestRunMintLive_DistinctReceiverPassesGuard confirms the guard does NOT
+// short-circuit a distinct-receiver mint: with To != IssuerParty the flow
+// proceeds past the guard to the ledger dial (which fails here because the
+// endpoint is bogus) — the error must be a dial/connection failure, never the
+// self-mint guard message. This guards against the guard regressing the
+// working distinct-receiver mint.
+func TestRunMintLive_DistinctReceiverPassesGuard(t *testing.T) {
+	ref := registry.TokenRef{
+		Symbol: "XYZ", InstrumentID: "XYZ", IssuerParty: "issuer::abc", Status: "on-ledger",
+	}
+	err := runMintLive(context.Background(), nil, MintOptions{
+		Instance: "demo", Instrument: "XYZ", To: "bob::xyz", Amount: "100",
+		Endpoint: "127.0.0.1:1", Role: "app-user",
+	}, ref)
+	if err == nil {
+		t.Fatal("expected a dial failure against the bogus endpoint")
+	}
+	if strings.Contains(err.Error(), "self-mint") {
+		t.Errorf("distinct-receiver mint must not trip the self-mint guard; got %v", err)
 	}
 }
 

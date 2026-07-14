@@ -600,8 +600,10 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 	// Live-submit: opts already carries the resolved endpoint/role.
 	opts.NoWait = body.NoWait
 	opts.AutoAccept = body.AutoAccept
-	// Atomic batches transfer+accept into one BatchingUtilityV2 transaction
-	// (opt-in; sequential remains the default — see TransferOptions.Atomic).
+	// Atomic batches transfer+accept into one BatchingUtilityV2 transaction.
+	// EXPERIMENTAL — not yet supported on current Splice (RunTransfer returns
+	// an actionable error and nothing commits); sequential is the default.
+	// See TransferOptions.Atomic / runTransferOnLedgerBatched.
 	opts.Atomic = body.Atomic
 	opts.Reason = body.Reason
 	// Capture RunTransfer's emitted events so we can return the created

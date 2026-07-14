@@ -20,8 +20,7 @@ import (
 // factory contract the registry returned. The choice argument mirrors the
 // upstream record:
 //
-//	{ expectedAdmin, settlement, allocation, requestedAt, inputHoldingCids,
-//	  extraArgs, actors }
+//	{ settlement, allocation, requestedAt, inputHoldingCids, extraArgs, actors }
 //
 // Returns the submit response — caller mines it for the created Allocation
 // (finalized) or AllocationInstruction (pending) contract id.
@@ -38,7 +37,6 @@ func exerciseAllocationFactory(
 		return nil, fmt.Errorf("build extraArgs: %w", err)
 	}
 	choiceArg := recordValue([]field{
-		{"expectedAdmin", partyValue(args.ExpectedAdmin)},
 		{"settlement", buildSettlementInfoRecord(args.Settlement)},
 		{"allocation", buildAllocationSpecRecord(args.Allocation)},
 		{"requestedAt", timestampValue(args.RequestedAt)},

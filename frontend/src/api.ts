@@ -1955,19 +1955,36 @@ export interface ActivityEvent {
 interface ActivityResponse {
   schema_version: number;
   events: ActivityEvent[];
+  // true when the backend's ledger scan hit its safety cap
+  // (maxActivityScan) before the window end — the feed is the newest
+  // slice of a clipped scan, not the complete history.
+  truncated?: boolean;
 }
 
+// ActivityPage is the shape the Activity tab consumes: the newest-first
+// events plus the backend's truncation flag, so the UI can distinguish
+// "reached the end" (grow the limit for more) from "scan was capped".
+export interface ActivityPage {
+  events: ActivityEvent[];
+  truncated: boolean;
+}
+
+// fetchActivity returns an instrument's movement feed, newest-first
+// (the backend sorts by ledger offset descending in one canonical place
+// — buildActivity / renderEventLogActivity — so the CLI `token activity`
+// and this feed agree). `limit` caps the rows; the pagination UI grows
+// it to fetch more. Returns the truncation flag alongside the events.
 export const fetchActivity = (
   instance: string,
   symbol: string,
   role = "app-user",
   limit = 50,
-) =>
+): Promise<ActivityPage> =>
   apiFetch<ActivityResponse>(
     `/api/tokens/${encodeURIComponent(symbol)}/activity?instance=${encodeURIComponent(
       instance,
     )}&role=${encodeURIComponent(role)}&limit=${limit}`,
-  ).then((r) => r.events);
+  ).then((r) => ({ events: r.events, truncated: !!r.truncated }));
 
 export const fetchHoldingContracts = (
   instance: string,
@@ -2074,8 +2091,11 @@ export const transferToken = async (
   autoAccept?: boolean,
   // atomic (with autoAccept) batches transfer+accept into one
   // all-or-nothing BatchingUtilityV2 transaction; on-ledger test tokens
-  // only. Default (undefined/false) keeps the sequential, partially
-  // recoverable offer→accept path. Mirrors the CLI's --atomic flag.
+  // only. EXPERIMENTAL and not yet supported on current Splice — the
+  // accept leg can't reference the transfer leg's instruction within one
+  // batch, so the server errors and nothing commits. Default
+  // (undefined/false) keeps the working sequential offer→accept path.
+  // Mirrors the CLI's --atomic flag (also experimental).
   atomic?: boolean,
 ): Promise<{ transferInstructionId: string; settled: boolean }> => {
   const resp = await fetch(

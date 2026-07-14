@@ -175,44 +175,86 @@ func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error)
 	return ws, nil
 }
 
-// instrumentsFromHoldings collects the distinct (admin, instrumentId)
-// pairs seen on the ledger and enriches each with recorded metadata.
+// instrumentsFromHoldings lists instruments for the instance: the ones
+// discovered on-ledger (from holdings) unioned with the registry-recorded
+// ones. Reads state.Tokens then delegates to mergeInstruments.
 func instrumentsFromHoldings(holdings []HoldingContract, instance string) []InstrumentRef {
+	var recorded map[string]registry.TokenRef
+	if state, err := registry.Read(instance); err == nil {
+		recorded = state.Tokens
+	}
+	return mergeInstruments(holdings, recorded)
+}
+
+// mergeInstruments unions the instruments seen on-ledger (distinct
+// (admin, instrumentId) across holdings) with the registry-recorded
+// instruments. Holdings-derived rows are enriched with recorded metadata
+// (name/symbol/decimals). A recorded instrument that no holding backs yet
+// — a token that was created (its TokenRules exists) but never minted —
+// is added with zero supply, so it doesn't vanish from the list until its
+// first mint. Pure — unit-testable.
+func mergeInstruments(holdings []HoldingContract, recorded map[string]registry.TokenRef) []InstrumentRef {
 	seen := map[string]*InstrumentRef{}
 	gen := map[string]Generation{} // richest generation seen per instrument
 	order := []string{}
+	keyOf := func(admin, inst string) string { return admin + "\x00" + inst }
+
 	for _, h := range holdings {
-		key := h.Admin + "\x00" + h.InstrumentID
-		if _, ok := seen[key]; !ok {
-			seen[key] = &InstrumentRef{Admin: h.Admin, InstrumentID: h.InstrumentID, OnLedger: true}
-			order = append(order, key)
+		k := keyOf(h.Admin, h.InstrumentID)
+		if _, ok := seen[k]; !ok {
+			seen[k] = &InstrumentRef{Admin: h.Admin, InstrumentID: h.InstrumentID, OnLedger: true}
+			order = append(order, k)
 		}
-		if h.Gen > gen[key] { // genV2 (2) outranks genV1 (1)
-			gen[key] = h.Gen
+		if h.Gen > gen[k] { // genV2 (2) outranks genV1 (1)
+			gen[k] = h.Gen
 		}
 	}
-	// Enrich from state.Tokens (keyed by symbol; our on-ledger create
-	// uses symbol == instrumentId, so they line up).
-	if state, err := registry.Read(instance); err == nil {
-		for _, ref := range state.Tokens {
-			for _, key := range order {
-				ir := seen[key]
-				if ir.InstrumentID == ref.InstrumentID || ir.InstrumentID == ref.Symbol {
-					ir.Name = ref.Name
-					ir.Symbol = ref.Symbol
-					ir.Decimals = ref.Decimals
-				}
+
+	// Enrich holdings-derived rows from the registry (keyed by symbol;
+	// our on-ledger create sets symbol == instrumentId, so they line up),
+	// and add any recorded instrument no holding backs yet.
+	for _, ref := range recorded {
+		matched := false
+		for _, k := range order {
+			ir := seen[k]
+			if ir.InstrumentID == ref.InstrumentID || ir.InstrumentID == ref.Symbol {
+				ir.Name = ref.Name
+				ir.Symbol = ref.Symbol
+				ir.Decimals = ref.Decimals
+				matched = true
 			}
 		}
+		if matched {
+			continue
+		}
+		// Unminted so far: surface the created instrument with zero
+		// supply. Admin = issuer party; on_ledger iff create anchored a
+		// TokenRules contract (status "on-ledger", vs the offline
+		// "recorded" path). Devkit create always issues a V2 test token.
+		k := keyOf(ref.IssuerParty, ref.InstrumentID)
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = &InstrumentRef{
+			Admin:        ref.IssuerParty,
+			InstrumentID: ref.InstrumentID,
+			Name:         ref.Name,
+			Symbol:       ref.Symbol,
+			Decimals:     ref.Decimals,
+			OnLedger:     ref.Status == "on-ledger",
+		}
+		gen[k] = genV2
+		order = append(order, k)
 	}
+
 	out := make([]InstrumentRef, 0, len(order))
-	for _, key := range order {
-		ir := seen[key]
+	for _, k := range order {
+		ir := seen[k]
 		if ir.Symbol == "" {
 			ir.Symbol = ir.InstrumentID
 		}
-		ir.Standard = standardFor(gen[key], ir.InstrumentID)
-		ir.Generation = gen[key].String()
+		ir.Standard = standardFor(gen[k], ir.InstrumentID)
+		ir.Generation = gen[k].String()
 		out = append(out, *ir)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Symbol < out[j].Symbol })

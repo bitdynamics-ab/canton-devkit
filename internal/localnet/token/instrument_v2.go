@@ -44,6 +44,16 @@ func ensureTokenRules(opts CreateOptions) error {
 
 	admin := opts.Issuer
 
+	// TokenRules has the issuer as signatory, so creating it requires the
+	// submitting user to hold CanActAs(issuer). The dial only auto-grants
+	// the role's own local parties; a custom issuer party must be granted
+	// explicitly — there is no CanActAsAnyParty right in the Ledger API, so
+	// the wildcard grants don't cover command submission. Best-effort +
+	// idempotent.
+	if admin != "" {
+		_ = client.GrantUserActAndReadAs(ctx, exerciseUserID, []string{admin})
+	}
+
 	// Auto-bundle the test-token DARs FIRST — findTokenRules
 	// filters the ACS by the #splice-test-token-v2 package name, which the
 	// participant rejects with PACKAGE_NAMES_NOT_FOUND until the package is
@@ -80,6 +90,30 @@ func ensureTokenRules(opts CreateOptions) error {
 // lone accept that follows is a single submit, so batching would save no
 // round-trip. Mint therefore stays sequential.
 func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regstate.TokenRef) error {
+	// Self-mint guard (issuer == receiver). OfferMint pre-authorizes
+	// TIA_Accept for the admin (TestTokenV2.daml:130
+	// `adminApproved = Map.singleton V2.TIA_Accept [admin]`). For a
+	// self-custodial receiver, `accountParties admin receiver` collapses to
+	// `[receiver]`; when receiver == admin that is `[admin]`, which already
+	// fully authorizes the receiver-side accept transition
+	// (AccountConfig.daml:216 `(TIS_Authorized, TIA_Accept, TIS_Accepted,
+	// STAS_Account receiver)`). getState therefore advances the offer
+	// straight to TIS_Accepted — a terminal state with no available action —
+	// so the receiver's TransferInstruction_Accept aborts in
+	// applyStateMachineTransitions ("unavailable action TIA_Accept",
+	// AccountConfig.daml:551-553). Crucially OfferMint creates the offer
+	// directly WITHOUT running a transition, so no Token is ever created and
+	// there is no in-place way to complete it (the V2 TransferInstruction
+	// interface exposes only Accept/Reject/Withdraw, all of which route
+	// through the same state machine and abort at TIS_Accepted). Mint to a
+	// distinct party instead — that receiver's account is self-custodial and
+	// its accept still drives TIS_Authorized -> TIS_Accepted, creating the
+	// holding.
+	if opts.To == ref.IssuerParty {
+		return fmt.Errorf("cannot self-mint: the test token cannot mint to the issuer's own party (%s) — "+
+			"mint to a distinct party", ref.IssuerParty)
+	}
+
 	conn := LedgerConn{
 		Endpoint: opts.Endpoint,
 		Insecure: opts.Insecure,
@@ -110,18 +144,11 @@ func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regst
 		"offer_cid": offerCID, "to": opts.To, "amount": opts.Amount,
 	})
 
-	// Settle the offer. The test token gates accept behind its
-	// configurable AccountConfig model: the receiver's account needs an
-	// AccountConfig contract, referenced by id in the accept's choice
-	// context under "testTokenV2/accountConfigs". Create it (owner=
-	// receiver, provider=admin) then accept with its cid threaded in.
-	configCID, err := createAccountConfig(ctx, client, admin, opts.To, admin)
-	if err != nil {
-		return fmt.Errorf("create receiver account config: %w", err)
-	}
-	emit(out, "mint: account-config", map[string]any{"config_cid": configCID})
-
-	if err := acceptMintOffer(ctx, client, opts.To, offerCID, configCID, tokenRulesCID, tokenRulesDisc); err != nil {
+	// Settle the offer by accepting it as the receiver. The receiver account
+	// is self-custodial (provider=None), so no AccountConfig contract is
+	// needed — extractAccountConfigMap inserts a basicConfig for it and the
+	// accept context carries only the TokenRules entry.
+	if err := acceptMintOffer(ctx, client, opts.To, offerCID, tokenRulesCID, tokenRulesDisc); err != nil {
 		return fmt.Errorf("accept mint offer: %w", err)
 	}
 	emit(out, "mint: accepted", map[string]any{
@@ -286,14 +313,14 @@ func buildHoldingRecord(from holdingRef, amount string) *lapiv2.Record {
 // TransferInstructionV2, so the receiver exercises
 // TransferInstruction_Accept on it with an empty choice context (the
 // test token needs no off-ledger context).
-func acceptMintOffer(ctx context.Context, client *ledger.Client, receiver, offerCID, accountConfigCID, tokenRulesCID string, tokenRulesDisc *lapiv2.DisclosedContract) error {
+func acceptMintOffer(ctx context.Context, client *ledger.Client, receiver, offerCID, tokenRulesCID string, tokenRulesDisc *lapiv2.DisclosedContract) error {
 	// The accept's choice context must carry two well-known entries the
 	// test token's state machine looks up: the issuer's TokenRules
 	// contract id and the involved accounts' AccountConfig contract ids.
 	// buildTestTokenExtraArgs assembles the tagged-AnyValue shape.
 	choiceArg := recordValue([]field{
 		{"actors", listValue([]string{receiver}, partyValue)},
-		{"extraArgs", buildTestTokenExtraArgs(tokenRulesCID, []string{accountConfigCID})},
+		{"extraArgs", buildTestTokenExtraArgs(tokenRulesCID, nil)},
 	})
 	pkg, mod, entity := splitInterfaceID(TransferInstructionInterfaceV2)
 	exercise := &lapiv2.Command{
@@ -503,14 +530,13 @@ func mintViaOfferMint(
 	admin, tokenRulesCID, receiver, amount, instrumentID string,
 ) (string, error) {
 	offeredAt := time.Now().UTC().Add(-5 * time.Second) // "in the past" per assertDeadlineExceeded
-	// The OfferMint `receiver` account MUST equal receiverConfig.account
-	// — the choice keys its account-config map by receiverConfig.account
-	// and then looks up `receiver` in it ("Cannot compute next actors"
-	// otherwise). Both carry provider=admin so the AccountConfig's
-	// `isSome account.provider` ensure passes.
-	adminParty := admin
+	// The OfferMint `receiver` account MUST equal receiverConfig.account —
+	// the choice keys its account-config map by receiverConfig.account and
+	// looks up `receiver` in it. Self-custodial (provider = None), matching
+	// the canonical mint: accountParties = [owner], so the receiver's
+	// TIA_Accept stays available (owner != admin, guarded in runMintLive).
 	ownerParty := receiver
-	receiverAccount := registry.Account{Owner: &ownerParty, Provider: &adminParty, ID: ""}
+	receiverAccount := registry.Account{Owner: &ownerParty, ID: ""}
 	choiceArg := recordValue([]field{
 		{"receiver", buildAccountRecord(receiverAccount)},
 		{"amount", numericValue(amount)},
@@ -558,8 +584,7 @@ func mintViaOfferMint(
 // clause.
 func buildAccountConfigRecord(admin, owner string) *lapiv2.Value {
 	ownerParty := owner
-	adminParty := admin
-	account := registry.Account{Owner: &ownerParty, Provider: &adminParty, ID: ""}
+	account := registry.Account{Owner: &ownerParty, ID: ""} // self-custodial: provider = None
 	return recordValue([]field{
 		{"admin", partyValue(admin)},
 		{"account", buildAccountRecord(account)},

@@ -43,6 +43,7 @@ import { useIdentityRole } from "../shell/useIdentityRole";
 import { W, wMono, tableCaps, wideCaps, tint, R, FAST, fs, ROLE_COLOR } from "../tokens";
 import { Button } from "../components/Button";
 import { MonoId } from "../components/MonoId";
+import { CopyPartyId } from "../components/CopyPartyId";
 import {
   Dot,
   IcArrowRight,
@@ -62,6 +63,11 @@ import {
 // first render and covers an identity-fetch failure. Order matches the
 // backend (default app-user first) and the WalletScreen switcher.
 const IDENTITY_ROLES: Role[] = ["app-user", "app-provider", "sv"];
+
+// Activity feed page size. "Load more" grows the requested limit by this
+// step; the backend returns the newest N movements (offset-descending),
+// capped server-side at 500.
+const ACTIVITY_PAGE = 50;
 
 function shortParty(p: string): string {
   const i = p.indexOf("::");
@@ -126,6 +132,8 @@ export function TokensScreen() {
   const expandSeqRef = useRef(0);
   const [matrix, setMatrix] = useState<BalanceMatrix | null>(null);
   const [matrixErr, setMatrixErr] = useState<string | null>(null);
+  // Which token the Holdings matrix is filtered to (null = full grid).
+  const [matrixSymbol, setMatrixSymbol] = useState<string | null>(null);
   const [summary, setSummary] = useState<InstrumentSummary | null>(null);
   const [parties, setParties] = useState<PartyRef[]>([]);
   const [showParties, setShowParties] = useState(false);
@@ -133,6 +141,12 @@ export function TokensScreen() {
   const [detailTab, setDetailTab] = useState<"overview" | "activity" | "allocations">("overview");
   const [activity, setActivity] = useState<ActivityEvent[] | null>(null);
   const [activityErr, setActivityErr] = useState<string | null>(null);
+  // Requested activity page size. "Load more" grows it; the backend
+  // returns the newest `activityLimit` movements. activityTruncated is
+  // set when the ledger scan itself was capped (a distinct, rarer
+  // condition from "the page is full").
+  const [activityLimit, setActivityLimit] = useState(ACTIVITY_PAGE);
+  const [activityTruncated, setActivityTruncated] = useState(false);
   const [allocations, setAllocations] = useState<AllocationSummary[] | null>(null);
   const [allocationsErr, setAllocationsErr] = useState<string | null>(null);
 
@@ -216,6 +230,13 @@ export function TokensScreen() {
     };
   }, [instance, view, role, refreshTick]);
 
+  // Opening the matrix focuses the instrument selected on the Instruments
+  // tab, so "pick a token → matrix follows" holds across the two views.
+  // The All chip clears it back to the full grid.
+  useEffect(() => {
+    if (view === "matrix") setMatrixSymbol(activeSymbol);
+  }, [view, activeSymbol]);
+
   useEffect(() => {
     if (!instance || !activeSymbol) {
       setHoldings([]);
@@ -281,14 +302,19 @@ export function TokensScreen() {
 
   // Lazy: only fetched when the Activity tab is open, since it's a full
   // historical scan, heavier than the other lenses' ACS snapshots.
+  // Re-runs when activityLimit grows ("Load more"), refetching the newest
+  // N movements — the backend returns them offset-descending.
   useEffect(() => {
     if (!instance || !activeSymbol || detailTab !== "activity") return;
     let cancelled = false;
     setActivity(null);
     setActivityErr(null);
-    fetchActivity(instance, activeSymbol, role)
-      .then((ev) => {
-        if (!cancelled) setActivity(ev);
+    fetchActivity(instance, activeSymbol, role, activityLimit)
+      .then((page) => {
+        if (!cancelled) {
+          setActivity(page.events);
+          setActivityTruncated(page.truncated);
+        }
       })
       .catch((e: unknown) => {
         if (!cancelled) setActivityErr(e instanceof ApiError ? e.message : "failed to load activity");
@@ -296,7 +322,14 @@ export function TokensScreen() {
     return () => {
       cancelled = true;
     };
-  }, [instance, activeSymbol, detailTab, role, refreshTick]);
+  }, [instance, activeSymbol, detailTab, role, refreshTick, activityLimit]);
+
+  // Reset the activity page size whenever the instrument or role changes,
+  // so a deep "Load more" on one instrument doesn't carry into the next.
+  useEffect(() => {
+    setActivityLimit(ACTIVITY_PAGE);
+    setActivityTruncated(false);
+  }, [activeSymbol, role, instance]);
 
   // Lazy: only fetched when the Allocations tab is open (an ACS scan of
   // the Allocation interface). Not instrument-scoped on the backend, so we
@@ -472,7 +505,7 @@ export function TokensScreen() {
       </div>
 
       {view === "matrix" ? (
-        <MatrixLens matrix={matrix} err={matrixErr} aliases={aliases} />
+        <MatrixLens matrix={matrix} err={matrixErr} aliases={aliases} filter={matrixSymbol} onFilter={setMatrixSymbol} />
       ) : list.length === 0 ? (
         <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 4, padding: 24, textAlign: "center" }}>
           <div style={{ color: W.text, fontSize: fs.lead, fontWeight: 600, marginBottom: 4 }}>
@@ -654,7 +687,14 @@ export function TokensScreen() {
                 )}
 
                 {detailTab === "activity" && (
-                  <ActivityFeed events={activity} err={activityErr} aliases={aliases} />
+                  <ActivityFeed
+                    events={activity}
+                    err={activityErr}
+                    aliases={aliases}
+                    limit={activityLimit}
+                    truncated={activityTruncated}
+                    onLoadMore={() => setActivityLimit((n) => n + ACTIVITY_PAGE)}
+                  />
                 )}
 
                 {detailTab === "allocations" && (
@@ -1184,12 +1224,36 @@ function HolderDistribution({ s, aliases }: { s: InstrumentSummary; aliases: Ali
   );
 }
 
-// Transfer/mint/burn history from the ledger stream; one netted transaction per row.
-function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null; err: string | null; aliases: AliasMap }) {
+// Transfer/mint/burn history from the ledger stream; one netted
+// transaction per row. Rows arrive newest-first (the backend sorts by
+// ledger offset descending — buildActivity / renderEventLogActivity — so
+// this feed and the CLI `token activity` agree). `limit` is the currently
+// requested page size; `onLoadMore` grows it. `truncated` means the
+// backend's ledger scan itself was capped (partial history).
+function ActivityFeed({
+  events,
+  err,
+  aliases,
+  limit,
+  truncated,
+  onLoadMore,
+}: {
+  events: ActivityEvent[] | null;
+  err: string | null;
+  aliases: AliasMap;
+  limit: number;
+  truncated: boolean;
+  onLoadMore: () => void;
+}) {
   if (err) return <div role="alert" style={{ color: W.err, fontSize: fs.data, marginTop: 12 }}>{err}</div>;
   if (events === null) return <div style={{ color: W.dim, fontSize: fs.data, marginTop: 12 }}>Scanning ledger history…</div>;
   if (events.length === 0)
     return <div style={{ color: W.dim, fontSize: fs.data, marginTop: 12 }}>No activity for this instrument yet.</div>;
+
+  // A full page (events == the requested limit) means there may be older
+  // movements the backend clipped off — offer to grow the window. When the
+  // page is short, we've reached the start of history.
+  const maybeMore = events.length >= limit;
 
   const tone: Record<ActivityEvent["kind"], string> = {
     mint: W.brand,
@@ -1212,7 +1276,14 @@ function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null
   const sourceLabel = (s: ActivityEvent["source"]) =>
     s === "event_log" ? "EventLog" : "derived";
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data, marginTop: 12 }}>
+    <>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, color: W.dim, fontSize: fs.meta }}>
+      <span>
+        Showing {events.length} {events.length === 1 ? "movement" : "movements"}, newest first
+        {truncated && <span style={{ color: W.warn }}> · ledger scan capped, older movements omitted</span>}
+      </span>
+    </div>
+    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data, marginTop: 6 }}>
       <thead>
         <tr style={{ color: W.dim, textAlign: "left" }}>
           <th style={th}>TIME</th>
@@ -1264,12 +1335,32 @@ function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null
         ))}
       </tbody>
     </table>
+    {maybeMore && (
+      <div style={{ display: "flex", justifyContent: "center", marginTop: 10 }}>
+        <Button variant="secondary" size="sm" icon={<IcChevronDown />} onClick={onLoadMore}>
+          Load more
+        </Button>
+      </div>
+    )}
+    </>
   );
 }
 
 // Party × instrument balance table from one ACS scan; only parties the
 // role's JWT can read appear.
-function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; err: string | null; aliases: AliasMap }) {
+function MatrixLens({
+  matrix,
+  err,
+  aliases,
+  filter,
+  onFilter,
+}: {
+  matrix: BalanceMatrix | null;
+  err: string | null;
+  aliases: AliasMap;
+  filter: string | null;
+  onFilter: (s: string | null) => void;
+}) {
   if (err) return <div role="alert" style={{ color: W.err, fontSize: fs.data }}>{err}</div>;
   if (!matrix) return <div style={{ color: W.dim, fontSize: fs.data }}>Scanning ACS…</div>;
 
@@ -1284,24 +1375,52 @@ function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; er
   matrix.totals.forEach((t) => { totals[symByInst[t.instrument_id]] = t.amount; });
   const parties = [...matrix.parties].sort();
 
+  // Filter to one token's column when selected; the All chip restores the
+  // full every-party × every-token grid.
+  const active = filter && syms.includes(filter) ? filter : null;
+  const shownSyms = active ? [active] : syms;
+
+  const chip = (label: string, value: string | null, on: boolean) => (
+    <button
+      key={label}
+      onClick={() => onFilter(value)}
+      aria-pressed={on}
+      style={{
+        padding: "4px 12px", fontSize: fs.meta, borderRadius: 2, border: "none", cursor: "pointer",
+        fontWeight: 600, whiteSpace: "nowrap",
+        background: on ? W.brand : "transparent",
+        color: on ? W.onAccent : W.dim,
+      }}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 4, padding: 16, overflowX: "auto" }}>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", background: W.surface2, borderRadius: 4, padding: 3, width: "fit-content", maxWidth: "100%", border: `1px solid ${W.border}`, marginBottom: 10 }}>
+        {chip("All tokens", null, active === null)}
+        {syms.map((s) => chip(s, s, active === s))}
+      </div>
       <div style={{ color: W.dim, fontSize: fs.meta, marginBottom: 10 }}>
-        {parties.length} {parties.length === 1 ? "party" : "parties"} × {syms.length} {syms.length === 1 ? "instrument" : "instruments"}.
-        Every readable party's balance of every instrument, in one ACS scan.
+        {active ? (
+          <>{parties.length} {parties.length === 1 ? "party" : "parties"} · balances of <span style={{ color: W.text }}>{active}</span> only.</>
+        ) : (
+          <>{parties.length} {parties.length === 1 ? "party" : "parties"} × {syms.length} {syms.length === 1 ? "instrument" : "instruments"}. Every readable party's balance of every instrument, in one ACS scan.</>
+        )}
       </div>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data }}>
         <thead>
           <tr style={{ color: W.dim, textAlign: "left" }}>
             <th style={th}>PARTY ╲ TOKEN</th>
-            {syms.map((s) => <th key={s} style={{ ...th, textAlign: "right" }}>{s}</th>)}
+            {shownSyms.map((s) => <th key={s} style={{ ...th, textAlign: "right" }}>{s}</th>)}
           </tr>
         </thead>
         <tbody>
           {parties.map((p) => (
             <tr key={p}>
               <td style={td}>{partyLabel(aliases, p)}</td>
-              {syms.map((s) => (
+              {shownSyms.map((s) => (
                 <td key={s} style={{ ...tdNum, color: amt[p]?.[s] ? W.text : W.dim }}>
                   {amt[p]?.[s] ?? "·"}
                 </td>
@@ -1310,12 +1429,12 @@ function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; er
           ))}
           <tr>
             <td style={{ ...td, color: W.dim, fontWeight: 600, fontSize: fs.meta }}>Σ total</td>
-            {syms.map((s) => (
+            {shownSyms.map((s) => (
               <td key={s} style={{ ...tdNum, fontWeight: 600 }}>{totals[s] ?? ""}</td>
             ))}
           </tr>
           {parties.length === 0 && (
-            <tr><td colSpan={syms.length + 1} style={{ ...td, color: W.dim }}>No holdings visible to this role.</td></tr>
+            <tr><td colSpan={shownSyms.length + 1} style={{ ...td, color: W.dim }}>No holdings visible to this role.</td></tr>
           )}
         </tbody>
       </table>
@@ -1470,6 +1589,7 @@ function PartyManagerModal({
         <thead>
           <tr style={{ color: W.dim, textAlign: "left" }}>
             <th style={th}>ALIAS</th>
+            <th style={th}>PARTY ID</th>
             <th style={th}>ROLE</th>
             <th style={th}></th>
           </tr>
@@ -1478,6 +1598,16 @@ function PartyManagerModal({
           {parties.map((p) => (
             <tr key={p.alias}>
               <td style={{ ...td, fontWeight: 600 }}>{p.alias}</td>
+              <td style={td}>
+                {p.party_id ? (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <MonoId value={p.party_id} size={11} color={W.dim} />
+                    <CopyPartyId partyId={p.party_id} label={`Copy party id for ${p.alias}`} />
+                  </span>
+                ) : (
+                  <span style={{ color: W.faint }}>·</span>
+                )}
+              </td>
               <td style={{ ...td, color: W.dim }}>{p.role}</td>
               <td style={{ ...td, textAlign: "right" }}>
                 <Button
@@ -1493,7 +1623,7 @@ function PartyManagerModal({
             </tr>
           ))}
           {parties.length === 0 && (
-            <tr><td colSpan={3} style={{ ...td, color: W.dim }}>No parties registered yet.</td></tr>
+            <tr><td colSpan={4} style={{ ...td, color: W.dim }}>No parties registered yet.</td></tr>
           )}
         </tbody>
       </table>
@@ -1774,25 +1904,30 @@ function PartyPicker({
   }
 
   return (
-    <select
-      value={value}
-      onChange={(e) => {
-        const v = e.target.value;
-        if (v === "__create__") { setMode("create"); return; }
-        if (v === "__raw__") { setMode("raw"); onChange(""); return; }
-        onChange(v);
-      }}
-      style={{ ...input, cursor: "pointer" }}
-    >
-      <option value="">{placeholder}</option>
-      {all.map((p) => (
-        <option key={p.party_id} value={p.party_id}>
-          {p.alias} · {shortParty(p.party_id)}
-        </option>
-      ))}
-      <option value="__create__">＋ create new party…</option>
-      <option value="__raw__">↳ enter raw party id…</option>
-    </select>
+    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      <select
+        value={value}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "__create__") { setMode("create"); return; }
+          if (v === "__raw__") { setMode("raw"); onChange(""); return; }
+          onChange(v);
+        }}
+        style={{ ...input, cursor: "pointer", flex: 1 }}
+      >
+        <option value="">{placeholder}</option>
+        {all.map((p) => (
+          <option key={p.party_id} value={p.party_id}>
+            {p.alias} · {shortParty(p.party_id)}
+          </option>
+        ))}
+        <option value="__create__">＋ create new party…</option>
+        <option value="__raw__">↳ enter raw party id…</option>
+      </select>
+      {/* Copy the full selected party id — the value a user pastes into
+          another target field. Only shown once a real party is chosen. */}
+      {value !== "" && known && <CopyPartyId partyId={value} />}
+    </div>
   );
 }
 

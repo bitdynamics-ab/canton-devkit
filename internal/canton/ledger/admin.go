@@ -150,6 +150,29 @@ func (c *Client) GrantUserActAndReadAs(ctx context.Context, userID string, parti
 	return nil
 }
 
+// GrantUserActAndReadAsAnyParty grants the user the wildcard
+// CanActAsAnyParty + CanReadAsAnyParty rights — the LocalNet god-mode
+// model where the operator owns everyone. Per-party grants only cover
+// parties we know about, but token-standard flows must read AND submit
+// against contracts owned by parties we don't host — the DSO, instrument
+// admins, other holders (e.g. creating an issuer's TokenRules, or an
+// interface-filtered ACS scan). Without these wildcards those RPCs return
+// PermissionDenied. Idempotent. LocalNet-only (the dev-signed JWT already
+// carries admin-equivalent claims).
+func (c *Client) GrantUserActAndReadAsAnyParty(ctx context.Context, userID string) error {
+	_, err := c.userMgmt.GrantUserRights(ctx, &adminv2.GrantUserRightsRequest{
+		UserId: userID,
+		Rights: []*adminv2.Right{
+			{Kind: &adminv2.Right_CanExecuteAsAnyParty_{CanExecuteAsAnyParty: &adminv2.Right_CanExecuteAsAnyParty{}}},
+			{Kind: &adminv2.Right_CanReadAsAnyParty_{CanReadAsAnyParty: &adminv2.Right_CanReadAsAnyParty{}}},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("ledger.GrantUserActAndReadAsAnyParty: %w", err)
+	}
+	return nil
+}
+
 // ListKnownPackages enumerates packages from the admin perspective — same
 // set as [Client.ListPackages] but with extra metadata (source DAR hash,
 // upload time, vetting state per synchronizer) only the admin API

@@ -49,31 +49,23 @@ func TestBuildScopedAccountRecord(t *testing.T) {
 	}
 }
 
-// TestBuildAnyContractIdValue pins AnyContractId = { contractId, meta }.
-func TestBuildAnyContractIdValue(t *testing.T) {
-	rec := recordOf(buildAnyContractIdValue("cid-9"))
-	if rec == nil {
-		t.Fatal("AnyContractId is not a record")
-	}
-	if got := contractIDOf(fieldOf(rec, "contractId")); got != "cid-9" {
-		t.Errorf("contractId = %q, want cid-9", got)
-	}
-	if fieldOf(rec, "meta") == nil {
-		t.Error("AnyContractId.meta missing")
-	}
-}
-
 // TestBuildChoiceCallRecord pins ChoiceCall = { cid : AnyContractId, arg }
-// and that `arg` is threaded through verbatim.
+// and that `arg` is threaded through verbatim. AnyContractId is a bare
+// contract id (MetadataV1.daml `type AnyContractId = ContractId AnyContract`),
+// so ChoiceCall.cid must be a plain Value_ContractId, NOT a { contractId,
+// meta } record.
 func TestBuildChoiceCallRecord(t *testing.T) {
 	arg := textValue("the-arg")
 	rec := recordOf(buildChoiceCallRecord("cid-1", arg))
 	if rec == nil {
 		t.Fatal("ChoiceCall is not a record")
 	}
-	cidRec := recordOf(fieldOf(rec, "cid"))
-	if got := contractIDOf(fieldOf(cidRec, "contractId")); got != "cid-1" {
-		t.Errorf("ChoiceCall.cid.contractId = %q, want cid-1", got)
+	// cid is a bare ContractId value, not a record.
+	if recordOf(fieldOf(rec, "cid")) != nil {
+		t.Errorf("ChoiceCall.cid is a record, want a bare ContractId: %#v", fieldOf(rec, "cid").GetSum())
+	}
+	if got := contractIDOf(fieldOf(rec, "cid")); got != "cid-1" {
+		t.Errorf("ChoiceCall.cid = %q, want cid-1", got)
 	}
 	if got := textOf(fieldOf(rec, "arg")); got != "the-arg" {
 		t.Errorf("ChoiceCall.arg not threaded through: %q", got)
@@ -91,7 +83,7 @@ func TestTSAVariants(t *testing.T) {
 	if ctor != "TSA_TransferFactory_TransferV2" {
 		t.Errorf("transfer ctor = %q, want TSA_TransferFactory_TransferV2", ctor)
 	}
-	if got := contractIDOf(fieldOf(recordOf(fieldOf(recordOf(inner), "cid")), "contractId")); got != "factory-cid" {
+	if got := contractIDOf(fieldOf(recordOf(inner), "cid")); got != "factory-cid" {
 		t.Errorf("transfer ChoiceCall cid = %q, want factory-cid", got)
 	}
 
@@ -105,35 +97,58 @@ func TestTSAVariants(t *testing.T) {
 	}
 }
 
-// TestBuildHoldingMapValue pins the HoldingMap encoding: a list of
-// (ScopedAccount, TextMap [ContractId Holding]) tuples, one per account,
-// each carrying the account's input holding cids. Empty input → empty list.
+// genMapOf returns the GenMap under a Value, or nil.
+func genMapOf(v *lapiv2.Value) *lapiv2.GenMap {
+	if v == nil {
+		return nil
+	}
+	if gm, ok := v.GetSum().(*lapiv2.Value_GenMap); ok {
+		return gm.GenMap
+	}
+	return nil
+}
+
+// TestBuildHoldingMapValue pins the HoldingMap encoding: the record
+// { byAdminAndAccount : Map ScopedAccount (TextMap [ContractId Holding]) },
+// where Map is a GenMap keyed by the ScopedAccount record. Each entry carries
+// the account's input holding cids. Empty input → record with empty GenMap.
 func TestBuildHoldingMapValue(t *testing.T) {
 	owner := "bob::abc"
 	in := []scopedHoldings{{
 		Admin:       "issuer::abc",
 		Account:     registry.Account{Owner: &owner, ID: "acc-1"},
+		Instrument:  "CTKC",
 		HoldingCIDs: []string{"h1", "h2"},
 	}}
-	lst, ok := buildHoldingMapValue(in).GetSum().(*lapiv2.Value_List)
-	if !ok {
-		t.Fatalf("HoldingMap is not a List: %#v", buildHoldingMapValue(in).GetSum())
+	// HoldingMap is a record, not a bare list.
+	rec := recordOf(buildHoldingMapValue(in))
+	if rec == nil {
+		t.Fatalf("HoldingMap is not a record: %#v", buildHoldingMapValue(in).GetSum())
 	}
-	if len(lst.List.Elements) != 1 {
-		t.Fatalf("HoldingMap has %d entries, want 1", len(lst.List.Elements))
+	gm := genMapOf(fieldOf(rec, "byAdminAndAccount"))
+	if gm == nil {
+		t.Fatalf("byAdminAndAccount is not a GenMap: %#v", fieldOf(rec, "byAdminAndAccount").GetSum())
 	}
-	pair := recordOf(lst.List.Elements[0])
-	// _1 is the ScopedAccount, _2 the TextMap of holding cids.
-	sa := recordOf(fieldOf(pair, "_1"))
+	if len(gm.Entries) != 1 {
+		t.Fatalf("HoldingMap has %d entries, want 1", len(gm.Entries))
+	}
+	// The GenMap key is the ScopedAccount record; the value the TextMap of cids.
+	sa := recordOf(gm.Entries[0].Key)
 	if got := partyOf(fieldOf(sa, "admin")); got != "issuer::abc" {
-		t.Errorf("tuple._1.admin = %q, want issuer::abc", got)
+		t.Errorf("entry.key.admin = %q, want issuer::abc", got)
 	}
-	tm, ok := fieldOf(pair, "_2").GetSum().(*lapiv2.Value_TextMap)
+	tm, ok := gm.Entries[0].Value.GetSum().(*lapiv2.Value_TextMap)
 	if !ok {
-		t.Fatalf("tuple._2 is not a TextMap: %#v", fieldOf(pair, "_2").GetSum())
+		t.Fatalf("entry.value is not a TextMap: %#v", gm.Entries[0].Value.GetSum())
 	}
 	if len(tm.TextMap.Entries) != 1 {
 		t.Fatalf("holding textmap has %d entries, want 1", len(tm.TextMap.Entries))
+	}
+	// The holdings TextMap MUST be keyed by the instrument id — ExecuteBatch
+	// looks holdings up with `TextMap.lookup instrumentId.id`. An index key
+	// ("0") would miss and the batched transfer would see inputAmount = 0.
+	if got := tm.TextMap.Entries[0].Key; got != "CTKC" {
+		t.Errorf("holding textmap key = %q, want the instrument id CTKC", got)
 	}
 	cids, ok := tm.TextMap.Entries[0].Value.GetSum().(*lapiv2.Value_List)
 	if !ok {
@@ -147,13 +162,17 @@ func TestBuildHoldingMapValue(t *testing.T) {
 		t.Errorf("holding cids = %v, want [h1 h2]", got)
 	}
 
-	// Empty input → empty (non-nil) list.
-	empty, ok := buildHoldingMapValue(nil).GetSum().(*lapiv2.Value_List)
-	if !ok || empty.List == nil {
-		t.Fatalf("empty HoldingMap is not an (empty) List: %#v", buildHoldingMapValue(nil).GetSum())
+	// Empty input → record with an empty (non-nil) GenMap.
+	emptyRec := recordOf(buildHoldingMapValue(nil))
+	if emptyRec == nil {
+		t.Fatalf("empty HoldingMap is not a record: %#v", buildHoldingMapValue(nil).GetSum())
 	}
-	if len(empty.List.Elements) != 0 {
-		t.Errorf("empty HoldingMap has %d entries, want 0", len(empty.List.Elements))
+	emptyGM := genMapOf(fieldOf(emptyRec, "byAdminAndAccount"))
+	if emptyGM == nil {
+		t.Fatalf("empty byAdminAndAccount is not a GenMap: %#v", fieldOf(emptyRec, "byAdminAndAccount").GetSum())
+	}
+	if len(emptyGM.Entries) != 0 {
+		t.Errorf("empty HoldingMap has %d entries, want 0", len(emptyGM.Entries))
 	}
 }
 

@@ -70,6 +70,12 @@ type CreateResult struct {
 // per-instance flock, and returns the new entry. On a duplicate
 // symbol it returns ErrSymbolInUse without mutating anything.
 func RunCreate(out io.Writer, opts CreateOptions) (*CreateResult, error) {
+	// Resolve the issuer alias to its party id, like mint/transfer/allocate
+	// do for their party inputs. Without this the raw alias (e.g. "app-user")
+	// flows through as the admin party and the on-ledger TokenRules submit
+	// acts-as a non-existent party — UNKNOWN_SUBMITTERS.
+	opts.Issuer = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Issuer)
+
 	if err := validateCreate(opts); err != nil {
 		return nil, err
 	}

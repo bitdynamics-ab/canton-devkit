@@ -69,6 +69,10 @@ func (f *fakeLedger) GrantUserActAndReadAs(ctx context.Context, userID string, p
 	return nil
 }
 
+func (f *fakeLedger) GrantUserActAndReadAsAnyParty(ctx context.Context, userID string) error {
+	return nil
+}
+
 func (f *fakeLedger) ListKnownPackages(ctx context.Context) (*adminv2.ListKnownPackagesResponse, error) {
 	if f.ListKnownPackagesFn != nil {
 		return f.ListKnownPackagesFn(ctx)

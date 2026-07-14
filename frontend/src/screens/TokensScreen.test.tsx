@@ -59,9 +59,16 @@ function stubFetch(
             parties: ["alice::abc", "bob::def"],
             instruments: [
               { admin: "alice::abc", instrument_id: "RTK", symbol: "RTK", standard: "CIP-0112 v2", on_ledger: true },
+              { admin: "alice::abc", instrument_id: "GOV", symbol: "GOV", standard: "CIP-0112 v2", on_ledger: true },
             ],
-            cells: [{ party: "bob::def", instrument_id: "RTK", amount: "1275.0" }],
-            totals: [{ party: "", instrument_id: "RTK", amount: "1275.0" }],
+            cells: [
+              { party: "bob::def", instrument_id: "RTK", amount: "1275.0" },
+              { party: "alice::abc", instrument_id: "GOV", amount: "42.0" },
+            ],
+            totals: [
+              { party: "", instrument_id: "RTK", amount: "1275.0" },
+              { party: "", instrument_id: "GOV", amount: "42.0" },
+            ],
           },
         });
       }
@@ -85,22 +92,24 @@ function stubFetch(
         });
       }
       if (url.startsWith("/api/tokens/") && url.includes("/activity")) {
-        return json({
-          schema_version: 1,
-          events: [
-            {
-              offset: 1106, update_id: "u1106", record_time: "2026-05-30T16:50:45Z",
-              instrument_id: "RTK", kind: "mint", source: "event_log", amount: "1000",
-              receivers: [{ party: "bob::def", amount: "1000" }],
-            },
-            {
-              offset: 1200, update_id: "u1200", record_time: "2026-05-30T17:00:00Z",
-              instrument_id: "RTK", kind: "transfer", source: "event_log", amount: "100",
-              senders: [{ party: "bob::def", amount: "100" }],
-              receivers: [{ party: "alice::abc", amount: "100" }],
-            },
-          ],
-        });
+        // Honour ?limit so pagination tests can drive a full-page → "Load
+        // more" state: synthesize `limit` newest-first rows (offset
+        // descending) capped at a small pool.
+        const limit = Number(new URL(url, "http://x").searchParams.get("limit") ?? "50");
+        const pool = 120; // more rows than one page → "Load more" appears
+        const n = Math.min(limit, pool);
+        const events = Array.from({ length: n }, (_, i) => ({
+          offset: 2000 - i, // descending → newest first
+          update_id: `u${2000 - i}`,
+          record_time: "2026-05-30T17:00:00Z",
+          instrument_id: "RTK",
+          kind: i === 0 ? "mint" : "transfer",
+          source: "event_log",
+          amount: "100",
+          senders: i === 0 ? undefined : [{ party: "bob::def", amount: "100" }],
+          receivers: [{ party: "alice::abc", amount: "100" }],
+        }));
+        return json({ schema_version: 1, events, truncated: false });
       }
       if (url.startsWith("/api/tokens/") && url.includes("/summary")) {
         return json({
@@ -312,6 +321,55 @@ describe("TokensScreen", () => {
     expect(screen.queryAllByText(/transfer/i).length).toBeGreaterThan(0);
   });
 
+  // The Activity feed is newest-first + paginated: it shows a "Showing N
+  // movements, newest first" affordance and a "Load more" button that
+  // grows the requested limit (the stub returns limit-many rows, capped
+  // at a pool larger than one page, so a full first page is offered
+  // more).
+  it("paginates the Activity feed with a Load more button", async () => {
+    const user = userEvent.setup();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    await user.click(await screen.findByRole("button", { name: /^activity$/i }, { timeout: 4000 }));
+    // First page: the "showing N, newest first" count is present.
+    await waitFor(
+      () => expect(screen.queryByText(/newest first/i)).toBeInTheDocument(),
+      { timeout: 4000 },
+    );
+    expect(screen.queryByText(/Showing 50 movements/i)).toBeInTheDocument();
+    // A full page → the feed offers "Load more"; clicking it grows the
+    // page and re-requests a larger limit (stub caps at 120).
+    const loadMore = await screen.findByRole("button", { name: /Load more/i });
+    await user.click(loadMore);
+    await waitFor(
+      () => expect(screen.queryByText(/Showing 100 movements/i)).toBeInTheDocument(),
+      { timeout: 4000 },
+    );
+  });
+
+  it("offers a copy-party-id control per row in the party manager", async () => {
+    const user = userEvent.setup();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    await user.click(await screen.findByRole("button", { name: /Parties/i }, { timeout: 4000 }));
+    // Each registered party row exposes an accessible "Copy party id …"
+    // button that copies the FULL alias::fingerprint id.
+    const copyBtn = await screen.findByRole(
+      "button",
+      { name: /copy party id for treasury/i },
+      { timeout: 4000 },
+    );
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    await user.click(copyBtn);
+    expect(writeText).toHaveBeenCalledWith("bob::def");
+    // Feedback flips the label to "Copied!".
+    await waitFor(
+      () => expect(screen.queryAllByText(/Copied!/i).length).toBeGreaterThan(0),
+      { timeout: 2000 },
+    );
+  });
+
   it("switches to the Holdings matrix lens and renders the pivot", async () => {
     const user = userEvent.setup();
     stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
@@ -335,6 +393,36 @@ describe("TokensScreen", () => {
       () => expect(screen.queryAllByText(/treasury/).length).toBeGreaterThan(0),
       { timeout: 4000 },
     );
+  });
+
+  it("filters the matrix to one token's column via the chips", async () => {
+    const user = userEvent.setup();
+    stubFetch([
+      { symbol: "RTK", name: "Retail Token" },
+      { symbol: "GOV", name: "Gov Token" },
+    ]);
+    renderTokens();
+    await user.click(await screen.findByRole("button", { name: /Holdings matrix/i }, { timeout: 4000 }));
+    // the All-tokens + per-token chips render
+    await waitFor(
+      () => expect(screen.getByRole("button", { name: "All tokens" })).toBeInTheDocument(),
+      { timeout: 4000 },
+    );
+    // filter to GOV → its cell shows, RTK's column drops out
+    await user.click(screen.getByRole("button", { name: "GOV" }));
+    await waitFor(
+      () => expect(screen.queryAllByText("42.0").length).toBeGreaterThan(0),
+      { timeout: 4000 },
+    );
+    expect(screen.queryByText("1275.0")).not.toBeInTheDocument();
+    // All tokens → the full grid returns (RTK's 1275.0 shows in both its
+    // cell and the Σ total row, hence queryAllByText)
+    await user.click(screen.getByRole("button", { name: "All tokens" }));
+    await waitFor(
+      () => expect(screen.queryAllByText("1275.0").length).toBeGreaterThan(0),
+      { timeout: 4000 },
+    );
+    expect(screen.queryAllByText("42.0").length).toBeGreaterThan(0);
   });
 
   it("opens the party manager and lists registered aliases", async () => {

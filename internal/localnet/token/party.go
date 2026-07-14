@@ -86,7 +86,33 @@ func RunPartyNew(ctx context.Context, opts PartyOptions) (*registry.PartyRef, er
 
 	var partyID string
 	var isLocal bool
-	resp, err := client.AllocateParty(ctx, &adminv2.AllocatePartyRequest{PartyIdHint: opts.Alias})
+	// Onboard the party to the participant's synchronizer. Without a
+	// SynchronizerId the party is allocated locally but is not a known
+	// submitter on any synchronizer, so its first command fails with
+	// UNKNOWN_SUBMITTERS. Resolve the id from an already-connected
+	// role-local party; empty is tolerated (single-synchronizer boots).
+	syncID := ""
+	if locals, _ := localPartiesForRole(ctx, client, conn.Role); len(locals) > 0 {
+		if cs, csErr := client.ConnectedSynchronizers(ctx, locals[0]); csErr == nil {
+			for _, s := range cs.GetConnectedSynchronizers() {
+				if id := s.GetSynchronizerId(); id != "" {
+					syncID = id
+					break
+				}
+			}
+		}
+	}
+	// UserId auto-grants the role's user CanActAs for the new party (no
+	// separate GrantUserRights round-trip). SynchronizerId associates the
+	// party with the participant's synchronizer. NB: on this LocalNet a
+	// freshly-allocated party is still not immediately a known submitter
+	// (UNKNOWN_SUBMITTERS on its first command) — the party-to-participant
+	// topology authorization must propagate first; see TODO below.
+	resp, err := client.AllocateParty(ctx, &adminv2.AllocatePartyRequest{
+		PartyIdHint:    opts.Alias,
+		SynchronizerId: syncID,
+		UserId:         exerciseUserID,
+	})
 	if err != nil {
 		// Recoverable case: a prior `party new` allocated the party on
 		// the node but didn't finish (e.g. the grant failed). The party

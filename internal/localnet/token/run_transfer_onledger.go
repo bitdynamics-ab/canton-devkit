@@ -521,16 +521,31 @@ func runTransferOnLedgerBatched(
 	}
 
 	// Thread the sender's picked input holdings through the HoldingMap so
-	// the batched transfer consumes them.
+	// the batched transfer consumes them. Admin + Account + Instrument must
+	// match the transfer's instrumentId.admin / sender / instrumentId.id, or
+	// ExecuteBatch's getHoldingsForInstrument lookup misses (inputAmount = 0).
 	inputHoldings := []scopedHoldings{{
 		Admin:       admin,
 		Account:     senderAcct.registryAccount(),
+		Instrument:  transferArgs.InstrumentID.ID,
 		HoldingCIDs: transferArgs.InputHoldingCids,
 	}}
 
 	res, err := executeBatch(ctx, client, batchUser, actAs, inputHoldings, actions, false)
 	if err != nil {
-		return "", fmt.Errorf("atomic transfer+accept batch: %w", err)
+		// TODO(BIT-NNN): atomic transfer+accept is experimental and not yet
+		// supported on this Splice version. The batch's wire shape is now
+		// correct (HoldingMap record, bare AnyContractId, instrument-keyed
+		// holdings), but BatchingUtility_ExecuteBatch does not rebind the
+		// accept leg to the TransferInstruction the transfer leg creates in
+		// the SAME batch — that forward reference needs ExecuteBatch
+		// intra-batch output binding, which the current test-token/wallet
+		// DARs don't wire. The batch is all-or-nothing, so nothing committed.
+		return "", fmt.Errorf(
+			"atomic transfer+accept batching is experimental and not yet supported on this "+
+				"Splice version (the accept leg can't reference the transfer leg's instruction "+
+				"within one BatchingUtility_ExecuteBatch); nothing was committed — re-run "+
+				"without --atomic for the sequential path. underlying: %w", err)
 	}
 	emit(out, "transfer batched", map[string]any{
 		"update_id":    res.UpdateID,

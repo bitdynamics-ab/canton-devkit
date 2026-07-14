@@ -29,6 +29,7 @@ type LedgerClient interface {
 	ResolveActAndReadParties(ctx context.Context) ([]string, error)
 	ListKnownParties(ctx context.Context) (*adminv2.ListKnownPartiesResponse, error)
 	GrantUserActAndReadAs(ctx context.Context, userID string, parties []string) error
+	GrantUserActAndReadAsAnyParty(ctx context.Context, userID string) error
 	ListKnownPackages(ctx context.Context) (*adminv2.ListKnownPackagesResponse, error)
 }
 
@@ -171,6 +172,14 @@ func redactJWTs(err error) error {
 // the user already has Act/Read rights (stable Splice grants these at
 // boot; second-and-later dials see prior grants).
 func ensureLocalPartyRights(ctx context.Context, c LedgerClient, role string) error {
+	// Wildcard read: interface-filtered ACS queries (TokenRules, Allocation,
+	// Holding across all holders) must read contracts owned by parties we
+	// don't host — the DSO, instrument admins, other holders. Per-party
+	// CanReadAs can't cover those, so without this the streams
+	// PermissionDenied. Applied on every dial, ahead of the per-party
+	// fast-path below; best-effort + idempotent.
+	_ = c.GrantUserActAndReadAsAnyParty(ctx, exerciseUserID)
+
 	rights, err := c.ResolveActAndReadParties(ctx)
 	if err != nil {
 		return fmt.Errorf("probe user rights: %w", err)
@@ -237,7 +246,46 @@ func resolveReadableParties(ctx context.Context, c LedgerClient, instance, role 
 	if len(parties) == 0 {
 		parties, _ = localPartiesForRole(ctx, c, role)
 	}
-	return parties, nil
+	return dropPhantomAliases(parties, aliasSet(instance)), nil
+}
+
+// aliasSet returns the set of registered party aliases for an instance
+// (the keys of state.Parties), empty when the instance is unknown.
+func aliasSet(instance string) map[string]struct{} {
+	set := map[string]struct{}{}
+	if instance == "" {
+		return set
+	}
+	state, err := registry.Read(instance)
+	if err != nil {
+		return set
+	}
+	for alias := range state.Parties {
+		set[alias] = struct{}{}
+	}
+	return set
+}
+
+// dropPhantomAliases removes resolved "parties" that are bare registry
+// alias strings rather than real party ids. Earlier, pre-alias-resolution
+// commands could grant the participant's user act/read for an unresolved
+// alias (e.g. "issuer"); those grants persist, so ResolveActAndReadParties
+// surfaces them and they show as phantom, holdingless duplicate rows in
+// the balance matrix (alongside the real "issuer::fingerprint" party).
+// A real Canton party id always carries a "::"-separated fingerprint, so
+// a fingerprint-less string that matches a known alias is a phantom. Only
+// those are dropped — genuine fingerprint-less dev parties are kept.
+func dropPhantomAliases(parties []string, aliases map[string]struct{}) []string {
+	out := make([]string, 0, len(parties))
+	for _, p := range parties {
+		if !strings.Contains(p, "::") {
+			if _, isAlias := aliases[p]; isAlias {
+				continue
+			}
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // resolveLedgerToken implements the four-step token resolution order

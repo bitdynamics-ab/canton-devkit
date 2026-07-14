@@ -181,33 +181,26 @@ func RunAllocate(ctx context.Context, out io.Writer, opts AllocationOptions) (st
 
 	now := time.Now().UTC()
 	settlement := registry.SettlementInfo{
-		Executor:       opts.Executor,
-		SettlementRef:  registry.Reference{ID: newSettlementID()},
-		RequestedAt:    now,
-		AllocateBefore: now.Add(24 * time.Hour),
-		SettleBefore:   now.Add(48 * time.Hour),
-		Meta:           registry.Metadata{Values: map[string]string{}},
+		Executors: []string{opts.Executor},
+		ID:        newSettlementID(),
+		Meta:      registry.Metadata{Values: map[string]string{}},
 	}
-	instrumentID := registry.InstrumentID{Admin: admin, ID: ref.InstrumentID}
 	spec := registry.AllocationSpecification{
 		Admin:      admin,
 		Authorizer: registry.NewOwnedAccount(opts.From),
 		TransferLegSides: []registry.TransferLegSide{{
 			TransferLegID: "leg0",
-			TransferLeg: registry.TransferLeg{
-				Sender:       registry.NewOwnedAccount(opts.From),
-				Receiver:     registry.NewOwnedAccount(opts.To),
-				Amount:       opts.Amount,
-				InstrumentID: instrumentID,
-				Meta:         registry.Metadata{Values: map[string]string{}},
-			},
+			Side:          "SenderSide",
+			Otherside:     registry.NewOwnedAccount(opts.To),
+			Amount:        opts.Amount,
+			InstrumentID:  ref.InstrumentID,
+			Meta:          registry.Metadata{Values: map[string]string{}},
 		}},
 		SettlementDeadline: deadline,
 		Committed:          opts.Committed,
 		Meta:               registry.Metadata{Values: map[string]string{}},
 	}
 	choiceArgs := registry.AllocationFactoryChoiceArgs{
-		ExpectedAdmin:    admin,
 		Settlement:       settlement,
 		Allocation:       spec,
 		RequestedAt:      now,

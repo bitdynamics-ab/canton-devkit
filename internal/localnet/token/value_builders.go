@@ -507,6 +507,26 @@ func textMapValue(m map[string]string) *lapiv2.Value {
 	return &lapiv2.Value{Sum: &lapiv2.Value_TextMap{TextMap: &lapiv2.TextMap{Entries: entries}}}
 }
 
+// genMapEntry is one (key, value) pair of a Daml `DA.Map` (GenMap): both
+// sides are arbitrary Values (unlike TextMap, whose key is always Text).
+type genMapEntry struct {
+	key   *lapiv2.Value
+	value *lapiv2.Value
+}
+
+// genMapValue builds a Daml `DA.Map k v` value — wire-encoded as a
+// Value_GenMap, NOT a TextMap. `DA.Map` keys are arbitrary `Ord` types
+// (here a ScopedAccount record), so the participant rejects a TextMap or a
+// bare List where a GenMap is declared. Entries are passed in caller order;
+// the participant reconstructs the map from them.
+func genMapValue(entries []genMapEntry) *lapiv2.Value {
+	out := make([]*lapiv2.GenMap_Entry, len(entries))
+	for i, e := range entries {
+		out[i] = &lapiv2.GenMap_Entry{Key: e.key, Value: e.value}
+	}
+	return &lapiv2.Value{Sum: &lapiv2.Value_GenMap{GenMap: &lapiv2.GenMap{Entries: out}}}
+}
+
 // variantValue wraps an inner Value in the participant's variant shape.
 // VariantId is intentionally left nil — the participant resolves the
 // type from the declaring choice's signature at exercise time, so

@@ -67,13 +67,20 @@ type batchAction struct {
 }
 
 // scopedHoldings pairs a ScopedAccount with the holding contract ids
-// threaded into the batch for that account. holdingMapFromList consumes a
-// list of these (as (ScopedAccount, TextMap [ContractId Holding]) tuples).
+// threaded into the batch for that account. buildHoldingMapValue turns a
+// slice of these into the HoldingMap record's byAdminAndAccount GenMap
+// (ScopedAccount → TextMap [ContractId Holding]).
 type scopedHoldings struct {
 	// Admin is the instrument admin (ScopedAccount.admin).
 	Admin string
 	// Account is the V2 account the holdings belong to.
 	Account registry.Account
+	// Instrument is the instrument id (InstrumentId.id). It keys the
+	// per-account holdings TextMap: ExecuteBatch looks holdings up by
+	// `TextMap.lookup instrumentId.id` (getHoldingsForInstrument), so this
+	// MUST equal the transfer's instrumentId.id or the batch finds no
+	// holdings and interpretation fails with inputAmount = 0.
+	Instrument string
 	// HoldingCIDs are the input Holding contract ids for this account.
 	HoldingCIDs []string
 }
@@ -317,41 +324,48 @@ func ledgerEffectsFormat(actAs []string) *lapiv2.TransactionFormat {
 
 // --- HoldingMap / TokenStandardAction value builders -----------------
 //
-// TODO(BIT-token-v2): the deep TokenStandardAction / AnyContractId /
-// HoldingMap record shapes below are hand-built from the 0.6.12 confirmed
-// signatures but NOT yet exercised against a live token-standard-v2 ledger
-// (no live participant in this worktree). Verify the exact record field
-// order/labels for holdingMapFromList's tuple encoding and each TSA_*
-// variant's ChoiceCall when the alpha e2e gate lands; the batch path is
+// TODO(BIT-token-v2): the deep TokenStandardAction / AnyContractId record
+// shapes below are hand-built from the 0.6.12 confirmed signatures but NOT
+// yet exercised against a live token-standard-v2 ledger (no live participant
+// in this worktree). Verify the exact record field order/labels for each
+// TSA_* variant's ChoiceCall when the alpha e2e gate lands; the batch path is
 // opt-in (TransferOptions.Atomic) so the default flow is unaffected until
 // then.
 
 // buildHoldingMapValue encodes the HoldingMap the batch threads its input
-// holdings through. Upstream builds it with
+// holdings through. BatchingUtility_ExecuteBatch's `inputHoldingMap` field is
+// the HoldingMap RECORD, not the list holdingMapFromList consumes. Upstream
+// (Splice.Util.Token.Wallet.BatchingUtilityV2):
 //
-//	holdingMapFromList [(ScopedAccount, TextMap [ContractId Holding])]
+//	data HoldingMap = HoldingMap with
+//	  byAdminAndAccount : Map.Map ScopedAccount (TextMap.TextMap [ContractId V2.Holding])
 //
-// which normalizes to a GenMap keyed by ScopedAccount. We emit the same
-// list-of-tuples the helper consumes as a Daml `[(ScopedAccount, TextMap
-// [ContractId Holding])]` value; the wallet choice runs holdingMapFromList
-// on it. An empty input yields an empty list (self-funded actions that
-// carry their own holdings in the action arg).
+// `Map.Map` is DA.Map → wire-encoded as a GenMap keyed by the ScopedAccount
+// record (Ord); `TextMap.TextMap` is DA.TextMap → wire-encoded as a TextMap.
+// The previous list-of-tuples encoding tripped the preprocessor with
+// "mismatching type: ...:HoldingMap and value: List(...)". An empty input
+// yields the record with an empty GenMap (self-funded actions that carry
+// their own holdings in the action arg).
+//
+// The inner TextMap is keyed by the INSTRUMENT ID, not an arbitrary index:
+// ExecuteBatch resolves a transfer's holdings with
+// `TextMap.lookup instrumentId.id` (getHoldingsForInstrument), so an index
+// key ("0") would miss and the batched transfer would see inputAmount = 0.
 func buildHoldingMapValue(in []scopedHoldings) *lapiv2.Value {
-	pairs := make([]*lapiv2.Value, 0, len(in))
-	for i, sh := range in {
-		// TextMap [ContractId Holding] keyed by a stable per-account index
-		// ("0", "1", …) — the wallet re-keys internally; the key is opaque.
-		key := fmt.Sprintf("%d", i)
+	entries := make([]genMapEntry, 0, len(in))
+	for _, sh := range in {
 		cids := listValue(sh.HoldingCIDs, contractIDValue)
 		holdingTextMap := &lapiv2.Value{Sum: &lapiv2.Value_TextMap{TextMap: &lapiv2.TextMap{
-			Entries: []*lapiv2.TextMap_Entry{{Key: key, Value: cids}},
+			Entries: []*lapiv2.TextMap_Entry{{Key: sh.Instrument, Value: cids}},
 		}}}
-		pairs = append(pairs, tupleValue(
-			buildScopedAccountRecord(sh.Admin, sh.Account),
-			holdingTextMap,
-		))
+		entries = append(entries, genMapEntry{
+			key:   buildScopedAccountRecord(sh.Admin, sh.Account),
+			value: holdingTextMap,
+		})
 	}
-	return &lapiv2.Value{Sum: &lapiv2.Value_List{List: &lapiv2.List{Elements: pairs}}}
+	return recordValue([]field{
+		{"byAdminAndAccount", genMapValue(entries)},
+	})
 }
 
 // buildScopedAccountRecord:
@@ -366,32 +380,26 @@ func buildScopedAccountRecord(admin string, account registry.Account) *lapiv2.Va
 	})
 }
 
-// buildAnyContractIdValue encodes an AnyContractId — the metadata-package
-// wrapper the ChoiceCall.cid field carries so a batch action can point at
-// any contract regardless of its template.
-//
-//	data AnyContractId = AnyContractId with
-//	  contractId : ContractId ()
-//	  meta       : Metadata
-func buildAnyContractIdValue(cid string) *lapiv2.Value {
-	return recordValue([]field{
-		{"contractId", contractIDValue(cid)},
-		{"meta", buildMetadataRecord(registry.Metadata{Values: map[string]string{}})},
-	})
-}
-
 // buildChoiceCallRecord:
 //
-//	data ChoiceCall = ChoiceCall with
+//	data ChoiceCall arg = ChoiceCall with
 //	  cid : AnyContractId
-//	  arg : <choice-arg record>
+//	  arg : arg
 //
-// `arg` is the same choice-argument record the sequential path builds for
-// the corresponding on-ledger exercise (e.g. the TransferFactory_Transfer
-// arg), reused verbatim so the two paths can't drift.
+// `cid` is `AnyContractId`, which upstream (MetadataV1.daml) is a type
+// SYNONYM for a bare contract id, NOT a record:
+//
+//	type AnyContractId = ContractId AnyContract
+//
+// so the wire value is a plain Value_ContractId. Encoding it as a
+// { contractId, meta } record tripped the preprocessor with "mismatching
+// type: ContractId ...:AnyContract and value: Record(...)". `arg` is the
+// same choice-argument record the sequential path builds for the
+// corresponding on-ledger exercise (e.g. the TransferFactory_Transfer arg),
+// reused verbatim so the two paths can't drift.
 func buildChoiceCallRecord(cid string, arg *lapiv2.Value) *lapiv2.Value {
 	return recordValue([]field{
-		{"cid", buildAnyContractIdValue(cid)},
+		{"cid", contractIDValue(cid)},
 		{"arg", arg},
 	})
 }
@@ -417,13 +425,4 @@ func tsaTransferInstructionAcceptV2(instructionCID string, arg *lapiv2.Value) ba
 		Kind:  "transfer_accept_v2",
 		Value: variantValue("TSA_TransferInstruction_AcceptV2", buildChoiceCallRecord(instructionCID, arg)),
 	}
-}
-
-// tupleValue encodes a Daml 2-tuple ((,) a b) as its record form
-// { _1 : a, _2 : b } — the participant's wire encoding for DA.Types.Tuple2.
-func tupleValue(a, b *lapiv2.Value) *lapiv2.Value {
-	return recordValue([]field{
-		{"_1", a},
-		{"_2", b},
-	})
 }

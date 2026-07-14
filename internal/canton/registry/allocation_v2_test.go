@@ -44,24 +44,21 @@ func TestGetAllocationFactory_HappyPath(t *testing.T) {
 	deadline := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
 	req := AllocationFactoryRequest{
 		ChoiceArguments: AllocationFactoryChoiceArgs{
-			ExpectedAdmin: "DSO::1220",
 			Settlement: SettlementInfo{
-				Executor:      "alice::1220",
-				SettlementRef: Reference{ID: "settlement-1"},
-				Meta:          Metadata{Values: map[string]string{}},
+				Executors: []string{"alice::1220"},
+				ID:        "settlement-1",
+				Meta:      Metadata{Values: map[string]string{}},
 			},
 			Allocation: AllocationSpecification{
 				Admin:      "DSO::1220",
 				Authorizer: NewOwnedAccount("alice::1220"),
 				TransferLegSides: []TransferLegSide{{
 					TransferLegID: "leg0",
-					TransferLeg: TransferLeg{
-						Sender:       NewOwnedAccount("alice::1220"),
-						Receiver:     NewOwnedAccount("bob::1220"),
-						Amount:       "10.0",
-						InstrumentID: InstrumentID{Admin: "DSO::1220", ID: "RTK"},
-						Meta:         Metadata{Values: map[string]string{}},
-					},
+					Side:          "SenderSide",
+					Otherside:     NewOwnedAccount("bob::1220"),
+					Amount:        "10.0",
+					InstrumentID:  "RTK",
+					Meta:          Metadata{Values: map[string]string{}},
 				}},
 				SettlementDeadline: &deadline,
 				Committed:          true,
@@ -91,8 +88,8 @@ func TestGetAllocationFactory_HappyPath(t *testing.T) {
 	if err := json.Unmarshal(capturedBody, &decoded); err != nil {
 		t.Fatalf("body unmarshal: %v\nbody=%s", err, capturedBody)
 	}
-	if decoded.ChoiceArguments.ExpectedAdmin != "DSO::1220" {
-		t.Errorf("expectedAdmin: got %q", decoded.ChoiceArguments.ExpectedAdmin)
+	if decoded.ChoiceArguments.Allocation.Admin != "DSO::1220" {
+		t.Errorf("allocation.admin: got %q", decoded.ChoiceArguments.Allocation.Admin)
 	}
 	if !decoded.ChoiceArguments.Allocation.Committed {
 		t.Errorf("committed did not round-trip: %s", capturedBody)

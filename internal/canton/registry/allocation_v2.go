@@ -53,12 +53,10 @@ import (
 // SettlementInfo` record — the settlement this allocation belongs to. The
 // executor + settlement id correlate allocations of the same DvP batch.
 type SettlementInfo struct {
-	Executor       string    `json:"executor"`
-	SettlementRef  Reference `json:"settlementRef"`
-	RequestedAt    time.Time `json:"requestedAt"`
-	AllocateBefore time.Time `json:"allocateBefore"`
-	SettleBefore   time.Time `json:"settleBefore"`
-	Meta           Metadata  `json:"meta"`
+	Executors []string `json:"executors"`
+	ID        string   `json:"id"`
+	Cid       *string  `json:"cid"`
+	Meta      Metadata `json:"meta"`
 }
 
 // Reference mirrors the standard's `Reference` record (an id + optional
@@ -73,8 +71,12 @@ type Reference struct {
 // leg of a settlement the allocation authorizes. `transferLegId` correlates
 // the sender/receiver halves; `transferLeg` carries the movement.
 type TransferLegSide struct {
-	TransferLegID string      `json:"transferLegId"`
-	TransferLeg   TransferLeg `json:"transferLeg"`
+	TransferLegID string   `json:"transferLegId"`
+	Side          string   `json:"side"` // "SenderSide" | "ReceiverSide"
+	Otherside     Account  `json:"otherside"`
+	Amount        string   `json:"amount"`
+	InstrumentID  string   `json:"instrumentId"` // Text id, not the {admin,id} record
+	Meta          Metadata `json:"meta"`
 }
 
 // TransferLeg mirrors the standard's `TransferLeg` record: sender/receiver
@@ -109,13 +111,12 @@ type AllocationSpecification struct {
 // against the real choice signature, so the field set must match the
 // upstream `AllocationFactory_Allocate` record exactly:
 //
-//	{ expectedAdmin, settlement, allocation, requestedAt, inputHoldingCids,
-//	  extraArgs, actors }
+//	{ settlement, allocation, requestedAt, inputHoldingCids, extraArgs, actors }
 //
-// (`expectedAdmin` is the factory admin the choice validates against —
-// analogous to the transfer V1 shape.)
+// The instrument admin travels inside `allocation`
+// (AllocationSpecification.admin), not as a top-level arg — unlike the
+// transfer V1 factory's expectedAdmin.
 type AllocationFactoryChoiceArgs struct {
-	ExpectedAdmin    string                  `json:"expectedAdmin"`
 	Settlement       SettlementInfo          `json:"settlement"`
 	Allocation       AllocationSpecification `json:"allocation"`
 	RequestedAt      time.Time               `json:"requestedAt"`

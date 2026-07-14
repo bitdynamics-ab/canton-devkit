@@ -54,7 +54,7 @@ TransferFactory response indicates the sender pre-approved them.`,
 	parent.Flags().String("amount", "", "Decimal amount. Required.")
 	parent.Flags().Bool("no-wait", false, "Return the TransferInstruction id without waiting for the receiver to accept.")
 	parent.Flags().Bool("auto-accept", false, "Chain the receiver-side accept onto the transfer (LocalNet: you own the receiver, so settle in one step).")
-	parent.Flags().Bool("atomic", false, "With --auto-accept, batch the transfer and receiver-accept into one all-or-nothing BatchingUtilityV2 transaction (on-ledger test tokens only). Trades away sequential partial-recovery.")
+	parent.Flags().Bool("atomic", false, "(experimental) With --auto-accept, batch the transfer and receiver-accept into one all-or-nothing BatchingUtilityV2 transaction (on-ledger test tokens only). Not yet supported on current Splice: the accept leg can't reference the transfer leg's instruction within one batch, so this errors and nothing commits — use the default sequential path.")
 	parent.Flags().String("reason", "", "Optional human-readable reason recorded on the TransferInstruction.")
 	parent.Flags().String("endpoint", "", "Participant gRPC endpoint (host:port). When set, run the live V2 transfer; otherwise print the not-wired remediation.")
 	parent.Flags().String("token", "", "Bearer JWT. Empty auto-issues a per-role token via the creds machinery.")

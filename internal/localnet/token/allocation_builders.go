@@ -18,73 +18,47 @@ import (
 //	  daml/Splice/Api/Token/AllocationInstructionV2.daml
 //	    — AllocationFactory_Allocate signature
 
-// buildReferenceRecord:
-//
-//	data Reference = Reference with
-//	  id  : Text
-//	  cid : Optional AnyContractId
-//
-// cid is left None for our flows (the settlement id text is what
-// correlates a batch).
-func buildReferenceRecord(r registry.Reference) *lapiv2.Value {
-	var cid *lapiv2.Value
-	if r.Cid != nil {
-		cid = contractIDValue(*r.Cid)
-	}
-	return recordValue([]field{
-		{"id", textValue(r.ID)},
-		{"cid", optionalValue(cid)},
-	})
-}
-
 // buildSettlementInfoRecord:
 //
-//	data SettlementInfo = SettlementInfo with
-//	  executor       : Party
-//	  settlementRef  : Reference
-//	  requestedAt    : Time
-//	  allocateBefore : Time
-//	  settleBefore   : Time
-//	  meta           : Metadata
+//	data SettlementInfo = SettlementInfo with   -- v2
+//	  executors : [Party]
+//	  id        : Text
+//	  cid       : Optional AnyContractId
+//	  meta      : Metadata
+//
+// cid is left None for our flows — the settlement id text correlates a batch.
 func buildSettlementInfoRecord(s registry.SettlementInfo) *lapiv2.Value {
 	return recordValue([]field{
-		{"executor", partyValue(s.Executor)},
-		{"settlementRef", buildReferenceRecord(s.SettlementRef)},
-		{"requestedAt", timestampValue(s.RequestedAt)},
-		{"allocateBefore", timestampValue(s.AllocateBefore)},
-		{"settleBefore", timestampValue(s.SettleBefore)},
+		{"executors", listValue(s.Executors, partyValue)},
+		{"id", textValue(s.ID)},
+		{"cid", optionalValue(nil)},
 		{"meta", buildMetadataRecord(s.Meta)},
 	})
 }
 
-// buildTransferLegRecord:
-//
-//	data TransferLeg = TransferLeg with
-//	  sender       : Account
-//	  receiver     : Account
-//	  amount       : Decimal
-//	  instrumentId : InstrumentId
-//	  meta         : Metadata
-func buildTransferLegRecord(l registry.TransferLeg) *lapiv2.Value {
-	return recordValue([]field{
-		{"sender", buildAccountRecord(l.Sender)},
-		{"receiver", buildAccountRecord(l.Receiver)},
-		{"amount", numericValue(l.Amount)},
-		{"instrumentId", buildInstrumentIDRecord(l.InstrumentID)},
-		{"meta", buildMetadataRecord(l.Meta)},
-	})
-}
-
-// buildTransferLegSideRecord:
+// buildTransferLegSideRecord (v2 flat directed side):
 //
 //	data TransferLegSide = TransferLegSide with
 //	  transferLegId : Text
-//	  transferLeg   : TransferLeg
+//	  side          : TransferSide  -- enum SenderSide | ReceiverSide
+//	  otherside     : Account
+//	  amount        : Decimal
+//	  instrumentId  : Text
+//	  meta          : Metadata
 func buildTransferLegSideRecord(s registry.TransferLegSide) *lapiv2.Value {
 	return recordValue([]field{
 		{"transferLegId", textValue(s.TransferLegID)},
-		{"transferLeg", buildTransferLegRecord(s.TransferLeg)},
+		{"side", enumValue(s.Side)},
+		{"otherside", buildAccountRecord(s.Otherside)},
+		{"amount", numericValue(s.Amount)},
+		{"instrumentId", textValue(s.InstrumentID)},
+		{"meta", buildMetadataRecord(s.Meta)},
 	})
+}
+
+// enumValue builds a Daml enum Value (a nullary sum-type constructor).
+func enumValue(constructor string) *lapiv2.Value {
+	return &lapiv2.Value{Sum: &lapiv2.Value_Enum{Enum: &lapiv2.Enum{Constructor: constructor}}}
 }
 
 // buildAllocationSpecRecord:
