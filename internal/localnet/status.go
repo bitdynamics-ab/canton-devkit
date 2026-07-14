@@ -173,8 +173,10 @@ func endpointsFromPorts(ports map[string]int) []types.Endpoint {
 	known := map[string]meta{
 		"app_user_ui":     {"Wallet · app-user", "http"},
 		"app_provider_ui": {"Wallet · app-provider", "http"},
-		// The bare sv_ui port serves the sv wallet; Scan UI sits
-		// behind the scan.localhost vhost on the same port.
+		// The bare host URLs below route to each role's wallet via the
+		// DevKit nginx-vhost overlay (see WriteNginxVhostOverlay); the
+		// Scan / name-service UIs sit behind their *.localhost vhosts on
+		// the same ports.
 		"sv_ui":               {"Wallet · sv", "http"},
 		"swagger_ui":          {"Swagger · JSON API", "http"},
 		"postgres":            {"Postgres", "postgresql"},
