@@ -11,10 +11,12 @@ body:
         Redact JWTs, party IDs, and other secrets from pasted output.
 
   - type: textarea
-    id: description
+    id: what_happened
     attributes:
-      label: Description
-      description: What went wrong?
+      label: What happened?
+      description: Describe the problem and what you expected instead.
+      placeholder: |
+        I ran `canton-devkit localnet up demo`. The command exited with an error instead of starting containers.
     validations:
       required: true
 
@@ -22,25 +24,10 @@ body:
     id: steps
     attributes:
       label: Steps to reproduce
-      description: Numbered steps to trigger the issue.
       placeholder: |
         1. Run `canton-devkit localnet up demo`
         2. Run `canton-devkit localnet status --name demo`
         3. See error
-    validations:
-      required: true
-
-  - type: textarea
-    id: expected
-    attributes:
-      label: Expected behavior
-    validations:
-      required: true
-
-  - type: textarea
-    id: actual
-    attributes:
-      label: Actual behavior
     validations:
       required: true
 
@@ -53,54 +40,17 @@ body:
     validations:
       required: true
 
-  - type: input
-    id: splice_version
+  - type: textarea
+    id: context
     attributes:
-      label: Splice / LocalNet version
-      description: If applicable.
-      placeholder: e.g. 0.6.4, token-standard-v2
-
-  - type: dropdown
-    id: surface
-    attributes:
-      label: Surface
-      options:
-        - CLI
-        - Web UI
-        - Both
-        - Unsure
-    validations:
-      required: true
-
-  - type: dropdown
-    id: platform
-    attributes:
-      label: OS / platform
-      options:
-        - macOS
-        - Linux
-        - Windows
-        - Other
-    validations:
-      required: true
-
-  - type: input
-    id: instance
-    attributes:
-      label: Instance name
-      description: If applicable.
-      placeholder: e.g. demo
+      label: Environment (optional)
+      description: OS, CLI vs Web UI, instance name, Splice version.
+      placeholder: |
+        macOS, CLI, instance `demo`, Splice 0.6.4
 
   - type: textarea
-    id: doctor
+    id: output
     attributes:
-      label: Diagnostic output
-      description: Paste `canton-devkit localnet doctor` output (redact secrets).
-      render: shell
-
-  - type: textarea
-    id: logs
-    attributes:
-      label: Logs / command output
-      description: stderr, docker compose output, or other relevant output.
+      label: Command output / logs (optional)
+      description: stderr, `canton-devkit localnet doctor`, or docker compose output.
       render: shell
