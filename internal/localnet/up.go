@@ -346,6 +346,21 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	}
 	composeFiles = append(composeFiles, loopbackPath)
 
+	// Fix the wallet URLs DevKit advertises. Splice's nginx routes by
+	// Host header; the bare host URL we print (http://localhost:<PORT>)
+	// matches no `*.localhost` vhost and falls through to the first
+	// server block on the port — the name service (app-provider) or a
+	// 404 static catch-all (sv). This overlay bind-mounts DevKit-owned
+	// copies of the role .conf files (with `localhost` added to each
+	// wallet block) over the upstream ones, without touching the
+	// content-hash-verified Splice cache.
+	nginxPath, err := WriteNginxVhostOverlay(dataDir, prog.Err())
+	if err != nil {
+		prog.FailStep(StepPersistState, "Failed to write nginx-vhost overlay", err)
+		return ExitRuntimeFailure
+	}
+	composeFiles = append(composeFiles, nginxPath)
+
 	// Observability profile(s) materialize the embedded Prometheus +
 	// Grafana overlay and append its compose file. Per-component
 	// profiles (`prometheus`, `grafana`) and the legacy umbrella
