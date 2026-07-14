@@ -30,6 +30,9 @@ import "embed"
 //	grafana/dashboards/canton-localnet.json
 //	grafana/provisioning/dashboards/canton.yaml
 //	grafana/provisioning/datasources/prometheus.yaml
+//	nginx/app-provider.conf
+//	nginx/app-user.conf
+//	nginx/sv.conf
 //
-//go:embed all:compose all:grafana
+//go:embed all:compose all:grafana all:nginx
 var FS embed.FS
