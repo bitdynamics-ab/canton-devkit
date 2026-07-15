@@ -173,11 +173,11 @@ func endpointsFromPorts(instance string, ports map[string]int) []types.Endpoint 
 	known := map[string]meta{
 		"app_user_ui":     {"Wallet · app-user", "http"},
 		"app_provider_ui": {"Wallet · app-provider", "http"},
-		// The wallet URLs are the instance-scoped vhost
-		// (wallet.<instance>.localhost) served by the DevKit nginx-vhost
-		// overlay (see WriteNginxVhostOverlay); the Scan / name-service /
-		// ledger-API UIs sit behind their own <service>.<instance>.localhost
-		// vhosts on the same ports.
+		// The wallet URLs are the role-scoped vhost
+		// (wallet.<role>.<instance>.localhost) served by the DevKit
+		// nginx-vhost overlay (see WriteNginxVhostOverlay); the Scan /
+		// name-service / ledger-API UIs sit behind their own
+		// <service>[.<role>].<instance>.localhost vhosts on the same ports.
 		"sv_ui":               {"Wallet · sv", "http"},
 		"swagger_ui":          {"Swagger · JSON API", "http"},
 		"postgres":            {"Postgres", "postgresql"},
@@ -201,11 +201,11 @@ func endpointsFromPorts(instance string, ports map[string]int) []types.Endpoint 
 		if !ok {
 			m = meta{label: k, scheme: "tcp"}
 		}
-		// Wallet UIs are served at the instance-scoped wallet vhost;
+		// Wallet UIs are served at the role-scoped wallet vhost;
 		// everything else stays on the bare loopback host.
 		host := "localhost"
-		if isWalletUIKey(k) {
-			host = instanceVHost(VHostServiceWallet, instance)
+		if vh := walletVHostForKey(k, instance); vh != "" {
+			host = vh
 		}
 		out = append(out, types.Endpoint{
 			Key:    k,

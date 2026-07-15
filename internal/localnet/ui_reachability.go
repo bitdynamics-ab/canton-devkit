@@ -106,13 +106,10 @@ func probeUIEndpoints(ctx context.Context, s *registry.State, endpoints []types.
 		}
 		// Always dial loopback (multi-label *.localhost does NOT resolve
 		// via the OS/Go resolver on macOS, so we can't dial the vhost
-		// directly). Wallet UIs only answer on their instance-scoped
-		// vhost, so carry it as the Host header to validate the real
-		// route rather than whatever server block owns the bare Host.
-		var host string
-		if isWalletUIKey(e.Key) {
-			host = instanceVHost(VHostServiceWallet, s.Name)
-		}
+		// directly). Wallet UIs only answer on their role-scoped vhost,
+		// so carry it as the Host header to validate the real route
+		// rather than whatever server block owns the bare Host.
+		host := walletVHostForKey(e.Key, s.Name)
 		dialURL := fmt.Sprintf("http://localhost:%d", e.Port)
 		wg.Add(1)
 		go func() {
@@ -197,11 +194,8 @@ func uiReachabilityCheck(ctx context.Context) docker.CheckResult {
 		for _, key := range uiProbePortKeys {
 			if port := s.Ports[key]; port > 0 {
 				// All probed UI keys are wallet UIs, which only answer
-				// on their instance-scoped wallet vhost.
-				host := ""
-				if isWalletUIKey(key) {
-					host = instanceVHost(VHostServiceWallet, e.Name)
-				}
+				// on their role-scoped wallet vhost.
+				host := walletVHostForKey(key, e.Name)
 				targets = append(targets, uiTarget{
 					instance: e.Name,
 					key:      key,

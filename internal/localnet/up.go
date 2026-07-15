@@ -773,11 +773,12 @@ func renderWelcome(out io.Writer, name, spliceVersion string, state *registry.St
 		if !ok {
 			continue
 		}
-		// Wallet UIs are served at the instance-scoped vhost; everything
-		// else (swagger, postgres) stays on the bare loopback host.
+		// Wallet UIs are served at the role-scoped wallet vhost;
+		// everything else (swagger, postgres) stays on the bare loopback
+		// host.
 		host := "localhost"
-		if isWalletUIKey(e.key) {
-			host = instanceVHost(VHostServiceWallet, name)
+		if vh := walletVHostForKey(e.key, name); vh != "" {
+			host = vh
 		}
 		url := fmt.Sprintf("%s://%s:%d", e.scheme, host, port)
 		endpoints = append(endpoints, term.Endpoint{
@@ -930,17 +931,28 @@ type endpointDisplay struct {
 	external bool   // browsable URL → render "↗" + OSC 8 hyperlink
 }
 
-// walletUIPortKeys are the state.json port keys whose UI is a wallet
-// served behind the instance-scoped wallet vhost. Shared by the
-// welcome-screen and status URL builders so both scope wallet URLs the
-// same way.
-var walletUIPortKeys = map[string]bool{
-	"app_user_ui":     true,
-	"app_provider_ui": true,
-	"sv_ui":           true,
+// walletUIRoleByKey maps a state.json UI port key to the Splice role
+// whose wallet is served behind that port. The wallet vhost is
+// role-scoped (wallet.<role>.<instance>.localhost), so URL builders and
+// the reachability probe resolve the role from the port key here.
+// Shared by the welcome-screen, status, and probe code so they all
+// scope wallet URLs the same way.
+var walletUIRoleByKey = map[string]string{
+	"app_user_ui":     "app-user",
+	"app_provider_ui": "app-provider",
+	"sv_ui":           "sv",
 }
 
-func isWalletUIKey(key string) bool { return walletUIPortKeys[key] }
+// walletVHostForKey returns the role-scoped wallet vhost for a UI port
+// key, e.g. walletVHostForKey("app_user_ui", "localnet-2") ==
+// "wallet.app-user.localnet-2.localhost". Empty for non-wallet keys.
+func walletVHostForKey(key, instance string) string {
+	role, ok := walletUIRoleByKey[key]
+	if !ok {
+		return ""
+	}
+	return instanceVHostRole(VHostServiceWallet, role, instance)
+}
 
 // shortSHA returns the first 7 characters of a git SHA (or the whole
 // string if shorter). Used only for the uncurated-tag warning.

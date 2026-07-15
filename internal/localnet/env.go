@@ -50,10 +50,11 @@ const EnvJWTRedaction = "<redacted>"
 //     including the participant_ledger/admin/json_<role> ports captured
 //     by CaptureCantonPorts and the sv_ui (scan UI) port — exactly the
 //     endpoints an external dApp needs.
-//  3. A derived CANTON_SCAN_UI_URL when the sv_ui port is recorded, plus
-//     per-role CANTON_<ROLE>_{JSON,GRPC}_LEDGER_API_URL and unqualified
+//  3. A derived CANTON_SCAN_UI_URL when the sv_ui port is recorded
+//     (single-service scan.<instance>.localhost vhost), plus per-role
+//     CANTON_<ROLE>_{JSON,GRPC}_LEDGER_API_URL and unqualified
 //     CANTON_{JSON,GRPC}_LEDGER_API_URL aliases, each carrying the
-//     matching instance-scoped <service>.<instance>.localhost vhost.
+//     matching role-scoped <service>.<role>.<instance>.localhost vhost.
 //  4. state.Credentials -> CANTON_<ROLE>_JWT (redacted unless
 //     includeJWT) plus the user/audience pair that signed it.
 //  5. state.Parties -> CANTON_<ROLE>_PARTY for the role parties
@@ -99,12 +100,13 @@ func BuildEnvExport(name string, includeJWT bool) (apitypes.EnvExport, error) {
 	}
 
 	// The JSON and gRPC Ledger APIs are reachable on each role's UI port
-	// behind the json-ledger-api / grpc-ledger-api instance-scoped
-	// vhosts. Emit a per-role URL var for every recorded role UI port,
-	// plus unqualified CANTON_{JSON,GRPC}_LEDGER_API_URL aliases pointing
-	// at the app-provider participant (the common dApp target). gRPC URLs
-	// carry no scheme — the host:port is what a gRPC client dials, with
-	// the vhost as the :authority pseudo-header.
+	// behind the role-scoped json-ledger-api.<role>.<instance>.localhost /
+	// grpc-ledger-api.<role>.<instance>.localhost vhosts. Emit a per-role
+	// URL var for every recorded role UI port, plus unqualified
+	// CANTON_{JSON,GRPC}_LEDGER_API_URL aliases pointing at the
+	// app-provider participant (the common dApp target). gRPC URLs carry
+	// no scheme — the host:port is what a gRPC client dials, with the
+	// vhost as the :authority pseudo-header.
 	ledgerRolePortKeys := map[string]string{
 		"app-user":     "app_user_ui",
 		"app-provider": "app_provider_ui",
@@ -117,16 +119,16 @@ func BuildEnvExport(name string, includeJWT bool) (apitypes.EnvExport, error) {
 		}
 		prefix := CredEnvKeyPrefix(role)
 		out.Vars[prefix+"_JSON_LEDGER_API_URL"] = fmt.Sprintf("http://%s:%d",
-			instanceVHost(VHostServiceJSONLedger, name), port)
+			instanceVHostRole(VHostServiceJSONLedger, role, name), port)
 		out.Vars[prefix+"_GRPC_LEDGER_API_URL"] = fmt.Sprintf("%s:%d",
-			instanceVHost(VHostServiceGRPCLedger, name), port)
+			instanceVHostRole(VHostServiceGRPCLedger, role, name), port)
 	}
 	// Unqualified aliases default to the app-provider participant.
 	if port, ok := state.Ports["app_provider_ui"]; ok && port > 0 {
 		out.Vars["CANTON_JSON_LEDGER_API_URL"] = fmt.Sprintf("http://%s:%d",
-			instanceVHost(VHostServiceJSONLedger, name), port)
+			instanceVHostRole(VHostServiceJSONLedger, "app-provider", name), port)
 		out.Vars["CANTON_GRPC_LEDGER_API_URL"] = fmt.Sprintf("%s:%d",
-			instanceVHost(VHostServiceGRPCLedger, name), port)
+			instanceVHostRole(VHostServiceGRPCLedger, "app-provider", name), port)
 	}
 
 	for role, cred := range state.Credentials {

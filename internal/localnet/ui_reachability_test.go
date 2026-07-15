@@ -198,10 +198,10 @@ func TestProbeUIEndpoints_MarksOnlyBrowserUIPorts(t *testing.T) {
 		t.Errorf("probe called for %v, want exactly the two UI ports", calls)
 	}
 	// Wallet UIs are dialed on loopback (multi-label *.localhost doesn't
-	// resolve) but carry their instance-scoped wallet vhost as the Host
+	// resolve) but carry their role-scoped wallet vhost as the Host
 	// header, else nginx routes to a different server block.
-	if got := probe.hostFor("http://localhost:4485"); got != "wallet.demo.localhost" {
-		t.Errorf("app_user_ui probe Host = %q, want wallet.demo.localhost", got)
+	if got := probe.hostFor("http://localhost:4485"); got != "wallet.app-user.demo.localhost" {
+		t.Errorf("app_user_ui probe Host = %q, want wallet.app-user.demo.localhost", got)
 	}
 }
 

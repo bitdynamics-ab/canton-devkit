@@ -236,7 +236,14 @@ func TestWriteNginxVhostOverlay(t *testing.T) {
 	// The three role .conf files must be materialized. Their server_name
 	// directives are ${VHOST_*} env vars (expanded by envsubst at nginx
 	// boot), so the materialized copies carry the placeholders, not the
-	// resolved hostnames. The flat Splice names must be gone.
+	// resolved hostnames. The wallet block is role-scoped, so each conf
+	// carries its own ${VHOST_WALLET_<ROLE>} var. The flat Splice names
+	// must be gone.
+	walletVarByConf := map[string]string{
+		"app-provider.conf": "${VHOST_WALLET_APP_PROVIDER}",
+		"app-user.conf":     "${VHOST_WALLET_APP_USER}",
+		"sv.conf":           "${VHOST_WALLET_SV}",
+	}
 	for _, name := range nginxVhostConfNames {
 		confPath := filepath.Join(tmp, "nginx", name)
 		body, rerr := os.ReadFile(confPath)
@@ -244,8 +251,9 @@ func TestWriteNginxVhostOverlay(t *testing.T) {
 			t.Fatalf("missing materialized %s: %v", name, rerr)
 		}
 		s := string(body)
-		if !strings.Contains(s, "server_name ${VHOST_WALLET};") {
-			t.Errorf("%s: wallet block missing ${VHOST_WALLET} server_name\n---\n%s", name, s)
+		walletVar := walletVarByConf[name]
+		if !strings.Contains(s, "server_name "+walletVar+";") {
+			t.Errorf("%s: wallet block missing %s server_name\n---\n%s", name, walletVar, s)
 		}
 		// Drop the flat wallet.localhost name entirely (comments aside).
 		for _, line := range strings.Split(s, "\n") {
@@ -278,6 +286,17 @@ func TestWriteNginxVhostOverlay(t *testing.T) {
 		t.Errorf("sv.conf missing the `server_name _;` catch-all directive\n%s", svBody)
 	}
 
+	// The http-context tuning snippet must be materialized with the
+	// bigger server-name hash bucket — nginx can't boot with the longer
+	// role-scoped vhosts under the default 64-byte bucket.
+	tuning, err := os.ReadFile(filepath.Join(tmp, "nginx", "00-devkit-tuning.conf"))
+	if err != nil {
+		t.Fatalf("missing materialized tuning conf: %v", err)
+	}
+	if !strings.Contains(string(tuning), "server_names_hash_bucket_size 128;") {
+		t.Errorf("tuning conf missing bucket-size directive\n%s", tuning)
+	}
+
 	// The compose overlay must inject the per-instance ${VHOST_*} values
 	// as nginx container env and remap the three role templates onto the
 	// materialized copies under !override while leaving nginx.conf and
@@ -290,16 +309,22 @@ func TestWriteNginxVhostOverlay(t *testing.T) {
 	for _, want := range []string{
 		"  nginx:",
 		"    environment:",
-		`      VHOST_WALLET: "wallet.localnet-2.localhost"`,
-		`      VHOST_ANS: "ans.localnet-2.localhost"`,
+		`      VHOST_WALLET_APP_USER: "wallet.app-user.localnet-2.localhost"`,
+		`      VHOST_WALLET_APP_PROVIDER: "wallet.app-provider.localnet-2.localhost"`,
+		`      VHOST_WALLET_SV: "wallet.sv.localnet-2.localhost"`,
+		`      VHOST_ANS_APP_USER: "ans.app-user.localnet-2.localhost"`,
+		`      VHOST_ANS_APP_PROVIDER: "ans.app-provider.localnet-2.localhost"`,
+		`      VHOST_JSON_LEDGER_APP_USER: "json-ledger-api.app-user.localnet-2.localhost"`,
+		`      VHOST_JSON_LEDGER_APP_PROVIDER: "json-ledger-api.app-provider.localnet-2.localhost"`,
+		`      VHOST_GRPC_LEDGER_APP_USER: "grpc-ledger-api.app-user.localnet-2.localhost"`,
+		`      VHOST_GRPC_LEDGER_APP_PROVIDER: "grpc-ledger-api.app-provider.localnet-2.localhost"`,
 		`      VHOST_SCAN: "scan.localnet-2.localhost"`,
 		`      VHOST_SV: "sv.localnet-2.localhost"`,
-		`      VHOST_JSON_LEDGER: "json-ledger-api.localnet-2.localhost"`,
-		`      VHOST_GRPC_LEDGER: "grpc-ledger-api.localnet-2.localhost"`,
 		"    volumes: !override",
 		filepath.ToSlash(filepath.Join(tmp, "nginx")) + "/app-provider.conf:/etc/nginx/templates/app-provider.c${APP_PROVIDER_PROFILE}f.template",
 		filepath.ToSlash(filepath.Join(tmp, "nginx")) + "/app-user.conf:/etc/nginx/templates/app-user.c${APP_USER_PROFILE}f.template",
 		filepath.ToSlash(filepath.Join(tmp, "nginx")) + "/sv.conf:/etc/nginx/templates/sv.c${SV_PROFILE}f.template",
+		filepath.ToSlash(filepath.Join(tmp, "nginx")) + "/00-devkit-tuning.conf:/etc/nginx/conf.d/00-devkit-tuning.conf",
 		"${LOCALNET_DIR}/conf/nginx/nginx.conf:/etc/nginx/nginx.conf",
 		"${LOCALNET_DIR}/conf/nginx/swagger-ui:/etc/nginx/includes",
 	} {

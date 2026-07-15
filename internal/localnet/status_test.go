@@ -74,7 +74,7 @@ func TestStatus_TableRendersHeaderAndSections(t *testing.T) {
 		t.Fatalf("exit code = %d, stderr=%q", code, errBuf.String())
 	}
 	body := out.String()
-	for _, want := range []string{"Name", "demo", "Splice", "0.6.4", "SERVICES", "canton-domain", "participant-alice", "ENDPOINTS", "Wallet · app-user", "http://wallet.demo.localhost:4485", "IDENTITIES", "sv-user"} {
+	for _, want := range []string{"Name", "demo", "Splice", "0.6.4", "SERVICES", "canton-domain", "participant-alice", "ENDPOINTS", "Wallet · app-user", "http://wallet.app-user.demo.localhost:4485", "IDENTITIES", "sv-user"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("output missing %q\nfull:\n%s", want, body)
 		}
@@ -360,8 +360,8 @@ func TestEndpointsFromPorts(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("got %d endpoints, want 2", len(got))
 	}
-	// Wallet UIs get the instance-scoped wallet vhost URL.
-	if got[0].Key != "app_user_ui" || got[0].Label != "Wallet · app-user" || got[0].URL != "http://wallet.localnet-2.localhost:4485" {
+	// Wallet UIs get the role-scoped wallet vhost URL.
+	if got[0].Key != "app_user_ui" || got[0].Label != "Wallet · app-user" || got[0].URL != "http://wallet.app-user.localnet-2.localhost:4485" {
 		t.Errorf("known endpoint mapping wrong: %+v", got[0])
 	}
 	if got[1].Key != "weird_service" || got[1].Label != "weird_service" || got[1].Scheme != "tcp" {
@@ -381,23 +381,22 @@ func TestEndpointsFromPorts_WalletKeysStablePerRole(t *testing.T) {
 	for _, e := range got {
 		byKey[e.Key] = e
 	}
-	for key, label := range map[string]string{
-		"app_user_ui":     "Wallet · app-user",
-		"app_provider_ui": "Wallet · app-provider",
-		"sv_ui":           "Wallet · sv",
+	for key, want := range map[string]struct{ label, host string }{
+		"app_user_ui":     {"Wallet · app-user", "wallet.app-user.localnet-2.localhost"},
+		"app_provider_ui": {"Wallet · app-provider", "wallet.app-provider.localnet-2.localhost"},
+		"sv_ui":           {"Wallet · sv", "wallet.sv.localnet-2.localhost"},
 	} {
 		e, ok := byKey[key]
 		if !ok {
 			t.Errorf("no endpoint with key %q: %+v", key, got)
 			continue
 		}
-		if e.Label != label {
-			t.Errorf("key %q label = %q, want %q", key, e.Label, label)
+		if e.Label != want.label {
+			t.Errorf("key %q label = %q, want %q", key, e.Label, want.label)
 		}
-		// Every wallet UI resolves to the instance-scoped wallet vhost.
-		wantHost := "wallet.localnet-2.localhost"
-		if !strings.Contains(e.URL, "//"+wantHost+":") {
-			t.Errorf("key %q URL = %q, want host %q", key, e.URL, wantHost)
+		// Every wallet UI resolves to its role-scoped wallet vhost.
+		if !strings.Contains(e.URL, "//"+want.host+":") {
+			t.Errorf("key %q URL = %q, want host %q", key, e.URL, want.host)
 		}
 	}
 }

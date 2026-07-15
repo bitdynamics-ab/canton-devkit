@@ -220,7 +220,7 @@ func TestBuildEnvExport_ScanUIURL(t *testing.T) {
 }
 
 // TestBuildEnvExport_LedgerAPIURLs pins the per-role JSON/gRPC Ledger
-// API URL vars behind the instance-scoped ledger vhosts. seedEnvState
+// API URL vars behind the role-scoped ledger vhosts. seedEnvState
 // records app_user_ui (4485) and sv_ui (4480) but no app_provider_ui,
 // so app-user + sv vars are present and the unqualified aliases are
 // absent.
@@ -233,10 +233,10 @@ func TestBuildEnvExport_LedgerAPIURLs(t *testing.T) {
 		t.Fatalf("BuildEnvExport: %v", err)
 	}
 	want := map[string]string{
-		"CANTON_APP_USER_JSON_LEDGER_API_URL": "http://json-ledger-api.demo.localhost:4485",
-		"CANTON_APP_USER_GRPC_LEDGER_API_URL": "grpc-ledger-api.demo.localhost:4485",
-		"CANTON_SV_JSON_LEDGER_API_URL":       "http://json-ledger-api.demo.localhost:4480",
-		"CANTON_SV_GRPC_LEDGER_API_URL":       "grpc-ledger-api.demo.localhost:4480",
+		"CANTON_APP_USER_JSON_LEDGER_API_URL": "http://json-ledger-api.app-user.demo.localhost:4485",
+		"CANTON_APP_USER_GRPC_LEDGER_API_URL": "grpc-ledger-api.app-user.demo.localhost:4485",
+		"CANTON_SV_JSON_LEDGER_API_URL":       "http://json-ledger-api.sv.demo.localhost:4480",
+		"CANTON_SV_GRPC_LEDGER_API_URL":       "grpc-ledger-api.sv.demo.localhost:4480",
 	}
 	for k, v := range want {
 		if got := ex.Vars[k]; got != v {
@@ -275,10 +275,10 @@ func TestBuildEnvExport_LedgerAPIAliases(t *testing.T) {
 		t.Fatalf("BuildEnvExport: %v", err)
 	}
 	want := map[string]string{
-		"CANTON_APP_PROVIDER_JSON_LEDGER_API_URL": "http://json-ledger-api.demo.localhost:4486",
-		"CANTON_APP_PROVIDER_GRPC_LEDGER_API_URL": "grpc-ledger-api.demo.localhost:4486",
-		"CANTON_JSON_LEDGER_API_URL":              "http://json-ledger-api.demo.localhost:4486",
-		"CANTON_GRPC_LEDGER_API_URL":              "grpc-ledger-api.demo.localhost:4486",
+		"CANTON_APP_PROVIDER_JSON_LEDGER_API_URL": "http://json-ledger-api.app-provider.demo.localhost:4486",
+		"CANTON_APP_PROVIDER_GRPC_LEDGER_API_URL": "grpc-ledger-api.app-provider.demo.localhost:4486",
+		"CANTON_JSON_LEDGER_API_URL":              "http://json-ledger-api.app-provider.demo.localhost:4486",
+		"CANTON_GRPC_LEDGER_API_URL":              "grpc-ledger-api.app-provider.demo.localhost:4486",
 	}
 	for k, v := range want {
 		if got := ex.Vars[k]; got != v {
