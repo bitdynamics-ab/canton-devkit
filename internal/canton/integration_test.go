@@ -59,20 +59,22 @@ func localnetParticipantEndpoint() string {
 //
 // CRITICAL — the URL scheme/host matters for nginx routing on the SV
 // tenant. The /api/scan/* path only matches when the request Host
-// header is `scan.localhost` (see Splice conf/nginx/sv.conf — there
-// are multiple `server_name` blocks under one listen port; only the
-// `scan.localhost` block proxies to the splice scan app). Hitting
-// `http://localhost:<sv-port>/api/scan/v0/dso` returns the
+// header is the instance-scoped `scan.<instance>.localhost` (see
+// assets/nginx/sv.conf — there are multiple `server_name` blocks under
+// one listen port; only the scan block proxies to the splice scan app,
+// and DevKit serves only the instance-scoped name). This harness runs
+// against `localnet up dev`, so the host is `scan.dev.localhost`.
+// Hitting `http://localhost:<sv-port>/api/scan/v0/dso` returns the
 // sv-html static index (200 with HTML body) because the default
 // server_name block serves the SV UI assets.
 //
 // The Go http.Client uses the URL's host as the Host header by
 // default, so the right form is:
 //
-//	export CANTON_DEVKIT_TEST_SCAN_URL=http://scan.localhost:<sv-port>
+//	export CANTON_DEVKIT_TEST_SCAN_URL=http://scan.dev.localhost:<sv-port>
 //
-// `scan.localhost` resolves to 127.0.0.1 per RFC 6761; verified on
-// macOS + Linux. To find the SV UI host port on a running instance:
+// `scan.dev.localhost` resolves to 127.0.0.1 in Go's resolver. To find
+// the SV UI host port on a running instance:
 //
 //	docker port <project>-nginx <SV_UI_PORT-from-compose-env>
 //
@@ -81,7 +83,7 @@ func localnetScanBaseURL() string {
 	if v := os.Getenv("CANTON_DEVKIT_TEST_SCAN_URL"); v != "" {
 		return v
 	}
-	return "http://scan.localhost:4000"
+	return "http://scan.dev.localhost:4000"
 }
 
 // devLocalNetTokenSource returns a TokenSource that signs JWTs with the

@@ -224,7 +224,8 @@ func TestWriteContainerRenameOverlay_RelaxesNginxSpliceDep(t *testing.T) {
 
 func TestWriteNginxVhostOverlay(t *testing.T) {
 	tmp := t.TempDir()
-	path, err := WriteNginxVhostOverlay(tmp, nil)
+	const instance = "localnet-2"
+	path, err := WriteNginxVhostOverlay(tmp, instance, nil)
 	if err != nil {
 		t.Fatalf("WriteNginxVhostOverlay: %v", err)
 	}
@@ -232,23 +233,33 @@ func TestWriteNginxVhostOverlay(t *testing.T) {
 		t.Errorf("unexpected filename: %s", path)
 	}
 
-	// The three role .conf files must be materialized, each with the
-	// bare `localhost` added to a wallet server block so the bare host
-	// URL routes to the wallet.
+	// The three role .conf files must be materialized. Their server_name
+	// directives are ${VHOST_*} env vars (expanded by envsubst at nginx
+	// boot), so the materialized copies carry the placeholders, not the
+	// resolved hostnames. The flat Splice names must be gone.
 	for _, name := range nginxVhostConfNames {
 		confPath := filepath.Join(tmp, "nginx", name)
 		body, rerr := os.ReadFile(confPath)
 		if rerr != nil {
 			t.Fatalf("missing materialized %s: %v", name, rerr)
 		}
-		if !strings.Contains(string(body), "server_name localhost wallet.localhost;") {
-			t.Errorf("%s: wallet block missing bare `localhost`\n---\n%s", name, body)
+		s := string(body)
+		if !strings.Contains(s, "server_name ${VHOST_WALLET};") {
+			t.Errorf("%s: wallet block missing ${VHOST_WALLET} server_name\n---\n%s", name, s)
+		}
+		// Drop the flat wallet.localhost name entirely (comments aside).
+		for _, line := range strings.Split(s, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "#") {
+				continue
+			}
+			if strings.Contains(trimmed, "wallet.localhost") {
+				t.Errorf("%s: flat wallet.localhost still present in a directive: %q", name, trimmed)
+			}
 		}
 	}
 
-	// The sv catch-all must no longer claim `localhost` (it 404'd): its
-	// active directive is now the bare `_`. Check the directive lines
-	// only, ignoring explanatory comments that reference the old form.
+	// The sv catch-all stays the bare `_`.
 	svBody, err := os.ReadFile(filepath.Join(tmp, "nginx", "sv.conf"))
 	if err != nil {
 		t.Fatal(err)
@@ -259,9 +270,6 @@ func TestWriteNginxVhostOverlay(t *testing.T) {
 		if strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		if trimmed == "server_name localhost _;" {
-			t.Errorf("sv.conf still has the 404-ing `localhost _` catch-all directive")
-		}
 		if trimmed == "server_name _;" {
 			sawCatchAll = true
 		}
@@ -270,7 +278,8 @@ func TestWriteNginxVhostOverlay(t *testing.T) {
 		t.Errorf("sv.conf missing the `server_name _;` catch-all directive\n%s", svBody)
 	}
 
-	// The compose overlay must remap the three role templates onto the
+	// The compose overlay must inject the per-instance ${VHOST_*} values
+	// as nginx container env and remap the three role templates onto the
 	// materialized copies under !override while leaving nginx.conf and
 	// includes/ pointed at the untouched Splice cache.
 	body, err := os.ReadFile(path)
@@ -280,6 +289,13 @@ func TestWriteNginxVhostOverlay(t *testing.T) {
 	s := string(body)
 	for _, want := range []string{
 		"  nginx:",
+		"    environment:",
+		`      VHOST_WALLET: "wallet.localnet-2.localhost"`,
+		`      VHOST_ANS: "ans.localnet-2.localhost"`,
+		`      VHOST_SCAN: "scan.localnet-2.localhost"`,
+		`      VHOST_SV: "sv.localnet-2.localhost"`,
+		`      VHOST_JSON_LEDGER: "json-ledger-api.localnet-2.localhost"`,
+		`      VHOST_GRPC_LEDGER: "grpc-ledger-api.localnet-2.localhost"`,
 		"    volumes: !override",
 		filepath.ToSlash(filepath.Join(tmp, "nginx")) + "/app-provider.conf:/etc/nginx/templates/app-provider.c${APP_PROVIDER_PROFILE}f.template",
 		filepath.ToSlash(filepath.Join(tmp, "nginx")) + "/app-user.conf:/etc/nginx/templates/app-user.c${APP_USER_PROFILE}f.template",
@@ -294,14 +310,20 @@ func TestWriteNginxVhostOverlay(t *testing.T) {
 }
 
 func TestWriteNginxVhostOverlay_RejectsEmptyDataDir(t *testing.T) {
-	if _, err := WriteNginxVhostOverlay("", nil); err == nil {
+	if _, err := WriteNginxVhostOverlay("", "localnet-2", nil); err == nil {
 		t.Error("expected error for empty dataDir")
+	}
+}
+
+func TestWriteNginxVhostOverlay_RejectsEmptyInstanceName(t *testing.T) {
+	if _, err := WriteNginxVhostOverlay(t.TempDir(), "", nil); err == nil {
+		t.Error("expected error for empty instanceName")
 	}
 }
 
 func TestWriteNginxVhostOverlay_PreservesOperatorEdits(t *testing.T) {
 	tmp := t.TempDir()
-	if _, err := WriteNginxVhostOverlay(tmp, nil); err != nil {
+	if _, err := WriteNginxVhostOverlay(tmp, "localnet-2", nil); err != nil {
 		t.Fatalf("first write: %v", err)
 	}
 	edited := filepath.Join(tmp, "nginx", "sv.conf")
@@ -310,7 +332,7 @@ func TestWriteNginxVhostOverlay_PreservesOperatorEdits(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A second run must not clobber the operator's edit.
-	if _, err := WriteNginxVhostOverlay(tmp, nil); err != nil {
+	if _, err := WriteNginxVhostOverlay(tmp, "localnet-2", nil); err != nil {
 		t.Fatalf("second write: %v", err)
 	}
 	got, err := os.ReadFile(edited)

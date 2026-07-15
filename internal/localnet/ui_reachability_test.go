@@ -18,7 +18,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-func installFakeUIProbe(t *testing.T, fn func(ctx context.Context, rawURL string) error) {
+func installFakeUIProbe(t *testing.T, fn func(ctx context.Context, rawURL, hostHeader string) error) {
 	t.Helper()
 	prev := uiProbeFn
 	uiProbeFn = fn
@@ -31,13 +31,18 @@ func installFakeUIProbe(t *testing.T, fn func(ctx context.Context, rawURL string
 type recordingUIProbe struct {
 	mu       sync.Mutex
 	calls    []string
-	failWith map[string]error // URL → error; nil entry = reachable
+	hosts    map[string]string // URL → Host header the probe received
+	failWith map[string]error  // URL → error; nil entry = reachable
 }
 
-func (p *recordingUIProbe) probe(_ context.Context, rawURL string) error {
+func (p *recordingUIProbe) probe(_ context.Context, rawURL, hostHeader string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.calls = append(p.calls, rawURL)
+	if p.hosts == nil {
+		p.hosts = map[string]string{}
+	}
+	p.hosts[rawURL] = hostHeader
 	return p.failWith[rawURL]
 }
 
@@ -47,12 +52,18 @@ func (p *recordingUIProbe) called() []string {
 	return append([]string(nil), p.calls...)
 }
 
+func (p *recordingUIProbe) hostFor(rawURL string) string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.hosts[rawURL]
+}
+
 func TestDefaultUIProbe_AnyHTTPStatusIsReachable(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound) // 404 still proves nginx answers
 	}))
 	defer srv.Close()
-	if err := defaultUIProbe(context.Background(), srv.URL); err != nil {
+	if err := defaultUIProbe(context.Background(), srv.URL, ""); err != nil {
 		t.Errorf("404 endpoint should count as reachable, got %v", err)
 	}
 }
@@ -65,7 +76,7 @@ func TestDefaultUIProbe_RedirectIsReachableWithoutFollowing(t *testing.T) {
 		http.Redirect(w, r, "/loop", http.StatusFound)
 	}))
 	defer srv.Close()
-	if err := defaultUIProbe(context.Background(), srv.URL); err != nil {
+	if err := defaultUIProbe(context.Background(), srv.URL, ""); err != nil {
 		t.Errorf("30x endpoint should count as reachable, got %v", err)
 	}
 }
@@ -86,7 +97,7 @@ func TestDefaultUIProbe_EmptyReplyIsUnreachable(t *testing.T) {
 		}
 	}()
 
-	perr := defaultUIProbe(context.Background(), "http://"+ln.Addr().String())
+	perr := defaultUIProbe(context.Background(), "http://"+ln.Addr().String(), "")
 	if perr == nil {
 		t.Fatal("empty-reply endpoint should be unreachable")
 	}
@@ -164,7 +175,7 @@ func TestProbeUIEndpoints_MarksOnlyBrowserUIPorts(t *testing.T) {
 			"postgres":    5432,
 		},
 	}
-	endpoints := endpointsFromPorts(s.Ports)
+	endpoints := endpointsFromPorts(s.Name, s.Ports)
 	probeUIEndpoints(context.Background(), s, endpoints)
 
 	byPort := map[int]types.Endpoint{}
@@ -186,6 +197,12 @@ func TestProbeUIEndpoints_MarksOnlyBrowserUIPorts(t *testing.T) {
 	if calls := probe.called(); len(calls) != 2 {
 		t.Errorf("probe called for %v, want exactly the two UI ports", calls)
 	}
+	// Wallet UIs are dialed on loopback (multi-label *.localhost doesn't
+	// resolve) but carry their instance-scoped wallet vhost as the Host
+	// header, else nginx routes to a different server block.
+	if got := probe.hostFor("http://localhost:4485"); got != "wallet.demo.localhost" {
+		t.Errorf("app_user_ui probe Host = %q, want wallet.demo.localhost", got)
+	}
 }
 
 func TestProbeUIEndpoints_StaleOverlayEnrichesDetail(t *testing.T) {
@@ -200,7 +217,7 @@ func TestProbeUIEndpoints_StaleOverlayEnrichesDetail(t *testing.T) {
 		t.Fatalf("write overlay: %v", err)
 	}
 	s := &registry.State{Name: "demo", DataDir: dataDir, Ports: map[string]int{"app_user_ui": 4485}}
-	endpoints := endpointsFromPorts(s.Ports)
+	endpoints := endpointsFromPorts(s.Name, s.Ports)
 	probeUIEndpoints(context.Background(), s, endpoints)
 
 	if !strings.Contains(endpoints[0].ReachabilityDetail, "stale loopback-ports.yaml") {

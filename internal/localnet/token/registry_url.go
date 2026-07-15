@@ -11,20 +11,27 @@ import (
 // registry endpoints (`/registry/transfer-instruction/v2/...`) are
 // served by the Splice scan app (`splice:5012` inside the docker
 // network), which the LocalNet nginx exposes behind the SV UI port
-// under the `scan.localhost` virtual host:
+// under the instance-scoped `scan.<instance>.localhost` virtual host
+// (DevKit's nginx-vhost overlay serves only the instance-scoped name,
+// not the flat `scan.localhost`):
 //
-//	cluster/compose/localnet/conf/nginx/sv.conf
-//	  server { listen ${SV_UI_PORT}; server_name scan.localhost;
+//	assets/nginx/sv.conf
+//	  server { listen ${SV_UI_PORT}; server_name ${VHOST_SCAN};
 //	    location /registry { proxy_pass http://splice:5012/registry; } }
 //
 // So from the host, the registry base URL is the SV UI port with a
-// `Host: scan.localhost` header — derived here from the registry
-// state's recorded ports.
+// `Host: scan.<instance>.localhost` header — derived here from the
+// registry state's recorded ports and the instance name.
 
-// scanVHost is the nginx virtual-host name the scan registry routes
-// live under on LocalNet. Real DevNet deployments give scan its own
-// DNS name, so this override is LocalNet-specific.
-const scanVHost = "scan.localhost"
+// scanVHost returns the instance-scoped nginx virtual host the scan
+// registry routes live under on LocalNet. Mirrors
+// localnet.instanceVHost("scan", …); duplicated here to avoid a package
+// import cycle (localnet imports this token package). Real DevNet
+// deployments give scan its own DNS name, so this override is
+// LocalNet-specific.
+func scanVHost(instance string) string {
+	return "scan." + instance + ".localhost"
+}
 
 // resolveRegistryURL returns the (baseURL, hostHeader) the registry
 // client needs to reach the scan app's V2 transfer endpoints for the
@@ -52,7 +59,7 @@ func resolveRegistryURL(instance, override string) (baseURL, hostHeader string, 
 				"the instance so ports are captured, or pass --registry-url "+
 				"with the scan app's URL explicitly", instance)
 	}
-	return "http://localhost:" + strconv.Itoa(port), scanVHost, nil
+	return "http://localhost:" + strconv.Itoa(port), scanVHost(instance), nil
 }
 
 // resolveRegistryToken returns the bearer JWT the scan registry

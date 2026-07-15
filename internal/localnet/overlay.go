@@ -251,26 +251,60 @@ var nginxVhostConfNames = []string{
 	"sv.conf",
 }
 
-// WriteNginxVhostOverlay fixes the wallet URLs DevKit advertises.
+// Splice service names for the instance-scoped nginx virtual hosts. Each
+// UI/API the localnet nginx fronts is reachable at
+// <service>.<instance>.localhost:<port> (see instanceVHost). The names
+// match Splice's own docs (wallet, ans, scan, sv, json-ledger-api,
+// grpc-ledger-api).
+const (
+	VHostServiceWallet     = "wallet"
+	VHostServiceANS        = "ans"
+	VHostServiceScan       = "scan"
+	VHostServiceSV         = "sv"
+	VHostServiceJSONLedger = "json-ledger-api"
+	VHostServiceGRPCLedger = "grpc-ledger-api"
+)
+
+// instanceVHost returns the instance-scoped nginx virtual host for a
+// service, e.g. instanceVHost("wallet", "localnet-2") ==
+// "wallet.localnet-2.localhost". This is the single source of truth for
+// the hostname shape shared by the nginx overlay (which injects the
+// values as ${VHOST_*} env vars) and every URL/env emitter.
 //
-// Splice's nginx routes by Host header. The bare host URL DevKit prints
-// (http://localhost:<UI_PORT>) matches no `*.localhost` vhost, so nginx
-// falls through to the first server block on the port:
-//   - app-provider: first block is `ans.localhost` → served the name
-//     service instead of the wallet.
-//   - sv: catch-all `server_name localhost _` served a non-existent
-//     static dir → 404.
+// Instance names are already validated as DNS labels
+// (registry.ValidateName), so the result is always a valid hostname.
+//
+// *.localhost resolves to 127.0.0.1 in browsers, curl, and Go, but NOT
+// in the JVM/Node/Python resolvers (and some Rust HTTP clients) — those
+// need an explicit Host header (HTTP) / :authority pseudo-header (gRPC)
+// or an /etc/hosts entry.
+func instanceVHost(service, instance string) string {
+	return service + "." + instance + ".localhost"
+}
+
+// WriteNginxVhostOverlay rewrites the hostnames DevKit's nginx serves so
+// each UI/API is reachable at an instance-scoped virtual host of the
+// form <service>.<instance>.localhost (e.g. wallet.localnet-2.localhost).
+//
+// Splice's nginx routes by Host header, defining several `server_name`
+// blocks per listen port. DevKit ships its own copies of the role .conf
+// files (assets/nginx/*.conf) whose server_name is a ${VHOST_*} env var;
+// this overlay injects the per-instance value for each var via a compose
+// `environment:` block, and bind-mounts the DevKit copies over Splice's
+// upstream templates.
+//
+// Only the instance-scoped names are served — the flat Splice names
+// (wallet.localhost, scan.localhost, ...) are intentionally dropped so
+// URLs stay unambiguous across concurrently running localnets. DevKit's
+// own scan-registry client threads the same instance-scoped Host header
+// (see internal/localnet/token.resolveRegistryURL).
 //
 // The upstream .conf files live in the content-hash-verified Splice
-// cache (shared across instances), so we do NOT edit them. Instead we
-// materialize DevKit-owned copies — with `localhost` added to each
-// wallet server block — into <dataDir>/nginx/ and emit a compose
-// overlay that remaps nginx's template bind-mounts onto them.
-//
-// nginx.conf and the includes/ dir are unchanged upstream, so the
-// overlay still points those at ${LOCALNET_DIR}/conf/nginx (the cache).
-// Compose merges `volumes` by appending, so the whole mount list is
-// re-declared under `!override` (same tactic as WriteLoopbackPortsOverlay).
+// cache (shared across instances), so we do NOT edit them. nginx.conf
+// and the includes/ dir are unchanged upstream, so the overlay still
+// points those at ${LOCALNET_DIR}/conf/nginx (the cache). Compose merges
+// `volumes` by appending, so the whole mount list is re-declared under
+// `!override` (same tactic as WriteLoopbackPortsOverlay).
 //
 // The overlay is written to <dataDir>/nginx-vhosts.yaml. Caller appends
 // it to the ComposeFiles list AFTER the loopback overlay. warnw receives
@@ -278,9 +312,12 @@ var nginxVhostConfNames = []string{
 // may be nil.
 //
 // Returns the absolute path of the written overlay.
-func WriteNginxVhostOverlay(dataDir string, warnw io.Writer) (string, error) {
+func WriteNginxVhostOverlay(dataDir, instanceName string, warnw io.Writer) (string, error) {
 	if dataDir == "" {
 		return "", fmt.Errorf("WriteNginxVhostOverlay: empty dataDir")
+	}
+	if instanceName == "" {
+		return "", fmt.Errorf("WriteNginxVhostOverlay: empty instanceName")
 	}
 	nginxDir := filepath.Join(dataDir, "nginx")
 	if err := os.MkdirAll(nginxDir, 0o755); err != nil {
@@ -299,18 +336,28 @@ func WriteNginxVhostOverlay(dataDir string, warnw io.Writer) (string, error) {
 		}
 	}
 
-	// Compose overlay: re-declare the full nginx volume list under
+	// Compose overlay: inject the per-instance ${VHOST_*} values as nginx
+	// container env (the official nginx image runs envsubst on the mounted
+	// templates at boot), then re-declare the full nginx volume list under
 	// !override. The three role templates point at the DevKit copies;
 	// nginx.conf and includes/ stay on the upstream cache paths. The
 	// destination keeps Splice's `${..._PROFILE}` gating so a disabled
 	// profile still parks the file at an inactive `.coff.template` name.
 	var b strings.Builder
 	b.WriteString("# Generated by canton-devkit.\n")
-	b.WriteString("# Overrides Splice's nginx server configs so the bare host URL\n")
-	b.WriteString("# (http://localhost:<UI_PORT>) routes to each role's wallet.\n")
+	b.WriteString("# Serves each Splice UI/API at an instance-scoped virtual host\n")
+	b.WriteString("# (<service>." + instanceName + ".localhost:<UI_PORT>) and remaps\n")
+	b.WriteString("# nginx's server configs onto the DevKit-owned copies.\n")
 	b.WriteString("# Requires Docker Compose v2.24.0+ for the !override YAML tag.\n")
 	b.WriteString("services:\n")
 	b.WriteString("  nginx:\n")
+	b.WriteString("    environment:\n")
+	fmt.Fprintf(&b, "      VHOST_WALLET: %q\n", instanceVHost(VHostServiceWallet, instanceName))
+	fmt.Fprintf(&b, "      VHOST_ANS: %q\n", instanceVHost(VHostServiceANS, instanceName))
+	fmt.Fprintf(&b, "      VHOST_SCAN: %q\n", instanceVHost(VHostServiceScan, instanceName))
+	fmt.Fprintf(&b, "      VHOST_SV: %q\n", instanceVHost(VHostServiceSV, instanceName))
+	fmt.Fprintf(&b, "      VHOST_JSON_LEDGER: %q\n", instanceVHost(VHostServiceJSONLedger, instanceName))
+	fmt.Fprintf(&b, "      VHOST_GRPC_LEDGER: %q\n", instanceVHost(VHostServiceGRPCLedger, instanceName))
 	b.WriteString("    volumes: !override\n")
 	b.WriteString("      - ${LOCALNET_DIR}/conf/nginx/nginx.conf:/etc/nginx/nginx.conf\n")
 	fmt.Fprintf(&b, "      - %s/app-provider.conf:/etc/nginx/templates/app-provider.c${APP_PROVIDER_PROFILE}f.template\n", filepath.ToSlash(nginxDir))

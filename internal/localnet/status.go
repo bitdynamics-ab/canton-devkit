@@ -85,7 +85,7 @@ func CollectStatus(ctx context.Context, name string, live, includeJWT bool) (typ
 		ContainerPrefix: s.ContainerPrefix,
 		ProjectDir:      s.ProjectDir,
 		DataDir:         s.DataDir,
-		Endpoints:       endpointsFromPorts(s.Ports),
+		Endpoints:       endpointsFromPorts(s.Name, s.Ports),
 		Credentials:     credentialsFor(s.Credentials, includeJWT),
 	}
 
@@ -165,7 +165,7 @@ func collapseState(state, health string) string {
 	}
 }
 
-func endpointsFromPorts(ports map[string]int) []types.Endpoint {
+func endpointsFromPorts(instance string, ports map[string]int) []types.Endpoint {
 	if len(ports) == 0 {
 		return nil
 	}
@@ -173,10 +173,11 @@ func endpointsFromPorts(ports map[string]int) []types.Endpoint {
 	known := map[string]meta{
 		"app_user_ui":     {"Wallet · app-user", "http"},
 		"app_provider_ui": {"Wallet · app-provider", "http"},
-		// The bare host URLs below route to each role's wallet via the
-		// DevKit nginx-vhost overlay (see WriteNginxVhostOverlay); the
-		// Scan / name-service UIs sit behind their *.localhost vhosts on
-		// the same ports.
+		// The wallet URLs are the instance-scoped vhost
+		// (wallet.<instance>.localhost) served by the DevKit nginx-vhost
+		// overlay (see WriteNginxVhostOverlay); the Scan / name-service /
+		// ledger-API UIs sit behind their own <service>.<instance>.localhost
+		// vhosts on the same ports.
 		"sv_ui":               {"Wallet · sv", "http"},
 		"swagger_ui":          {"Swagger · JSON API", "http"},
 		"postgres":            {"Postgres", "postgresql"},
@@ -200,12 +201,18 @@ func endpointsFromPorts(ports map[string]int) []types.Endpoint {
 		if !ok {
 			m = meta{label: k, scheme: "tcp"}
 		}
+		// Wallet UIs are served at the instance-scoped wallet vhost;
+		// everything else stays on the bare loopback host.
+		host := "localhost"
+		if isWalletUIKey(k) {
+			host = instanceVHost(VHostServiceWallet, instance)
+		}
 		out = append(out, types.Endpoint{
 			Key:    k,
 			Label:  m.label,
 			Port:   p,
 			Scheme: m.scheme,
-			URL:    fmt.Sprintf("%s://localhost:%d", m.scheme, p),
+			URL:    fmt.Sprintf("%s://%s:%d", m.scheme, host, p),
 		})
 	}
 	return out

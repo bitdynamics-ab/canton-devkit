@@ -94,8 +94,8 @@ func TestEnv_ShellOutputIsPosixQuoted(t *testing.T) {
 		// Participant Ledger/JSON API ports a dApp dials directly.
 		"export CANTON_PARTICIPANT_LEDGER_APP_USER_PORT='2901'",
 		"export CANTON_PARTICIPANT_JSON_APP_USER_PORT='2975'",
-		// Scan UI surfaced explicitly with the scan.localhost vhost.
-		"export CANTON_SCAN_UI_URL='http://scan.localhost:4480'",
+		// Scan UI surfaced explicitly with the instance-scoped scan vhost.
+		"export CANTON_SCAN_UI_URL='http://scan.demo.localhost:4480'",
 		"export CANTON_SV_JWT='<redacted>'",
 		"export CANTON_SV_USER='sv-user'",
 		"export CANTON_SV_AUDIENCE='sv-aud'",

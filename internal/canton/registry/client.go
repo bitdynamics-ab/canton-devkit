@@ -67,10 +67,12 @@ type DialOptions struct {
 	// HostHeader, when non-empty, overrides the HTTP Host header sent
 	// on every request (req.Host). Needed for Splice LocalNet's nginx
 	// virtual-host routing: the scan app's `/registry` routes are gated
-	// behind `server_name scan.localhost`, so a request to the SV UI
-	// port must carry `Host: scan.localhost` to reach the scan
-	// upstream rather than the SV-info default vhost. On a real DevNet
-	// (where scan has its own DNS name) this stays empty.
+	// behind an instance-scoped `server_name scan.<instance>.localhost`,
+	// so a request to the SV UI port must carry a matching
+	// `Host: scan.<instance>.localhost` header to reach the scan
+	// upstream rather than the SV-info default vhost (DevKit's
+	// token.resolveRegistryURL supplies this). On a real DevNet (where
+	// scan has its own DNS name) this stays empty.
 	HostHeader string
 
 	// Version selects the token-standard transfer-instruction registry
@@ -173,8 +175,8 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, into any
 		req.Header.Set("Content-Type", "application/json")
 	}
 	// Host-header override for nginx virtual-host routing (LocalNet
-	// scan registry sits behind `server_name scan.localhost`). Setting
-	// req.Host — not req.Header.Set("Host", …) — is the correct knob;
+	// scan registry sits behind `server_name scan.<instance>.localhost`).
+	// Setting req.Host — not req.Header.Set("Host", …) — is the correct knob;
 	// net/http reads the Host field, not the header map, for the
 	// request line's authority.
 	if c.hostHeader != "" {
