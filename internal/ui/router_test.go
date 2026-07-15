@@ -111,6 +111,31 @@ func TestAssets_SPAFallbackServesIndex(t *testing.T) {
 	}
 }
 
+// TestAssets_MissingAssetDoesNotServeIndex pins the SPA fallback boundary:
+// /assets/... is the static bundle namespace, not a React Router route. A
+// missing bundle file should fail as a missing file instead of returning
+// index.html and hiding a stale dist/ build behind a successful HTML response.
+func TestAssets_MissingAssetDoesNotServeIndex(t *testing.T) {
+	srv, addr := startTestServer(t)
+	defer func() { _ = srv.Shutdown(context.Background()) }()
+
+	resp, err := http.Get("http://" + addr + "/assets/index-definitely-missing.js")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("missing asset status = %d, want 404", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if strings.Contains(string(body), "<!doctype") || strings.Contains(string(body), "<html") {
+		t.Errorf("missing asset served SPA index instead of 404:\n%s", body)
+	}
+	if ct := resp.Header.Get("Content-Type"); strings.HasPrefix(ct, "text/html") {
+		t.Errorf("missing asset Content-Type = %q, want non-html", ct)
+	}
+}
+
 // TestAssets_KnownFileServed verifies the happy path: a request that
 // DOES match an embedded file gets that file's bytes (not the SPA
 // index). With our placeholder dist/, the only file is index.html

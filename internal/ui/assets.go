@@ -106,6 +106,10 @@ func AssetsHandler() (http.Handler, error) {
 			statPath = statPath[1:]
 		}
 		if _, statErr := fs.Stat(sub, statPath); statErr != nil {
+			if strings.HasPrefix(statPath, "assets/") {
+				http.NotFound(w, r)
+				return
+			}
 			serveIndex(w, index)
 			return
 		}
