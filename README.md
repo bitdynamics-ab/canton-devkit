@@ -48,8 +48,14 @@ dependencies:
   - daml-stdlib
   - daml-script
 components:
+  - canton-open-source:3.5.2
+  - codegen:3.5.2
   - damlc:3.5.2
+  - daml-new:3.5.2
   - daml-script:3.5.2
+  - upgrade-check:3.5.2
+  - scribe:3.5.2
+  - daml-shell:3.5.2
   - oci://ghcr.io/bitdynamics-ab/canton-devkit:latest
 ```
 

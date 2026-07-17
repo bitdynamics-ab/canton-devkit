@@ -53,11 +53,21 @@ curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/i
 The DPM component is published to GitHub Container Registry on every
 tagged release at `ghcr.io/bitdynamics-ab/canton-devkit:<version>`.
 `dpm install package` reads the component references from the project's
-`daml.yaml`, so declare the component there and then install:
+`daml.yaml`. Remove `sdk-version` and declare the SDK packages plus the
+DevKit component, then install:
 
 ```yaml
 # daml.yaml
+#sdk-version: 3.5.2
 components:
+  - canton-open-source:3.5.2
+  - codegen:3.5.2
+  - damlc:3.5.2
+  - daml-new:3.5.2
+  - daml-script:3.5.2
+  - upgrade-check:3.5.2
+  - scribe:3.5.2
+  - daml-shell:3.5.2
   - oci://ghcr.io/bitdynamics-ab/canton-devkit:<version>
 ```
 
@@ -66,8 +76,10 @@ dpm install package
 dpm localnet --help
 ```
 
-`<version>` follows semver (no `v` prefix); tag `latest` points at the
-most recently published final (non-pre-release) release.
+Pin the SDK package versions to the Canton/Daml release you are targeting
+(example above uses `3.5.2`). `<version>` for the DevKit OCI tag follows
+semver (no `v` prefix); tag `latest` points at the most recently
+published final (non-pre-release) release.
 
 ### Manifest
 
