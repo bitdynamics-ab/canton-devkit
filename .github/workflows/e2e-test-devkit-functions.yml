@@ -6,7 +6,9 @@ name: "E2E: canton-devkit Functions"
 # Triggers:
 #   - schedule: nightly at 04:00 UTC (offset from integration.yml's 03:00).
 #   - workflow_dispatch: manual trigger for ad-hoc validation.
-#   - pull_request: only when the PR carries the `run-e2e` label.
+#   - pull_request: only when the PR carries the `run-e2e` label, and
+#     only when the PR touches non-doc paths (docs/website/Markdown are
+#     ignored so label/synchronize on doc-only PRs does not queue jobs).
 #   - push to main: when Milestone 1 E2E scripts or workflow change.
 #
 # The run-e2e gate lives on the setup job only. Downstream jobs inherit
@@ -22,6 +24,10 @@ on:
   workflow_dispatch:
   pull_request:
     types: [labeled, synchronize]
+    paths-ignore:
+      - "docs/**"
+      - "website/**"
+      - "**.md"
   push:
     branches:
       - main

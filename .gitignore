@@ -4,6 +4,7 @@ dist/
 
 # Scratch dir for local validation / temporary files
 .tmp/
+tmp/
 
 # Local environment
 .env
@@ -37,4 +38,5 @@ internal/ui/dist/*
 # worktrunk configs
 .config/wt.toml
 
-tmp/
+# workspace files
+*.code-workspace

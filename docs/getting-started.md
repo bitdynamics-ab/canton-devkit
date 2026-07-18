@@ -42,18 +42,27 @@ preflight.
 
 ## 2. Install — DPM component (primary)
 
-DevKit is published as a native DPM component to an OCI registry. Add
-it to your project's `daml.yaml` (or `multi-package.yaml`) `components`
-list and install:
+DevKit is published as a native DPM component to an OCI registry. Remove
+the `sdk-version` field from your project's `daml.yaml` (or
+`multi-package.yaml`) and declare the SDK packages plus the DevKit
+component under `components`, then install:
 
 ```yaml
 # daml.yaml
-sdk-version: <your-sdk-version>
+#sdk-version: <your-sdk-version>
 name: my-app
 version: 0.1.0
 source: .
 dependencies: []
 components:
+  - canton-open-source:<your-sdk-version>
+  - codegen:<your-sdk-version>
+  - damlc:<your-sdk-version>
+  - daml-new:<your-sdk-version>
+  - daml-script:<your-sdk-version>
+  - upgrade-check:<your-sdk-version>
+  - scribe:<your-sdk-version>
+  - daml-shell:<your-sdk-version>
   - oci://ghcr.io/bitdynamics-ab/canton-devkit:<version>
 ```
 
@@ -61,6 +70,10 @@ components:
 dpm install package
 dpm localnet --help          # confirms the component loaded
 ```
+
+Replace `<your-sdk-version>` with the Canton/Daml release you are
+targeting, and `<version>` with a DevKit release tag (semver, no `v`
+prefix) or `latest`.
 
 DPM registers a single top-level `localnet` command; every DevKit
 subcommand (`up`, `down`, `status`, `dar`, `contracts`, `tx`, `token`,
