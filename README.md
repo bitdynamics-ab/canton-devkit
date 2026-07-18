@@ -24,7 +24,7 @@ recommended) and 10 GB of free disk — see the
 Through the dpm ([Daml Package Manager](https://docs.canton.network/sdks-tools/cli-tools/dpm)), in a project's `daml.yaml`. Ensure you remove the sdk-version field from the file. For example, if your current daml.yaml file is:
 
 ```yaml
-sdk-version: <your-sdk-version>
+sdk-version: 3.5.2
 name: daml-test-1
 source: daml
 init-script: Main:setup
@@ -38,7 +38,7 @@ dependencies:
 You should use the following daml.yaml file:
 
 ```yaml
-#sdk-version: <your-sdk-version>
+#sdk-version: 3.5.2
 name: daml-test-1
 source: daml
 init-script: Main:setup
@@ -48,14 +48,14 @@ dependencies:
   - daml-stdlib
   - daml-script
 components:
-  - canton-open-source:<your-sdk-version>
-  - codegen:<your-sdk-version>
-  - damlc:<your-sdk-version>
-  - daml-new:<your-sdk-version>
-  - daml-script:<your-sdk-version>
-  - upgrade-check:<your-sdk-version>
-  - scribe:<your-sdk-version>
-  - daml-shell:<your-sdk-version>
+  - canton-open-source:3.5.2
+  - codegen:3.5.2
+  - damlc:3.5.2
+  - daml-new:3.5.2
+  - daml-script:3.5.2
+  - upgrade-check:3.5.2
+  - scribe:3.5.2
+  - daml-shell:3.5.2
   - oci://ghcr.io/bitdynamics-ab/canton-devkit:latest
 ```
 
