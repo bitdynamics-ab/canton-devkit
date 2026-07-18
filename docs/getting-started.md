@@ -49,20 +49,20 @@ component under `components`, then install:
 
 ```yaml
 # daml.yaml
-#sdk-version: 3.5.2
+#sdk-version: <your-sdk-version>
 name: my-app
 version: 0.1.0
 source: .
 dependencies: []
 components:
-  - canton-open-source:3.5.2
-  - codegen:3.5.2
-  - damlc:3.5.2
-  - daml-new:3.5.2
-  - daml-script:3.5.2
-  - upgrade-check:3.5.2
-  - scribe:3.5.2
-  - daml-shell:3.5.2
+  - canton-open-source:<your-sdk-version>
+  - codegen:<your-sdk-version>
+  - damlc:<your-sdk-version>
+  - daml-new:<your-sdk-version>
+  - daml-script:<your-sdk-version>
+  - upgrade-check:<your-sdk-version>
+  - scribe:<your-sdk-version>
+  - daml-shell:<your-sdk-version>
   - oci://ghcr.io/bitdynamics-ab/canton-devkit:<version>
 ```
 
@@ -71,9 +71,9 @@ dpm install package
 dpm localnet --help          # confirms the component loaded
 ```
 
-Pin the SDK package versions to the Canton/Daml release you are targeting
-(example above uses `3.5.2`). Replace `<version>` with a DevKit release
-tag (semver, no `v` prefix) or `latest`.
+Replace `<your-sdk-version>` with the Canton/Daml release you are
+targeting, and `<version>` with a DevKit release tag (semver, no `v`
+prefix) or `latest`.
 
 DPM registers a single top-level `localnet` command; every DevKit
 subcommand (`up`, `down`, `status`, `dar`, `contracts`, `tx`, `token`,

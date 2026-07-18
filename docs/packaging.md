@@ -58,16 +58,16 @@ DevKit component, then install:
 
 ```yaml
 # daml.yaml
-#sdk-version: 3.5.2
+#sdk-version: <your-sdk-version>
 components:
-  - canton-open-source:3.5.2
-  - codegen:3.5.2
-  - damlc:3.5.2
-  - daml-new:3.5.2
-  - daml-script:3.5.2
-  - upgrade-check:3.5.2
-  - scribe:3.5.2
-  - daml-shell:3.5.2
+  - canton-open-source:<your-sdk-version>
+  - codegen:<your-sdk-version>
+  - damlc:<your-sdk-version>
+  - daml-new:<your-sdk-version>
+  - daml-script:<your-sdk-version>
+  - upgrade-check:<your-sdk-version>
+  - scribe:<your-sdk-version>
+  - daml-shell:<your-sdk-version>
   - oci://ghcr.io/bitdynamics-ab/canton-devkit:<version>
 ```
 
@@ -76,10 +76,10 @@ dpm install package
 dpm localnet --help
 ```
 
-Pin the SDK package versions to the Canton/Daml release you are targeting
-(example above uses `3.5.2`). `<version>` for the DevKit OCI tag follows
-semver (no `v` prefix); tag `latest` points at the most recently
-published final (non-pre-release) release.
+Replace `<your-sdk-version>` with the Canton/Daml release you are
+targeting. `<version>` for the DevKit OCI tag follows semver (no `v`
+prefix); tag `latest` points at the most recently published final
+(non-pre-release) release.
 
 ### Manifest
 
