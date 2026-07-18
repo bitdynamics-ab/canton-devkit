@@ -22,7 +22,9 @@ name: "E2E: dpm localnet"
 #   - schedule: nightly at 04:30 UTC (offset from the 04:00 functions e2e
 #     and 05:00 Mon dpm-installation checks).
 #   - workflow_dispatch: manual trigger for ad-hoc validation.
-#   - pull_request: only when the PR carries the `run-e2e` label.
+#   - pull_request: only when the PR carries the `run-e2e` label, and
+#     only when the PR touches non-doc paths (docs/website/Markdown are
+#     ignored so label/synchronize on doc-only PRs does not queue jobs).
 #
 # Platform: Linux only (self-hosted Proxmox e2e runner). Run
 # `make e2e-dpm` locally for macOS validation.
@@ -33,6 +35,10 @@ on:
   workflow_dispatch:
   pull_request:
     types: [labeled, synchronize]
+    paths-ignore:
+      - "docs/**"
+      - "website/**"
+      - "**.md"
 
 permissions:
   contents: read
