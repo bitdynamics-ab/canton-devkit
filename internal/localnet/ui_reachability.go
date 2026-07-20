@@ -39,8 +39,11 @@ var uiProbePortKeys = []string{"app_user_ui", "app_provider_ui", "sv_ui"}
 const uiProbeTimeout = 2 * time.Second
 
 // uiProbeFn is the test seam for the per-URL HTTP probe. nil selects
-// defaultUIProbe (same pattern as statusProberFn).
-var uiProbeFn func(ctx context.Context, rawURL string) error
+// defaultUIProbe (same pattern as statusProberFn). hostHeader, when
+// non-empty, overrides the request Host — needed for the wallet UI,
+// whose route only matches the instance-scoped wallet vhost (the flat
+// loopback Host now falls through to a different server block).
+var uiProbeFn func(ctx context.Context, rawURL, hostHeader string) error
 
 // uiProbeClient never follows redirects: a 30x from nginx already
 // proves the UI answers HTTP, and login redirects would otherwise
@@ -55,12 +58,15 @@ var uiProbeClient = &http.Client{
 // code counts as reachable — a 404/502 still proves nginx is serving
 // on the port. Only transport-level failures (empty reply, refused,
 // timeout) count as unreachable.
-func defaultUIProbe(ctx context.Context, rawURL string) error {
+func defaultUIProbe(ctx context.Context, rawURL, hostHeader string) error {
 	ctx, cancel := context.WithTimeout(ctx, uiProbeTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return err
+	}
+	if hostHeader != "" {
+		req.Host = hostHeader
 	}
 	resp, err := uiProbeClient.Do(req)
 	if err != nil {
@@ -98,10 +104,17 @@ func probeUIEndpoints(ctx context.Context, s *registry.State, endpoints []types.
 		if e.Scheme != "http" || !uiPorts[e.Port] {
 			continue
 		}
+		// Always dial loopback (multi-label *.localhost does NOT resolve
+		// via the OS/Go resolver on macOS, so we can't dial the vhost
+		// directly). Wallet UIs only answer on their role-scoped vhost,
+		// so carry it as the Host header to validate the real route
+		// rather than whatever server block owns the bare Host.
+		host := walletVHostForKey(e.Key, s.Name)
+		dialURL := fmt.Sprintf("http://localhost:%d", e.Port)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := probe(ctx, e.URL)
+			err := probe(ctx, dialURL, host)
 			if err == nil {
 				e.Reachability = types.ReachabilityOK
 				return
@@ -160,6 +173,7 @@ func uiReachabilityCheck(ctx context.Context) docker.CheckResult {
 		instance string
 		key      string
 		url      string
+		host     string // Host-header override for vhost-scoped routes
 		stale    bool
 		detail   string // filled by the probe on failure
 	}
@@ -179,10 +193,14 @@ func uiReachabilityCheck(ctx context.Context) docker.CheckResult {
 		stale := hasStaleLoopbackOverlay(s.DataDir)
 		for _, key := range uiProbePortKeys {
 			if port := s.Ports[key]; port > 0 {
+				// All probed UI keys are wallet UIs, which only answer
+				// on their role-scoped wallet vhost.
+				host := walletVHostForKey(key, e.Name)
 				targets = append(targets, uiTarget{
 					instance: e.Name,
 					key:      key,
 					url:      fmt.Sprintf("http://localhost:%d", port),
+					host:     host,
 					stale:    stale,
 				})
 			}
@@ -210,7 +228,7 @@ func uiReachabilityCheck(ctx context.Context) docker.CheckResult {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if perr := probe(ctx, t.url); perr != nil {
+			if perr := probe(ctx, t.url, t.host); perr != nil {
 				t.detail = uiProbeErrorDetail(perr)
 			}
 		}()

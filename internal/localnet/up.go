@@ -346,15 +346,13 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	}
 	composeFiles = append(composeFiles, loopbackPath)
 
-	// Fix the wallet URLs DevKit advertises. Splice's nginx routes by
-	// Host header; the bare host URL we print (http://localhost:<PORT>)
-	// matches no `*.localhost` vhost and falls through to the first
-	// server block on the port — the name service (app-provider) or a
-	// 404 static catch-all (sv). This overlay bind-mounts DevKit-owned
-	// copies of the role .conf files (with `localhost` added to each
-	// wallet block) over the upstream ones, without touching the
-	// content-hash-verified Splice cache.
-	nginxPath, err := WriteNginxVhostOverlay(dataDir, prog.Err())
+	// Serve each Splice UI/API at an instance-scoped virtual host
+	// (<service>.<instance>.localhost). Splice's nginx routes by Host
+	// header; this overlay bind-mounts DevKit-owned copies of the role
+	// .conf files (server_name = ${VHOST_*}) over the upstream ones and
+	// injects the per-instance vhost values as nginx container env,
+	// without touching the content-hash-verified Splice cache.
+	nginxPath, err := WriteNginxVhostOverlay(dataDir, opts.Name, prog.Err())
 	if err != nil {
 		prog.FailStep(StepPersistState, "Failed to write nginx-vhost overlay", err)
 		return ExitRuntimeFailure
@@ -775,7 +773,14 @@ func renderWelcome(out io.Writer, name, spliceVersion string, state *registry.St
 		if !ok {
 			continue
 		}
-		url := fmt.Sprintf("%s://localhost:%d", e.scheme, port)
+		// Wallet UIs are served at the role-scoped wallet vhost;
+		// everything else (swagger, postgres) stays on the bare loopback
+		// host.
+		host := "localhost"
+		if vh := walletVHostForKey(e.key, name); vh != "" {
+			host = vh
+		}
+		url := fmt.Sprintf("%s://%s:%d", e.scheme, host, port)
 		endpoints = append(endpoints, term.Endpoint{
 			Category: e.category,
 			Label:    e.label,
@@ -924,6 +929,29 @@ type endpointDisplay struct {
 	scheme   string
 	category string // welcome-screen section header — "WEB UIs", "INFRASTRUCTURE"
 	external bool   // browsable URL → render "↗" + OSC 8 hyperlink
+}
+
+// walletUIRoleByKey maps a state.json UI port key to the Splice role
+// whose wallet is served behind that port. The wallet vhost is
+// role-scoped (wallet.<role>.<instance>.localhost), so URL builders and
+// the reachability probe resolve the role from the port key here.
+// Shared by the welcome-screen, status, and probe code so they all
+// scope wallet URLs the same way.
+var walletUIRoleByKey = map[string]string{
+	"app_user_ui":     "app-user",
+	"app_provider_ui": "app-provider",
+	"sv_ui":           "sv",
+}
+
+// walletVHostForKey returns the role-scoped wallet vhost for a UI port
+// key, e.g. walletVHostForKey("app_user_ui", "localnet-2") ==
+// "wallet.app-user.localnet-2.localhost". Empty for non-wallet keys.
+func walletVHostForKey(key, instance string) string {
+	role, ok := walletUIRoleByKey[key]
+	if !ok {
+		return ""
+	}
+	return instanceVHostRole(VHostServiceWallet, role, instance)
 }
 
 // shortSHA returns the first 7 characters of a git SHA (or the whole
