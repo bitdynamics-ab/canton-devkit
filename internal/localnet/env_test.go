@@ -204,8 +204,8 @@ func TestBuildEnvExport_AuthFileRewriteTightensPerms(t *testing.T) {
 }
 
 // TestBuildEnvExport_ScanUIURL pins that the scan UI is surfaced under
-// an explicit, self-describing key carrying the scan.localhost vhost
-// hint.
+// an explicit, self-describing key carrying the instance-scoped scan
+// vhost hint.
 func TestBuildEnvExport_ScanUIURL(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedEnvState(t, "demo")
@@ -214,8 +214,76 @@ func TestBuildEnvExport_ScanUIURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildEnvExport: %v", err)
 	}
-	if got := ex.Vars["CANTON_SCAN_UI_URL"]; got != "http://scan.localhost:4480" {
-		t.Errorf("CANTON_SCAN_UI_URL = %q, want http://scan.localhost:4480", got)
+	if got := ex.Vars["CANTON_SCAN_UI_URL"]; got != "http://scan.demo.localhost:4480" {
+		t.Errorf("CANTON_SCAN_UI_URL = %q, want http://scan.demo.localhost:4480", got)
+	}
+}
+
+// TestBuildEnvExport_LedgerAPIURLs pins the per-role JSON/gRPC Ledger
+// API URL vars behind the role-scoped ledger vhosts. seedEnvState
+// records app_user_ui (4485) and sv_ui (4480) but no app_provider_ui,
+// so app-user + sv vars are present and the unqualified aliases are
+// absent.
+func TestBuildEnvExport_LedgerAPIURLs(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedEnvState(t, "demo")
+
+	ex, err := BuildEnvExport("demo", false)
+	if err != nil {
+		t.Fatalf("BuildEnvExport: %v", err)
+	}
+	want := map[string]string{
+		"CANTON_APP_USER_JSON_LEDGER_API_URL": "http://json-ledger-api.app-user.demo.localhost:4485",
+		"CANTON_APP_USER_GRPC_LEDGER_API_URL": "grpc-ledger-api.app-user.demo.localhost:4485",
+		"CANTON_SV_JSON_LEDGER_API_URL":       "http://json-ledger-api.sv.demo.localhost:4480",
+		"CANTON_SV_GRPC_LEDGER_API_URL":       "grpc-ledger-api.sv.demo.localhost:4480",
+	}
+	for k, v := range want {
+		if got := ex.Vars[k]; got != v {
+			t.Errorf("%s = %q, want %q", k, got, v)
+		}
+	}
+	// No app_provider_ui port → no app-provider vars, no aliases.
+	for _, k := range []string{
+		"CANTON_APP_PROVIDER_JSON_LEDGER_API_URL",
+		"CANTON_APP_PROVIDER_GRPC_LEDGER_API_URL",
+		"CANTON_JSON_LEDGER_API_URL",
+		"CANTON_GRPC_LEDGER_API_URL",
+	} {
+		if got, ok := ex.Vars[k]; ok {
+			t.Errorf("%s should be absent (no app_provider_ui port), got %q", k, got)
+		}
+	}
+}
+
+// TestBuildEnvExport_LedgerAPIAliases pins the unqualified
+// CANTON_{JSON,GRPC}_LEDGER_API_URL aliases pointing at the
+// app-provider participant when its UI port is recorded.
+func TestBuildEnvExport_LedgerAPIAliases(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	s := registry.NewState("demo", "0.6.4")
+	s.ProjectDir = t.TempDir()
+	s.DataDir = "/test/demo"
+	s.Status = registry.StatusRunning
+	s.Ports = map[string]int{"app_provider_ui": 4486}
+	if err := registry.Write(s); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	ex, err := BuildEnvExport("demo", false)
+	if err != nil {
+		t.Fatalf("BuildEnvExport: %v", err)
+	}
+	want := map[string]string{
+		"CANTON_APP_PROVIDER_JSON_LEDGER_API_URL": "http://json-ledger-api.app-provider.demo.localhost:4486",
+		"CANTON_APP_PROVIDER_GRPC_LEDGER_API_URL": "grpc-ledger-api.app-provider.demo.localhost:4486",
+		"CANTON_JSON_LEDGER_API_URL":              "http://json-ledger-api.app-provider.demo.localhost:4486",
+		"CANTON_GRPC_LEDGER_API_URL":              "grpc-ledger-api.app-provider.demo.localhost:4486",
+	}
+	for k, v := range want {
+		if got := ex.Vars[k]; got != v {
+			t.Errorf("%s = %q, want %q", k, got, v)
+		}
 	}
 }
 

@@ -216,8 +216,8 @@ func TestAppConfig_EnvFormatIsDefault(t *testing.T) {
 		// Real on-ledger party id (CANTON_<ROLE>_PARTY), distinct
 		// from the credential's user name.
 		"CANTON_APP_PROVIDER_PARTY=app-provider::1220deadbeef",
-		// Scan UI surfaced explicitly with the scan.localhost vhost.
-		"CANTON_SCAN_UI_URL=http://scan.localhost:4480",
+		// Scan UI surfaced explicitly with the instance-scoped scan vhost.
+		"CANTON_SCAN_UI_URL=http://scan.demo.localhost:4480",
 	} {
 		if !strings.Contains(string(body), want) {
 			t.Errorf("env body missing %q\nbody:\n%s", want, body)

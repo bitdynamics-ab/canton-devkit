@@ -25,15 +25,17 @@ import (
 // jwtRedactionPlaceholder — same sentinel so the surfaces don't drift.
 const EnvJWTRedaction = "<redacted>"
 
-// scanUIVHost is the nginx virtual-host name the Splice scan UI /
-// scan registry routes live under on LocalNet. The scan app
-// (`splice:5012` inside the docker network) is exposed on the host
-// behind the SV UI port under `server_name scan.localhost` (see
-// cluster/compose/localnet/conf/nginx/sv.conf, mirrored by
-// internal/localnet/token.scanVHost). We emit an explicit
-// CANTON_SCAN_UI_URL carrying this host hint rather than leaving
-// operators to derive it from the bare sv_ui port.
-const scanUIVHost = "scan.localhost"
+// Splice UIs/APIs are served on LocalNet behind instance-scoped nginx
+// virtual hosts of the form <service>.<instance>.localhost (see
+// WriteNginxVhostOverlay and instanceVHost). We surface those hosts in
+// explicit, self-describing URL vars (CANTON_SCAN_UI_URL,
+// CANTON_*_LEDGER_API_URL) rather than leaving operators to derive them
+// from the bare UI ports.
+//
+// *.localhost resolves to 127.0.0.1 in browsers, curl, and Go, but NOT
+// in the JVM/Node/Python resolvers (and some Rust HTTP clients) — those
+// need an explicit Host header (HTTP) / :authority pseudo-header (gRPC)
+// or an /etc/hosts entry.
 
 // BuildEnvExport assembles the shared apitypes.EnvExport for an
 // instance from its registry state. It is the single builder behind
@@ -48,8 +50,11 @@ const scanUIVHost = "scan.localhost"
 //     including the participant_ledger/admin/json_<role> ports captured
 //     by CaptureCantonPorts and the sv_ui (scan UI) port — exactly the
 //     endpoints an external dApp needs.
-//  3. A derived CANTON_SCAN_UI_URL when the sv_ui port is recorded,
-//     carrying the scan.localhost vhost hint.
+//  3. A derived CANTON_SCAN_UI_URL when the sv_ui port is recorded
+//     (single-service scan.<instance>.localhost vhost), plus per-role
+//     CANTON_<ROLE>_{JSON,GRPC}_LEDGER_API_URL and unqualified
+//     CANTON_{JSON,GRPC}_LEDGER_API_URL aliases, each carrying the
+//     matching role-scoped <service>.<role>.<instance>.localhost vhost.
 //  4. state.Credentials -> CANTON_<ROLE>_JWT (redacted unless
 //     includeJWT) plus the user/audience pair that signed it.
 //  5. state.Parties -> CANTON_<ROLE>_PARTY for the role parties
@@ -85,12 +90,45 @@ func BuildEnvExport(name string, includeJWT bool) (apitypes.EnvExport, error) {
 		out.Vars[PortEnvKey(logical)] = fmt.Sprintf("%d", port)
 	}
 	// The scan UI is reachable on the SV UI port behind the
-	// scan.localhost nginx vhost. Surface it under an explicit,
-	// self-describing key so a dApp doesn't have to know the vhost
-	// trick. Skipped when sv_ui wasn't captured (instance pre-dates
-	// port capture, or came up without the SV profile).
+	// scan.<instance>.localhost nginx vhost. Surface it under an
+	// explicit, self-describing key so a dApp doesn't have to know the
+	// vhost trick. Skipped when sv_ui wasn't captured (instance
+	// pre-dates port capture, or came up without the SV profile).
 	if port, ok := state.Ports["sv_ui"]; ok && port > 0 {
-		out.Vars["CANTON_SCAN_UI_URL"] = fmt.Sprintf("http://%s:%d", scanUIVHost, port)
+		out.Vars["CANTON_SCAN_UI_URL"] = fmt.Sprintf("http://%s:%d",
+			instanceVHost(VHostServiceScan, name), port)
+	}
+
+	// The JSON and gRPC Ledger APIs are reachable on each role's UI port
+	// behind the role-scoped json-ledger-api.<role>.<instance>.localhost /
+	// grpc-ledger-api.<role>.<instance>.localhost vhosts. Emit a per-role
+	// URL var for every recorded role UI port, plus unqualified
+	// CANTON_{JSON,GRPC}_LEDGER_API_URL aliases pointing at the
+	// app-provider participant (the common dApp target). gRPC URLs carry
+	// no scheme — the host:port is what a gRPC client dials, with the
+	// vhost as the :authority pseudo-header.
+	ledgerRolePortKeys := map[string]string{
+		"app-user":     "app_user_ui",
+		"app-provider": "app_provider_ui",
+		"sv":           "sv_ui",
+	}
+	for role, portKey := range ledgerRolePortKeys {
+		port, ok := state.Ports[portKey]
+		if !ok || port <= 0 {
+			continue
+		}
+		prefix := CredEnvKeyPrefix(role)
+		out.Vars[prefix+"_JSON_LEDGER_API_URL"] = fmt.Sprintf("http://%s:%d",
+			instanceVHostRole(VHostServiceJSONLedger, role, name), port)
+		out.Vars[prefix+"_GRPC_LEDGER_API_URL"] = fmt.Sprintf("%s:%d",
+			instanceVHostRole(VHostServiceGRPCLedger, role, name), port)
+	}
+	// Unqualified aliases default to the app-provider participant.
+	if port, ok := state.Ports["app_provider_ui"]; ok && port > 0 {
+		out.Vars["CANTON_JSON_LEDGER_API_URL"] = fmt.Sprintf("http://%s:%d",
+			instanceVHostRole(VHostServiceJSONLedger, "app-provider", name), port)
+		out.Vars["CANTON_GRPC_LEDGER_API_URL"] = fmt.Sprintf("%s:%d",
+			instanceVHostRole(VHostServiceGRPCLedger, "app-provider", name), port)
 	}
 
 	for role, cred := range state.Credentials {

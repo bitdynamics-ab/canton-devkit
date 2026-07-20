@@ -141,7 +141,7 @@ func TestDetail_ReturnsInstance(t *testing.T) {
 	if got.SchemaVersion != types.SchemaVersion {
 		t.Errorf("SchemaVersion = %d, want %d", got.SchemaVersion, types.SchemaVersion)
 	}
-	if len(got.Endpoints) == 0 || got.Endpoints[0].URL != "http://localhost:4441" {
+	if len(got.Endpoints) == 0 || got.Endpoints[0].URL != "http://wallet.app-user.demo.localhost:4441" {
 		t.Errorf("Endpoints = %+v, want wallet URL", got.Endpoints)
 	}
 }

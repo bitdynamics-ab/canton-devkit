@@ -74,7 +74,7 @@ func TestStatus_TableRendersHeaderAndSections(t *testing.T) {
 		t.Fatalf("exit code = %d, stderr=%q", code, errBuf.String())
 	}
 	body := out.String()
-	for _, want := range []string{"Name", "demo", "Splice", "0.6.4", "SERVICES", "canton-domain", "participant-alice", "ENDPOINTS", "Wallet · app-user", "http://localhost:4485", "IDENTITIES", "sv-user"} {
+	for _, want := range []string{"Name", "demo", "Splice", "0.6.4", "SERVICES", "canton-domain", "participant-alice", "ENDPOINTS", "Wallet · app-user", "http://wallet.app-user.demo.localhost:4485", "IDENTITIES", "sv-user"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("output missing %q\nfull:\n%s", want, body)
 		}
@@ -224,7 +224,7 @@ func TestStatus_UIUnreachableWarnsWithRemediation(t *testing.T) {
 	installFakeStatusProber(t, func(context.Context, *registry.State) ([]types.ServiceStatus, error) {
 		return []types.ServiceStatus{{Name: "nginx", State: "healthy", Image: "nginx"}}, nil
 	})
-	installFakeUIProbe(t, func(_ context.Context, rawURL string) error {
+	installFakeUIProbe(t, func(_ context.Context, rawURL, _ string) error {
 		if rawURL == "http://localhost:4485" {
 			return io.EOF
 		}
@@ -256,7 +256,7 @@ func TestStatus_UIReachableRendersNoWarning(t *testing.T) {
 	installFakeStatusProber(t, func(context.Context, *registry.State) ([]types.ServiceStatus, error) {
 		return nil, nil
 	})
-	installFakeUIProbe(t, func(context.Context, string) error { return nil })
+	installFakeUIProbe(t, func(context.Context, string, string) error { return nil })
 
 	var out, errBuf bytes.Buffer
 	code := RunStatus(context.Background(), &out, &errBuf, &StatusOptions{Name: "demo", Format: "table"})
@@ -276,7 +276,7 @@ func TestStatus_JSONCarriesReachability(t *testing.T) {
 	installFakeStatusProber(t, func(context.Context, *registry.State) ([]types.ServiceStatus, error) {
 		return nil, nil
 	})
-	installFakeUIProbe(t, func(context.Context, string) error { return io.EOF })
+	installFakeUIProbe(t, func(context.Context, string, string) error { return io.EOF })
 
 	var out, errBuf bytes.Buffer
 	code := RunStatus(context.Background(), &out, &errBuf, &StatusOptions{Name: "demo", Format: "json"})
@@ -307,7 +307,7 @@ func TestStatus_UIProbeSkippedWhenNotRunning(t *testing.T) {
 		return nil, nil
 	})
 	called := false
-	installFakeUIProbe(t, func(context.Context, string) error { called = true; return nil })
+	installFakeUIProbe(t, func(context.Context, string, string) error { called = true; return nil })
 
 	var out, errBuf bytes.Buffer
 	if code := RunStatus(context.Background(), &out, &errBuf, &StatusOptions{Name: "demo", Format: "table"}); code != ExitSuccess {
@@ -325,7 +325,7 @@ func TestStatus_UIProbeSkippedWhenDockerQueryFails(t *testing.T) {
 		return nil, errors.New("docker daemon unreachable")
 	})
 	called := false
-	installFakeUIProbe(t, func(context.Context, string) error { called = true; return nil })
+	installFakeUIProbe(t, func(context.Context, string, string) error { called = true; return nil })
 
 	var out, errBuf bytes.Buffer
 	if code := RunStatus(context.Background(), &out, &errBuf, &StatusOptions{Name: "demo", Format: "table"}); code != ExitSuccess {
@@ -356,11 +356,12 @@ func TestCollapseState(t *testing.T) {
 }
 
 func TestEndpointsFromPorts(t *testing.T) {
-	got := endpointsFromPorts(map[string]int{"app_user_ui": 4485, "weird_service": 9999})
+	got := endpointsFromPorts("localnet-2", map[string]int{"app_user_ui": 4485, "weird_service": 9999})
 	if len(got) != 2 {
 		t.Fatalf("got %d endpoints, want 2", len(got))
 	}
-	if got[0].Key != "app_user_ui" || got[0].Label != "Wallet · app-user" || got[0].URL != "http://localhost:4485" {
+	// Wallet UIs get the role-scoped wallet vhost URL.
+	if got[0].Key != "app_user_ui" || got[0].Label != "Wallet · app-user" || got[0].URL != "http://wallet.app-user.localnet-2.localhost:4485" {
 		t.Errorf("known endpoint mapping wrong: %+v", got[0])
 	}
 	if got[1].Key != "weird_service" || got[1].Label != "weird_service" || got[1].Scheme != "tcp" {
@@ -371,7 +372,7 @@ func TestEndpointsFromPorts(t *testing.T) {
 // Pins the per-role wallet endpoint keys and labels; the Wallet
 // screen resolves its iframe URL by key.
 func TestEndpointsFromPorts_WalletKeysStablePerRole(t *testing.T) {
-	got := endpointsFromPorts(map[string]int{
+	got := endpointsFromPorts("localnet-2", map[string]int{
 		"app_user_ui":     4485,
 		"app_provider_ui": 4486,
 		"sv_ui":           4487,
@@ -380,24 +381,28 @@ func TestEndpointsFromPorts_WalletKeysStablePerRole(t *testing.T) {
 	for _, e := range got {
 		byKey[e.Key] = e
 	}
-	for key, label := range map[string]string{
-		"app_user_ui":     "Wallet · app-user",
-		"app_provider_ui": "Wallet · app-provider",
-		"sv_ui":           "Wallet · sv",
+	for key, want := range map[string]struct{ label, host string }{
+		"app_user_ui":     {"Wallet · app-user", "wallet.app-user.localnet-2.localhost"},
+		"app_provider_ui": {"Wallet · app-provider", "wallet.app-provider.localnet-2.localhost"},
+		"sv_ui":           {"Wallet · sv", "wallet.sv.localnet-2.localhost"},
 	} {
 		e, ok := byKey[key]
 		if !ok {
 			t.Errorf("no endpoint with key %q: %+v", key, got)
 			continue
 		}
-		if e.Label != label {
-			t.Errorf("key %q label = %q, want %q", key, e.Label, label)
+		if e.Label != want.label {
+			t.Errorf("key %q label = %q, want %q", key, e.Label, want.label)
+		}
+		// Every wallet UI resolves to its role-scoped wallet vhost.
+		if !strings.Contains(e.URL, "//"+want.host+":") {
+			t.Errorf("key %q URL = %q, want host %q", key, e.URL, want.host)
 		}
 	}
 }
 
 func TestEndpointsFromPorts_SkipsZeroPorts(t *testing.T) {
-	got := endpointsFromPorts(map[string]int{"app_user_ui": 0, "postgres": 5432})
+	got := endpointsFromPorts("localnet-2", map[string]int{"app_user_ui": 0, "postgres": 5432})
 	if len(got) != 1 || got[0].Label != "Postgres" {
 		t.Errorf("zero ports should be skipped, got %+v", got)
 	}
