@@ -48,6 +48,7 @@ func NewRouter(assets http.Handler, hub *stream.Hub, opts ...RouterOption) http.
 	handlers.MountMetrics(mux)
 	handlers.MountSnapshots(mux)
 	handlers.MountDAR(mux, hub)
+	handlers.MountAnalyzer(mux)
 	handlers.MountContracts(mux)
 	handlers.MountTransactions(mux)
 	handlers.MountSkills(mux)
@@ -144,6 +145,8 @@ func featureForPath(path string) string {
 		switch sub {
 		case "dar":
 			return "dar"
+		case "analyzer":
+			return "analyzer"
 		case "contracts", "transactions":
 			return "explorer"
 		case "metrics":
@@ -162,6 +165,8 @@ func featureForPath(path string) string {
 	switch {
 	case strings.HasPrefix(path, "/api/dars"), strings.HasPrefix(path, "/api/dar/"):
 		return "dar"
+	case strings.HasPrefix(path, "/api/analyzer"):
+		return "analyzer"
 	case strings.HasPrefix(path, "/api/contracts"), strings.HasPrefix(path, "/api/transactions"):
 		return "explorer"
 	case strings.HasPrefix(path, "/api/metrics"):
