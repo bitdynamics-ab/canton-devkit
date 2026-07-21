@@ -10,6 +10,7 @@ import { DoctorScreen } from "./screens/DoctorScreen";
 import { Placeholder } from "./screens/Placeholder";
 import { MetricsScreen } from "./screens/MetricsScreen";
 import { DARScreen } from "./screens/DARScreen";
+import { AnalyzerScreen } from "./screens/AnalyzerScreen";
 import { ExplorerScreen } from "./screens/ExplorerScreen";
 import { WalletScreen } from "./screens/WalletScreen";
 import { AgentSkillsScreen } from "./screens/AgentSkillsScreen";
@@ -66,6 +67,7 @@ function RoutedSurface() {
       <Route path="/wallet/*" element={<Guard routeKey={loc.pathname}><WalletScreen /></Guard>} />
       <Route path="/explorer/*" element={<Guard routeKey={loc.pathname}><ExplorerScreen /></Guard>} />
       <Route path="/dar/*" element={<Guard routeKey={loc.pathname}><DARScreen /></Guard>} />
+      <Route path="/analyzer/*" element={<Guard routeKey={loc.pathname}><AnalyzerScreen /></Guard>} />
       <Route path="/metrics/*" element={<Guard routeKey={loc.pathname}><MetricsScreen /></Guard>} />
       <Route path="/tokens/*" element={<Guard routeKey={loc.pathname}><TokensScreen /></Guard>} />
       <Route path="/agent/*" element={<Guard routeKey={loc.pathname}><AgentSkillsScreen /></Guard>} />

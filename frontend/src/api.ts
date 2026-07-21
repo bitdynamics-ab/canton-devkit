@@ -40,7 +40,13 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     ...init,
     headers: {
       Accept: "application/json",
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      // A FormData body must NOT carry an explicit Content-Type — the
+      // browser sets multipart/form-data with the boundary itself.
+      // Forcing application/json here would corrupt the multipart parse
+      // server-side (the analyzer's .dar upload relies on this).
+      ...(init?.body && !(init.body instanceof FormData)
+        ? { "Content-Type": "application/json" }
+        : {}),
       ...init?.headers,
     },
   });
@@ -2270,3 +2276,124 @@ async function apiFetchVoid(
   }
   throw new ApiError(resp.status, parsed);
 }
+
+// ── Analyzer (daml-analyzer) ─────────────────────────────
+//
+// Static, cross-package interaction analysis of a compiled Daml
+// package (.dar), backed by github.com/Certora/daml-analyzer. These
+// interfaces mirror internal/api/types/analyzer.go EXACTLY (snake_case
+// wire tags); the Go package maps the upstream analyzer's camelCase
+// output onto them.
+
+// AnalyzerPackage is the analyzed package's identity.
+export interface AnalyzerPackage {
+  name: string;
+  version: string;
+  package_id: string;
+  lf_version?: string;
+}
+
+// AnalyzerPackageRef names a dependency package.
+export interface AnalyzerPackageRef {
+  name: string;
+  version: string;
+  package_id: string;
+}
+
+// AnalyzerSummary aggregates the interactions by type and by target
+// package.
+export interface AnalyzerSummary {
+  total_interactions: number;
+  by_type: Record<string, number>;
+  by_target_package: Record<string, number>;
+}
+
+// AnalyzerSource is the (best-effort) source location of an interaction.
+export interface AnalyzerSource {
+  package?: string;
+  file?: string;
+  start_line?: number;
+}
+
+// AnalyzerEndpoint is one side of an interaction (caller or target):
+// the package + module and, where applicable, the template / interface
+// / choice. consuming is set on choice targets.
+export interface AnalyzerEndpoint {
+  package: string;
+  version: string;
+  package_id: string;
+  module: string;
+  template?: string;
+  interface?: string;
+  choice?: string;
+  consuming?: boolean;
+}
+
+// AnalyzerInteraction is a single cross-package interaction: a caller
+// in the analyzed package reaching a target in a dependency.
+export interface AnalyzerInteraction {
+  type: string;
+  source?: AnalyzerSource;
+  caller: AnalyzerEndpoint;
+  target: AnalyzerEndpoint;
+}
+
+// AnalyzerReport is the full analysis of one package.
+export interface AnalyzerReport {
+  analyzed_package: AnalyzerPackage;
+  dependencies: AnalyzerPackageRef[];
+  summary: AnalyzerSummary;
+  interactions: AnalyzerInteraction[];
+}
+
+// AnalyzerResponse is the top-level shape for POST /api/analyzer/analyze
+// and GET /api/instances/{name}/analyzer/{id}.
+export interface AnalyzerResponse {
+  schema_version: number;
+  instance?: string;
+  dar_name?: string;
+  package_id?: string;
+  report: AnalyzerReport | null;
+}
+
+// AnalyzerStatusResponse reports whether the analyzer can run in this
+// environment (Docker reachable, image present/pullable), so the UI can
+// show a clean "not configured" state instead of failing mid-flight.
+export interface AnalyzerStatusResponse {
+  schema_version: number;
+  available: boolean;
+  docker_found: boolean;
+  image_present: boolean;
+  image?: string;
+  detail?: string;
+}
+
+// fetchAnalyzerStatus probes the host once (Docker + image). The screen
+// gates the whole surface on `available`.
+export const fetchAnalyzerStatus = () =>
+  apiFetch<AnalyzerStatusResponse>("/api/analyzer/status");
+
+// analyzeDeployedDar analyzes a DAR already deployed to an instance,
+// by its main package id. role selects the participant to read from.
+export const analyzeDeployedDar = (
+  instance: string,
+  id: string,
+  role?: Role,
+) =>
+  apiFetch<AnalyzerResponse>(
+    `/api/instances/${encodeURIComponent(instance)}/analyzer/${encodeURIComponent(
+      id,
+    )}?role=${role ?? "app-user"}`,
+  );
+
+// analyzeUploadedDar analyzes an ad-hoc .dar file the user drops in —
+// no instance required. The multipart boundary is set by the browser;
+// apiFetch skips its JSON Content-Type for FormData bodies.
+export const analyzeUploadedDar = (file: File) => {
+  const fd = new FormData();
+  fd.append("dar", file);
+  return apiFetch<AnalyzerResponse>("/api/analyzer/analyze", {
+    method: "POST",
+    body: fd,
+  });
+};

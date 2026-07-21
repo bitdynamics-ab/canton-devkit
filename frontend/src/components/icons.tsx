@@ -186,6 +186,18 @@ export const IcPackage = (p: IconProps) => (
   </I>
 );
 
+// Two package nodes joined by an interaction edge, under a magnifier —
+// the "cross-package interaction analysis" motif for the Analyzer tab.
+export const IcAnalyzer = (p: IconProps) => (
+  <I {...p}>
+    <circle cx="4" cy="4.5" r="2" />
+    <circle cx="11" cy="4.5" r="2" />
+    <path d="M6 4.5h3" />
+    <circle cx="6.5" cy="10.5" r="3" />
+    <path d="m8.7 12.7 2.8 2.8" />
+  </I>
+);
+
 export const IcMetrics = (p: IconProps) => (
   <I {...p}>
     <path d="M2.5 2.5v11h11" />
