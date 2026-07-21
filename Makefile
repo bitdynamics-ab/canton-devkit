@@ -3,7 +3,11 @@ VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)
 
-.PHONY: build clean docker-build lint test frontend frontend-install frontend-test ui e2e-dpm
+.PHONY: build clean docker-build lint test frontend frontend-install frontend-test ui e2e-dpm analyzer-image analyzer-push
+
+# daml-analyzer image (see build/daml-analyzer/). Keep DAML_ANALYZER_IMAGE in
+# sync with analyzer.DefaultImage.
+DAML_ANALYZER_IMAGE ?= ghcr.io/bitdynamics-ab/daml-analyzer:0.1.0-143a7e2
 
 # frontend-install: sync frontend/node_modules with the lockfile.
 # Separate target so CI runners with pre-cached deps can build only.
@@ -52,6 +56,12 @@ e2e-dpm:
 
 docker-build:
 	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) -t $(BINARY_NAME):$(VERSION) .
+
+analyzer-image:
+	docker build -t $(DAML_ANALYZER_IMAGE) build/daml-analyzer
+
+analyzer-push: analyzer-image
+	docker push $(DAML_ANALYZER_IMAGE)
 
 clean:
 	rm -rf bin dist

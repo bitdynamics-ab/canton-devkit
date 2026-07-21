@@ -78,13 +78,14 @@ type AnalyzerResponse struct {
 }
 
 // AnalyzerStatusResponse reports whether the analyzer can run in this
-// environment (Java present, jar found), so the UI can show a clean
-// "not configured" state instead of failing an analysis mid-flight.
+// environment (Docker reachable, image present/pullable), so the UI can
+// show a clean "not configured" state instead of failing an analysis
+// mid-flight.
 type AnalyzerStatusResponse struct {
 	SchemaVersion int    `json:"schema_version"`
 	Available     bool   `json:"available"`
-	JavaFound     bool   `json:"java_found"`
-	JarFound      bool   `json:"jar_found"`
-	JavaVersion   string `json:"java_version,omitempty"`
+	DockerFound   bool   `json:"docker_found"`
+	ImagePresent  bool   `json:"image_present"`
+	Image         string `json:"image,omitempty"`
 	Detail        string `json:"detail,omitempty"`
 }

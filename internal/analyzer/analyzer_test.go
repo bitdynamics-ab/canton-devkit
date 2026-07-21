@@ -54,9 +54,13 @@ func TestParseReport(t *testing.T) {
 	}
 }
 
-func TestFindJar_EnvOverride(t *testing.T) {
-	t.Setenv(JarEnv, "/definitely/not/here.jar")
-	if _, err := FindJar(); err == nil {
-		t.Error("expected error for non-existent jar env override")
+func TestImage_EnvOverride(t *testing.T) {
+	t.Setenv(ImageEnv, "example.com/mirror/daml-analyzer:pinned")
+	if got := Image(); got != "example.com/mirror/daml-analyzer:pinned" {
+		t.Errorf("Image() env override: got %q", got)
+	}
+	t.Setenv(ImageEnv, "")
+	if got := Image(); got != DefaultImage {
+		t.Errorf("Image() default: got %q, want %q", got, DefaultImage)
 	}
 }

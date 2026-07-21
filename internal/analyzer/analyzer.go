@@ -1,8 +1,10 @@
-// Package analyzer wraps the vendored Certora daml-analyzer JAR: it locates
-// a Java runtime and the jar, runs the analyzer on a compiled .dar, and maps
-// its JSON output onto internal/api/types. Both the CLI (`dpm localnet dar
-// analyze`) and the Web UI analyzer handlers call through here, so the two
-// surfaces produce identical reports.
+// Package analyzer runs the Certora daml-analyzer as a pinned Docker image:
+// it checks Docker, runs the image on a compiled .dar (mounted read-only),
+// and maps the analyzer's JSON output onto internal/api/types. Both the CLI
+// (`dpm localnet dar analyze`) and the Web UI analyzer handlers call through
+// here, so the two surfaces produce identical reports. Running the analyzer
+// as a container keeps it reproducible (pinned image) with no host Java and
+// nothing heavy in git — the image lives in a registry.
 package analyzer
 
 import (
@@ -19,89 +21,62 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 )
 
-// ErrJavaNotFound / ErrJarNotFound are sentinels so callers can render a
-// clean "not configured" state with remediation instead of a raw failure.
-var (
-	ErrJavaNotFound = errors.New("java runtime not found")
-	ErrJarNotFound  = errors.New("daml-analyzer jar not found")
+// ErrDockerNotFound is a sentinel so callers can render a clean "not
+// configured" state with remediation instead of a raw failure.
+var ErrDockerNotFound = errors.New("docker not found")
+
+const (
+	// ImageEnv overrides the analyzer image reference (for a locally-built
+	// image, or a mirror). Defaults to DefaultImage.
+	ImageEnv = "DAML_ANALYZER_IMAGE"
+	// DefaultImage is the pinned, published analyzer image. It is built from
+	// the upstream commit recorded in build/daml-analyzer/Dockerfile.
+	DefaultImage = "ghcr.io/bitdynamics-ab/daml-analyzer:0.1.0-143a7e2"
 )
 
-// JarEnv overrides the vendored jar location.
-const JarEnv = "DAML_ANALYZER_JAR"
-
-// vendoredJarRelPaths are tried relative to the executable and the working
-// directory when JarEnv is unset (the jar is vendored under third_party/).
-var vendoredJarRelPaths = []string{
-	"third_party/daml-analyzer/daml-analyzer.jar",
-	"../third_party/daml-analyzer/daml-analyzer.jar",
-	"../../third_party/daml-analyzer/daml-analyzer.jar",
+// Image returns the analyzer image reference (env override wins).
+func Image() string {
+	if e := strings.TrimSpace(os.Getenv(ImageEnv)); e != "" {
+		return e
+	}
+	return DefaultImage
 }
 
-// FindJava returns the java executable (PATH first, then JAVA_HOME/bin/java).
-func FindJava() (string, error) {
-	if p, err := exec.LookPath("java"); err == nil {
+// FindDocker returns the docker executable path.
+func FindDocker() (string, error) {
+	if p, err := exec.LookPath("docker"); err == nil {
 		return p, nil
 	}
-	if jh := os.Getenv("JAVA_HOME"); jh != "" {
-		if cand := filepath.Join(jh, "bin", "java"); fileExists(cand) {
-			return cand, nil
-		}
-	}
-	return "", ErrJavaNotFound
+	return "", ErrDockerNotFound
 }
 
-// FindJar locates the vendored analyzer jar (JarEnv wins, else search).
-func FindJar() (string, error) {
-	if p := os.Getenv(JarEnv); p != "" {
-		if fileExists(p) {
-			return p, nil
-		}
-		return "", fmt.Errorf("%w: %s=%q does not exist", ErrJarNotFound, JarEnv, p)
-	}
-	var roots []string
-	if exe, err := os.Executable(); err == nil {
-		roots = append(roots, filepath.Dir(exe))
-	}
-	if wd, err := os.Getwd(); err == nil {
-		roots = append(roots, wd)
-	}
-	for _, root := range roots {
-		for _, rel := range vendoredJarRelPaths {
-			if cand := filepath.Join(root, rel); fileExists(cand) {
-				return cand, nil
-			}
-		}
-	}
-	return "", ErrJarNotFound
+func imagePresent(ctx context.Context, docker, image string) bool {
+	return exec.CommandContext(ctx, docker, "image", "inspect", image).Run() == nil
 }
 
-// Status probes whether an analysis can run in this environment, so the UI
-// shows a "not configured" state up front rather than failing mid-analysis.
+// Status probes whether an analysis can run here (docker installed, daemon
+// reachable, image present or pullable), so the UI shows a "not configured"
+// state up front rather than failing mid-analysis.
 func Status(ctx context.Context) types.AnalyzerStatusResponse {
-	st := types.AnalyzerStatusResponse{SchemaVersion: types.SchemaVersion}
-	if java, err := FindJava(); err == nil {
-		st.JavaFound = true
-		st.JavaVersion = javaVersion(ctx, java)
+	st := types.AnalyzerStatusResponse{SchemaVersion: types.SchemaVersion, Image: Image()}
+	docker, err := FindDocker()
+	if err != nil {
+		st.Detail = "install Docker to run the analyzer image"
+		return st
 	}
-	if _, err := FindJar(); err == nil {
-		st.JarFound = true
+	st.DockerFound = true
+	if exec.CommandContext(ctx, docker, "info").Run() != nil {
+		st.Detail = "Docker is installed but the daemon is not reachable"
+		return st
 	}
-	st.Available = st.JavaFound && st.JarFound
-	switch {
-	case !st.JavaFound:
-		st.Detail = "install a Java runtime (JRE 17+) or set JAVA_HOME"
-	case !st.JarFound:
-		st.Detail = "analyzer jar not found; set " + JarEnv + " or vendor third_party/daml-analyzer/daml-analyzer.jar"
+	st.ImagePresent = imagePresent(ctx, docker, st.Image)
+	// Available once the daemon is reachable; a missing image is pulled on
+	// first analysis.
+	st.Available = true
+	if !st.ImagePresent {
+		st.Detail = "image will be pulled on first analysis: " + st.Image
 	}
 	return st
-}
-
-func javaVersion(ctx context.Context, java string) string {
-	out, err := exec.CommandContext(ctx, java, "-version").CombinedOutput()
-	if err != nil {
-		return ""
-	}
-	return strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)[0]
 }
 
 // AnalyzeBytes writes dar bytes to a temp file and analyzes it. Used by the
@@ -119,20 +94,31 @@ func AnalyzeBytes(ctx context.Context, dar []byte) (*types.AnalyzerReport, error
 	return AnalyzeDAR(ctx, darPath)
 }
 
-// AnalyzeDAR runs the analyzer on a .dar path and returns the parsed report.
+// AnalyzeDAR runs the analyzer image on a .dar path and returns the parsed
+// report. The dar's directory is mounted read-only (mounting the directory
+// rather than the single file is the portable choice across Docker backends).
 func AnalyzeDAR(ctx context.Context, darPath string) (*types.AnalyzerReport, error) {
-	java, err := FindJava()
+	docker, err := FindDocker()
 	if err != nil {
 		return nil, err
 	}
-	jar, err := FindJar()
+	abs, err := filepath.Abs(darPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve dar path: %w", err)
 	}
+	image := Image()
+	if !imagePresent(ctx, docker, image) {
+		// Pull on demand; the run below surfaces a clear error if the image
+		// genuinely isn't available (offline / not yet published).
+		_ = exec.CommandContext(ctx, docker, "pull", image).Run()
+	}
+
 	var stdout, stderr bytes.Buffer
-	// -Xss4m: the analyzer recurses over deep package graphs and upstream
-	// recommends a larger stack. -f json streams the report to stdout.
-	cmd := exec.CommandContext(ctx, java, "-Xss4m", "-jar", jar, darPath, "-f", "json")
+	// ENTRYPOINT is `java -jar <analyzer>`, so the args are the in-container
+	// dar path + output format. --network none: analysis needs no network.
+	cmd := exec.CommandContext(ctx, docker, "run", "--rm", "--network", "none",
+		"-v", filepath.Dir(abs)+":/in:ro",
+		image, "/in/"+filepath.Base(abs), "-f", "json")
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -140,7 +126,7 @@ func AnalyzeDAR(ctx context.Context, darPath string) (*types.AnalyzerReport, err
 		if msg == "" {
 			msg = err.Error()
 		}
-		return nil, fmt.Errorf("daml-analyzer failed: %s", msg)
+		return nil, fmt.Errorf("daml-analyzer (docker) failed: %s", msg)
 	}
 	return parseReport(stdout.Bytes())
 }
@@ -151,11 +137,6 @@ func parseReport(raw []byte) (*types.AnalyzerReport, error) {
 		return nil, fmt.Errorf("parse analyzer output: %w", err)
 	}
 	return r.toTypes(), nil
-}
-
-func fileExists(p string) bool {
-	info, err := os.Stat(p)
-	return err == nil && !info.IsDir()
 }
 
 // --- upstream JSON shape (camelCase) → devkit types (snake_case) ----------
