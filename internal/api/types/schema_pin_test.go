@@ -15,6 +15,8 @@ import (
 // without the field, or missing from the list, fails here.
 func TestAllTopLevelResponses_CarrySchemaVersion(t *testing.T) {
 	topLevel := []interface{}{
+		AnalyzerResponse{},
+		AnalyzerStatusResponse{},
 		AllocationsResponse{},
 		ContractsListResponse{},
 		ContractDetailResponse{},

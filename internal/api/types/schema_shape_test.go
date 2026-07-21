@@ -46,6 +46,8 @@ func TestSchemaShape_GoldenPinsFieldLevelShape(t *testing.T) {
 // exported shape not listed escapes the pin.
 func schemaShapeRoots() []any {
 	return []any{
+		AnalyzerResponse{},
+		AnalyzerStatusResponse{},
 		ContractsListResponse{},
 		ContractDetailResponse{},
 		DARListResponse{},
