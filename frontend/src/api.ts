@@ -1995,12 +1995,12 @@ export interface DemoResult {
   seeded: boolean;
 }
 
-// Provisions a live demo token in one call (issuer + V2 instrument with
-// supply + a funded holder). Throws ApiError(412, NEEDS_V2_LOCALNET)
+// Provisions a live demo token in one call (issuer + V2 instrument whose
+// supply is minted to a holder party). Throws ApiError(412, NEEDS_V2_LOCALNET)
 // when the instance has no live V2 endpoint.
 export const launchDemoToken = (
   instance: string,
-  opts?: { symbol?: string; initial_supply?: string; decimals?: number; seed_holder?: boolean },
+  opts?: { symbol?: string; initial_supply?: string; decimals?: number },
   role?: string,
 ): Promise<DemoResult> =>
   apiFetch<DemoResult>(`/api/tokens/demo?${tokenQuery(instance, role)}`, {

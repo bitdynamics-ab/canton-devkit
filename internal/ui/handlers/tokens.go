@@ -437,8 +437,9 @@ func handleTokensCreate(w http.ResponseWriter, r *http.Request) {
 // V2 instrument → mint → faucet a holder) — the server side of the
 // "Launch demo token" button and the CLI `token demo` verb, both via
 // token.RunDemo. The body is optional (defaults: symbol DEMO, supply
-// 1,000,000, decimals 6, seed a holder). Requires a live V2 endpoint;
-// without one RunDemo returns ErrNeedsV2LocalNet → 412.
+// 1,000,000, decimals 6). The supply is always minted to a holder party,
+// so the demo token is transferable. Requires a live V2 endpoint; without
+// one RunDemo returns ErrNeedsV2LocalNet → 412.
 func handleTokensDemo(w http.ResponseWriter, r *http.Request) {
 	instance, err := instanceFromQuery(r)
 	if err != nil {
@@ -449,17 +450,12 @@ func handleTokensDemo(w http.ResponseWriter, r *http.Request) {
 		Symbol        string `json:"symbol"`
 		InitialSupply string `json:"initial_supply"`
 		Decimals      int    `json:"decimals"`
-		SeedHolder    *bool  `json:"seed_holder"`
 	}
 	if err := decodeJSON(r.Body, &req); err != nil && !errors.Is(err, io.EOF) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
 	role := roleFromQuery(r)
-	seed := true
-	if req.SeedHolder != nil {
-		seed = *req.SeedHolder
-	}
 	res, err := runTokenDemo(r.Context(), nil, token.DemoOptions{
 		Instance:      instance,
 		Role:          role,
@@ -468,7 +464,6 @@ func handleTokensDemo(w http.ResponseWriter, r *http.Request) {
 		Symbol:        req.Symbol,
 		InitialSupply: req.InitialSupply,
 		Decimals:      req.Decimals,
-		SeedHolder:    seed,
 	})
 	if err != nil {
 		mapTokenError(w, err, "demo")
