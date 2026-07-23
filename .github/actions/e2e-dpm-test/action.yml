@@ -49,7 +49,52 @@ runs:
         CDK_BIN: ${{ github.workspace }}/bin/canton-devkit
         BATS_LIB_PATH: ${{ github.workspace }}/e2e-tests/test_helper
       run: |
-        e2e-tests/bats/bin/bats --formatter tap "e2e-tests/${{ inputs.bats-file }}"
+        set -o pipefail
+        e2e-tests/bats/bin/bats --formatter tap "e2e-tests/${{ inputs.bats-file }}" \
+          | tee "${RUNNER_TEMP}/bats.tap"
+
+    - name: Write job summary
+      if: always()
+      shell: bash
+      run: |
+        tap="${RUNNER_TEMP}/bats.tap"
+        [ -f "$tap" ] || exit 0
+
+        {
+          echo "### E2E: ${{ inputs.bats-file }}"
+          echo
+          echo "| Result | # | Test |"
+          echo "| --- | --- | --- |"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        passed=0 failed=0 skipped=0
+        while IFS= read -r line; do
+          case "$line" in
+            "ok "*"# skip"*|"ok "*"SKIP"*)
+              num="${line#ok }"; num="${num%% *}"
+              name="${line#ok "$num" }"; name="${name%%#*}"
+              echo "| ⏭️ | $num | ${name% } |" >> "$GITHUB_STEP_SUMMARY"
+              skipped=$((skipped + 1))
+              ;;
+            "ok "*)
+              num="${line#ok }"; num="${num%% *}"
+              name="${line#ok "$num" }"
+              echo "| ✅ | $num | $name |" >> "$GITHUB_STEP_SUMMARY"
+              passed=$((passed + 1))
+              ;;
+            "not ok "*)
+              num="${line#not ok }"; num="${num%% *}"
+              name="${line#not ok "$num" }"
+              echo "| ❌ | $num | $name |" >> "$GITHUB_STEP_SUMMARY"
+              failed=$((failed + 1))
+              ;;
+          esac
+        done < "$tap"
+
+        {
+          echo
+          echo "**Total:** ${passed} passed, ${failed} failed, ${skipped} skipped"
+        } >> "$GITHUB_STEP_SUMMARY"
 
     - name: Dump container state on failure
       if: failure()

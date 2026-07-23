@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
-# DPM-DAR-001: `dpm localnet dar build-upload` inside a Daml project.
+# DPM-DAR-001: build step of `dpm localnet dar build-upload` (--build-only).
+# Does not exercise the upload RPC and does not require a running
+# LocalNet or a pre-existing Daml project (one is scaffolded below).
 #
 # Regression test for issue #230: under `dpm localnet …`, DPM injects
 # DPM_RESOLUTION_FILE pointing at a temp resolution file it already
@@ -43,7 +45,7 @@ teardown() {
   [ -n "${PROJECT_DIR:-}" ] && rm -rf "$PROJECT_DIR"
 }
 
-@test "DPM-DAR-001: build-upload inside a Daml project (issue #230)" {
+@test "DPM-DAR-001: build-upload build step, build-only (no upload/LocalNet) (issue #230)" {
   cd "$PROJECT_DIR"
 
   run "$DPM" install package
