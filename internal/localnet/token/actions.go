@@ -216,13 +216,19 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	if err := validateAmount("mint", opts.Amount); err != nil {
 		return err
 	}
+	if opts.Role == "" {
+		opts.Role = "app-user"
+	}
+	// Auto-discover the endpoint from the instance's captured ledger port
+	// when none was passed, so a live mint (and its self-mint guard) works
+	// flag-free on a running LocalNet. Explicit --endpoint wins.
+	if opts.Endpoint == "" {
+		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
+	}
 	ref := instrumentRefOrRaw(opts.Instance, opts.Instrument)
 	// Live mint only for on-ledger test-token instruments. Amulet and
 	// registry-only instruments have no asset-specific mint.
 	if opts.Endpoint != "" && ref.Status == "on-ledger" {
-		if opts.Role == "" {
-			opts.Role = "app-user"
-		}
 		return runMintLive(ctx, out, opts, ref)
 	}
 	emit(out, "mint", map[string]any{
@@ -251,14 +257,20 @@ func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error
 	if err := validateAmount("transfer", opts.Amount); err != nil {
 		return err
 	}
+	if opts.Role == "" {
+		opts.Role = "app-user"
+	}
+	// Auto-discover the endpoint from the instance's captured ledger port
+	// when none was passed. Explicit --endpoint wins; if still empty (no
+	// live participant) fall through to the ErrNeedsV2LocalNet remediation.
+	if opts.Endpoint == "" {
+		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
+	}
 	if opts.Endpoint == "" {
 		emit(out, "transfer", map[string]any{
 			"from": opts.From, "to": opts.To, "amount": opts.Amount,
 		})
 		return ErrNeedsV2LocalNet
-	}
-	if opts.Role == "" {
-		opts.Role = "app-user"
 	}
 
 	// On-ledger instruments transfer by exercising the issuer's TokenRules
@@ -331,14 +343,20 @@ func RunAccept(ctx context.Context, out io.Writer, opts AcceptOptions) error {
 	// detection (which puts the receiver in an ACS party filter) and the
 	// off-ledger path need a real party id, not an alias.
 	opts.Party = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Party)
+	if opts.Role == "" {
+		opts.Role = "app-user"
+	}
+	// Auto-discover the endpoint from the instance's captured ledger port
+	// when none was passed. Explicit --endpoint wins; if still empty fall
+	// through to the ErrNeedsV2LocalNet remediation.
+	if opts.Endpoint == "" {
+		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
+	}
 	if opts.Endpoint == "" {
 		emit(out, "transfer accept", map[string]any{
 			"transfer_instruction_id": opts.TransferInstructionID,
 		})
 		return ErrNeedsV2LocalNet
-	}
-	if opts.Role == "" {
-		opts.Role = "app-user"
 	}
 	// An issuer-administered test-token offer is accepted on-ledger; only
 	// Amulet / external-registry instructions go through the off-ledger
@@ -365,11 +383,16 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 	if err := validateAmount("burn", opts.Amount); err != nil {
 		return err
 	}
+	if opts.Role == "" {
+		opts.Role = "app-user"
+	}
+	// Auto-discover the endpoint from the instance's captured ledger port
+	// when none was passed. Explicit --endpoint wins.
+	if opts.Endpoint == "" {
+		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
+	}
 	ref := instrumentRefOrRaw(opts.Instance, opts.Instrument)
 	if opts.Endpoint != "" && ref.Status == "on-ledger" {
-		if opts.Role == "" {
-			opts.Role = "app-user"
-		}
 		return runBurnLive(ctx, out, opts, ref)
 	}
 	emit(out, "burn", map[string]any{
