@@ -144,10 +144,10 @@ const (
 	AllocationInstructionWithdrawPathV2 = "/registry/allocation-instruction/v2/{allocationInstructionId}/choice-contexts/withdraw"
 	// SettlementFactoryPathV2 → SettlementFactory_SettleBatch context.
 	SettlementFactoryPathV2 = "/registry/allocation/v2/settlement-factory"
-	// AllocationWithdrawPathV2 → Allocation_Withdraw context.
-	AllocationWithdrawPathV2 = "/registry/allocations/v2/{allocationId}/choice-contexts/withdraw"
-	// AllocationCancelPathV2 → Allocation_Cancel context.
-	AllocationCancelPathV2 = "/registry/allocations/v2/{allocationId}/choice-contexts/cancel"
+	// Note: Allocation_Withdraw / Allocation_Cancel are exercised against the
+	// issuer's own on-ledger allocation state (see runAllocationAction), not
+	// via scan-registry choice-context endpoints, so no paths are defined for
+	// them here.
 )
 
 // Asset-specific choice / template names for the bundled

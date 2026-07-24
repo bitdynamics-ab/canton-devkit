@@ -66,28 +66,28 @@ func testTokenAllocateFactoryArg(args registry.AllocationFactoryChoiceArgs, toke
 }
 
 // exerciseAllocationChoice submits a nonconsuming Allocation choice —
-// Allocation_Withdraw or Allocation_Cancel — against a finalized Allocation.
-// Both take the same `{ extraArgs }` argument shape; the caller passes the
-// choice name.
+// Allocation_Withdraw or Allocation_Cancel — against a finalized Allocation
+// on the issuer's own on-ledger contract state. Both take the same
+// `{ actors : [Party]; extraArgs }` argument shape (AllocationV2.daml); the
+// caller passes the choice name + its controller `actors`.
+//
+// Like the allocate factory path, the TestToken impl reads the local
+// test-token choice context (TokenRules event-log + authorizer AccountConfig
+// cids) from extraArgs — unlockTokenAllocationV2 calls
+// getEventLogFromContext and applyAllocationTransitions calls
+// extractAccountConfigMap — rather than the scan registry's opaque blob, so
+// the context is built locally from those cids.
 func exerciseAllocationChoice(
 	ctx context.Context,
 	client *ledger.Client,
-	actAs string,
+	actAs []string,
 	allocationID string,
 	choice string,
-	ctxResp *registry.ChoiceContextResponse,
+	actors []string,
+	tokenRulesCID string,
+	accountConfigCIDs []string,
 ) (*lapiv2.SubmitAndWaitForTransactionResponse, error) {
-	extraArgs, err := buildExtraArgsRecord(ctxResp.ChoiceContextData, registry.Metadata{Values: map[string]string{}})
-	if err != nil {
-		return nil, fmt.Errorf("build extraArgs: %w", err)
-	}
-	choiceArg := recordValue([]field{
-		{"extraArgs", extraArgs},
-	})
-	disclosed, err := disclosedContractsToProto(ctxResp.DisclosedContracts)
-	if err != nil {
-		return nil, fmt.Errorf("convert disclosed contracts: %w", err)
-	}
+	choiceArg := testTokenAllocationChoiceArg(actors, tokenRulesCID, accountConfigCIDs)
 	pkg, mod, entity := splitInterfaceID(AllocationInterfaceV2)
 	exercise := &lapiv2.Command{
 		Command: &lapiv2.Command_Exercise{
@@ -99,7 +99,19 @@ func exerciseAllocationChoice(
 			},
 		},
 	}
-	return submitAllocation(ctx, client, []string{actAs}, []*lapiv2.Command{exercise}, disclosed)
+	return submitAllocation(ctx, client, actAs, []*lapiv2.Command{exercise}, nil)
+}
+
+// testTokenAllocationChoiceArg builds the `{ actors; extraArgs }` argument
+// shared by Allocation_Withdraw / Allocation_Cancel. The extraArgs carry the
+// locally-built test-token choice context (TokenRules + authorizer
+// AccountConfig cids) the DAML impl reads. Extracted so the wire shape is
+// unit-testable.
+func testTokenAllocationChoiceArg(actors []string, tokenRulesCID string, accountConfigCIDs []string) *lapiv2.Value {
+	return recordValue([]field{
+		{"actors", listValue(actors, partyValue)},
+		{"extraArgs", buildTestTokenExtraArgs(tokenRulesCID, accountConfigCIDs)},
+	})
 }
 
 // submitAllocation is the shared submission seam for the allocation

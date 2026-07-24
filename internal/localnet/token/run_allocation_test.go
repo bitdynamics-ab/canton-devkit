@@ -283,6 +283,87 @@ func TestTestTokenAllocateFactoryArg(t *testing.T) {
 	}
 }
 
+// TestTestTokenAllocationChoiceArg pins the withdraw/cancel choice arg wire
+// shape: the `actors` list is carried through and `extraArgs.context` is the
+// local test-token context (TokenRules event-log cid + accountConfigs),
+// mirroring the on-ledger allocate factory path rather than a registry blob.
+func TestTestTokenAllocationChoiceArg(t *testing.T) {
+	arg := testTokenAllocationChoiceArg([]string{"holder::1220", "prov::1220"}, "tr-9", []string{"cfg-a"})
+
+	actors := fieldValue(arg, "actors").GetList()
+	if actors == nil || len(actors.Elements) != 2 {
+		t.Fatalf("actors = %v, want 2 elements", actors)
+	}
+	if got := partyOf(actors.Elements[0]); got != "holder::1220" {
+		t.Errorf("actors[0] = %q, want holder::1220", got)
+	}
+
+	extra := fieldValue(arg, "extraArgs")
+	if extra == nil {
+		t.Fatal("missing extraArgs field")
+	}
+	values := contextValuesMap(t, fieldValue(extra, "context"))
+	if _, ok := values[tokenRulesContextKey]; !ok {
+		t.Errorf("context missing %q; have %v", tokenRulesContextKey, keysOf(values))
+	}
+	ctor, inner := variantOf(t, values[tokenRulesContextKey])
+	if ctor != "AV_ContractId" || contractIDOf(inner) != "tr-9" {
+		t.Errorf("tokenRules entry = (%s,%q), want (AV_ContractId, tr-9)", ctor, contractIDOf(inner))
+	}
+	if _, ok := values[accountConfigsContextKey]; !ok {
+		t.Errorf("context missing %q", accountConfigsContextKey)
+	}
+}
+
+// TestExtractAllocationView_WithdrawCancelFields pins that the view walker
+// surfaces the authorizer account provider/id and the settlement executors —
+// the coordinates runAllocationAction needs to build the withdraw/cancel
+// controller actors + resolve the AccountConfig.
+func TestExtractAllocationView_WithdrawCancelFields(t *testing.T) {
+	owner := "holder::1220"
+	prov := "prov::1220"
+	spec := recordValue([]field{
+		{"admin", partyValue("issuer::1220")},
+		{"authorizer", recordValue([]field{
+			{"owner", optionalPartyValue(&owner)},
+			{"provider", optionalPartyValue(&prov)},
+			{"id", textValue("acct-x")},
+		})},
+		{"settlement", recordValue([]field{
+			{"settlementRef", recordValue([]field{{"id", textValue("s-1")}})},
+			{"executors", &lapiv2.Value{Sum: &lapiv2.Value_List{List: &lapiv2.List{
+				Elements: []*lapiv2.Value{partyValue("exec::1220")},
+			}}}},
+		})},
+	})
+	view := recordValue([]field{{"allocation", spec}})
+	iv := []*lapiv2.InterfaceView{{
+		InterfaceId: &lapiv2.Identifier{ModuleName: "Splice.Api.Token.AllocationV2", EntityName: "Allocation"},
+		ViewValue:   view.GetRecord(),
+	}}
+	av, ok := extractAllocationView(iv)
+	if !ok {
+		t.Fatal("extractAllocationView: ok=false")
+	}
+	if av.Admin != "issuer::1220" {
+		t.Errorf("admin = %q, want issuer::1220", av.Admin)
+	}
+	if av.AuthorizerProvider != "prov::1220" {
+		t.Errorf("authorizerProvider = %q, want prov::1220", av.AuthorizerProvider)
+	}
+	if av.AuthorizerID != "acct-x" {
+		t.Errorf("authorizerID = %q, want acct-x", av.AuthorizerID)
+	}
+	if len(av.Executors) != 1 || av.Executors[0] != "exec::1220" {
+		t.Errorf("executors = %v, want [exec::1220]", av.Executors)
+	}
+	// withdraw controllers = authorizer account parties (admin + owner + provider).
+	got := accountPartiesOf(av.Admin, av.Authorizer, av.AuthorizerProvider)
+	if len(got) != 2 || got[0] != "holder::1220" || got[1] != "prov::1220" {
+		t.Errorf("withdraw actors = %v, want [holder::1220 prov::1220]", got)
+	}
+}
+
 // TestAuthorizerAccountFromHoldings pins that the authorizer Account is
 // taken from the picked holdings' own account (owner/provider/id) — the
 // DAML impl asserts inputHolding.account == allocation.authorizer.

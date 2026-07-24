@@ -325,19 +325,27 @@ func RunListAllocations(ctx context.Context, opts ListAllocationsOptions) ([]typ
 // settlement deadline passes; the participant's assertion failure is
 // surfaced to the caller.
 func RunAllocationWithdraw(ctx context.Context, out io.Writer, opts AllocationActionOptions) error {
-	return runAllocationAction(ctx, out, opts, "withdraw", AllocationWithdrawPathV2, "Allocation_Withdraw")
+	return runAllocationAction(ctx, out, opts, "withdraw", "Allocation_Withdraw")
 }
 
 // RunAllocationCancel exercises Allocation_Cancel against a finalized
 // Allocation.
 func RunAllocationCancel(ctx context.Context, out io.Writer, opts AllocationActionOptions) error {
-	return runAllocationAction(ctx, out, opts, "cancel", AllocationCancelPathV2, "Allocation_Cancel")
+	return runAllocationAction(ctx, out, opts, "cancel", "Allocation_Cancel")
 }
 
-// runAllocationAction is the shared withdraw/cancel flow: fetch the
-// per-allocation choice context from the registry, then exercise the named
-// nonconsuming Allocation choice.
-func runAllocationAction(ctx context.Context, out io.Writer, opts AllocationActionOptions, verb, pathTemplate, choice string) error {
+// runAllocationAction is the shared withdraw/cancel flow. Like the allocate
+// factory path, both choices are exercised against the issuer's own
+// on-ledger allocation state (the TestToken impl reads the local test-token
+// choice context — TokenRules event-log + authorizer AccountConfig cids —
+// from extraArgs, not the scan registry's opaque blob). It fetches the
+// target Allocation's view to resolve the admin, the authorizer account, and
+// the settlement executors, then exercises the named choice with the
+// controller `actors` the state machine requires:
+//   - withdraw → the authorizer's account parties (AccountConfig.daml
+//     STAS_Account authorizer)
+//   - cancel   → the settlement executors (STAS_Parties executors)
+func runAllocationAction(ctx context.Context, out io.Writer, opts AllocationActionOptions, verb, choice string) error {
 	if err := requireFields(verb, opts.Instance, opts.AllocationID); err != nil {
 		return err
 	}
@@ -350,10 +358,6 @@ func runAllocationAction(ctx context.Context, out io.Writer, opts AllocationActi
 	}
 	opts.Party = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Party)
 
-	regBaseURL, regHost, err := resolveRegistryURL(opts.Instance, opts.RegistryURL)
-	if err != nil {
-		return err
-	}
 	conn := LedgerConn{
 		Endpoint: opts.Endpoint,
 		Token:    opts.Token,
@@ -367,29 +371,63 @@ func runAllocationAction(ctx context.Context, out io.Writer, opts AllocationActi
 	}
 	defer cleanup()
 
-	actor := opts.Party
-	if actor == "" {
-		actor, err = pickActAsParty(ctx, client)
-		if err != nil {
-			return fmt.Errorf("resolve %s party: %w", verb, err)
-		}
+	av, err := findAllocationView(ctx, client, opts.AllocationID)
+	if err != nil {
+		return fmt.Errorf("look up allocation %s: %w", opts.AllocationID, err)
+	}
+	admin := av.Admin
+	if admin == "" {
+		return fmt.Errorf("allocation %s view carries no admin — cannot resolve TokenRules", opts.AllocationID)
 	}
 
-	regCli, err := registry.Dial(registry.DialOptions{
-		BaseURL:    regBaseURL,
-		HostHeader: regHost,
-		Token:      registry.StaticToken(resolveRegistryToken(opts.Token, opts.Instance, opts.Role)),
-		Version:    "v2",
+	// The issuer's on-ledger TokenRules IS the allocation's event log +
+	// AccountConfig context source (interface instance for TokenRules); the
+	// choice's getEventLogFromContext / extractAccountConfigMap read it.
+	tokenRulesCID, err := findTokenRules(ctx, client, admin)
+	if err != nil {
+		return fmt.Errorf("look up TokenRules: %w", err)
+	}
+	if tokenRulesCID == "" {
+		return fmt.Errorf("no on-ledger TokenRules for issuer %s — "+
+			"run `localnet token create --endpoint ...` first", admin)
+	}
+
+	// Provider-scoped authorizer accounts need an AccountConfig in the
+	// context; self-custodial (provider="") accounts use the synthesized
+	// basic config, so none is supplied.
+	var accountConfigCIDs []string
+	if av.AuthorizerProvider != "" {
+		cid, cerr := findOrCreateAccountConfig(ctx, client, admin, av.Authorizer, av.AuthorizerProvider)
+		if cerr != nil {
+			return fmt.Errorf("ensure authorizer account config: %w", cerr)
+		}
+		accountConfigCIDs = []string{cid}
+	}
+
+	// Controller `actors` per the allocation state machine
+	// (AccountConfig.daml:254-255).
+	var actors []string
+	switch choice {
+	case "Allocation_Cancel":
+		actors = av.Executors
+	default: // Allocation_Withdraw
+		actors = accountPartiesOf(admin, av.Authorizer, av.AuthorizerProvider)
+	}
+	if len(actors) == 0 {
+		return fmt.Errorf("%s: allocation %s view carries no %s actors", verb, opts.AllocationID, verb)
+	}
+
+	// Act as the controller actors plus the admin: the unlocked holdings the
+	// choice recreates are admin-co-signed, and on LocalNet we host the admin.
+	actAs := dedupParties(append(append([]string{}, actors...), admin))
+
+	emit(out, verb+": exercising", map[string]any{
+		"allocation_id": opts.AllocationID,
+		"admin":         admin,
+		"actors":        actors,
 	})
-	if err != nil {
-		return fmt.Errorf("dial registry: %w", err)
-	}
-	ctxResp, err := regCli.GetAllocationChoiceContext(ctx, pathTemplate, opts.AllocationID,
-		registry.ChoiceContextRequest{Meta: map[string]string{}})
-	if err != nil {
-		return fmt.Errorf("registry %s choice-context: %w", verb, err)
-	}
-	resp, err := exerciseAllocationChoice(ctx, client, actor, opts.AllocationID, choice, ctxResp)
+
+	resp, err := exerciseAllocationChoice(ctx, client, actAs, opts.AllocationID, choice, actors, tokenRulesCID, accountConfigCIDs)
 	if err != nil {
 		return fmt.Errorf("exercise %s: %w", choice, err)
 	}
@@ -455,6 +493,45 @@ func RunSettle(ctx context.Context, out io.Writer, opts AllocationActionOptions)
 }
 
 // --- helpers -------------------------------------------------------
+
+// findAllocationView ACS-scans the Allocation interface and returns the view
+// of the contract with the given id — the admin / authorizer account /
+// executors the withdraw + cancel exercises need. Errors if the allocation
+// is not visible (already settled/withdrawn, or wrong participant).
+func findAllocationView(ctx context.Context, client *ledger.Client, allocationID string) (allocationView, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	end, err := client.LedgerEnd(ctx)
+	if err != nil {
+		return allocationView{}, fmt.Errorf("ledger end: %w", err)
+	}
+	stream, err := client.ActiveContracts(ctx, ledger.ActiveContractsRequest{
+		ActiveAtOffset: end.Offset,
+		EventFormat:    allocationInterfaceFilter(nil),
+	})
+	if err != nil {
+		return allocationView{}, fmt.Errorf("ACS query: %w", err)
+	}
+	for item := range stream {
+		if item.Err != nil {
+			return allocationView{}, fmt.Errorf("ACS stream: %w", item.Err)
+		}
+		entry, ok := item.Value.ContractEntry.(*lapiv2.GetActiveContractsResponse_ActiveContract)
+		if !ok {
+			continue
+		}
+		created := entry.ActiveContract.GetCreatedEvent()
+		if created == nil || created.GetContractId() != allocationID {
+			continue
+		}
+		av, ok := extractAllocationView(created.GetInterfaceViews())
+		if !ok {
+			return allocationView{}, fmt.Errorf("allocation %s has no parseable Allocation view", allocationID)
+		}
+		return av, nil
+	}
+	return allocationView{}, fmt.Errorf("allocation %s not found in active contracts (already settled/withdrawn, or not visible to this party)", allocationID)
+}
 
 // authorizerAccountFromHoldings builds the V2 Account the allocation
 // authorizes from the picked input holdings. The DAML impl asserts every
@@ -527,6 +604,15 @@ type allocationView struct {
 	Admin        string
 	LegCount     int
 	Committed    bool
+
+	// AuthorizerProvider / AuthorizerID are the remaining coordinates of the
+	// authorizer Account (owner is Authorizer). Empty provider → self-custodial.
+	// Executors are the settlement executors. These back the withdraw/cancel
+	// exercises (actors + account-config resolution) but are not surfaced in
+	// the summary list.
+	AuthorizerProvider string
+	AuthorizerID       string
+	Executors          []string
 }
 
 // allocationInterfaceFilter builds the EventFormat matching every V2
@@ -588,8 +674,13 @@ func walkAllocationFields(fields []*lapiv2.RecordField, out *allocationView) {
 			// some views.
 			if rec := recordOf(f.Value); rec != nil {
 				for _, af := range rec.Fields {
-					if af.Label == "owner" {
+					switch af.Label {
+					case "owner":
 						out.Authorizer = optionalPartyOf(af.Value)
+					case "provider":
+						out.AuthorizerProvider = optionalPartyOf(af.Value)
+					case "id":
+						out.AuthorizerID = textOf(af.Value)
 					}
 				}
 			} else {
@@ -602,15 +693,22 @@ func walkAllocationFields(fields []*lapiv2.RecordField, out *allocationView) {
 		case "committed":
 			out.Committed = boolOf(f.Value)
 		case "settlement":
-			// Nested SettlementInfo — pull the settlement ref id.
+			// Nested SettlementInfo — pull the settlement ref id + executors.
 			if rec := recordOf(f.Value); rec != nil {
 				for _, sf := range rec.Fields {
-					if sf.Label == "settlementRef" {
+					switch sf.Label {
+					case "settlementRef":
 						if rref := recordOf(sf.Value); rref != nil {
 							for _, rf := range rref.Fields {
 								if rf.Label == "id" {
 									out.SettlementID = textOf(rf.Value)
 								}
+							}
+						}
+					case "executors":
+						for _, e := range listElems(sf.Value) {
+							if p := partyOf(e); p != "" {
+								out.Executors = append(out.Executors, p)
 							}
 						}
 					}
