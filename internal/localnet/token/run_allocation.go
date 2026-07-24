@@ -114,10 +114,6 @@ func RunAllocate(ctx context.Context, out io.Writer, opts AllocationOptions) (st
 		return "", err
 	}
 
-	regBaseURL, regHost, err := resolveRegistryURL(opts.Instance, opts.RegistryURL)
-	if err != nil {
-		return "", err
-	}
 	ref := instrumentRefOrRaw(opts.Instance, opts.Instrument)
 
 	conn := LedgerConn{
@@ -153,15 +149,11 @@ func RunAllocate(ctx context.Context, out io.Writer, opts AllocationOptions) (st
 		return "", fmt.Errorf("could not determine instrument admin party — pass an instrument with a recorded issuer or rely on at least one holding being present for the authorizer")
 	}
 
-	regCli, err := registry.Dial(registry.DialOptions{
-		BaseURL:    regBaseURL,
-		HostHeader: regHost,
-		Token:      registry.StaticToken(resolveRegistryToken(opts.Token, opts.Instance, opts.Role)),
-		Version:    "v2",
-	})
-	if err != nil {
-		return "", fmt.Errorf("dial registry: %w", err)
-	}
+	// Build the authorizer Account from the picked holdings — the DAML
+	// AllocationFactory_Allocate impl asserts inputHolding.account ==
+	// allocation.authorizer, so use the holdings' own account (owner /
+	// provider / id) rather than assuming a bare owned account.
+	authorizer := authorizerAccountFromHoldings(picked, opts.From)
 
 	now := time.Now().UTC()
 	settlement := registry.SettlementInfo{
@@ -171,7 +163,7 @@ func RunAllocate(ctx context.Context, out io.Writer, opts AllocationOptions) (st
 	}
 	spec := registry.AllocationSpecification{
 		Admin:      admin,
-		Authorizer: registry.NewOwnedAccount(opts.From),
+		Authorizer: authorizer,
 		TransferLegSides: []registry.TransferLegSide{{
 			TransferLegID: "leg0",
 			Side:          "SenderSide",
@@ -189,23 +181,54 @@ func RunAllocate(ctx context.Context, out io.Writer, opts AllocationOptions) (st
 		Allocation:       spec,
 		RequestedAt:      now,
 		InputHoldingCids: contractIDsOf(picked),
-		Actors:           []string{opts.From},
+		Actors:           accountPartiesOf(admin, opts.From, authorizerProvider(picked)),
 		ExtraArgs: registry.ExtraArgs{
 			Context: registry.Metadata{Values: map[string]string{}},
 			Meta:    registry.Metadata{Values: map[string]string{}},
 		},
 	}
-	factoryResp, err := regCli.GetAllocationFactory(ctx, AllocationFactoryPathV2, registry.AllocationFactoryRequest{ChoiceArguments: choiceArgs})
+
+	// The issuer's on-ledger TokenRules contract IS the V2 AllocationFactory
+	// (interface instance V2.AllocationFactory for TokenRules); its admin ==
+	// the instrument admin, so it satisfies the impl's allocation.admin ==
+	// tokenRules.admin assertion. The scan registry's default factory (admin
+	// = DSO) does not, so it rejects issuer-created instruments with
+	// "Instrument-id must match the factory". Exercise the TokenRules
+	// directly, mirroring the on-ledger transfer path.
+	tokenRulesCID, err := findTokenRules(ctx, client, admin)
 	if err != nil {
-		return "", fmt.Errorf("registry allocation-factory: %w", err)
+		return "", fmt.Errorf("look up TokenRules: %w", err)
 	}
+	if tokenRulesCID == "" {
+		return "", fmt.Errorf("no on-ledger TokenRules for issuer %s — "+
+			"run `localnet token create --endpoint ...` first", admin)
+	}
+
+	// Provider-scoped authorizer accounts need an AccountConfig in the
+	// choice context; self-custodial (provider=None) accounts use the basic
+	// config the choice synthesizes, so none is supplied.
+	var accountConfigCIDs []string
+	if p := authorizerProvider(picked); p != "" {
+		cid, cerr := findOrCreateAccountConfig(ctx, client, admin, opts.From, p)
+		if cerr != nil {
+			return "", fmt.Errorf("ensure authorizer account config: %w", cerr)
+		}
+		accountConfigCIDs = []string{cid}
+	}
+
+	// Act as the authorizer's account parties plus the admin: the locked
+	// holdings + allocation the choice creates are admin-co-signed, and on
+	// LocalNet we host the admin.
+	authorizerParties := accountPartiesOf(admin, opts.From, authorizerProvider(picked))
+	factoryActAs := dedupParties(append(append([]string{}, authorizerParties...), admin))
+
 	emit(out, "allocate: factory", map[string]any{
-		"factory_id": factoryResp.FactoryID,
-		"disclosed":  len(factoryResp.DisclosedContractsList()),
+		"factory_id": tokenRulesCID,
+		"admin":      admin,
 		"committed":  opts.Committed,
 	})
 
-	resp, err := exerciseAllocationFactory(ctx, client, opts.From, factoryResp.FactoryID, choiceArgs, factoryResp)
+	resp, err := exerciseAllocationFactoryOnLedger(ctx, client, factoryActAs, tokenRulesCID, accountConfigCIDs, choiceArgs)
 	if err != nil {
 		return "", fmt.Errorf("exercise AllocationFactory_Allocate: %w", err)
 	}
@@ -432,6 +455,39 @@ func RunSettle(ctx context.Context, out io.Writer, opts AllocationActionOptions)
 }
 
 // --- helpers -------------------------------------------------------
+
+// authorizerAccountFromHoldings builds the V2 Account the allocation
+// authorizes from the picked input holdings. The DAML impl asserts every
+// inputHolding.account == allocation.authorizer, so the authorizer must be
+// the holdings' own account (owner / provider / id), not a synthesized bare
+// owned account. Falls back to a bare owned account for `from` when the
+// holdings carry no account coordinates.
+func authorizerAccountFromHoldings(picked []holdingRef, from string) registry.Account {
+	if len(picked) == 0 {
+		return registry.NewOwnedAccount(from)
+	}
+	h := picked[0]
+	owner := h.Owner
+	if owner == "" {
+		owner = from
+	}
+	acct := registry.Account{Owner: &owner, ID: h.AccountID}
+	if h.Provider != "" {
+		p := h.Provider
+		acct.Provider = &p
+	}
+	return acct
+}
+
+// authorizerProvider returns the account provider carried on the picked
+// holdings ("" when self-custodial). All inputs share one account, so the
+// first holding is authoritative.
+func authorizerProvider(picked []holdingRef) string {
+	if len(picked) == 0 {
+		return ""
+	}
+	return picked[0].Provider
+}
 
 // newSettlementID returns a fresh settlement-ref id, reusing the command-id
 // random source (hex, collision-safe).

@@ -8,6 +8,7 @@ import (
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
+	"github.com/bitdynamics-ab/canton-devkit/internal/canton/registry"
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
 
@@ -211,3 +212,111 @@ func TestRunAllocate_RejectsBadAmount(t *testing.T) {
 }
 
 func strptr(s string) *string { return &s }
+
+// fieldValue returns the value of the named field in a record Value, or nil.
+func fieldValue(v *lapiv2.Value, label string) *lapiv2.Value {
+	rec := v.GetRecord()
+	if rec == nil {
+		return nil
+	}
+	for _, f := range rec.Fields {
+		if f.Label == label {
+			return f.Value
+		}
+	}
+	return nil
+}
+
+// TestTestTokenAllocateFactoryArg pins the on-ledger
+// AllocationFactory_Allocate choice argument: allocation.admin carries the
+// issuer (so it matches the TokenRules factory admin — the fix for
+// "Instrument-id must match the factory"), and extraArgs carry the local
+// test-token choice context (TokenRules + AccountConfig cids) rather than a
+// registry blob.
+func TestTestTokenAllocateFactoryArg(t *testing.T) {
+	args := registry.AllocationFactoryChoiceArgs{
+		Settlement: registry.SettlementInfo{Executors: []string{"exec::1"}, ID: "s-1"},
+		Allocation: registry.AllocationSpecification{
+			Admin:      "issuer::1220",
+			Authorizer: registry.NewOwnedAccount("holder::1220"),
+			TransferLegSides: []registry.TransferLegSide{{
+				TransferLegID: "leg0", Side: "SenderSide",
+				Otherside: registry.NewOwnedAccount("recv::1220"), Amount: "10", InstrumentID: "DEMO",
+			}},
+		},
+		InputHoldingCids: []string{"h1", "h2"},
+		Actors:           []string{"holder::1220"},
+	}
+	arg := testTokenAllocateFactoryArg(args, "tr-1", []string{"cfg-a"})
+
+	// allocation.admin must be the issuer (the TokenRules factory admin).
+	spec := fieldValue(arg, "allocation")
+	if spec == nil {
+		t.Fatal("missing allocation field")
+	}
+	if got := partyOf(fieldValue(spec, "admin")); got != "issuer::1220" {
+		t.Errorf("allocation.admin = %q, want issuer::1220 (must match the TokenRules factory admin)", got)
+	}
+
+	// extraArgs.context must be the local test-token context, not a
+	// registry blob: tokenRules cid + accountConfigs list present.
+	extra := fieldValue(arg, "extraArgs")
+	if extra == nil {
+		t.Fatal("missing extraArgs field")
+	}
+	values := contextValuesMap(t, fieldValue(extra, "context"))
+	if _, ok := values[tokenRulesContextKey]; !ok {
+		t.Errorf("context missing %q; have %v", tokenRulesContextKey, keysOf(values))
+	}
+	ctor, inner := variantOf(t, values[tokenRulesContextKey])
+	if ctor != "AV_ContractId" || contractIDOf(inner) != "tr-1" {
+		t.Errorf("tokenRules entry = (%s,%q), want (AV_ContractId, tr-1)", ctor, contractIDOf(inner))
+	}
+	if _, ok := values[accountConfigsContextKey]; !ok {
+		t.Errorf("context missing %q", accountConfigsContextKey)
+	}
+
+	// inputHoldingCids round-trip through the choice arg.
+	list := fieldValue(arg, "inputHoldingCids").GetList()
+	if list == nil || len(list.Elements) != 2 {
+		t.Fatalf("inputHoldingCids = %v, want 2 elements", list)
+	}
+}
+
+// TestAuthorizerAccountFromHoldings pins that the authorizer Account is
+// taken from the picked holdings' own account (owner/provider/id) — the
+// DAML impl asserts inputHolding.account == allocation.authorizer.
+func TestAuthorizerAccountFromHoldings(t *testing.T) {
+	t.Run("provider-scoped", func(t *testing.T) {
+		picked := []holdingRef{{Owner: "holder::1", Provider: "prov::1", AccountID: "acct-x"}}
+		a := authorizerAccountFromHoldings(picked, "holder::1")
+		if a.Owner == nil || *a.Owner != "holder::1" {
+			t.Errorf("owner = %v, want holder::1", a.Owner)
+		}
+		if a.Provider == nil || *a.Provider != "prov::1" {
+			t.Errorf("provider = %v, want prov::1", a.Provider)
+		}
+		if a.ID != "acct-x" {
+			t.Errorf("id = %q, want acct-x", a.ID)
+		}
+		if authorizerProvider(picked) != "prov::1" {
+			t.Errorf("authorizerProvider = %q, want prov::1", authorizerProvider(picked))
+		}
+	})
+	t.Run("self-custodial", func(t *testing.T) {
+		picked := []holdingRef{{Owner: "holder::1", AccountID: ""}}
+		a := authorizerAccountFromHoldings(picked, "holder::1")
+		if a.Provider != nil {
+			t.Errorf("provider = %v, want nil (self-custodial)", a.Provider)
+		}
+		if authorizerProvider(picked) != "" {
+			t.Errorf("authorizerProvider = %q, want empty", authorizerProvider(picked))
+		}
+	})
+	t.Run("empty falls back to from", func(t *testing.T) {
+		a := authorizerAccountFromHoldings(nil, "from::1")
+		if a.Owner == nil || *a.Owner != "from::1" {
+			t.Errorf("owner = %v, want from::1", a.Owner)
+		}
+	})
+}

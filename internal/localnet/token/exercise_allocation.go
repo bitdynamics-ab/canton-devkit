@@ -14,48 +14,55 @@ import (
 // already happened; this file turns a (factory/contract id, choice context,
 // disclosed contracts) tuple into a SubmitAndWaitForTransaction.
 
-// exerciseAllocationFactory submits AllocationFactory_Allocate against the
-// factory contract the registry returned. Returns the submit response —
-// caller mines it for the created Allocation (finalized) or
-// AllocationInstruction (pending) contract id.
-func exerciseAllocationFactory(
+// exerciseAllocationFactoryOnLedger submits AllocationFactory_Allocate
+// against the issuer's own on-ledger TokenRules contract — which IS the V2
+// AllocationFactory for an issuer-administered test-token instrument
+// (interface instance V2.AllocationFactory for TokenRules). The DAML impl
+// asserts allocation.admin == tokenRules.admin, so the factory must be the
+// issuer's TokenRules, not the scan registry's network-default (DSO)
+// factory. Mirrors the on-ledger transfer path (TransferFactory_Transfer on
+// the same TokenRules): the choice context is built locally from the
+// TokenRules + authorizer AccountConfig cids, and the submit acts as the
+// authorizer's account parties plus the admin so the admin-co-signed
+// allocation/holdings are authorized without off-ledger disclosure.
+func exerciseAllocationFactoryOnLedger(
 	ctx context.Context,
 	client *ledger.Client,
-	actAs string,
-	factoryID string,
+	actAs []string,
+	tokenRulesCID string,
+	accountConfigCIDs []string,
 	args registry.AllocationFactoryChoiceArgs,
-	factoryResp *registry.AllocationFactoryResponse,
 ) (*lapiv2.SubmitAndWaitForTransactionResponse, error) {
-	extraArgs, err := buildExtraArgsRecord(factoryResp.ChoiceContextData(), registry.Metadata{Values: map[string]string{}})
-	if err != nil {
-		return nil, fmt.Errorf("build extraArgs: %w", err)
-	}
-	choiceArg := recordValue([]field{
-		{"settlement", buildSettlementInfoRecord(args.Settlement)},
-		{"allocation", buildAllocationSpecRecord(args.Allocation)},
-		{"requestedAt", timestampValue(args.RequestedAt)},
-		{"inputHoldingCids", listValue(args.InputHoldingCids, contractIDValue)},
-		{"extraArgs", extraArgs},
-		{"actors", listValue(args.Actors, partyValue)},
-	})
-
-	disclosed, err := disclosedContractsToProto(factoryResp.DisclosedContractsList())
-	if err != nil {
-		return nil, fmt.Errorf("convert disclosed contracts: %w", err)
-	}
+	choiceArg := testTokenAllocateFactoryArg(args, tokenRulesCID, accountConfigCIDs)
 
 	pkg, mod, entity := splitInterfaceID(AllocationFactoryInterfaceV2)
 	exercise := &lapiv2.Command{
 		Command: &lapiv2.Command_Exercise{
 			Exercise: &lapiv2.ExerciseCommand{
 				TemplateId:     &lapiv2.Identifier{PackageId: pkg, ModuleName: mod, EntityName: entity},
-				ContractId:     factoryID,
+				ContractId:     tokenRulesCID,
 				Choice:         "AllocationFactory_Allocate",
 				ChoiceArgument: choiceArg,
 			},
 		},
 	}
-	return submitAllocation(ctx, client, actAs, []*lapiv2.Command{exercise}, disclosed)
+	return submitAllocation(ctx, client, actAs, []*lapiv2.Command{exercise}, nil)
+}
+
+// testTokenAllocateFactoryArg builds the AllocationFactory_Allocate choice
+// argument for the on-ledger TokenRules factory. The `extraArgs` carry the
+// locally-built test-token choice context (TokenRules + authorizer
+// AccountConfig cids) the DAML impl reads, rather than the scan registry's
+// opaque blob. Extracted so the wire shape is unit-testable.
+func testTokenAllocateFactoryArg(args registry.AllocationFactoryChoiceArgs, tokenRulesCID string, accountConfigCIDs []string) *lapiv2.Value {
+	return recordValue([]field{
+		{"settlement", buildSettlementInfoRecord(args.Settlement)},
+		{"allocation", buildAllocationSpecRecord(args.Allocation)},
+		{"requestedAt", timestampValue(args.RequestedAt)},
+		{"inputHoldingCids", listValue(args.InputHoldingCids, contractIDValue)},
+		{"extraArgs", buildTestTokenExtraArgs(tokenRulesCID, accountConfigCIDs)},
+		{"actors", listValue(args.Actors, partyValue)},
+	})
 }
 
 // exerciseAllocationChoice submits a nonconsuming Allocation choice —
@@ -92,17 +99,18 @@ func exerciseAllocationChoice(
 			},
 		},
 	}
-	return submitAllocation(ctx, client, actAs, []*lapiv2.Command{exercise}, disclosed)
+	return submitAllocation(ctx, client, []string{actAs}, []*lapiv2.Command{exercise}, disclosed)
 }
 
 // submitAllocation is the shared submission seam for the allocation
-// exercises. Requests the actAs party's created events with the Allocation +
-// AllocationInstruction interface views attached, so the caller can mine the
-// resulting contract id (finalized vs pending).
+// exercises. Requests the first actAs party's created events with the
+// Allocation + AllocationInstruction interface views attached, so the caller
+// can mine the resulting contract id (finalized vs pending). actAs may carry
+// multiple parties (e.g. authorizer + admin) for the on-ledger factory path.
 func submitAllocation(
 	ctx context.Context,
 	client *ledger.Client,
-	actAs string,
+	actAs []string,
 	commands []*lapiv2.Command,
 	disclosed []*lapiv2.DisclosedContract,
 ) (*lapiv2.SubmitAndWaitForTransactionResponse, error) {
@@ -114,24 +122,24 @@ func submitAllocation(
 		Commands: &lapiv2.Commands{
 			UserId:             exerciseUserID,
 			CommandId:          cmdID,
-			ActAs:              []string{actAs},
+			ActAs:              actAs,
 			Commands:           commands,
 			DisclosedContracts: disclosed,
 		},
-		TransactionFormat: allocationTxFormat(actAs),
+		TransactionFormat: allocationTxFormat(actAs[0]),
 	}
 	return client.SubmitAndWaitForTransaction(ctx, req)
 }
 
-// allocationTxFormat requests the submit response with the actAs party's
+// allocationTxFormat requests the submit response with the given party's
 // created events + the Allocation and AllocationInstruction interface views,
 // which findCreatedAllocationID walks to surface the resulting contract id.
-func allocationTxFormat(actAs string) *lapiv2.TransactionFormat {
+func allocationTxFormat(party string) *lapiv2.TransactionFormat {
 	return &lapiv2.TransactionFormat{
 		TransactionShape: lapiv2.TransactionShape_TRANSACTION_SHAPE_ACS_DELTA,
 		EventFormat: &lapiv2.EventFormat{
 			FiltersByParty: map[string]*lapiv2.Filters{
-				actAs: {Cumulative: []*lapiv2.CumulativeFilter{
+				party: {Cumulative: []*lapiv2.CumulativeFilter{
 					interfaceFilterEntry(AllocationInterfaceV2),
 					interfaceFilterEntry(AllocationInstructionInterfaceV2),
 				}},
