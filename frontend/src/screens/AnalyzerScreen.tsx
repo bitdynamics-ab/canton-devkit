@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   fetchAnalyzerStatus,
   fetchDARList,
@@ -8,6 +8,7 @@ import {
   type Role,
   type AnalyzerStatusResponse,
   type AnalyzerReport,
+  type AnalyzerInteraction,
   type AnalyzerEndpoint,
   type DARRow,
 } from "../api";
@@ -16,14 +17,20 @@ import { W, wMono, tableCaps, R, tint, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { MonoId } from "../components/MonoId";
 
-// Cross-package interaction analysis (Certora daml-analyzer). Analyze a
-// DAR already deployed to the selected instance, or a .dar file uploaded
-// ad hoc. The whole surface is gated on the analyzer being available
-// (Docker + image), so a missing runtime reads as a clean notice.
+// Cross-package interaction analysis (Certora daml-analyzer). Analyze DARs
+// deployed to the selected instance or uploaded ad hoc; several reports can
+// be loaded at once so they can be compared. The views mirror the upstream
+// analyzer's own viewer: highlights, a target-package summary pivot, the
+// package graph, the raw interaction list, and a two-report diff.
 
 const ROLES: Role[] = ["app-user", "app-provider", "sv"];
+type Tab = "highlights" | "summary" | "graph" | "interactions" | "diff";
+const TABS: Tab[] = ["highlights", "summary", "graph", "interactions", "diff"];
 
-type Loaded = { darName: string; report: AnalyzerReport };
+type Loaded = { id: string; darName: string; report: AnalyzerReport };
+// Filter applied from the summary pivot: a target package, optionally
+// narrowed to one interaction type.
+type Filter = { pkg: string; type?: string } | null;
 
 export function AnalyzerScreen() {
   const sel = useInstanceSelection();
@@ -31,8 +38,11 @@ export function AnalyzerScreen() {
   const [role, setRole] = useState<Role>("app-user");
   const [status, setStatus] = useState<AnalyzerStatusResponse | null>(null);
   const [dars, setDars] = useState<DARRow[]>([]);
-  const [loaded, setLoaded] = useState<Loaded | null>(null);
-  const [busy, setBusy] = useState<string | null>(null); // package id / "upload" in flight
+  const [reports, setReports] = useState<Loaded[]>([]);
+  const [activeId, setActiveId] = useState<string>("");
+  const [tab, setTab] = useState<Tab>("highlights");
+  const [filter, setFilter] = useState<Filter>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -59,12 +69,19 @@ export function AnalyzerScreen() {
     };
   }, [name, role]);
 
+  function add(darName: string, report: AnalyzerReport) {
+    const id = `${darName}#${report.analyzed_package.package_id.slice(0, 8)}`;
+    setReports((prev) => [...prev.filter((r) => r.id !== id), { id, darName, report }]);
+    setActiveId(id);
+    setFilter(null);
+  }
+
   async function run(what: string, p: Promise<{ dar_name?: string; report: AnalyzerReport | null }>) {
     setBusy(what);
     setErr(null);
     try {
       const resp = await p;
-      if (resp.report) setLoaded({ darName: resp.dar_name ?? "", report: resp.report });
+      if (resp.report) add(resp.dar_name || what, resp.report);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : String(e));
     } finally {
@@ -72,6 +89,23 @@ export function AnalyzerScreen() {
     }
   }
 
+  // Upload analyses run sequentially so a directory of DARs surfaces one
+  // report per file without flooding the backend.
+  async function runUploads(files: File[]) {
+    setErr(null);
+    for (const f of files) {
+      setBusy(`upload:${f.name}`);
+      try {
+        const resp = await analyzeUploadedDar(f);
+        if (resp.report) add(resp.dar_name || f.name, resp.report);
+      } catch (e) {
+        setErr(e instanceof ApiError ? e.message : String(e));
+      }
+    }
+    setBusy(null);
+  }
+
+  const active = reports.find((r) => r.id === activeId) ?? reports[reports.length - 1];
   const gated = status !== null && !status.available;
 
   return (
@@ -102,27 +136,28 @@ export function AnalyzerScreen() {
         </span>
       </header>
 
-      {gated && <NotConfigured status={status} />}
+      {gated && status && <NotConfigured status={status} />}
 
       {!gated && (
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "18px 0", flexWrap: "wrap" }}>
-            <label style={{ ...uploadStyle(!!busy) }}>
-              {busy === "upload" ? "Analyzing…" : "Analyze a .dar file"}
+            <label style={uploadStyle(!!busy)}>
+              {busy?.startsWith("upload") ? `Analyzing ${busy.slice(7)}…` : "Analyze .dar file(s)"}
               <input
                 type="file"
                 accept=".dar"
+                multiple
                 disabled={!!busy}
                 style={{ display: "none" }}
                 onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) run("upload", analyzeUploadedDar(f));
+                  const files = Array.from(e.target.files ?? []);
+                  if (files.length) void runUploads(files);
                   e.target.value = "";
                 }}
               />
             </label>
             {status?.source && (
-              <span style={{ color: W.dim, fontSize: fs.meta, fontFamily: wMono }}>
+              <span style={{ color: W.faint, fontSize: fs.meta, fontFamily: wMono }}>
                 via {status.runtime === "component" ? "DPM component" : status.runtime} · {status.source}
               </span>
             )}
@@ -140,25 +175,57 @@ export function AnalyzerScreen() {
                     variant="secondary"
                     size="sm"
                     disabled={!!busy}
-                    onClick={() => run(d.main, analyzeDeployedDar(name, d.main, role))}
+                    onClick={() => run(`${d.name} ${d.version}`, analyzeDeployedDar(name, d.main, role))}
                   >
-                    {busy === d.main ? "Analyzing…" : `${d.name} ${d.version}`}
+                    {busy === `${d.name} ${d.version}` ? "Analyzing…" : `${d.name} ${d.version}`}
                   </Button>
                 ))}
               </div>
             </div>
           )}
 
-          {err && (
-            <div style={{ color: W.err, fontSize: fs.body, margin: "12px 0" }}>{err}</div>
+          {err && <div style={{ color: W.err, fontSize: fs.body, margin: "12px 0" }}>{err}</div>}
+
+          {reports.length > 1 && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+              {reports.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => {
+                    setActiveId(r.id);
+                    setFilter(null);
+                  }}
+                  style={{
+                    background: r.id === active?.id ? tint(W.brand, 14) : "transparent",
+                    color: r.id === active?.id ? W.text : W.dim,
+                    border: `1px solid ${r.id === active?.id ? W.brand : W.border}`,
+                    borderRadius: R.control,
+                    padding: "3px 10px",
+                    fontSize: fs.label,
+                    fontFamily: wMono,
+                    cursor: "pointer",
+                  }}
+                >
+                  {r.report.analyzed_package.name} {r.report.analyzed_package.version}
+                </button>
+              ))}
+            </div>
           )}
 
-          {loaded && <ReportView darName={loaded.darName} report={loaded.report} />}
+          {active && (
+            <ReportPanel
+              loaded={active}
+              all={reports}
+              tab={tab}
+              setTab={setTab}
+              filter={filter}
+              setFilter={setFilter}
+            />
+          )}
 
-          {!loaded && !err && !busy && (
+          {!active && !err && !busy && (
             <p style={{ color: W.dim, fontSize: fs.body }}>
-              Pick a deployed DAR above{name ? "" : " (select an instance)"} or upload a .dar to see its
-              cross-package interactions.
+              Pick a deployed DAR above{name ? "" : " (select an instance)"} or upload one or more .dar files.
             </p>
           )}
         </>
@@ -192,10 +259,25 @@ function NotConfigured({ status }: { status: AnalyzerStatusResponse }) {
   );
 }
 
-function ReportView({ darName, report }: { darName: string; report: AnalyzerReport }) {
+function ReportPanel({
+  loaded,
+  all,
+  tab,
+  setTab,
+  filter,
+  setFilter,
+}: {
+  loaded: Loaded;
+  all: Loaded[];
+  tab: Tab;
+  setTab: (t: Tab) => void;
+  filter: Filter;
+  setFilter: (f: Filter) => void;
+}) {
+  const report = loaded.report;
   const p = report.analyzed_package;
   const s = report.summary;
-  const [view, setView] = useState<"table" | "graph">("table");
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
@@ -203,70 +285,295 @@ function ReportView({ darName, report }: { darName: string; report: AnalyzerRepo
         <span style={{ color: W.dim, fontFamily: wMono, fontSize: fs.meta }}>
           {p.version} · LF {p.lf_version ?? "?"}
         </span>
-        {darName && <span style={{ color: W.faint, fontSize: fs.meta }}>{darName}</span>}
+        {loaded.darName && <span style={{ color: W.faint, fontSize: fs.meta }}>{loaded.darName}</span>}
+        <span style={{ marginLeft: "auto" }}>
+          <Button variant="secondary" size="sm" onClick={() => downloadReport(loaded)}>
+            Export JSON
+          </Button>
+        </span>
       </div>
 
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap", margin: "12px 0", alignItems: "baseline" }}>
         <Stat label="Interactions" value={String(s.total_interactions)} />
         <Stat label="Dependencies" value={String(report.dependencies.length)} />
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {Object.entries(s.by_type).map(([k, n]) => (
-            <span
-              key={k}
-              style={{
-                background: tint(W.brand, 12),
-                color: W.brandText,
-                borderRadius: R.control,
-                padding: "2px 8px",
-                fontSize: fs.label,
-                fontFamily: wMono,
-              }}
-            >
-              {k} {n}
-            </span>
-          ))}
-        </div>
+        <Stat label="Target packages" value={String(Object.keys(s.by_target_package).length)} />
       </div>
 
-      {s.total_interactions > 0 && (
-        <div style={{ display: "flex", gap: 4, margin: "6px 0 14px" }}>
-          {(["table", "graph"] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              style={{
-                background: view === v ? W.brand : "transparent",
-                color: view === v ? W.onAccent : W.dim,
-                border: `1px solid ${view === v ? W.brand : W.border}`,
-                borderRadius: R.control,
-                padding: "3px 12px",
-                fontSize: fs.label,
-                textTransform: "capitalize",
-                cursor: "pointer",
-              }}
-            >
-              {v}
-            </button>
-          ))}
+      <div style={{ display: "flex", gap: 4, margin: "6px 0 14px", borderBottom: `1px solid ${W.border}` }}>
+        {TABS.map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            disabled={t === "diff" && all.length < 2}
+            title={t === "diff" && all.length < 2 ? "Load a second DAR to compare" : undefined}
+            style={{
+              background: "transparent",
+              border: "none",
+              borderBottom: `2px solid ${tab === t ? W.brand : "transparent"}`,
+              color: tab === t ? W.text : t === "diff" && all.length < 2 ? W.faint : W.dim,
+              padding: "6px 12px",
+              fontSize: fs.data,
+              fontWeight: tab === t ? 600 : 400,
+              textTransform: "capitalize",
+              cursor: t === "diff" && all.length < 2 ? "default" : "pointer",
+            }}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {tab === "highlights" && <Highlights report={report} onJump={(f) => { setFilter(f); setTab("interactions"); }} />}
+      {tab === "summary" && (
+        <SummaryPivot
+          report={report}
+          onPick={(f) => {
+            setFilter(f);
+            setTab("interactions");
+          }}
+        />
+      )}
+      {tab === "graph" && <GraphView report={report} />}
+      {tab === "interactions" && (
+        <InteractionsTable report={report} filter={filter} clearFilter={() => setFilter(null)} />
+      )}
+      {tab === "diff" && <DiffView current={loaded} all={all} />}
+    </div>
+  );
+}
+
+// --- Highlights ----------------------------------------------------------
+
+// Derived "what matters here" findings: the destructive and structural
+// interactions an operator should notice first.
+function Highlights({ report, onJump }: { report: AnalyzerReport; onJump: (f: Filter) => void }) {
+  const ix = report.interactions;
+  const consuming = ix.filter((i) => i.target.consuming);
+  const impls = ix.filter((i) => i.type === "ImplementsInterface");
+  const creates = ix.filter((i) => i.type === "Create");
+  const byPkg = report.summary.by_target_package;
+  const top = Object.entries(byPkg).sort((a, b) => b[1] - a[1])[0];
+  const noSource = ix.filter((i) => !i.source?.file).length;
+
+  const items: Array<{ tone: string; label: string; detail: string; pkg?: string; type?: string }> = [];
+  if (consuming.length) {
+    items.push({
+      tone: W.warn,
+      label: `${consuming.length} consuming exercise${consuming.length > 1 ? "s" : ""}`,
+      detail: "archives a contract in another package — the destructive cross-package calls",
+      type: "Exercise",
+    });
+  }
+  if (impls.length) {
+    items.push({
+      tone: W.teal,
+      label: `${impls.length} interface implementation${impls.length > 1 ? "s" : ""}`,
+      detail: "this package implements interfaces owned by a dependency",
+      type: "ImplementsInterface",
+    });
+  }
+  if (creates.length) {
+    items.push({
+      tone: W.brandText,
+      label: `${creates.length} cross-package create${creates.length > 1 ? "s" : ""}`,
+      detail: "writes contracts defined by another package",
+      type: "Create",
+    });
+  }
+  if (top) {
+    items.push({
+      tone: W.brandText,
+      label: `${top[0]} is the most-reached package`,
+      detail: `${top[1]} of ${report.summary.total_interactions} interactions target it`,
+      pkg: top[0],
+    });
+  }
+  if (noSource) {
+    items.push({
+      tone: W.faint,
+      label: `${noSource} interaction${noSource > 1 ? "s" : ""} without a source location`,
+      detail: "compiled without source info — file:line is unavailable for these",
+    });
+  }
+
+  if (!items.length) {
+    return <p style={{ color: W.dim, fontSize: fs.body }}>No notable findings — no cross-package interactions.</p>;
+  }
+  return (
+    <div style={{ display: "grid", gap: 8, maxWidth: 760 }}>
+      {items.map((it, i) => (
+        <button
+          key={i}
+          onClick={() => (it.pkg || it.type ? onJump({ pkg: it.pkg ?? "", type: it.type }) : undefined)}
+          style={{
+            textAlign: "left",
+            background: W.surface,
+            border: `1px solid ${W.border}`,
+            borderLeft: `3px solid ${it.tone}`,
+            borderRadius: R.card,
+            padding: "10px 14px",
+            cursor: it.pkg || it.type ? "pointer" : "default",
+          }}
+        >
+          <div style={{ color: W.text, fontSize: fs.data, fontWeight: 600 }}>{it.label}</div>
+          <div style={{ color: W.dim, fontSize: fs.meta, marginTop: 2 }}>{it.detail}</div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// --- Summary pivot -------------------------------------------------------
+
+// Rows = target packages, columns = interaction types, with totals — the
+// analyzer viewer's primary view. Click a row to see every finding against
+// that package; click a cell to narrow to one interaction type.
+function SummaryPivot({ report, onPick }: { report: AnalyzerReport; onPick: (f: Filter) => void }) {
+  const [q, setQ] = useState("");
+  const types = useMemo(
+    () => [...new Set(report.interactions.map((i) => i.type))].sort(),
+    [report],
+  );
+  const rows = useMemo(() => {
+    const m = new Map<string, { version: string; counts: Record<string, number>; total: number }>();
+    for (const it of report.interactions) {
+      const e = m.get(it.target.package) ?? { version: it.target.version, counts: {}, total: 0 };
+      e.counts[it.type] = (e.counts[it.type] ?? 0) + 1;
+      e.total++;
+      m.set(it.target.package, e);
+    }
+    return [...m.entries()]
+      .map(([pkg, e]) => ({ pkg, ...e }))
+      .filter((r) => r.pkg.toLowerCase().includes(q.trim().toLowerCase()))
+      .sort((a, b) => b.total - a.total);
+  }, [report, q]);
+
+  const colTotal = (t: string) => rows.reduce((n, r) => n + (r.counts[t] ?? 0), 0);
+  const grand = rows.reduce((n, r) => n + r.total, 0);
+
+  return (
+    <div>
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Filter target packages…"
+        style={{
+          background: W.inset,
+          border: `1px solid ${W.border}`,
+          borderRadius: R.control,
+          color: W.text,
+          padding: "5px 10px",
+          fontSize: fs.data,
+          marginBottom: 10,
+          minWidth: 240,
+        }}
+      />
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data }}>
+          <thead>
+            <tr style={{ color: W.dim, textAlign: "left" }}>
+              <th style={th}>TARGET PACKAGE</th>
+              <th style={th}>VERSION</th>
+              {types.map((t) => (
+                <th key={t} style={{ ...th, textAlign: "right" }}>
+                  {t.toUpperCase()}
+                </th>
+              ))}
+              <th style={{ ...th, textAlign: "right" }}>TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.pkg} style={{ borderTop: `1px solid ${W.border}` }}>
+                <td style={{ ...td, cursor: "pointer" }} onClick={() => onPick({ pkg: r.pkg })}>
+                  <span style={{ fontFamily: wMono, color: W.brandText }}>{r.pkg}</span>
+                </td>
+                <td style={{ ...td, color: W.dim, fontFamily: wMono }}>{r.version}</td>
+                {types.map((t) => (
+                  <td
+                    key={t}
+                    onClick={() => r.counts[t] && onPick({ pkg: r.pkg, type: t })}
+                    style={{
+                      ...td,
+                      textAlign: "right",
+                      fontFamily: wMono,
+                      color: r.counts[t] ? W.text : W.faint,
+                      cursor: r.counts[t] ? "pointer" : "default",
+                    }}
+                  >
+                    {r.counts[t] ?? "·"}
+                  </td>
+                ))}
+                <td style={{ ...td, textAlign: "right", fontFamily: wMono, color: W.text, fontWeight: 600 }}>
+                  {r.total}
+                </td>
+              </tr>
+            ))}
+            <tr style={{ borderTop: `1px solid ${W.borderHi}` }}>
+              <td style={{ ...td, color: W.dim }}>Σ total</td>
+              <td style={td} />
+              {types.map((t) => (
+                <td key={t} style={{ ...td, textAlign: "right", fontFamily: wMono, color: W.text2 }}>
+                  {colTotal(t)}
+                </td>
+              ))}
+              <td style={{ ...td, textAlign: "right", fontFamily: wMono, color: W.text, fontWeight: 600 }}>
+                {grand}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// --- Interactions --------------------------------------------------------
+
+function InteractionsTable({
+  report,
+  filter,
+  clearFilter,
+}: {
+  report: AnalyzerReport;
+  filter: Filter;
+  clearFilter: () => void;
+}) {
+  const rows = report.interactions.filter(
+    (it) =>
+      !filter ||
+      ((!filter.pkg || it.target.package === filter.pkg) && (!filter.type || it.type === filter.type)),
+  );
+  return (
+    <div>
+      {filter && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ color: W.dim, fontSize: fs.meta }}>
+            Filtered to{" "}
+            <span style={{ fontFamily: wMono, color: W.brandText }}>
+              {filter.pkg || "all packages"}
+              {filter.type ? ` · ${filter.type}` : ""}
+            </span>{" "}
+            — {rows.length} of {report.interactions.length}
+          </span>
+          <Button variant="secondary" size="sm" onClick={clearFilter}>
+            Clear
+          </Button>
         </div>
       )}
-
-      {s.total_interactions === 0 ? (
-        <p style={{ color: W.dim, fontSize: fs.body }}>No cross-package interactions.</p>
-      ) : view === "graph" ? (
-        <GraphView report={report} />
-      ) : (
+      <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data }}>
           <thead>
             <tr style={{ color: W.dim, textAlign: "left" }}>
               <th style={th}>TYPE</th>
               <th style={th}>CALLER</th>
               <th style={th}>TARGET</th>
+              <th style={th}>SOURCE</th>
               <th style={th}>PACKAGE</th>
             </tr>
           </thead>
           <tbody>
-            {report.interactions.map((it, i) => (
+            {rows.map((it, i) => (
               <tr key={i} style={{ borderTop: `1px solid ${W.border}` }}>
                 <td style={td}>
                   <span style={{ fontFamily: wMono, color: W.brandText }}>{it.type}</span>
@@ -276,31 +583,113 @@ function ReportView({ darName, report }: { darName: string; report: AnalyzerRepo
                   {endpointLabel(it.target)}
                   {it.target.consuming ? <span style={{ color: W.warn }}> (consuming)</span> : null}
                 </td>
+                <td style={{ ...td, fontFamily: wMono, color: W.dim, fontSize: fs.meta }}>
+                  {sourceLabel(it)}
+                </td>
                 <td style={{ ...td, color: W.dim }}>
                   <MonoId value={it.target.package_id} size={12} color={W.dim} />
                 </td>
               </tr>
             ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={5} style={{ ...td, color: W.dim }}>
+                  No interactions match this filter.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+// --- Diff ----------------------------------------------------------------
+
+// Compares two loaded reports by interaction identity, so an upgrade shows
+// what a new DAR version added, dropped, or kept.
+function DiffView({ current, all }: { current: Loaded; all: Loaded[] }) {
+  const others = all.filter((r) => r.id !== current.id);
+  const [baseId, setBaseId] = useState(others[0]?.id ?? "");
+  const base = all.find((r) => r.id === baseId) ?? others[0];
+  if (!base) return <p style={{ color: W.dim, fontSize: fs.body }}>Load a second DAR to compare.</p>;
+
+  const a = new Map(base.report.interactions.map((i) => [ixKey(i), i]));
+  const b = new Map(current.report.interactions.map((i) => [ixKey(i), i]));
+  const added = [...b.entries()].filter(([k]) => !a.has(k)).map(([, v]) => v);
+  const removed = [...a.entries()].filter(([k]) => !b.has(k)).map(([, v]) => v);
+  const kept = [...b.keys()].filter((k) => a.has(k)).length;
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+        <span style={{ color: W.dim, fontSize: fs.meta }}>Compare against</span>
+        <select
+          value={base.id}
+          onChange={(e) => setBaseId(e.target.value)}
+          style={{
+            background: W.inset,
+            border: `1px solid ${W.border}`,
+            borderRadius: R.control,
+            color: W.text,
+            padding: "4px 8px",
+            fontSize: fs.data,
+            fontFamily: wMono,
+          }}
+        >
+          {others.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.report.analyzed_package.name} {r.report.analyzed_package.version}
+            </option>
+          ))}
+        </select>
+        <span style={{ color: W.faint, fontSize: fs.meta, fontFamily: wMono }}>
+          {base.report.analyzed_package.version} → {current.report.analyzed_package.version}
+        </span>
+      </div>
+
+      <div style={{ display: "flex", gap: 24, marginBottom: 14 }}>
+        <Stat label="Added" value={`+${added.length}`} />
+        <Stat label="Removed" value={`-${removed.length}`} />
+        <Stat label="Unchanged" value={String(kept)} />
+      </div>
+
+      {added.length === 0 && removed.length === 0 ? (
+        <p style={{ color: W.dim, fontSize: fs.body }}>No cross-package interaction changes.</p>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data }}>
+            <tbody>
+              {added.map((it, i) => (
+                <DiffRow key={`a${i}`} it={it} sign="+" tone={W.ok} />
+              ))}
+              {removed.map((it, i) => (
+                <DiffRow key={`r${i}`} it={it} sign="−" tone={W.err} />
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function DiffRow({ it, sign, tone }: { it: AnalyzerInteraction; sign: string; tone: string }) {
   return (
-    <div>
-      <div style={{ ...tableCaps, color: W.faint, fontSize: fs.label }}>{label}</div>
-      <div style={{ fontFamily: wMono, fontSize: fs.stat, color: W.text, lineHeight: 1.1 }}>{value}</div>
-    </div>
+    <tr style={{ borderTop: `1px solid ${W.border}` }}>
+      <td style={{ ...td, width: 18, color: tone, fontFamily: wMono, fontWeight: 600 }}>{sign}</td>
+      <td style={{ ...td, fontFamily: wMono, color: W.brandText }}>{it.type}</td>
+      <td style={{ ...td, fontFamily: wMono }}>{endpointLabel(it.caller)}</td>
+      <td style={{ ...td, fontFamily: wMono }}>
+        {it.target.package}·{endpointLabel(it.target)}
+      </td>
+    </tr>
   );
 }
 
-// GraphView is a native package-interaction graph: the analyzed package on
-// the left, each dependency it reaches on the right, edges labeled with the
-// interaction count — the same shape the analyzer's DOT output draws, built
-// from the JSON so it needs no graphviz/cytoscape.
+// --- Graph ---------------------------------------------------------------
+
 type TargetAgg = { pkg: string; version: string; total: number; types: string[] };
 
 function aggregateTargets(report: AnalyzerReport): TargetAgg[] {
@@ -319,6 +708,9 @@ function aggregateTargets(report: AnalyzerReport): TargetAgg[] {
 function GraphView({ report }: { report: AnalyzerReport }) {
   const src = report.analyzed_package;
   const targets = aggregateTargets(report);
+  if (!targets.length) {
+    return <p style={{ color: W.dim, fontSize: fs.body }}>No cross-package interactions to graph.</p>;
+  }
   const NW = 176;
   const NH = 48;
   const GAP = 20;
@@ -404,10 +796,44 @@ function GraphNode({
   );
 }
 
+// --- helpers -------------------------------------------------------------
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div style={{ ...tableCaps, color: W.faint, fontSize: fs.label }}>{label}</div>
+      <div style={{ fontFamily: wMono, fontSize: fs.stat, color: W.text, lineHeight: 1.1 }}>{value}</div>
+    </div>
+  );
+}
+
 // caller reads as module.choice/template; target as module.interface/template.
 function endpointLabel(e: AnalyzerEndpoint): string {
   const leaf = e.choice || e.interface || e.template;
   return leaf ? `${e.module}.${leaf}` : e.module;
+}
+
+// file:line when the package carries source info, else a muted dash.
+function sourceLabel(it: AnalyzerInteraction): string {
+  const s = it.source;
+  if (!s?.file) return "·";
+  return s.start_line ? `${s.file}:${s.start_line}` : s.file;
+}
+
+// Stable identity for diffing: same call from the same caller to the same
+// target is the "same" interaction across versions.
+function ixKey(it: AnalyzerInteraction): string {
+  return [it.type, endpointLabel(it.caller), it.target.package, endpointLabel(it.target)].join("|");
+}
+
+function downloadReport(loaded: Loaded) {
+  const blob = new Blob([JSON.stringify(loaded.report, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${loaded.report.analyzed_package.name}-${loaded.report.analyzed_package.version}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 const th: React.CSSProperties = { ...tableCaps, fontSize: fs.label, padding: "6px 10px 6px 0" };

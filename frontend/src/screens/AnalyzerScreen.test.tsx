@@ -14,6 +14,7 @@ const REPORT = {
   interactions: [
     {
       type: "Exercise",
+      source: { package: "pkg-app", file: "App.daml", start_line: 12 },
       caller: { package: "pkg-app", version: "1.0.0", package_id: "aa11", module: "App", choice: "TransferAsset" },
       target: { package: "pkg-registry", version: "1.0.0", package_id: "bb22", module: "Registry", choice: "UpdateOwner", consuming: true },
     },
@@ -48,15 +49,39 @@ function renderScreen() {
 }
 
 describe("AnalyzerScreen", () => {
-  it("renders a report when a deployed DAR is analyzed", async () => {
+  it("renders highlights, then the summary pivot and interactions", async () => {
     stubFetch({ available: true });
     renderScreen();
-    // the deployed DAR appears as a button; clicking it renders the report
+    // the deployed DAR appears as a button; clicking it loads the report
     const darBtn = await screen.findByRole("button", { name: /pkg-app 1\.0\.0/ }, { timeout: 4000 });
     await userEvent.click(darBtn);
+
+    // Highlights is the default view — the consuming exercise is surfaced.
+    expect(await screen.findByText(/consuming exercise/i)).toBeInTheDocument();
+
+    // Summary pivot lists the target package with its per-type counts.
+    await userEvent.click(screen.getByRole("button", { name: "summary" }));
+    expect(await screen.findByText("pkg-registry")).toBeInTheDocument();
+    expect(screen.getByText("TARGET PACKAGE")).toBeInTheDocument();
+
+    // Interactions carries the caller/target plus a source column.
+    await userEvent.click(screen.getByRole("button", { name: "interactions" }));
     expect(await screen.findByText(/TransferAsset/)).toBeInTheDocument();
     expect(screen.getByText(/UpdateOwner/)).toBeInTheDocument();
-    expect(screen.getByText(/consuming/)).toBeInTheDocument();
+    expect(screen.getByText("SOURCE")).toBeInTheDocument();
+    expect(screen.getByText("App.daml:12")).toBeInTheDocument();
+  });
+
+  it("filters interactions when a summary row is clicked", async () => {
+    stubFetch({ available: true });
+    renderScreen();
+    const darBtn = await screen.findByRole("button", { name: /pkg-app 1\.0\.0/ }, { timeout: 4000 });
+    await userEvent.click(darBtn);
+    await userEvent.click(screen.getByRole("button", { name: "summary" }));
+    await userEvent.click(await screen.findByText("pkg-registry"));
+    // clicking the row jumps to the filtered interaction list
+    expect(await screen.findByText(/Filtered to/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear" })).toBeInTheDocument();
   });
 
   it("shows a not-configured notice when the analyzer is unavailable", async () => {
