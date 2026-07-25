@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
@@ -133,21 +134,25 @@ func eventLogInterfaceFilter(parties []string) *lapiv2.EventFormat {
 }
 
 // consumeEventLogStream drains a ledger updates channel into
-// types.TokenActivityEvent records for the given instrument, stopping at
-// maxActivityScan (truncated=true). Only exercised EventLog_HoldingsChange
-// events with at least one leg matching the instrument are retained.
+// types.TokenActivityEvent records for the given instrument. The Updates
+// gRPC API only streams forward (oldest→newest), so to return the newest
+// history under a bound we keep a sliding window of the most recent
+// maxActivityScan events (evicting the oldest and setting truncated) rather
+// than stopping at the first maxActivityScan (which would return the oldest
+// slice and drop newer activity).
+//
+// A single transfer surfaces as two EventLog_HoldingsChange exercises in the
+// same update — one per account side — each carrying the same leg
+// (transferLegId). Emitting both would double-count the movement, so events
+// are deduplicated by (updateID, transferLegId set): the first
+// holdings-change for a given update+leg wins and later paired sides are
+// dropped.
 func consumeEventLogStream(stream <-chan ledger.StreamItem[*lapiv2.GetUpdatesResponse], instrument string) ([]types.TokenActivityEvent, bool, error) {
-	var out []types.TokenActivityEvent
-	var scanned int
-	var truncated bool
+	win := newActivityWindow[types.TokenActivityEvent](maxActivityScan)
+	seen := map[string]struct{}{}
 	for item := range stream {
 		if item.Err != nil {
 			return nil, false, fmt.Errorf("updates stream: %w", item.Err)
-		}
-		scanned++
-		if scanned > maxActivityScan {
-			truncated = true
-			break
 		}
 		t := item.Value.GetTransaction()
 		if t == nil {
@@ -158,12 +163,19 @@ func consumeEventLogStream(stream <-chan ledger.StreamItem[*lapiv2.GetUpdatesRes
 			if x == nil || !isEventLogHoldingsChange(x) {
 				continue
 			}
-			if ev, ok := decodeHoldingsChange(x, t, instrument); ok {
-				out = append(out, ev)
+			ev, ok := decodeHoldingsChange(x, t, instrument)
+			if !ok {
+				continue
 			}
+			key := holdingsChangeDedupKey(ev)
+			if _, dup := seen[key]; dup {
+				continue // paired account-side of a leg already recorded
+			}
+			seen[key] = struct{}{}
+			win.add(ev)
 		}
 	}
-	return out, truncated, nil
+	return win.slice(), win.truncated, nil
 }
 
 // isEventLogHoldingsChange reports whether an exercised event is the EventLog
@@ -218,6 +230,20 @@ func decodeHoldingsChange(x *lapiv2.ExercisedEvent, t *lapiv2.Transaction, instr
 		return types.TokenActivityEvent{}, false
 	}
 	return ev, true
+}
+
+// holdingsChangeDedupKey identifies a movement independently of which account
+// side reported it. Both the sender-side and receiver-side
+// EventLog_HoldingsChange for one leg share the same updateID and the same
+// set of transferLegIds, so keying on (updateID, sorted legIDs) collapses the
+// pair to a single event.
+func holdingsChangeDedupKey(ev types.TokenActivityEvent) string {
+	legIDs := make([]string, 0, len(ev.TransferLegs))
+	for _, leg := range ev.TransferLegs {
+		legIDs = append(legIDs, leg.TransferLegID)
+	}
+	sort.Strings(legIDs)
+	return ev.UpdateID + "\x00" + strings.Join(legIDs, "\x00")
 }
 
 // decodeTransferLegs walks the transferLegSides list, keeping only the

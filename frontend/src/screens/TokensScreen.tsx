@@ -22,7 +22,6 @@ import {
   fetchMatrix,
   mintToken,
   planTransfer,
-  settleAllocation,
   transferToken,
   withdrawAllocation,
   type ActivityEvent,
@@ -327,7 +326,7 @@ export function TokensScreen() {
     let cancelled = false;
     setAllocations(null);
     setAllocationsErr(null);
-    fetchAllocations(instance)
+    fetchAllocations(instance, undefined, role)
       .then((r) => {
         if (!cancelled) setAllocations(r.allocations);
       })
@@ -337,7 +336,7 @@ export function TokensScreen() {
     return () => {
       cancelled = true;
     };
-  }, [instance, detailTab, refreshTick]);
+  }, [instance, detailTab, role, refreshTick]);
 
   // Selecting a different instrument resets the detail tab to Overview.
   useEffect(() => {
@@ -691,9 +690,8 @@ export function TokensScreen() {
                     err={allocationsErr}
                     aliases={aliases}
                     onAllocate={() => setModal({ kind: "allocate", symbol: sym })}
-                    onSettle={(id) => runAllocationAction(settleAllocation(instance, id), "settle")}
-                    onWithdraw={(id) => runAllocationAction(withdrawAllocation(instance, id), "withdraw")}
-                    onCancel={(id) => runAllocationAction(cancelAllocation(instance, id), "cancel")}
+                    onWithdraw={(id) => runAllocationAction(withdrawAllocation(instance, id, undefined, role), "withdraw")}
+                    onCancel={(id) => runAllocationAction(cancelAllocation(instance, id, undefined, role), "cancel")}
                   />
                 )}
               </>
@@ -816,6 +814,7 @@ export function TokensScreen() {
         <AllocateModal
           instance={instance}
           symbol={modal.symbol}
+          role={role}
           parties={parties}
           onPartiesChanged={() => bump()}
           onClose={() => setModal(null)}
@@ -825,7 +824,7 @@ export function TokensScreen() {
             bump();
             setTopNotice({
               tone: "ok",
-              text: `Allocation created (${allocationId.slice(0, 12)}…). Settle it from the Allocations tab.`,
+              text: `Allocation created (${allocationId.slice(0, 12)}…). Manage it from the Allocations tab.`,
             });
           }}
           onError={(e) => setTopNotice(renderActionError(e, "allocate failed"))}
@@ -856,6 +855,7 @@ function TransferModal({
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const [autoAccept, setAutoAccept] = useState(true);
+  const [atomic, setAtomic] = useState(false);
   const [busy, setBusy] = useState(false);
   const [plan, setPlan] = useState<import("../api").TransferPlan | null>(null);
 
@@ -877,7 +877,7 @@ function TransferModal({
     e.preventDefault();
     setBusy(true);
     try {
-      const res = await transferToken(instance, symbol, from, to, amount, reason || undefined, role, autoAccept);
+      const res = await transferToken(instance, symbol, from, to, amount, reason || undefined, role, autoAccept, atomic && autoAccept);
       // A non-auto-accept Offer returns an instruction id; anything settled just closes.
       onDone(!res.settled && res.transferInstructionId
         ? { instructionId: res.transferInstructionId, receiver: to }
@@ -904,6 +904,17 @@ function TransferModal({
           <input type="checkbox" checked={autoAccept} onChange={(e) => setAutoAccept(e.target.checked)} />
           Auto-accept (settle in one step. You own the receiver on LocalNet.)
         </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, color: autoAccept ? W.text2 : W.dim, fontSize: fs.meta, cursor: autoAccept ? "pointer" : "not-allowed" }}>
+          <input type="checkbox" checked={atomic && autoAccept} disabled={!autoAccept} onChange={(e) => setAtomic(e.target.checked)} />
+          Atomic (experimental) — batch transfer + accept into one all-or-nothing transaction
+        </label>
+        {atomic && autoAccept && (
+          <div role="status" style={{ ...notice("warn") }}>
+            Experimental and not yet supported on current Splice: the accept leg can’t
+            reference the transfer leg’s instruction within one batch, so the submit
+            errors and nothing commits. Uncheck to use the working sequential offer→accept path.
+          </div>
+        )}
 
         {plan && (
           <div style={{ background: W.surface2, border: `1px solid ${W.border}`, borderRadius: 4, padding: "10px 12px" }}>
@@ -962,10 +973,11 @@ function TransferModal({
 // Creates a V2 DvP allocation: authorizer + receiver + amount, a
 // settlement deadline, and a committed toggle (locks funds until then).
 function AllocateModal({
-  instance, symbol, parties, onPartiesChanged, onClose, onDone, onError,
+  instance, symbol, role, parties, onPartiesChanged, onClose, onDone, onError,
 }: {
   instance: string;
   symbol: string;
+  role: string;
   parties: PartyRef[];
   onPartiesChanged?: () => void;
   onClose: () => void;
@@ -989,7 +1001,7 @@ function AllocateModal({
         amount,
         settlement_deadline: deadline || undefined,
         committed,
-      });
+      }, role);
       onDone(res.allocationId);
     } catch (err) {
       onError(err);
@@ -1002,10 +1014,10 @@ function AllocateModal({
     <ModalShell title={`Allocate ${symbol}`} onClose={onClose}>
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 10 }}>
         <Field label="Authorizer (from)">
-          <PartyPicker instance={instance} parties={parties} value={from} onChange={setFrom} onPartiesChanged={onPartiesChanged} placeholder="Select authorizer" />
+          <PartyPicker instance={instance} role={role} parties={parties} value={from} onChange={setFrom} onPartiesChanged={onPartiesChanged} placeholder="Select authorizer" />
         </Field>
         <Field label="Receiver (to)">
-          <PartyPicker instance={instance} parties={parties} value={to} onChange={setTo} onPartiesChanged={onPartiesChanged} placeholder="Select receiver" />
+          <PartyPicker instance={instance} role={role} parties={parties} value={to} onChange={setTo} onPartiesChanged={onPartiesChanged} placeholder="Select receiver" />
         </Field>
         <Field label="Amount"><input value={amount} onChange={(e) => setAmount(e.target.value)} style={input} required /></Field>
         <Field label="Settlement deadline (optional, RFC3339 or duration e.g. 1h)">
@@ -1034,13 +1046,12 @@ function AllocateModal({
 // Lists ready-to-settle V2 allocations with per-row settle / withdraw /
 // cancel. Not instrument-scoped — shows every visible allocation.
 function AllocationsPanel({
-  allocations, err, aliases, onAllocate, onSettle, onWithdraw, onCancel,
+  allocations, err, aliases, onAllocate, onWithdraw, onCancel,
 }: {
   allocations: AllocationSummary[] | null;
   err: string | null;
   aliases: AliasMap;
   onAllocate: () => void;
-  onSettle: (id: string) => void;
   onWithdraw: (id: string) => void;
   onCancel: (id: string) => void;
 }) {
@@ -1083,7 +1094,6 @@ function AllocationsPanel({
                 </td>
                 <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
                   <span style={{ display: "inline-flex", gap: 4, justifyContent: "flex-end" }}>
-                    <Button variant="secondary" size="sm" icon={<IcCheck />} onClick={() => onSettle(a.contract_id)} title="Settle this allocation's batch (executor)">Settle</Button>
                     <Button variant="ghost" size="sm" onClick={() => onWithdraw(a.contract_id)} title={a.committed ? "Committed: only after the settlement deadline" : "Withdraw this allocation"}>Withdraw</Button>
                     <Button variant="danger" size="sm" icon={<IcX />} onClick={() => onCancel(a.contract_id)} title="Cancel this allocation">Cancel</Button>
                   </span>

@@ -63,6 +63,7 @@ func schemaShapeRoots() []any {
 		Snapshot{},
 		Allocation{},
 		AllocationSummary{},
+		AllocationsResponse{},
 		BatchResult{},
 		TokenActivityEvent{},
 		TokenCreateRequest{},
@@ -211,6 +212,12 @@ types.AllocationSummary {
   authorizer string
   leg_count int
   committed bool
+}
+
+types.AllocationsResponse {
+  schema_version int
+  allocations []types.AllocationSummary
+  aliases map[string]string
 }
 
 types.BatchActionResult {

@@ -50,7 +50,6 @@ Quick start (on a running instance):
 	cmd.AddCommand(buildFaucet())
 	cmd.AddCommand(buildAllocate())
 	cmd.AddCommand(buildAllocations())
-	cmd.AddCommand(buildSettle())
 	return cmd
 }
 

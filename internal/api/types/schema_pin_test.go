@@ -15,6 +15,7 @@ import (
 // without the field, or missing from the list, fails here.
 func TestAllTopLevelResponses_CarrySchemaVersion(t *testing.T) {
 	topLevel := []interface{}{
+		AllocationsResponse{},
 		ContractsListResponse{},
 		ContractDetailResponse{},
 		DARListResponse{},
@@ -169,6 +170,16 @@ func TestSchemaVersion_ConsistentAcrossResponses(t *testing.T) {
 					SchemaVersion: SchemaVersion,
 					Source:        HoldingSourceRegistry,
 					Holdings:      nil,
+				})
+			},
+			want: SchemaVersion,
+		},
+		{
+			name: "AllocationsResponse",
+			marshal: func() ([]byte, error) {
+				return json.Marshal(AllocationsResponse{
+					SchemaVersion: SchemaVersion,
+					Allocations:   nil,
 				})
 			},
 			want: SchemaVersion,

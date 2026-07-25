@@ -64,8 +64,8 @@ func TestHandleTokenAllocate_ThreadsFieldsAndReturnsID(t *testing.T) {
 }
 
 // TestHandleAllocationActions_Routing pins that each per-allocation action
-// route (settle/withdraw/cancel) reaches the matching RunX with the path id
-// + ?party=.
+// route (withdraw/cancel) reaches the matching RunX with the path id
+// + ?party=. (settle is intentionally not exposed — not yet functional.)
 func TestHandleAllocationActions_Routing(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DPM_REGISTRY_DIR", dir)
@@ -80,7 +80,7 @@ func TestHandleAllocationActions_Routing(t *testing.T) {
 	}
 	srv := tokensSrv(t)
 
-	for _, action := range []string{"settle", "withdraw", "cancel"} {
+	for _, action := range []string{"withdraw", "cancel"} {
 		t.Run(action, func(t *testing.T) {
 			url := srv.URL + "/api/tokens/allocations/00alloc-1/" + action + "?instance=" + inst + "&party=bob%3A%3A1220"
 			resp, err := http.Post(url, "application/json", nil)
@@ -88,9 +88,8 @@ func TestHandleAllocationActions_Routing(t *testing.T) {
 				t.Fatalf("POST: %v", err)
 			}
 			defer func() { _ = resp.Body.Close() }()
-			// settle currently returns a plain not-proven error (400);
-			// withdraw/cancel hit the not-wired stub (412). Either way a
-			// wired route must NOT 404/405.
+			// withdraw/cancel hit the not-wired stub (412). A wired route
+			// must NOT 404/405.
 			if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
 				t.Fatalf("%s route not wired: status %d", action, resp.StatusCode)
 			}

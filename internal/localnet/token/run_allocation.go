@@ -438,59 +438,14 @@ func runAllocationAction(ctx context.Context, out io.Writer, opts AllocationActi
 	return nil
 }
 
-// RunSettle drives the executor-side SettlementFactory_SettleBatch for the
-// batch a finalized Allocation belongs to.
-//
-// TODO: end-to-end settlement is not yet proven. There is NO registry
-// choice-contexts/settle endpoint (settlement is executor-driven via the
-// settlement-factory context), so this fetches that factory context — real,
-// proving the endpoint wiring — but the FinalizedAllocation list + the
-// batch's transferLegs must be reconstructed from live allocation state,
-// which needs a running V2 instance to validate against. Until then it
-// returns a clear not-proven error so the CLI/UI surface and seam exist.
-func RunSettle(ctx context.Context, out io.Writer, opts AllocationActionOptions) error {
-	if err := requireFields("settle", opts.Instance, opts.AllocationID); err != nil {
-		return err
-	}
-	if opts.Endpoint == "" {
-		emit(out, "settle", map[string]any{"allocation_id": opts.AllocationID})
-		return ErrNeedsV2LocalNet
-	}
-	if opts.Role == "" {
-		opts.Role = "app-user"
-	}
-	opts.Party = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Party)
-
-	regBaseURL, regHost, err := resolveRegistryURL(opts.Instance, opts.RegistryURL)
-	if err != nil {
-		return err
-	}
-	regCli, err := registry.Dial(registry.DialOptions{
-		BaseURL:    regBaseURL,
-		HostHeader: regHost,
-		Token:      registry.StaticToken(resolveRegistryToken(opts.Token, opts.Instance, opts.Role)),
-		Version:    "v2",
-	})
-	if err != nil {
-		return fmt.Errorf("dial registry: %w", err)
-	}
-	// Real: prove the settlement-factory endpoint wiring resolves.
-	factoryResp, err := regCli.GetSettlementFactory(ctx, SettlementFactoryPathV2)
-	if err != nil {
-		return fmt.Errorf("registry settlement-factory: %w", err)
-	}
-	emit(out, "settle: factory", map[string]any{
-		"factory_id": factoryResp.FactoryID,
-		"disclosed":  len(factoryResp.DisclosedContractsList()),
-	})
-	// TODO: assemble + submit exerciseSettleBatch. The finalizedAllocations
-	// list + transferLegs must be mined from the live Allocation contract(s)
-	// for this settlement id, which wants a running V2 instance to validate.
-	return fmt.Errorf("settle: SettlementFactory_SettleBatch end-to-end not yet proven " +
-		"(no registry settle choice-context endpoint — executor-driven; " +
-		"batch assembly needs a live V2 instance). Settlement-factory context " +
-		"resolved OK (factory_id above); wiring the FinalizedAllocation batch is the remaining step")
-}
+// Settlement (executor-side SettlementFactory_SettleBatch) is intentionally
+// not implemented / not exposed: end-to-end settlement is not yet proven on
+// LocalNet. There is no registry settle choice-context endpoint (settlement
+// is executor-driven via the settlement-factory context), and the
+// FinalizedAllocation batch + transferLegs must be reconstructed from live
+// allocation state, which needs a running V2 instance to validate against.
+// The CLI `token settle` verb and the settle HTTP route/UI action were
+// removed until this is functional — see docs/changes-from-proposal.md.
 
 // --- helpers -------------------------------------------------------
 

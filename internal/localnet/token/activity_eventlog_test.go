@@ -2,6 +2,8 @@ package token
 
 import (
 	"context"
+	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
@@ -110,6 +112,50 @@ func eventLogUpdate(f eventLogFix) *lapiv2.GetUpdatesResponse {
 				Events:   []*lapiv2.Event{{Event: &lapiv2.Event_Exercised{Exercised: x}}},
 			},
 		},
+	}
+}
+
+// eventLogUpdatePair wraps two EventLog_HoldingsChange exercised events —
+// the sender-side and receiver-side reports of one transfer — into a single
+// transaction (same updateID/offset), the shape a real transfer produces.
+func eventLogUpdatePair(sender, receiver eventLogFix) *lapiv2.GetUpdatesResponse {
+	_, mod, entity := splitInterfaceID(EventLogInterfaceV2)
+	mk := func(f eventLogFix) *lapiv2.Event {
+		x := &lapiv2.ExercisedEvent{
+			Choice:         eventLogHoldingsChangeChoice,
+			ChoiceArgument: holdingsChangeArg(f),
+			InterfaceId:    &lapiv2.Identifier{PackageId: "#pkg", ModuleName: mod, EntityName: entity},
+		}
+		return &lapiv2.Event{Event: &lapiv2.Event_Exercised{Exercised: x}}
+	}
+	return &lapiv2.GetUpdatesResponse{
+		Update: &lapiv2.GetUpdatesResponse_Transaction{
+			Transaction: &lapiv2.Transaction{
+				UpdateId: sender.updateID,
+				Offset:   sender.offset,
+				Events:   []*lapiv2.Event{mk(sender), mk(receiver)},
+			},
+		},
+	}
+}
+
+// TestEventLog_DedupsPairedTransferSides: a transfer surfaces as two
+// EventLog_HoldingsChange exercises in one update — one per account side —
+// sharing the same updateID and transferLegId. The consumer must collapse
+// the pair to a single event rather than double-count the movement.
+func TestEventLog_DedupsPairedTransferSides(t *testing.T) {
+	upd := []*lapiv2.GetUpdatesResponse{eventLogUpdatePair(
+		eventLogFix{offset: 30, updateID: "u30", admin: "dso", account: "bob", consumedCid: 1,
+			legs: []legFix{{side: "SenderSide", otherside: "app-user", amount: "100.0", instrument: "MYT", legID: "L1"}}},
+		eventLogFix{offset: 30, updateID: "u30", admin: "dso", account: "app-user", createdCid: 1,
+			legs: []legFix{{side: "ReceiverSide", otherside: "bob", amount: "100.0", instrument: "MYT", legID: "L1"}}},
+	)}
+	got := consumeAndRender(t, upd, "MYT")
+	if len(got) != 1 {
+		t.Fatalf("paired sides not deduped: want 1 event, got %d", len(got))
+	}
+	if got[0].Kind != "transfer" || got[0].Amount != "100" {
+		t.Errorf("kind/amount = %s/%s, want transfer/100", got[0].Kind, got[0].Amount)
 	}
 }
 
@@ -232,20 +278,38 @@ func TestEventLog_SkipsWrongChoiceAndOmittedInterfaceID(t *testing.T) {
 	}
 }
 
-// TestConsumeEventLogStream_TruncatesAtCap pins the OOM guard: the
-// consumer stops at maxActivityScan with truncated=true.
+// TestConsumeEventLogStream_TruncatesAtCap pins the OOM guard and the
+// newest-first retention: the stream arrives oldest→newest, so once more
+// than maxActivityScan events are retained, the ring buffer evicts the
+// oldest and keeps the newest window. truncated must flip true, and the
+// events returned must be the last maxActivityScan by offset.
 func TestConsumeEventLogStream_TruncatesAtCap(t *testing.T) {
-	ch := make(chan ledger.StreamItem[*lapiv2.GetUpdatesResponse], maxActivityScan+1)
-	for i := 0; i < maxActivityScan+1; i++ {
-		ch <- ledger.StreamItem[*lapiv2.GetUpdatesResponse]{Value: &lapiv2.GetUpdatesResponse{}}
+	total := maxActivityScan + 5
+	upd := make([]*lapiv2.GetUpdatesResponse, total)
+	for i := 0; i < total; i++ {
+		upd[i] = eventLogUpdate(eventLogFix{
+			offset: int64(i + 1), updateID: "u" + strconv.Itoa(i+1), admin: "dso", account: "a", createdCid: 1,
+			legs: []legFix{{side: "ReceiverSide", amount: "1.0", instrument: "MYT", legID: "L1"}},
+		})
 	}
-	close(ch)
-	_, truncated, err := consumeEventLogStream(ch, "MYT")
+	events, truncated, err := consumeEventLogStream(newUpdatesStream(upd, nil), "MYT")
 	if err != nil {
 		t.Fatalf("consumeEventLogStream: %v", err)
 	}
 	if !truncated {
-		t.Errorf("truncated = false; want true after %d items", maxActivityScan+1)
+		t.Fatalf("truncated = false; want true after %d retained events", total)
+	}
+	if len(events) != maxActivityScan {
+		t.Fatalf("retained %d events; want cap %d", len(events), maxActivityScan)
+	}
+	// Oldest 5 evicted: window holds offsets [6 .. total]. Order within the
+	// window is stream order (oldest→newest); rendering sorts newest-first.
+	rendered := renderEventLogActivity(events, -1, maxActivityScan)
+	if rendered[0].Offset != int64(total) {
+		t.Errorf("newest kept = %d; want %d", rendered[0].Offset, total)
+	}
+	if rendered[len(rendered)-1].Offset != 6 {
+		t.Errorf("oldest kept = %d; want 6 (offsets 1-5 evicted)", rendered[len(rendered)-1].Offset)
 	}
 }
 
@@ -339,6 +403,65 @@ func TestRunActivityResult_FallsBackToNettingWhenNoEventLogPackage(t *testing.T)
 	}
 	if ev.Kind != "mint" || ev.Amount != "500" {
 		t.Errorf("kind/amount = %s/%s, want mint/500", ev.Kind, ev.Amount)
+	}
+}
+
+// TestRunActivityResult_FallsBackToNettingWhenEventLogStreamErrors: the
+// transfer-events package is vetted, but the EventLog stream terminates with
+// a fallback-safe error (not context cancel/deadline). RunActivityResult must
+// fall through to netting rather than surface a blank/error feed.
+func TestRunActivityResult_FallsBackToNettingWhenEventLogStreamErrors(t *testing.T) {
+	calls := 0
+	fake := fakeForDispatch(
+		[]string{"bob"},
+		[]string{"splice-api-token-holding-v2", "splice-api-token-transfer-events-v2"},
+		mintUpdate,
+	)
+	fake.UpdatesFn = func(context.Context, ledger.UpdatesRequest) (<-chan ledger.StreamItem[*lapiv2.GetUpdatesResponse], error) {
+		calls++
+		if calls == 1 { // EventLog path: terminate with a transient stream error
+			return newUpdatesStream(nil, errors.New("eventlog stream boom")), nil
+		}
+		// netting path: a HoldingV2 create the netter classifies as a mint
+		return newUpdatesStream([]*lapiv2.GetUpdatesResponse{holdingCreateUpdate(7, "u7", "bob", "MYT", "500.0")}, nil), nil
+	}
+	withFakeDial(t, fake)
+
+	res, err := RunActivityResult(context.Background(), BalanceOptions{
+		Instance: "inst", Role: "app-user", Endpoint: "x:1", Instrument: "MYT",
+	})
+	if err != nil {
+		t.Fatalf("RunActivityResult: %v", err)
+	}
+	if len(res.Events) != 1 || res.Events[0].Source != string(types.ActivitySourceTransaction) {
+		t.Fatalf("want 1 netted (transaction) event after fallback, got %+v", res.Events)
+	}
+	if res.Events[0].Kind != "mint" || res.Events[0].Amount != "500" {
+		t.Errorf("kind/amount = %s/%s, want mint/500", res.Events[0].Kind, res.Events[0].Amount)
+	}
+}
+
+// TestRunActivityResult_AbortsWhenEventLogStreamContextCancelled: a cancelled
+// context is NOT fallback-safe (netting would hit the same deadline), so the
+// error propagates instead of silently retrying.
+func TestRunActivityResult_AbortsWhenEventLogStreamContextCancelled(t *testing.T) {
+	fake := fakeForDispatch(
+		[]string{"bob"},
+		[]string{"splice-api-token-holding-v2", "splice-api-token-transfer-events-v2"},
+		mintUpdate,
+	)
+	fake.UpdatesFn = func(context.Context, ledger.UpdatesRequest) (<-chan ledger.StreamItem[*lapiv2.GetUpdatesResponse], error) {
+		return newUpdatesStream(nil, context.Canceled), nil
+	}
+	withFakeDial(t, fake)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := RunActivityResult(ctx, BalanceOptions{
+		Instance: "inst", Role: "app-user", Endpoint: "x:1", Instrument: "MYT",
+	})
+	if err == nil {
+		t.Fatalf("want error on cancelled context, got nil")
 	}
 }
 

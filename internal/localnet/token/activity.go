@@ -2,6 +2,7 @@ package token
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"sort"
@@ -14,10 +15,53 @@ import (
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
 
-// maxActivityScan caps how many ledger update items RunActivity consumes
-// before declaring the result truncated, bounding memory against a runaway
+// maxActivityScan caps how many activity records the feed retains before
+// declaring the result truncated, bounding memory against a runaway
 // transaction stream on a busy ledger.
 const maxActivityScan = 10_000
+
+// activityWindow is a fixed-capacity ring buffer that retains the most
+// recently added items. The Updates gRPC stream only flows forward
+// (oldest→newest), so keeping a window of the newest `cap` items lets the
+// activity feeds return the newest history under a bound instead of the
+// oldest slice (which a leading break would produce). truncated flips true
+// once any item has been evicted.
+type activityWindow[T any] struct {
+	buf       []T
+	cap       int
+	start     int // index of the oldest retained item
+	len       int
+	truncated bool
+}
+
+func newActivityWindow[T any](capacity int) *activityWindow[T] {
+	if capacity < 1 {
+		capacity = 1
+	}
+	return &activityWindow[T]{buf: make([]T, capacity), cap: capacity}
+}
+
+// add appends v, evicting the oldest item (and setting truncated) when full.
+func (w *activityWindow[T]) add(v T) {
+	if w.len < w.cap {
+		w.buf[(w.start+w.len)%w.cap] = v
+		w.len++
+		return
+	}
+	// Full: overwrite the oldest slot and advance start.
+	w.buf[w.start] = v
+	w.start = (w.start + 1) % w.cap
+	w.truncated = true
+}
+
+// slice returns the retained items in insertion (oldest→newest) order.
+func (w *activityWindow[T]) slice() []T {
+	out := make([]T, 0, w.len)
+	for i := 0; i < w.len; i++ {
+		out = append(out, w.buf[(w.start+i)%w.cap])
+	}
+	return out
+}
 
 // The netting activity feed reconstructs an instrument's transfer/mint/burn
 // history from the ledger transaction stream — no off-ledger registry required.
@@ -242,13 +286,16 @@ func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult
 	}
 
 	// Prefer the EventLog path when vetted; fall through to netting if it
-	// yields nothing, so an instrument without EventLog is never blank.
+	// yields nothing OR fails in a fallback-safe way (stream-open / malformed
+	// event), so an instrument without a usable EventLog is never blank. Only
+	// a cancelled/expired context aborts — retrying via netting would fail the
+	// same way.
 	if surfaces.HasEventLog {
 		res, elErr := RunActivityViaEventLog(ctx, client, parties, opts)
-		if elErr != nil {
+		if elErr != nil && !isEventLogFallbackSafe(ctx, elErr) {
 			return ActivityResult{}, elErr
 		}
-		if len(res.Events) > 0 {
+		if elErr == nil && len(res.Events) > 0 {
 			return res, nil
 		}
 	}
@@ -288,23 +335,35 @@ func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult
 	}, nil
 }
 
-// consumeActivityStream drains a ledger updates channel into rawTx records,
-// stopping at maxActivityScan (truncated=true).
+// isEventLogFallbackSafe reports whether an EventLog-path error should fall
+// through to the netting reconstruction rather than abort. A cancelled or
+// expired context is NOT fallback-safe: the netting path would hit the same
+// deadline. Every other failure (stream open, malformed event/shape) is
+// safe to retry via netting, which reconstructs history independently.
+func isEventLogFallbackSafe(ctx context.Context, err error) bool {
+	if err == nil {
+		return true
+	}
+	if ctx.Err() != nil {
+		return false
+	}
+	return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+}
+
+// consumeActivityStream drains a ledger updates channel into rawTx records.
+// The Updates gRPC stream only flows forward, so it keeps a sliding window of
+// the newest maxActivityScan transactions (truncated once older ones are
+// evicted) rather than the oldest slice a leading break would yield. The
+// contractId→facts map spans the whole scan, so a late archive still resolves
+// against a create whose tx row was already evicted from the window.
 func consumeActivityStream(stream <-chan ledger.StreamItem[*lapiv2.GetUpdatesResponse]) ([]rawTx, bool, error) {
 	// contractId → holding facts, so archived events (which carry only the
 	// contract id) resolve back to owner/instrument/amount.
 	byContract := map[string]rawHoldingDelta{}
-	var txs []rawTx
-	var scanned int
-	var truncated bool
+	win := newActivityWindow[rawTx](maxActivityScan)
 	for item := range stream {
 		if item.Err != nil {
 			return nil, false, fmt.Errorf("updates stream: %w", item.Err)
-		}
-		scanned++
-		if scanned > maxActivityScan {
-			truncated = true
-			break
 		}
 		t := item.Value.GetTransaction()
 		if t == nil {
@@ -342,10 +401,10 @@ func consumeActivityStream(stream <-chan ledger.StreamItem[*lapiv2.GetUpdatesRes
 			}
 		}
 		if len(tx.deltas) > 0 {
-			txs = append(txs, tx)
+			win.add(tx)
 		}
 	}
-	return txs, truncated, nil
+	return win.slice(), win.truncated, nil
 }
 
 // instrumentDecimals looks up the recorded decimals for an instrument

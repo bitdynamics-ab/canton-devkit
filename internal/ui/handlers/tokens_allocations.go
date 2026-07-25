@@ -85,20 +85,21 @@ func handleAllocationsList(w http.ResponseWriter, r *http.Request) {
 		mapTokenError(w, err, "allocations")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"schema_version": types.SchemaVersion,
-		"allocations":    rows,
-		"aliases":        aliasMap(instance),
+	if rows == nil {
+		rows = []types.AllocationSummary{}
+	}
+	writeJSON(w, http.StatusOK, types.AllocationsResponse{
+		SchemaVersion: types.SchemaVersion,
+		Allocations:   rows,
+		Aliases:       aliasMap(instance),
 	})
 }
 
-// handleAllocationSettle / Withdraw / Cancel —
-// POST /api/tokens/allocations/{id}/{settle,withdraw,cancel}. Each maps to
-// the matching RunX with the path id + optional ?party=.
-func handleAllocationSettle(w http.ResponseWriter, r *http.Request) {
-	runAllocationActionHandler(w, r, token.RunSettle, "settle")
-}
-
+// handleAllocationWithdraw / Cancel —
+// POST /api/tokens/allocations/{id}/{withdraw,cancel}. Each maps to
+// the matching RunX with the path id + optional ?party=. Settlement
+// (SettlementFactory_SettleBatch) is not yet functional on LocalNet, so no
+// settle route is exposed.
 func handleAllocationWithdraw(w http.ResponseWriter, r *http.Request) {
 	runAllocationActionHandler(w, r, token.RunAllocationWithdraw, "withdraw")
 }

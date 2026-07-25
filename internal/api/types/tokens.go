@@ -189,6 +189,19 @@ type AllocationSummary struct {
 	Committed    bool             `json:"committed"`
 }
 
+// AllocationsResponse is the shared top-level body of the allocations list —
+// GET /api/tokens/allocations (Web UI) and `token allocations --format json`
+// (CLI). Declared once so the two surfaces cannot drift (repository policy:
+// shared API shapes across CLI JSON and Web UI).
+type AllocationsResponse struct {
+	SchemaVersion int `json:"schema_version"`
+	// Allocations is never null on the wire — an empty scan yields [].
+	Allocations []AllocationSummary `json:"allocations"`
+	// Aliases maps partyID → registered alias so a surface can label party
+	// ids without a second round-trip.
+	Aliases map[string]string `json:"aliases"`
+}
+
 // BatchActionResult is one action's outcome inside a BatchResult,
 // mirroring one TokenStandardActionResult (order-preserved).
 type BatchActionResult struct {

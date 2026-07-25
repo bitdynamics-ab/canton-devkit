@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 	"github.com/spf13/cobra"
@@ -40,9 +41,18 @@ Requires --endpoint (the participant ledger gRPC host:port).`,
 			}
 			out := cmd.OutOrStdout()
 			if format == "json" {
+				if rows == nil {
+					rows = []types.AllocationSummary{}
+				}
 				enc := json.NewEncoder(out)
 				enc.SetIndent("", "  ")
-				return enc.Encode(rows)
+				// Same top-level shape as GET /api/tokens/allocations so
+				// CLI JSON and Web UI cannot drift.
+				return enc.Encode(types.AllocationsResponse{
+					SchemaVersion: types.SchemaVersion,
+					Allocations:   rows,
+					Aliases:       token.PartyAliasMap(opts.Instance),
+				})
 			}
 			if len(rows) == 0 {
 				_, _ = fmt.Fprintln(out, "No allocations.")

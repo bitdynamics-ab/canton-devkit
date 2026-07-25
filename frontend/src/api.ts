@@ -2217,20 +2217,9 @@ export async function allocateToken(
   return { allocationId: b.allocation_id ?? "" };
 }
 
-// settle / withdraw / cancel exercise the matching per-allocation choice;
-// all return void on 2xx.
-export const settleAllocation = (
-  instance: string,
-  allocationID: string,
-  party?: string,
-  role?: string,
-): Promise<void> =>
-  apiFetchVoid(
-    allocationActionURL(instance, allocationID, "settle", party, role),
-    {},
-    idempotencyHeader(),
-  );
-
+// withdraw / cancel exercise the matching per-allocation choice; both
+// return void on 2xx. Settlement (SettlementFactory_SettleBatch) is not yet
+// functional on LocalNet, so no settle action is exposed.
 export const withdrawAllocation = (
   instance: string,
   allocationID: string,
@@ -2258,7 +2247,7 @@ export const cancelAllocation = (
 function allocationActionURL(
   instance: string,
   allocationID: string,
-  action: "settle" | "withdraw" | "cancel",
+  action: "withdraw" | "cancel",
   party?: string,
   role?: string,
 ): string {
