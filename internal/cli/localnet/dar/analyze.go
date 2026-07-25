@@ -24,12 +24,13 @@ func buildAnalyze() *cobra.Command {
 		Long: `Run the daml-analyzer on a local .dar and report which templates,
 interfaces, and choices it reaches across package boundaries.
 
-Requires Docker. The pinned analyzer image is pulled on first use;
-override it with DAML_ANALYZER_IMAGE.
+Runs the Certora daml-analyzer. Preferred runtime is the DPM component
+(add oci://ghcr.io/certora/daml-analyzer:0.1.0 to daml.yaml, then run
+dpm install package); falls back to the pinned Docker image.
 
 Exit codes:
   0  Analysis returned
-  1  Invalid arguments, or Docker not available
+  1  Invalid arguments, or no analyzer runtime available
   4  Analyzer run failed`,
 		Args:          cobra.ExactArgs(1),
 		SilenceUsage:  true,
@@ -42,9 +43,10 @@ Exit codes:
 			path := args[0]
 			rep, err := analyzer.AnalyzeDAR(cmd.Context(), path)
 			if err != nil {
-				if errors.Is(err, analyzer.ErrDockerNotFound) {
-					_, _ = fmt.Fprintln(cmd.ErrOrStderr(),
-						"dar analyze: Docker not found. Install Docker to run the analyzer image.")
+				if errors.Is(err, analyzer.ErrNoRuntime) {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+						"dar analyze: no analyzer runtime. Add `%s` to daml.yaml and run "+
+							"`dpm install package`, or install Docker.\n", analyzer.ComponentRef)
 					return localnet.AsExitError(localnet.ExitUserError)
 				}
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dar analyze: %s\n", err)

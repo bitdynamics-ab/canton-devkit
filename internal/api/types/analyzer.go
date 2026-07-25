@@ -77,15 +77,18 @@ type AnalyzerResponse struct {
 	Report        *AnalyzerReport `json:"report"`
 }
 
-// AnalyzerStatusResponse reports whether the analyzer can run in this
-// environment (Docker reachable, image present/pullable), so the UI can
-// show a clean "not configured" state instead of failing an analysis
-// mid-flight.
+// AnalyzerStatusResponse reports whether an analysis can run here and which
+// runtime would serve it, so the UI can show a clean "not configured" state
+// instead of failing an analysis mid-flight.
 type AnalyzerStatusResponse struct {
-	SchemaVersion int    `json:"schema_version"`
-	Available     bool   `json:"available"`
-	DockerFound   bool   `json:"docker_found"`
-	ImagePresent  bool   `json:"image_present"`
-	Image         string `json:"image,omitempty"`
-	Detail        string `json:"detail,omitempty"`
+	SchemaVersion int  `json:"schema_version"`
+	Available     bool `json:"available"`
+	// Runtime is how the analyzer will be invoked: "component" (the DPM
+	// component), "docker" (the pinned image), or "bin" (an explicit
+	// executable). Empty when nothing is available.
+	Runtime string `json:"runtime,omitempty"`
+	// Source identifies the resolved runtime — component version, image
+	// reference, or executable path.
+	Source string `json:"source,omitempty"`
+	Detail string `json:"detail,omitempty"`
 }

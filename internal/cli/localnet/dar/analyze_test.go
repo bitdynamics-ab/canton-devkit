@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"os"
 	"testing"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/analyzer"
@@ -12,11 +11,10 @@ import (
 )
 
 // TestDarAnalyzeJSON runs the analyze verb on a committed sample DAR and
-// asserts the --json output. Requires a built analyzer image + Docker, so
-// it skips when DAML_ANALYZER_IMAGE is unset.
+// asserts the --json output. Skips when no analyzer runtime resolves.
 func TestDarAnalyzeJSON(t *testing.T) {
-	if os.Getenv(analyzer.ImageEnv) == "" {
-		t.Skipf("%s not set; build the analyzer image to run this", analyzer.ImageEnv)
+	if !analyzer.Status(context.Background()).Available {
+		t.Skip("no analyzer runtime available (DPM component or Docker)")
 	}
 	cmd := buildAnalyze()
 	var out bytes.Buffer

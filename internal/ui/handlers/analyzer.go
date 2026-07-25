@@ -39,7 +39,7 @@ import (
 
 // ErrCodeAnalyzerUnavailable is the stable token the frontend branches
 // on to render a clean "analyzer not configured" state (install Java /
-// install Docker) instead of a generic upstream error.
+// install the DPM component or Docker) instead of a generic error.
 const ErrCodeAnalyzerUnavailable = "ANALYZER_UNAVAILABLE"
 
 // analyzerUploadMax caps the multipart upload body. DARs are larger
@@ -194,7 +194,7 @@ func handleInstanceAnalyze(w http.ResponseWriter, r *http.Request) {
 // onto a 503 carrying the same remediation Status() would render.
 // Returns true when it handled err (503 written), false otherwise.
 func writeAnalyzerUnavailable(w http.ResponseWriter, ctx context.Context, err error) bool {
-	if !errors.Is(err, analyzer.ErrDockerNotFound) {
+	if !errors.Is(err, analyzer.ErrNoRuntime) {
 		return false
 	}
 	detail := analyzer.Status(ctx).Detail

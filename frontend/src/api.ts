@@ -2356,19 +2356,19 @@ export interface AnalyzerResponse {
   report: AnalyzerReport | null;
 }
 
-// AnalyzerStatusResponse reports whether the analyzer can run in this
-// environment (Docker reachable, image present/pullable), so the UI can
-// show a clean "not configured" state instead of failing mid-flight.
+// AnalyzerStatusResponse reports whether an analysis can run here and which
+// runtime serves it ("component" = the DPM component, "docker" = the pinned
+// image, "bin" = an explicit executable), so the UI can show a clean "not
+// configured" state instead of failing mid-flight.
 export interface AnalyzerStatusResponse {
   schema_version: number;
   available: boolean;
-  docker_found: boolean;
-  image_present: boolean;
-  image?: string;
+  runtime?: string;
+  source?: string;
   detail?: string;
 }
 
-// fetchAnalyzerStatus probes the host once (Docker + image). The screen
+// fetchAnalyzerStatus probes the host once for a usable runtime. The screen
 // gates the whole surface on `available`.
 export const fetchAnalyzerStatus = () =>
   apiFetch<AnalyzerStatusResponse>("/api/analyzer/status");

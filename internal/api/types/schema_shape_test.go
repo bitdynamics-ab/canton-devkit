@@ -277,9 +277,8 @@ types.AnalyzerSource {
 types.AnalyzerStatusResponse {
   schema_version int
   available bool
-  docker_found bool
-  image_present bool
-  image string
+  runtime string
+  source string
   detail string
 }
 

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"mime/multipart"
@@ -32,8 +33,8 @@ func analyzerMux(t *testing.T) *httptest.Server {
 // version and a reachable Docker (DAML_ANALYZER_IMAGE is set for the
 // suite, and Docker is running).
 func TestAnalyzerStatus(t *testing.T) {
-	if os.Getenv(analyzer.ImageEnv) == "" {
-		t.Skipf("%s not set; run the suite with the analyzer image built", analyzer.ImageEnv)
+	if !analyzer.Status(context.Background()).Available {
+		t.Skip("no analyzer runtime available (DPM component or Docker)")
 	}
 	srv := analyzerMux(t)
 
@@ -47,10 +48,9 @@ func TestAnalyzerStatus(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", resp.StatusCode, body)
 	}
 	var got struct {
-		SchemaVersion int  `json:"schema_version"`
-		Available     bool `json:"available"`
-		DockerFound   bool `json:"docker_found"`
-		ImagePresent  bool `json:"image_present"`
+		SchemaVersion int    `json:"schema_version"`
+		Available     bool   `json:"available"`
+		Runtime       string `json:"runtime"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -58,11 +58,8 @@ func TestAnalyzerStatus(t *testing.T) {
 	if got.SchemaVersion == 0 {
 		t.Errorf("schema_version not set: %+v", got)
 	}
-	if !got.DockerFound {
-		t.Errorf("docker_found = false, want true (Docker should be running)")
-	}
-	if !got.Available {
-		t.Errorf("available = false, want true (%s is set)", analyzer.ImageEnv)
+	if !got.Available || got.Runtime == "" {
+		t.Errorf("available/runtime = %v/%q, want true + a resolved runtime", got.Available, got.Runtime)
 	}
 }
 
@@ -70,8 +67,8 @@ func TestAnalyzerStatus(t *testing.T) {
 // the pkg-app DAR bytes as multipart field `dar`, expect a 200 with a
 // report naming the analyzed package and a non-zero interaction count.
 func TestAnalyzerAnalyzeUpload(t *testing.T) {
-	if os.Getenv(analyzer.ImageEnv) == "" {
-		t.Skipf("%s not set; run the suite with the analyzer image built", analyzer.ImageEnv)
+	if !analyzer.Status(context.Background()).Available {
+		t.Skip("no analyzer runtime available (DPM component or Docker)")
 	}
 	darBytes, err := os.ReadFile(pkgAppDAR)
 	if err != nil {

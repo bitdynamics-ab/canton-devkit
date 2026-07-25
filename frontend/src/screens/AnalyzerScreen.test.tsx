@@ -20,7 +20,7 @@ const REPORT = {
   ],
 };
 
-function stubFetch(status: { available: boolean; docker_found?: boolean; image_present?: boolean; detail?: string }) {
+function stubFetch(status: { available: boolean; runtime?: string; source?: string; detail?: string }) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string) => {
@@ -31,7 +31,7 @@ function stubFetch(status: { available: boolean; docker_found?: boolean; image_p
       if (url.startsWith("/api/instances/demo/dar")) return json({ schema_version: 1, instance: "demo", role: "app-user", dars: [{ main: "aa11", name: "pkg-app", version: "1.0.0" }] });
       if (url.startsWith("/api/instances")) return json({ schema_version: 1, instances: [{ name: "demo", status: "running" }] });
       if (url.startsWith("/api/analyzer/status"))
-        return json({ schema_version: 1, available: status.available, docker_found: status.docker_found ?? status.available, image_present: status.image_present ?? status.available, detail: status.detail ?? "" });
+        return json({ schema_version: 1, available: status.available, runtime: status.runtime ?? (status.available ? "component" : ""), source: status.source ?? (status.available ? "dpm component 0.1.0" : ""), detail: status.detail ?? "" });
       return Promise.resolve(new Response(null, { status: 204 }));
     }),
   );
@@ -60,9 +60,9 @@ describe("AnalyzerScreen", () => {
   });
 
   it("shows a not-configured notice when the analyzer is unavailable", async () => {
-    stubFetch({ available: false, docker_found: false, image_present: false, detail: "install Docker to run the analyzer image" });
+    stubFetch({ available: false, detail: "install the analyzer as a DPM component" });
     renderScreen();
     expect(await screen.findByText("Analyzer not configured")).toBeInTheDocument();
-    expect(screen.getByText(/install Docker/)).toBeInTheDocument();
+    expect(screen.getByText("oci://ghcr.io/certora/daml-analyzer:0.1.0")).toBeInTheDocument();
   });
 });

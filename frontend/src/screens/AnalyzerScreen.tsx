@@ -121,9 +121,9 @@ export function AnalyzerScreen() {
                 }}
               />
             </label>
-            {status && !status.image_present && (
-              <span style={{ color: W.dim, fontSize: fs.meta }}>
-                first run pulls the image ({status.image})
+            {status?.source && (
+              <span style={{ color: W.dim, fontSize: fs.meta, fontFamily: wMono }}>
+                via {status.runtime === "component" ? "DPM component" : status.runtime} · {status.source}
               </span>
             )}
           </div>
@@ -183,9 +183,10 @@ function NotConfigured({ status }: { status: AnalyzerStatusResponse }) {
       <div style={{ color: W.dim, fontSize: fs.body, marginBottom: 10 }}>
         {status.detail || "The analyzer runtime is not available in this environment."}
       </div>
-      <div style={{ display: "flex", gap: 16, fontSize: fs.meta, fontFamily: wMono, color: W.dim }}>
-        <span>docker: {status.docker_found ? "found" : "missing"}</span>
-        <span>image: {status.image_present ? "present" : "not pulled"}</span>
+      <div style={{ fontSize: fs.meta, fontFamily: wMono, color: W.dim }}>
+        Install it as a DPM component: add{" "}
+        <span style={{ color: W.text2 }}>oci://ghcr.io/certora/daml-analyzer:0.1.0</span> to daml.yaml,
+        then run <span style={{ color: W.text2 }}>dpm install package</span>.
       </div>
     </div>
   );
@@ -194,6 +195,7 @@ function NotConfigured({ status }: { status: AnalyzerStatusResponse }) {
 function ReportView({ darName, report }: { darName: string; report: AnalyzerReport }) {
   const p = report.analyzed_package;
   const s = report.summary;
+  const [view, setView] = useState<"table" | "graph">("table");
   return (
     <div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
@@ -226,8 +228,33 @@ function ReportView({ darName, report }: { darName: string; report: AnalyzerRepo
         </div>
       </div>
 
+      {s.total_interactions > 0 && (
+        <div style={{ display: "flex", gap: 4, margin: "6px 0 14px" }}>
+          {(["table", "graph"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              style={{
+                background: view === v ? W.brand : "transparent",
+                color: view === v ? W.onAccent : W.dim,
+                border: `1px solid ${view === v ? W.brand : W.border}`,
+                borderRadius: R.control,
+                padding: "3px 12px",
+                fontSize: fs.label,
+                textTransform: "capitalize",
+                cursor: "pointer",
+              }}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+      )}
+
       {s.total_interactions === 0 ? (
         <p style={{ color: W.dim, fontSize: fs.body }}>No cross-package interactions.</p>
+      ) : view === "graph" ? (
+        <GraphView report={report} />
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data }}>
           <thead>
@@ -267,6 +294,113 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div style={{ ...tableCaps, color: W.faint, fontSize: fs.label }}>{label}</div>
       <div style={{ fontFamily: wMono, fontSize: fs.stat, color: W.text, lineHeight: 1.1 }}>{value}</div>
     </div>
+  );
+}
+
+// GraphView is a native package-interaction graph: the analyzed package on
+// the left, each dependency it reaches on the right, edges labeled with the
+// interaction count — the same shape the analyzer's DOT output draws, built
+// from the JSON so it needs no graphviz/cytoscape.
+type TargetAgg = { pkg: string; version: string; total: number; types: string[] };
+
+function aggregateTargets(report: AnalyzerReport): TargetAgg[] {
+  const m = new Map<string, { version: string; total: number; types: Set<string> }>();
+  for (const it of report.interactions) {
+    const e = m.get(it.target.package) ?? { version: it.target.version, total: 0, types: new Set<string>() };
+    e.total++;
+    e.types.add(it.type);
+    m.set(it.target.package, e);
+  }
+  return [...m.entries()]
+    .map(([pkg, e]) => ({ pkg, version: e.version, total: e.total, types: [...e.types] }))
+    .sort((a, b) => b.total - a.total);
+}
+
+function GraphView({ report }: { report: AnalyzerReport }) {
+  const src = report.analyzed_package;
+  const targets = aggregateTargets(report);
+  const NW = 176;
+  const NH = 48;
+  const GAP = 20;
+  const LX = 6;
+  const RX = 384;
+  const PADY = 6;
+  const VBW = 574;
+  const H = targets.length * NH + Math.max(0, targets.length - 1) * GAP + PADY * 2;
+  const srcCY = H / 2;
+  return (
+    <div style={{ overflowX: "auto", border: `1px solid ${W.border}`, borderRadius: R.card, padding: "14px 12px" }}>
+      <svg viewBox={`0 0 ${VBW} ${H}`} width="100%" style={{ maxWidth: VBW, display: "block" }}>
+        {targets.map((t, i) => {
+          const cy = PADY + i * (NH + GAP) + NH / 2;
+          const x1 = LX + NW;
+          const mx = (x1 + RX) / 2;
+          return (
+            <g key={t.pkg}>
+              <path
+                d={`M${x1} ${srcCY} C${mx} ${srcCY} ${mx} ${cy} ${RX} ${cy}`}
+                fill="none"
+                style={{ stroke: W.borderHi }}
+                strokeWidth={1.5}
+              />
+              <text
+                x={mx}
+                y={(srcCY + cy) / 2 - 5}
+                textAnchor="middle"
+                style={{ fill: W.dim, fontFamily: wMono, fontSize: 11 }}
+              >
+                {t.total}×
+              </text>
+              <GraphNode x={RX} cy={cy} w={NW} h={NH} name={t.pkg} version={t.version} sub={t.types.join(" · ")} />
+            </g>
+          );
+        })}
+        <GraphNode x={LX} cy={srcCY} w={NW} h={NH} name={src.name} version={src.version} accent />
+      </svg>
+    </div>
+  );
+}
+
+function GraphNode({
+  x,
+  cy,
+  w,
+  h,
+  name,
+  version,
+  sub,
+  accent,
+}: {
+  x: number;
+  cy: number;
+  w: number;
+  h: number;
+  name: string;
+  version: string;
+  sub?: string;
+  accent?: boolean;
+}) {
+  const y = cy - h / 2;
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={w}
+        height={h}
+        rx={6}
+        style={{ fill: accent ? tint(W.brand, 14) : W.surface, stroke: accent ? W.brand : W.border }}
+        strokeWidth={1}
+      />
+      <text x={x + 12} y={y + (sub ? 20 : 28)} style={{ fill: W.text, fontFamily: wMono, fontSize: 13, fontWeight: 600 }}>
+        {name} <tspan style={{ fill: W.dim, fontWeight: 400 }}>{version}</tspan>
+      </text>
+      {sub && (
+        <text x={x + 12} y={y + 36} style={{ fill: W.faint, fontSize: 10 }}>
+          {sub.length > 30 ? sub.slice(0, 29) + "…" : sub}
+        </text>
+      )}
+    </g>
   );
 }
 
