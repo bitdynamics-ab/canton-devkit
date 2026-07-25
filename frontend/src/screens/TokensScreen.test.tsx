@@ -6,18 +6,14 @@ import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
 import { TokensScreen, createErrorText } from "./TokensScreen";
 import { ApiError } from "../api";
 
-// TokensScreen tests — minimal smoke that the screen mounts under the
-// shared providers App.tsx uses, and that the list/empty paths render.
-// The interactive modal flows are exercised by the live UI on a
-// running LocalNet, not by unit tests; replicating the InstanceSelection
-// + apiFetch + react-router timing here is brittle and low-value.
+// TokensScreen tests — smoke that the screen mounts under the shared
+// providers and the list/empty/modal paths render.
 
 afterEach(() => vi.unstubAllGlobals());
 
-// holdingsResponse lets a test drive the source banner: pass
-// { source: "registry", rows: [...] } to exercise the pseudo-balance
-// disclaimer. Defaults to a live empty ACS (no banner) so existing
-// callers are unaffected.
+// holdingsResponse drives the source banner: pass { source: "registry",
+// rows } to exercise the pseudo-balance disclaimer. Defaults to a live
+// empty ACS (no banner).
 function stubFetch(
   tokens: Array<{ symbol: string; name: string }>,
   holdingsResponse?: {
@@ -44,6 +40,14 @@ function stubFetch(
           instances: [{ name: "demo", status: "running" }],
         });
       }
+      if (url.startsWith("/api/tokens/identity")) {
+        return json({
+          schema_version: 1,
+          instance: "demo",
+          available_roles: ["app-user", "app-provider", "sv"],
+          current_role: "app-user",
+        });
+      }
       if (url.startsWith("/api/tokens/matrix")) {
         return json({
           schema_version: 1,
@@ -51,9 +55,16 @@ function stubFetch(
             parties: ["alice::abc", "bob::def"],
             instruments: [
               { admin: "alice::abc", instrument_id: "RTK", symbol: "RTK", standard: "CIP-0112 v2", on_ledger: true },
+              { admin: "alice::abc", instrument_id: "GOV", symbol: "GOV", standard: "CIP-0112 v2", on_ledger: true },
             ],
-            cells: [{ party: "bob::def", instrument_id: "RTK", amount: "1275.0" }],
-            totals: [{ party: "", instrument_id: "RTK", amount: "1275.0" }],
+            cells: [
+              { party: "bob::def", instrument_id: "RTK", amount: "1275.0" },
+              { party: "alice::abc", instrument_id: "GOV", amount: "42.0" },
+            ],
+            totals: [
+              { party: "", instrument_id: "RTK", amount: "1275.0" },
+              { party: "", instrument_id: "GOV", amount: "42.0" },
+            ],
           },
         });
       }
@@ -77,22 +88,23 @@ function stubFetch(
         });
       }
       if (url.startsWith("/api/tokens/") && url.includes("/activity")) {
-        return json({
-          schema_version: 1,
-          events: [
-            {
-              offset: 1106, update_id: "u1106", record_time: "2026-05-30T16:50:45Z",
-              instrument_id: "RTK", kind: "mint", amount: "1000",
-              receivers: [{ party: "bob::def", amount: "1000" }],
-            },
-            {
-              offset: 1200, update_id: "u1200", record_time: "2026-05-30T17:00:00Z",
-              instrument_id: "RTK", kind: "transfer", amount: "100",
-              senders: [{ party: "bob::def", amount: "100" }],
-              receivers: [{ party: "alice::abc", amount: "100" }],
-            },
-          ],
-        });
+        // Honour ?limit so pagination tests can drive a full-page → "Load
+        // more" state: synthesize `limit` newest-first rows.
+        const limit = Number(new URL(url, "http://x").searchParams.get("limit") ?? "50");
+        const pool = 120; // more rows than one page → "Load more" appears
+        const n = Math.min(limit, pool);
+        const events = Array.from({ length: n }, (_, i) => ({
+          offset: 2000 - i, // descending → newest first
+          update_id: `u${2000 - i}`,
+          record_time: "2026-05-30T17:00:00Z",
+          instrument_id: "RTK",
+          kind: i === 0 ? "mint" : "transfer",
+          source: "event_log",
+          amount: "100",
+          senders: i === 0 ? undefined : [{ party: "bob::def", amount: "100" }],
+          receivers: [{ party: "alice::abc", amount: "100" }],
+        }));
+        return json({ schema_version: 1, events, truncated: false });
       }
       if (url.startsWith("/api/tokens/") && url.includes("/summary")) {
         return json({
@@ -304,6 +316,52 @@ describe("TokensScreen", () => {
     expect(screen.queryAllByText(/transfer/i).length).toBeGreaterThan(0);
   });
 
+  // Newest-first + paginated: a "Showing N … newest first" affordance
+  // and a "Load more" that grows the requested limit.
+  it("paginates the Activity feed with a Load more button", async () => {
+    const user = userEvent.setup();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    await user.click(await screen.findByRole("button", { name: /^activity$/i }, { timeout: 4000 }));
+    // First page: the "showing N, newest first" count is present.
+    await waitFor(
+      () => expect(screen.queryByText(/newest first/i)).toBeInTheDocument(),
+      { timeout: 4000 },
+    );
+    expect(screen.queryByText(/Showing 50 movements/i)).toBeInTheDocument();
+    // A full page → the feed offers "Load more"; clicking it grows the
+    // page and re-requests a larger limit (stub caps at 120).
+    const loadMore = await screen.findByRole("button", { name: /Load more/i });
+    await user.click(loadMore);
+    await waitFor(
+      () => expect(screen.queryByText(/Showing 100 movements/i)).toBeInTheDocument(),
+      { timeout: 4000 },
+    );
+  });
+
+  it("offers a copy-party-id control per row in the party manager", async () => {
+    const user = userEvent.setup();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    await user.click(await screen.findByRole("button", { name: /Parties/i }, { timeout: 4000 }));
+    // Each registered party row exposes an accessible "Copy party id …"
+    // button that copies the FULL alias::fingerprint id.
+    const copyBtn = await screen.findByRole(
+      "button",
+      { name: /copy party id for treasury/i },
+      { timeout: 4000 },
+    );
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    await user.click(copyBtn);
+    expect(writeText).toHaveBeenCalledWith("bob::def");
+    // Feedback flips the label to "Copied!".
+    await waitFor(
+      () => expect(screen.queryAllByText(/Copied!/i).length).toBeGreaterThan(0),
+      { timeout: 2000 },
+    );
+  });
+
   it("switches to the Holdings matrix lens and renders the pivot", async () => {
     const user = userEvent.setup();
     stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
@@ -327,6 +385,36 @@ describe("TokensScreen", () => {
       () => expect(screen.queryAllByText(/treasury/).length).toBeGreaterThan(0),
       { timeout: 4000 },
     );
+  });
+
+  it("filters the matrix to one token's column via the chips", async () => {
+    const user = userEvent.setup();
+    stubFetch([
+      { symbol: "RTK", name: "Retail Token" },
+      { symbol: "GOV", name: "Gov Token" },
+    ]);
+    renderTokens();
+    await user.click(await screen.findByRole("button", { name: /Holdings matrix/i }, { timeout: 4000 }));
+    // the All-tokens + per-token chips render
+    await waitFor(
+      () => expect(screen.getByRole("button", { name: "All tokens" })).toBeInTheDocument(),
+      { timeout: 4000 },
+    );
+    // filter to GOV → its cell shows, RTK's column drops out
+    await user.click(screen.getByRole("button", { name: "GOV" }));
+    await waitFor(
+      () => expect(screen.queryAllByText("42.0").length).toBeGreaterThan(0),
+      { timeout: 4000 },
+    );
+    expect(screen.queryByText("1275.0")).not.toBeInTheDocument();
+    // All tokens → the full grid returns (RTK's 1275.0 shows in both its
+    // cell and the Σ total row, hence queryAllByText)
+    await user.click(screen.getByRole("button", { name: "All tokens" }));
+    await waitFor(
+      () => expect(screen.queryAllByText("1275.0").length).toBeGreaterThan(0),
+      { timeout: 4000 },
+    );
+    expect(screen.queryAllByText("42.0").length).toBeGreaterThan(0);
   });
 
   it("opens the party manager and lists registered aliases", async () => {
@@ -358,6 +446,48 @@ describe("TokensScreen", () => {
     // The "not on-ledger holdings" copy is split across <b> tags, so the
     // trailing fragment lands in its own text node — match that.
     expect(screen.queryByText(/on-ledger holdings/i)).toBeInTheDocument();
+  });
+
+  // Selecting "app-provider" must re-plumb the role: the screen refetches
+  // with role=app-provider; before the switch, calls omit role (app-user default).
+  it("threads the selected identity through token API calls", async () => {
+    const user = userEvent.setup();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+
+    const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>;
+    const calledWith = (needle: string) =>
+      fetchMock.mock.calls.some(([u]) => String(u).includes(needle));
+
+    // Instruments load under the default identity first.
+    await waitFor(
+      () => expect(screen.queryAllByText(/Retail Token/).length).toBeGreaterThan(0),
+      { timeout: 4000 },
+    );
+    // Default calls carry no explicit role (app-user is the omitted default).
+    expect(calledWith("role=app-provider")).toBe(false);
+
+    // Switch identity via the header segmented control.
+    await user.click(
+      await screen.findByRole("button", { name: /app-provider/i }, { timeout: 4000 }),
+    );
+
+    // The switch triggers a refetch of the token list under the new role.
+    await waitFor(
+      () => expect(calledWith("/api/tokens?instance=demo&role=app-provider")).toBe(true),
+      { timeout: 4000 },
+    );
+  });
+
+  it("populates the switcher from GET /api/tokens/identity", async () => {
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    // available_roles from the identity endpoint render as switcher buttons.
+    await waitFor(
+      () => expect(screen.getByRole("button", { name: /app-provider/i })).toBeInTheDocument(),
+      { timeout: 4000 },
+    );
+    expect(screen.getByRole("button", { name: /^sv$/i })).toBeInTheDocument();
   });
 
   it("does NOT show the disclaimer when holdings are live on-ledger", async () => {

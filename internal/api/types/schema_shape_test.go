@@ -9,36 +9,18 @@ import (
 )
 
 // TestSchemaShape_GoldenPinsFieldLevelShape is the field-level
-// structural pin. The other schema-pin layers
-// (TestAllTopLevelResponses_CarrySchemaVersion here, the AST scan in
-// internal/ui/handlers, and the regex grep in internal/ui) only
-// assert that the single integer SchemaVersion constant matches and
-// that each response carries a SchemaVersion field. None of them
-// notice when a field is ADDED, REMOVED, RENAMED, or RETYPED on a
-// shared response struct — yet that is the single most common way the
-// Go wire shape drifts away from frontend/src/api.ts's hand-written
-// `mirrors internal/...` interfaces while SchemaVersion silently stays
-// at 1. The frontend then mis-decodes at runtime with no CI signal.
+// structural pin. The other schema-pin layers only check that the
+// SchemaVersion constant matches and each response carries the field;
+// none catch a field ADDED, REMOVED, RENAMED, or RETYPED on a shared
+// struct — the most common way the Go wire shape drifts from
+// frontend/src/api.ts's hand-written interfaces while SchemaVersion
+// stays at 1, so the frontend mis-decodes at runtime with no CI signal.
 //
-// This test closes that gap: it reflects over every shared shape in
-// this package (and the external types they embed, e.g. skills.Skill),
-// renders a canonical signature of each — json key + Go kind, in
-// declaration order — and compares the whole set against the golden
-// string committed below.
-//
-// Catch class: any structural edit to a shared type. The diff fails
-// loudly and the message tells the contributor exactly what to do:
-//
-//  1. update wantSchemaShape to the new rendering, AND
-//  2. mirror the change in frontend/src/api.ts (the corresponding
-//     `export interface`), AND
-//  3. bump SchemaVersion (+ a docs/limitations.md migration note) when
-//     the change is wire-breaking (rename / remove / retype), so the
-//     bootstrap handshake forces stale frontends to reload.
-//
-// The golden is the human checkpoint: regenerating it is a deliberate
-// one-line edit visible in the diff, not something that
-// happens by accident.
+// This reflects over every shared shape (and embedded external types
+// like skills.Skill), renders a canonical json-key+Go-kind signature in
+// declaration order, and diffs it against the committed golden. On
+// failure the message tells the contributor to mirror the change in
+// api.ts, bump SchemaVersion if wire-breaking, and regenerate the golden.
 func TestSchemaShape_GoldenPinsFieldLevelShape(t *testing.T) {
 	got := schemaShape(schemaShapeRoots())
 	if got != wantSchemaShape {
@@ -59,15 +41,9 @@ func TestSchemaShape_GoldenPinsFieldLevelShape(t *testing.T) {
 }
 
 // schemaShapeRoots is the hand-enumerated set of shared shapes whose
-// field-level layout we pin. Every top-level response/request struct
-// in this package belongs here; nested types (Endpoint, Party,
-// Credential, ServiceStatus, PreflightSection/Check, SnapshotDatabase,
-// skills.Skill) are reached transitively by the walker, so they do not
-// need their own entry.
-//
-// Rule: when you add a new exported shape to this package, add it here
-// too. A new top-level type that nobody references would otherwise
-// escape the pin.
+// field-level layout we pin. Nested types are reached transitively by
+// the walker; only add top-level (unreferenced) shapes here. A new
+// exported shape not listed escapes the pin.
 func schemaShapeRoots() []any {
 	return []any{
 		ContractsListResponse{},
@@ -85,7 +61,13 @@ func schemaShapeRoots() []any {
 		SkillsInstallResponse{},
 		SkillsListResponse{},
 		Snapshot{},
+		Allocation{},
+		AllocationSummary{},
+		AllocationsResponse{},
+		BatchResult{},
+		TokenActivityEvent{},
 		TokenCreateRequest{},
+		TokenIdentityResponse{},
 		TokenRef{},
 		TransactionsListResponse{},
 		TxReplayResponse{},
@@ -93,21 +75,10 @@ func schemaShapeRoots() []any {
 }
 
 // schemaShape renders a deterministic, diff-friendly signature for the
-// given root types and every struct type reachable from them. Output
-// is one block per struct, blocks sorted by type name:
-//
-//	pkg.TypeName {
-//	  json_key kind
-//	  ...
-//	}
-//
-// Fields are listed in declaration order (the order matters for the
-// human reading the diff, and is stable across runs). The "kind" is
-// the reflect.Kind of the field's type with element/key kinds spelled
-// out for slices and maps, so a string→int retype is visible. We
-// deliberately key on the JSON tag, not the Go field name: a JSON tag
-// rename is a wire break even if the Go field keeps its name, and a Go
-// field rename that preserves the tag is wire-compatible.
+// root types and every struct reachable from them — one block per
+// struct (sorted by type name), fields in declaration order as
+// `json_key kind`. Keyed on the JSON tag, not the Go field name, since
+// a tag rename is a wire break and a Go-only rename is not.
 func schemaShape(roots []any) string {
 	seen := map[reflect.Type]string{}
 	var visit func(t reflect.Type)
@@ -164,9 +135,8 @@ func deref(t reflect.Type) reflect.Type {
 	}
 }
 
-// kindOf renders a field type's shape: scalars as their kind, and
-// containers with their element/key kinds spelled out so a retype of
-// the contained type (e.g. []string → []int) is caught.
+// kindOf renders a field type's shape: scalars as their kind, containers
+// with element/key kinds spelled out so a []string→[]int retype is caught.
 func kindOf(t reflect.Type) string {
 	switch t.Kind() {
 	case reflect.Pointer:
@@ -213,15 +183,53 @@ func typeName(t reflect.Type) string {
 	return pkg + "." + t.Name()
 }
 
-// wantSchemaShape is the committed golden. Regenerate by copying the
-// GOT block from a failing TestSchemaShape_GoldenPinsFieldLevelShape
-// run — and only after doing the api.ts mirror + SchemaVersion bump the
-// failure message describes.
+// wantSchemaShape is the committed golden. Regenerate from a failing
+// run's GOT block — only after the api.ts mirror + SchemaVersion bump.
 const wantSchemaShape = `skills.Skill {
   filename string
   name string
   description string
   body string
+}
+
+types.Allocation {
+  contract_id string
+  status string
+  settlement_id string
+  admin string
+  authorizer string
+  executors []string
+  committed bool
+  settlement_deadline string
+  transfer_legs []types.TokenTransferLeg
+  created_at string
+}
+
+types.AllocationSummary {
+  contract_id string
+  status string
+  settlement_id string
+  authorizer string
+  leg_count int
+  committed bool
+}
+
+types.AllocationsResponse {
+  schema_version int
+  allocations []types.AllocationSummary
+  aliases map[string]string
+}
+
+types.BatchActionResult {
+  kind string
+  ok bool
+  detail string
+}
+
+types.BatchResult {
+  update_id string
+  actions []types.BatchActionResult
+  ok bool
 }
 
 types.ContractDetail {
@@ -454,12 +462,33 @@ types.SnapshotDatabase {
   content_sha string
 }
 
+types.TokenActivityEvent {
+  source string
+  update_id string
+  offset int64
+  record_time string
+  instrument_id string
+  account string
+  admin string
+  consumed_holding_count int
+  created_holding_count int
+  transfer_legs []types.TokenTransferLeg
+  reason string
+}
+
 types.TokenCreateRequest {
   name string
   symbol string
   decimals int
   initial_supply string
   issuer string
+}
+
+types.TokenIdentityResponse {
+  schema_version int
+  instance string
+  available_roles []string
+  current_role string
 }
 
 types.TokenRef {
@@ -471,6 +500,14 @@ types.TokenRef {
   instrument_id string
   created_at string
   status string
+}
+
+types.TokenTransferLeg {
+  transfer_leg_id string
+  side string
+  otherside string
+  amount string
+  instrument_id string
 }
 
 types.TransactionEvent {

@@ -69,38 +69,42 @@ func TestRunDemo_ComposesPartyCreateMintFaucet(t *testing.T) {
 			return nil
 		},
 		func(_ context.Context, _ io.Writer, o FaucetOptions) error {
-			order = append(order, "faucet:"+o.To)
 			faucetOpts = o
+			order = append(order, "faucet:"+o.To)
 			return nil
 		},
 	)
 
 	res, err := RunDemo(context.Background(), nil, DemoOptions{
-		Instance: "demo", Endpoint: "localhost:5001", Role: "app-user", SeedHolder: true,
+		Instance: "demo", Endpoint: "localhost:5001", Role: "app-user",
 	})
 	if err != nil {
 		t.Fatalf("RunDemo: %v", err)
 	}
 
-	want := []string{"party:demo-issuer", "create:DEMO", "mint:demo-issuer::pid", "party:demo-holder", "faucet:demo-holder::pid"}
+	// The V2 supply is minted to the holder (never the issuer — the test
+	// token can't self-mint), so there's no faucet leg.
+	want := []string{"party:demo-issuer", "create:DEMO", "party:demo-holder", "mint:demo-holder::pid"}
 	if !slices.Equal(order, want) {
 		t.Fatalf("call order = %v, want %v", order, want)
 	}
 	if createOpts.Issuer != "demo-issuer::pid" || createOpts.Symbol != "DEMO" || createOpts.InitialSupply != "1000000" || createOpts.Decimals != 6 {
 		t.Errorf("create opts wrong: %+v", createOpts)
 	}
-	if mintOpts.To != "demo-issuer::pid" || mintOpts.Amount != "1000000" || mintOpts.Instrument != "DEMO" {
+	if mintOpts.To != "demo-holder::pid" || mintOpts.Amount != "1000000" || mintOpts.Instrument != "DEMO" {
 		t.Errorf("mint opts wrong: %+v", mintOpts)
 	}
-	if faucetOpts.Source != "demo-issuer::pid" || faucetOpts.To != "demo-holder::pid" || faucetOpts.Amount != "1000" {
-		t.Errorf("faucet opts wrong: %+v", faucetOpts)
+	if len(faucetOpts.To) != 0 {
+		t.Errorf("V2 demo must not faucet: %+v", faucetOpts)
 	}
 	if res.Token.Symbol != "DEMO" || res.Issuer.PartyID != "demo-issuer::pid" || !res.Seeded || res.Holder == nil || res.Holder.PartyID != "demo-holder::pid" {
 		t.Errorf("result wrong: %+v", res)
 	}
 }
 
-func TestRunDemo_NoSeedHolderSkipsFaucet(t *testing.T) {
+// The V2 demo has no faucet leg: the supply is minted straight to the holder
+// (the issuer can't self-mint), so the holder is always present and seeded.
+func TestRunDemo_V2MintsToHolderNoFaucet(t *testing.T) {
 	stubDemoV2Capable(t, true)
 	var order []string
 	stubDemoSeams(t,
@@ -112,22 +116,25 @@ func TestRunDemo_NoSeedHolderSkipsFaucet(t *testing.T) {
 			order = append(order, "create")
 			return &CreateResult{TokenRef: registry.TokenRef{Symbol: o.Symbol}}, nil
 		},
-		func(_ context.Context, _ io.Writer, _ MintOptions) error { order = append(order, "mint"); return nil },
+		func(_ context.Context, _ io.Writer, o MintOptions) error {
+			order = append(order, "mint:"+o.To)
+			return nil
+		},
 		func(_ context.Context, _ io.Writer, _ FaucetOptions) error {
 			order = append(order, "faucet")
 			return nil
 		},
 	)
 
-	res, err := RunDemo(context.Background(), nil, DemoOptions{Instance: "demo", Endpoint: "x:1", SeedHolder: false})
+	res, err := RunDemo(context.Background(), nil, DemoOptions{Instance: "demo", Endpoint: "x:1"})
 	if err != nil {
 		t.Fatalf("RunDemo: %v", err)
 	}
-	if want := []string{"party:demo-issuer", "create", "mint"}; !slices.Equal(order, want) {
-		t.Fatalf("order = %v, want %v (no holder/faucet)", order, want)
+	if want := []string{"party:demo-issuer", "create", "party:demo-holder", "mint:demo-holder::pid"}; !slices.Equal(order, want) {
+		t.Fatalf("order = %v, want %v (mint to holder, no faucet)", order, want)
 	}
-	if res.Seeded || res.Holder != nil {
-		t.Errorf("should not seed a holder: %+v", res)
+	if !res.Seeded || res.Holder == nil || res.Holder.PartyID != "demo-holder::pid" {
+		t.Errorf("V2 demo should always seed the holder: %+v", res)
 	}
 }
 
@@ -143,7 +150,7 @@ func TestRunDemo_StopsOnCreateError(t *testing.T) {
 		func(_ context.Context, _ io.Writer, _ FaucetOptions) error { return nil },
 	)
 
-	if _, err := RunDemo(context.Background(), nil, DemoOptions{Instance: "demo", Endpoint: "x:1", SeedHolder: true}); !errors.Is(err, ErrSymbolInUse) {
+	if _, err := RunDemo(context.Background(), nil, DemoOptions{Instance: "demo", Endpoint: "x:1"}); !errors.Is(err, ErrSymbolInUse) {
 		t.Fatalf("want ErrSymbolInUse wrapped, got %v", err)
 	}
 	if minted {
@@ -177,7 +184,10 @@ func TestRunDemo_ReusesExistingIssuerAlias(t *testing.T) {
 	stubDemoV2Capable(t, true)
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	s := registry.NewState("demo", "0.6.4")
-	s.Parties = map[string]registry.PartyRef{"demo-issuer": {Alias: "demo-issuer", PartyID: "existing::pid"}}
+	s.Parties = map[string]registry.PartyRef{
+		"demo-issuer": {Alias: "demo-issuer", PartyID: "existing::pid"},
+		"demo-holder": {Alias: "demo-holder", PartyID: "existing-holder::pid"},
+	}
 	if err := registry.Write(s); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -195,7 +205,7 @@ func TestRunDemo_ReusesExistingIssuerAlias(t *testing.T) {
 		func(_ context.Context, _ io.Writer, _ FaucetOptions) error { return nil },
 	)
 
-	if _, err := RunDemo(context.Background(), nil, DemoOptions{Instance: "demo", Endpoint: "x:1", SeedHolder: false}); err != nil {
+	if _, err := RunDemo(context.Background(), nil, DemoOptions{Instance: "demo", Endpoint: "x:1"}); err != nil {
 		t.Fatalf("RunDemo: %v", err)
 	}
 	if createIssuer != "existing::pid" {
@@ -226,7 +236,7 @@ func TestRunDemo_V1FundsHolderWithAmulet(t *testing.T) {
 	)
 
 	res, err := RunDemo(context.Background(), nil, DemoOptions{
-		Instance: "demo", Endpoint: "localhost:5001", Role: "app-user", SeedHolder: true,
+		Instance: "demo", Endpoint: "localhost:5001", Role: "app-user",
 	})
 	if err != nil {
 		t.Fatalf("RunDemo: %v", err)

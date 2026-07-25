@@ -1,6 +1,7 @@
 package token
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
@@ -112,28 +113,34 @@ func TestBuildActivity_LimitAndZeroNetSkipped(t *testing.T) {
 	}
 }
 
-// TestConsumeActivityStream_TruncatesAtCap pins the OOM guard: when the
-// updates stream emits more than maxActivityScan items, the consumer
-// stops at the cap and returns truncated=true. Mirrors maxWorkspaceScan
-// in workspace.go — a runaway transaction stream on a busy ledger
-// would otherwise pump us into OOM via an unbounded slice.
+// TestConsumeActivityStream_TruncatesAtCap pins the OOM guard and the
+// newest-first retention: the stream arrives oldest→newest, so once more
+// than maxActivityScan holding-bearing transactions are seen, the ring
+// buffer evicts the oldest and keeps the newest window with truncated=true.
+// Mirrors maxWorkspaceScan in workspace.go — a runaway transaction stream
+// on a busy ledger would otherwise pump us into OOM via an unbounded slice.
 func TestConsumeActivityStream_TruncatesAtCap(t *testing.T) {
-	ch := make(chan ledger.StreamItem[*lapiv2.GetUpdatesResponse], maxActivityScan+1)
-	for i := 0; i < maxActivityScan+1; i++ {
-		ch <- ledger.StreamItem[*lapiv2.GetUpdatesResponse]{Value: &lapiv2.GetUpdatesResponse{}}
+	total := maxActivityScan + 5
+	upd := make([]*lapiv2.GetUpdatesResponse, total)
+	for i := 0; i < total; i++ {
+		upd[i] = holdingCreateUpdate(int64(i+1), "u"+strconv.Itoa(i+1), "bob", "MYT", "1.0")
 	}
-	close(ch)
-	txs, truncated, err := consumeActivityStream(ch)
+	txs, truncated, err := consumeActivityStream(newUpdatesStream(upd, nil))
 	if err != nil {
 		t.Fatalf("consumeActivityStream: %v", err)
 	}
 	if !truncated {
-		t.Errorf("truncated = false; want true after %d items", maxActivityScan+1)
+		t.Fatalf("truncated = false; want true after %d retained txs", total)
 	}
-	if len(txs) != 0 {
-		// Empty GetUpdatesResponse contains no transaction; no rawTx
-		// should accumulate. The point of the test is the cap path.
-		t.Errorf("unexpected rawTx accumulation: got %d", len(txs))
+	if len(txs) != maxActivityScan {
+		t.Fatalf("retained %d txs; want cap %d", len(txs), maxActivityScan)
+	}
+	// Oldest 5 evicted: window holds offsets [6 .. total] in stream order.
+	if txs[0].offset != 6 {
+		t.Errorf("oldest kept = %d; want 6 (offsets 1-5 evicted)", txs[0].offset)
+	}
+	if txs[len(txs)-1].offset != int64(total) {
+		t.Errorf("newest kept = %d; want %d", txs[len(txs)-1].offset, total)
 	}
 }
 

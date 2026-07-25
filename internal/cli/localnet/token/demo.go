@@ -13,15 +13,14 @@ import (
 // token.RunDemo via POST /api/tokens/demo.
 func buildDemo() *cobra.Command {
 	var (
-		instance   string
-		role       string
-		endpoint   string
-		insecure   bool
-		symbol     string
-		supply     string
-		decimals   int
-		seedHolder bool
-		format     string
+		instance string
+		role     string
+		endpoint string
+		insecure bool
+		symbol   string
+		supply   string
+		decimals int
+		format   string
 	)
 	cmd := &cobra.Command{
 		Use:   "demo",
@@ -30,8 +29,9 @@ func buildDemo() *cobra.Command {
 flow adapts to the instance:
 
   token-standard-v2 instance: allocate an issuer party, create a V2
-    instrument on-ledger, mint the initial supply, and (unless
-    --seed-holder=false) fund a holder party.
+    instrument on-ledger, and mint the initial supply to a distinct
+    holder party (the test token can't self-mint to the issuer), giving
+    a transferable balance.
 
   standard instance (V1): there is no create/mint — Amulet is the only
     instrument — so a holder party is funded with Amulet moved from the
@@ -56,7 +56,6 @@ orchestration via POST /api/tokens/demo.`,
 				Symbol:        symbol,
 				InitialSupply: supply,
 				Decimals:      decimals,
-				SeedHolder:    seedHolder,
 			})
 			if err != nil {
 				return err
@@ -78,7 +77,6 @@ orchestration via POST /api/tokens/demo.`,
 	cmd.Flags().StringVar(&symbol, "symbol", "DEMO", "Instrument symbol.")
 	cmd.Flags().StringVar(&supply, "supply", "1000000", "Initial supply (decimal string).")
 	cmd.Flags().IntVar(&decimals, "decimals", 6, "Decimal precision (0..18).")
-	cmd.Flags().BoolVar(&seedHolder, "seed-holder", true, "Allocate a holder party and fund it so the token is transferable.")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json (json prints the DemoResult).")
 	_ = cmd.MarkFlagRequired("instance")
 	return cmd

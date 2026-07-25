@@ -3,6 +3,7 @@ package token
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
@@ -113,12 +114,133 @@ func TestRunMint_UnsupportedOnInstrument(t *testing.T) {
 	}
 }
 
-// TestRunTransfer_UnknownSymbol covers the no-endpoint path: when no
-// live endpoint is set, RunTransfer falls back to ErrNeedsV2LocalNet
-// after passing field-validation. With an unknown symbol AND no
-// endpoint, ErrNeedsV2LocalNet is the deliberate surface (so the user
-// adds --endpoint and re-runs, where the orchestration treats unknown
-// symbols as raw instrument ids).
+// TestRunMintLive_SelfMintRejected pins the self-mint guard: minting to
+// the issuer's own party (To == IssuerParty) is rejected before any dial
+// with a clear, actionable error.
+func TestRunMintLive_SelfMintRejected(t *testing.T) {
+	ref := registry.TokenRef{
+		Symbol: "XYZ", InstrumentID: "XYZ", IssuerParty: "issuer::abc", Status: "on-ledger",
+	}
+	// To == IssuerParty: guard must fire before any dial.
+	err := runMintLive(context.Background(), nil, MintOptions{
+		Instance: "demo", Instrument: "XYZ", To: "issuer::abc", Amount: "100",
+		Endpoint: "localhost:1", Role: "app-user",
+	}, ref)
+	if err == nil {
+		t.Fatal("self-mint (To == IssuerParty) must be rejected")
+	}
+	if !strings.Contains(err.Error(), "self-mint") || !strings.Contains(err.Error(), "distinct party") {
+		t.Errorf("self-mint error not actionable: %v", err)
+	}
+}
+
+// TestRunMintLive_DistinctReceiverPassesGuard confirms the guard does NOT
+// short-circuit a distinct-receiver mint: with To != IssuerParty the flow
+// proceeds past the guard to the ledger dial (which fails on the bogus
+// endpoint), so the error must never be the self-mint guard message.
+func TestRunMintLive_DistinctReceiverPassesGuard(t *testing.T) {
+	ref := registry.TokenRef{
+		Symbol: "XYZ", InstrumentID: "XYZ", IssuerParty: "issuer::abc", Status: "on-ledger",
+	}
+	err := runMintLive(context.Background(), nil, MintOptions{
+		Instance: "demo", Instrument: "XYZ", To: "bob::xyz", Amount: "100",
+		Endpoint: "127.0.0.1:1", Role: "app-user",
+	}, ref)
+	if err == nil {
+		t.Fatal("expected a dial failure against the bogus endpoint")
+	}
+	if strings.Contains(err.Error(), "self-mint") {
+		t.Errorf("distinct-receiver mint must not trip the self-mint guard; got %v", err)
+	}
+}
+
+// seedOnLedgerToken records an on-ledger instrument in the instance state
+// so RunMint/RunBurn take the live path without a real create.
+func seedOnLedgerToken(t *testing.T, instance, symbol, issuer string) {
+	t.Helper()
+	st, err := registry.Read(instance)
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	if st.Tokens == nil {
+		st.Tokens = map[string]registry.TokenRef{}
+	}
+	st.Tokens[symbol] = registry.TokenRef{
+		Symbol: symbol, InstrumentID: symbol, IssuerParty: issuer, Status: "on-ledger",
+	}
+	if err := registry.Write(st); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+}
+
+// TestRunMint_AutoResolvesEndpointHitsSelfMintGuard: with a captured
+// ledger port and no explicit --endpoint, RunMint auto-discovers the
+// endpoint and routes to the live path, so a self-mint (To == issuer)
+// surfaces the actionable guard rather than the generic
+// ErrUnsupportedOnInstrument. This is the exact gap found in live testing.
+func TestRunMint_AutoResolvesEndpointHitsSelfMintGuard(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "demo")
+	setLedgerPort(t, "demo", "app-user", 65535)
+	seedOnLedgerToken(t, "demo", "XYZ", "issuer::abc")
+
+	err := RunMint(context.Background(), nil, MintOptions{
+		Instance: "demo", Instrument: "XYZ", To: "issuer::abc", Amount: "100",
+	})
+	if err == nil {
+		t.Fatal("self-mint should be rejected")
+	}
+	if errors.Is(err, ErrUnsupportedOnInstrument) {
+		t.Errorf("auto-resolved on-ledger mint must reach the live path, not ErrUnsupportedOnInstrument; got %v", err)
+	}
+	if !strings.Contains(err.Error(), "self-mint") {
+		t.Errorf("expected the self-mint guard message; got %v", err)
+	}
+}
+
+// TestRunMint_AutoResolvesEndpointDistinctReceiver: with a captured port
+// and a distinct receiver, the auto-resolved live path proceeds past the
+// guard to a ledger dial (which fails on the unreachable port) — never the
+// self-mint message and never ErrUnsupportedOnInstrument.
+func TestRunMint_AutoResolvesEndpointDistinctReceiver(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "demo")
+	setLedgerPort(t, "demo", "app-user", 1)
+	seedOnLedgerToken(t, "demo", "XYZ", "issuer::abc")
+
+	err := RunMint(context.Background(), nil, MintOptions{
+		Instance: "demo", Instrument: "XYZ", To: "bob::xyz", Amount: "100",
+	})
+	if err == nil {
+		t.Fatal("expected a dial failure against the unreachable port")
+	}
+	if errors.Is(err, ErrUnsupportedOnInstrument) {
+		t.Errorf("distinct-receiver mint must reach the live path; got %v", err)
+	}
+	if strings.Contains(err.Error(), "self-mint") {
+		t.Errorf("distinct-receiver mint must not trip the self-mint guard; got %v", err)
+	}
+}
+
+// TestRunMint_UnsupportedWhenNoLedgerPort: with no captured port,
+// auto-resolution yields "" so RunMint keeps the registry-fallback
+// behaviour and surfaces ErrUnsupportedOnInstrument.
+func TestRunMint_UnsupportedWhenNoLedgerPort(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "demo")
+	seedOnLedgerToken(t, "demo", "XYZ", "issuer::abc")
+
+	err := RunMint(context.Background(), nil, MintOptions{
+		Instance: "demo", Instrument: "XYZ", To: "bob::xyz", Amount: "100",
+	})
+	if !errors.Is(err, ErrUnsupportedOnInstrument) {
+		t.Errorf("no captured port should keep the registry fallback; got %v", err)
+	}
+}
+
+// TestRunTransfer_UnknownSymbol: with no endpoint, RunTransfer falls back
+// to ErrNeedsV2LocalNet after field-validation, even for an unknown symbol
+// (the user then adds --endpoint, where unknown symbols are raw ids).
 func TestRunTransfer_UnknownSymbol(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo")
@@ -130,6 +252,26 @@ func TestRunTransfer_UnknownSymbol(t *testing.T) {
 	}
 	if !errors.Is(err, ErrNeedsV2LocalNet) {
 		t.Errorf("no-endpoint transfer should surface ErrNeedsV2LocalNet; got %v", err)
+	}
+}
+
+// TestRunTransfer_AutoResolvesEndpoint: with a captured ledger port and no
+// explicit --endpoint, RunTransfer auto-discovers the endpoint and attempts
+// the live path instead of returning ErrNeedsV2LocalNet.
+func TestRunTransfer_AutoResolvesEndpoint(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "demo")
+	setLedgerPort(t, "demo", "app-user", 1)
+	seedOnLedgerToken(t, "demo", "XYZ", "issuer::abc")
+
+	err := RunTransfer(context.Background(), nil, TransferOptions{
+		Instance: "demo", Instrument: "XYZ", From: "a::1", To: "b::2", Amount: "1",
+	})
+	if err == nil {
+		t.Fatal("expected a live-path error against the unreachable port")
+	}
+	if errors.Is(err, ErrNeedsV2LocalNet) {
+		t.Errorf("captured port should drive the live path, not ErrNeedsV2LocalNet; got %v", err)
 	}
 }
 
@@ -193,10 +335,9 @@ func TestBalanceSource(t *testing.T) {
 	}
 }
 
-// TestRunBalanceLive_TagsRowsLedger covers the other half: when the
-// live ACS yields a holding, the summed row is tagged SourceLedger.
-// Uses the fakeLedger seam + a single HoldingViewV2-shaped created
-// event so we exercise the real row-construction path.
+// TestRunBalanceLive_TagsRowsLedger: when the live ACS yields a holding,
+// the summed row is tagged SourceLedger. Uses the fakeLedger seam and one
+// HoldingViewV2-shaped event to exercise the real row-construction path.
 func TestRunBalanceLive_TagsRowsLedger(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo")
@@ -230,11 +371,9 @@ func TestRunBalanceLive_TagsRowsLedger(t *testing.T) {
 	}
 }
 
-// holdingContract builds a GetActiveContractsResponse carrying a
-// single HoldingViewV2-shaped InterfaceView (account.owner,
-// instrumentId.{admin,id}, amount) so extractHoldingViewV2 parses it.
-// Reuses the production value_builders.go constructors so the test
-// view matches the shape the real participant emits.
+// holdingContract builds a GetActiveContractsResponse carrying one
+// HoldingViewV2-shaped InterfaceView. Reuses the production value builders
+// so the test view matches what the real participant emits.
 func holdingContract(owner, instrumentID, admin, amount string) *lapiv2.GetActiveContractsResponse {
 	view := recordValue([]field{
 		{"account", recordValue([]field{

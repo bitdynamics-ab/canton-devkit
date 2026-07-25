@@ -42,15 +42,10 @@ func (c *Client) GetParticipantId(ctx context.Context) (*adminv2.GetParticipantI
 	return resp, nil
 }
 
-// UploadDarFile uploads a DAR archive to the participant. The participant
-// validates, extracts, and registers the contained packages — they
-// become available for command submission immediately on success.
-// Used by `dpm localnet dar upload <path>` and the DAR Web UI
-// drag-and-drop; both read the .dar bytes into req.DarFile.
-//
-// For multi-participant uploads, the caller dials each participant's
-// admin port and calls this once per participant. The CLI's --all-participants
-// flag does that loop.
+// UploadDarFile uploads a DAR archive to the participant, which validates,
+// extracts, and registers the contained packages — available for command
+// submission immediately on success. For multi-participant uploads the
+// caller dials each participant's admin port and calls this once each.
 func (c *Client) UploadDarFile(ctx context.Context, req *adminv2.UploadDarFileRequest) (*adminv2.UploadDarFileResponse, error) {
 	resp, err := c.packageMgmt.UploadDarFile(ctx, req)
 	if err != nil {
@@ -59,11 +54,9 @@ func (c *Client) UploadDarFile(ctx context.Context, req *adminv2.UploadDarFileRe
 	return resp, nil
 }
 
-// ListMyUserRights returns the party-rights and admin claims attached
-// to the JWT's claimed user (the empty UserId asks the participant
-// to use the token's own user). Lets the Web UI Explorer resolve
-// a Splice LocalNet user-id token to the concrete party set it
-// can read.
+// ListMyUserRights returns the party-rights and admin claims attached to
+// the JWT's claimed user (the empty UserId asks the participant to use the
+// token's own user).
 //
 // Each Right is a oneof — typical entries:
 //
@@ -82,17 +75,13 @@ func (c *Client) ListMyUserRights(ctx context.Context) (*adminv2.ListUserRightsR
 }
 
 // ResolveActAndReadParties walks the JWT's user-rights and returns the
-// union of parties the token can ActAs or ReadAs. Empty result means
-// the JWT carries no party claims and the caller should treat the
-// query as "nothing visible".
+// sorted union of parties the token can ActAs or ReadAs. Empty means no
+// party claims — the caller treats the query as "nothing visible".
 //
-// Returns a deterministic-order slice (sorted) so consumers using the
-// result as a map key get stable behaviour across calls.
-//
-// If the user has CanReadAsAnyParty or ParticipantAdmin, this still
-// returns the explicit per-party set — those claims expand "across all
-// parties" semantics inside Canton itself; we can't enumerate "any
-// party" client-side without a separate ListKnownParties call.
+// CanReadAsAnyParty / ParticipantAdmin still return only the explicit
+// per-party set: those claims expand "across all parties" inside Canton,
+// and we can't enumerate "any party" client-side without a separate
+// ListKnownParties call.
 func (c *Client) ResolveActAndReadParties(ctx context.Context) ([]string, error) {
 	resp, err := c.ListMyUserRights(ctx)
 	if err != nil {
@@ -116,19 +105,14 @@ func (c *Client) ResolveActAndReadParties(ctx context.Context) ([]string, error)
 }
 
 // GrantUserActAndReadAs grants the calling JWT's user CanActAs +
-// CanReadAs for every supplied party. Idempotent: Canton's grant API
-// returns the resulting full rights list and tolerates re-grants of
-// already-held rights, so calling this multiple times is safe.
+// CanReadAs for every supplied party. Idempotent: Canton tolerates
+// re-grants of already-held rights.
 //
 // Why this exists: the Splice V2 alpha boot doesn't auto-grant the
-// `ledger-api-user` user any party rights on the per-role participants
-// (stable Splice 0.6.4 does). Without these grants the JWT is accepted
-// but every ACS / submit RPC returns PermissionDenied. The token CLI
-// auto-grants the local party before its first ledger call so V2 boots
-// behave like stable Splice boots from the caller's perspective.
-//
-// userId="" asks the participant to apply the grant to the JWT's own
-// user — same shape as ListMyUserRights.
+// `ledger-api-user` user any party rights (stable 0.6.4 does), so without
+// these grants the JWT is accepted but every ACS / submit RPC returns
+// PermissionDenied. The token CLI grants the local party before its first
+// ledger call. userId="" applies the grant to the JWT's own user.
 func (c *Client) GrantUserActAndReadAs(ctx context.Context, userID string, parties []string) error {
 	if len(parties) == 0 {
 		return nil
@@ -150,11 +134,30 @@ func (c *Client) GrantUserActAndReadAs(ctx context.Context, userID string, parti
 	return nil
 }
 
+// GrantUserActAndReadAsAnyParty grants the user the wildcard
+// CanActAsAnyParty + CanReadAsAnyParty rights. Per-party grants only cover
+// parties we know about, but token-standard flows must read AND submit
+// against contracts owned by parties we don't host — the DSO, instrument
+// admins, other holders — or those RPCs PermissionDenied. Idempotent.
+// LocalNet-only, where the operator owns everyone.
+func (c *Client) GrantUserActAndReadAsAnyParty(ctx context.Context, userID string) error {
+	_, err := c.userMgmt.GrantUserRights(ctx, &adminv2.GrantUserRightsRequest{
+		UserId: userID,
+		Rights: []*adminv2.Right{
+			{Kind: &adminv2.Right_CanExecuteAsAnyParty_{CanExecuteAsAnyParty: &adminv2.Right_CanExecuteAsAnyParty{}}},
+			{Kind: &adminv2.Right_CanReadAsAnyParty_{CanReadAsAnyParty: &adminv2.Right_CanReadAsAnyParty{}}},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("ledger.GrantUserActAndReadAsAnyParty: %w", err)
+	}
+	return nil
+}
+
 // ListKnownPackages enumerates packages from the admin perspective — same
 // set as [Client.ListPackages] but with extra metadata (source DAR hash,
-// upload time, vetting state per synchronizer) only the admin API
-// surfaces. The package explorer Web UI prefers this for its richer
-// view; the plain ListPackages is fine for "is this package present?"
+// upload time, per-synchronizer vetting state) only the admin API
+// surfaces. The plain ListPackages is fine for "is this package present?"
 // checks.
 func (c *Client) ListKnownPackages(ctx context.Context) (*adminv2.ListKnownPackagesResponse, error) {
 	resp, err := c.packageMgmt.ListKnownPackages(ctx, &adminv2.ListKnownPackagesRequest{})

@@ -15,20 +15,17 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
-// Party registry orchestration. On LocalNet there is no trust
-// boundary between parties — the `unsafe` dev secret signs for every
-// role — so the token tool treats the instance as one god-mode
-// workspace: a developer allocates a party by alias, the participant
-// grants the role's user act/read-as for it, and the alias is recorded
-// so every later command (and the matrix / activity scan) can refer to
-// it by name. Both the CLI (`localnet party …`) and the Web UI call
-// into these functions, so the two surfaces stay in lock-step (see
-// the CLI ↔ Web UI parity rule in CONTRIBUTING.md).
+// Party registry orchestration. On LocalNet there is no trust boundary
+// between parties (the dev secret signs for every role), so the token
+// tool treats the instance as one workspace: a developer allocates a
+// party by alias, the participant grants the role's user act/read-as for
+// it, and the alias is recorded so later commands can refer to it by
+// name. Both the CLI and the Web UI call into these functions.
 
 // validAlias keeps aliases readable and collision-free with party-id
-// syntax: a letter followed by letters/digits/hyphens. Rejects empty,
-// leading digit/hyphen, and anything containing "::" (which would be
-// mistaken for a raw party id by ResolveAlias).
+// syntax: a letter followed by letters/digits/hyphens. Rejects a leading
+// digit/hyphen and any "::" (which ResolveAlias would take for a raw
+// party id).
 var validAlias = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 
 // ErrAliasInvalid / ErrAliasInUse are user-error conditions (exit 1),
@@ -86,12 +83,35 @@ func RunPartyNew(ctx context.Context, opts PartyOptions) (*registry.PartyRef, er
 
 	var partyID string
 	var isLocal bool
-	resp, err := client.AllocateParty(ctx, &adminv2.AllocatePartyRequest{PartyIdHint: opts.Alias})
+	// Onboard the party to the participant's synchronizer: without a
+	// SynchronizerId the party is allocated but is not a known submitter,
+	// so its first command fails with UNKNOWN_SUBMITTERS. Resolve the id
+	// from an already-connected role-local party; empty is tolerated.
+	syncID := ""
+	if locals, _ := localPartiesForRole(ctx, client, conn.Role); len(locals) > 0 {
+		if cs, csErr := client.ConnectedSynchronizers(ctx, locals[0]); csErr == nil {
+			for _, s := range cs.GetConnectedSynchronizers() {
+				if id := s.GetSynchronizerId(); id != "" {
+					syncID = id
+					break
+				}
+			}
+		}
+	}
+	// UserId auto-grants the role's user CanActAs for the new party (no
+	// separate GrantUserRights round-trip); SynchronizerId associates the
+	// party with the participant's synchronizer. A freshly-allocated party
+	// still isn't immediately a known submitter — the party-to-participant
+	// topology authorization must propagate first.
+	resp, err := client.AllocateParty(ctx, &adminv2.AllocatePartyRequest{
+		PartyIdHint:    opts.Alias,
+		SynchronizerId: syncID,
+		UserId:         exerciseUserID,
+	})
 	if err != nil {
-		// Recoverable case: a prior `party new` allocated the party on
-		// the node but didn't finish (e.g. the grant failed). The party
-		// is permanent, so re-allocation is rejected — find the existing
-		// one by hint and continue to grant + record. Idempotent retry.
+		// Idempotent retry: a prior `party new` allocated the party but
+		// didn't finish. The party is permanent, so re-allocation is
+		// rejected — find the existing one by hint and grant + record it.
 		existing, lookupErr := findPartyByHint(ctx, client, opts.Alias)
 		if lookupErr != nil || existing == "" {
 			return nil, fmt.Errorf("allocate party %q: %w", opts.Alias, err)
@@ -107,12 +127,10 @@ func RunPartyNew(ctx context.Context, opts PartyOptions) (*registry.PartyRef, er
 		return nil, fmt.Errorf("participant returned an empty party id for alias %q", opts.Alias)
 	}
 
-	// Grant the role's user act/read-as so the role's JWT can spend from
-	// and see the new party — without this the party exists but is
-	// invisible to every ACS / submit RPC. The participant requires an
-	// explicit user id on GrantUserRights (unlike the ListMyUserRights
-	// "" shorthand); the Splice per-role tokens all authenticate as
-	// exerciseUserID ("ledger-api-user").
+	// Grant the role's user act/read-as so its JWT can spend from and see
+	// the new party — without this the party exists but is invisible to
+	// every ACS / submit RPC. GrantUserRights requires an explicit user
+	// id; the Splice per-role tokens all authenticate as exerciseUserID.
 	if err := client.GrantUserActAndReadAs(ctx, exerciseUserID, []string{partyID}); err != nil {
 		return nil, fmt.Errorf("grant rights for %q: %w", opts.Alias, err)
 	}
@@ -156,9 +174,8 @@ func RunPartyList(ctx context.Context, opts PartyOptions) ([]registry.PartyRef, 
 }
 
 // RunPartyRemove forgets an alias. It does NOT de-allocate the on-ledger
-// party (parties are permanent on a Canton participant) — it only drops
-// the alias mapping, so the name frees up and the party stops appearing
-// in the workspace's read-as widening.
+// party (parties are permanent) — it only drops the alias mapping, so the
+// name frees up and the party stops appearing in the read-as widening.
 func RunPartyRemove(instance, alias string) error {
 	release, err := registry.Lock(instance)
 	if err != nil {

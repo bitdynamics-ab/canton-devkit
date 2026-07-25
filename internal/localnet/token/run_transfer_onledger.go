@@ -14,60 +14,27 @@ import (
 
 // On-ledger V2 transfer for the bundled splice-test-token-v2 instrument.
 //
-// Why this exists: the off-ledger path in run_transfer.go POSTs to the
-// LocalNet scan registry, which returns the *Amulet* TransferFactory
-// whose admin is the DSO party. TestTokenV2's
-// `token_transferFactory_transferImpl` requires
-//
-//	transfer.instrumentId.admin == transferFactory.admin
-//
-// so exercising the Amulet factory for an issuer-administered
-// instrument fails with an admin-mismatch assertion. For the test
-// token the issuer's own TokenRules contract IS the V2 TransferFactory
-// (it implements the interface, admin = issuer), so we exercise THAT
-// on-ledger — no off-ledger HTTP call — exactly as mint/burn do for
-// the same instrument (ref.Status=="on-ledger").
-//
-// Flow (sender → receiver, both controlled on LocalNet):
-//
-//  1. find the issuer's TokenRules contract (the factory).
-//  2. ACS-query the sender's holdings, group by account, pick the inputs.
-//  3. ensure the sender account's AccountConfig exists (provider-scoped
-//     accounts need one; self-custodial accounts use the basic config).
-//  4. exercise TransferFactory_Transfer on the TokenRules contract with
-//     the test-token choice context — creates a pending TokenTransferOffer
-//     (a V2 TransferInstruction).
-//  5. when --auto-accept is set, exercise TransferInstruction_Accept on
-//     that offer as the receiver to settle in the same flow.
+// The off-ledger path returns the Amulet TransferFactory (admin = DSO),
+// but TestTokenV2 asserts transfer.instrumentId.admin ==
+// transferFactory.admin, so the Amulet factory rejects an
+// issuer-administered instrument. The issuer's own TokenRules contract IS
+// the V2 TransferFactory (admin = issuer), so we exercise THAT on-ledger,
+// as mint/burn do for the same instrument (ref.Status=="on-ledger").
 
-// runTransferOnLedgerFn is the dispatch seam RunTransfer uses for the
-// on-ledger (issuer-administered test-token) transfer path. A package
-// var so tests can assert the dispatch routes here for on-ledger
-// instruments — and away from the off-ledger scan-registry path — without
-// a live participant.
+// Dispatch seams. Package vars so tests can assert the on-ledger vs
+// off-ledger routing without a live participant or HTTP registry.
 var runTransferOnLedgerFn = runTransferLiveOnLedger
 
-// runAcceptOnLedgerFn is the dispatch seam RunAccept uses to try the
-// on-ledger (test-token) accept before falling back to the off-ledger
-// registry path. A package var for the same test-seam reason as
-// runTransferOnLedgerFn.
 var runAcceptOnLedgerFn = runAcceptOnLedgerIfTestToken
 
-// runTransferOffLedgerFn / runAcceptOffLedgerFn are the off-ledger
-// (Amulet / external-registry) dispatch seams. Package vars so the
-// dispatch tests can assert that on-ledger instruments never reach the
-// off-ledger scan-registry path without standing up a participant or
-// an HTTP registry.
 var runTransferOffLedgerFn = runTransferOffLedger
 
 var runAcceptOffLedgerFn = runAcceptLive
 
 // tokenAccount is the V2 Account a holding belongs to, plus the
-// instrument coordinates carried alongside it. All of a sender's
-// holdings for one (admin, instrument, provider, account-id) tuple
-// share one tokenAccount; a transfer's inputs must too (the test
-// token's sumAndArchiveHoldings asserts inputHolding.account ==
-// transfer.sender).
+// instrument coordinates carried alongside it. A transfer's inputs must
+// all share one account: the test token's sumAndArchiveHoldings asserts
+// inputHolding.account == transfer.sender.
 type tokenAccount struct {
 	Owner      string
 	Provider   string // "" == None (self-custodial)
@@ -89,12 +56,10 @@ func (a tokenAccount) registryAccount() registry.Account {
 	return acct
 }
 
-// runTransferLiveOnLedger executes a transfer of an issuer-administered
-// test-token instrument by exercising the issuer's on-ledger
-// TransferFactory (the TokenRules contract), and — when AutoAccept is
-// set — settling the resulting offer. Returns the pending
-// TransferInstruction contract id (empty only if the response carried
-// none). RunTransfer dispatches here when ref.Status=="on-ledger".
+// runTransferLiveOnLedger transfers an issuer-administered test-token
+// instrument by exercising the issuer's on-ledger TransferFactory (the
+// TokenRules contract), settling the resulting offer when AutoAccept is
+// set. Returns the pending TransferInstruction contract id.
 func runTransferLiveOnLedger(ctx context.Context, out io.Writer, opts TransferOptions, ref regstate.TokenRef) (string, error) {
 	conn := LedgerConn{
 		Endpoint: opts.Endpoint,
@@ -109,7 +74,7 @@ func runTransferLiveOnLedger(ctx context.Context, out io.Writer, opts TransferOp
 	}
 	defer cleanup()
 
-	// The issuer's TokenRules contract IS the V2 TransferFactory. Its
+	// The issuer's TokenRules contract IS the V2 TransferFactory; its
 	// admin (signatory) is the issuer party, so the factory-admin check
 	// inside TransferFactory_Transfer matches the instrument's admin.
 	admin := ref.IssuerParty
@@ -132,8 +97,8 @@ func runTransferLiveOnLedger(ctx context.Context, out io.Writer, opts TransferOp
 	if err != nil {
 		return "", err
 	}
-	// Prefer the admin / instrument id recorded on the actual holdings —
-	// authoritative over the local registry ref, which can drift.
+	// Prefer the admin / instrument id on the holdings — authoritative
+	// over the local registry ref, which can drift.
 	if senderAcct.Admin != "" {
 		admin = senderAcct.Admin
 	}
@@ -170,20 +135,31 @@ func runTransferLiveOnLedger(ctx context.Context, out io.Writer, opts TransferOp
 		Meta:             registry.Metadata{Values: map[string]string{}},
 	}
 
-	// Authorize the transfer as the sender's account parties. We act as
-	// those parties plus the admin: the locked holdings + offer created
-	// by the choice are co-signed by the admin, and on LocalNet we host
-	// it, so submitting as the union avoids the off-ledger
-	// authority-delegation dance.
+	// Act as the sender's account parties plus the admin: the locked
+	// holdings + offer the choice creates are admin-co-signed, and on
+	// LocalNet we host the admin, so the union avoids off-ledger
+	// authority delegation.
 	senderParties := accountPartiesOf(admin, senderAcct.Owner, senderAcct.Provider)
 	factoryActAs := dedupParties(append(append([]string{}, senderParties...), admin))
+
+	// Atomic path: batch the factory-transfer + receiver-accept into one
+	// all-or-nothing ExecuteBatch. Only when the caller opted in and wants
+	// the accept chained (with NoWait there's no accept to batch; a bare
+	// transfer is already a single submit). See batch.go for the
+	// partial-recovery tradeoff this gives up.
+	if opts.Atomic && opts.AutoAccept && !opts.NoWait {
+		return runTransferOnLedgerBatched(
+			ctx, out, client, opts, admin, tokenRulesCID,
+			senderAcct, senderParties, transferArgs, accountConfigCIDs,
+		)
+	}
+
 	resp, err := exerciseTestTokenTransferFactory(
 		ctx, client, tokenRulesCID, factoryActAs, senderParties, transferArgs, accountConfigCIDs,
 	)
 	if err != nil {
 		return "", fmt.Errorf("exercise on-ledger TransferFactory_Transfer: %w", err)
 	}
-	// The on-ledger path is the V2 splice-test-token-v2.
 	instructionID := findCreatedInstructionID(resp, genV2)
 	emit(out, "transfer: submitted", map[string]any{
 		"transfer_instruction_id": instructionID,
@@ -192,9 +168,8 @@ func runTransferLiveOnLedger(ctx context.Context, out io.Writer, opts TransferOp
 	})
 
 	// Auto-accept settles the offer in the same flow (LocalNet hosts the
-	// receiver). The receiver account is self-custodial, so it needs no
-	// AccountConfig of its own — but the accept still references the
-	// sender's config (extractAccountConfigMap covers both endpoints).
+	// receiver). The self-custodial receiver needs no AccountConfig of its
+	// own, but the accept still references the sender's config.
 	if opts.AutoAccept && !opts.NoWait && instructionID != "" {
 		receiverParties := accountPartiesOf(admin, opts.To, "")
 		acceptActAs := dedupParties(append(append(append([]string{}, senderParties...), receiverParties...), admin))
@@ -213,16 +188,13 @@ func runTransferLiveOnLedger(ctx context.Context, out io.Writer, opts TransferOp
 
 // runAcceptOnLedgerIfTestToken handles a standalone `transfer accept`
 // when the pending TransferInstruction is an issuer-administered
-// test-token offer (TokenTransferOffer). It reports handled=true once it
-// has accepted (or failed to accept) on-ledger; handled=false means the
-// instruction isn't a local test-token offer and RunAccept should fall
-// back to the off-ledger registry path.
+// test-token offer. handled=false means it isn't a local test-token
+// offer and RunAccept should fall back to the off-ledger registry path.
 //
-// Detection is conservative: it reads the offer's `transfer` record and
-// routes on-ledger ONLY when the instrument's admin actually anchors a
-// TokenRules contract on this participant. An Amulet instruction
-// (admin = DSO, no TokenRules) therefore falls through to the off-ledger
-// path, as do any instructions we can't read or parse.
+// Detection is conservative: it routes on-ledger only when the
+// instrument's admin actually anchors a TokenRules contract here. An
+// Amulet instruction (admin = DSO, no TokenRules) falls through, as do
+// instructions we can't read or parse.
 func runAcceptOnLedgerIfTestToken(ctx context.Context, out io.Writer, opts AcceptOptions) (bool, error) {
 	conn := LedgerConn{
 		Endpoint: opts.Endpoint,
@@ -239,8 +211,7 @@ func runAcceptOnLedgerIfTestToken(ctx context.Context, out io.Writer, opts Accep
 	defer cleanup()
 
 	// Parties that might see the offer: the explicit --party (receiver)
-	// plus the JWT's granted set (the receiver is an observer of its own
-	// pending instruction).
+	// plus the JWT's granted set.
 	parties, _ := client.ResolveActAndReadParties(ctx)
 	if opts.Party != "" {
 		parties = append([]string{opts.Party}, parties...)
@@ -256,8 +227,8 @@ func runAcceptOnLedgerIfTestToken(ctx context.Context, out io.Writer, opts Accep
 		return false, nil
 	}
 
-	// Supply an AccountConfig for every provider-scoped endpoint; the
-	// accept's extractAccountConfigMap covers both sender and receiver.
+	// Supply an AccountConfig for every provider-scoped endpoint (sender
+	// and receiver).
 	var configCIDs []string
 	for _, a := range []tokenAccount{sender, receiver} {
 		if a.Provider == "" {
@@ -284,10 +255,10 @@ func runAcceptOnLedgerIfTestToken(ctx context.Context, out io.Writer, opts Accep
 	return true, nil
 }
 
-// fetchOfferTransfer reads a TokenTransferOffer's `transfer` record via
-// EventsByContractId and returns the sender + receiver accounts and the
-// instrument admin. ok=false when the contract isn't visible to the
-// given parties, isn't a transfer offer, or the args can't be parsed.
+// fetchOfferTransfer reads a TokenTransferOffer's `transfer` record and
+// returns the sender + receiver accounts and the instrument admin.
+// ok=false when the contract isn't visible, isn't a transfer offer, or
+// can't be parsed.
 func fetchOfferTransfer(ctx context.Context, client *ledger.Client, parties []string, cid string) (sender, receiver tokenAccount, admin string, ok bool) {
 	if len(parties) == 0 || cid == "" {
 		return tokenAccount{}, tokenAccount{}, "", false
@@ -310,10 +281,9 @@ func fetchOfferTransfer(ctx context.Context, client *ledger.Client, parties []st
 	return extractTransferFromArgs(cev.GetCreatedEvent().GetCreateArguments())
 }
 
-// extractTransferFromArgs walks a TokenTransferOffer create-argument
-// record for its `transfer` field and pulls out the sender/receiver
-// accounts and the instrument admin. Returns ok=false when there's no
-// transfer record or no admin (i.e. not a recognizable transfer offer).
+// extractTransferFromArgs pulls the sender/receiver accounts and
+// instrument admin out of a TokenTransferOffer's create-argument record.
+// ok=false when there's no transfer record or no admin.
 func extractTransferFromArgs(args *lapiv2.Record) (sender, receiver tokenAccount, admin string, ok bool) {
 	if args == nil {
 		return tokenAccount{}, tokenAccount{}, "", false
@@ -379,11 +349,10 @@ func accountFromRecord(rec *lapiv2.Record) tokenAccount {
 // exerciseTestTokenTransferFactory submits TransferFactory_Transfer
 // against the issuer's TokenRules contract (the on-ledger V2
 // TransferFactory). `actors` is the sender's account parties (the choice
-// controller); `actAs` is the participant submission party set (sender
-// parties + admin). The choice creates a pending TokenTransferOffer; the
-// response carries the actAs[0] party's created events with the
-// TransferInstructionV2 interface view so findCreatedInstructionID can
-// surface its contract id.
+// controller); `actAs` is the submission party set (sender parties +
+// admin). The choice creates a pending TokenTransferOffer; the response
+// carries actAs[0]'s created events with the TransferInstructionV2
+// interface view for findCreatedInstructionID.
 func exerciseTestTokenTransferFactory(
 	ctx context.Context,
 	client *ledger.Client,
@@ -393,13 +362,7 @@ func exerciseTestTokenTransferFactory(
 	transferArgs registry.TransferArgs,
 	accountConfigCIDs []string,
 ) (*lapiv2.SubmitAndWaitForTransactionResponse, error) {
-	// The bundled splice-test-token-v2 is a V2 instrument, so its
-	// transfer record uses the V2 (Account) sender/receiver shape.
-	choiceArg := recordValue([]field{
-		{"transfer", buildTransferRecord(transferArgs, genV2)},
-		{"actors", listValue(actors, partyValue)},
-		{"extraArgs", buildTestTokenExtraArgs(tokenRulesCID, accountConfigCIDs)},
-	})
+	choiceArg := testTokenTransferFactoryArg(transferArgs, actors, tokenRulesCID, accountConfigCIDs)
 	pkg, mod, entity := splitInterfaceID(TransferFactoryInterfaceV2)
 	exercise := &lapiv2.Command{
 		Command: &lapiv2.Command_Exercise{
@@ -417,11 +380,10 @@ func exerciseTestTokenTransferFactory(
 
 // acceptTestTokenTransfer submits TransferInstruction_Accept against a
 // pending TokenTransferOffer. `actors` is the receiver's account parties
-// (the choice controller); `actAs` covers sender + receiver parties +
-// admin so the consequences (archiving the admin-co-signed locked
-// holdings, creating the receiver's holding) are authorized without
-// off-ledger disclosure. The choice context is the same test-token
-// context the factory used.
+// (the choice controller); `actAs` covers sender + receiver + admin so
+// the consequences (archiving the admin-co-signed locked holdings,
+// creating the receiver's holding) are authorized without off-ledger
+// disclosure.
 func acceptTestTokenTransfer(
 	ctx context.Context,
 	client *ledger.Client,
@@ -431,10 +393,7 @@ func acceptTestTokenTransfer(
 	tokenRulesCID string,
 	accountConfigCIDs []string,
 ) error {
-	choiceArg := recordValue([]field{
-		{"actors", listValue(actors, partyValue)},
-		{"extraArgs", buildTestTokenExtraArgs(tokenRulesCID, accountConfigCIDs)},
-	})
+	choiceArg := testTokenAcceptArg(actors, tokenRulesCID, accountConfigCIDs)
 	pkg, mod, entity := splitInterfaceID(TransferInstructionInterfaceV2)
 	exercise := &lapiv2.Command{
 		Command: &lapiv2.Command_Exercise{
@@ -451,11 +410,99 @@ func acceptTestTokenTransfer(
 	return err
 }
 
+// testTokenTransferFactoryArg builds the TransferFactory_Transfer choice
+// argument ({transfer, actors, extraArgs}). Shared by the sequential
+// exercise and the atomic batch path so the two can't drift.
+func testTokenTransferFactoryArg(transferArgs registry.TransferArgs, actors []string, tokenRulesCID string, accountConfigCIDs []string) *lapiv2.Value {
+	return recordValue([]field{
+		{"transfer", buildTransferRecord(transferArgs, genV2)},
+		{"actors", listValue(actors, partyValue)},
+		{"extraArgs", buildTestTokenExtraArgs(tokenRulesCID, accountConfigCIDs)},
+	})
+}
+
+// testTokenAcceptArg builds the TransferInstruction_Accept choice
+// argument ({actors, extraArgs}). Shared by the sequential accept and
+// the atomic batch path.
+func testTokenAcceptArg(actors []string, tokenRulesCID string, accountConfigCIDs []string) *lapiv2.Value {
+	return recordValue([]field{
+		{"actors", listValue(actors, partyValue)},
+		{"extraArgs", buildTestTokenExtraArgs(tokenRulesCID, accountConfigCIDs)},
+	})
+}
+
+// runTransferOnLedgerBatched executes the transfer + receiver-accept as
+// one atomic BatchingUtility_ExecuteBatch: it wraps the same choice args
+// as TSA_* batch actions and threads the sender's input holdings through
+// the batch's HoldingMap. The accept action targets the instruction the
+// transfer action creates inside the SAME batch, so either both land or
+// neither does. Returns "" — the batch settles both legs, leaving no
+// pending instruction to hand back.
+func runTransferOnLedgerBatched(
+	ctx context.Context,
+	out io.Writer,
+	client *ledger.Client,
+	opts TransferOptions,
+	admin, tokenRulesCID string,
+	senderAcct tokenAccount,
+	senderParties []string,
+	transferArgs registry.TransferArgs,
+	accountConfigCIDs []string,
+) (string, error) {
+	batchUser := senderParties[0]
+	receiverParties := accountPartiesOf(admin, opts.To, "")
+	actAs := dedupParties(append(append(append([]string{}, senderParties...), receiverParties...), admin))
+
+	// Action 2's target instruction is created by action 1 within the
+	// batch, so we pass the factory cid as a placeholder the wallet
+	// re-binds to the produced instruction.
+	transferArg := testTokenTransferFactoryArg(transferArgs, senderParties, tokenRulesCID, accountConfigCIDs)
+	acceptArg := testTokenAcceptArg(receiverParties, tokenRulesCID, accountConfigCIDs)
+	actions := []batchAction{
+		tsaTransferFactoryTransferV2(tokenRulesCID, transferArg),
+		tsaTransferInstructionAcceptV2(tokenRulesCID, acceptArg),
+	}
+
+	// Thread the sender's picked input holdings through the HoldingMap.
+	// Admin + Account + Instrument must match the transfer's
+	// instrumentId.admin / sender / instrumentId.id, or ExecuteBatch's
+	// getHoldingsForInstrument lookup misses (inputAmount = 0).
+	inputHoldings := []scopedHoldings{{
+		Admin:       admin,
+		Account:     senderAcct.registryAccount(),
+		Instrument:  transferArgs.InstrumentID.ID,
+		HoldingCIDs: transferArgs.InputHoldingCids,
+	}}
+
+	res, err := executeBatch(ctx, client, batchUser, actAs, inputHoldings, actions, false)
+	if err != nil {
+		// TODO: atomic transfer+accept is experimental and not yet supported
+		// on this Splice version. The batch's wire shape is correct, but
+		// BatchingUtility_ExecuteBatch does not rebind the accept leg to the
+		// TransferInstruction the transfer leg creates in the SAME batch —
+		// that forward reference needs ExecuteBatch intra-batch output
+		// binding, which the current test-token/wallet DARs don't wire. The
+		// batch is all-or-nothing, so nothing committed.
+		return "", fmt.Errorf(
+			"atomic transfer+accept batching is experimental and not yet supported on this "+
+				"Splice version (the accept leg can't reference the transfer leg's instruction "+
+				"within one BatchingUtility_ExecuteBatch); nothing was committed — re-run "+
+				"without --atomic for the sequential path. underlying: %w", err)
+	}
+	emit(out, "transfer batched", map[string]any{
+		"update_id":    res.UpdateID,
+		"action_count": len(res.Actions),
+		"receiver":     opts.To,
+		"atomic":       true,
+	})
+	// Callers treat an empty id as "already settled".
+	return "", nil
+}
+
 // selectSenderAccountAndInputs groups the sender's holdings by account
-// (same provider / account-id / admin / instrument) and returns the
-// first account whose holdings cover `amount`, along with the picked
-// inputs and their sum. The test token requires every input of a
-// transfer to share one account, so we never mix across accounts.
+// and returns the first account whose holdings cover `amount`, with the
+// picked inputs and their sum. The test token requires every input of a
+// transfer to share one account.
 func selectSenderAccountAndInputs(holdings []holdingRef, amount string) (tokenAccount, []holdingRef, string, error) {
 	if len(holdings) == 0 {
 		return tokenAccount{}, nil, "", fmt.Errorf("sender holds no units of this instrument")
@@ -488,17 +535,15 @@ func selectSenderAccountAndInputs(holdings []holdingRef, amount string) (tokenAc
 		}, picked, total, nil
 	}
 	if lastErr != nil {
-		// All accounts came up short; surface the closest reason.
 		return tokenAccount{}, nil, "", lastErr
 	}
 	return tokenAccount{}, nil, "", fmt.Errorf("no single account covers %s", amount)
 }
 
-// findOrCreateAccountConfig returns the contract id of the AccountConfig
-// for (owner, provider) under `admin`, creating one if none exists.
-// Idempotent: the mint flow already creates a receiver AccountConfig, so
-// transfers from minted holdings reuse it rather than spawning duplicates
-// (the registry rejects more than one config per account).
+// findOrCreateAccountConfig returns the AccountConfig contract id for
+// (owner, provider) under `admin`, creating one if none exists.
+// Idempotent: transfers from minted holdings reuse the receiver
+// AccountConfig the mint flow created (one config per account).
 func findOrCreateAccountConfig(ctx context.Context, client *ledger.Client, admin, owner, provider string) (string, error) {
 	cid, err := findAccountConfigCID(ctx, client, admin, owner, provider)
 	if err != nil {
@@ -510,10 +555,9 @@ func findOrCreateAccountConfig(ctx context.Context, client *ledger.Client, admin
 	return createAccountConfig(ctx, client, admin, owner, provider)
 }
 
-// findAccountConfigCID ACS-queries the admin's AccountConfig contracts
-// and returns the contract id of the one whose account matches
-// (owner, provider), or "" when none exists. The admin is an observer on
-// every AccountConfig (so it can serve them as choice context), so the
+// findAccountConfigCID returns the contract id of the admin's
+// AccountConfig whose account matches (owner, provider), or "" when none
+// exists. The admin is an observer on every AccountConfig, so the
 // admin-party filter sees all of them.
 func findAccountConfigCID(ctx context.Context, client *ledger.Client, admin, owner, provider string) (string, error) {
 	ctx, cancel := context.WithCancel(ctx)
@@ -535,7 +579,7 @@ func findAccountConfigCID(ctx context.Context, client *ledger.Client, admin, own
 					},
 				}}},
 			},
-			// Verbose so created-event record fields carry labels for
+			// Verbose so created-event fields carry labels for
 			// accountConfigMatches to walk by name.
 			Verbose: true,
 		},
@@ -609,7 +653,7 @@ func accountPartiesOf(admin, owner, provider string) []string {
 
 // dedupParties returns the input with duplicates and empties removed,
 // order preserved — for assembling an actAs set from overlapping party
-// lists (e.g. sender parties + receiver parties + admin).
+// lists.
 func dedupParties(in []string) []string {
 	seen := map[string]struct{}{}
 	var out []string
