@@ -22,8 +22,7 @@ type DemoOptions struct {
 	Name          string // default "Demo Token"
 	Decimals      int    // default 6
 	InitialSupply string // default "1000000"
-	SeedHolder    bool   // allocate a holder party + fund it so it's transferable
-	SeedAmount    string // default "1000"
+	SeedAmount    string // default "1000" (V1 Amulet faucet amount)
 
 	// Party aliases; default demo-issuer / demo-holder.
 	IssuerAlias string
@@ -53,7 +52,9 @@ var (
 // RunDemo provisions a live, transferable demo token in one call, composing
 // the same Run* verbs the CLI/UI use so it can't drift. A live ledger endpoint
 // is required (empty → ErrNeedsV2LocalNet). The path is capability-chosen:
-//   - token-standard-v2 instance: create + mint + seed a new "DEMO" instrument;
+//   - token-standard-v2 instance: create a new "DEMO" instrument and mint its
+//     supply to a fresh holder party (the test token can't self-mint to the
+//     issuer, so the holder both receives and can transfer the balance);
 //   - standard (V1) instance: fund a fresh holder with Amulet from the
 //     network-funded role party (no create/mint exists there).
 func RunDemo(ctx context.Context, out io.Writer, opts DemoOptions) (*DemoResult, error) {
@@ -69,8 +70,8 @@ func RunDemo(ctx context.Context, out io.Writer, opts DemoOptions) (*DemoResult,
 	return runDemoV1(ctx, out, applyDemoV1Defaults(opts))
 }
 
-// runDemoV2 creates a V2 instrument, mints its supply, and optionally seeds a
-// holder. opts is already defaulted.
+// runDemoV2 creates a V2 instrument and mints its supply to a distinct holder
+// party. opts is already defaulted.
 func runDemoV2(ctx context.Context, out io.Writer, opts DemoOptions) (*DemoResult, error) {
 	step := func(format string, a ...any) {
 		if out != nil {
@@ -108,11 +109,23 @@ func runDemoV2(ctx context.Context, out io.Writer, opts DemoOptions) (*DemoResul
 		return nil, fmt.Errorf("demo: create instrument: %w", err)
 	}
 
-	step("Minting %s %s to the issuer…", opts.InitialSupply, opts.Symbol)
+	// The test token can't self-mint (issuer == receiver): OfferMint
+	// pre-authorizes the admin's accept, so an issuer-targeted mint advances
+	// straight to terminal without ever creating a Token. Mint the supply to
+	// a distinct holder party instead — that account's accept drives the
+	// holding into being, so the holder is intrinsic to the V2 demo (not an
+	// optional seed step) and the balance is transferable from the start.
+	step("Allocating holder party %q…", opts.HolderAlias)
+	holder, herr := ensureDemoParty(ctx, opts, opts.HolderAlias)
+	if herr != nil {
+		return nil, fmt.Errorf("demo: allocate holder: %w", herr)
+	}
+
+	step("Minting %s %s to %s…", opts.InitialSupply, opts.Symbol, opts.HolderAlias)
 	if err := demoMint(ctx, out, MintOptions{
 		Instance:   opts.Instance,
 		Instrument: opts.Symbol,
-		To:         issuer.PartyID,
+		To:         holder.PartyID,
 		Amount:     opts.InitialSupply,
 		Endpoint:   opts.Endpoint,
 		Role:       opts.Role,
@@ -121,33 +134,8 @@ func runDemoV2(ctx context.Context, out io.Writer, opts DemoOptions) (*DemoResul
 		return nil, fmt.Errorf("demo: mint supply: %w", err)
 	}
 
-	result := &DemoResult{Token: created.TokenRef, Issuer: *issuer}
-
-	if opts.SeedHolder {
-		step("Allocating holder party %q…", opts.HolderAlias)
-		holder, herr := ensureDemoParty(ctx, opts, opts.HolderAlias)
-		if herr != nil {
-			return nil, fmt.Errorf("demo: allocate holder: %w", herr)
-		}
-		step("Funding %s with %s %s from the issuer…", opts.HolderAlias, opts.SeedAmount, opts.Symbol)
-		if ferr := demoFaucet(ctx, out, FaucetOptions{
-			Instance:   opts.Instance,
-			Instrument: opts.Symbol,
-			To:         holder.PartyID,
-			Amount:     opts.SeedAmount,
-			Source:     issuer.PartyID,
-			Endpoint:   opts.Endpoint,
-			Role:       opts.Role,
-			Insecure:   opts.Insecure,
-		}); ferr != nil {
-			return nil, fmt.Errorf("demo: fund holder: %w", ferr)
-		}
-		result.Holder = holder
-		result.Seeded = true
-	}
-
-	step("Demo token %s is live%s.", opts.Symbol, map[bool]string{true: " and transferable", false: ""}[opts.SeedHolder])
-	return result, nil
+	step("Demo token %s is live and transferable.", opts.Symbol)
+	return &DemoResult{Token: created.TokenRef, Issuer: *issuer, Holder: holder, Seeded: true}, nil
 }
 
 // ensureDemoParty allocates a party by alias, reusing an existing one on

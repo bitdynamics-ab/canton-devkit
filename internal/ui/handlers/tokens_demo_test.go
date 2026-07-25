@@ -15,7 +15,7 @@ import (
 
 // TestTokens_DemoProvisionsLiveToken pins that POST /api/tokens/demo
 // resolves the live endpoint from the instance's captured port, threads
-// instance/role/seed through to RunDemo, and returns the DemoResult.
+// instance/role through to RunDemo, and returns the DemoResult.
 func TestTokens_DemoProvisionsLiveToken(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DPM_REGISTRY_DIR", dir)
@@ -45,7 +45,7 @@ func TestTokens_DemoProvisionsLiveToken(t *testing.T) {
 
 	srv := tokensSrv(t)
 	resp, err := http.Post(srv.URL+"/api/tokens/demo?instance="+inst, "application/json",
-		bytes.NewBufferString(`{"seed_holder":true}`))
+		bytes.NewBufferString(`{"symbol":"DEMO"}`))
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestTokens_DemoProvisionsLiveToken(t *testing.T) {
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want 201", resp.StatusCode)
 	}
-	if captured.Instance != inst || !captured.SeedHolder {
+	if captured.Instance != inst {
 		t.Errorf("opts not threaded through: %+v", captured)
 	}
 	if captured.Endpoint == "" {

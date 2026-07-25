@@ -8,6 +8,33 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
+// Regression: the participant can carry stale act/read grants for bare
+// alias strings from earlier pre-alias-resolution commands. A bare
+// string that matches a known registry alias is a phantom (the real
+// party carries a "::" fingerprint) and must be dropped, or it shows as
+// a phantom, holdingless duplicate row in the balance matrix. Genuine
+// fingerprint-less strings that are NOT aliases are left untouched.
+func TestDropPhantomAliases_RemovesBareAliasGrants(t *testing.T) {
+	aliases := map[string]struct{}{"issuer": {}, "app-user": {}}
+	in := []string{
+		"issuer",            // phantom: bare alias
+		"issuer::1220abc",   // real party
+		"app-user",          // phantom: bare alias
+		"app_user::1220def", // real party
+		"carol",             // bare but NOT an alias — a genuine dev party, kept
+	}
+	got := dropPhantomAliases(in, aliases)
+	want := []string{"issuer::1220abc", "app_user::1220def", "carol"}
+	if len(got) != len(want) {
+		t.Fatalf("dropPhantomAliases: got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("dropPhantomAliases[%d]: got %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 // TestRunPartyNew_RejectsInvalidAlias — validation happens before any
 // ledger dial, so this needs no live participant.
 func TestRunPartyNew_RejectsInvalidAlias(t *testing.T) {

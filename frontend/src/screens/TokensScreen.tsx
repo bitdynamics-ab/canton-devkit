@@ -3,11 +3,15 @@ import {
   ApiError,
   acceptTransfer,
   aliasMapFrom,
+  allocateToken,
   burnToken,
+  cancelAllocation,
   createParty,
   createToken,
   faucetToken,
+  fetchAllocations,
   launchDemoToken,
+  fetchTokenIdentity,
   fetchActivity,
   fetchHoldingContracts,
   fetchParties,
@@ -19,21 +23,26 @@ import {
   mintToken,
   planTransfer,
   transferToken,
+  withdrawAllocation,
   type ActivityEvent,
   type AliasMap,
+  type AllocationSummary,
   type BalanceMatrix,
   type HoldingSource,
   type PartyRef,
   type HoldingContract,
   type InstrumentRef,
   type InstrumentSummary,
+  type Role,
   type TokenHolding,
   type TokenRef,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { W, wMono, tableCaps, wideCaps, tint, R, FAST, fs } from "../tokens";
+import { useIdentityRole } from "../shell/useIdentityRole";
+import { W, wMono, tableCaps, wideCaps, tint, R, FAST, fs, ROLE_COLOR } from "../tokens";
 import { Button } from "../components/Button";
 import { MonoId } from "../components/MonoId";
+import { CopyPartyId } from "../components/CopyPartyId";
 import {
   Dot,
   IcArrowRight,
@@ -48,6 +57,14 @@ import {
   IcX,
 } from "../components/icons";
 
+// Fallback identity list; the real set comes from GET
+// /api/tokens/identity. Seeds the switcher for the first render and
+// covers a fetch failure. Default (app-user) first.
+const IDENTITY_ROLES: Role[] = ["app-user", "app-provider", "sv"];
+
+// Activity feed page size; "Load more" grows the limit by this step.
+const ACTIVITY_PAGE = 50;
+
 function shortParty(p: string): string {
   const i = p.indexOf("::");
   return i > 0 ? p.slice(0, i) : p;
@@ -58,7 +75,7 @@ function partyLabel(aliases: AliasMap, p: string): string {
   return aliases[p] ?? shortParty(p);
 }
 
-// Capability guards keyed on the machine generation tag, not the display
+// Capability guard keyed on the machine generation tag, not the display
 // label: mint requires a native V2 (CIP-0112) instrument created on-ledger.
 export function mintDisabledReason(t: InstrumentRef): string | null {
   if (t.generation !== "v2")
@@ -87,6 +104,12 @@ export function createErrorText(e: unknown): string {
 export function TokensScreen() {
   const sel = useInstanceSelection();
   const instance = sel.selected;
+  // Top-level act-as identity, threaded through every token API call so
+  // the whole screen reads/writes as this role; persisted per instance.
+  const [role, setRole] = useIdentityRole(instance ?? "");
+  // Selectable identities from GET /api/tokens/identity; seeded with the
+  // static default so the switcher renders before the fetch lands.
+  const [availableRoles, setAvailableRoles] = useState<Role[]>(IDENTITY_ROLES);
 
   const [list, setList] = useState<InstrumentRef[]>([]);
   const [listErr, setListErr] = useState<string | null>(null);
@@ -96,21 +119,28 @@ export function TokensScreen() {
 
   const [holdings, setHoldings] = useState<TokenHolding[]>([]);
   const [holdingsErr, setHoldingsErr] = useState<string | null>(null);
-  // "ledger" = real on-ledger balances; "registry" = pseudo-balance fallback
-  // when no live participant is reachable. Drives the disclaimer banner.
+  // "registry" (vs "ledger") drives the pseudo-balance disclaimer banner.
   const [holdingsSource, setHoldingsSource] = useState<HoldingSource>("ledger");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [contracts, setContracts] = useState<HoldingContract[]>([]);
   const expandSeqRef = useRef(0);
   const [matrix, setMatrix] = useState<BalanceMatrix | null>(null);
   const [matrixErr, setMatrixErr] = useState<string | null>(null);
+  // Which token the Holdings matrix is filtered to (null = full grid).
+  const [matrixSymbol, setMatrixSymbol] = useState<string | null>(null);
   const [summary, setSummary] = useState<InstrumentSummary | null>(null);
   const [parties, setParties] = useState<PartyRef[]>([]);
   const [showParties, setShowParties] = useState(false);
   const aliases: AliasMap = useMemo(() => aliasMapFrom(parties), [parties]);
-  const [detailTab, setDetailTab] = useState<"overview" | "activity">("overview");
+  const [detailTab, setDetailTab] = useState<"overview" | "activity" | "allocations">("overview");
   const [activity, setActivity] = useState<ActivityEvent[] | null>(null);
   const [activityErr, setActivityErr] = useState<string | null>(null);
+  // Requested page size; "Load more" grows it. activityTruncated is set
+  // when the ledger scan itself was capped (distinct from a full page).
+  const [activityLimit, setActivityLimit] = useState(ACTIVITY_PAGE);
+  const [activityTruncated, setActivityTruncated] = useState(false);
+  const [allocations, setAllocations] = useState<AllocationSummary[] | null>(null);
+  const [allocationsErr, setAllocationsErr] = useState<string | null>(null);
 
   const [showCreate, setShowCreate] = useState(false);
   const [modal, setModal] = useState<
@@ -119,6 +149,7 @@ export function TokensScreen() {
     | { kind: "burn"; symbol: string }
     | { kind: "faucet"; symbol: string }
     | { kind: "accept"; id?: string; party?: string }
+    | { kind: "allocate"; symbol: string }
     | null
   >(null);
   const [topNotice, setTopNotice] = useState<{ tone: "ok" | "warn" | "err"; text: string } | null>(null);
@@ -131,7 +162,7 @@ export function TokensScreen() {
       return;
     }
     let cancelled = false;
-    fetchInstruments(instance)
+    fetchInstruments(instance, role)
       .then((items) => {
         if (cancelled) return;
         setList(items);
@@ -150,12 +181,31 @@ export function TokensScreen() {
     };
     // activeSymbol intentionally NOT in deps — selecting a row shouldn't refetch the list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [instance, refreshTick]);
+  }, [instance, role, refreshTick]);
+
+  // Available identities from the backend. Best-effort: on failure the
+  // switcher keeps the static default. Only re-runs per instance.
+  useEffect(() => {
+    if (!instance) return;
+    let cancelled = false;
+    fetchTokenIdentity(instance)
+      .then((id) => {
+        if (!cancelled && id.available_roles?.length) {
+          setAvailableRoles(id.available_roles);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAvailableRoles(IDENTITY_ROLES);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instance]);
 
   useEffect(() => {
     if (!instance || view !== "matrix") return;
     let cancelled = false;
-    fetchMatrix(instance)
+    fetchMatrix(instance, role)
       .then((m) => {
         if (!cancelled) {
           setMatrix(m);
@@ -168,7 +218,14 @@ export function TokensScreen() {
     return () => {
       cancelled = true;
     };
-  }, [instance, view, refreshTick]);
+  }, [instance, view, role, refreshTick]);
+
+  // Opening the matrix focuses the instrument selected on the Instruments
+  // tab, so "pick a token → matrix follows" holds across the two views.
+  // The All chip clears it back to the full grid.
+  useEffect(() => {
+    if (view === "matrix") setMatrixSymbol(activeSymbol);
+  }, [view, activeSymbol]);
 
   useEffect(() => {
     if (!instance || !activeSymbol) {
@@ -178,7 +235,7 @@ export function TokensScreen() {
     let cancelled = false;
     setExpanded(null);
     setContracts([]);
-    fetchHoldings(instance, activeSymbol)
+    fetchHoldings(instance, activeSymbol, undefined, role)
       .then((r) => {
         if (!cancelled) {
           setHoldings(r.holdings);
@@ -194,7 +251,7 @@ export function TokensScreen() {
     return () => {
       cancelled = true;
     };
-  }, [instance, activeSymbol, refreshTick]);
+  }, [instance, activeSymbol, role, refreshTick]);
 
   useEffect(() => {
     if (!instance) {
@@ -202,7 +259,7 @@ export function TokensScreen() {
       return;
     }
     let cancelled = false;
-    fetchParties(instance)
+    fetchParties(instance, role)
       .then((p) => {
         if (!cancelled) setParties(p);
       })
@@ -212,7 +269,7 @@ export function TokensScreen() {
     return () => {
       cancelled = true;
     };
-  }, [instance, refreshTick]);
+  }, [instance, role, refreshTick]);
 
   // Best-effort: a failure just hides the KPI strip; holdings still load.
   useEffect(() => {
@@ -221,7 +278,7 @@ export function TokensScreen() {
       return;
     }
     let cancelled = false;
-    fetchInstrumentSummary(instance, activeSymbol)
+    fetchInstrumentSummary(instance, activeSymbol, role)
       .then((s) => {
         if (!cancelled) setSummary(s);
       })
@@ -231,18 +288,21 @@ export function TokensScreen() {
     return () => {
       cancelled = true;
     };
-  }, [instance, activeSymbol, refreshTick]);
+  }, [instance, activeSymbol, role, refreshTick]);
 
-  // Lazy: only fetched when the Activity tab is open, since it's a full
-  // historical scan, heavier than the other lenses' ACS snapshots.
+  // Lazy: only when the Activity tab is open (a full historical scan,
+  // heavier than the ACS-snapshot lenses). Re-runs when activityLimit grows.
   useEffect(() => {
     if (!instance || !activeSymbol || detailTab !== "activity") return;
     let cancelled = false;
     setActivity(null);
     setActivityErr(null);
-    fetchActivity(instance, activeSymbol)
-      .then((ev) => {
-        if (!cancelled) setActivity(ev);
+    fetchActivity(instance, activeSymbol, role, activityLimit)
+      .then((page) => {
+        if (!cancelled) {
+          setActivity(page.events);
+          setActivityTruncated(page.truncated);
+        }
       })
       .catch((e: unknown) => {
         if (!cancelled) setActivityErr(e instanceof ApiError ? e.message : "failed to load activity");
@@ -250,7 +310,33 @@ export function TokensScreen() {
     return () => {
       cancelled = true;
     };
-  }, [instance, activeSymbol, detailTab, refreshTick]);
+  }, [instance, activeSymbol, detailTab, role, refreshTick, activityLimit]);
+
+  // Reset the activity page size whenever the instrument or role changes,
+  // so a deep "Load more" on one instrument doesn't carry into the next.
+  useEffect(() => {
+    setActivityLimit(ACTIVITY_PAGE);
+    setActivityTruncated(false);
+  }, [activeSymbol, role, instance]);
+
+  // Lazy: only when the Allocations tab is open. Not instrument-scoped —
+  // shows every visible allocation regardless of the active symbol.
+  useEffect(() => {
+    if (!instance || detailTab !== "allocations") return;
+    let cancelled = false;
+    setAllocations(null);
+    setAllocationsErr(null);
+    fetchAllocations(instance, undefined, role)
+      .then((r) => {
+        if (!cancelled) setAllocations(r.allocations);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setAllocationsErr(e instanceof ApiError ? e.message : "failed to load allocations");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instance, detailTab, role, refreshTick]);
 
   // Selecting a different instrument resets the detail tab to Overview.
   useEffect(() => {
@@ -275,7 +361,7 @@ export function TokensScreen() {
     expandSeqRef.current = seq;
     setExpanded(party);
     setContracts([]);
-    fetchHoldingContracts(instance, activeSymbol, party)
+    fetchHoldingContracts(instance, activeSymbol, party, role)
       .then((cs) => {
         if (expandSeqRef.current === seq) setContracts(cs);
       })
@@ -303,13 +389,26 @@ export function TokensScreen() {
     return { tone: "err", text: e instanceof ApiError ? e.message : fallback };
   }
 
+  // Runs a per-allocation action promise (settle/withdraw/cancel), surfaces
+  // a notice on success/failure, and refreshes the allocations list.
+  async function runAllocationAction(p: Promise<void>, verb: string) {
+    try {
+      await p;
+      setTopNotice({ tone: "ok", text: `Allocation ${verb} submitted.` });
+    } catch (e) {
+      setTopNotice(renderActionError(e, `${verb} failed`));
+    } finally {
+      bump();
+    }
+  }
+
   // Server composes issuer-party → create → mint → faucet-a-holder.
   async function launchDemo() {
     if (!instance) return;
     setDemoBusy(true);
     setTopNotice(null);
     try {
-      const res = await launchDemoToken(instance);
+      const res = await launchDemoToken(instance, undefined, role);
       setActiveSymbol(res.token.symbol);
       bump();
       setTopNotice({
@@ -336,7 +435,7 @@ export function TokensScreen() {
   if (listErr) {
     return (
       <section style={{ padding: 24 }}>
-        <Header />
+        <Header right={<RoleSwitcher role={role} roles={availableRoles} onChange={setRole} />} />
         <p role="alert" style={{ color: W.err }}>{listErr}</p>
       </section>
     );
@@ -345,7 +444,8 @@ export function TokensScreen() {
   return (
     <section style={{ padding: 24, display: "flex", flexDirection: "column", gap: 14 }}>
       <Header right={
-        <span style={{ display: "flex", gap: 8 }}>
+        <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <RoleSwitcher role={role} roles={availableRoles} onChange={setRole} />
           <Button variant="secondary" size="sm" onClick={() => setShowParties(true)}>
             Parties{parties.length > 0 ? ` (${parties.length})` : ""}
           </Button>
@@ -392,7 +492,7 @@ export function TokensScreen() {
       </div>
 
       {view === "matrix" ? (
-        <MatrixLens matrix={matrix} err={matrixErr} aliases={aliases} />
+        <MatrixLens matrix={matrix} err={matrixErr} aliases={aliases} filter={matrixSymbol} onFilter={setMatrixSymbol} />
       ) : list.length === 0 ? (
         <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 4, padding: 24, textAlign: "center" }}>
           <div style={{ color: W.text, fontSize: fs.lead, fontWeight: 600, marginBottom: 4 }}>
@@ -473,6 +573,7 @@ export function TokensScreen() {
                       title={mintReason ? BURN_DISABLED_REASON : "Burn holdings (archive path)"}
                     >Burn</Button>
                     <Button variant="secondary" size="sm" icon={<IcCheck />} onClick={() => setModal({ kind: "accept" })}>Accept transfer</Button>
+                    <Button variant="secondary" size="sm" icon={<IcArrowRight />} onClick={() => setModal({ kind: "allocate", symbol: sym })} title="Allocate holdings to a settlement (DvP)">Allocate</Button>
                   </span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, color: W.dim, fontSize: fs.meta, marginTop: 4, fontFamily: wMono }}>
@@ -482,7 +583,7 @@ export function TokensScreen() {
                 </div>
 
                 <div style={{ display: "flex", gap: 4, margin: "16px 0 2px", borderBottom: `1px solid ${W.border}` }}>
-                  {(["overview", "activity"] as const).map((tab) => (
+                  {(["overview", "activity", "allocations"] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setDetailTab(tab)}
@@ -573,7 +674,25 @@ export function TokensScreen() {
                 )}
 
                 {detailTab === "activity" && (
-                  <ActivityFeed events={activity} err={activityErr} aliases={aliases} />
+                  <ActivityFeed
+                    events={activity}
+                    err={activityErr}
+                    aliases={aliases}
+                    limit={activityLimit}
+                    truncated={activityTruncated}
+                    onLoadMore={() => setActivityLimit((n) => n + ACTIVITY_PAGE)}
+                  />
+                )}
+
+                {detailTab === "allocations" && (
+                  <AllocationsPanel
+                    allocations={allocations}
+                    err={allocationsErr}
+                    aliases={aliases}
+                    onAllocate={() => setModal({ kind: "allocate", symbol: sym })}
+                    onWithdraw={(id) => runAllocationAction(withdrawAllocation(instance, id, undefined, role), "withdraw")}
+                    onCancel={(id) => runAllocationAction(cancelAllocation(instance, id, undefined, role), "cancel")}
+                  />
                 )}
               </>
               );
@@ -585,6 +704,7 @@ export function TokensScreen() {
       {showParties && (
         <PartyManagerModal
           instance={instance}
+          role={role}
           parties={parties}
           onClose={() => setShowParties(false)}
           onChanged={() => bump()}
@@ -594,6 +714,7 @@ export function TokensScreen() {
       {showCreate && (
         <CreateTokenModal
           instance={instance}
+          role={role}
           parties={parties}
           onPartiesChanged={() => bump()}
           onClose={() => setShowCreate(false)}
@@ -610,10 +731,11 @@ export function TokensScreen() {
           title={`Mint ${modal.symbol}`}
           fields={[{ label: "To party", key: "to", party: true }, { label: "Amount", key: "amount" }]}
           instance={instance}
+          role={role}
           parties={parties}
           onPartiesChanged={() => bump()}
           onClose={() => setModal(null)}
-          submit={(v) => mintToken(instance, modal.symbol, v.to, v.amount)}
+          submit={(v) => mintToken(instance, modal.symbol, v.to, v.amount, role)}
           onDone={() => { setModal(null); bump(); }}
           onError={(e) => setTopNotice(renderActionError(e, "mint failed"))}
         />
@@ -622,6 +744,7 @@ export function TokensScreen() {
         <TransferModal
           instance={instance}
           symbol={modal.symbol}
+          role={role}
           parties={parties}
           onPartiesChanged={() => bump()}
           onClose={() => setModal(null)}
@@ -643,10 +766,11 @@ export function TokensScreen() {
           title={`Burn ${modal.symbol}`}
           fields={[{ label: "From party", key: "from", party: true }, { label: "Amount", key: "amount" }]}
           instance={instance}
+          role={role}
           parties={parties}
           onPartiesChanged={() => bump()}
           onClose={() => setModal(null)}
-          submit={(v) => burnToken(instance, modal.symbol, v.from, v.amount)}
+          submit={(v) => burnToken(instance, modal.symbol, v.from, v.amount, role)}
           onDone={() => { setModal(null); bump(); }}
           onError={(e) => setTopNotice(renderActionError(e, "burn failed"))}
         />
@@ -660,10 +784,11 @@ export function TokensScreen() {
             { label: "Source (optional, defaults to funded party)", key: "source", optional: true, party: true },
           ]}
           instance={instance}
+          role={role}
           parties={parties}
           onPartiesChanged={() => bump()}
           onClose={() => setModal(null)}
-          submit={(v) => faucetToken(instance, modal.symbol, v.to, v.amount, v.source || undefined)}
+          submit={(v) => faucetToken(instance, modal.symbol, v.to, v.amount, v.source || undefined, role)}
           onDone={() => { setModal(null); bump(); }}
           onError={(e) => setTopNotice(renderActionError(e, "faucet failed"))}
         />
@@ -677,24 +802,46 @@ export function TokensScreen() {
             { label: "Receiver party", key: "party", party: true },
           ]}
           instance={instance}
+          role={role}
           parties={parties}
           onClose={() => setModal(null)}
-          submit={(v) => acceptTransfer(instance, v.id, v.party || undefined)}
+          submit={(v) => acceptTransfer(instance, v.id, v.party || undefined, role)}
           onDone={() => { setModal(null); bump(); }}
           onError={(e) => setTopNotice(renderActionError(e, "accept failed"))}
+        />
+      )}
+      {modal?.kind === "allocate" && active && (
+        <AllocateModal
+          instance={instance}
+          symbol={modal.symbol}
+          role={role}
+          parties={parties}
+          onPartiesChanged={() => bump()}
+          onClose={() => setModal(null)}
+          onDone={(allocationId) => {
+            setModal(null);
+            setDetailTab("allocations");
+            bump();
+            setTopNotice({
+              tone: "ok",
+              text: `Allocation created (${allocationId.slice(0, 12)}…). Manage it from the Allocations tab.`,
+            });
+          }}
+          onError={(e) => setTopNotice(renderActionError(e, "allocate failed"))}
         />
       )}
     </section>
   );
 }
 
-// From/To/Amount plus a live coin-selection preview: dry-runs the transfer
-// as From + Amount fill in, showing which Holding contracts get consumed.
+// From/To/Amount plus a live coin-selection preview (dry-runs as From +
+// Amount fill in, showing which Holding contracts get consumed).
 function TransferModal({
-  instance, symbol, parties, onPartiesChanged, onClose, onDone, onError,
+  instance, symbol, role, parties, onPartiesChanged, onClose, onDone, onError,
 }: {
   instance: string;
   symbol: string;
+  role: Role;
   parties: PartyRef[];
   onPartiesChanged?: () => void;
   onClose: () => void;
@@ -708,6 +855,7 @@ function TransferModal({
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const [autoAccept, setAutoAccept] = useState(true);
+  const [atomic, setAtomic] = useState(false);
   const [busy, setBusy] = useState(false);
   const [plan, setPlan] = useState<import("../api").TransferPlan | null>(null);
 
@@ -718,18 +866,18 @@ function TransferModal({
     }
     let cancelled = false;
     const t = setTimeout(() => {
-      planTransfer(instance, symbol, from, amount)
+      planTransfer(instance, symbol, from, amount, role)
         .then((p) => { if (!cancelled) setPlan(p); })
         .catch(() => { if (!cancelled) setPlan(null); });
     }, 350);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [instance, symbol, from, amount]);
+  }, [instance, symbol, from, amount, role]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
-      const res = await transferToken(instance, symbol, from, to, amount, reason || undefined, undefined, autoAccept);
+      const res = await transferToken(instance, symbol, from, to, amount, reason || undefined, role, autoAccept, atomic && autoAccept);
       // A non-auto-accept Offer returns an instruction id; anything settled just closes.
       onDone(!res.settled && res.transferInstructionId
         ? { instructionId: res.transferInstructionId, receiver: to }
@@ -745,10 +893,10 @@ function TransferModal({
     <ModalShell title={`Transfer ${symbol}`} onClose={onClose}>
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 10 }}>
         <Field label="From party">
-          <PartyPicker instance={instance} parties={parties} value={from} onChange={setFrom} onPartiesChanged={onPartiesChanged} placeholder="Select sender" />
+          <PartyPicker instance={instance} role={role} parties={parties} value={from} onChange={setFrom} onPartiesChanged={onPartiesChanged} placeholder="Select sender" />
         </Field>
         <Field label="To party">
-          <PartyPicker instance={instance} parties={parties} value={to} onChange={setTo} onPartiesChanged={onPartiesChanged} placeholder="Select recipient" />
+          <PartyPicker instance={instance} role={role} parties={parties} value={to} onChange={setTo} onPartiesChanged={onPartiesChanged} placeholder="Select recipient" />
         </Field>
         <Field label="Amount"><input value={amount} onChange={(e) => setAmount(e.target.value)} style={input} required /></Field>
         <Field label="Reason (optional)"><input value={reason} onChange={(e) => setReason(e.target.value)} style={input} /></Field>
@@ -756,6 +904,17 @@ function TransferModal({
           <input type="checkbox" checked={autoAccept} onChange={(e) => setAutoAccept(e.target.checked)} />
           Auto-accept (settle in one step. You own the receiver on LocalNet.)
         </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, color: autoAccept ? W.text2 : W.dim, fontSize: fs.meta, cursor: autoAccept ? "pointer" : "not-allowed" }}>
+          <input type="checkbox" checked={atomic && autoAccept} disabled={!autoAccept} onChange={(e) => setAtomic(e.target.checked)} />
+          Atomic (experimental) — batch transfer + accept into one all-or-nothing transaction
+        </label>
+        {atomic && autoAccept && (
+          <div role="status" style={{ ...notice("warn") }}>
+            Experimental and not yet supported on current Splice: the accept leg can’t
+            reference the transfer leg’s instruction within one batch, so the submit
+            errors and nothing commits. Uncheck to use the working sequential offer→accept path.
+          </div>
+        )}
 
         {plan && (
           <div style={{ background: W.surface2, border: `1px solid ${W.border}`, borderRadius: 4, padding: "10px 12px" }}>
@@ -808,6 +967,146 @@ function TransferModal({
         </div>
       </form>
     </ModalShell>
+  );
+}
+
+// Creates a V2 DvP allocation: authorizer + receiver + amount, a
+// settlement deadline, and a committed toggle (locks funds until then).
+function AllocateModal({
+  instance, symbol, role, parties, onPartiesChanged, onClose, onDone, onError,
+}: {
+  instance: string;
+  symbol: string;
+  role: string;
+  parties: PartyRef[];
+  onPartiesChanged?: () => void;
+  onClose: () => void;
+  onDone: (allocationId: string) => void;
+  onError: (e: unknown) => void;
+}) {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [amount, setAmount] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [committed, setCommitted] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const res = await allocateToken(instance, symbol, {
+        from,
+        to,
+        amount,
+        settlement_deadline: deadline || undefined,
+        committed,
+      }, role);
+      onDone(res.allocationId);
+    } catch (err) {
+      onError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ModalShell title={`Allocate ${symbol}`} onClose={onClose}>
+      <form onSubmit={onSubmit} style={{ display: "grid", gap: 10 }}>
+        <Field label="Authorizer (from)">
+          <PartyPicker instance={instance} role={role} parties={parties} value={from} onChange={setFrom} onPartiesChanged={onPartiesChanged} placeholder="Select authorizer" />
+        </Field>
+        <Field label="Receiver (to)">
+          <PartyPicker instance={instance} role={role} parties={parties} value={to} onChange={setTo} onPartiesChanged={onPartiesChanged} placeholder="Select receiver" />
+        </Field>
+        <Field label="Amount"><input value={amount} onChange={(e) => setAmount(e.target.value)} style={input} required /></Field>
+        <Field label="Settlement deadline (optional, RFC3339 or duration e.g. 1h)">
+          <input value={deadline} onChange={(e) => setDeadline(e.target.value)} style={input} placeholder="1h" />
+        </Field>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, color: W.text2, fontSize: fs.meta, cursor: "pointer" }}>
+          <input type="checkbox" checked={committed} onChange={(e) => setCommitted(e.target.checked)} />
+          Committed (lock funds until the deadline — no early withdraw)
+        </label>
+        {committed && !deadline && (
+          <div role="status" style={{ ...notice("warn") }}>
+            A committed allocation with no deadline can never be withdrawn early. Set a deadline unless that's intended.
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+          <Button variant="ghost" size="md" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" size="md" type="submit" disabled={busy || !from || !to || !amount}>
+            {busy ? "Allocating…" : "Allocate"}
+          </Button>
+        </div>
+      </form>
+    </ModalShell>
+  );
+}
+
+// Lists ready-to-settle V2 allocations with per-row settle / withdraw /
+// cancel. Not instrument-scoped — shows every visible allocation.
+function AllocationsPanel({
+  allocations, err, aliases, onAllocate, onWithdraw, onCancel,
+}: {
+  allocations: AllocationSummary[] | null;
+  err: string | null;
+  aliases: AliasMap;
+  onAllocate: () => void;
+  onWithdraw: (id: string) => void;
+  onCancel: (id: string) => void;
+}) {
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", margin: "12px 0 8px" }}>
+        <h4 style={{ color: W.text2, margin: 0 }}>
+          Allocations <span style={{ color: W.dim, fontWeight: 400, fontSize: fs.meta }}>· ready-to-settle DvP approvals across all instruments</span>
+        </h4>
+        <span style={{ marginLeft: "auto" }}>
+          <Button variant="secondary" size="sm" icon={<IcPlus />} onClick={onAllocate}>New allocation</Button>
+        </span>
+      </div>
+      {err && <div role="alert" style={{ color: W.err, fontSize: fs.meta }}>{err}</div>}
+      {allocations === null && !err && <div style={{ color: W.dim, fontSize: fs.meta }}>Loading allocations…</div>}
+      {allocations !== null && (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data }}>
+          <thead>
+            <tr style={{ color: W.dim, textAlign: "left" }}>
+              <th style={th}>ALLOCATION</th>
+              <th style={th}>SETTLEMENT</th>
+              <th style={th}>AUTHORIZER</th>
+              <th style={thNum}>LEGS</th>
+              <th style={th}>STATUS</th>
+              <th style={th}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {allocations.map((a) => (
+              <tr key={a.contract_id}>
+                <td style={td}><MonoId value={a.contract_id} size={11.5} color={W.mag} /></td>
+                <td style={{ ...td, fontFamily: wMono, fontSize: fs.label, color: W.text2 }}>{a.settlement_id || "·"}</td>
+                <td style={td}>{partyLabel(aliases, a.authorizer)}</td>
+                <td style={tdNum}>{a.leg_count}</td>
+                <td style={td}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: W.text2, fontSize: fs.label }}>
+                    <Dot color={a.committed ? W.warn : W.ok} size={5} />
+                    {a.status}{a.committed ? " · committed" : ""}
+                  </span>
+                </td>
+                <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+                  <span style={{ display: "inline-flex", gap: 4, justifyContent: "flex-end" }}>
+                    <Button variant="ghost" size="sm" onClick={() => onWithdraw(a.contract_id)} title={a.committed ? "Committed: only after the settlement deadline" : "Withdraw this allocation"}>Withdraw</Button>
+                    <Button variant="danger" size="sm" icon={<IcX />} onClick={() => onCancel(a.contract_id)} title="Cancel this allocation">Cancel</Button>
+                  </span>
+                </td>
+              </tr>
+            ))}
+            {allocations.length === 0 && (
+              <tr><td colSpan={6} style={{ ...td, color: W.dim }}>No allocations yet. Create one with “New allocation”.</td></tr>
+            )}
+          </tbody>
+        </table>
+      )}
+    </>
   );
 }
 
@@ -921,12 +1220,31 @@ function HolderDistribution({ s, aliases }: { s: InstrumentSummary; aliases: Ali
   );
 }
 
-// Transfer/mint/burn history from the ledger stream; one netted transaction per row.
-function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null; err: string | null; aliases: AliasMap }) {
+// Transfer/mint/burn history from the ledger stream, one netted
+// transaction per row, newest-first. `onLoadMore` grows `limit`;
+// `truncated` means the backend's scan was capped (partial history).
+function ActivityFeed({
+  events,
+  err,
+  aliases,
+  limit,
+  truncated,
+  onLoadMore,
+}: {
+  events: ActivityEvent[] | null;
+  err: string | null;
+  aliases: AliasMap;
+  limit: number;
+  truncated: boolean;
+  onLoadMore: () => void;
+}) {
   if (err) return <div role="alert" style={{ color: W.err, fontSize: fs.data, marginTop: 12 }}>{err}</div>;
   if (events === null) return <div style={{ color: W.dim, fontSize: fs.data, marginTop: 12 }}>Scanning ledger history…</div>;
   if (events.length === 0)
     return <div style={{ color: W.dim, fontSize: fs.data, marginTop: 12 }}>No activity for this instrument yet.</div>;
+
+  // A full page may have older movements clipped off — offer to grow it.
+  const maybeMore = events.length >= limit;
 
   const tone: Record<ActivityEvent["kind"], string> = {
     mint: W.brand,
@@ -942,12 +1260,24 @@ function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null
     !ps || ps.length === 0
       ? "·"
       : ps.map((p) => `${partyLabel(aliases, p.party)} ${p.amount}`).join(", ");
+  // Provenance: "event_log" = admin's authoritative events; "transaction"
+  // = netted from HoldingV2 create/archive deltas.
+  const sourceLabel = (s: ActivityEvent["source"]) =>
+    s === "event_log" ? "EventLog" : "derived";
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data, marginTop: 12 }}>
+    <>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, color: W.dim, fontSize: fs.meta }}>
+      <span>
+        Showing {events.length} {events.length === 1 ? "movement" : "movements"}, newest first
+        {truncated && <span style={{ color: W.warn }}> · ledger scan capped, older movements omitted</span>}
+      </span>
+    </div>
+    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data, marginTop: 6 }}>
       <thead>
         <tr style={{ color: W.dim, textAlign: "left" }}>
           <th style={th}>TIME</th>
           <th style={th}>KIND</th>
+          <th style={th}>SOURCE</th>
           <th style={thNum}>AMOUNT</th>
           <th style={th}>FROM</th>
           <th style={th}>TO</th>
@@ -977,6 +1307,16 @@ function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null
                 {kindLabel[e.kind]}
               </span>
             </td>
+            <td
+              style={{ ...td, color: W.dim, fontSize: fs.label }}
+              title={
+                e.source === "event_log"
+                  ? "Authoritative EventLog_HoldingsChange event from the instrument admin"
+                  : "Derived by netting HoldingV2 create/archive deltas"
+              }
+            >
+              {sourceLabel(e.source)}
+            </td>
             <td style={tdNum}>{e.amount}</td>
             <td style={{ ...td, fontFamily: wMono, color: W.text2 }}>{fmtParties(e.senders)}</td>
             <td style={{ ...td, fontFamily: wMono, color: W.text2 }}>{fmtParties(e.receivers)}</td>
@@ -984,12 +1324,32 @@ function ActivityFeed({ events, err, aliases }: { events: ActivityEvent[] | null
         ))}
       </tbody>
     </table>
+    {maybeMore && (
+      <div style={{ display: "flex", justifyContent: "center", marginTop: 10 }}>
+        <Button variant="secondary" size="sm" icon={<IcChevronDown />} onClick={onLoadMore}>
+          Load more
+        </Button>
+      </div>
+    )}
+    </>
   );
 }
 
 // Party × instrument balance table from one ACS scan; only parties the
-// role's JWT can read appear.
-function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; err: string | null; aliases: AliasMap }) {
+// role's JWT can read appear. Filterable to one token's column.
+function MatrixLens({
+  matrix,
+  err,
+  aliases,
+  filter,
+  onFilter,
+}: {
+  matrix: BalanceMatrix | null;
+  err: string | null;
+  aliases: AliasMap;
+  filter: string | null;
+  onFilter: (s: string | null) => void;
+}) {
   if (err) return <div role="alert" style={{ color: W.err, fontSize: fs.data }}>{err}</div>;
   if (!matrix) return <div style={{ color: W.dim, fontSize: fs.data }}>Scanning ACS…</div>;
 
@@ -1004,24 +1364,52 @@ function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; er
   matrix.totals.forEach((t) => { totals[symByInst[t.instrument_id]] = t.amount; });
   const parties = [...matrix.parties].sort();
 
+  // Filter to one token's column when selected; the All chip restores the
+  // full every-party × every-token grid.
+  const active = filter && syms.includes(filter) ? filter : null;
+  const shownSyms = active ? [active] : syms;
+
+  const chip = (label: string, value: string | null, on: boolean) => (
+    <button
+      key={label}
+      onClick={() => onFilter(value)}
+      aria-pressed={on}
+      style={{
+        padding: "4px 12px", fontSize: fs.meta, borderRadius: 2, border: "none", cursor: "pointer",
+        fontWeight: 600, whiteSpace: "nowrap",
+        background: on ? W.brand : "transparent",
+        color: on ? W.onAccent : W.dim,
+      }}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 4, padding: 16, overflowX: "auto" }}>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", background: W.surface2, borderRadius: 4, padding: 3, width: "fit-content", maxWidth: "100%", border: `1px solid ${W.border}`, marginBottom: 10 }}>
+        {chip("All tokens", null, active === null)}
+        {syms.map((s) => chip(s, s, active === s))}
+      </div>
       <div style={{ color: W.dim, fontSize: fs.meta, marginBottom: 10 }}>
-        {parties.length} {parties.length === 1 ? "party" : "parties"} × {syms.length} {syms.length === 1 ? "instrument" : "instruments"}.
-        Every readable party's balance of every instrument, in one ACS scan.
+        {active ? (
+          <>{parties.length} {parties.length === 1 ? "party" : "parties"} · balances of <span style={{ color: W.text }}>{active}</span> only.</>
+        ) : (
+          <>{parties.length} {parties.length === 1 ? "party" : "parties"} × {syms.length} {syms.length === 1 ? "instrument" : "instruments"}. Every readable party's balance of every instrument, in one ACS scan.</>
+        )}
       </div>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data }}>
         <thead>
           <tr style={{ color: W.dim, textAlign: "left" }}>
             <th style={th}>PARTY ╲ TOKEN</th>
-            {syms.map((s) => <th key={s} style={{ ...th, textAlign: "right" }}>{s}</th>)}
+            {shownSyms.map((s) => <th key={s} style={{ ...th, textAlign: "right" }}>{s}</th>)}
           </tr>
         </thead>
         <tbody>
           {parties.map((p) => (
             <tr key={p}>
               <td style={td}>{partyLabel(aliases, p)}</td>
-              {syms.map((s) => (
+              {shownSyms.map((s) => (
                 <td key={s} style={{ ...tdNum, color: amt[p]?.[s] ? W.text : W.dim }}>
                   {amt[p]?.[s] ?? "·"}
                 </td>
@@ -1030,12 +1418,12 @@ function MatrixLens({ matrix, err, aliases }: { matrix: BalanceMatrix | null; er
           ))}
           <tr>
             <td style={{ ...td, color: W.dim, fontWeight: 600, fontSize: fs.meta }}>Σ total</td>
-            {syms.map((s) => (
+            {shownSyms.map((s) => (
               <td key={s} style={{ ...tdNum, fontWeight: 600 }}>{totals[s] ?? ""}</td>
             ))}
           </tr>
           {parties.length === 0 && (
-            <tr><td colSpan={syms.length + 1} style={{ ...td, color: W.dim }}>No holdings visible to this role.</td></tr>
+            <tr><td colSpan={shownSyms.length + 1} style={{ ...td, color: W.dim }}>No holdings visible to this role.</td></tr>
           )}
         </tbody>
       </table>
@@ -1053,16 +1441,97 @@ function Header({ right }: { right?: React.ReactNode }) {
   );
 }
 
-// List/allocate/forget aliased parties. New parties are immediately visible
-// in the matrix/activity (the scan grants read-as for every registered party).
+// Top-level act-as identity picker: selecting a role re-plumbs it
+// through every token API call (read + write) so the whole screen speaks
+// the ledger as that identity.
+function RoleSwitcher({
+  role,
+  roles,
+  onChange,
+}: {
+  role: Role;
+  roles: Role[];
+  onChange: (r: Role) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Act-as identity"
+      style={{
+        display: "flex",
+        gap: 1,
+        padding: 3,
+        background: W.border,
+        border: `1px solid ${W.border}`,
+        borderRadius: 2,
+      }}
+    >
+      {roles.map((id) => {
+        const active = id === role;
+        return (
+          <button
+            key={id}
+            aria-pressed={active}
+            onClick={() => onChange(id)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 7,
+              padding: "5px 10px",
+              borderRadius: R.control,
+              border: "none",
+              background: active ? tint(W.brand, 16) : "transparent",
+              cursor: active ? "default" : "pointer",
+              fontSize: fs.meta,
+              fontFamily: wMono,
+              fontWeight: active ? 600 : 500,
+              color: active ? W.text : W.dim,
+              transition: `background-color ${FAST}`,
+            }}
+          >
+            <RoleDot role={id} />
+            {id}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function RoleDot({ role }: { role: Role }) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: 14,
+        height: 14,
+        borderRadius: "50%",
+        background: ROLE_COLOR[role],
+        color: W.onAccent,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: 600,
+        fontSize: fs.micro,
+      }}
+    >
+      {role[0].toUpperCase()}
+    </span>
+  );
+}
+
+// List/allocate/forget aliased parties. New parties show immediately in
+// the matrix/activity (the scan grants read-as for every registered party).
 function PartyManagerModal({
   instance,
+  role,
   parties,
   onClose,
   onChanged,
   onError,
 }: {
   instance: string;
+  role: Role;
   parties: PartyRef[];
   onClose: () => void;
   onChanged: () => void;
@@ -1076,7 +1545,7 @@ function PartyManagerModal({
     if (!alias.trim()) return;
     setBusy(true);
     try {
-      await createParty(instance, alias.trim());
+      await createParty(instance, alias.trim(), role);
       setAlias("");
       onChanged();
     } catch (err) {
@@ -1108,6 +1577,7 @@ function PartyManagerModal({
         <thead>
           <tr style={{ color: W.dim, textAlign: "left" }}>
             <th style={th}>ALIAS</th>
+            <th style={th}>PARTY ID</th>
             <th style={th}>ROLE</th>
             <th style={th}></th>
           </tr>
@@ -1116,6 +1586,16 @@ function PartyManagerModal({
           {parties.map((p) => (
             <tr key={p.alias}>
               <td style={{ ...td, fontWeight: 600 }}>{p.alias}</td>
+              <td style={td}>
+                {p.party_id ? (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <MonoId value={p.party_id} size={11} color={W.dim} />
+                    <CopyPartyId partyId={p.party_id} label={`Copy party id for ${p.alias}`} />
+                  </span>
+                ) : (
+                  <span style={{ color: W.faint }}>·</span>
+                )}
+              </td>
               <td style={{ ...td, color: W.dim }}>{p.role}</td>
               <td style={{ ...td, textAlign: "right" }}>
                 <Button
@@ -1131,7 +1611,7 @@ function PartyManagerModal({
             </tr>
           ))}
           {parties.length === 0 && (
-            <tr><td colSpan={3} style={{ ...td, color: W.dim }}>No parties registered yet.</td></tr>
+            <tr><td colSpan={4} style={{ ...td, color: W.dim }}>No parties registered yet.</td></tr>
           )}
         </tbody>
       </table>
@@ -1152,12 +1632,14 @@ function PartyManagerModal({
 
 function CreateTokenModal({
   instance,
+  role,
   parties,
   onPartiesChanged,
   onClose,
   onCreated,
 }: {
   instance: string;
+  role: Role;
   parties: PartyRef[];
   onPartiesChanged?: () => void;
   onClose: () => void;
@@ -1181,7 +1663,7 @@ function CreateTokenModal({
     try {
       const ref = await createToken(instance, {
         name, symbol, decimals, initial_supply: initialSupply, issuer,
-      });
+      }, role);
       onCreated(ref);
     } catch (e) {
       setErr(createErrorText(e));
@@ -1201,6 +1683,7 @@ function CreateTokenModal({
         <Field label="Issuer party">
           <PartyPicker
             instance={instance}
+            role={role}
             parties={parties}
             value={issuer}
             onChange={setIssuer}
@@ -1222,6 +1705,7 @@ function ActionModal({
   title,
   fields,
   instance,
+  role,
   parties,
   onPartiesChanged,
   initial,
@@ -1233,6 +1717,7 @@ function ActionModal({
   title: string;
   fields: { label: string; key: string; optional?: boolean; party?: boolean }[];
   instance: string;
+  role: Role;
   parties: PartyRef[];
   onPartiesChanged?: () => void;
   initial?: Record<string, string>;
@@ -1265,6 +1750,7 @@ function ActionModal({
             {f.party ? (
               <PartyPicker
                 instance={instance}
+                role={role}
                 parties={parties}
                 value={values[f.key] ?? ""}
                 onChange={(v) => setValues((vv) => ({ ...vv, [f.key]: v }))}
@@ -1292,8 +1778,7 @@ function ActionModal({
 }
 
 // Alias-aware party selector: pick a registered alias, create one inline,
-// or type a raw id. Always emits the resolved party_id (ResolveAlias passes
-// it through unchanged, so it's correct on both create and action paths).
+// or type a raw id. Always emits the resolved party_id.
 function PartyPicker({
   instance,
   parties,
@@ -1406,25 +1891,30 @@ function PartyPicker({
   }
 
   return (
-    <select
-      value={value}
-      onChange={(e) => {
-        const v = e.target.value;
-        if (v === "__create__") { setMode("create"); return; }
-        if (v === "__raw__") { setMode("raw"); onChange(""); return; }
-        onChange(v);
-      }}
-      style={{ ...input, cursor: "pointer" }}
-    >
-      <option value="">{placeholder}</option>
-      {all.map((p) => (
-        <option key={p.party_id} value={p.party_id}>
-          {p.alias} · {shortParty(p.party_id)}
-        </option>
-      ))}
-      <option value="__create__">＋ create new party…</option>
-      <option value="__raw__">↳ enter raw party id…</option>
-    </select>
+    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      <select
+        value={value}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "__create__") { setMode("create"); return; }
+          if (v === "__raw__") { setMode("raw"); onChange(""); return; }
+          onChange(v);
+        }}
+        style={{ ...input, cursor: "pointer", flex: 1 }}
+      >
+        <option value="">{placeholder}</option>
+        {all.map((p) => (
+          <option key={p.party_id} value={p.party_id}>
+            {p.alias} · {shortParty(p.party_id)}
+          </option>
+        ))}
+        <option value="__create__">＋ create new party…</option>
+        <option value="__raw__">↳ enter raw party id…</option>
+      </select>
+      {/* Copy the full selected party id — the value a user pastes into
+          another target field. Only shown once a real party is chosen. */}
+      {value !== "" && known && <CopyPartyId partyId={value} />}
+    </div>
   );
 }
 

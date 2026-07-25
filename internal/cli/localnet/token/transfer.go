@@ -9,9 +9,8 @@ import (
 )
 
 // buildTransfer returns the `token transfer` parent + its `accept`
-// sub-subcommand. Models the upstream Splice CLI split (which has
-// separate `transfer` and `acceptTransferInstruction` commands) so a
-// V2 wallet flow lines up 1:1 with our surface.
+// sub-subcommand, mirroring the upstream Splice CLI's separate
+// `transfer` / `acceptTransferInstruction` split.
 func buildTransfer() *cobra.Command {
 	parent := &cobra.Command{
 		Use:   "transfer",
@@ -33,6 +32,7 @@ TransferFactory response indicates the sender pre-approved them.`,
 		opts.Amount, _ = cmd.Flags().GetString("amount")
 		opts.NoWait, _ = cmd.Flags().GetBool("no-wait")
 		opts.AutoAccept, _ = cmd.Flags().GetBool("auto-accept")
+		opts.Atomic, _ = cmd.Flags().GetBool("atomic")
 		opts.Reason, _ = cmd.Flags().GetString("reason")
 		opts.Endpoint, _ = cmd.Flags().GetString("endpoint")
 		opts.Token, _ = cmd.Flags().GetString("token")
@@ -53,8 +53,9 @@ TransferFactory response indicates the sender pre-approved them.`,
 	parent.Flags().String("amount", "", "Decimal amount. Required.")
 	parent.Flags().Bool("no-wait", false, "Return the TransferInstruction id without waiting for the receiver to accept.")
 	parent.Flags().Bool("auto-accept", false, "Chain the receiver-side accept onto the transfer (LocalNet: you own the receiver, so settle in one step).")
+	parent.Flags().Bool("atomic", false, "(experimental) With --auto-accept, batch the transfer and receiver-accept into one all-or-nothing BatchingUtilityV2 transaction (on-ledger test tokens only). Not yet supported on current Splice: the accept leg can't reference the transfer leg's instruction within one batch, so this errors and nothing commits — use the default sequential path.")
 	parent.Flags().String("reason", "", "Optional human-readable reason recorded on the TransferInstruction.")
-	parent.Flags().String("endpoint", "", "Participant gRPC endpoint (host:port). When set, run the live V2 transfer; otherwise print the not-wired remediation.")
+	parent.Flags().String("endpoint", "", "Participant gRPC endpoint (host:port). Defaults to the instance's captured ledger port; set to override which participant the live transfer dials.")
 	parent.Flags().String("token", "", "Bearer JWT. Empty auto-issues a per-role token via the creds machinery.")
 	parent.Flags().String("role", "app-user", "Role whose JWT authenticates the submit (sv / app-provider / app-user).")
 	parent.Flags().Bool("insecure", true, "Use plaintext gRPC (LocalNet default).")
@@ -89,7 +90,7 @@ twice is rejected by the underlying Daml choice.`,
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")
 	cmd.Flags().StringVar(&opts.TransferInstructionID, "id", "", "TransferInstruction contract id. Required.")
 	cmd.Flags().StringVar(&opts.Party, "party", "", "Receiver party acting on the instruction. Defaults to the JWT's first granted party (set explicitly on multi-party participants).")
-	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). When set, run the live accept; otherwise print the not-wired remediation.")
+	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Defaults to the instance's captured ledger port; set to override which participant the live accept dials.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
 	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the submit.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")

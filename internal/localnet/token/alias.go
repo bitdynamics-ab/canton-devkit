@@ -95,3 +95,17 @@ func aliasMapForInstance(instance string) map[string]registry.PartyRef {
 	}
 	return state.Parties
 }
+
+// PartyAliasMap returns partyID → alias for an instance's registered
+// parties, matching the Web UI handler's alias-map shape so CLI JSON and
+// HTTP responses carry the same aliases. Empty when the instance is
+// unknown or has no aliased parties.
+func PartyAliasMap(instance string) map[string]string {
+	out := map[string]string{}
+	for _, ref := range aliasMapForInstance(instance) {
+		if ref.PartyID != "" {
+			out[ref.PartyID] = ref.Alias
+		}
+	}
+	return out
+}

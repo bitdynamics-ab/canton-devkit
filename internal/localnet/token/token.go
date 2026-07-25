@@ -23,12 +23,9 @@ import (
 // Callers (CLI + HTTP handler) map this to ExitUserError / 409.
 var ErrSymbolInUse = errors.New("symbol already in use on this instance")
 
-// CreateOptions captures everything `token create` needs.
-//
-// The non-interactive CLI path and the Web UI handler both populate
-// this struct directly (from flags / JSON body); the interactive CLI
-// wizard populates it from stdin prompts and then calls RunCreate
-// with the populated struct — same code path either way.
+// CreateOptions captures everything `token create` needs. The CLI (flags
+// or interactive wizard) and the Web UI handler (JSON body) all populate
+// it directly and call RunCreate — same code path either way.
 type CreateOptions struct {
 	// Instance is the registered LocalNet name; required.
 	Instance string
@@ -70,6 +67,12 @@ type CreateResult struct {
 // per-instance flock, and returns the new entry. On a duplicate
 // symbol it returns ErrSymbolInUse without mutating anything.
 func RunCreate(out io.Writer, opts CreateOptions) (*CreateResult, error) {
+	// Resolve the issuer alias to its party id (as mint/transfer do).
+	// Without this the raw alias flows through as the admin party and the
+	// on-ledger TokenRules submit acts-as a non-existent party —
+	// UNKNOWN_SUBMITTERS.
+	opts.Issuer = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Issuer)
+
 	if err := validateCreate(opts); err != nil {
 		return nil, err
 	}
@@ -93,9 +96,9 @@ func RunCreate(out io.Writer, opts CreateOptions) (*CreateResult, error) {
 	}
 
 	// On-ledger create uses the symbol as the V2 InstrumentId.id (paired
-	// with the issuer admin party), so transfers/balance resolve the
-	// instrument by the same human symbol. The registry-only path keeps
-	// a generated opaque id.
+	// with the issuer admin), so transfers/balance resolve the instrument
+	// by the same human symbol. The registry-only path keeps a generated
+	// opaque id.
 	instrumentID := opts.Symbol
 	status := "on-ledger"
 	if opts.Endpoint == "" {
@@ -275,12 +278,10 @@ func validatePartyID(field, v string) error {
 	return nil
 }
 
-// looksLikeDecimal accepts strings of the form `123`, `123.456`, or
-// `0.5`. Reject leading + / scientific notation / sign for parity
-// with Daml Decimal literal syntax. A lone "." (or any input with no
-// digit at all) is rejected: it is not a number, renders as a bogus
-// "." amount in the UI holdings table, and breaks addDecimal's
-// big.Int parse downstream.
+// looksLikeDecimal accepts `123`, `123.456`, `0.5`; rejects signs and
+// scientific notation for parity with Daml Decimal literal syntax. A
+// digit-less input (e.g. a lone ".") is rejected: it renders as a bogus
+// "." amount in the UI and breaks addDecimal's big.Int parse downstream.
 func looksLikeDecimal(s string) bool {
 	if s == "" {
 		return false
@@ -304,12 +305,9 @@ func looksLikeDecimal(s string) bool {
 	return sawDigit
 }
 
-// damlNumericMaxDigits is the maximum number of significant decimal
-// digits Daml's Numeric type can represent (38 total across the
-// integer and fractional parts). A supply that exceeds this passes a
-// naive digit-grammar check but fails on-ledger, so we reject it at
-// the local gate to give a friendly error instead of a confusing
-// submission failure later.
+// damlNumericMaxDigits is the max significant digits Daml's Numeric can
+// represent (38 across integer + fractional parts). Enforced locally so
+// an oversized supply fails with a friendly error, not an on-ledger one.
 const damlNumericMaxDigits = 38
 
 // countDecimalDigits returns the number of integer and fractional
@@ -321,13 +319,10 @@ func countDecimalDigits(s string) (intDigits, fracDigits int) {
 	return len(intPart), len(fracPart)
 }
 
-// newInstrumentID generates a 16-byte random InstrumentId.id string,
-// hex-encoded. The V2 InstrumentId is `(admin, id)` — the admin is
-// the issuer party we already know; the id only has to be unique per
-// admin, so a random 128-bit value is comfortable. Stored as the hex
-// string so it's safe to put in URLs (instrument detail endpoint
-// path) and shell args without escaping. Uses crypto/rand for the
-// uniqueness guarantee, not for secrecy.
+// newInstrumentID generates a hex-encoded 16-byte random InstrumentId.id.
+// The V2 InstrumentId is `(admin, id)`; the id only has to be unique per
+// admin, so a random 128-bit value is comfortable. Hex-encoded so it's
+// URL- and shell-safe. crypto/rand for uniqueness, not secrecy.
 func newInstrumentID() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {

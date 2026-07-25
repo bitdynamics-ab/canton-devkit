@@ -66,6 +66,13 @@ export const IcCheck = (p: IconProps) => (
   </I>
 );
 
+export const IcCopy = (p: IconProps) => (
+  <I {...p}>
+    <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+    <path d="M10.5 5.5V4a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5" />
+  </I>
+);
+
 export const IcX = (p: IconProps) => (
   <I {...p}>
     <path d="m4 4 8 8M12 4l-8 8" />

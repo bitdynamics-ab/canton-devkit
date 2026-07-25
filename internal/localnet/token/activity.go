@@ -2,68 +2,103 @@ package token
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
 
-// maxActivityScan caps how many ledger update items RunActivity will
-// consume before declaring the result truncated. Mirrors
-// maxWorkspaceScan in workspace.go — a runaway transaction stream on a
-// busy ledger would otherwise pump us into OOM via an unbounded slice.
+// maxActivityScan caps how many activity records the feed retains before
+// declaring the result truncated, bounding memory against a runaway
+// transaction stream on a busy ledger.
 const maxActivityScan = 10_000
 
-// The activity feed reconstructs an
-// instrument's transfer/mint/burn history from the ledger transaction
-// stream — no off-ledger transfer-events-v2 registry required. On a UTXO
-// ledger every movement archives the sender's Holding contracts and
-// creates the receiver's within one transaction, so a single scan over
-// HoldingV2 create/archive events is enough to net out who sent what to
-// whom:
-//
-// - created holding → a credit to its owner
-// - archived holding → a debit from its owner
-//
-// Per transaction we net the per-party deltas and classify:
-//
-// - only credits, no debits → mint (new supply appeared)
-// - only debits, no credits → burn (supply destroyed)
-// - both → transfer
-//
-// Archived events don't carry the HoldingView (only the contract id), so
-// we build a contractId → (owner, instrument, amount) map from the create
-// events seen earlier in the same scan and resolve debits against it.
+// activityWindow is a fixed-capacity ring buffer that retains the most
+// recently added items. The Updates gRPC stream only flows forward
+// (oldest→newest), so keeping a window of the newest `cap` items lets the
+// activity feeds return the newest history under a bound instead of the
+// oldest slice (which a leading break would produce). truncated flips true
+// once any item has been evicted.
+type activityWindow[T any] struct {
+	buf       []T
+	cap       int
+	start     int // index of the oldest retained item
+	len       int
+	truncated bool
+}
 
-// PartyDelta is one party's signed magnitude in an activity event. The
-// amount is always the positive magnitude; the sender/receiver list it
-// appears in carries the direction.
+func newActivityWindow[T any](capacity int) *activityWindow[T] {
+	if capacity < 1 {
+		capacity = 1
+	}
+	return &activityWindow[T]{buf: make([]T, capacity), cap: capacity}
+}
+
+// add appends v, evicting the oldest item (and setting truncated) when full.
+func (w *activityWindow[T]) add(v T) {
+	if w.len < w.cap {
+		w.buf[(w.start+w.len)%w.cap] = v
+		w.len++
+		return
+	}
+	// Full: overwrite the oldest slot and advance start.
+	w.buf[w.start] = v
+	w.start = (w.start + 1) % w.cap
+	w.truncated = true
+}
+
+// slice returns the retained items in insertion (oldest→newest) order.
+func (w *activityWindow[T]) slice() []T {
+	out := make([]T, 0, w.len)
+	for i := 0; i < w.len; i++ {
+		out = append(out, w.buf[(w.start+i)%w.cap])
+	}
+	return out
+}
+
+// The netting activity feed reconstructs an instrument's transfer/mint/burn
+// history from the ledger transaction stream — no off-ledger registry required.
+// On a UTXO ledger every movement archives the sender's Holdings and creates
+// the receiver's in one transaction, so netting per-party create/archive deltas
+// recovers who sent what: created → credit, archived → debit; only credits →
+// mint, only debits → burn, both → transfer.
+//
+// Archived events carry only the contract id, so we build a contractId →
+// (owner, instrument, amount) map from create events earlier in the same scan
+// and resolve debits against it.
+
+// PartyDelta is one party's magnitude in an activity event. The amount is
+// always positive; the sender/receiver list it appears in carries direction.
 type PartyDelta struct {
 	Party  string `json:"party"`
 	Amount string `json:"amount"`
 }
 
-// ActivityEvent is one netted ledger transaction touching an instrument.
+// ActivityEvent is one ledger movement touching an instrument. Two paths
+// produce it — the netting path (Source="transaction") and the EventLog-native
+// path (Source="event_log") — rendering identically; Source labels provenance.
 type ActivityEvent struct {
 	Offset     int64        `json:"offset"`
 	UpdateID   string       `json:"update_id"`
 	RecordTime string       `json:"record_time"`
 	Instrument string       `json:"instrument_id"`
-	Kind       string       `json:"kind"` // mint | burn | transfer
+	Kind       string       `json:"kind"`   // mint | burn | transfer
+	Source     string       `json:"source"` // event_log | transaction (types.TokenActivitySource)
 	Amount     string       `json:"amount"`
 	Senders    []PartyDelta `json:"senders,omitempty"`
 	Receivers  []PartyDelta `json:"receivers,omitempty"`
 }
 
-// ActivityResult is the activity feed plus a Truncated flag indicating
-// the underlying transaction stream hit maxActivityScan and stopped
-// short. The UI can then render "showing N of many" rather than silently
-// misreporting the feed.
+// ActivityResult is the activity feed plus a Truncated flag set when the
+// underlying stream hit maxActivityScan, so the UI can render "showing N of
+// many" rather than silently misreporting the feed.
 type ActivityResult struct {
 	Events    []ActivityEvent `json:"events"`
 	Truncated bool            `json:"truncated,omitempty"`
@@ -85,11 +120,9 @@ type rawTx struct {
 	deltas     []rawHoldingDelta
 }
 
-// buildActivity nets each transaction's holding deltas into an
-// ActivityEvent for the given instrument, newest-first, capped at limit
-// (limit <= 0 means no cap). decimals controls the fractional precision
-// of formatted amounts; <0 falls back to 18 (the V2 test-token cap).
-// Pure — unit-testable without a ledger.
+// buildActivity nets each transaction's holding deltas into an ActivityEvent
+// for the given instrument, newest-first, capped at limit (<=0 → no cap).
+// decimals sets fractional precision (<0 → 18, the V2 test-token cap). Pure.
 func buildActivity(txs []rawTx, instrument string, decimals int, limit int) []ActivityEvent {
 	out := make([]ActivityEvent, 0, len(txs))
 	for _, tx := range txs {
@@ -106,15 +139,13 @@ func buildActivity(txs []rawTx, instrument string, decimals int, limit int) []Ac
 	return out
 }
 
-// netTransaction folds one transaction's deltas for a single instrument
-// into senders/receivers + a kind. Returns ok=false when the transaction
-// doesn't touch the instrument or nets to nothing.
+// netTransaction folds one transaction's deltas for a single instrument into
+// senders/receivers + a kind. Returns ok=false when it doesn't touch the
+// instrument or nets to nothing.
 //
-// Amount arithmetic uses math/big.Rat (not big.Float): Float carries a
-// binary mantissa and silently drifts past ~15 decimal digits (0.1 +
-// 0.2 → "0.30000000000000004"), which would net 18-decimal-place V2
-// amounts wrong. Rat is exact for decimal input and renders back via
-// FloatString(decimals).
+// Uses math/big.Rat, not big.Float: Float's binary mantissa drifts past ~15
+// decimal digits and would net 18-decimal V2 amounts wrong; Rat is exact for
+// decimal input.
 func netTransaction(tx rawTx, instrument string, decimals int) (ActivityEvent, bool) {
 	net := map[string]*big.Rat{}
 	order := []string{}
@@ -179,6 +210,7 @@ func netTransaction(tx rawTx, instrument string, decimals int) (ActivityEvent, b
 		RecordTime: tx.recordTime,
 		Instrument: instrument,
 		Kind:       kind,
+		Source:     string(types.ActivitySourceTransaction),
 		Amount:     formatDecimal(amount, decimals),
 		Senders:    senders,
 		Receivers:  receivers,
@@ -204,13 +236,17 @@ func formatDecimal(r *big.Rat, decimals int) string {
 	return s
 }
 
-// RunActivityResult scans the ledger transaction stream (offset 0 →
-// ledger end) for HoldingV2 create/archive events and reconstructs the
-// instrument's activity history. opts.Instrument selects the instrument;
-// opts.Limit caps the returned events (default 50). Truncated is set
-// when the underlying updates stream was cut short at maxActivityScan
-// to bound memory — on a busy ledger an unbounded consume would OOM the
-// UI server. Read-only; no submission.
+// RunActivityResult reconstructs an instrument's transfer/mint/burn history
+// from the ledger. opts.Limit caps the events (default 50); Truncated is set
+// when the stream was cut at maxActivityScan. Read-only; no submission.
+//
+// It picks one of two paths so a movement is never double-counted:
+//
+//   - EventLog-native (Source="event_log"): when the participant vets
+//     splice-api-token-transfer-events-v2 AND the admin reports
+//     EventLog_HoldingsChange events (Amulet's admin is dso).
+//   - HoldingV2 netting (Source="transaction"): the fallback, used when the
+//     admin does not implement EventLog or its stream yields nothing.
 func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult, error) {
 	limit := opts.Limit
 	if limit <= 0 {
@@ -223,15 +259,14 @@ func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult
 		Instance: opts.Instance,
 		Role:     opts.Role,
 	}
-	client, cleanup, err := dialLedger(ctx, conn)
+	client, cleanup, err := dialLedgerFn(ctx, conn)
 	if err != nil {
 		return ActivityResult{}, err
 	}
 	defer cleanup()
 
-	// Widen read-as to every registered party alias so the
-	// activity feed reconstructs movements across ALL aliased parties,
-	// then re-resolve the authoritative granted set.
+	// Read as every registered party alias so the feed reconstructs movements
+	// across all of them.
 	parties, err := resolveReadableParties(ctx, client, opts.Instance, opts.Role)
 	if err != nil {
 		return ActivityResult{}, err
@@ -240,9 +275,8 @@ func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult
 		return ActivityResult{Events: []ActivityEvent{}}, nil
 	}
 
-	// Query every vetted holding surface (V1 + V2), not just V2, so a V1
-	// instrument like Amulet appears in the activity feed on a stable
-	// release — matching the balance / instruments / matrix read paths.
+	// Query every vetted holding surface (V1 + V2) so a V1 instrument like
+	// Amulet also appears, matching the balance / instruments / matrix reads.
 	surfaces, err := discoverTokenSurfaces(ctx, client)
 	if err != nil {
 		return ActivityResult{}, err
@@ -251,14 +285,28 @@ func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult
 		return ActivityResult{Events: []ActivityEvent{}}, nil
 	}
 
+	// Prefer the EventLog path when vetted; fall through to netting if it
+	// yields nothing OR fails in a fallback-safe way (stream-open / malformed
+	// event), so an instrument without a usable EventLog is never blank. Only
+	// a cancelled/expired context aborts — retrying via netting would fail the
+	// same way.
+	if surfaces.HasEventLog {
+		res, elErr := RunActivityViaEventLog(ctx, client, parties, opts)
+		if elErr != nil && !isEventLogFallbackSafe(ctx, elErr) {
+			return ActivityResult{}, elErr
+		}
+		if elErr == nil && len(res.Events) > 0 {
+			return res, nil
+		}
+	}
+
 	end, err := client.LedgerEnd(ctx)
 	if err != nil {
 		return ActivityResult{}, fmt.Errorf("ledger end: %w", err)
 	}
 	endInc := end.Offset
-	// Wrap before opening the stream so an early break (cap hit, decode
-	// error) cancels the upstream pump goroutine instead of letting it
-	// drain the rest of the ledger for the lifetime of the parent ctx.
+	// Wrap so an early break (cap hit, decode error) cancels the upstream pump
+	// instead of draining the ledger for the parent ctx's lifetime.
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stream, err := client.Updates(streamCtx, ledger.UpdatesRequest{
@@ -287,25 +335,35 @@ func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult
 	}, nil
 }
 
-// consumeActivityStream drains a ledger updates channel into rawTx
-// records, stopping once maxActivityScan items have been seen (with
-// truncated=true). Extracted from RunActivityResult so a fake channel
-// can pin the cap behavior without dialing a real participant.
+// isEventLogFallbackSafe reports whether an EventLog-path error should fall
+// through to the netting reconstruction rather than abort. A cancelled or
+// expired context is NOT fallback-safe: the netting path would hit the same
+// deadline. Every other failure (stream open, malformed event/shape) is
+// safe to retry via netting, which reconstructs history independently.
+func isEventLogFallbackSafe(ctx context.Context, err error) bool {
+	if err == nil {
+		return true
+	}
+	if ctx.Err() != nil {
+		return false
+	}
+	return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+}
+
+// consumeActivityStream drains a ledger updates channel into rawTx records.
+// The Updates gRPC stream only flows forward, so it keeps a sliding window of
+// the newest maxActivityScan transactions (truncated once older ones are
+// evicted) rather than the oldest slice a leading break would yield. The
+// contractId→facts map spans the whole scan, so a late archive still resolves
+// against a create whose tx row was already evicted from the window.
 func consumeActivityStream(stream <-chan ledger.StreamItem[*lapiv2.GetUpdatesResponse]) ([]rawTx, bool, error) {
-	// contractId → its holding facts, so archived events (which carry
-	// only the contract id) can be resolved back to owner/instrument/amount.
+	// contractId → holding facts, so archived events (which carry only the
+	// contract id) resolve back to owner/instrument/amount.
 	byContract := map[string]rawHoldingDelta{}
-	var txs []rawTx
-	var scanned int
-	var truncated bool
+	win := newActivityWindow[rawTx](maxActivityScan)
 	for item := range stream {
 		if item.Err != nil {
 			return nil, false, fmt.Errorf("updates stream: %w", item.Err)
-		}
-		scanned++
-		if scanned > maxActivityScan {
-			truncated = true
-			break
 		}
 		t := item.Value.GetTransaction()
 		if t == nil {
@@ -317,10 +375,8 @@ func consumeActivityStream(stream <-chan ledger.StreamItem[*lapiv2.GetUpdatesRes
 		}
 		for _, e := range t.GetEvents() {
 			if c := e.GetCreated(); c != nil {
-				// One delta per contract — prefer the richer V2 view, fall
-				// back to V1 — so a V1 Holding (Amulet) registers in the
-				// feed too, never double-counted when a contract implements
-				// both interfaces.
+				// Prefer the richer V2 view, fall back to V1, so a V1 Holding
+				// (Amulet) also registers, never double-counted.
 				if view, ok := extractBestHoldingView(c.GetInterfaceViews()); ok {
 					d := rawHoldingDelta{
 						party:      view.Owner,
@@ -345,10 +401,10 @@ func consumeActivityStream(stream <-chan ledger.StreamItem[*lapiv2.GetUpdatesRes
 			}
 		}
 		if len(tx.deltas) > 0 {
-			txs = append(txs, tx)
+			win.add(tx)
 		}
 	}
-	return txs, truncated, nil
+	return win.slice(), win.truncated, nil
 }
 
 // instrumentDecimals looks up the recorded decimals for an instrument

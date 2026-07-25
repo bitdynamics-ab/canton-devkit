@@ -37,6 +37,8 @@ Every deviation listed here is **intentional**, not an oversight or implementati
 - [`localnet token`](#localnet-token)
   - [Additional subcommands (new)](#additional-subcommands-new)
   - [`transfer accept` subcommand](#transfer-accept-subcommand)
+  - [`transfer --atomic` flag (experimental, new)](#transfer---atomic-flag-experimental-new)
+  - [`allocations settle` deferred](#allocations-settle-deferred)
   - [`burn` requires explicit confirmation](#burn-requires-explicit-confirmation)
   - [`--instance` required flag](#--instance-required-flag)
   - [`--name` collision in `token create`](#--name-collision-in-token-create)
@@ -307,6 +309,10 @@ The embedded skill docs are the same artifacts that back the Web UI's Agent Skil
 | `token party rm <alias>` | Remove a party alias |
 | `token faucet <party> <amount>` | Fund a party with an auto-accepted transfer (no recipient interaction needed) |
 | `token demo` | One-step provision: creates a DEMO instrument and seeds a holder wallet |
+| `token identity` | List the act-as identities (roles) available for the instance's token commands |
+| `token allocations` | List V2 DvP allocations, optionally filtered to one authorizer party |
+| `token allocations withdraw` | Withdraw a V2 allocation (only after its settlement deadline) |
+| `token allocations cancel` | Cancel a V2 allocation |
 
 **Why:** The alias registry (`token party`) improves UX by eliminating repeated `--party <long-id>` flags across commands. `faucet` and `demo` target workshop and onboarding use cases where speed matters more than exercising the full CIP-0112 two-phase flow. `balances`, `summary`, and `activity` provide portfolio-level and historical views that are essential for verifying token operations during testing.
 
@@ -319,6 +325,26 @@ The embedded skill docs are the same artifacts that back the Web UI's Agent Skil
 **Shipped:** `token transfer` initiates a transfer; `token transfer accept` accepts a pending incoming transfer. CIP-0112 transfers are two-phase (offer + accept), so both halves are exposed as CLI subcommands.
 
 **Why:** The two-phase model is required by the CIP-0112 protocol — it is not a simplification but a faithful implementation of the standard. Exposing both steps gives scripts and workshops full control over the accept timing, enabling realistic multi-party test scenarios.
+
+---
+
+### `transfer --atomic` flag (experimental, new)
+
+**Proposal said:** not mentioned; `token transfer` was a single-shot command.
+
+**Shipped:** `token transfer --atomic` is an **experimental** flag that only takes effect together with `--auto-accept`. When both are set, the transfer and the receiver-side accept are batched into one all-or-nothing `BatchingUtilityV2` transaction (on-ledger test tokens only). On current Splice this is **not yet functional** — the accept leg cannot reference the transfer leg's instruction within a single batch, so the command errors and nothing commits; the default sequential path (`--auto-accept` alone) is the supported behaviour. In the Web UI the atomic checkbox is disabled unless auto-accept is on and carries an explicit experimental warning.
+
+**Why:** The flag is shipped ahead of ledger support so the atomic-settlement path is wired and testable end-to-end the moment Splice can reference a batched instruction. Gating it behind `--auto-accept`, defaulting it off, and surfacing an experimental warning keeps the unsupported path from being reached accidentally.
+
+---
+
+### `allocations settle` deferred
+
+**Proposal said:** not mentioned (allocations/DvP settlement were not part of the proposal's token surface).
+
+**Shipped:** the DvP allocation surface ships `allocations` (list), `allocations withdraw`, and `allocations cancel`, but the **`allocations settle` verb is intentionally not exposed** on the CLI or in the Web UI. The settlement factory plumbing exists and is unit-tested, but the end-to-end settle path is not yet functional against current Splice, so the user-facing action is withheld until it works rather than shipping a command that always fails.
+
+**Why:** Exposing a settle action that cannot succeed would be a misleading dead end. Withholding it — while keeping withdraw/cancel, which do work — keeps the surface honest; the verb will be re-enabled in the same place once the settlement flow is functional.
 
 ---
 

@@ -1,6 +1,10 @@
 package token
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
+)
 
 // sample holdings: bob holds MYT across 3 UTXOs + Amulet in 1; alice holds Amulet.
 func sampleHoldings() []HoldingContract {
@@ -58,6 +62,57 @@ func TestInstrumentsFromHoldings_DistinctAndLabeled(t *testing.T) {
 	// symbol falls back to instrumentId when no metadata
 	if bySym["MYT"].Symbol != "MYT" {
 		t.Errorf("MYT symbol fallback: got %q", bySym["MYT"].Symbol)
+	}
+}
+
+// Regression: a token created but never minted (TokenRules exists, no
+// Holding does) must still appear in the instrument list. Discovery was
+// holdings-only before the fix, hiding it whenever the ledger was live.
+func TestMergeInstruments_IncludesRecordedWithoutHoldings(t *testing.T) {
+	holdings := []HoldingContract{
+		{ContractID: "c1", Party: "bob", Admin: "alice", InstrumentID: "MYT", Amount: "100.0", Gen: genV2},
+	}
+	recorded := map[string]registry.TokenRef{
+		// Minted (has a holding): enriches the holdings row, no duplicate.
+		"MYT": {Symbol: "MYT", Name: "My Token", Decimals: 4, InstrumentID: "MYT", IssuerParty: "alice", Status: "on-ledger"},
+		// Created but never minted: must still be listed, zero supply.
+		"ZHE": {Symbol: "ZHE", Name: "ZHE LI", Decimals: 6, InstrumentID: "ZHE", IssuerParty: "issuer1", Status: "on-ledger"},
+		// Offline-recorded (no ledger anchor): listed but not on_ledger.
+		"OFF": {Symbol: "OFF", Name: "Offline", Decimals: 2, InstrumentID: "off-id", IssuerParty: "issuer2", Status: "recorded"},
+	}
+
+	instr := mergeInstruments(holdings, recorded)
+	bySym := map[string]InstrumentRef{}
+	for _, i := range instr {
+		bySym[i.Symbol] = i
+	}
+	if len(instr) != 3 {
+		t.Fatalf("instrument count: got %d, want 3 (MYT, OFF, ZHE)", len(instr))
+	}
+
+	// MYT: single enriched row (registry metadata applied, not duplicated).
+	if myt := bySym["MYT"]; myt.Name != "My Token" || myt.Decimals != 4 || !myt.OnLedger {
+		t.Errorf("MYT not enriched as a single on-ledger row: %+v", myt)
+	}
+
+	// ZHE: created-but-unminted, surfaced with the issuer as admin.
+	zhe, ok := bySym["ZHE"]
+	if !ok {
+		t.Fatal("ZHE (created but unminted) should still be listed")
+	}
+	if zhe.Admin != "issuer1" || !zhe.OnLedger {
+		t.Errorf("ZHE admin/on_ledger: got admin=%q on_ledger=%v, want issuer1/true", zhe.Admin, zhe.OnLedger)
+	}
+	if zhe.Name != "ZHE LI" || zhe.Decimals != 6 {
+		t.Errorf("ZHE metadata not carried: %+v", zhe)
+	}
+	if zhe.Standard != "Token Standard V2 (CIP-0112)" {
+		t.Errorf("ZHE standard: got %q, want V2", zhe.Standard)
+	}
+
+	// OFF: recorded offline → listed but flagged not on_ledger.
+	if off := bySym["OFF"]; off.OnLedger || off.InstrumentID != "off-id" {
+		t.Errorf("OFF should be listed as not-on_ledger with its instrument id: %+v", off)
 	}
 }
 
@@ -131,12 +186,9 @@ func TestSummarizeInstrument_EmptyZeroSafe(t *testing.T) {
 	}
 }
 
-// TestBuildMatrix_PropagatesTruncated pins D1: when scanWorkspace
-// hits maxWorkspaceScan and returns truncated=true, buildMatrix
-// must carry the flag through so the UI can render
-// "matrix shows N of many" instead of misleading per-instrument
-// totals. The unbounded ACS read this guards against could otherwise
-// silently pump us into OOM.
+// TestBuildMatrix_PropagatesTruncated: when scanWorkspace hits
+// maxWorkspaceScan and returns truncated=true, buildMatrix must carry the
+// flag through so the UI can render "matrix shows N of many".
 func TestBuildMatrix_PropagatesTruncated(t *testing.T) {
 	ws := &Workspace{Truncated: true}
 	m := buildMatrix(ws)

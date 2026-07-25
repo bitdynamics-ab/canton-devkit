@@ -10,10 +10,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildActivity is `token activity` — the instrument's transfer/mint/burn
+// buildActivity is `token activity` — an instrument's transfer/mint/burn
 // history, reconstructed from HoldingV2 create/archive events on the
-// ledger transaction stream (no off-ledger transfer-events registry).
-// CLI counterpart of the Web UI activity feed.
+// ledger transaction stream. CLI counterpart of the Web UI activity feed.
 func buildActivity() *cobra.Command {
 	var opts token.BalanceOptions
 	var format string
@@ -49,6 +48,7 @@ Requires --endpoint (the participant ledger gRPC host:port) and
 				{Label: "OFFSET"},
 				{Label: "TIME"},
 				{Label: "KIND"},
+				{Label: "SOURCE"},
 				{Label: "AMOUNT"},
 				{Label: "FROM"},
 				{Label: "TO"},
@@ -59,6 +59,7 @@ Requires --endpoint (the participant ledger gRPC host:port) and
 					fmt.Sprintf("%d", e.Offset),
 					e.RecordTime,
 					e.Kind,
+					sourceLabel(e.Source),
 					e.Amount,
 					partyList(e.Senders),
 					partyList(e.Receivers),
@@ -86,8 +87,16 @@ Requires --endpoint (the participant ledger gRPC host:port) and
 	return cmd
 }
 
-// partyList renders a slice of party deltas as "alice +100, bob +5" with
-// short party ids for table display.
+// sourceLabel renders an ActivityEvent.Source for the text table:
+// "EventLog" (admin's authoritative events) vs "derived" (HoldingV2 netting).
+func sourceLabel(source string) string {
+	if source == "event_log" {
+		return "EventLog"
+	}
+	return "derived"
+}
+
+// partyList renders party deltas as "alice +100, bob +5" for the table.
 func partyList(deltas []token.PartyDelta) string {
 	if len(deltas) == 0 {
 		return "·"

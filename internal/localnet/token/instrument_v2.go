@@ -15,19 +15,15 @@ import (
 )
 
 // On-ledger instrument lifecycle for the bundled splice-test-token-v2
-// example token. Unlike Amulet (an externally-administered V1-era asset
-// reached through the scan registry), the test token's TokenRules
-// contract — created here with `admin = <our party>` — IS the registry:
-// it directly implements V2.TransferFactory, so transfers exercise it
-// on-ledger with an empty choice context, no off-ledger HTTP call.
-//
-// This is what makes us the issuer: we control the admin party, so we
-// can mint freely (TokenRules_OfferMint is `controller admin`).
+// example token. The test token's TokenRules contract — created here
+// with admin = our party — IS the registry: it implements
+// V2.TransferFactory, so transfers exercise it on-ledger with an empty
+// choice context. We control the admin party, so we can mint freely
+// (TokenRules_OfferMint is `controller admin`).
 
-// ensureTokenRules dials the ledger and creates the issuer's TokenRules
-// contract if it doesn't already exist. Called by RunCreate's live
-// path. The issuer party (opts.Issuer) is the admin/signatory, so the
-// dial must act as it — the auto-grant on dial covers the rights.
+// ensureTokenRules creates the issuer's TokenRules contract if it doesn't
+// already exist. The issuer party (opts.Issuer) is the admin/signatory;
+// the auto-grant on dial covers the rights.
 func ensureTokenRules(opts CreateOptions) error {
 	ctx := context.Background()
 	conn := LedgerConn{
@@ -44,11 +40,17 @@ func ensureTokenRules(opts CreateOptions) error {
 
 	admin := opts.Issuer
 
-	// Auto-bundle the test-token DARs FIRST — findTokenRules
-	// filters the ACS by the #splice-test-token-v2 package name, which the
-	// participant rejects with PACKAGE_NAMES_NOT_FOUND until the package is
-	// vetted. Upload happens before any package-name-scoped query. No-op
-	// when already vetted.
+	// Creating TokenRules requires CanActAs(issuer). The dial only
+	// auto-grants the role's own local parties, so a custom issuer party
+	// must be granted explicitly. Best-effort + idempotent.
+	if admin != "" {
+		_ = client.GrantUserActAndReadAs(ctx, exerciseUserID, []string{admin})
+	}
+
+	// Bundle the test-token DARs before any package-name-scoped query:
+	// findTokenRules filters by the #splice-test-token-v2 package name,
+	// which the participant rejects with PACKAGE_NAMES_NOT_FOUND until the
+	// package is vetted. No-op when already vetted.
 	if err := ensureTokenDARs(ctx, client, opts.Instance, nil); err != nil {
 		return err
 	}
@@ -58,20 +60,36 @@ func ensureTokenRules(opts CreateOptions) error {
 		return fmt.Errorf("look up existing TokenRules: %w", err)
 	}
 	if existing != "" {
-		return nil // already anchored for this admin
+		return nil
 	}
 	_, err = createTokenRules(ctx, client, admin)
 	return err
 }
 
-// runMintLive performs an asset-specific mint of a test-token
-// instrument: find the issuer's TokenRules, exercise
-// TokenRules_OfferMint (controller = admin), then accept the resulting
-// TokenTransferOffer so the holding lands in the receiver's account.
-// The issuer party (ref.IssuerParty) is the admin; we dial as the
-// instrument's role and auto-grant covers acting as both admin and
+// runMintLive performs an asset-specific mint: find the issuer's
+// TokenRules, exercise TokenRules_OfferMint (controller = admin), then
+// accept the resulting TokenTransferOffer so the holding lands in the
+// receiver's account. The auto-grant covers acting as both admin and
 // receiver (LocalNet hosts them on the same participant).
+//
+// Not batched (unlike transfer+accept): TokenRules_OfferMint is an
+// asset-specific choice and BatchingUtilityV2's TokenStandardAction set
+// wraps only standard token-interface choices, so the offer step can't be
+// a batch action. The lone accept that follows is a single submit anyway.
 func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regstate.TokenRef) error {
+	// Self-mint guard (issuer == receiver). OfferMint pre-authorizes
+	// TIA_Accept for the admin; when receiver == admin the receiver-side
+	// accept transition is already fully authorized, so the offer advances
+	// straight to TIS_Accepted (terminal). OfferMint creates the offer
+	// without running a transition, so no Token is ever created and the
+	// receiver's TransferInstruction_Accept then aborts with "unavailable
+	// action TIA_Accept". Mint to a distinct party instead — its
+	// self-custodial account's accept still drives the holding into being.
+	if opts.To == ref.IssuerParty {
+		return fmt.Errorf("cannot self-mint: the test token cannot mint to the issuer's own party (%s) — "+
+			"mint to a distinct party", ref.IssuerParty)
+	}
+
 	conn := LedgerConn{
 		Endpoint: opts.Endpoint,
 		Insecure: opts.Insecure,
@@ -102,18 +120,10 @@ func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regst
 		"offer_cid": offerCID, "to": opts.To, "amount": opts.Amount,
 	})
 
-	// Settle the offer. The test token gates accept behind its
-	// configurable AccountConfig model: the receiver's account needs an
-	// AccountConfig contract, referenced by id in the accept's choice
-	// context under "testTokenV2/accountConfigs". Create it (owner=
-	// receiver, provider=admin) then accept with its cid threaded in.
-	configCID, err := createAccountConfig(ctx, client, admin, opts.To, admin)
-	if err != nil {
-		return fmt.Errorf("create receiver account config: %w", err)
-	}
-	emit(out, "mint: account-config", map[string]any{"config_cid": configCID})
-
-	if err := acceptMintOffer(ctx, client, opts.To, offerCID, configCID, tokenRulesCID, tokenRulesDisc); err != nil {
+	// Settle by accepting as the receiver. The self-custodial receiver
+	// (provider=None) needs no AccountConfig; the accept context carries
+	// only the TokenRules entry.
+	if err := acceptMintOffer(ctx, client, opts.To, offerCID, tokenRulesCID, tokenRulesDisc); err != nil {
 		return fmt.Errorf("accept mint offer: %w", err)
 	}
 	emit(out, "mint: accepted", map[string]any{
@@ -125,20 +135,17 @@ func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regst
 // runBurnLive burns `amount` of the holder's tokens by archiving their
 // Holding contracts.
 //
-// The splice-test-token-v2 example has no protocol-level standalone burn:
-// its transfer state machine unconditionally `create Token`s for the
-// receiver, which violates the Token template's `ensure isSome
-// account.owner` when the receiver is the special burn account — so you
-// cannot transfer-to-burn-account. But the Token (holding) template's
-// signatory is the account parties + the instrument admin, and on
-// LocalNet we control all of them, so we exercise the built-in Archive
-// choice directly to remove holdings from circulation. Supply = sum of
-// holdings, so archiving reduces it.
+// The splice-test-token-v2 example has no standalone burn (its transfer
+// state machine can't target the special burn account), but the Token
+// template's signatory is the account parties + the instrument admin —
+// all operator-controlled on LocalNet — so we exercise the built-in
+// Archive choice directly. Supply = sum of holdings, so archiving reduces
+// it.
 //
-// To stay amount-precise we select the smallest set of the holder's
-// holdings covering `amount`, then in ONE atomic transaction archive them
-// all and (if they overshoot) create a single change holding back to the
-// holder. Atomicity means a partial burn can never strand the change.
+// To stay amount-precise, select the smallest set of holdings covering
+// `amount`, then in ONE atomic transaction archive them and (on overshoot)
+// create a single change holding back to the holder, so a partial burn
+// can never strand the change.
 func runBurnLive(ctx context.Context, out io.Writer, opts BurnOptions, ref regstate.TokenRef) error {
 	conn := LedgerConn{
 		Endpoint: opts.Endpoint, Token: opts.Token,
@@ -184,8 +191,7 @@ func runBurnLive(ctx context.Context, out io.Writer, opts BurnOptions, ref regst
 			},
 		})
 	}
-	// Re-create the change holding (one Token back to the holder) when
-	// the selected holdings overshoot the burn amount.
+	// Change holding (one Token back to the holder) on overshoot.
 	if change != "" && change != "0" {
 		commands = append(commands, &lapiv2.Command{
 			Command: &lapiv2.Command_Create{
@@ -197,9 +203,8 @@ func runBurnLive(ctx context.Context, out io.Writer, opts BurnOptions, ref regst
 		})
 	}
 
-	// Archive (and the change create) require ALL Token signatories:
-	// the account parties plus the admin. Operator controls all on
-	// LocalNet, so act as their union.
+	// Archive (and the change create) require all Token signatories: the
+	// account parties plus the admin, all operator-controlled on LocalNet.
 	actAs := burnActAs(picked, admin)
 	if _, err := submitForTransactionMulti(ctx, client, actAs, commands, nil,
 		createdContractFormat(opts.From, "")); err != nil {
@@ -214,8 +219,8 @@ func runBurnLive(ctx context.Context, out io.Writer, opts BurnOptions, ref regst
 }
 
 // computeBurn selects the smallest set of holdings covering `amount` and
-// returns the picked set + the change (selected sum − amount, "" or "0"
-// when exact). Pure — unit-testable.
+// returns the picked set + the change (selected sum − amount, "0" when
+// exact). Pure — unit-testable.
 func computeBurn(holdings []holdingRef, amount string) ([]holdingRef, string, error) {
 	picked, sum, err := selectInputHoldings(holdings, amount)
 	if err != nil {
@@ -273,19 +278,16 @@ func buildHoldingRecord(from holdingRef, amount string) *lapiv2.Record {
 	return &lapiv2.Record{Fields: []*lapiv2.RecordField{{Label: "holding", Value: view}}}
 }
 
-// acceptMintOffer accepts a TokenTransferOffer created by OfferMint via
-// its TransferInstruction interface — the offer implements
-// TransferInstructionV2, so the receiver exercises
-// TransferInstruction_Accept on it with an empty choice context (the
-// test token needs no off-ledger context).
-func acceptMintOffer(ctx context.Context, client *ledger.Client, receiver, offerCID, accountConfigCID, tokenRulesCID string, tokenRulesDisc *lapiv2.DisclosedContract) error {
-	// The accept's choice context must carry two well-known entries the
-	// test token's state machine looks up: the issuer's TokenRules
-	// contract id and the involved accounts' AccountConfig contract ids.
-	// buildTestTokenExtraArgs assembles the tagged-AnyValue shape.
+// acceptMintOffer accepts a TokenTransferOffer created by OfferMint: the
+// offer implements TransferInstructionV2, so the receiver exercises
+// TransferInstruction_Accept on it.
+func acceptMintOffer(ctx context.Context, client *ledger.Client, receiver, offerCID, tokenRulesCID string, tokenRulesDisc *lapiv2.DisclosedContract) error {
+	// The accept's choice context carries the two entries the test token's
+	// state machine looks up: the TokenRules contract id and the involved
+	// accounts' AccountConfig contract ids.
 	choiceArg := recordValue([]field{
 		{"actors", listValue([]string{receiver}, partyValue)},
-		{"extraArgs", buildTestTokenExtraArgs(tokenRulesCID, []string{accountConfigCID})},
+		{"extraArgs", buildTestTokenExtraArgs(tokenRulesCID, nil)},
 	})
 	pkg, mod, entity := splitInterfaceID(TransferInstructionInterfaceV2)
 	exercise := &lapiv2.Command{
@@ -307,11 +309,9 @@ func acceptMintOffer(ctx context.Context, client *ledger.Client, receiver, offer
 	return err
 }
 
-// Test token's well-known choice-context keys (see
-// TestTokenV2.Util.tokenRulesContextKey +
-// TestTokenV2.AccountConfig.accountConfigsContextKey). The accept/
-// transfer state machine looks these up to find the TokenRules
-// contract and the involved accounts' AccountConfig contracts.
+// Test token's well-known choice-context keys the accept/transfer state
+// machine looks up to find the TokenRules contract and the involved
+// accounts' AccountConfig contracts.
 const (
 	accountConfigsContextKey = "testTokenV2/accountConfigs"
 	tokenRulesContextKey     = "testTokenV2/tokenRules"
@@ -325,11 +325,10 @@ const (
 // Single-signer create: the admin (our acting party) is the only
 // signatory, so a plain submit-and-wait suffices.
 func createTokenRules(ctx context.Context, client *ledger.Client, admin string) (string, error) {
-	// CreateCommand needs a concrete package id — Canton does NOT
-	// resolve the `#package-name` reference for creates (only for
-	// interface-choice exercises under smart-contract upgrade). Resolve
-	// the vetted splice-test-token-v2 package id at runtime so we stay
-	// robust across the alpha's weekly snapshot rotation.
+	// CreateCommand needs a concrete package id — Canton resolves the
+	// `#package-name` reference only for interface-choice exercises, not
+	// creates. Resolving at runtime stays robust across the alpha's weekly
+	// snapshot rotation.
 	pkgID, err := resolvePackageID(ctx, client, "splice-test-token-v2")
 	if err != nil {
 		return "", err
@@ -351,9 +350,8 @@ func createTokenRules(ctx context.Context, client *ledger.Client, admin string) 
 			},
 		},
 	}
-	// TokenRules is a template (not an interface) — use the wildcard
-	// created-event format so firstCreatedOfTemplate can match it by
-	// entity name.
+	// TokenRules is a template, so use the wildcard created-event format
+	// for firstCreatedOfTemplate to match by entity name.
 	resp, err := submitForTransaction(ctx, client, admin, []*lapiv2.Command{create}, nil,
 		createdContractFormat(admin, ""))
 	if err != nil {
@@ -367,22 +365,20 @@ func createTokenRules(ctx context.Context, client *ledger.Client, admin string) 
 }
 
 // findTokenRules returns the admin's existing TokenRules contract id, or
-// "" when none exists yet. Lets create be idempotent — one TokenRules
-// per admin party is enough to anchor every instrument that admin issues
-// (the instrument identity is the (admin, id) pair carried per holding,
-// not per-TokenRules).
+// "" when none exists yet. Lets create be idempotent — one TokenRules per
+// admin party anchors every instrument that admin issues (instrument
+// identity is the (admin, id) pair carried per holding).
 func findTokenRules(ctx context.Context, client *ledger.Client, admin string) (string, error) {
-	// Cancel the stream pump on every return path so an early break
-	// (first match found) doesn't leak the goroutine for the lifetime
-	// of the parent request context.
+	// Cancel the stream pump on every return path so the first-match break
+	// doesn't leak the goroutine.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	end, err := client.LedgerEnd(ctx)
 	if err != nil {
 		return "", fmt.Errorf("ledger end: %w", err)
 	}
-	// ACS template filters take the `#package-name` reference form
-	// (the opposite of CreateCommand, which needs a concrete id).
+	// ACS template filters take the `#package-name` reference form (unlike
+	// CreateCommand, which needs a concrete id).
 	pkg, mod, entity := splitInterfaceID(TestTokenV2RulesTemplateID)
 	req := ledger.ActiveContractsRequest{
 		ActiveAtOffset: end.Offset,
@@ -418,13 +414,10 @@ func findTokenRules(ctx context.Context, client *ledger.Client, admin string) (s
 }
 
 // findTokenRulesDisclosed returns the issuer's TokenRules contract id
-// PLUS a DisclosedContract for it. The mint receiver isn't a
-// stakeholder on the TokenRules (signatory = admin), so the accept
-// submission must disclose it (with its createdEventBlob) for the
-// receiver's transaction to reference it via the choice context.
+// plus a DisclosedContract for it. The mint receiver isn't a stakeholder
+// on the TokenRules (signatory = admin), so the accept must disclose it
+// (with its createdEventBlob) to reference it via the choice context.
 func findTokenRulesDisclosed(ctx context.Context, client *ledger.Client, admin string) (string, *lapiv2.DisclosedContract, error) {
-	// Cancel the stream pump on every return path; first-match returns
-	// otherwise leak the upstream goroutine.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	end, err := client.LedgerEnd(ctx)
@@ -476,9 +469,9 @@ func findTokenRulesDisclosed(ctx context.Context, client *ledger.Client, admin s
 }
 
 // mintViaOfferMint exercises TokenRules_OfferMint on the issuer's
-// TokenRules contract, then accepts the resulting offer so the holding
-// actually lands in the receiver's account. Mint in this token is an
-// offer (the upstream pattern), so a complete mint = exercise + accept.
+// TokenRules contract. Mint in this token is an offer, so a complete
+// mint = exercise + accept; this returns the offer contract id for the
+// accept that follows.
 //
 // OfferMint args (TestTokenV2.daml):
 //
@@ -487,22 +480,18 @@ func findTokenRulesDisclosed(ctx context.Context, client *ledger.Client, admin s
 //	instrumentId : InstrumentId — { admin, id }
 //	offeredAt : Time — must be in the past
 //	receiverConfig : AccountConfig — per-account auth rules
-//
-// Returns the resulting offer contract id (for the accept that follows).
 func mintViaOfferMint(
 	ctx context.Context,
 	client *ledger.Client,
 	admin, tokenRulesCID, receiver, amount, instrumentID string,
 ) (string, error) {
 	offeredAt := time.Now().UTC().Add(-5 * time.Second) // "in the past" per assertDeadlineExceeded
-	// The OfferMint `receiver` account MUST equal receiverConfig.account
-	// — the choice keys its account-config map by receiverConfig.account
-	// and then looks up `receiver` in it ("Cannot compute next actors"
-	// otherwise). Both carry provider=admin so the AccountConfig's
-	// `isSome account.provider` ensure passes.
-	adminParty := admin
+	// The OfferMint `receiver` account MUST equal receiverConfig.account —
+	// the choice keys its account-config map by receiverConfig.account.
+	// Self-custodial (provider = None): accountParties = [owner], so the
+	// receiver's TIA_Accept stays available (owner != admin, guarded above).
 	ownerParty := receiver
-	receiverAccount := registry.Account{Owner: &ownerParty, Provider: &adminParty, ID: ""}
+	receiverAccount := registry.Account{Owner: &ownerParty, ID: ""}
 	choiceArg := recordValue([]field{
 		{"receiver", buildAccountRecord(receiverAccount)},
 		{"amount", numericValue(amount)},
@@ -522,8 +511,6 @@ func mintViaOfferMint(
 		},
 	}
 	resp, err := submitForTransaction(ctx, client, admin, []*lapiv2.Command{exercise}, nil,
-		// The OfferMint creates a TokenTransferOffer; capture it so the
-		// caller can accept it. Match by the offer template's entity.
 		createdContractFormat(admin, ""))
 	if err != nil {
 		return "", fmt.Errorf("exercise TokenRules_OfferMint: %w", err)
@@ -544,14 +531,11 @@ func mintViaOfferMint(
 //	  ownerConfig : PartyConfig — { canInitiate, mustApprove }
 //	  providerConfig: PartyConfig
 //
-// We mirror the mintConfig the choice builds internally: owner can
-// initiate + need not approve, provider neither. provider is set to the
-// admin so the Account passes its `isSome account.provider` ensure
-// clause.
+// Mirrors the mintConfig the choice builds internally: owner can initiate,
+// needn't approve; provider neither.
 func buildAccountConfigRecord(admin, owner string) *lapiv2.Value {
 	ownerParty := owner
-	adminParty := admin
-	account := registry.Account{Owner: &ownerParty, Provider: &adminParty, ID: ""}
+	account := registry.Account{Owner: &ownerParty, ID: ""} // self-custodial: provider = None
 	return recordValue([]field{
 		{"admin", partyValue(admin)},
 		{"account", buildAccountRecord(account)},
@@ -572,11 +556,11 @@ func boolValue(b bool) *lapiv2.Value {
 	return &lapiv2.Value{Sum: &lapiv2.Value_Bool{Bool: b}}
 }
 
-// resolvePackageID returns the concrete package id of the vetted
-// package with the given package-name. Creates and template-filtered
-// ACS queries need the concrete id (the `#name` reference form is only
-// resolved for interface-choice exercises). Resolving at runtime keeps
-// us robust across the V2 alpha's weekly snapshot rotation.
+// resolvePackageID returns the concrete package id of the vetted package
+// with the given package-name. Creates and template-filtered ACS queries
+// need the concrete id (the `#name` form resolves only for
+// interface-choice exercises); resolving at runtime stays robust across
+// the V2 alpha's weekly snapshot rotation.
 func resolvePackageID(ctx context.Context, client *ledger.Client, name string) (string, error) {
 	resp, err := client.ListKnownPackages(ctx)
 	if err != nil {
@@ -591,10 +575,9 @@ func resolvePackageID(ctx context.Context, client *ledger.Client, name string) (
 		"upload it first (`localnet dar upload <%s.dar>`)", name, name)
 }
 
-// submitForTransaction is the generalised submit used by the instrument
-// lifecycle (create / mint), mirroring submitExercise but taking the
-// TransactionFormat explicitly so callers can request whichever created
-// events they need to mine for contract ids.
+// submitForTransaction is the instrument-lifecycle submit (create /
+// mint), taking the TransactionFormat explicitly so callers can request
+// whichever created events they need to mine for contract ids.
 func submitForTransaction(
 	ctx context.Context,
 	client *ledger.Client,
@@ -606,11 +589,10 @@ func submitForTransaction(
 	return submitForTransactionMulti(ctx, client, []string{actAs}, commands, disclosed, txFormat)
 }
 
-// submitForTransactionMulti is the multi-actAs variant — needed when a
-// contract has several required authorizers (e.g. AccountConfig, whose
-// signatory is account.owner AND account.provider). On LocalNet all
-// parties are operator-controlled, so acting as several at once is
-// legitimate.
+// submitForTransactionMulti is the multi-actAs variant — for a contract
+// with several required authorizers (e.g. AccountConfig, signed by
+// account.owner AND account.provider). All parties are
+// operator-controlled on LocalNet.
 func submitForTransactionMulti(
 	ctx context.Context,
 	client *ledger.Client,
@@ -642,13 +624,11 @@ func submitForTransactionMulti(
 // token's AccountConfig template.
 const accountConfigTemplateID = "#splice-test-token-v2:Splice.Testing.Tokens.TestTokenV2.AccountConfig:AccountConfig"
 
-// createAccountConfig creates an AccountConfig contract for the
-// receiver account so the mint/transfer accept can authorize. The
-// template's signatory is account.owner AND account.provider, so the
-// submit acts as both (operator controls both on LocalNet). Config
-// flags: owner can initiate AND approves (mustApprove), provider does
-// neither — so the owner alone settles, satisfying
-// isValidAccountConfig ((owner.canInitiate||…) && (owner.mustApprove||…)).
+// createAccountConfig creates an AccountConfig contract for the receiver
+// account so the mint/transfer accept can authorize. Signatory is
+// account.owner AND account.provider, so the submit acts as both. Config
+// flags: owner can initiate AND approves, provider neither — so the owner
+// alone settles, satisfying isValidAccountConfig.
 func createAccountConfig(ctx context.Context, client *ledger.Client, admin, owner, provider string) (string, error) {
 	pkgID, err := resolvePackageID(ctx, client, "splice-test-token-v2")
 	if err != nil {
@@ -683,11 +663,10 @@ func createAccountConfig(ctx context.Context, client *ledger.Client, admin, owne
 	return cid, nil
 }
 
-// createdContractFormat builds a TransactionFormat that returns the
-// party's created events (ACS_DELTA) with template ids populated
-// (verbose), so firstCreatedOfTemplate can match by entity name. The
-// optional interfaceID adds an interface-view filter; pass "" for a
-// plain wildcard-template view.
+// createdContractFormat builds a TransactionFormat returning the party's
+// created events (ACS_DELTA, verbose) for firstCreatedOfTemplate to match
+// by entity name. A non-empty interfaceID adds an interface-view filter;
+// "" gives a plain wildcard-template view.
 func createdContractFormat(party, interfaceID string) *lapiv2.TransactionFormat {
 	var cumulative []*lapiv2.CumulativeFilter
 	if interfaceID != "" {
@@ -718,7 +697,7 @@ func createdContractFormat(party, interfaceID string) *lapiv2.TransactionFormat 
 
 // firstCreatedOfTemplate returns the contract id of the first created
 // event whose template entity name matches `entity`. Matches on entity
-// name alone — the package id is the alpha snapshot hash and rotates.
+// name alone — the package id is the rotating alpha snapshot hash.
 func firstCreatedOfTemplate(resp *lapiv2.SubmitAndWaitForTransactionResponse, entity string) string {
 	tx := resp.GetTransaction()
 	if tx == nil {
