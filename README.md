@@ -34,19 +34,33 @@ canton-devkit localnet down demo
 `dpm localnet <cmd>` and `canton-devkit localnet <cmd>` are
 interchangeable.
 
+## Commands
+
+The command surface covers the full development loop:
+
+| Area              | Commands                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------ |
+| Lifecycle         | `up` `down` `stop` `start` `restart` `pause` `resume` `clean` `list` `status` `logs` |
+| Host checks       | `doctor` — the same preflight `up` runs, with remediation hints                      |
+| App wiring        | `env` `creds` — endpoints, party IDs, and JWTs for tests and CI                      |
+| DAR management    | `dar upload / list / info / download / diff / remove / build-upload / watch`         |
+| Ledger inspection | `contracts ls / watch` · `tx ls / replay`                                            |
+| Tokens            | `token create / mint / transfer / burn / balance`                                    |
+| State             | `snapshot` / `restore` — a portable `.tgz` of a network's full state                 |
+| Versions          | `versions` — pinned Splice releases, keyed by commit SHA                             |
+
 ## Features
 
-- Instance lifecycle: `up`, `down`, `stop`, `start`, `restart`, `pause`,
-  `resume`, `clean`, `list`, `status`, `logs`
-- Host preflight via `doctor` (same checks `up` runs)
-- App wiring: `env` and `creds` for endpoints, party IDs, and JWTs
-- DAR upload, inspect, diff, hot redeploy (`dar watch`)
-- Ledger inspection: `contracts` and `tx` (list, watch, replay)
+- Instance lifecycle management
+- Host preflight checks with remediation hints
+- App wiring for endpoints, party IDs, and JWTs
+- DAR upload, inspect, diff, and hot redeploy
+- Live ledger inspection (contracts and transactions)
 - Token flows for CIP-0056 and Token Standard V2 — see the
   [tokens guide](https://bitdynamics-ab.github.io/canton-devkit/guides/tokens/)
 - Snapshot and restore of a network's full state
-- CLI and Web UI at parity (`localnet ui`, loopback only)
-- Optional Prometheus and Grafana (`up --profile observability`)
+- Both CLI and Web UI are available
+- Prometheus and Grafana
 - Stable exit codes and `--format json` for CI; example workflow in
   [`examples/ci/`](examples/ci/github-actions.yml)
 - Multiple named instances with auto-allocated or pinned ports
