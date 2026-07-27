@@ -448,7 +448,7 @@ function handleInstanceRoute(
 }
 
 function handleTokensRoute(
-  req: IncomingMessage,
+  _req: IncomingMessage,
   res: ServerResponse,
   store: MockStore,
   path: string,
