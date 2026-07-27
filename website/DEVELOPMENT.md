@@ -1,8 +1,10 @@
-# canton-devkit docs site
+# Documentation site development
 
-The documentation website for canton-devkit, built with
+Maintainer notes for the canton-devkit documentation website, built with
 [Astro](https://astro.build/) + [Starlight](https://starlight.astro.build/).
 
+The published site is
+[https://bitdynamics-ab.github.io/canton-devkit/](https://bitdynamics-ab.github.io/canton-devkit/).
 Pages live in `src/content/docs/` as Markdown/MDX; the sidebar is
 configured in `astro.config.mjs`.
 
