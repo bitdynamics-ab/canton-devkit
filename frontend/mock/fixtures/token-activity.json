@@ -1,24 +1,759 @@
 {
-  "schema_version": 1,
+  "aliases": {
+    "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249": "app-user"
+  },
   "events": [
     {
-      "offset": 1106,
-      "update_id": "u1106",
-      "record_time": "2026-05-30T16:50:45Z",
-      "instrument_id": "RTK",
+      "offset": 2549,
+      "update_id": "122045a8d40663027f87522052ba6e7cee2059c6fefc5ae6e9d723cef1bfb7a556ac",
+      "record_time": "2026-07-27T20:37:24.821949Z",
+      "instrument_id": "Amulet",
       "kind": "mint",
-      "amount": "1000",
-      "receivers": [{ "party": "bob::def", "amount": "1000" }]
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
     },
     {
-      "offset": 1200,
-      "update_id": "u1200",
-      "record_time": "2026-05-30T17:00:00Z",
-      "instrument_id": "RTK",
-      "kind": "transfer",
-      "amount": "100",
-      "senders": [{ "party": "bob::def", "amount": "100" }],
-      "receivers": [{ "party": "alice::abc", "amount": "100" }]
+      "offset": 2514,
+      "update_id": "12200587171c5530b701dab605d8b52516f6cfd397b6fe59eb3b8a1f3849dfe07a18",
+      "record_time": "2026-07-27T20:27:24.918127Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 2469,
+      "update_id": "1220c585d71fcec69c6ba557cf3fb9deb0b35bdc884da2b6401d13cfcbea046ca8db",
+      "record_time": "2026-07-27T20:14:31.527017Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 2446,
+      "update_id": "12202aa47ae94ad4fdbae5fad91f4b8955b6266c4d6748d0f2ed1e1e48e9cec1bcb0",
+      "record_time": "2026-07-27T20:08:36.358115Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 2407,
+      "update_id": "1220c9dd64aa0ebe53e85746a777fdf5b62d2dbba14fb0cdb9de2fcbd77955c5d6d2",
+      "record_time": "2026-07-27T19:58:01.045457Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 2366,
+      "update_id": "122004f994110d8bdc7a72e2ad4a14b1b5d5ea2d40c70764c8bde49af813e50af467",
+      "record_time": "2026-07-27T19:47:07.874072Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 2332,
+      "update_id": "1220720bc2f2d767ee461ea941bb9edd2cad566de5b45f85c8e1ac5e3102a0bb2c2c",
+      "record_time": "2026-07-27T19:36:48.308897Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 2294,
+      "update_id": "122065ae8134a082aeca05bcc238642fe920a95d781a12b3a4273d2a93f91f544034",
+      "record_time": "2026-07-27T19:25:36.715825Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 2246,
+      "update_id": "12203f23415e30be0c4a94591ddcb6c5be97e57e70573c0724938943fb6fef11d95d",
+      "record_time": "2026-07-27T19:11:38.23617Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 2209,
+      "update_id": "12207caf84947eecf3c12cb1125d244c8afd7b57c476b2d3e430f3e8d1bf354e5ac5",
+      "record_time": "2026-07-27T19:01:59.214021Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 2178,
+      "update_id": "1220fcb458b764eba190a30b3057f4056e76a93ccb7d211fd41f9dfa9225581321e5",
+      "record_time": "2026-07-27T18:52:32.451853Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 2138,
+      "update_id": "12206ba265e6577b632149a93599a7dab70af053f26edea972a39ad27b3788290c77",
+      "record_time": "2026-07-27T18:42:37.221639Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 2108,
+      "update_id": "122019e555b34574d79974d2976460af28f6b34158141fda1c1c368d01d9a9c6959b",
+      "record_time": "2026-07-27T18:33:14.383441Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 2075,
+      "update_id": "1220bd46400e5886a382ad1cc0a07e4a41774758e89f8ee5617ad7988f78d79cabb5",
+      "record_time": "2026-07-27T18:23:41.708168Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 2028,
+      "update_id": "122038f93e118336bd55c17d13af0e3e2a4ca51dea83f47e1640f67501b708bc18c6",
+      "record_time": "2026-07-27T18:11:58.455602Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1979,
+      "update_id": "1220754dca7bd0d1c1bbd235bfa3400d786b597ec00ffe4070b462c9cb5bc7663c91",
+      "record_time": "2026-07-27T17:58:48.299228Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1947,
+      "update_id": "122062ab22edb8bdd4d5d315fbe5589237fbee958235ee5d7daabf9627dbedb78577",
+      "record_time": "2026-07-27T17:50:00.858647Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1906,
+      "update_id": "1220e1cf2800796b44b4dc26c9506f76f419fefe5eb3ecfab1c97f146dfd8c2819be",
+      "record_time": "2026-07-27T17:37:50.547051Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1872,
+      "update_id": "122010017cbe61aa614f2c9e5baa4083ad729629ab5848a351838db70d32ab1bc4a6",
+      "record_time": "2026-07-27T17:27:33.151563Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1836,
+      "update_id": "1220a896ff33fe79518d4a4bece12268be9e46b7c267c67e8a20fbf0d58b24ab6bad",
+      "record_time": "2026-07-27T17:18:14.698997Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1799,
+      "update_id": "122083b5861ba59c43f82b42e32a1ff8494fa60d37c05774632223af343180a689dd",
+      "record_time": "2026-07-27T17:07:59.04471Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1765,
+      "update_id": "1220034830a93074967f300ba789b9e5af0f6a82280753049584b16ffecd971b3fd8",
+      "record_time": "2026-07-27T16:58:47.93262Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1723,
+      "update_id": "1220f2a04824091e46e5820d0be69de83f834303fa0f4c6b6d13e91555b60d5ff7c2",
+      "record_time": "2026-07-27T16:48:10.774009Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1690,
+      "update_id": "1220f9f26d66d76475e6908fbb4a941794f162c70308fd5c85fbb9474f3299489a28",
+      "record_time": "2026-07-27T16:39:03.183853Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1652,
+      "update_id": "1220dbad91508db193b497bd40e5132f3b9cd036178a4bed1e2b0735177ebbba8056",
+      "record_time": "2026-07-27T16:28:15.529318Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1620,
+      "update_id": "122024c1af9237567ed739794e3e3a26272af57ed1cfbb3b26fad27e8531f8c687a4",
+      "record_time": "2026-07-27T16:19:40.982089Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1585,
+      "update_id": "1220051d63c11d462a1f20b2379cc574d9522e3440c0e384d7a745c40fb3fd1e9bc9",
+      "record_time": "2026-07-27T16:09:41.766204Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1533,
+      "update_id": "1220e55978cf90185068ae9aa85699b52a285bf98e9a60e83ce62420e3d30d0bb3e9",
+      "record_time": "2026-07-27T15:55:07.989802Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1498,
+      "update_id": "12208c5f50312743ac0722627983e15e1b31042f9a52031da4a1eaf79a6e1cd2b29a",
+      "record_time": "2026-07-27T15:45:05.491788Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1462,
+      "update_id": "1220174c2385279a0fcd83d0fdf8d0e70d3424479106ee947e3cff9c62bfb226b38b",
+      "record_time": "2026-07-27T15:35:31.51546Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1426,
+      "update_id": "122072ffce937339191a953819c6d7cd50df866614fdbe71c352cd4d0707b8196471",
+      "record_time": "2026-07-27T15:25:07.794462Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1387,
+      "update_id": "12206b2e1a5686b410780b5151551b39f095caef88877edb79a89e1dcd72e13fadc2",
+      "record_time": "2026-07-27T15:13:32.156246Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1353,
+      "update_id": "1220c7964f4f3ff075558a27b0ed6e1f33672543da270428a1f3ae5db28a0377dbc3",
+      "record_time": "2026-07-27T15:04:46.4509Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1319,
+      "update_id": "12202a0f1821e02c0bf232ae2c85b9f2da47b51eb3207a4ec4342d997975c6adced1",
+      "record_time": "2026-07-27T14:55:03.758195Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1284,
+      "update_id": "1220c9a12a08d150686288e2cb6ea0dd9435cc84b13e0254951049bc82f11c144c20",
+      "record_time": "2026-07-27T14:45:00.303082Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1255,
+      "update_id": "1220241a919121c7a1405ea99ff9afcbe47d8f2fb8c7bdfab5f69adc42d2e1bf7a83",
+      "record_time": "2026-07-27T14:35:01.548009Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1212,
+      "update_id": "122097976d87e41b23bc1e3ee81a304a265511adb7c518f86663e8db31c334cbad9c",
+      "record_time": "2026-07-27T14:23:28.840758Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1176,
+      "update_id": "1220cd911b18ffceb1cdde801695dce06fa1cca7be825d49ab30d2eef1a2b01f6beb",
+      "record_time": "2026-07-27T14:12:47.510131Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1139,
+      "update_id": "1220fab3434445cfe49666e9102b235d44d4d16798ae764d73d32d786ad1f1cb100b",
+      "record_time": "2026-07-27T14:02:31.846088Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1103,
+      "update_id": "1220f439afdb64e9fc4997f0c26b3dda3d3a5d1decce844b0a27e0bc9c149ef55178",
+      "record_time": "2026-07-27T13:52:58.29188Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1066,
+      "update_id": "12206a036f8b1fef97093083577f3890420f3fd15b2ee7c2cae154c2aded0d06b39a",
+      "record_time": "2026-07-27T13:41:48.682617Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 1028,
+      "update_id": "1220176901ffa9cd46b66d8f5c61e5f0f56fd7bd145d878c9a6ddb3d5538543ebb95",
+      "record_time": "2026-07-27T13:31:08.259759Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 988,
+      "update_id": "1220749ce511d6607565530d463f2b4b2d007ffb1f56359f5c6feb734b25db886a30",
+      "record_time": "2026-07-27T13:20:22.212443Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 945,
+      "update_id": "12209560844a4e7188bdc41fb114275e5c2e1c7e54735b3e5882df521b897e58ca6c",
+      "record_time": "2026-07-27T13:08:03.542104Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 914,
+      "update_id": "1220e00878c0f67ba60eacd1533f18508b4c6aaebbf71751c500ddb60b55b1bdee8b",
+      "record_time": "2026-07-27T12:58:54.37742Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 870,
+      "update_id": "12202ac6b92e84cad9b5bcfbedbc69d833a53c286332961045e404ac75b2858a8e93",
+      "record_time": "2026-07-27T12:47:44.65316Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 840,
+      "update_id": "122038ccbf035c8ed29577a61d51ae20948fda129dc8058c7bf2e76d0e0a37ea29f1",
+      "record_time": "2026-07-27T12:38:33.979512Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 807,
+      "update_id": "1220fbe37e020de0edc4d63012c77295252f13fc5d7db301c1e120aeb0f6ac40915a",
+      "record_time": "2026-07-27T12:29:17.587707Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 771,
+      "update_id": "1220b6b923f9e45ee4c281dc16bbc3dc3f4c9351b36a6b04451e64a1461ab7f298a0",
+      "record_time": "2026-07-27T12:19:48.17774Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
+    },
+    {
+      "offset": 719,
+      "update_id": "12203b55b1b5557bcb01a26a1573f3e34694e73f97355e1d45f6a0066f0d1a562538",
+      "record_time": "2026-07-27T12:04:42.450608Z",
+      "instrument_id": "Amulet",
+      "kind": "mint",
+      "source": "event_log",
+      "amount": "570",
+      "receivers": [
+        {
+          "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+          "amount": "570"
+        }
+      ]
     }
-  ]
+  ],
+  "schema_version": 1,
+  "truncated": false
 }

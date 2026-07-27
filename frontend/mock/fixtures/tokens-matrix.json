@@ -1,29 +1,33 @@
 {
-  "schema_version": 1,
+  "aliases": {},
   "matrix": {
-    "parties": ["alice::abc", "bob::def"],
+    "parties": [
+      "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+    ],
     "instruments": [
       {
-        "admin": "alice::abc",
-        "instrument_id": "RTK",
-        "symbol": "RTK",
-        "standard": "CIP-0112 v2",
+        "admin": "DSO::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+        "instrument_id": "Amulet",
+        "symbol": "Amulet",
+        "standard": "Splice Amulet",
+        "generation": "v2",
         "on_ledger": true
       }
     ],
     "cells": [
       {
-        "party": "bob::def",
-        "instrument_id": "RTK",
-        "amount": "1275.0"
+        "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+        "instrument_id": "Amulet",
+        "amount": "38990.1600000000"
       }
     ],
     "totals": [
       {
         "party": "",
-        "instrument_id": "RTK",
-        "amount": "1275.0"
+        "instrument_id": "Amulet",
+        "amount": "38990.1600000000"
       }
     ]
-  }
+  },
+  "schema_version": 1
 }

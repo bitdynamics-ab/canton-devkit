@@ -2,12 +2,11 @@
   "schema_version": 1,
   "instances": [
     {
-      "name": "demo",
+      "name": "localnet-1",
       "status": "running",
-      "splice_version": "0.6.4",
-      "ports": "60470-60480",
-      "started_ago": "2h",
-      "volume_size": "1.2 GB"
+      "splice_version": "0.6.12",
+      "ports": "61245–61249",
+      "started_ago": ""
     }
   ]
 }

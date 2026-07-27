@@ -1,23 +1,20 @@
 {
+  "aliases": {
+    "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249": "app-user"
+  },
   "schema_version": 1,
   "summary": {
-    "instrument_id": "RTK",
-    "admin": "alice::abc",
-    "total_supply": "1275.0",
-    "holder_count": 2,
-    "contract_count": 3,
+    "instrument_id": "Amulet",
+    "admin": "DSO::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+    "total_supply": "38990.1600000000",
+    "holder_count": 1,
+    "contract_count": 1,
     "holders": [
       {
-        "party": "bob::def",
-        "balance": "1275.0",
-        "contract_count": 3,
+        "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+        "balance": "38990.1600000000",
+        "contract_count": 1,
         "pct_of_supply": "100.0"
-      },
-      {
-        "party": "alice::abc",
-        "balance": "0.0",
-        "contract_count": 0,
-        "pct_of_supply": "0.0"
       }
     ]
   }
