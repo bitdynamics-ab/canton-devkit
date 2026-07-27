@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "instances": [
+    {
+      "name": "demo",
+      "status": "running",
+      "splice_version": "0.6.4",
+      "ports": "60470-60480",
+      "started_ago": "2h",
+      "volume_size": "1.2 GB"
+    }
+  ]
+}

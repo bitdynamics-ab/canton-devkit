@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "skills": [
+    {
+      "name": "grant-docs-review",
+      "description": "Review grant-facing documentation",
+      "installed": true,
+      "path": ".cursor/skills/grant-docs-review"
+    },
+    {
+      "name": "improve-e2e-tests",
+      "description": "Improve end-to-end test coverage",
+      "installed": false,
+      "path": ".cursor/skills/improve-e2e-tests"
+    }
+  ]
+}

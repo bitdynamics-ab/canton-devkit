@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "events": [
+    {
+      "offset": 1106,
+      "update_id": "u1106",
+      "record_time": "2026-05-30T16:50:45Z",
+      "instrument_id": "RTK",
+      "kind": "mint",
+      "amount": "1000",
+      "receivers": [{ "party": "bob::def", "amount": "1000" }]
+    },
+    {
+      "offset": 1200,
+      "update_id": "u1200",
+      "record_time": "2026-05-30T17:00:00Z",
+      "instrument_id": "RTK",
+      "kind": "transfer",
+      "amount": "100",
+      "senders": [{ "party": "bob::def", "amount": "100" }],
+      "receivers": [{ "party": "alice::abc", "amount": "100" }]
+    }
+  ]
+}

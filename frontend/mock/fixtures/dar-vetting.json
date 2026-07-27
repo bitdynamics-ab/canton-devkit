@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "dar_id": "token-dar",
+  "roles": [
+    {
+      "role": "app-user",
+      "vetted": true,
+      "package_count": 1
+    },
+    {
+      "role": "app-provider",
+      "vetted": false,
+      "package_count": 0
+    }
+  ]
+}

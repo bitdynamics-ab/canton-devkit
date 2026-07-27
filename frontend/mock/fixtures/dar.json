@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "instance": "demo",
+  "role": "app-user",
+  "dars": [
+    {
+      "id": "token-dar",
+      "main_package_id": "pkg-token-001",
+      "name": "token",
+      "version": "1.0.0",
+      "description": "CIP-56 token package",
+      "uploaded_at": "2026-05-30T10:00:00Z",
+      "size_bytes": 245760
+    },
+    {
+      "id": "utility-dar",
+      "main_package_id": "pkg-util-002",
+      "name": "utility",
+      "version": "0.2.1",
+      "description": "Shared utilities",
+      "uploaded_at": "2026-05-30T11:30:00Z",
+      "size_bytes": 98304
+    }
+  ]
+}

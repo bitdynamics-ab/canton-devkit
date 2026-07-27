@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "contract": {
+    "contract_id": "00abc111",
+    "template": "Token:Instrument",
+    "signatories": ["alice::abc"],
+    "observers": [],
+    "payload": {
+      "instrumentId": "RTK",
+      "admin": "alice::abc",
+      "standard": "CIP-0112 v2"
+    },
+    "created_at": "2026-05-30T10:00:00Z"
+  }
+}

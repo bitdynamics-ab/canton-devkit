@@ -2,6 +2,7 @@
 import { execSync } from "node:child_process";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import { mockApiPluginVite } from "./mock/plugin.ts";
 
 // Short git commit the UI bundle was built from. Surfaced in the side
 // nav footer so screenshots reveal which UI commit a user is on.
@@ -13,6 +14,8 @@ const uiCommit = (() => {
     return "dev";
   }
 })();
+
+const useMock = process.env.VITE_MOCK_API === "1";
 
 // Vite config for the canton-devkit Web UI.
 //
@@ -26,8 +29,11 @@ const uiCommit = (() => {
 // during `npm run dev` so the dev server (port 5173) can talk
 // to a running `dpm localnet ui --port 7777`. Both must be up
 // for the dev loop to work.
+//
+// `npm run dev:mock` sets VITE_MOCK_API=1 and serves fixtures
+// from frontend/mock/ via middleware — no Go backend required.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), useMock && mockApiPluginVite()].filter(Boolean),
   define: {
     __UI_COMMIT__: JSON.stringify(uiCommit),
   },
@@ -42,13 +48,15 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    proxy: {
-      "/api": "http://127.0.0.1:7777",
-      "/events": {
-        target: "http://127.0.0.1:7777",
-        ws: false, // SSE is plain HTTP, not WebSocket
-      },
-    },
+    proxy: useMock
+      ? undefined
+      : {
+          "/api": "http://127.0.0.1:7777",
+          "/events": {
+            target: "http://127.0.0.1:7777",
+            ws: false, // SSE is plain HTTP, not WebSocket
+          },
+        },
   },
   test: {
     // jsdom — needed because the components touch document,
@@ -62,7 +70,7 @@ export default defineConfig({
     // Co-located convention: src/**/*.test.ts(x). Keeps each test
     // next to the code it exercises rather than mirroring the
     // tree under a separate __tests__/ root.
-    include: ["src/**/*.test.{ts,tsx}"],
+    include: ["src/**/*.test.{ts,tsx}", "mock/**/*.test.ts"],
     css: false,
   },
 });

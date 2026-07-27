@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "matrix": {
+    "parties": ["alice::abc", "bob::def"],
+    "instruments": [
+      {
+        "admin": "alice::abc",
+        "instrument_id": "RTK",
+        "symbol": "RTK",
+        "standard": "CIP-0112 v2",
+        "on_ledger": true
+      }
+    ],
+    "cells": [
+      {
+        "party": "bob::def",
+        "instrument_id": "RTK",
+        "amount": "1275.0"
+      }
+    ],
+    "totals": [
+      {
+        "party": "",
+        "instrument_id": "RTK",
+        "amount": "1275.0"
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "summary": "All checks passed — host is ready for localnet up",
+  "sections": [
+    {
+      "title": "System",
+      "checks": [
+        { "label": "Docker daemon", "result": "pass" },
+        { "label": "Available memory", "result": "pass" }
+      ]
+    }
+  ]
+}

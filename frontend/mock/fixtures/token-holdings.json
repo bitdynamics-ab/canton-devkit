@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "source": "ledger",
+  "holdings": [
+    {
+      "instrument_id": "RTK",
+      "party": "bob::def",
+      "amount": "1275.0",
+      "source": "ledger"
+    }
+  ]
+}

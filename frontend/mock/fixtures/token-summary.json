@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "summary": {
+    "instrument_id": "RTK",
+    "admin": "alice::abc",
+    "total_supply": "1275.0",
+    "holder_count": 2,
+    "contract_count": 3,
+    "holders": [
+      {
+        "party": "bob::def",
+        "balance": "1275.0",
+        "contract_count": 3,
+        "pct_of_supply": "100.0"
+      },
+      {
+        "party": "alice::abc",
+        "balance": "0.0",
+        "contract_count": 0,
+        "pct_of_supply": "0.0"
+      }
+    ]
+  }
+}

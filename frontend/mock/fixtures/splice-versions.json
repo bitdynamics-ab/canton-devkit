@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "latest_alias": "0.6.4",
+  "upstream_fetched": true,
+  "versions": [
+    {
+      "alias": "0.6.4",
+      "tag": "0.6.4",
+      "released_at": "2026-04-01T00:00:00Z"
+    },
+    {
+      "alias": "0.6.3",
+      "tag": "0.6.3",
+      "released_at": "2026-03-01T00:00:00Z"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "instance": "demo",
+  "role": "app-user",
+  "count": 3,
+  "contracts": [
+    {
+      "contract_id": "00abc111",
+      "template": "Token:Instrument",
+      "signatories": ["alice::abc"],
+      "observers": [],
+      "created_at": "2026-05-30T10:00:00Z"
+    },
+    {
+      "contract_id": "00abc222",
+      "template": "Token:Holding",
+      "signatories": ["bob::def"],
+      "observers": ["alice::abc"],
+      "created_at": "2026-05-30T11:00:00Z"
+    },
+    {
+      "contract_id": "00abc333",
+      "template": "Token:TransferOffer",
+      "signatories": ["bob::def"],
+      "observers": ["alice::abc"],
+      "created_at": "2026-05-30T12:00:00Z"
+    }
+  ]
+}

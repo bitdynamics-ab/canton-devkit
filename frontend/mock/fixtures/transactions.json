@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "instance": "demo",
+  "role": "app-user",
+  "count": 2,
+  "transactions": [
+    {
+      "update_id": "u1106",
+      "offset": 1106,
+      "record_time": "2026-05-30T16:50:45Z",
+      "events": [
+        {
+          "kind": "created",
+          "contract_id": "00abc111",
+          "template": "Token:Instrument"
+        }
+      ]
+    },
+    {
+      "update_id": "u1200",
+      "offset": 1200,
+      "record_time": "2026-05-30T17:00:00Z",
+      "events": [
+        {
+          "kind": "exercised",
+          "contract_id": "00abc222",
+          "template": "Token:Holding",
+          "choice": "Transfer"
+        }
+      ]
+    }
+  ]
+}

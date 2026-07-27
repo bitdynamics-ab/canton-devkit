@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "instance": "demo",
+  "containers": [
+    {
+      "name": "demo-participant-1",
+      "service": "participant",
+      "state": "running",
+      "health": "healthy",
+      "status": "Up 2 hours (healthy)",
+      "image": "ghcr.io/digital-asset/canton-participant:0.6.4"
+    },
+    {
+      "name": "demo-validator-app-user-1",
+      "service": "validator-app-user",
+      "state": "running",
+      "health": "healthy",
+      "status": "Up 2 hours (healthy)",
+      "image": "ghcr.io/digital-asset/splice-validator:0.6.4"
+    },
+    {
+      "name": "demo-postgres-1",
+      "service": "postgres",
+      "state": "running",
+      "health": "healthy",
+      "status": "Up 2 hours (healthy)",
+      "image": "postgres:15"
+    }
+  ],
+  "healthy_count": 3,
+  "starting_count": 0,
+  "unhealthy_count": 0,
+  "restarting_count": 0,
+  "exited_count": 0
+}

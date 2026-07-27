@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "summary": "Host is ready",
+  "sections": [
+    {
+      "title": "Resources",
+      "checks": [
+        { "label": "Docker", "result": "pass" },
+        { "label": "Disk space", "result": "pass" }
+      ]
+    }
+  ]
+}

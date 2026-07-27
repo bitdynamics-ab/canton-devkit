@@ -43,6 +43,27 @@ npm run dev
 Open **http://localhost:5173** (not 7777). Vite proxies `/api` and
 `/events` to the backend on `:7777` — see `frontend/vite.config.ts`.
 
+#### Mock API mode
+
+For UI-only work without Go or LocalNet:
+
+```sh
+cd frontend
+npm install     # first run only
+npm run dev:mock
+```
+
+Open **http://localhost:5173**. The Vite dev server serves mock API
+responses from `frontend/mock/fixtures/` via middleware — no backend on
+`:7777` required. Mutations are in-memory only (reset on server restart).
+
+To refresh fixtures from a live instance:
+
+```sh
+# With real backend + LocalNet running:
+npm run mock:seed -- --instance <name> [--as demo]
+```
+
 Notes:
 
 - You do **not** need `make frontend` for this loop; that target only
