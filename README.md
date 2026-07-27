@@ -59,8 +59,8 @@ The command surface covers the full development loop:
 - Token flows for CIP-0056 and Token Standard V2 — see the
   [tokens guide](https://bitdynamics-ab.github.io/canton-devkit/guides/tokens/)
 - Snapshot and restore of a network's full state
-- CLI and Web UI at parity (`localnet ui`, loopback only)
-- Optional Prometheus and Grafana (`--profile observability`)
+- Both CLI and Web UI are available
+- Prometheus and Grafana
 - Stable exit codes and `--format json` for CI; example workflow in
   [`examples/ci/`](examples/ci/github-actions.yml)
 - Multiple named instances with auto-allocated or pinned ports
