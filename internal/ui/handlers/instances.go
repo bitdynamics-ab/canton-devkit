@@ -3,7 +3,7 @@
 //
 // The CLI status command and Web UI detail endpoint share
 // localnet.CollectStatus so JSON shape, Docker soft-fail handling,
-// endpoint projection, and JWT redaction do not drift. See
+// endpoint projection, and credential projection do not drift. See
 // CONTRIBUTING.md "CLI ↔ Web UI parity".
 package handlers
 
