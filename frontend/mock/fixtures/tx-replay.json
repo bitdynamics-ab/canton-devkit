@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "instance": "localnet-1",
+  "parties": [
+    "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+  ],
+  "update_id": "122045a8d40663027f87522052ba6e7cee2059c6fefc5ae6e9d723cef1bfb7a556ac",
+  "offset": 2549,
+  "effective_at": "2026-07-27T20:37:24Z",
+  "event_count": 6,
+  "events": [
+    {
+      "kind": "exercised",
+      "node_id": 0,
+      "contract_id": "0076677cff95e66905e2e5c6c7ea53171836134ed216c422561d6ee5935e0f521cca1212208a4e466f276703d25651f7b6a57cf56270bd9bd3af142f08cca84c03624cea05",
+      "template_id": "727c0fb9711d59b506fbb3cff2342e55eb583bb88682a946220525c304feca4a:Splice.Wallet.Install:WalletAppInstall",
+      "choice": "WalletAppInstall_ExecuteBatch",
+      "acting_parties": [
+        "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+      ]
+    },
+    {
+      "kind": "exercised",
+      "node_id": 1,
+      "contract_id": "0041d44299ea8ab3a9fe7c601644bdf24bb43e2b1cd8c7d9ddb8e8d04a1c9a71c4ca121220bbf4d7a671aa84c9447a3a9808c71981b2cb398590faeff8cbf697a90c6b7c5e",
+      "template_id": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.AmuletRules:AmuletRules",
+      "choice": "AmuletRules_Transfer",
+      "acting_parties": [
+        "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+      ]
+    },
+    {
+      "kind": "exercised",
+      "node_id": 5,
+      "contract_id": "00b621b237012316f6056f67f74a22f21ee060252895bf6c633c6ddd128c5024b3ca1212204487c564e1e2ed54d2176f6aa2bd994e25a86f21fdaf8ac2e712263bcc85e61f",
+      "template_id": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+      "choice": "Archive",
+      "acting_parties": [
+        "DSO::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+        "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+      ],
+      "consuming": true
+    },
+    {
+      "kind": "exercised",
+      "node_id": 7,
+      "contract_id": "005610e0c1bdd2bf3775de3a88c3906643fbc6329553ca7321e985f6754f1457feca1212204ce7575d10a7a80d1387af98f1b900c3b4ea2919471ead9c5f022be1d3da8180",
+      "template_id": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+      "choice": "Archive",
+      "acting_parties": [
+        "DSO::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55"
+      ],
+      "consuming": true
+    },
+    {
+      "kind": "created",
+      "node_id": 8,
+      "contract_id": "00691b075b42263cd8f5be74f12483a54392aff2e7e2c2c6b96e98e3d7f0eed67dca121220a105bd8e503f120b782ca468763270c42308f7449fffbc85a73622af6a473a53",
+      "template_id": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+      "signatories": [
+        "DSO::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+        "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+      ]
+    },
+    {
+      "kind": "exercised",
+      "node_id": 9,
+      "contract_id": "0041d44299ea8ab3a9fe7c601644bdf24bb43e2b1cd8c7d9ddb8e8d04a1c9a71c4ca121220bbf4d7a671aa84c9447a3a9808c71981b2cb398590faeff8cbf697a90c6b7c5e",
+      "template_id": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.AmuletRules:AmuletRules",
+      "choice": "EventLog_HoldingsChange",
+      "acting_parties": [
+        "DSO::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55"
+      ]
+    }
+  ]
+}

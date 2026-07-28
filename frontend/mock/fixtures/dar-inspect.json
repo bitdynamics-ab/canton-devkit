@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "dar_id": "token-dar",
+  "main_package_id": "pkg-token-001",
+  "packages": [
+    {
+      "package_id": "pkg-token-001",
+      "name": "token",
+      "version": "1.0.0",
+      "modules": [
+        {
+          "name": "Token",
+          "templates": ["Instrument", "Holding", "TransferOffer"]
+        }
+      ]
+    }
+  ]
+}
