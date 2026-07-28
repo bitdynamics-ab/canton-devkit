@@ -93,10 +93,7 @@ func TestJWT_DefaultRoleIssued(t *testing.T) {
 	seedWithCredentials(t, "demo", "app-provider::1220a8d2")
 	srv := authMux(t)
 
-	// Pass ?include_jwt=true to receive the raw token; the
-	// redacted-by-default contract is pinned by
-	// TestJWT_RedactedByDefault below.
-	resp, err := http.Post(srv.URL+"/api/instances/demo/jwt?include_jwt=true",
+	resp, err := http.Post(srv.URL+"/api/instances/demo/jwt",
 		"application/json", strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("POST: %v", err)
@@ -115,9 +112,6 @@ func TestJWT_DefaultRoleIssued(t *testing.T) {
 	}
 	if got.SchemaVersion != SchemaVersion {
 		t.Errorf("SchemaVersion = %d, want %d", got.SchemaVersion, SchemaVersion)
-	}
-	if got.Redacted {
-		t.Error("Redacted = true even with ?include_jwt=true — flag ignored")
 	}
 	// JWT must have 3 base64-ish segments separated by dots
 	// (standard JWT shape; cheap sanity check without parsing).
@@ -280,9 +274,8 @@ func TestAppConfig_JSONFormat(t *testing.T) {
 	if got.Vars["CANTON_APP_PROVIDER_PARTY"] != "app-provider::1220deadbeef" {
 		t.Errorf("party id mismatch: %q", got.Vars["CANTON_APP_PROVIDER_PARTY"])
 	}
-	// JWT redacted by default (no ?include_jwt).
-	if got.Vars["CANTON_APP_PROVIDER_JWT"] != jwtRedactionPlaceholder {
-		t.Errorf("JWT not redacted by default: %q", got.Vars["CANTON_APP_PROVIDER_JWT"])
+	if got.Vars["CANTON_APP_PROVIDER_JWT"] == "" || got.Vars["CANTON_APP_PROVIDER_JWT"] == "<redacted>" {
+		t.Errorf("JWT not returned raw: %q", got.Vars["CANTON_APP_PROVIDER_JWT"])
 	}
 }
 
@@ -306,7 +299,7 @@ func TestAppConfig_ParityWithCLIEnv(t *testing.T) {
 
 	// Same builder, default-redacted — the CLI's collectEnv is a thin
 	// wrapper over this too.
-	fromShared, err := localnet.BuildEnvExport("demo", false)
+	fromShared, err := localnet.BuildEnvExport("demo")
 	if err != nil {
 		t.Fatalf("BuildEnvExport: %v", err)
 	}
@@ -357,17 +350,13 @@ func TestAppConfig_UnknownFormatReturns400(t *testing.T) {
 	}
 }
 
-// TestJWT_RedactedByDefault: when ?include_jwt=true is NOT passed, Token
-// in the response must be the redaction placeholder, NOT the real JWT.
-// Default-redact keeps CI logs, screenshot-shares, and "look at the
-// response" demos from leaking a usable signing token. Mirrors the
-// --include-jwt convention on the CLI side.
-func TestJWT_RedactedByDefault(t *testing.T) {
+// TestJWT_AlwaysRaw verifies that the bare LocalNet auth endpoint returns
+// a usable token without a query parameter.
+func TestJWT_AlwaysRaw(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedWithCredentials(t, "demo", "app-provider::1220a8d2")
 	srv := authMux(t)
 
-	// Bare POST — no ?include_jwt.
 	resp, err := http.Post(srv.URL+"/api/instances/demo/jwt",
 		"application/json", strings.NewReader(""))
 	if err != nil {
@@ -377,15 +366,8 @@ func TestJWT_RedactedByDefault(t *testing.T) {
 
 	var got jwtResponse
 	_ = json.NewDecoder(resp.Body).Decode(&got)
-	if !got.Redacted {
-		t.Error("Redacted = false by default — token will leak through screenshots/logs")
-	}
-	if got.Token != jwtRedactionPlaceholder {
-		t.Errorf("Token = %q, want %q (redaction regressed)",
-			got.Token, jwtRedactionPlaceholder)
-	}
-	if strings.Count(got.Token, ".") == 2 {
-		t.Error("Token has JWT shape (header.payload.sig) by default — raw JWT leaked")
+	if strings.Count(got.Token, ".") != 2 {
+		t.Errorf("Token = %q, want a raw JWT", got.Token)
 	}
 }
 
@@ -436,7 +418,7 @@ func TestJWT_AuditLogEmittedOnIssue(t *testing.T) {
 	log.SetOutput(&logBuf)
 	t.Cleanup(func() { log.SetOutput(prevOut) })
 
-	resp, err := http.Post(srv.URL+"/api/instances/demo/jwt?include_jwt=true",
+	resp, err := http.Post(srv.URL+"/api/instances/demo/jwt",
 		"application/json", strings.NewReader(`{"role":"sv"}`))
 	if err != nil {
 		t.Fatalf("POST: %v", err)
@@ -448,7 +430,6 @@ func TestJWT_AuditLogEmittedOnIssue(t *testing.T) {
 		"audit: jwt_issued",
 		`instance="demo"`,
 		`role="sv"`,
-		`raw=true`,
 	} {
 		if !strings.Contains(logLine, want) {
 			t.Errorf("audit log missing %q\nfull:\n%s", want, logLine)
@@ -463,33 +444,6 @@ func TestJWT_AuditLogEmittedOnIssue(t *testing.T) {
 	}
 	if strings.Contains(logLine, "eyJ") {
 		t.Error("audit log contains a raw JWT (starts with eyJ) — secret leaked into logs")
-	}
-}
-
-// TestJWT_AuditLogNotesRedactedByDefault is the symmetric pin
-// for the audit log: when the caller does NOT pass include_jwt,
-// the audit line carries raw=false so log scrapers can distinguish
-// "someone read the raw token" (suspicious) from "someone
-// generated a credential preview" (routine).
-func TestJWT_AuditLogNotesRedactedByDefault(t *testing.T) {
-	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
-	seedWithCredentials(t, "demo", "p")
-	srv := authMux(t)
-
-	var logBuf bytes.Buffer
-	prevOut := log.Default().Writer()
-	log.SetOutput(&logBuf)
-	t.Cleanup(func() { log.SetOutput(prevOut) })
-
-	resp, err := http.Post(srv.URL+"/api/instances/demo/jwt",
-		"application/json", strings.NewReader(""))
-	if err != nil {
-		t.Fatalf("POST: %v", err)
-	}
-	_ = resp.Body.Close()
-
-	if !strings.Contains(logBuf.String(), "raw=false") {
-		t.Errorf("audit log missing raw=false on redacted issue:\n%s", logBuf.String())
 	}
 }
 
