@@ -290,11 +290,9 @@ function handleInstanceRoute(
   }
 
   if (rest === "/jwt" && method === "POST") {
-    const includeJwt = url.searchParams.get("include_jwt") === "true";
     jsonResponse(res, 200, {
       schema_version: SCHEMA_VERSION,
-      token: includeJwt ? "mock.jwt.token" : "<redacted>",
-      redacted: !includeJwt,
+      token: "mock.jwt.token",
       party: "alice::abc",
       audience: "https://canton.network.global",
       role: "app-user",
@@ -307,17 +305,28 @@ function handleInstanceRoute(
   if (rest === "/app-config" && method === "GET") {
     const format = url.searchParams.get("format") ?? "json";
     if (format === "env") {
-      textResponse(res, 200, "CANTON_PARTICIPANT_URL=http://127.0.0.1:60475\n");
+      textResponse(
+        res,
+        200,
+        "CANTON_PARTICIPANT_URL=http://127.0.0.1:60475\nCANTON_APP_USER_JWT=mock.jwt.token\n",
+      );
       return true;
     }
     if (format === "yaml") {
-      textResponse(res, 200, "participant_url: http://127.0.0.1:60475\n");
+      textResponse(
+        res,
+        200,
+        "participant_url: http://127.0.0.1:60475\napp_user_jwt: mock.jwt.token\n",
+      );
       return true;
     }
     jsonResponse(res, 200, {
       schema_version: SCHEMA_VERSION,
       instance: name,
-      env: { CANTON_PARTICIPANT_URL: "http://127.0.0.1:60475" },
+      vars: {
+        CANTON_PARTICIPANT_URL: "http://127.0.0.1:60475",
+        CANTON_APP_USER_JWT: "mock.jwt.token",
+      },
     });
     return true;
   }
