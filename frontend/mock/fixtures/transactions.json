@@ -1,56 +1,21 @@
 {
   "schema_version": 1,
-  "instance": "localnet-1",
+  "instance": "demo",
   "role": "app-user",
-  "ledger_end": 2565,
+  "ledger_end": 4939,
   "transactions": [
     {
       "kind": "transaction",
-      "offset": 2549,
-      "update_id": "122045a8d40663027f87522052ba6e7cee2059c6fefc5ae6e9d723cef1bfb7a556ac",
-      "command_id": "65200548-4b24-4ea5-be16-d94bc0a66965",
-      "record_time": "2026-07-27T20:37:24.821949Z",
+      "offset": 4927,
+      "update_id": "12209d3e92cc06e931157ed7d2db237b3e4bf97f1e8f1baedbe87e696e6d2162cba8",
+      "command_id": "f6f40423-c7ec-42cc-8066-60b7a2593b48",
+      "record_time": "2026-07-28T07:42:55.267004Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "00b621b237012316f6056f67f74a22f21ee060252895bf6c633c6ddd128c5024b3ca1212204487c564e1e2ed54d2176f6aa2bd994e25a86f21fdaf8ac2e712263bcc85e61f",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "archive",
-          "contract_id": "005610e0c1bdd2bf3775de3a88c3906643fbc6329553ca7321e985f6754f1457feca1212204ce7575d10a7a80d1387af98f1b900c3b4ea2919471ead9c5f022be1d3da8180",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "00691b075b42263cd8f5be74f12483a54392aff2e7e2c2c6b96e98e3d7f0eed67dca121220a105bd8e503f120b782ca468763270c42308f7449fffbc85a73622af6a473a53",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 2544,
-      "update_id": "122036e00b07b5f74bed1c16e7329ecf5601f1349d26effff70354bb76b151728fd0",
-      "command_id": "ab3d7711-f14f-40ce-ac53-eddadffd9681",
-      "record_time": "2026-07-27T20:36:19.420358Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "007cd1cdd9b44ae077de8da0c67bbb661c69f9bc7e73373aa81cd5dd0748ca4da1ca1212207138dd0dab88ca873372d18626caccf08b74514753fd46724714fed1a27736e0",
+          "contract_id": "00e6889b718cbf704eb42f24f472ff39f85a5b230220def358f5ae09637e8e1edfca1212204de933043dde6428e0c3f602d9c05f436a8c724e2476056e7029f4edd5e4f579",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -58,7 +23,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00113ced41d161a520e7354cc6b7bf911a48678b70a8705206ebd1cdb5d80129bdca121220110401cbb446bb09bdaa4cbcd069041b64f7391121d6419108968e7b2960064a",
+          "contract_id": "0009aeb751ccba5edc302dfbf29c00cbb1a2086dd1b792980c2054d169e9b10e29ca12122064d1d99d4e78169204644f90f4abc60a76e1d2e38f2e2ab99684cec6a69aa001",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -66,7 +31,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00c246990873050f2dea0a25b7f9b154d4423b57b1154acac587f1bccacaae3502ca121220cc0dedd7fe99782482afa7351bf4794c1dd0bfaf43aef7cd2e85f63d7b4bdc88",
+          "contract_id": "00bc364ebb0ce42e26cb0acf6bdca59abd0f10d5972676609a0ed25925f1b187e5ca1212205f7e2464943993f76b9a1e27417665a8edba40dd56b4939dd37ede426513fa10",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -76,51 +41,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2529,
-      "update_id": "122063e570fc91fd4c1ee6e1d0e27049cb2fe0bb142d04f0fb850cd62e677f32fdd9",
-      "command_id": "0b258124-2229-4b42-b132-f08a8061c884",
-      "record_time": "2026-07-27T20:31:42.000363Z",
+      "offset": 4914,
+      "update_id": "1220dabd1e2a9389e8f0bd9a51ce4db85c1883f16859af6f4df4b35d67879de24f32",
+      "command_id": "8d7cf09f-0712-4a94-bde5-97dbdc6ce48b",
+      "record_time": "2026-07-28T07:39:40.274625Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "00e6f97832db404a251269918e59ee0925a87468d42b272987a80ce1e3ce3edd58ca1212202d0b9973dfbff39b85587dc5926d3537adf961b665d6a191495f3a9b06bea4c3",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "007cd1cdd9b44ae077de8da0c67bbb661c69f9bc7e73373aa81cd5dd0748ca4da1ca1212207138dd0dab88ca873372d18626caccf08b74514753fd46724714fed1a27736e0",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "0054c1abb00257d6fd2566f8d7bdfd18a516099b2bda97fc7b009394be61297bfdca12122015d31bae48f4719517faf6f88f391de541a23193e5290648d0b07770e19a3d69",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 2514,
-      "update_id": "12200587171c5530b701dab605d8b52516f6cfd397b6fe59eb3b8a1f3849dfe07a18",
-      "command_id": "a83edf3d-fac6-4231-b480-0f095af21100",
-      "record_time": "2026-07-27T20:27:24.918127Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "002dafd8f54f2f5533476cf470b79a7d632397d22f09b0377d3306651d1408cc7aca121220624c4ac14be49ede48df616efc2430e783d4e78f86513daaf2935d35da2861be",
+          "contract_id": "00df6afe989b1a8f256772854c96b99b82dc077c0da15fedb6cc4db5a903b4e78fca121220af4409f6105384754dd630fcc16c865e59746ae13f144074ce18b484201cc8fa",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -128,7 +58,7 @@
         },
         {
           "kind": "archive",
-          "contract_id": "00ddee7816616519262f5c926fa7ffb4978439601841e8ac16b9c9914965655b7fca1212207af8e67d8e82fe60cece93ad81b66dfbc3ac01f3efbcd978622d974384394bd2",
+          "contract_id": "00243e207841e0fc01e086c2239dd2fff87b1ee3cae9c77a3edeac18d2626bd0a6ca121220bed5c3843f208562981616df66fcccac1a5a7b7010329a57087e873dd60db298",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -136,7 +66,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00b621b237012316f6056f67f74a22f21ee060252895bf6c633c6ddd128c5024b3ca1212204487c564e1e2ed54d2176f6aa2bd994e25a86f21fdaf8ac2e712263bcc85e61f",
+          "contract_id": "00934a2aacbfb1e32ab59ff94e3bd3b6831f38be8577d43c9f8fd3cbf1e2506125ca121220f57e2cbfb9ed739fc96ce62e4f0160464837fc33570ba3adcb530ab7ccde6a8b",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -146,16 +76,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2480,
-      "update_id": "12204f615e42a6ee47e9ea6532e96b26e0b0f08ec04a0202014cb2fb60ae515c3916",
-      "command_id": "29fa592e-50bc-49df-8dfa-292970ad8873",
-      "record_time": "2026-07-27T20:17:07.375622Z",
+      "offset": 4909,
+      "update_id": "12200b8c88ecad2ce5f6d7112d47f033512e6a92739d8031474f81bb918d67bd803d",
+      "command_id": "0937b99a-0ef2-49ea-aea6-f0c1ee171d51",
+      "record_time": "2026-07-28T07:38:51.180708Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "0051b62061b4d01b345cf59cc1acee76a2ea2d928ee017fad5255d59c7795c5f0cca1212201de92e0e1d083183be6d5debd61aa37525f95b343a4b87bd1d45dbd775113b5c",
+          "contract_id": "007dbb6a7da0ffe05b6e66e14f7992ebbc92c0e901cbfb8acdf5e9c7b5affb7fe1ca12122063ab4ae95c52187ecb2e51520953153b9ee5a4ab1fe88054b19be9cb9d49ab6a",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -163,7 +93,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00e6f97832db404a251269918e59ee0925a87468d42b272987a80ce1e3ce3edd58ca1212202d0b9973dfbff39b85587dc5926d3537adf961b665d6a191495f3a9b06bea4c3",
+          "contract_id": "00e6889b718cbf704eb42f24f472ff39f85a5b230220def358f5ae09637e8e1edfca1212204de933043dde6428e0c3f602d9c05f436a8c724e2476056e7029f4edd5e4f579",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -171,7 +101,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "004ea30320e7dc03ce55ed5334bd8deb240b73d19f296d749d98ee1a89241b2340ca121220f04ca116b6606513e30a7f9f31b075d0641608a7a1590da33a8e8ef2582594b3",
+          "contract_id": "006fad6c8dfd103935a42345689d5736af11ce14dec5a502e377c93672c241a139ca121220b1307db3fb20425bc344303ed26b3359353e25647a8c28d6e333ee1ee0c81b27",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -181,16 +111,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2469,
-      "update_id": "1220c585d71fcec69c6ba557cf3fb9deb0b35bdc884da2b6401d13cfcbea046ca8db",
-      "command_id": "05e22b01-37b2-433e-855d-187e876a5195",
-      "record_time": "2026-07-27T20:14:31.527017Z",
+      "offset": 4876,
+      "update_id": "122088a6a902cb71d5faeab40ef15c2a20e3232db3db7454f517b405bd9965db760e",
+      "command_id": "5039449e-1287-4d78-8583-a6e5aad24d47",
+      "record_time": "2026-07-28T07:29:13.676768Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "00ff58fe2023bb10286e8a5bbb26e14b841da97cc0c60f6f8132b1451b4522b692ca121220511444eee0396b1fd872a79007715f745d0abf230cfc66b60011b16e982269a4",
+          "contract_id": "0059361bf04e704fec391969e7bd4adc6174b6258db3b091764cae392d6c0e41f9ca121220ac11aabcf13f26b24b9e3ad9550ac0be41d582f7c0e4e802582086e8ac8a535e",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -198,7 +128,7 @@
         },
         {
           "kind": "archive",
-          "contract_id": "005602951f8877a9c7ec8edee5d3cbf41d57b04d496d043ef98bed648e08ceef2cca121220da7120cd6ad3fc9a66f481fb6169052e0e8be6da4b6c9966de7e67bdbdc3fe73",
+          "contract_id": "00f422959201efeda15e96f045c29333252081705902689b6c280798bc7b191581ca12122081b6245bd9e32911a4dba930d1d560827106689862b18f8a92a7bda38d66cfb0",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -206,42 +136,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "002dafd8f54f2f5533476cf470b79a7d632397d22f09b0377d3306651d1408cc7aca121220624c4ac14be49ede48df616efc2430e783d4e78f86513daaf2935d35da2861be",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 2446,
-      "update_id": "12202aa47ae94ad4fdbae5fad91f4b8955b6266c4d6748d0f2ed1e1e48e9cec1bcb0",
-      "command_id": "0b15b270-a112-4912-982e-d004842a1c3d",
-      "record_time": "2026-07-27T20:08:36.358115Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "008ee874b70f572e6b64334a9ce334d409d48b1f1f8fd86621378c1153cd2d6f9bca1212201128555163052f67e22225c4a2bbd0ef85b18d5d4d82ec788ae1f5665bec175a",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "archive",
-          "contract_id": "006edc55738d88c8fd6df11afe594f71718c57bd18c05e9eb12ff6b1afa27e9305ca1212208b18d09ccd2ad8fe0786a5c8e6ed12df1d7a9e85b9cddbd668a6e41ab0061d5a",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "00ff58fe2023bb10286e8a5bbb26e14b841da97cc0c60f6f8132b1451b4522b692ca121220511444eee0396b1fd872a79007715f745d0abf230cfc66b60011b16e982269a4",
+          "contract_id": "00df6afe989b1a8f256772854c96b99b82dc077c0da15fedb6cc4db5a903b4e78fca121220af4409f6105384754dd630fcc16c865e59746ae13f144074ce18b484201cc8fa",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -251,16 +146,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2439,
-      "update_id": "12205455429b8c231b4a6c74ce93deeb0c176129282bdcaee9e11188dd21be7fe21d",
-      "command_id": "4b897bc7-044a-45a7-bcf9-125226ea24fd",
-      "record_time": "2026-07-27T20:06:34.680455Z",
+      "offset": 4856,
+      "update_id": "1220828693b794fe8603576122769fd2f8e8a7071783742f79f19e7c48dcf13e3eed",
+      "command_id": "1ba4cc0f-0a06-4e82-b082-3ecb92004b67",
+      "record_time": "2026-07-28T07:23:42.193936Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "00503e348ae1399b52b34ab30f90b556baaaa58bec3eaffe4e555b0130608cb5e1ca121220fba392dabc76c1df381257db04d8b8f21c773b6dcfaf01716c8dc6ed7df52e0f",
+          "contract_id": "0077314affff96b627d7f71ed508ae53bc4917349f5cfe0915a77335152465898aca121220de83b6556a00d7851d615b6696db85248f54f7e13283b3c581440cdbde35da8c",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -268,7 +163,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "0051b62061b4d01b345cf59cc1acee76a2ea2d928ee017fad5255d59c7795c5f0cca1212201de92e0e1d083183be6d5debd61aa37525f95b343a4b87bd1d45dbd775113b5c",
+          "contract_id": "007dbb6a7da0ffe05b6e66e14f7992ebbc92c0e901cbfb8acdf5e9c7b5affb7fe1ca12122063ab4ae95c52187ecb2e51520953153b9ee5a4ab1fe88054b19be9cb9d49ab6a",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -276,7 +171,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "005610e0c1bdd2bf3775de3a88c3906643fbc6329553ca7321e985f6754f1457feca1212204ce7575d10a7a80d1387af98f1b900c3b4ea2919471ead9c5f022be1d3da8180",
+          "contract_id": "00eca51173e9f95e4c641a58fc07e91cd73b184ddbff82c863fdf9cfdd936a659bca12122098e73d269f3681043c117e907b1feb9081afeef2ef0393d65dbb3539d5716bd0",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -286,51 +181,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2426,
-      "update_id": "122068d25f68efc4405a508b1cea3dfe5bb4df4edf20fd202a8891104e6d59c36671",
-      "command_id": "682f8e71-ecf0-4b5a-9902-8c48f4822ac3",
-      "record_time": "2026-07-27T20:03:02.728317Z",
+      "offset": 4853,
+      "update_id": "12209dfaf3bab38d6c637998e2e02d8afa992156d064da9e71037068b77cbd4ccb49",
+      "command_id": "f96954cb-0472-4591-a35c-6e89e75b1fe2",
+      "record_time": "2026-07-28T07:23:11.33732Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "0091a21896442612c7632cc2ffe1ce572dde2f7d6e174572011f2dbc692f81bf09ca12122002e429820ab43726908bbf8b6d95a8e8c4fe10b16fbf2cb9a1e73b335d81ebfb",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "00503e348ae1399b52b34ab30f90b556baaaa58bec3eaffe4e555b0130608cb5e1ca121220fba392dabc76c1df381257db04d8b8f21c773b6dcfaf01716c8dc6ed7df52e0f",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "00ddee7816616519262f5c926fa7ffb4978439601841e8ac16b9c9914965655b7fca1212207af8e67d8e82fe60cece93ad81b66dfbc3ac01f3efbcd978622d974384394bd2",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 2407,
-      "update_id": "1220c9dd64aa0ebe53e85746a777fdf5b62d2dbba14fb0cdb9de2fcbd77955c5d6d2",
-      "command_id": "1e9e32d7-4b51-4cea-972b-5dea3f4c9998",
-      "record_time": "2026-07-27T19:58:01.045457Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "00e5c6f4792cdf0b293b5c07242dc704f8d8b7c0c9fcc64f31ca3e08e432146f5eca121220058c5d48f210bfce616a47371bd9baf2d5ce7dfa1493cd9f0fac675ac89a55bd",
+          "contract_id": "00d758423fe174376c7dce70a7e846d66e1d18a0fe6a0a187c8e8d969048541e46ca121220ee9f2609cf7cc349f7471d87fc382e7e4589e6e866bb33aaf222f9e3981805c2",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -338,7 +198,7 @@
         },
         {
           "kind": "archive",
-          "contract_id": "0086dea89f4329cf866aca17329f9d860d2be6ef5e35619a27939117faf77fe486ca1212207e1845c0885ec281ab171f1fe2864c72cb4b23b9d2e07731f896d500731a2710",
+          "contract_id": "00f82af430262f00329edb15ee931a9e0473d71d37a6d8071aad5f67d6e61cbf02ca1212208a3ffdced6ceb80b57f373349b7415f107abd457055afb65817c7135b4310530",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -346,7 +206,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "008ee874b70f572e6b64334a9ce334d409d48b1f1f8fd86621378c1153cd2d6f9bca1212201128555163052f67e22225c4a2bbd0ef85b18d5d4d82ec788ae1f5665bec175a",
+          "contract_id": "0059361bf04e704fec391969e7bd4adc6174b6258db3b091764cae392d6c0e41f9ca121220ac11aabcf13f26b24b9e3ad9550ac0be41d582f7c0e4e802582086e8ac8a535e",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -356,16 +216,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2372,
-      "update_id": "1220d4ed7aeda11bc5bf90701ec7538ae399af1de412e675f349641c654f747f8316",
-      "command_id": "06322935-fbd9-4625-984e-f940c889522c",
-      "record_time": "2026-07-27T19:48:27.87414Z",
+      "offset": 4830,
+      "update_id": "1220880ee461cb4fa619e25f4d77b42826ec427c25d8abb6fc6f2ca2d484f52c4e17",
+      "command_id": "368e22b8-9d45-4f7c-a536-c7ddf7884153",
+      "record_time": "2026-07-28T07:17:17.422019Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "00b5d358deed5892fe41ef0771f1cf216115eb9498653e1477e6077ea4b2096be5ca1212203627386ee5cf3050a3790affc219934c616845e30e3baf96f1c13dc9c61ee5ac",
+          "contract_id": "00d7a8d085ef80de87dcc8b1e54cb2a9dd47e67bd64a96f10b5819aade18cbc55eca12122078443fe716a7d8ce5cd9c122927aa61d7721f1a351ce506e916667bb165471a8",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -373,7 +233,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "0091a21896442612c7632cc2ffe1ce572dde2f7d6e174572011f2dbc692f81bf09ca12122002e429820ab43726908bbf8b6d95a8e8c4fe10b16fbf2cb9a1e73b335d81ebfb",
+          "contract_id": "0077314affff96b627d7f71ed508ae53bc4917349f5cfe0915a77335152465898aca121220de83b6556a00d7851d615b6696db85248f54f7e13283b3c581440cdbde35da8c",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -381,7 +241,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "005602951f8877a9c7ec8edee5d3cbf41d57b04d496d043ef98bed648e08ceef2cca121220da7120cd6ad3fc9a66f481fb6169052e0e8be6da4b6c9966de7e67bdbdc3fe73",
+          "contract_id": "00243e207841e0fc01e086c2239dd2fff87b1ee3cae9c77a3edeac18d2626bd0a6ca121220bed5c3843f208562981616df66fcccac1a5a7b7010329a57087e873dd60db298",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -391,16 +251,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2366,
-      "update_id": "122004f994110d8bdc7a72e2ad4a14b1b5d5ea2d40c70764c8bde49af813e50af467",
-      "command_id": "3a36a9f2-2530-4406-805d-64bea65bcb2d",
-      "record_time": "2026-07-27T19:47:07.874072Z",
+      "offset": 4801,
+      "update_id": "1220c760c13f0b2c31c19a2492f7b53f8aff259d4a07679bfc4a73149b5760c2ec0d",
+      "command_id": "202593d2-1496-4a23-ae67-6ce9a411b55b",
+      "record_time": "2026-07-28T07:08:15.04796Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "00aa5e8fd93cc9d3de969bd82063d72f59d24d3faf90e50afb52a8c834370a44c8ca121220ab3e556aff97720e648dee38580e77f1d47605a746e42c6d14961586176271ba",
+          "contract_id": "00710dec894a4edfca82a96425afc15ebc0708147a113a4f2b7adf218fe55e2ca6ca121220e30f3c503627d25828e024260939362e76ea77149f5cb6da21e54b7fb84a23e1",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -408,7 +268,7 @@
         },
         {
           "kind": "archive",
-          "contract_id": "007fbbedaf379e324879951e9fc95b71fc0dfa985b3bb920e5e5caec8c381af44cca121220af90d8c352577eaa0ddeccb05dbfe5d1df75fc6385caf924997d1612de9b4668",
+          "contract_id": "00c1a2903668d6b13b32e32ca53aa8833ebda6008d29f69d668b6857b510e938b6ca1212200a99e4bc68f253436ad0620d61586a2b3a1cca2209889f581aa9aa813ee1a7fb",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -416,77 +276,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00e5c6f4792cdf0b293b5c07242dc704f8d8b7c0c9fcc64f31ca3e08e432146f5eca121220058c5d48f210bfce616a47371bd9baf2d5ce7dfa1493cd9f0fac675ac89a55bd",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 2347,
-      "update_id": "12205af70d73faa42827421f3483ae3a638814b349cebd4b5813541eb0cb567dcc22",
-      "command_id": "b3dfe234-60d5-499c-a6b5-779e90516ba8",
-      "record_time": "2026-07-27T19:41:33.699622Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "00757a3629d925c1397fcd46df79d5b8f1886cda0197c6892f246a3ebee35a10a8ca121220d7f3110634355c0def8f20b9396066f675e9ac0e31778e18211a108bd2789131",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "00b5d358deed5892fe41ef0771f1cf216115eb9498653e1477e6077ea4b2096be5ca1212203627386ee5cf3050a3790affc219934c616845e30e3baf96f1c13dc9c61ee5ac",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "006edc55738d88c8fd6df11afe594f71718c57bd18c05e9eb12ff6b1afa27e9305ca1212208b18d09ccd2ad8fe0786a5c8e6ed12df1d7a9e85b9cddbd668a6e41ab0061d5a",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 2332,
-      "update_id": "1220720bc2f2d767ee461ea941bb9edd2cad566de5b45f85c8e1ac5e3102a0bb2c2c",
-      "command_id": "9a7b8e9d-5f16-4c0e-aa22-d9e55b69fb6a",
-      "record_time": "2026-07-27T19:36:48.308897Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "00d5d2235027a9f3f65d4d3823eda98aaff7efab754088f65433e0e046a9d223e5ca1212205ae79b9552bf2268c2c0070fabc8e1a7a95fe1a57c993ff8f9902e97a6099315",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "archive",
-          "contract_id": "002dd2140f6447a36ba2e4234777d0f6faf7fe31c8874289adc0ea0f21c122185dca1212202f785b508fb6f5ccb1765981b4053e43b05e6c6e42b828b9e343537afe2380e5",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "00aa5e8fd93cc9d3de969bd82063d72f59d24d3faf90e50afb52a8c834370a44c8ca121220ab3e556aff97720e648dee38580e77f1d47605a746e42c6d14961586176271ba",
+          "contract_id": "00d758423fe174376c7dce70a7e846d66e1d18a0fe6a0a187c8e8d969048541e46ca121220ee9f2609cf7cc349f7471d87fc382e7e4589e6e866bb33aaf222f9e3981805c2",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -496,16 +286,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2309,
-      "update_id": "122034216480b13c0371cd0b0743aa6ccfe7c84a1344ea3a82d7e8c228554739f7ca",
-      "command_id": "3adae88e-e9b5-4590-83b4-a17571d3c98d",
-      "record_time": "2026-07-27T19:29:31.139384Z",
+      "offset": 4784,
+      "update_id": "1220414336de9dc8a65245fe2085669c0f5678ecdc055a3bd75c6a8c60ab38775877",
+      "command_id": "535621ea-866d-4f2c-bf5c-bf91a347051d",
+      "record_time": "2026-07-28T07:03:54.22995Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "009a485cc460fca8d6ac880569df264488fc79857ebf44c0269ae3ecdd65290a79ca121220a381e6b4c9817e83257b1ce6181b1756464c6e330cea49375f6f5208ac773517",
+          "contract_id": "00d6fc83585ab14e90b577ef688aa450290863a22cb042a248996ddae70561d08eca121220e5f064750f64d6738241612721efaa545af6d7f25108b46bcc2ebfac279983c4",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -513,7 +303,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00757a3629d925c1397fcd46df79d5b8f1886cda0197c6892f246a3ebee35a10a8ca121220d7f3110634355c0def8f20b9396066f675e9ac0e31778e18211a108bd2789131",
+          "contract_id": "00d7a8d085ef80de87dcc8b1e54cb2a9dd47e67bd64a96f10b5819aade18cbc55eca12122078443fe716a7d8ce5cd9c122927aa61d7721f1a351ce506e916667bb165471a8",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -521,7 +311,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "0086dea89f4329cf866aca17329f9d860d2be6ef5e35619a27939117faf77fe486ca1212207e1845c0885ec281ab171f1fe2864c72cb4b23b9d2e07731f896d500731a2710",
+          "contract_id": "00f422959201efeda15e96f045c29333252081705902689b6c280798bc7b191581ca12122081b6245bd9e32911a4dba930d1d560827106689862b18f8a92a7bda38d66cfb0",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -531,16 +321,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2294,
-      "update_id": "122065ae8134a082aeca05bcc238642fe920a95d781a12b3a4273d2a93f91f544034",
-      "command_id": "e9819670-0554-4395-ad4c-cff38b409a15",
-      "record_time": "2026-07-27T19:25:36.715825Z",
+      "offset": 4769,
+      "update_id": "122006696fa8c1dbb32d8ba7d561d96bb6842215000ecd8cbf00eede1bc4b77c695c",
+      "command_id": "74b91592-6117-4d66-b0b5-dba4c0fcc2c0",
+      "record_time": "2026-07-28T06:59:16.52628Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "005ae0b8200012a07ec8b1d711b0e55cd63d7a88cddcfc7e0db1ad5449ca4c246bca12122043e1dbec049aab4a171b96f9d4678a53de27b29fab159518fb2da0787ce12fb2",
+          "contract_id": "003b5e9489c3e3eff6239459a3cfba44a13e1c1ac9c3a1566ea17fc41eb5e0c363ca121220820af37d24a57dd45fc1edb4144077a7adbeb8cdb523f89e88d1b95608ddcb58",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -548,7 +338,7 @@
         },
         {
           "kind": "archive",
-          "contract_id": "006704e8cee108050ad7f62aa8a092493b12102271a8ecf9390d6899365c1fe6fbca121220b4753e51c1cddef8162b4e6f5ffa31383899fa5b4321fd8b6467591bb3943cd5",
+          "contract_id": "00b13e41b4889b072452ce9366dbf859a003bb50daa9d85e8431d1a324aa7236c0ca1212209de6d15aa7df9a467c04dddf9d653012b9b8b3a9af28708098c678556888151f",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -556,77 +346,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00d5d2235027a9f3f65d4d3823eda98aaff7efab754088f65433e0e046a9d223e5ca1212205ae79b9552bf2268c2c0070fabc8e1a7a95fe1a57c993ff8f9902e97a6099315",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 2259,
-      "update_id": "12207c709d6fab9481045f6640bca2ee51dd7d2cd41da78379131cf953e58f8261bc",
-      "command_id": "c3ee9e35-1fab-40ae-835d-997b9b4a8100",
-      "record_time": "2026-07-27T19:15:01.9208Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "00d0c6e4b679d03803b8f86359957f381b04cd2fc7b048c6aa13c14c797a9a896dca121220517d4897aa164bf1462d5808bc550511bd3bd4d3da462d4a2a3b469424f11001",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "009a485cc460fca8d6ac880569df264488fc79857ebf44c0269ae3ecdd65290a79ca121220a381e6b4c9817e83257b1ce6181b1756464c6e330cea49375f6f5208ac773517",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "007fbbedaf379e324879951e9fc95b71fc0dfa985b3bb920e5e5caec8c381af44cca121220af90d8c352577eaa0ddeccb05dbfe5d1df75fc6385caf924997d1612de9b4668",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 2246,
-      "update_id": "12203f23415e30be0c4a94591ddcb6c5be97e57e70573c0724938943fb6fef11d95d",
-      "command_id": "52cf9f6d-2524-46fb-ad11-a8bd922c9543",
-      "record_time": "2026-07-27T19:11:38.23617Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "00443537f25883afb3594a8a9993b6eafcc4141d61e51b666e3f0752847de6e80aca1212207a4799b34e320224276cfb45e534e8dd9d90f4fc3adbec6a2161a985fa9b8c4a",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "archive",
-          "contract_id": "0086d389c98633c254dc2fe995afdbabf4e531add619bad3e2dc3fb352655c26c0ca1212202bf42c97ab5a77ae735dee3b37e0d93dddbee086943215affd689f89a0fff1e6",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "005ae0b8200012a07ec8b1d711b0e55cd63d7a88cddcfc7e0db1ad5449ca4c246bca12122043e1dbec049aab4a171b96f9d4678a53de27b29fab159518fb2da0787ce12fb2",
+          "contract_id": "00710dec894a4edfca82a96425afc15ebc0708147a113a4f2b7adf218fe55e2ca6ca121220e30f3c503627d25828e024260939362e76ea77149f5cb6da21e54b7fb84a23e1",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -636,16 +356,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2236,
-      "update_id": "1220f9ef07f68117df77e76c53a3935aa98a6fa9e9118aff6eb1888cf8ef6f13a295",
-      "command_id": "0c39e6e4-6317-4a04-b9ec-55196bf5e64e",
-      "record_time": "2026-07-27T19:09:29.653422Z",
+      "offset": 4748,
+      "update_id": "12208c9e20a54e19b35fe22de65717de0defb0653ba43f320491b3a50d684bceb315",
+      "command_id": "20f180df-76eb-41f0-b609-047e3d6e6473",
+      "record_time": "2026-07-28T06:53:03.366815Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "006569c556c4c27a59853eb2583f2254e6a15c152213a8f510c17cf7c3528983b7ca121220226fc60572b73a30c97e04b31b4a63b1d100fe7b51e9b0318262db6f54577cb8",
+          "contract_id": "00295f5dd790038524d70e87dafa934c0d4e6db5e590f156031ccd028c01de8c6fca121220ec14cba1da2ea26d6187ff2b453748bd191365b8135a6c268b467e8739c45c64",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -653,7 +373,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00d0c6e4b679d03803b8f86359957f381b04cd2fc7b048c6aa13c14c797a9a896dca121220517d4897aa164bf1462d5808bc550511bd3bd4d3da462d4a2a3b469424f11001",
+          "contract_id": "00d6fc83585ab14e90b577ef688aa450290863a22cb042a248996ddae70561d08eca121220e5f064750f64d6738241612721efaa545af6d7f25108b46bcc2ebfac279983c4",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -661,7 +381,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "002dd2140f6447a36ba2e4234777d0f6faf7fe31c8874289adc0ea0f21c122185dca1212202f785b508fb6f5ccb1765981b4053e43b05e6c6e42b828b9e343537afe2380e5",
+          "contract_id": "00f82af430262f00329edb15ee931a9e0473d71d37a6d8071aad5f67d6e61cbf02ca1212208a3ffdced6ceb80b57f373349b7415f107abd457055afb65817c7135b4310530",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -671,16 +391,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2209,
-      "update_id": "12207caf84947eecf3c12cb1125d244c8afd7b57c476b2d3e430f3e8d1bf354e5ac5",
-      "command_id": "6aa8dbf5-3300-48a1-8492-5c6a48cd841d",
-      "record_time": "2026-07-27T19:01:59.214021Z",
+      "offset": 4735,
+      "update_id": "1220ff2ab152e20f86fe3a8371f72bd8be7a66bfc50f24eadf6631a8d960ad2f3693",
+      "command_id": "c667de8d-5d76-44d9-8095-13310b1b4035",
+      "record_time": "2026-07-28T06:49:40.547515Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "00dad5422c29230f388a534e21c67ad3d82320be19aec10b50158eeb6c4a716010ca1212200f6cb954c0ba47459402818eceebd8216aa10e17ffa47c289f2fa2d66e6aa594",
+          "contract_id": "00b768b32ce5b60db2fed14a690e46b9d192e866f20d3f39e1dce31572bd4321daca121220345e30a8c2fade9f9088810547c5f831a8658f7d2a3659fe8c562b2690b6ff0b",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -688,7 +408,7 @@
         },
         {
           "kind": "archive",
-          "contract_id": "0043e5e66ffac712932d603e6d18c1b6c4c25901ccd942a76f5f2ef3957c152591ca121220f428582d741af8540cf6aa5ff5d9bfc7717422832d126aeee8aaeb07a47df3a9",
+          "contract_id": "00f9a5edb2072b465aa702eacd26f8fcba087d88ee79a0770f3ebbf7fe7663cb2cca12122011873962c67d159db5e1e71aba9d5180f2cf363d6136694f1814d80bb993b447",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -696,42 +416,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00443537f25883afb3594a8a9993b6eafcc4141d61e51b666e3f0752847de6e80aca1212207a4799b34e320224276cfb45e534e8dd9d90f4fc3adbec6a2161a985fa9b8c4a",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 2178,
-      "update_id": "1220fcb458b764eba190a30b3057f4056e76a93ccb7d211fd41f9dfa9225581321e5",
-      "command_id": "b6b7816f-cb90-449f-b9b7-eb0804841ad8",
-      "record_time": "2026-07-27T18:52:32.451853Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "004947b9826aef33951c2961a01185f8f11f1e02deb6c7f29f706f651d2bffbea8ca12122083d64d72fabc5ab9a6640a0b3557ea3a06594f42fd846ab11c24303c38244412",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "archive",
-          "contract_id": "0009a1cf9fb828c57a622b951b79e18d845fc54d3f2617e4e3ffcc00a458599724ca121220ff67ed68be975a09d6cd3575acb21aef0653e0b62868841ffdfab83b487da3e1",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "00dad5422c29230f388a534e21c67ad3d82320be19aec10b50158eeb6c4a716010ca1212200f6cb954c0ba47459402818eceebd8216aa10e17ffa47c289f2fa2d66e6aa594",
+          "contract_id": "003b5e9489c3e3eff6239459a3cfba44a13e1c1ac9c3a1566ea17fc41eb5e0c363ca121220820af37d24a57dd45fc1edb4144077a7adbeb8cdb523f89e88d1b95608ddcb58",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -741,16 +426,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2171,
-      "update_id": "122046973905f4797fbf517da326d3951f0ee0a0a6dafa5eff8c1ae202f02d619e42",
-      "command_id": "08b39af8-6913-4156-9298-93d75fa0c3e9",
-      "record_time": "2026-07-27T18:51:21.361874Z",
+      "offset": 4705,
+      "update_id": "12200a6d984c60a5856bdb1593a36ba30438c6659a5a34c1515f97639c484946ef46",
+      "command_id": "f1b44a7f-02a0-49a1-b418-ff08fee1df4c",
+      "record_time": "2026-07-28T06:40:39.680257Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "0030d00d3a68f027c100683065305e7353428b76a44db501855b580106d52f7dd9ca121220613c8f9ddd2cf7b961b8480e9ec51975eadabd63f75bf205e42e72ff85b88ec7",
+          "contract_id": "001663b5b9c7d1f0b0aca98788b75676665b59870ff9992abd3d1924fe00013051ca121220a92d8016ca7bbed193e7d649b68e44c3aa09df2276fa838bc21d266b340e9880",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -758,7 +443,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "006569c556c4c27a59853eb2583f2254e6a15c152213a8f510c17cf7c3528983b7ca121220226fc60572b73a30c97e04b31b4a63b1d100fe7b51e9b0318262db6f54577cb8",
+          "contract_id": "00295f5dd790038524d70e87dafa934c0d4e6db5e590f156031ccd028c01de8c6fca121220ec14cba1da2ea26d6187ff2b453748bd191365b8135a6c268b467e8739c45c64",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -766,7 +451,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "006704e8cee108050ad7f62aa8a092493b12102271a8ecf9390d6899365c1fe6fbca121220b4753e51c1cddef8162b4e6f5ffa31383899fa5b4321fd8b6467591bb3943cd5",
+          "contract_id": "00c1a2903668d6b13b32e32ca53aa8833ebda6008d29f69d668b6857b510e938b6ca1212200a99e4bc68f253436ad0620d61586a2b3a1cca2209889f581aa9aa813ee1a7fb",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -776,51 +461,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2145,
-      "update_id": "1220b7fd12cdb9028546042db5ea8902199af91e148d1fdf5259daae0dad7cdbc74b",
-      "command_id": "f39f0c4f-29a4-4db6-a12e-e2351b5e5dd3",
-      "record_time": "2026-07-27T18:43:51.879404Z",
+      "offset": 4702,
+      "update_id": "122065cac9c8250741c890424ce5a6ed5baf764c690060434006d6c8c4d75bece9ec",
+      "command_id": "e0e12735-1687-4aef-a42b-8b3345f9cfc8",
+      "record_time": "2026-07-28T06:40:10.156141Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "00f873f3e034930ca393a5ad894d17e5922ba2278f65fc0203a5c2ddc2ef402f01ca121220f9a60ef614771a31b955b39898af923a2fda494bbd54f07ca088410ba88791aa",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "0030d00d3a68f027c100683065305e7353428b76a44db501855b580106d52f7dd9ca121220613c8f9ddd2cf7b961b8480e9ec51975eadabd63f75bf205e42e72ff85b88ec7",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "0086d389c98633c254dc2fe995afdbabf4e531add619bad3e2dc3fb352655c26c0ca1212202bf42c97ab5a77ae735dee3b37e0d93dddbee086943215affd689f89a0fff1e6",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 2138,
-      "update_id": "12206ba265e6577b632149a93599a7dab70af053f26edea972a39ad27b3788290c77",
-      "command_id": "f306cfe8-15be-4add-9d03-4bef6920e9cb",
-      "record_time": "2026-07-27T18:42:37.221639Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "00393688e1b8c1d277fa79168411d3ccc0fb0e90022f42fb372addf3d7ec9f94acca1212203e842551ae98341f43eb63a1f0f3a07ef25700ee79f61c67ea231776965f9b63",
+          "contract_id": "007ae50204dc9a5fd7831568abf93c69f506059fc26d30962b71180d7d9b79b247ca1212202cc3901742ad62eb5423b90dbe378504398ef987738b9f3863e80f992d0669f0",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -828,7 +478,7 @@
         },
         {
           "kind": "archive",
-          "contract_id": "0083961951330c319e1f0350fabc1a304f4cfffec3613bab5a1bb9a1c5f7cad7d3ca1212204fd5777221253dd81c23736ec85796ec7c3c5d6c104bc2be84bd2a1cec6e834b",
+          "contract_id": "009752aed75d4c5f362cac2d83aaf32c747fd00de658d97bc89c385cc9d264e6faca121220a5331548c6fe480827c50134e95e9455ec525fba14faf9439fcf26d4440cce1c",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -836,7 +486,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "004947b9826aef33951c2961a01185f8f11f1e02deb6c7f29f706f651d2bffbea8ca12122083d64d72fabc5ab9a6640a0b3557ea3a06594f42fd846ab11c24303c38244412",
+          "contract_id": "00b768b32ce5b60db2fed14a690e46b9d192e866f20d3f39e1dce31572bd4321daca121220345e30a8c2fade9f9088810547c5f831a8658f7d2a3659fe8c562b2690b6ff0b",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -846,16 +496,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2119,
-      "update_id": "1220e93f254a6bbc6fc9508fc8704c2a7ec40630e242b433fd92431c1794b01cad7b",
-      "command_id": "aacdceab-1a23-4023-9c51-f05b121a09d7",
-      "record_time": "2026-07-27T18:36:48.546212Z",
+      "offset": 4677,
+      "update_id": "12205698da17eaed6e105d78fa2896a219854af3be9e140e8d831f70e9bdc6e21b28",
+      "command_id": "64a445a6-0631-4139-a16e-1aac5fab1b3a",
+      "record_time": "2026-07-28T06:32:32.598427Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "003e1b9bdb4605e20b5812730d25afce70ad6b2219c6b5a3e000c980dc82a24772ca121220499d2f0b6e8cd3b6d546025584cd5eb5d26ebdcf226f10bbd687f0e31b4f5df6",
+          "contract_id": "004aa57f0931d220222de70ec32d91014b481750160caa93a0db77b5cd41c0fd0dca1212206f68dfa3ef2599afa56a4fa4f52c4299a04f9635e237b6124a132e036ba02ae0",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -863,7 +513,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00f873f3e034930ca393a5ad894d17e5922ba2278f65fc0203a5c2ddc2ef402f01ca121220f9a60ef614771a31b955b39898af923a2fda494bbd54f07ca088410ba88791aa",
+          "contract_id": "001663b5b9c7d1f0b0aca98788b75676665b59870ff9992abd3d1924fe00013051ca121220a92d8016ca7bbed193e7d649b68e44c3aa09df2276fa838bc21d266b340e9880",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -871,7 +521,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "0043e5e66ffac712932d603e6d18c1b6c4c25901ccd942a76f5f2ef3957c152591ca121220f428582d741af8540cf6aa5ff5d9bfc7717422832d126aeee8aaeb07a47df3a9",
+          "contract_id": "00b13e41b4889b072452ce9366dbf859a003bb50daa9d85e8431d1a324aa7236c0ca1212209de6d15aa7df9a467c04dddf9d653012b9b8b3a9af28708098c678556888151f",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -881,16 +531,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2108,
-      "update_id": "122019e555b34574d79974d2976460af28f6b34158141fda1c1c368d01d9a9c6959b",
-      "command_id": "d4c76cbf-e65c-4d93-83a8-ad7f97a6d928",
-      "record_time": "2026-07-27T18:33:14.383441Z",
+      "offset": 4664,
+      "update_id": "1220a84b71c4cb3b4280b3a67938bc7acbb1a8d68a7a2a6f596d6d0e7e2694ded969",
+      "command_id": "8f85b3de-92be-446c-89f5-f6a479a40dde",
+      "record_time": "2026-07-28T06:29:12.695874Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "00baa42e2694ba3726cd8fd4a7705c3c5baeb8780045093c9e8c444e762bab3081ca12122019476ad30578fdb3a15ecd65d17de4afe9f7f101d626a5d9cf0ac1f4d4c12c90",
+          "contract_id": "00d00edaba1707cec79423548d1bf73c7ac9181dde1090e67bd0a6f524b7581238ca1212208c19584d7e34b005e27b951233a91d2421c1e9dd4295388c19c344f23613580b",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -898,7 +548,7 @@
         },
         {
           "kind": "archive",
-          "contract_id": "00a6d699c5fc8d01296f8959abc82e45c567a51faf2a99879f5e99f34e5ecbc03bca121220f480ce2c014a89b439934fe1e3120b844f2f4b58431463276466a99b1a8ea452",
+          "contract_id": "00513d951be3816e3f24cf6473ee41e2605ab3bd2739e4aa1873559aeccc738657ca1212206ac45e355b206c79fa40611c0d2e57f07dfba3e487102ede0565e7447b59f99f",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -906,42 +556,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00393688e1b8c1d277fa79168411d3ccc0fb0e90022f42fb372addf3d7ec9f94acca1212203e842551ae98341f43eb63a1f0f3a07ef25700ee79f61c67ea231776965f9b63",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 2075,
-      "update_id": "1220bd46400e5886a382ad1cc0a07e4a41774758e89f8ee5617ad7988f78d79cabb5",
-      "command_id": "06a09ed6-f02c-4159-8fa1-e66b01c98bf4",
-      "record_time": "2026-07-27T18:23:41.708168Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "00a2f62ced1b856298dd4f0991d5802a4d95b1b3c6e70a52cd41976bb1fa7bd707ca121220df23b7db0430b748d4e3fd4707cc5a580502e5394f1e5738f024a358aef8da33",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "archive",
-          "contract_id": "009b9b921a11cdc4b05ad0b241b0b9f71fdd5d6209c809a029a6f74b136db7aec3ca121220f909b4b05d5b86e5df31c48c15b1dff12e6f8f88b08ead11bff2371b9a52f4c7",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "00baa42e2694ba3726cd8fd4a7705c3c5baeb8780045093c9e8c444e762bab3081ca12122019476ad30578fdb3a15ecd65d17de4afe9f7f101d626a5d9cf0ac1f4d4c12c90",
+          "contract_id": "007ae50204dc9a5fd7831568abf93c69f506059fc26d30962b71180d7d9b79b247ca1212202cc3901742ad62eb5423b90dbe378504398ef987738b9f3863e80f992d0669f0",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -951,16 +566,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2063,
-      "update_id": "122043e2a64c421c11fbc56a9a0689b94b1761ad6ffaa5af386eb3300f93b7410ced",
-      "command_id": "d1b07df3-d24c-4a84-a4cc-ca7fc5c81108",
-      "record_time": "2026-07-27T18:21:01.758168Z",
+      "offset": 4621,
+      "update_id": "12208ad9cc82782dc6b09f7b04e2543cbd1c9ee019a673afa74a89a62eca703b2a17",
+      "command_id": "293cd547-080e-4e48-85bf-e00f5ae79ec7",
+      "record_time": "2026-07-28T06:16:04.915063Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "00befad135ff9a036edbb0516cbd314884518bc3478da126fd399e75ef3393cd1fca121220e7c722a884a1301474051abfd10a97889aa8795295d53df9a25f714397ebb11e",
+          "contract_id": "0034ec08619ec15f2ec40a03927f83dafe300aa6fc8a41a07bfed791f77b85f993ca1212205f8e4d978db453a21674c753f206aad0cb5e86bf6ec0e46362456aae58cffaaf",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -968,7 +583,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "003e1b9bdb4605e20b5812730d25afce70ad6b2219c6b5a3e000c980dc82a24772ca121220499d2f0b6e8cd3b6d546025584cd5eb5d26ebdcf226f10bbd687f0e31b4f5df6",
+          "contract_id": "004aa57f0931d220222de70ec32d91014b481750160caa93a0db77b5cd41c0fd0dca1212206f68dfa3ef2599afa56a4fa4f52c4299a04f9635e237b6124a132e036ba02ae0",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -976,7 +591,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "0009a1cf9fb828c57a622b951b79e18d845fc54d3f2617e4e3ffcc00a458599724ca121220ff67ed68be975a09d6cd3575acb21aef0653e0b62868841ffdfab83b487da3e1",
+          "contract_id": "00f9a5edb2072b465aa702eacd26f8fcba087d88ee79a0770f3ebbf7fe7663cb2cca12122011873962c67d159db5e1e71aba9d5180f2cf363d6136694f1814d80bb993b447",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -986,16 +601,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 2028,
-      "update_id": "122038f93e118336bd55c17d13af0e3e2a4ca51dea83f47e1640f67501b708bc18c6",
-      "command_id": "fa16ee0d-37f9-4ab5-875a-ec7f461d80b4",
-      "record_time": "2026-07-27T18:11:58.455602Z",
+      "offset": 4618,
+      "update_id": "1220c45e4c669428333eee3ed47047dba3e40dd349428170f3bee1836dc8d47a7d00",
+      "command_id": "113e6c0b-2124-4ff8-bb7f-bc77bed083ec",
+      "record_time": "2026-07-28T06:15:53.672503Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "00443c82e3efb7ea2ecff67a21c50d246976aec3c705cf4e5a212e70e20ab97659ca121220efd3c6d2e8d718b24ecea9bc2f4cb7f2b028b060fd73013bd989ac8ee7d76642",
+          "contract_id": "0063b2e9f09bf9dcdbbae3801eeb215e5bbb5209ecbadb9d152901aa53b71cb5e0ca1212208be864f2c708c12d2c1b1c71288aac70f80c522f5c79dde7ee5cd8aacd118707",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1003,7 +618,7 @@
         },
         {
           "kind": "archive",
-          "contract_id": "008c8aa346458f3349dbf20f821c626570fe2fcf4a3237dc9650dc30bfe7c00b85ca1212207910a88e38f4b5d607fc7bd5f88dfdfafc5dc3c42de0eb56ed2f9458d672b79c",
+          "contract_id": "0006f44fb141a40f2ec67f7391a87be64e30a230e32869a93e053943b1dfb2eeccca121220da3202b15da22baaf1543867fa0763d543921e82e16f4fbc5fc205bb2de57879",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1011,112 +626,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00a2f62ced1b856298dd4f0991d5802a4d95b1b3c6e70a52cd41976bb1fa7bd707ca121220df23b7db0430b748d4e3fd4707cc5a580502e5394f1e5738f024a358aef8da33",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 2025,
-      "update_id": "1220114a51c9927acf685c0f0bae3b187c67929cbaa8ea1913ac95f442194aa909d9",
-      "command_id": "5ce07b8c-df15-4671-8a59-583084528782",
-      "record_time": "2026-07-27T18:11:20.766993Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "0067049f93e1b73b596dd7ecc74787cee72c6f84b94c4694d97331690254fb70a9ca121220a27b6f13745a9525bb7f9e634166615e58221f9c7f503f26bb66211afa4eb3c0",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "00befad135ff9a036edbb0516cbd314884518bc3478da126fd399e75ef3393cd1fca121220e7c722a884a1301474051abfd10a97889aa8795295d53df9a25f714397ebb11e",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "0083961951330c319e1f0350fabc1a304f4cfffec3613bab5a1bb9a1c5f7cad7d3ca1212204fd5777221253dd81c23736ec85796ec7c3c5d6c104bc2be84bd2a1cec6e834b",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 1992,
-      "update_id": "1220208d51b9983c2ac66698a5635fe0c285df42f4b7954a5969edeef91d4ce6089f",
-      "command_id": "c8941dcf-da31-48f7-b651-66d2188665cf",
-      "record_time": "2026-07-27T18:01:46.916263Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "00f1dccf9557859836bf7f3b76a0e7e462bb7a829a9a99330dc843dc8a75aa071eca1212208dc914b45d039596c101a93679c3deb2ae372b9b53d8ff825b490d39084b7332",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "0067049f93e1b73b596dd7ecc74787cee72c6f84b94c4694d97331690254fb70a9ca121220a27b6f13745a9525bb7f9e634166615e58221f9c7f503f26bb66211afa4eb3c0",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "00a6d699c5fc8d01296f8959abc82e45c567a51faf2a99879f5e99f34e5ecbc03bca121220f480ce2c014a89b439934fe1e3120b844f2f4b58431463276466a99b1a8ea452",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 1979,
-      "update_id": "1220754dca7bd0d1c1bbd235bfa3400d786b597ec00ffe4070b462c9cb5bc7663c91",
-      "command_id": "dcd60977-19e7-4ec4-8983-f230f11e3e8f",
-      "record_time": "2026-07-27T17:58:48.299228Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "00cc2c58c108ed98e09451cecd48c4b27e39d2797da9586211de2a27d890f0776dca121220fcaab2920e40f4064722102dcf165b937c0c8c82b2db484f4b433fb279e46261",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "archive",
-          "contract_id": "000811d5d4c95f9b688bd95b908c17c35c9730689ed3fd8a73cce64de499425cc9ca121220b9fef7d959f1fd57a39dfe89e67452c27bd1274f46265f7301d007fd542fe4db",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "00443c82e3efb7ea2ecff67a21c50d246976aec3c705cf4e5a212e70e20ab97659ca121220efd3c6d2e8d718b24ecea9bc2f4cb7f2b028b060fd73013bd989ac8ee7d76642",
+          "contract_id": "00d00edaba1707cec79423548d1bf73c7ac9181dde1090e67bd0a6f524b7581238ca1212208c19584d7e34b005e27b951233a91d2421c1e9dd4295388c19c344f23613580b",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1126,16 +636,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 1972,
-      "update_id": "12207f187610ba3d51860e1d60bd1aaf164793807e35d29924c6e09b40acab33d9d1",
-      "command_id": "157a6e5a-a918-49fe-b944-d16d197277a3",
-      "record_time": "2026-07-27T17:57:10.553359Z",
+      "offset": 4588,
+      "update_id": "12208e245438fe86619df08169c5fac58d164688babe3accb0d4bc279f9f90122e0d",
+      "command_id": "da5b36a3-8535-4d98-97f1-1985421bb6df",
+      "record_time": "2026-07-28T06:07:48.009003Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "0070d4877cca9237eb007ba08a7fa218ca38a0dba0a45df907136a92ca52de3df4ca12122064233dc6152faf57e40cc327bb95e7b0dcc1d8ddd00788b47f2b27338f688d14",
+          "contract_id": "00a95746da7a5c50efaac3b5c52f1b751541416b368fbe0d733c75514e7c959f13ca121220d2bf9f5b536046e6c2a98007e885311aab7fdcd11942076249fe6f97d179c1f0",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1143,7 +653,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00f1dccf9557859836bf7f3b76a0e7e462bb7a829a9a99330dc843dc8a75aa071eca1212208dc914b45d039596c101a93679c3deb2ae372b9b53d8ff825b490d39084b7332",
+          "contract_id": "0034ec08619ec15f2ec40a03927f83dafe300aa6fc8a41a07bfed791f77b85f993ca1212205f8e4d978db453a21674c753f206aad0cb5e86bf6ec0e46362456aae58cffaaf",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1151,7 +661,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "009b9b921a11cdc4b05ad0b241b0b9f71fdd5d6209c809a029a6f74b136db7aec3ca121220f909b4b05d5b86e5df31c48c15b1dff12e6f8f88b08ead11bff2371b9a52f4c7",
+          "contract_id": "009752aed75d4c5f362cac2d83aaf32c747fd00de658d97bc89c385cc9d264e6faca121220a5331548c6fe480827c50134e95e9455ec525fba14faf9439fcf26d4440cce1c",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1161,16 +671,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 1947,
-      "update_id": "122062ab22edb8bdd4d5d315fbe5589237fbee958235ee5d7daabf9627dbedb78577",
-      "command_id": "d58477ab-1732-4240-8369-665f07eb7abb",
-      "record_time": "2026-07-27T17:50:00.858647Z",
+      "offset": 4579,
+      "update_id": "1220b27a7eecb88a6cc45a6a01bd04f69e1c69e8ec9f79afdc0489d6324909e8b893",
+      "command_id": "035aadfb-dae9-4b0e-af7c-dfb05ddcc696",
+      "record_time": "2026-07-28T06:05:31.777376Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "00b54c2716f24d78aa2f5fea6a314e619749a89d0f9d5117e0f2e7b094f5c5aeaaca121220ffc19b82995d9cf0fda77d684b36fd5d955c385313d006cfdc5bbb965c96bea6",
+          "contract_id": "00d4f2f0a11dc1b0632b2193e90f154ba6d8c39c0a2ec9f3c72d9f0a40a34f852eca121220b00fe6c7b80bf12d36edb2be3105a56806495d5f518b54fd0df5de66341e1525",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1178,7 +688,7 @@
         },
         {
           "kind": "archive",
-          "contract_id": "004c6eb42e9642f75314ddf04554639c139b4e4bbe17bb2f7ec052fb2d08da25b9ca121220088ceb8d7627a8fc8994fda058ff36dec3dbcb409da54243ba32903c704e268a",
+          "contract_id": "009958a2a6408abbb0ad9a68cc17d710f6f1033b7bbec3611c90db4e49ada4781bca1212204dd1b1c9b3548fe0994cc0e97910f65f54559ad10955b09cb9ddd046d4809cce",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1186,77 +696,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00cc2c58c108ed98e09451cecd48c4b27e39d2797da9586211de2a27d890f0776dca121220fcaab2920e40f4064722102dcf165b937c0c8c82b2db484f4b433fb279e46261",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 1911,
-      "update_id": "122006c220f413abcd0be755e118f5afdc3a1336be3a65a09ba5e2b4d7cdc4b3e996",
-      "command_id": "3cf93419-4217-4aa8-968a-2af083c55c58",
-      "record_time": "2026-07-27T17:38:46.809864Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "00ab924de23d1ef5ffb5b49a5d03f91ae9af506e5286292d82481cb928ea56298bca121220ac15539b883014dead90daeb74328e60df8aacb546e13a0b370c5b78028e90da",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "0070d4877cca9237eb007ba08a7fa218ca38a0dba0a45df907136a92ca52de3df4ca12122064233dc6152faf57e40cc327bb95e7b0dcc1d8ddd00788b47f2b27338f688d14",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "008c8aa346458f3349dbf20f821c626570fe2fcf4a3237dc9650dc30bfe7c00b85ca1212207910a88e38f4b5d607fc7bd5f88dfdfafc5dc3c42de0eb56ed2f9458d672b79c",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 1906,
-      "update_id": "1220e1cf2800796b44b4dc26c9506f76f419fefe5eb3ecfab1c97f146dfd8c2819be",
-      "command_id": "6ccf2205-f66f-419f-8956-6b45b654b452",
-      "record_time": "2026-07-27T17:37:50.547051Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "007049083d12a4fe2d4f20b5329cc3bece3119895be030428123d9733569bce917ca121220585155915f1bcce956e9fcb2604482e7494a7ed0ae957cc284f61856f1502c3d",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "archive",
-          "contract_id": "00696928156022e43c1787a93c4416facc17d2f6feb36dfe200e0f8cbbbb3a0aceca121220e29552e6eb57ad4408d9f7052bbc340f5792e47160f291bc43de441779699329",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "00b54c2716f24d78aa2f5fea6a314e619749a89d0f9d5117e0f2e7b094f5c5aeaaca121220ffc19b82995d9cf0fda77d684b36fd5d955c385313d006cfdc5bbb965c96bea6",
+          "contract_id": "0063b2e9f09bf9dcdbbae3801eeb215e5bbb5209ecbadb9d152901aa53b71cb5e0ca1212208be864f2c708c12d2c1b1c71288aac70f80c522f5c79dde7ee5cd8aacd118707",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1266,16 +706,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 1881,
-      "update_id": "12205692fba51f2e94e5ac51467a30c4aa5d8f85427ddd7d1e82193827e347bd5090",
-      "command_id": "8892580d-4bbb-481b-b454-00cf9ac34bc9",
-      "record_time": "2026-07-27T17:29:43.277572Z",
+      "offset": 4566,
+      "update_id": "12208a67e8319e3a113bd915a38251476b658736f7dd9ab870ca18fa188eba1fafe3",
+      "command_id": "a3ee524b-43b8-4de9-9af9-bccf6b83e5a5",
+      "record_time": "2026-07-28T06:01:36.64828Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "005afb94e9c1d0358f9ef194cf93a6c8d5edb55c8bc9dcb7b665b31ff29738f1f1ca12122017e9055e97908e28f212bf04fd8463e06df5b988123c86af85ccb8eb05af3b9e",
+          "contract_id": "005a0ba328f43f272ceaff6b05ce49a948fb30e75948f22af724c8e0bd3cd0df8bca1212206fdb75346b78221475338e7c37d50117f574c321f05e64cd52d3d2a7dd086756",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1283,7 +723,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00ab924de23d1ef5ffb5b49a5d03f91ae9af506e5286292d82481cb928ea56298bca121220ac15539b883014dead90daeb74328e60df8aacb546e13a0b370c5b78028e90da",
+          "contract_id": "00a95746da7a5c50efaac3b5c52f1b751541416b368fbe0d733c75514e7c959f13ca121220d2bf9f5b536046e6c2a98007e885311aab7fdcd11942076249fe6f97d179c1f0",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1291,7 +731,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "000811d5d4c95f9b688bd95b908c17c35c9730689ed3fd8a73cce64de499425cc9ca121220b9fef7d959f1fd57a39dfe89e67452c27bd1274f46265f7301d007fd542fe4db",
+          "contract_id": "00513d951be3816e3f24cf6473ee41e2605ab3bd2739e4aa1873559aeccc738657ca1212206ac45e355b206c79fa40611c0d2e57f07dfba3e487102ede0565e7447b59f99f",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1301,16 +741,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 1872,
-      "update_id": "122010017cbe61aa614f2c9e5baa4083ad729629ab5848a351838db70d32ab1bc4a6",
-      "command_id": "11dbc85a-bd7e-4bff-9a0d-09a87e77cc30",
-      "record_time": "2026-07-27T17:27:33.151563Z",
+      "offset": 4559,
+      "update_id": "12208db4b656af0fd428b25c571dd1d811385ff9b6758a08d7003039e18c6bc4b6b9",
+      "command_id": "d4574bee-af0b-4888-9c35-6873187ee3e7",
+      "record_time": "2026-07-28T05:59:55.563326Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "0011a05a4aa3f07d8efe9c2bdd3cbd886f59d7069944d8f0fb6802c0bb57a0f1beca121220926dcca187fb23b7dfb7cfc05f6ae3781677049a7b92c8a71959045c6a2e7664",
+          "contract_id": "001fa04926be31334943bc80eb769e47e7c269469ab5e784fe50b3ce8f643ceee6ca121220f4329846f5bbd2fd19cd6eb6fe1bb37750cb26c75ac76318c563b75ad27d68c3",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1318,7 +758,7 @@
         },
         {
           "kind": "archive",
-          "contract_id": "00e3b11d54bede0945ad6f3ecdb4c46bf87427d533e614d7323ca9e49d1b4bab2aca1212203e156ab5fb24619f1774365b8fb56d458c5236fabbbf581649656977df961175",
+          "contract_id": "00405388a546d364f342fd686094f4e056e985ad995c33ff302fc6406e85d80cfcca12122062a9bfd82ccac20d92069a2c292677f8cba972d7cbb0953fc0a40846aefffb64",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1326,77 +766,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "007049083d12a4fe2d4f20b5329cc3bece3119895be030428123d9733569bce917ca121220585155915f1bcce956e9fcb2604482e7494a7ed0ae957cc284f61856f1502c3d",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 1863,
-      "update_id": "12207d742d85ea351d1bf58bcf5efc9a8315fca5547911f52aecd7f9ca39089d9cbe",
-      "command_id": "e94faecd-7542-4904-bed2-3c7acd37e367",
-      "record_time": "2026-07-27T17:25:19.971489Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "005c333a6687e0f82630b11fa461afc0a8f7a7733c793b9d17d9a46074131f5e73ca121220947d6afde9506946cba964b2877fcc065e00fe6777544aad516000bc97c2c3c2",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "005afb94e9c1d0358f9ef194cf93a6c8d5edb55c8bc9dcb7b665b31ff29738f1f1ca12122017e9055e97908e28f212bf04fd8463e06df5b988123c86af85ccb8eb05af3b9e",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "004c6eb42e9642f75314ddf04554639c139b4e4bbe17bb2f7ec052fb2d08da25b9ca121220088ceb8d7627a8fc8994fda058ff36dec3dbcb409da54243ba32903c704e268a",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 1836,
-      "update_id": "1220a896ff33fe79518d4a4bece12268be9e46b7c267c67e8a20fbf0d58b24ab6bad",
-      "command_id": "28ebc740-6b47-456d-86b2-baef412e6b4a",
-      "record_time": "2026-07-27T17:18:14.698997Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "009cf2ac0db62a7b2067df39ab483900271cbaed8a9bf1731ddfc31595334bc530ca121220149ef58eba003e181f5a32f889ea46b92f2c62a2537401700ba8df4090fd19e5",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "archive",
-          "contract_id": "004626de6427f2fd551007d49f4ffb716970e45066eb76175c5befa3c689b8732cca121220f4f6ff0040492fa9dbd204e92699273692ca4363f2eabb657159116c3e4b8706",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "0011a05a4aa3f07d8efe9c2bdd3cbd886f59d7069944d8f0fb6802c0bb57a0f1beca121220926dcca187fb23b7dfb7cfc05f6ae3781677049a7b92c8a71959045c6a2e7664",
+          "contract_id": "00d4f2f0a11dc1b0632b2193e90f154ba6d8c39c0a2ec9f3c72d9f0a40a34f852eca121220b00fe6c7b80bf12d36edb2be3105a56806495d5f518b54fd0df5de66341e1525",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1406,51 +776,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 1812,
-      "update_id": "12200437fae27faa4363f75c8b859f4cf226cabaae9a4ad84b8fa238ff8670e3cff5",
-      "command_id": "ad43e6a3-f006-42fb-914e-914e301db4f6",
-      "record_time": "2026-07-27T17:11:14.35024Z",
+      "offset": 4521,
+      "update_id": "12205be548103c9ddd687d3015fc887994be8a28f20ed1ba7bbf224485772c53f979",
+      "command_id": "6e0e1ba9-9913-408d-a6a2-74dbe21ac9b9",
+      "record_time": "2026-07-28T05:48:29.205463Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "0076361c708c8d0916dc11c77249b58391eaeb4f7b039e71c4629a18694430f387ca1212209f3ed000a8cdfbc8e483b9d48416daf36e0ee81cc41e4b916376abb392d22afc",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "005c333a6687e0f82630b11fa461afc0a8f7a7733c793b9d17d9a46074131f5e73ca121220947d6afde9506946cba964b2877fcc065e00fe6777544aad516000bc97c2c3c2",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "00696928156022e43c1787a93c4416facc17d2f6feb36dfe200e0f8cbbbb3a0aceca121220e29552e6eb57ad4408d9f7052bbc340f5792e47160f291bc43de441779699329",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 1799,
-      "update_id": "122083b5861ba59c43f82b42e32a1ff8494fa60d37c05774632223af343180a689dd",
-      "command_id": "4bca23b6-fa7d-4891-b279-6c763b5a1252",
-      "record_time": "2026-07-27T17:07:59.04471Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "00340fa45c87a1044ee6e909ac2702f6d35f93dde5adc8d5b16da466744c31d686ca121220336117dd0b35cde5a6c5565c571b4b48f13655ef74c8a8c2014591665e54c481",
+          "contract_id": "009dfb12b9b9224b1ed86bb042a22799886204643fec3c0b9b98fac6c7b353f139ca1212203e46d2b453900af86618d633064fa6833e94fbd0e28ee976530b15f23954ee4c",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1458,7 +793,7 @@
         },
         {
           "kind": "archive",
-          "contract_id": "00f3842f9e10c83f06337486a906608d60b285cc12db5a50c01d1830577267503fca12122068b18ad959ef7d745a57850271fc322a9eed3afe559aa7b5a804b2bb8ad85d1a",
+          "contract_id": "004ff69f2539b046aa3013b4c759c78b92f81fa862989c9d97cada7001cfc49aabca121220949e071836bfcb0c7ff20e9e412605065f79e1ef22093b5e85a8ad36ae3547a2",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1466,7 +801,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "009cf2ac0db62a7b2067df39ab483900271cbaed8a9bf1731ddfc31595334bc530ca121220149ef58eba003e181f5a32f889ea46b92f2c62a2537401700ba8df4090fd19e5",
+          "contract_id": "001fa04926be31334943bc80eb769e47e7c269469ab5e784fe50b3ce8f643ceee6ca121220f4329846f5bbd2fd19cd6eb6fe1bb37750cb26c75ac76318c563b75ad27d68c3",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1476,16 +811,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 1784,
-      "update_id": "122096c328933f8c3c2bd484ab409d9dc87d519371f6eb950b37d484af2786025462",
-      "command_id": "78c9d2ea-6904-49ca-81da-30263e48dcf3",
-      "record_time": "2026-07-27T17:03:47.780865Z",
+      "offset": 4518,
+      "update_id": "1220d029d6e17da1bc10c14e9855e9abe7c25c616642645f3741dde4484e358edc64",
+      "command_id": "9ed3eae0-8a26-471a-b730-2dc9240620f5",
+      "record_time": "2026-07-28T05:48:22.953844Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "0099fb3d88bd9c278df730427450d1ff5f10e56787262ffbbbd4f573ea7e75bd72ca1212208e04b950e0742518856e5ed423e612a550e833e482820f4a56ebc863ab805289",
+          "contract_id": "00aaa8483a2e606a525f9d2413bc387023175cf6b7925b272795c4428fafd699e7ca121220efe8aa3636a1e7198aa6bbaefa0eb1a009ca1ad12cd2a0e4b0bbfb877a44d551",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1493,7 +828,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "0076361c708c8d0916dc11c77249b58391eaeb4f7b039e71c4629a18694430f387ca1212209f3ed000a8cdfbc8e483b9d48416daf36e0ee81cc41e4b916376abb392d22afc",
+          "contract_id": "005a0ba328f43f272ceaff6b05ce49a948fb30e75948f22af724c8e0bd3cd0df8bca1212206fdb75346b78221475338e7c37d50117f574c321f05e64cd52d3d2a7dd086756",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1501,7 +836,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00e3b11d54bede0945ad6f3ecdb4c46bf87427d533e614d7323ca9e49d1b4bab2aca1212203e156ab5fb24619f1774365b8fb56d458c5236fabbbf581649656977df961175",
+          "contract_id": "0006f44fb141a40f2ec67f7391a87be64e30a230e32869a93e053943b1dfb2eeccca121220da3202b15da22baaf1543867fa0763d543921e82e16f4fbc5fc205bb2de57879",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1511,16 +846,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 1765,
-      "update_id": "1220034830a93074967f300ba789b9e5af0f6a82280753049584b16ffecd971b3fd8",
-      "command_id": "3d5b73ad-5446-4ec8-a22b-6a62879bcce7",
-      "record_time": "2026-07-27T16:58:47.93262Z",
+      "offset": 4481,
+      "update_id": "1220e70d6beb6f836bd0ff7c234ef0428913a4e2f0dc463d1a2e319892f44da14eb3",
+      "command_id": "efd136a9-7b85-4a89-9f74-7c213c16b8ce",
+      "record_time": "2026-07-28T05:37:19.226435Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "00aead35c57af8af826eb57ddae55e89ff214d60bd9b2e33ba660cc2c03c688e29ca1212203eddadc68cd86a648511b206c91ac6aea2f89402310556d35bc163c4afb8c396",
+          "contract_id": "002adcf3dbd8bb6f1fd5d48f9f585e88612de8e493d38ec06c02b0932c5f8367aeca1212203f769d94abbaa3be7184333cc14816171229d92786a7a3ce8e86886dd524f9a7",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1528,7 +863,7 @@
         },
         {
           "kind": "archive",
-          "contract_id": "00b26eabc648720531ef4d2e9b7c9890efc1b55fcf7fda89da3c71d3530c3b1ba6ca1212208d25ee7c47516d12b0a374b68082d7e9d53c21ee5eb68e5c4b6fa563a1ce629f",
+          "contract_id": "0094994881fcfb838c4d1922e57ea1d6ae2599fae0fbb88f4946b56e1e2b20cc3dca121220f19feb5b4a70e1bbd0590949f8becd0de93edd264673b9fa76c8e2a46de4cc80",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1536,77 +871,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00340fa45c87a1044ee6e909ac2702f6d35f93dde5adc8d5b16da466744c31d686ca121220336117dd0b35cde5a6c5565c571b4b48f13655ef74c8a8c2014591665e54c481",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 1732,
-      "update_id": "12205f3c2aba8398b6bec5716b13c27e46f044ba49fc5ef470bf3e28cad6a051ebe2",
-      "command_id": "d0c7140b-af94-4b5b-8555-9c2384715dc0",
-      "record_time": "2026-07-27T16:50:16.017486Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "00d8936f433bc9c6e9631e1d423d7be2e572f5d26db8dc81c2a1ddedc365375edeca121220559baf72a2e74be6e4409187724d791ff6ad2fb81d412bb6bbd78752d63d463b",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "0099fb3d88bd9c278df730427450d1ff5f10e56787262ffbbbd4f573ea7e75bd72ca1212208e04b950e0742518856e5ed423e612a550e833e482820f4a56ebc863ab805289",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "004626de6427f2fd551007d49f4ffb716970e45066eb76175c5befa3c689b8732cca121220f4f6ff0040492fa9dbd204e92699273692ca4363f2eabb657159116c3e4b8706",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 1723,
-      "update_id": "1220f2a04824091e46e5820d0be69de83f834303fa0f4c6b6d13e91555b60d5ff7c2",
-      "command_id": "ce4331e6-682b-40ca-ade9-da4fb10d0b65",
-      "record_time": "2026-07-27T16:48:10.774009Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "00bb9ab9e22f6d2fec9a55a72c4445d9e416b67c485787bd4b7b21010bc2e61df2ca1212209433b7a3ed43788f1e6bdb0086a40342c6e86a4e2803339d5ab484a1f39c6c8a",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "archive",
-          "contract_id": "00ef01e2ec12940aa30b9705098d3827e7bb3db51c49f5bf9592ecc7bbead16b72ca121220bd7de1bd1b2821c897a4b1057efecfda2787a1f7a3ede550dc801b1baab403b7",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "00aead35c57af8af826eb57ddae55e89ff214d60bd9b2e33ba660cc2c03c688e29ca1212203eddadc68cd86a648511b206c91ac6aea2f89402310556d35bc163c4afb8c396",
+          "contract_id": "009dfb12b9b9224b1ed86bb042a22799886204643fec3c0b9b98fac6c7b353f139ca1212203e46d2b453900af86618d633064fa6833e94fbd0e28ee976530b15f23954ee4c",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1616,16 +881,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 1693,
-      "update_id": "1220c677091096cbe4d2c34e9f0e41c8f4cc9b141082701d79bc916517903f789c49",
-      "command_id": "589a43b0-7adf-4698-964c-64deb170a835",
-      "record_time": "2026-07-27T16:39:21.953634Z",
+      "offset": 4474,
+      "update_id": "12205cecbb7e42f3d7df6673c3df20c87dcdc268e0cac83d25737cdc35ace6867beb",
+      "command_id": "746b8083-3cae-4de8-a268-841fe100b553",
+      "record_time": "2026-07-28T05:36:01.593388Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "006daa6596652078046cede301c5d419abe45011961d940309859901c36660e848ca121220e1a628a372a2ffac20d3e9a30b616604902fdf8573cc7b719dd7ab1fc54d5c26",
+          "contract_id": "00d23364e7e2aeaadf600d0ceb978b9790b326a1fb3fbabd328e935dfabb19b70dca121220fe531388ddff3c9642838bb9ba756681244d0c6f9ce632c69288e4de26d924c0",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1633,7 +898,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00d8936f433bc9c6e9631e1d423d7be2e572f5d26db8dc81c2a1ddedc365375edeca121220559baf72a2e74be6e4409187724d791ff6ad2fb81d412bb6bbd78752d63d463b",
+          "contract_id": "00aaa8483a2e606a525f9d2413bc387023175cf6b7925b272795c4428fafd699e7ca121220efe8aa3636a1e7198aa6bbaefa0eb1a009ca1ad12cd2a0e4b0bbfb877a44d551",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1641,7 +906,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00f3842f9e10c83f06337486a906608d60b285cc12db5a50c01d1830577267503fca12122068b18ad959ef7d745a57850271fc322a9eed3afe559aa7b5a804b2bb8ad85d1a",
+          "contract_id": "009958a2a6408abbb0ad9a68cc17d710f6f1033b7bbec3611c90db4e49ada4781bca1212204dd1b1c9b3548fe0994cc0e97910f65f54559ad10955b09cb9ddd046d4809cce",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1651,51 +916,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 1690,
-      "update_id": "1220f9f26d66d76475e6908fbb4a941794f162c70308fd5c85fbb9474f3299489a28",
-      "command_id": "79080989-a6b3-44b2-8614-7e848d918108",
-      "record_time": "2026-07-27T16:39:03.183853Z",
+      "offset": 4449,
+      "update_id": "1220b827adead8cdd4af01c560bc5f6ad9b2856c3958bc3e0e754bcef62250c2743b",
+      "command_id": "b7145923-2f19-4ab9-8b4d-2bc28f6b8362",
+      "record_time": "2026-07-28T05:29:22.843108Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "00d2b8ed61a5e088fdac356ac304d1d4e8ec3527622c69e7f6d7cdbb86f8ce09b7ca121220804a8b741446a0d9260426e0b752aca7446082e4067ee88e507f094f6cb86565",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "archive",
-          "contract_id": "001711c2cdc1cc50fbcb2ba409fe1ba813a950cf8bae0d2ebff408a3d0994ac9d9ca1212205b4ed0116627b96110e18d7db1f1f786552605f99ad92d561a670c745fd50d77",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        },
-        {
-          "kind": "create",
-          "contract_id": "00bb9ab9e22f6d2fec9a55a72c4445d9e416b67c485787bd4b7b21010bc2e61df2ca1212209433b7a3ed43788f1e6bdb0086a40342c6e86a4e2803339d5ab484a1f39c6c8a",
-          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-          "witnesses": [
-            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-          ]
-        }
-      ]
-    },
-    {
-      "kind": "transaction",
-      "offset": 1667,
-      "update_id": "1220a80a3752412fc9a1e8f1a0e6aa7331b33f97cebaf6690cd922e0894c82bb00e7",
-      "command_id": "941cf28a-64be-4372-b24f-48d1e5f2b297",
-      "record_time": "2026-07-27T16:32:57.148535Z",
-      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-      "event_count": 3,
-      "events": [
-        {
-          "kind": "archive",
-          "contract_id": "00f8c7be006d582f9599e0becacd0dd916c6e051557e1b4feae471de5faa5025c3ca121220bea1d4fe0cd3f5c8ddd73efc345208a3bff052e0fe9fd6f95c9f3648a6ee00a9",
+          "contract_id": "00772268e314cc763c87f2d3cba004dc563efcc8aa871d0561087c48ce6bb556f6ca121220b6f4e19ad4c176b8c28b8c7ee553edeaa0694f18f9550f128a7455fb65442351",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1703,7 +933,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "006daa6596652078046cede301c5d419abe45011961d940309859901c36660e848ca121220e1a628a372a2ffac20d3e9a30b616604902fdf8573cc7b719dd7ab1fc54d5c26",
+          "contract_id": "00d23364e7e2aeaadf600d0ceb978b9790b326a1fb3fbabd328e935dfabb19b70dca121220fe531388ddff3c9642838bb9ba756681244d0c6f9ce632c69288e4de26d924c0",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1711,7 +941,7 @@
         },
         {
           "kind": "create",
-          "contract_id": "00b26eabc648720531ef4d2e9b7c9890efc1b55fcf7fda89da3c71d3530c3b1ba6ca1212208d25ee7c47516d12b0a374b68082d7e9d53c21ee5eb68e5c4b6fa563a1ce629f",
+          "contract_id": "00405388a546d364f342fd686094f4e056e985ad995c33ff302fc6406e85d80cfcca12122062a9bfd82ccac20d92069a2c292677f8cba972d7cbb0953fc0a40846aefffb64",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1721,16 +951,16 @@
     },
     {
       "kind": "transaction",
-      "offset": 1652,
-      "update_id": "1220dbad91508db193b497bd40e5132f3b9cd036178a4bed1e2b0735177ebbba8056",
-      "command_id": "2c483955-6451-418a-a9e6-e4e8d4c9ebeb",
-      "record_time": "2026-07-27T16:28:15.529318Z",
+      "offset": 4442,
+      "update_id": "1220d699f0e0de4eba4fcd091d1296b5753b5432283b13c875a0701a98de0992a9ea",
+      "command_id": "23381d8c-a34d-42ed-ab64-f240b70fcc62",
+      "record_time": "2026-07-28T05:27:56.850622Z",
       "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
       "event_count": 3,
       "events": [
         {
           "kind": "archive",
-          "contract_id": "000dc127d181357e230dee79adf9098d3677782e2a47f5dbc835cbb2c7e6ec8bddca121220cc2c56ea8b7e7a5c554e25f2d63da8ce3d1d5977d3aa2744a1ffafa4f88077cc",
+          "contract_id": "00481164cf1685496029d630c1f8f965b506d1e7206e7c40f5f5377e250fbf9f51ca121220937b57aa2f817effb7633c1a09de3925f94bede34ac845ef581b17afe8577ee5",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1738,7 +968,7 @@
         },
         {
           "kind": "archive",
-          "contract_id": "0070ebe72335d0ea90c9d6c82045e0d9b0285eb8334470c6343a079411060efa7dca1212205fee331c06311f27429e2a733be7c944b29f9ff7328fc8848da8864a19b9dceb",
+          "contract_id": "00e8418619591c7cbb925203b6df63857be94ef8ed4925007a73e36f5520afc3d1ca121220a75892b9122c4aad4c9e473b7ac2334beeb766c0ddfb0661a8a610073af7e1a6",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -1746,7 +976,777 @@
         },
         {
           "kind": "create",
-          "contract_id": "00d2b8ed61a5e088fdac356ac304d1d4e8ec3527622c69e7f6d7cdbb86f8ce09b7ca121220804a8b741446a0d9260426e0b752aca7446082e4067ee88e507f094f6cb86565",
+          "contract_id": "002adcf3dbd8bb6f1fd5d48f9f585e88612de8e493d38ec06c02b0932c5f8367aeca1212203f769d94abbaa3be7184333cc14816171229d92786a7a3ce8e86886dd524f9a7",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4394,
+      "update_id": "1220d71262b347d9792368699ba673d2dbcdf9f9b03293d2777423321667ffe6dbb4",
+      "command_id": "286e1112-e919-4417-aadd-57ffe2306e92",
+      "record_time": "2026-07-28T05:13:52.764035Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "00849aff102fd453f0fd09c075fad71b807de944b5e80de129ed4a573d45e094f8ca121220f1edced450f34c20da96c1f14f787d26b11c92517bac13541d2745d3b16a3792",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "00772268e314cc763c87f2d3cba004dc563efcc8aa871d0561087c48ce6bb556f6ca121220b6f4e19ad4c176b8c28b8c7ee553edeaa0694f18f9550f128a7455fb65442351",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "004ff69f2539b046aa3013b4c759c78b92f81fa862989c9d97cada7001cfc49aabca121220949e071836bfcb0c7ff20e9e412605065f79e1ef22093b5e85a8ad36ae3547a2",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4391,
+      "update_id": "12204377aa21c22f1f394fd4feb279ef6f5b86fd59c8d84945c224c2dfd18a47f80f",
+      "command_id": "f57f0bd0-3d69-47a7-914b-695bd9e83540",
+      "record_time": "2026-07-28T05:13:35.082179Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "0053636993c7fd1e7e9aab900d15f2489f7eef554b3c04f7d3774853c65a7eb94aca121220786ea97d458647226525da639cf96544898c3caa9622e1102571cdd87716d841",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "archive",
+          "contract_id": "0088cd92ecebfbad3a115c6260413f17bc3950206520247a19305d827329c72731ca121220048abcbaa6901dcc5032e558ce25c7351ebbac132f8c4e390a2214903a42c67a",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "00481164cf1685496029d630c1f8f965b506d1e7206e7c40f5f5377e250fbf9f51ca121220937b57aa2f817effb7633c1a09de3925f94bede34ac845ef581b17afe8577ee5",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4380,
+      "update_id": "1220b036abe8e25c8fc81d85bc49d3768e1f5de7f2bef3c4bc21d67beaa85afbdaef",
+      "command_id": "385591fd-9ad2-4611-9577-dbd5ca248f06",
+      "record_time": "2026-07-28T05:10:24.901469Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "00c2c0548cb998488c2b3a2a092473fbd4fe980b9e62e85b13fa9c78f09c336d29ca1212202e627de9d31ed66e3ea8a590ef15b32dba6c30b1ab1bfcef36f61d021464d626",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "00849aff102fd453f0fd09c075fad71b807de944b5e80de129ed4a573d45e094f8ca121220f1edced450f34c20da96c1f14f787d26b11c92517bac13541d2745d3b16a3792",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "0094994881fcfb838c4d1922e57ea1d6ae2599fae0fbb88f4946b56e1e2b20cc3dca121220f19feb5b4a70e1bbd0590949f8becd0de93edd264673b9fa76c8e2a46de4cc80",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4371,
+      "update_id": "122022c67458ebaa12e5f4a779917211744e104f540a83ba0c5b6894e787047c5634",
+      "command_id": "ace265e5-224f-4a92-b8a6-5633adadfaae",
+      "record_time": "2026-07-28T05:08:45.803108Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "004a9e10eb4289637049daa06eaf3b90d4c4ad70bdf216ea8cc278004a3eab4c58ca121220c051358aee8b87c2d43b25640a9f5aad45240f6dadb259952ed6be7ec7e89593",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "archive",
+          "contract_id": "001d30883f3d2348b105ce8d371856ab10f9a85c67f8db59e4240a9f8e69e2474bca12122054fc4d90cadb70aba2818ea886519672ed48f34f16f01e52f8b8ab8df98a67f4",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "0053636993c7fd1e7e9aab900d15f2489f7eef554b3c04f7d3774853c65a7eb94aca121220786ea97d458647226525da639cf96544898c3caa9622e1102571cdd87716d841",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4338,
+      "update_id": "1220ff6b43463abaa9295bd6b28751fb79d4d11eb9267d803010d1122b1c4753383c",
+      "command_id": "6bd6b7d4-0b17-436d-b5df-b3f0e58cf38e",
+      "record_time": "2026-07-28T04:58:31.951803Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "00f7c3e0b09b8178e728b353d18e400f57e33c60417ba55307baf813ea3b7c2354ca121220f984b08338930d71cd27c21385f282cef3fc93eeb9afac9405fa2bf7069925a9",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "00c2c0548cb998488c2b3a2a092473fbd4fe980b9e62e85b13fa9c78f09c336d29ca1212202e627de9d31ed66e3ea8a590ef15b32dba6c30b1ab1bfcef36f61d021464d626",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "00e8418619591c7cbb925203b6df63857be94ef8ed4925007a73e36f5520afc3d1ca121220a75892b9122c4aad4c9e473b7ac2334beeb766c0ddfb0661a8a610073af7e1a6",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4335,
+      "update_id": "122023780b80f8622066ba9e3c08741c296202f0e0b17c459160757ee92a3c6dc66d",
+      "command_id": "16c47518-fecd-43a4-b41d-f03219bb99f5",
+      "record_time": "2026-07-28T04:58:11.848741Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "008d7bf1c6a44e4953e884ee24771d24ab5ea20e3659dfda4967a6c5cba9800edbca121220dc0195440b4b823fd91c2814a646856cf8ef6ba320a924df932f72f8167fb211",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "archive",
+          "contract_id": "001c6be7a366f9fcf6b324eba5be3253065e5eddf1adcb709f2c044c472cfdc933ca121220f622f3bcbc7b04af4fae13b076ce87dd420ee7bf197de9872518ced40598fe9c",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "004a9e10eb4289637049daa06eaf3b90d4c4ad70bdf216ea8cc278004a3eab4c58ca121220c051358aee8b87c2d43b25640a9f5aad45240f6dadb259952ed6be7ec7e89593",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4310,
+      "update_id": "122096e0354f119865fa14b2da0cfc08b14d837fefc4132cf20169fe488091bf0479",
+      "command_id": "d508fb4a-0207-4560-97f4-11b4953bd722",
+      "record_time": "2026-07-28T04:51:02.888829Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "007732be4c5f094a161191268cc9d34b42d4eb850f30209a175bcdfebe580cdb4bca121220626c94fa9bd2ad2f118392148f1377a9bbec4efbe24a09b836cc479182202aaa",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "00f7c3e0b09b8178e728b353d18e400f57e33c60417ba55307baf813ea3b7c2354ca121220f984b08338930d71cd27c21385f282cef3fc93eeb9afac9405fa2bf7069925a9",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "0088cd92ecebfbad3a115c6260413f17bc3950206520247a19305d827329c72731ca121220048abcbaa6901dcc5032e558ce25c7351ebbac132f8c4e390a2214903a42c67a",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4295,
+      "update_id": "12202d65f560e9c4aa973057bd2ce48257be8fe650ec1993663b17e1b4e01f877b8e",
+      "command_id": "3041e914-7357-4575-a6a0-6f22bad5ce05",
+      "record_time": "2026-07-28T04:46:38.663513Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "007b34dd3c864ae78b7e4d46c5be263ff99d77531a89cbcc706adf2d967eec3df5ca12122024010fd4c1d5ff3585f2a6841cfe38a816b790f46ba02c17b7651a93942b59a2",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "archive",
+          "contract_id": "003d94ec59800e463d54b2c821dbb108bce8c9a7b574298e8bdeb6621407e74e2eca1212208a0023f27bf611a671089267a0f795bbc072e0404f617894a0781a1fa8d3e9df",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "008d7bf1c6a44e4953e884ee24771d24ab5ea20e3659dfda4967a6c5cba9800edbca121220dc0195440b4b823fd91c2814a646856cf8ef6ba320a924df932f72f8167fb211",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4267,
+      "update_id": "1220215d5962544eab146e8a082aaf53c9591372e07708a6143edd529adb819ddc8b",
+      "command_id": "6d17c6c1-2b5d-4c25-b403-432f9ef93ea9",
+      "record_time": "2026-07-28T04:38:25.656902Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "00564bd65d605ea3542b8b7daa447ca1fc384b174e756783168fc4265f23fa9e6eca1212200d37ff90f172b881e697cd47c8a22240d8e5f12047e9d0028e971e64c8a0785d",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "007732be4c5f094a161191268cc9d34b42d4eb850f30209a175bcdfebe580cdb4bca121220626c94fa9bd2ad2f118392148f1377a9bbec4efbe24a09b836cc479182202aaa",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "001d30883f3d2348b105ce8d371856ab10f9a85c67f8db59e4240a9f8e69e2474bca12122054fc4d90cadb70aba2818ea886519672ed48f34f16f01e52f8b8ab8df98a67f4",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4260,
+      "update_id": "1220dc9d183e1a53f05d362816e00c63871e2c127e55a9057151b08e5dec541b0d3f",
+      "command_id": "9db8e584-eebd-4623-9853-7de5cfd67785",
+      "record_time": "2026-07-28T04:36:57.648808Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "003ae464ba922741bc925a93eb8d32774f0418bab3ef17b076f924d58257d88f7cca1212204bb320fd21713f62bb291d4c61f1edacde338401b316e1265267738cc2f1605d",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "archive",
+          "contract_id": "00e660cb8c1b3c778399e39119856cef49e7a237cb26a149a4cd66b1569faddf44ca121220c07c7e5512a80288bbd7e64b9e73df760466683a5e3f35a17eefbfc0c7949501",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "007b34dd3c864ae78b7e4d46c5be263ff99d77531a89cbcc706adf2d967eec3df5ca12122024010fd4c1d5ff3585f2a6841cfe38a816b790f46ba02c17b7651a93942b59a2",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4237,
+      "update_id": "1220487bbcd321d7122c0bf92427f9715859efc56c731f05ab7c2d38af405e286181",
+      "command_id": "e8d2800b-68eb-4bb6-b928-988abedeae2b",
+      "record_time": "2026-07-28T04:29:27.969311Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "0079e40349256e42931d6679a56e738d692232e05ac1a6b1055469a1fc70859dbbca121220106e71d5379ef197378423ef25b3c77c00415a0f95d803268050ba1c1d80374f",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "00564bd65d605ea3542b8b7daa447ca1fc384b174e756783168fc4265f23fa9e6eca1212200d37ff90f172b881e697cd47c8a22240d8e5f12047e9d0028e971e64c8a0785d",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "001c6be7a366f9fcf6b324eba5be3253065e5eddf1adcb709f2c044c472cfdc933ca121220f622f3bcbc7b04af4fae13b076ce87dd420ee7bf197de9872518ced40598fe9c",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4226,
+      "update_id": "122094ebe84170cb013a59c8bd2d0b92ee7988af5c7d8dfbdfcb2917fdd4f45ca230",
+      "command_id": "398581cd-568c-495a-9d42-673d6f8ef857",
+      "record_time": "2026-07-28T04:26:50.458943Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "005d9a0f527e9d05e7e4bb6f731919c7b922d7e1def876e20cd95683355b35c19aca1212207cf5c5b25c941e5363c762c583d2f2f3c1c7816d38c76c640e17812e96d68372",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "archive",
+          "contract_id": "000a724080b15feee336b1962ba397d8b089b83da381a06bf26bd6f7ea6ffb60ddca121220507a809cea9d972a5cbb4a3957f43f2372356b9bf044cbabb02dad4669ad8336",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "003ae464ba922741bc925a93eb8d32774f0418bab3ef17b076f924d58257d88f7cca1212204bb320fd21713f62bb291d4c61f1edacde338401b316e1265267738cc2f1605d",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4186,
+      "update_id": "12206b816e06ed08cc837649952bda4f4c9e23a778d509eb41d138c5dbc55745b5a6",
+      "command_id": "840d361d-67fa-493f-b4a9-74ed05b9399f",
+      "record_time": "2026-07-28T04:14:49.73215Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "0016311db86e69bf737c04f22e53e1e929c46e7cf1c0aaa9bd8689dbef0f338c2bca12122084e158f627b4150570cc304a8d7a86b5323624ac37459b81ef80e90b01ea5f7e",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "0079e40349256e42931d6679a56e738d692232e05ac1a6b1055469a1fc70859dbbca121220106e71d5379ef197378423ef25b3c77c00415a0f95d803268050ba1c1d80374f",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "003d94ec59800e463d54b2c821dbb108bce8c9a7b574298e8bdeb6621407e74e2eca1212208a0023f27bf611a671089267a0f795bbc072e0404f617894a0781a1fa8d3e9df",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4177,
+      "update_id": "1220ec05ce3ed09fa00a2f5538858346ad670a14d48e849d0025603fbafc4e1d255e",
+      "command_id": "18eb7d54-9fe1-46bf-a9d5-116337b71ce4",
+      "record_time": "2026-07-28T04:12:14.306146Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "00f230fdb6a7a1d9bbf868fb7dd1dc993f7a94db8f1b139d372244452542dfab10ca121220bac93c961b39bd43d2d11cce8ccb9fcf7b82e91cf5a3ab435163ebb56b3276f0",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "archive",
+          "contract_id": "00ac1f9bc56e5dc195fc7363eed22a7fa91c0156f82cdbfbc66ee8a7d6c8526d6bca1212209350303e8ea82c4aa003462d622fe8249b191d0386256107b8626963c14ab68c",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "005d9a0f527e9d05e7e4bb6f731919c7b922d7e1def876e20cd95683355b35c19aca1212207cf5c5b25c941e5363c762c583d2f2f3c1c7816d38c76c640e17812e96d68372",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4158,
+      "update_id": "1220fa8fb2f8d12eeb451f2911b7959e04a6dbbd7018578abc68abd6e5aec6e0507e",
+      "command_id": "5d096174-6db0-420f-a5ce-51b59edbc57c",
+      "record_time": "2026-07-28T04:06:50.192529Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "00952f436a8f3048eec0a7ef6dc7c0945e9a2b3f515b95104a1d60c0ebb6d4970fca121220207a6a4c100e9e5da0b4395c96bb3a698975cdc1790d0cbcbf91227c14732d2e",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "0016311db86e69bf737c04f22e53e1e929c46e7cf1c0aaa9bd8689dbef0f338c2bca12122084e158f627b4150570cc304a8d7a86b5323624ac37459b81ef80e90b01ea5f7e",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "00e660cb8c1b3c778399e39119856cef49e7a237cb26a149a4cd66b1569faddf44ca121220c07c7e5512a80288bbd7e64b9e73df760466683a5e3f35a17eefbfc0c7949501",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4153,
+      "update_id": "1220ce64d6e31eca8ca5e54b3717fae97b70da547dce40d2963e969de120c710e1a3",
+      "command_id": "1a6b14aa-06e3-4a1e-a000-2b33881b69fd",
+      "record_time": "2026-07-28T04:06:00.288173Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "00b24f02b3884fe4b46cb1c8daa77959d8bcdb828b0df2f458a4c4d7569fefe8fdca1212203d66fd99002da06afb696cd6b3e83dd49d220de66bdf1d9afb78728457c7c861",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "archive",
+          "contract_id": "000b6ccd503e9913267ba6bd365957d85e9b95a95411927f2509528cf2eadb4f29ca121220d5c5ee4670f304c155ca8c9683186005c39a582e74d8c9726b7a18aa62ee7194",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "00f230fdb6a7a1d9bbf868fb7dd1dc993f7a94db8f1b139d372244452542dfab10ca121220bac93c961b39bd43d2d11cce8ccb9fcf7b82e91cf5a3ab435163ebb56b3276f0",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4116,
+      "update_id": "1220df7d2ca1fe52b3a3068d57874bc65dba9352b4b39e58ce6d4eb1d448b663afe2",
+      "command_id": "9212ef65-cb7c-4821-b0d3-50a572f6e167",
+      "record_time": "2026-07-28T03:55:06.451422Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "00ead4809eb02cef3a30ca093960e3a0a694647fff052753e1791810c4bd41da47ca12122081526429094a57e33fa9d439859cd974d11b6eefb0e3ba169856d0429262b0e9",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "archive",
+          "contract_id": "0030e582e86c88f9c5bfc4aacbee661ad7c9fa7b20622549a4b6fdf3c9376d14e1ca12122059ced6f00c8b51a071a6399557ce0a6a1e5315a972da65fcbb3ae561c6325082",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "00b24f02b3884fe4b46cb1c8daa77959d8bcdb828b0df2f458a4c4d7569fefe8fdca1212203d66fd99002da06afb696cd6b3e83dd49d220de66bdf1d9afb78728457c7c861",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4109,
+      "update_id": "12209d2bef413e55c824bcdb38ee4e9213c291b00c766eafb824808999bae60d9f66",
+      "command_id": "27f5133d-6268-48a8-8fa0-3bf895c65576",
+      "record_time": "2026-07-28T03:53:54.758134Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "0030a5931f474c491fa005687d628cde55ed23e9ff0d7a7fd673394d95aa6506e8ca121220bcc7f7aae208c1b97024f186a085cfa1194c2bda069df17f76b9083b8721ffc1",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "00952f436a8f3048eec0a7ef6dc7c0945e9a2b3f515b95104a1d60c0ebb6d4970fca121220207a6a4c100e9e5da0b4395c96bb3a698975cdc1790d0cbcbf91227c14732d2e",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "000a724080b15feee336b1962ba397d8b089b83da381a06bf26bd6f7ea6ffb60ddca121220507a809cea9d972a5cbb4a3957f43f2372356b9bf044cbabb02dad4669ad8336",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4094,
+      "update_id": "1220ebf8745bf1ca3f0791341217e29b61e7a5de09213f0f3b71520a69ac2cd7c44c",
+      "command_id": "e5eaad37-7281-43d9-bf00-2d84289470f6",
+      "record_time": "2026-07-28T03:50:01.814518Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "00c350b46a7654088421e58b43eb9bd61263d9246164371754eae56bd5d5ce22f0ca121220c95e040304d3a7e69424ae4a39b3eaec1032d7505394e3e248d2ebe079772e16",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "0030a5931f474c491fa005687d628cde55ed23e9ff0d7a7fd673394d95aa6506e8ca121220bcc7f7aae208c1b97024f186a085cfa1194c2bda069df17f76b9083b8721ffc1",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "00ac1f9bc56e5dc195fc7363eed22a7fa91c0156f82cdbfbc66ee8a7d6c8526d6bca1212209350303e8ea82c4aa003462d622fe8249b191d0386256107b8626963c14ab68c",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4074,
+      "update_id": "1220a2757503ddf01e2b25b297fc28890fdf6b02e9105bdf10731c4ace807bd41cbc",
+      "command_id": "46490696-12d1-4ee9-8930-2c3212a3fe6e",
+      "record_time": "2026-07-28T03:44:20.351724Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "0075a6974525c1ea0aa04c754d6a2436cca0bba6ac7d25d382fa8e1e54f12c04c7ca121220547cc5692f2b7db629bf1b57a5f72c8c6ce2b48a4647e2b6ec32b278788e6550",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "archive",
+          "contract_id": "00f1105a038d9dbdf49b6c4ce372584aa17bb7948c4aafca2b21c010c5b35c7bd5ca1212205fb8b9bc8c6c10c5d3d093578bbabf9c8872a2cb14f66d22856c355b406344b4",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "00ead4809eb02cef3a30ca093960e3a0a694647fff052753e1791810c4bd41da47ca12122081526429094a57e33fa9d439859cd974d11b6eefb0e3ba169856d0429262b0e9",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4051,
+      "update_id": "12205d050df2f58f48fb2314316d5f8ede1b277915948666052eb809808af6f8084c",
+      "command_id": "3f793e78-aa88-4eba-9fe2-908737ed446d",
+      "record_time": "2026-07-28T03:37:55.322855Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "00e756e3b71e88a2cc282926da458d5a1cb0f84be93ac9541a34dc3a116b53019aca1212209fd0d43282350a86f417f6aa59f08ba7a58012d59d29fe312861e66c198ba553",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "00c350b46a7654088421e58b43eb9bd61263d9246164371754eae56bd5d5ce22f0ca121220c95e040304d3a7e69424ae4a39b3eaec1032d7505394e3e248d2ebe079772e16",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "000b6ccd503e9913267ba6bd365957d85e9b95a95411927f2509528cf2eadb4f29ca121220d5c5ee4670f304c155ca8c9683186005c39a582e74d8c9726b7a18aa62ee7194",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "transaction",
+      "offset": 4026,
+      "update_id": "1220a2d72e413f260942f3f0bde45dfb6ce4d6f30b8361fdb4b08149bdede11f4f15",
+      "command_id": "59eb5b89-64ab-421a-8f58-df1382f56cf7",
+      "record_time": "2026-07-28T03:30:32.754803Z",
+      "synchronizer": "global-domain::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "event_count": 3,
+      "events": [
+        {
+          "kind": "archive",
+          "contract_id": "0097e03fa4e1b8f314c564be47a648058811b7bd4878e467754e4054cb9775279cca121220d02ab69745fdecac8c0772a23a321a528ab1e96ad8a046264c1769a7e60fa271",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "archive",
+          "contract_id": "00ae70652fa2b84f73bf4789fe61929da0b2fbff6c570779f7506df3ff4c7d8cbbca1212206ac7492517f8ff67f2c2a1b40eed0f846e853848d8e9a45394be797f51d6b731",
+          "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
+          "witnesses": [
+            "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+          ]
+        },
+        {
+          "kind": "create",
+          "contract_id": "0075a6974525c1ea0aa04c754d6a2436cca0bba6ac7d25d382fa8e1e54f12c04c7ca121220547cc5692f2b7db629bf1b57a5f72c8c6ce2b48a4647e2b6ec32b278788e6550",
           "template": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
           "witnesses": [
             "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"

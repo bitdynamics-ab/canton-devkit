@@ -4,9 +4,9 @@
   },
   "events": [
     {
-      "offset": 2549,
-      "update_id": "122045a8d40663027f87522052ba6e7cee2059c6fefc5ae6e9d723cef1bfb7a556ac",
-      "record_time": "2026-07-27T20:37:24.821949Z",
+      "offset": 4914,
+      "update_id": "1220dabd1e2a9389e8f0bd9a51ce4db85c1883f16859af6f4df4b35d67879de24f32",
+      "record_time": "2026-07-28T07:39:40.274625Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -19,9 +19,9 @@
       ]
     },
     {
-      "offset": 2514,
-      "update_id": "12200587171c5530b701dab605d8b52516f6cfd397b6fe59eb3b8a1f3849dfe07a18",
-      "record_time": "2026-07-27T20:27:24.918127Z",
+      "offset": 4876,
+      "update_id": "122088a6a902cb71d5faeab40ef15c2a20e3232db3db7454f517b405bd9965db760e",
+      "record_time": "2026-07-28T07:29:13.676768Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -34,9 +34,9 @@
       ]
     },
     {
-      "offset": 2469,
-      "update_id": "1220c585d71fcec69c6ba557cf3fb9deb0b35bdc884da2b6401d13cfcbea046ca8db",
-      "record_time": "2026-07-27T20:14:31.527017Z",
+      "offset": 4853,
+      "update_id": "12209dfaf3bab38d6c637998e2e02d8afa992156d064da9e71037068b77cbd4ccb49",
+      "record_time": "2026-07-28T07:23:11.33732Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -49,9 +49,9 @@
       ]
     },
     {
-      "offset": 2446,
-      "update_id": "12202aa47ae94ad4fdbae5fad91f4b8955b6266c4d6748d0f2ed1e1e48e9cec1bcb0",
-      "record_time": "2026-07-27T20:08:36.358115Z",
+      "offset": 4801,
+      "update_id": "1220c760c13f0b2c31c19a2492f7b53f8aff259d4a07679bfc4a73149b5760c2ec0d",
+      "record_time": "2026-07-28T07:08:15.04796Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -64,9 +64,9 @@
       ]
     },
     {
-      "offset": 2407,
-      "update_id": "1220c9dd64aa0ebe53e85746a777fdf5b62d2dbba14fb0cdb9de2fcbd77955c5d6d2",
-      "record_time": "2026-07-27T19:58:01.045457Z",
+      "offset": 4769,
+      "update_id": "122006696fa8c1dbb32d8ba7d561d96bb6842215000ecd8cbf00eede1bc4b77c695c",
+      "record_time": "2026-07-28T06:59:16.52628Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -79,9 +79,9 @@
       ]
     },
     {
-      "offset": 2366,
-      "update_id": "122004f994110d8bdc7a72e2ad4a14b1b5d5ea2d40c70764c8bde49af813e50af467",
-      "record_time": "2026-07-27T19:47:07.874072Z",
+      "offset": 4735,
+      "update_id": "1220ff2ab152e20f86fe3a8371f72bd8be7a66bfc50f24eadf6631a8d960ad2f3693",
+      "record_time": "2026-07-28T06:49:40.547515Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -94,9 +94,9 @@
       ]
     },
     {
-      "offset": 2332,
-      "update_id": "1220720bc2f2d767ee461ea941bb9edd2cad566de5b45f85c8e1ac5e3102a0bb2c2c",
-      "record_time": "2026-07-27T19:36:48.308897Z",
+      "offset": 4702,
+      "update_id": "122065cac9c8250741c890424ce5a6ed5baf764c690060434006d6c8c4d75bece9ec",
+      "record_time": "2026-07-28T06:40:10.156141Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -109,9 +109,9 @@
       ]
     },
     {
-      "offset": 2294,
-      "update_id": "122065ae8134a082aeca05bcc238642fe920a95d781a12b3a4273d2a93f91f544034",
-      "record_time": "2026-07-27T19:25:36.715825Z",
+      "offset": 4664,
+      "update_id": "1220a84b71c4cb3b4280b3a67938bc7acbb1a8d68a7a2a6f596d6d0e7e2694ded969",
+      "record_time": "2026-07-28T06:29:12.695874Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -124,9 +124,9 @@
       ]
     },
     {
-      "offset": 2246,
-      "update_id": "12203f23415e30be0c4a94591ddcb6c5be97e57e70573c0724938943fb6fef11d95d",
-      "record_time": "2026-07-27T19:11:38.23617Z",
+      "offset": 4618,
+      "update_id": "1220c45e4c669428333eee3ed47047dba3e40dd349428170f3bee1836dc8d47a7d00",
+      "record_time": "2026-07-28T06:15:53.672503Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -139,9 +139,9 @@
       ]
     },
     {
-      "offset": 2209,
-      "update_id": "12207caf84947eecf3c12cb1125d244c8afd7b57c476b2d3e430f3e8d1bf354e5ac5",
-      "record_time": "2026-07-27T19:01:59.214021Z",
+      "offset": 4579,
+      "update_id": "1220b27a7eecb88a6cc45a6a01bd04f69e1c69e8ec9f79afdc0489d6324909e8b893",
+      "record_time": "2026-07-28T06:05:31.777376Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -154,9 +154,9 @@
       ]
     },
     {
-      "offset": 2178,
-      "update_id": "1220fcb458b764eba190a30b3057f4056e76a93ccb7d211fd41f9dfa9225581321e5",
-      "record_time": "2026-07-27T18:52:32.451853Z",
+      "offset": 4559,
+      "update_id": "12208db4b656af0fd428b25c571dd1d811385ff9b6758a08d7003039e18c6bc4b6b9",
+      "record_time": "2026-07-28T05:59:55.563326Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -169,9 +169,9 @@
       ]
     },
     {
-      "offset": 2138,
-      "update_id": "12206ba265e6577b632149a93599a7dab70af053f26edea972a39ad27b3788290c77",
-      "record_time": "2026-07-27T18:42:37.221639Z",
+      "offset": 4521,
+      "update_id": "12205be548103c9ddd687d3015fc887994be8a28f20ed1ba7bbf224485772c53f979",
+      "record_time": "2026-07-28T05:48:29.205463Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -184,9 +184,9 @@
       ]
     },
     {
-      "offset": 2108,
-      "update_id": "122019e555b34574d79974d2976460af28f6b34158141fda1c1c368d01d9a9c6959b",
-      "record_time": "2026-07-27T18:33:14.383441Z",
+      "offset": 4481,
+      "update_id": "1220e70d6beb6f836bd0ff7c234ef0428913a4e2f0dc463d1a2e319892f44da14eb3",
+      "record_time": "2026-07-28T05:37:19.226435Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -199,9 +199,9 @@
       ]
     },
     {
-      "offset": 2075,
-      "update_id": "1220bd46400e5886a382ad1cc0a07e4a41774758e89f8ee5617ad7988f78d79cabb5",
-      "record_time": "2026-07-27T18:23:41.708168Z",
+      "offset": 4442,
+      "update_id": "1220d699f0e0de4eba4fcd091d1296b5753b5432283b13c875a0701a98de0992a9ea",
+      "record_time": "2026-07-28T05:27:56.850622Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -214,9 +214,9 @@
       ]
     },
     {
-      "offset": 2028,
-      "update_id": "122038f93e118336bd55c17d13af0e3e2a4ca51dea83f47e1640f67501b708bc18c6",
-      "record_time": "2026-07-27T18:11:58.455602Z",
+      "offset": 4391,
+      "update_id": "12204377aa21c22f1f394fd4feb279ef6f5b86fd59c8d84945c224c2dfd18a47f80f",
+      "record_time": "2026-07-28T05:13:35.082179Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -229,9 +229,9 @@
       ]
     },
     {
-      "offset": 1979,
-      "update_id": "1220754dca7bd0d1c1bbd235bfa3400d786b597ec00ffe4070b462c9cb5bc7663c91",
-      "record_time": "2026-07-27T17:58:48.299228Z",
+      "offset": 4371,
+      "update_id": "122022c67458ebaa12e5f4a779917211744e104f540a83ba0c5b6894e787047c5634",
+      "record_time": "2026-07-28T05:08:45.803108Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -244,9 +244,9 @@
       ]
     },
     {
-      "offset": 1947,
-      "update_id": "122062ab22edb8bdd4d5d315fbe5589237fbee958235ee5d7daabf9627dbedb78577",
-      "record_time": "2026-07-27T17:50:00.858647Z",
+      "offset": 4335,
+      "update_id": "122023780b80f8622066ba9e3c08741c296202f0e0b17c459160757ee92a3c6dc66d",
+      "record_time": "2026-07-28T04:58:11.848741Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -259,9 +259,9 @@
       ]
     },
     {
-      "offset": 1906,
-      "update_id": "1220e1cf2800796b44b4dc26c9506f76f419fefe5eb3ecfab1c97f146dfd8c2819be",
-      "record_time": "2026-07-27T17:37:50.547051Z",
+      "offset": 4295,
+      "update_id": "12202d65f560e9c4aa973057bd2ce48257be8fe650ec1993663b17e1b4e01f877b8e",
+      "record_time": "2026-07-28T04:46:38.663513Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -274,9 +274,9 @@
       ]
     },
     {
-      "offset": 1872,
-      "update_id": "122010017cbe61aa614f2c9e5baa4083ad729629ab5848a351838db70d32ab1bc4a6",
-      "record_time": "2026-07-27T17:27:33.151563Z",
+      "offset": 4260,
+      "update_id": "1220dc9d183e1a53f05d362816e00c63871e2c127e55a9057151b08e5dec541b0d3f",
+      "record_time": "2026-07-28T04:36:57.648808Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -289,9 +289,9 @@
       ]
     },
     {
-      "offset": 1836,
-      "update_id": "1220a896ff33fe79518d4a4bece12268be9e46b7c267c67e8a20fbf0d58b24ab6bad",
-      "record_time": "2026-07-27T17:18:14.698997Z",
+      "offset": 4226,
+      "update_id": "122094ebe84170cb013a59c8bd2d0b92ee7988af5c7d8dfbdfcb2917fdd4f45ca230",
+      "record_time": "2026-07-28T04:26:50.458943Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -304,9 +304,9 @@
       ]
     },
     {
-      "offset": 1799,
-      "update_id": "122083b5861ba59c43f82b42e32a1ff8494fa60d37c05774632223af343180a689dd",
-      "record_time": "2026-07-27T17:07:59.04471Z",
+      "offset": 4177,
+      "update_id": "1220ec05ce3ed09fa00a2f5538858346ad670a14d48e849d0025603fbafc4e1d255e",
+      "record_time": "2026-07-28T04:12:14.306146Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -319,9 +319,9 @@
       ]
     },
     {
-      "offset": 1765,
-      "update_id": "1220034830a93074967f300ba789b9e5af0f6a82280753049584b16ffecd971b3fd8",
-      "record_time": "2026-07-27T16:58:47.93262Z",
+      "offset": 4153,
+      "update_id": "1220ce64d6e31eca8ca5e54b3717fae97b70da547dce40d2963e969de120c710e1a3",
+      "record_time": "2026-07-28T04:06:00.288173Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -334,9 +334,9 @@
       ]
     },
     {
-      "offset": 1723,
-      "update_id": "1220f2a04824091e46e5820d0be69de83f834303fa0f4c6b6d13e91555b60d5ff7c2",
-      "record_time": "2026-07-27T16:48:10.774009Z",
+      "offset": 4116,
+      "update_id": "1220df7d2ca1fe52b3a3068d57874bc65dba9352b4b39e58ce6d4eb1d448b663afe2",
+      "record_time": "2026-07-28T03:55:06.451422Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -349,9 +349,9 @@
       ]
     },
     {
-      "offset": 1690,
-      "update_id": "1220f9f26d66d76475e6908fbb4a941794f162c70308fd5c85fbb9474f3299489a28",
-      "record_time": "2026-07-27T16:39:03.183853Z",
+      "offset": 4074,
+      "update_id": "1220a2757503ddf01e2b25b297fc28890fdf6b02e9105bdf10731c4ace807bd41cbc",
+      "record_time": "2026-07-28T03:44:20.351724Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -364,9 +364,9 @@
       ]
     },
     {
-      "offset": 1652,
-      "update_id": "1220dbad91508db193b497bd40e5132f3b9cd036178a4bed1e2b0735177ebbba8056",
-      "record_time": "2026-07-27T16:28:15.529318Z",
+      "offset": 4026,
+      "update_id": "1220a2d72e413f260942f3f0bde45dfb6ce4d6f30b8361fdb4b08149bdede11f4f15",
+      "record_time": "2026-07-28T03:30:32.754803Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -379,9 +379,9 @@
       ]
     },
     {
-      "offset": 1620,
-      "update_id": "122024c1af9237567ed739794e3e3a26272af57ed1cfbb3b26fad27e8531f8c687a4",
-      "record_time": "2026-07-27T16:19:40.982089Z",
+      "offset": 4003,
+      "update_id": "12206195e028a53df7194789a80412d7f54445e09f2901cdb1f4f40338f4d10d0de4",
+      "record_time": "2026-07-28T03:24:40.512716Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -394,9 +394,9 @@
       ]
     },
     {
-      "offset": 1585,
-      "update_id": "1220051d63c11d462a1f20b2379cc574d9522e3440c0e384d7a745c40fb3fd1e9bc9",
-      "record_time": "2026-07-27T16:09:41.766204Z",
+      "offset": 3951,
+      "update_id": "12203888a540aeb21ee5be15babaa4af392338bf723739cdacf9a73b5c5904284d37",
+      "record_time": "2026-07-28T03:10:17.011829Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -409,9 +409,9 @@
       ]
     },
     {
-      "offset": 1533,
-      "update_id": "1220e55978cf90185068ae9aa85699b52a285bf98e9a60e83ce62420e3d30d0bb3e9",
-      "record_time": "2026-07-27T15:55:07.989802Z",
+      "offset": 3913,
+      "update_id": "1220cb34bb522cec721bb603cc87d9bbd5fdb4eee36ca3dd1001c4c36131da13fa78",
+      "record_time": "2026-07-28T03:00:27.4455Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -424,9 +424,9 @@
       ]
     },
     {
-      "offset": 1498,
-      "update_id": "12208c5f50312743ac0722627983e15e1b31042f9a52031da4a1eaf79a6e1cd2b29a",
-      "record_time": "2026-07-27T15:45:05.491788Z",
+      "offset": 3877,
+      "update_id": "12201a566b7ba0d2d3b0e0c005c4cccb3158ed4dcc1ec1ad01268707c3fbe57f63ca",
+      "record_time": "2026-07-28T02:50:08.821147Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -439,9 +439,9 @@
       ]
     },
     {
-      "offset": 1462,
-      "update_id": "1220174c2385279a0fcd83d0fdf8d0e70d3424479106ee947e3cff9c62bfb226b38b",
-      "record_time": "2026-07-27T15:35:31.51546Z",
+      "offset": 3848,
+      "update_id": "122009529f7a80fa1b946e29566bbcaa94e6097a1ff12564b0df07f4f2fd079faa92",
+      "record_time": "2026-07-28T02:41:43.112698Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -454,9 +454,9 @@
       ]
     },
     {
-      "offset": 1426,
-      "update_id": "122072ffce937339191a953819c6d7cd50df866614fdbe71c352cd4d0707b8196471",
-      "record_time": "2026-07-27T15:25:07.794462Z",
+      "offset": 3809,
+      "update_id": "1220b40a2e009049b17c959d96033b54225b681151d358e63bcb727deb3b226fd840",
+      "record_time": "2026-07-28T02:31:39.094352Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -469,9 +469,9 @@
       ]
     },
     {
-      "offset": 1387,
-      "update_id": "12206b2e1a5686b410780b5151551b39f095caef88877edb79a89e1dcd72e13fadc2",
-      "record_time": "2026-07-27T15:13:32.156246Z",
+      "offset": 3767,
+      "update_id": "1220782484fb26d38b529edd0939d116fb0fdcd38c96eb68ecae04af071471b5ed1a",
+      "record_time": "2026-07-28T02:20:09.796649Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -484,9 +484,9 @@
       ]
     },
     {
-      "offset": 1353,
-      "update_id": "1220c7964f4f3ff075558a27b0ed6e1f33672543da270428a1f3ae5db28a0377dbc3",
-      "record_time": "2026-07-27T15:04:46.4509Z",
+      "offset": 3729,
+      "update_id": "1220be38aef5e1bf98a7de80c4ca275cfccb1293cd982e07582b1f2713654a62a97e",
+      "record_time": "2026-07-28T02:10:51.287706Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -499,9 +499,9 @@
       ]
     },
     {
-      "offset": 1319,
-      "update_id": "12202a0f1821e02c0bf232ae2c85b9f2da47b51eb3207a4ec4342d997975c6adced1",
-      "record_time": "2026-07-27T14:55:03.758195Z",
+      "offset": 3689,
+      "update_id": "1220d772311baaebc895b1591738da0bcb828228e0ef9acc0f7fc18e37f191624d9a",
+      "record_time": "2026-07-28T02:00:11.14193Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -514,9 +514,9 @@
       ]
     },
     {
-      "offset": 1284,
-      "update_id": "1220c9a12a08d150686288e2cb6ea0dd9435cc84b13e0254951049bc82f11c144c20",
-      "record_time": "2026-07-27T14:45:00.303082Z",
+      "offset": 3652,
+      "update_id": "1220edbc0604b2d6af23c65be30a3e2c23f978a3e887341e727c7308e39adfe1d44b",
+      "record_time": "2026-07-28T01:49:13.597947Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -529,9 +529,9 @@
       ]
     },
     {
-      "offset": 1255,
-      "update_id": "1220241a919121c7a1405ea99ff9afcbe47d8f2fb8c7bdfab5f69adc42d2e1bf7a83",
-      "record_time": "2026-07-27T14:35:01.548009Z",
+      "offset": 3622,
+      "update_id": "1220c74b28e35bedf6164609f05395f6c39ba8d45eafce34c4ea78675fc10d9bac0e",
+      "record_time": "2026-07-28T01:40:17.735818Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -544,9 +544,9 @@
       ]
     },
     {
-      "offset": 1212,
-      "update_id": "122097976d87e41b23bc1e3ee81a304a265511adb7c518f86663e8db31c334cbad9c",
-      "record_time": "2026-07-27T14:23:28.840758Z",
+      "offset": 3580,
+      "update_id": "12204681f6a6c715db532c7f9972ed37a5964b89873b6b09f8732891c8f0404cbbb0",
+      "record_time": "2026-07-28T01:28:13.308714Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -559,9 +559,9 @@
       ]
     },
     {
-      "offset": 1176,
-      "update_id": "1220cd911b18ffceb1cdde801695dce06fa1cca7be825d49ab30d2eef1a2b01f6beb",
-      "record_time": "2026-07-27T14:12:47.510131Z",
+      "offset": 3547,
+      "update_id": "12203d55d96ab254347f2096da7034426702277a98cf656e934f81198d609552b6e1",
+      "record_time": "2026-07-28T01:18:46.053639Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -574,9 +574,9 @@
       ]
     },
     {
-      "offset": 1139,
-      "update_id": "1220fab3434445cfe49666e9102b235d44d4d16798ae764d73d32d786ad1f1cb100b",
-      "record_time": "2026-07-27T14:02:31.846088Z",
+      "offset": 3510,
+      "update_id": "1220453a52f6d4afdca8081549c1422c7f2a0a5d1865c4637d15002ab7794df2a67d",
+      "record_time": "2026-07-28T01:08:12.902325Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -589,9 +589,9 @@
       ]
     },
     {
-      "offset": 1103,
-      "update_id": "1220f439afdb64e9fc4997f0c26b3dda3d3a5d1decce844b0a27e0bc9c149ef55178",
-      "record_time": "2026-07-27T13:52:58.29188Z",
+      "offset": 3471,
+      "update_id": "1220208b9c1be157ddb16472448c91367d396c8f212924bbc8fb19bc65858e4c8509",
+      "record_time": "2026-07-28T00:58:04.665653Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -604,9 +604,9 @@
       ]
     },
     {
-      "offset": 1066,
-      "update_id": "12206a036f8b1fef97093083577f3890420f3fd15b2ee7c2cae154c2aded0d06b39a",
-      "record_time": "2026-07-27T13:41:48.682617Z",
+      "offset": 3422,
+      "update_id": "122020f409f0d26fdcdea3d38ae0660054574c480c87c21a4e6e95323980954bb187",
+      "record_time": "2026-07-28T00:44:38.733398Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -619,9 +619,9 @@
       ]
     },
     {
-      "offset": 1028,
-      "update_id": "1220176901ffa9cd46b66d8f5c61e5f0f56fd7bd145d878c9a6ddb3d5538543ebb95",
-      "record_time": "2026-07-27T13:31:08.259759Z",
+      "offset": 3388,
+      "update_id": "122049851b96e01cee488f88f8408a8664a904007329f5d0740be87a9914478ef81c",
+      "record_time": "2026-07-28T00:34:17.521437Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -634,9 +634,9 @@
       ]
     },
     {
-      "offset": 988,
-      "update_id": "1220749ce511d6607565530d463f2b4b2d007ffb1f56359f5c6feb734b25db886a30",
-      "record_time": "2026-07-27T13:20:22.212443Z",
+      "offset": 3369,
+      "update_id": "1220a9aa706a6e3f1429a49af0bdf2ced44bbf904a0387d4e13ce3993ce670870369",
+      "record_time": "2026-07-28T00:28:59.571093Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -649,9 +649,9 @@
       ]
     },
     {
-      "offset": 945,
-      "update_id": "12209560844a4e7188bdc41fb114275e5c2e1c7e54735b3e5882df521b897e58ca6c",
-      "record_time": "2026-07-27T13:08:03.542104Z",
+      "offset": 3329,
+      "update_id": "1220185e1204c307085588fb5674974cabf05444c9b1cb7b413ccb2ef654f244d5f6",
+      "record_time": "2026-07-28T00:18:10.746165Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -664,9 +664,9 @@
       ]
     },
     {
-      "offset": 914,
-      "update_id": "1220e00878c0f67ba60eacd1533f18508b4c6aaebbf71751c500ddb60b55b1bdee8b",
-      "record_time": "2026-07-27T12:58:54.37742Z",
+      "offset": 3287,
+      "update_id": "122078e3e3031fcac83fb67afd92e20c1419f5c6e213f57281b18c2548214786b572",
+      "record_time": "2026-07-28T00:05:49.044996Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -679,9 +679,9 @@
       ]
     },
     {
-      "offset": 870,
-      "update_id": "12202ac6b92e84cad9b5bcfbedbc69d833a53c286332961045e404ac75b2858a8e93",
-      "record_time": "2026-07-27T12:47:44.65316Z",
+      "offset": 3246,
+      "update_id": "1220fc125deadc09812a4d54ff856c154c4da7c642daca4793be33900abbaa63e8ca",
+      "record_time": "2026-07-27T23:54:34.709621Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -694,9 +694,9 @@
       ]
     },
     {
-      "offset": 840,
-      "update_id": "122038ccbf035c8ed29577a61d51ae20948fda129dc8058c7bf2e76d0e0a37ea29f1",
-      "record_time": "2026-07-27T12:38:33.979512Z",
+      "offset": 3208,
+      "update_id": "12209a79a2b71ef607512b6eed2919a1b0deafa017bcf407b92cd9922cb2100864bb",
+      "record_time": "2026-07-27T23:43:28.767219Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -709,9 +709,9 @@
       ]
     },
     {
-      "offset": 807,
-      "update_id": "1220fbe37e020de0edc4d63012c77295252f13fc5d7db301c1e120aeb0f6ac40915a",
-      "record_time": "2026-07-27T12:29:17.587707Z",
+      "offset": 3171,
+      "update_id": "1220741c3eec3ecd63d4e7237d05639807755299f74d66be2a9c690967b15296b61d",
+      "record_time": "2026-07-27T23:32:11.254163Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -724,9 +724,9 @@
       ]
     },
     {
-      "offset": 771,
-      "update_id": "1220b6b923f9e45ee4c281dc16bbc3dc3f4c9351b36a6b04451e64a1461ab7f298a0",
-      "record_time": "2026-07-27T12:19:48.17774Z",
+      "offset": 3134,
+      "update_id": "1220cd79c59d6db479e2bb95cc8ab179a7532de87c676969f5a1514d37b7b1904046",
+      "record_time": "2026-07-27T23:22:09.947261Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",
@@ -739,9 +739,9 @@
       ]
     },
     {
-      "offset": 719,
-      "update_id": "12203b55b1b5557bcb01a26a1573f3e34694e73f97355e1d45f6a0066f0d1a562538",
-      "record_time": "2026-07-27T12:04:42.450608Z",
+      "offset": 3102,
+      "update_id": "12209fcb8be20c27fb79c7be75d0f3de7d610982373ef888d7bf8d4ea5ffbeb01d11",
+      "record_time": "2026-07-27T23:12:53.625364Z",
       "instrument_id": "Amulet",
       "kind": "mint",
       "source": "event_log",

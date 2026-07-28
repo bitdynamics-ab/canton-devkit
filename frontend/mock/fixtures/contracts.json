@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "instance": "localnet-1",
+  "instance": "demo",
   "role": "app-user",
-  "ledger_end": 2565,
+  "ledger_end": 4939,
   "contracts": [
     {
       "contract_id": "0076677cff95e66905e2e5c6c7ea53171836134ed216c422561d6ee5935e0f521cca1212208a4e466f276703d25651f7b6a57cf56270bd9bd3af142f08cca84c03624cea05",
@@ -54,12 +54,12 @@
       "package_name": "splice-wallet"
     },
     {
-      "contract_id": "004ea30320e7dc03ce55ed5334bd8deb240b73d19f296d749d98ee1a89241b2340ca121220f04ca116b6606513e30a7f9f31b075d0641608a7a1590da33a8e8ef2582594b3",
+      "contract_id": "00eca51173e9f95e4c641a58fc07e91cd73b184ddbff82c863fdf9cfdd936a659bca12122098e73d269f3681043c117e907b1feb9081afeef2ef0393d65dbb3539d5716bd0",
       "template_id": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
       "payload": {
         "dso": "DSO::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
         "round": {
-          "number": 67
+          "number": 131
         },
         "validator": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
       },
@@ -69,16 +69,16 @@
       "observers": [
         "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
       ],
-      "created_at": "2026-07-27T20:17:07Z",
+      "created_at": "2026-07-28T07:23:42Z",
       "package_name": "splice-amulet"
     },
     {
-      "contract_id": "0054c1abb00257d6fd2566f8d7bdfd18a516099b2bda97fc7b009394be61297bfdca12122015d31bae48f4719517faf6f88f391de541a23193e5290648d0b07770e19a3d69",
+      "contract_id": "006fad6c8dfd103935a42345689d5736af11ce14dec5a502e377c93672c241a139ca121220b1307db3fb20425bc344303ed26b3359353e25647a8c28d6e333ee1ee0c81b27",
       "template_id": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
       "payload": {
         "dso": "DSO::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
         "round": {
-          "number": 68
+          "number": 132
         },
         "validator": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
       },
@@ -88,11 +88,35 @@
       "observers": [
         "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
       ],
-      "created_at": "2026-07-27T20:31:41Z",
+      "created_at": "2026-07-28T07:38:51Z",
       "package_name": "splice-amulet"
     },
     {
-      "contract_id": "00113ced41d161a520e7354cc6b7bf911a48678b70a8705206ebd1cdb5d80129bdca121220110401cbb446bb09bdaa4cbcd069041b64f7391121d6419108968e7b2960064a",
+      "contract_id": "00934a2aacbfb1e32ab59ff94e3bd3b6831f38be8577d43c9f8fd3cbf1e2506125ca121220f57e2cbfb9ed739fc96ce62e4f0160464837fc33570ba3adcb530ab7ccde6a8b",
+      "template_id": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
+      "payload": {
+        "amount": {
+          "createdAt": {
+            "number": 133
+          },
+          "initialAmount": "75470.1600000000",
+          "ratePerRound": {
+            "rate": "0.0038051800"
+          }
+        },
+        "dso": "DSO::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+        "owner": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+      },
+      "signatories": [
+        "DSO::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+        "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+      ],
+      "observers": [],
+      "created_at": "2026-07-28T07:39:40Z",
+      "package_name": "splice-amulet"
+    },
+    {
+      "contract_id": "0009aeb751ccba5edc302dfbf29c00cbb1a2086dd1b792980c2054d169e9b10e29ca12122064d1d99d4e78169204644f90f4abc60a76e1d2e38f2e2ab99684cec6a69aa001",
       "template_id": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLicense",
       "payload": {
         "dso": "DSO::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
@@ -101,11 +125,11 @@
             "number": 0
           },
           "lastReceivedFor": {
-            "number": 69
+            "number": 133
           },
           "numCouponsMissed": 0
         },
-        "lastActiveAt": 1785184579389799,
+        "lastActiveAt": 1785224575217289,
         "metadata": {
           "contactPoint": "",
           "lastUpdatedAt": 1785142103729685,
@@ -120,16 +144,16 @@
       "observers": [
         "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
       ],
-      "created_at": "2026-07-27T20:36:19Z",
+      "created_at": "2026-07-28T07:42:55Z",
       "package_name": "splice-amulet"
     },
     {
-      "contract_id": "00c246990873050f2dea0a25b7f9b154d4423b57b1154acac587f1bccacaae3502ca121220cc0dedd7fe99782482afa7351bf4794c1dd0bfaf43aef7cd2e85f63d7b4bdc88",
+      "contract_id": "00bc364ebb0ce42e26cb0acf6bdca59abd0f10d5972676609a0ed25925f1b187e5ca1212205f7e2464943993f76b9a1e27417665a8edba40dd56b4939dd37ede426513fa10",
       "template_id": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
       "payload": {
         "dso": "DSO::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
         "round": {
-          "number": 69
+          "number": 133
         },
         "validator": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
       },
@@ -139,31 +163,7 @@
       "observers": [
         "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
       ],
-      "created_at": "2026-07-27T20:36:19Z",
-      "package_name": "splice-amulet"
-    },
-    {
-      "contract_id": "00691b075b42263cd8f5be74f12483a54392aff2e7e2c2c6b96e98e3d7f0eed67dca121220a105bd8e503f120b782ca468763270c42308f7449fffbc85a73622af6a473a53",
-      "template_id": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a:Splice.Amulet:Amulet",
-      "payload": {
-        "amount": {
-          "createdAt": {
-            "number": 69
-          },
-          "initialAmount": "38990.1600000000",
-          "ratePerRound": {
-            "rate": "0.0038051800"
-          }
-        },
-        "dso": "DSO::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-        "owner": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-      },
-      "signatories": [
-        "DSO::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
-        "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
-      ],
-      "observers": [],
-      "created_at": "2026-07-27T20:37:24Z",
+      "created_at": "2026-07-28T07:42:55Z",
       "package_name": "splice-amulet"
     }
   ],

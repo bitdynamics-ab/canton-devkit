@@ -45,7 +45,7 @@
         {
           "label": "Disk space",
           "result": "pass",
-          "detail": "183.49 GB free at /Users/zzz/.canton-devkit/localnet"
+          "detail": "178.29 GB free at /Users/zzz/.canton-devkit/localnet"
         }
       ]
     },

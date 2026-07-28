@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "instance": "localnet-1",
+  "instance": "demo",
   "role": "app-user",
   "dars": [
     {

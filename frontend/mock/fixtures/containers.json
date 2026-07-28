@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "instance": "localnet-1",
+  "instance": "demo",
   "containers": [
     {
       "name": "localnet-1-ans-web-ui-app-provider",
       "service": "ans-web-ui-app-provider",
       "state": "running",
       "health": "healthy",
-      "status": "Up 12 hours (healthy)",
+      "status": "Up 23 hours (healthy)",
       "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/ans-web-ui:0.6.12"
     },
     {
@@ -15,7 +15,7 @@
       "service": "ans-web-ui-app-user",
       "state": "running",
       "health": "healthy",
-      "status": "Up 12 hours (healthy)",
+      "status": "Up 23 hours (healthy)",
       "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/ans-web-ui:0.6.12"
     },
     {
@@ -23,14 +23,14 @@
       "service": "canton",
       "state": "running",
       "health": "healthy",
-      "status": "Up 12 hours (healthy)",
+      "status": "Up 23 hours (healthy)",
       "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/canton:0.6.12"
     },
     {
       "name": "localnet-1-nginx",
       "service": "nginx",
       "state": "running",
-      "status": "Up 12 hours",
+      "status": "Up 23 hours",
       "image": "nginx:1.27.0"
     },
     {
@@ -38,7 +38,7 @@
       "service": "postgres",
       "state": "running",
       "health": "healthy",
-      "status": "Up 12 hours (healthy)",
+      "status": "Up 23 hours (healthy)",
       "image": "postgres:14"
     },
     {
@@ -46,7 +46,7 @@
       "service": "scan-web-ui",
       "state": "running",
       "health": "healthy",
-      "status": "Up 12 hours (healthy)",
+      "status": "Up 23 hours (healthy)",
       "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/scan-web-ui:0.6.12"
     },
     {
@@ -54,7 +54,7 @@
       "service": "splice",
       "state": "running",
       "health": "healthy",
-      "status": "Up 12 hours (healthy)",
+      "status": "Up 23 hours (healthy)",
       "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/splice-app:0.6.12"
     },
     {
@@ -62,14 +62,14 @@
       "service": "sv-web-ui",
       "state": "running",
       "health": "healthy",
-      "status": "Up 12 hours (healthy)",
+      "status": "Up 23 hours (healthy)",
       "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/sv-web-ui:0.6.12"
     },
     {
       "name": "localnet-1-swagger-ui",
       "service": "swagger-ui",
       "state": "running",
-      "status": "Up 12 hours",
+      "status": "Up 23 hours",
       "image": "swaggerapi/swagger-ui"
     },
     {
@@ -77,7 +77,7 @@
       "service": "wallet-web-ui-app-provider",
       "state": "running",
       "health": "healthy",
-      "status": "Up 12 hours (healthy)",
+      "status": "Up 23 hours (healthy)",
       "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/wallet-web-ui:0.6.12"
     },
     {
@@ -85,7 +85,7 @@
       "service": "wallet-web-ui-app-user",
       "state": "running",
       "health": "healthy",
-      "status": "Up 12 hours (healthy)",
+      "status": "Up 23 hours (healthy)",
       "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/wallet-web-ui:0.6.12"
     },
     {
@@ -93,7 +93,7 @@
       "service": "wallet-web-ui-sv",
       "state": "running",
       "health": "healthy",
-      "status": "Up 12 hours (healthy)",
+      "status": "Up 23 hours (healthy)",
       "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/wallet-web-ui:0.6.12"
     }
   ],
