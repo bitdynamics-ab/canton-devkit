@@ -17,14 +17,6 @@ import (
 // source of truth they both call. See CONTRIBUTING.md
 // "CLI ↔ Web UI parity".
 
-// EnvJWTRedaction is the placeholder that replaces a captured JWT when
-// the caller does not opt into raw tokens. Format chosen so a
-// downstream shell that expects a real token errors loudly ("Bearer
-// <redacted>" -> 401) instead of silently sending an empty header.
-// Mirrored by the CLI's jwtRedaction and the UI's
-// jwtRedactionPlaceholder — same sentinel so the surfaces don't drift.
-const EnvJWTRedaction = "<redacted>"
-
 // Splice UIs/APIs are served on LocalNet behind instance-scoped nginx
 // virtual hosts of the form <service>.<instance>.localhost (see
 // WriteNginxVhostOverlay and instanceVHost). We surface those hosts in
@@ -55,14 +47,14 @@ const EnvJWTRedaction = "<redacted>"
 //     CANTON_<ROLE>_{JSON,GRPC}_LEDGER_API_URL and unqualified
 //     CANTON_{JSON,GRPC}_LEDGER_API_URL aliases, each carrying the
 //     matching role-scoped <service>.<role>.<instance>.localhost vhost.
-//  4. state.Credentials -> CANTON_<ROLE>_JWT (redacted unless
-//     includeJWT) plus the user/audience pair that signed it.
+//  4. state.Credentials -> CANTON_<ROLE>_JWT plus the user/audience
+//     pair that signed it.
 //  5. state.Parties -> CANTON_<ROLE>_PARTY for the role parties
 //     (app-user/app-provider/sv), carrying the REAL on-ledger party
 //     ids — distinct from the ledger-api user name in Credentials.
 //     Empty until `up`/token tooling has scanned the participants, so
 //     a key is only emitted when a party id is actually recorded.
-func BuildEnvExport(name string, includeJWT bool) (apitypes.EnvExport, error) {
+func BuildEnvExport(name string) (apitypes.EnvExport, error) {
 	state, err := registry.Read(name)
 	if err != nil {
 		return apitypes.EnvExport{}, err
@@ -133,15 +125,7 @@ func BuildEnvExport(name string, includeJWT bool) (apitypes.EnvExport, error) {
 
 	for role, cred := range state.Credentials {
 		base := CredEnvKeyPrefix(role)
-		if includeJWT {
-			out.Vars[base+"_JWT"] = cred.JWT
-		} else {
-			// Default: emit a non-empty redaction placeholder so
-			// downstream tooling that asserts the variable is set keeps
-			// working, but the dev-only signing secret never hits
-			// stdout / CI logs / shared terminals.
-			out.Vars[base+"_JWT"] = EnvJWTRedaction
-		}
+		out.Vars[base+"_JWT"] = cred.JWT
 		if cred.User != "" {
 			out.Vars[base+"_USER"] = cred.User
 		}

@@ -126,22 +126,22 @@ func TestStatus_JSONShape(t *testing.T) {
 	if len(got.Endpoints) == 0 {
 		t.Error("Endpoints empty")
 	}
-	if got.Credentials["sv"].JWT != statusJWTRedaction {
-		t.Errorf("JWT = %q, want redacted", got.Credentials["sv"].JWT)
+	if got.Credentials["sv"].JWT != "eyJ.svsig" {
+		t.Errorf("JWT = %q, want raw JWT", got.Credentials["sv"].JWT)
 	}
 }
 
-func TestStatus_IncludeJWTOptIn(t *testing.T) {
+func TestStatus_AlwaysIncludesJWT(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedStatusInstance(t, "demo", registry.StatusRunning)
 	installFakeStatusProber(t, func(context.Context, *registry.State) ([]types.ServiceStatus, error) { return nil, nil })
 
-	got, err := CollectStatus(context.Background(), "demo", true, true)
+	got, err := CollectStatus(context.Background(), "demo", true)
 	if err != nil {
 		t.Fatalf("CollectStatus: %v", err)
 	}
 	if got.Credentials["sv"].JWT != "eyJ.svsig" {
-		t.Errorf("expected raw JWT with includeJWT, got %q", got.Credentials["sv"].JWT)
+		t.Errorf("expected raw JWT, got %q", got.Credentials["sv"].JWT)
 	}
 }
 

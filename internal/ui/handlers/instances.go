@@ -3,7 +3,7 @@
 //
 // The CLI status command and Web UI detail endpoint share
 // localnet.CollectStatus so JSON shape, Docker soft-fail handling,
-// endpoint projection, and JWT redaction do not drift. See
+// endpoint projection, and credential projection do not drift. See
 // CONTRIBUTING.md "CLI ↔ Web UI parity".
 package handlers
 
@@ -375,7 +375,7 @@ func handleDetail(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid instance name", err)
 		return
 	}
-	inst, err := localnet.CollectStatus(r.Context(), name, true, false)
+	inst, err := localnet.CollectStatus(r.Context(), name, true)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "instance not registered", err)

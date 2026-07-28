@@ -39,11 +39,11 @@ function JwtPanel({ name }: { name: string }) {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // include_jwt=true returns the raw token, usable as-is (LocalNet only).
+  // LocalNet returns a raw token, usable as-is for local development.
   useEffect(() => {
     let cancelled = false;
     setBusy(true);
-    issueJwt(name, { role, audience }, true)
+    issueJwt(name, { role, audience })
       .then((r) => {
         if (!cancelled) setJwt(r);
         setErr(null);

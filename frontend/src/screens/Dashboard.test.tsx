@@ -121,8 +121,7 @@ function mockListResponse(
           new Response(
             JSON.stringify({
               schema_version: 1,
-              token: "<redacted>",
-              redacted: true,
+              token: "header.payload.signature",
               party: "alice::abc",
               audience: "https://canton.network.global",
               role: "app-provider",

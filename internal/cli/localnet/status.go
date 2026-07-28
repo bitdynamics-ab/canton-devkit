@@ -18,8 +18,8 @@ Docker is available. Saved details are still shown if Docker is unreachable.
 Use --format=json for script-friendly output. --no-live skips live service
 checks and prints saved instance details only.
 
-JWTs in credentials are redacted by default to <redacted>. Pass --include-jwt
-to opt in to raw JWT output.`,
+JWTs in credentials contain the captured LocalNet values. LocalNet uses
+dev-only credentials and is intended for loopback development.`,
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -45,6 +45,5 @@ to opt in to raw JWT output.`,
 	cmd.Flags().StringVar(&opts.Name, "name", "", "Instance to inspect. Can also be passed as a positional argument.")
 	cmd.Flags().StringVar(&opts.Format, "format", "table", "Output format: table or json.")
 	cmd.Flags().BoolVar(&opts.NoLive, "no-live", false, "Skip live service checks; print saved instance details only.")
-	cmd.Flags().BoolVar(&opts.IncludeJWT, "include-jwt", false, "Emit raw JWT values in credentials. Default is <redacted>.")
 	return cmd
 }

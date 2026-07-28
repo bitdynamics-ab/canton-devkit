@@ -858,7 +858,7 @@ The test plan assumes command syntax that differs from the actual CLI implementa
 | M1-UP-001 | **PASS** | ~2-4 min | Splice 0.6.4, cached images. Status: healthy. Docker compose project verified. |
 | M1-STS-001 | **PASS** | <2s | Status includes health, endpoints, participant info. Non-existent instance → exit 1. |
 | M1-LOG-001 | **PASS** | <10s | Full logs: 308 lines. Service-filtered (`canton`): 20 lines. |
-| M1-ENV-001 | **PASS** | <1s | `export CANTON_*` format. Contains JWT (redacted), audience, port variables. |
+| M1-ENV-001 | **PASS** | <1s | `export CANTON_*` format. Contains raw JWT, audience, and port variables. |
 | M1-RST-001 | **PASS** | ~5-8 min | Full restart + single-service (`--service canton`) restart. Readiness wait is slow post-restart. |
 | M1-STP-001 | **NOT RUN** | — | Added after this run (PR #201 standalone `stop`/`start`). Covered by `scripts/e2e/run-all.sh`. |
 | M1-SNP-001 | **PASS*** | ~10 min | Snapshot: 78 MB .tgz. Restore + re-up works but splice re-sync can exceed 5 min (crash-consistent, not app-consistent). |

@@ -230,8 +230,8 @@ func (s *statusRecorder) Flush() {
 //
 //	access: 200 GET /api/version  127.0.0.1  3.2ms
 //
-// Query strings are deliberately NOT logged — they can carry
-// credentials (?include_jwt=true today, future auth tokens).
+// Query strings are deliberately NOT logged because they may carry
+// credentials in future endpoints.
 func withAccessLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

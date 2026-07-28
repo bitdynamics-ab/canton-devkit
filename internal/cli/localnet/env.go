@@ -32,9 +32,8 @@ import (
 // builder, so both surfaces emit an identical apitypes.EnvExport.
 func buildEnv() *cobra.Command {
 	var (
-		name       string
-		format     string
-		includeJWT bool
+		name   string
+		format string
 	)
 	cmd := &cobra.Command{
 		Use:   "env [name]",
@@ -56,10 +55,8 @@ Formats:
               (shell/dotenv carry comments + quotes that $GITHUB_ENV rejects)
   json        machine-readable shape; matches the Web UI handler
 
-JWTs are REDACTED by default (CANTON_<ROLE>_JWT=<redacted>) so
-CI logs / shared terminals don't leak the dev-only signing
-secret. Pass --include-jwt to opt in before piping or sourcing
-raw token values.`,
+JWT variables contain the captured LocalNet credentials. LocalNet uses
+dev-only credentials and is intended for loopback development.`,
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -74,7 +71,7 @@ raw token values.`,
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 				return localnet.AsExitError(localnet.ExitUserError)
 			}
-			ex, err := collectEnv(name, includeJWT)
+			ex, err := collectEnv(name)
 			if err != nil {
 				if errors.Is(err, registry.ErrNotFound) {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "no LocalNet instance named %q\n", name)
@@ -103,8 +100,6 @@ raw token values.`,
 		"Identifier of the LocalNet instance to export. Can also be passed as a positional argument.")
 	cmd.Flags().StringVar(&format, "format", "shell",
 		"Output format: shell | dotenv | github-env | json")
-	cmd.Flags().BoolVar(&includeJWT, "include-jwt", false,
-		"Emit raw CANTON_<ROLE>_JWT values. Default is <redacted>.")
 	return cmd
 }
 
@@ -112,8 +107,8 @@ raw token values.`,
 // — the same builder the Web UI app-config handler calls, so both
 // surfaces emit an identical shape (CLI ↔ Web UI parity, see
 // CONTRIBUTING.md).
-func collectEnv(name string, includeJWT bool) (apitypes.EnvExport, error) {
-	return localnet.BuildEnvExport(name, includeJWT)
+func collectEnv(name string) (apitypes.EnvExport, error) {
+	return localnet.BuildEnvExport(name)
 }
 
 // portEnvKey converts a logical port name into the canonical
