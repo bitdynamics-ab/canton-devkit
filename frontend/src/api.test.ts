@@ -152,7 +152,7 @@ describe("apiFetch", () => {
 describe("issueJwt", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("appends ?include_jwt=true only when explicitly opted in", async () => {
+  it("always requests the raw LocalNet JWT", async () => {
     // Use mockImplementation so each call gets a fresh Response —
     // fetch's body is one-shot and the second .text() throws
     // "Body is unusable" if we share a single instance.
@@ -162,8 +162,7 @@ describe("issueJwt", () => {
           new Response(
             JSON.stringify({
               schema_version: 1,
-              token: "<redacted>",
-              redacted: true,
+               token: "header.payload.signature",
               party: "alice::abc",
               audience: "https://canton.network.global",
               role: "app-provider",
@@ -175,25 +174,25 @@ describe("issueJwt", () => {
     );
     vi.stubGlobal("fetch", fetchSpy);
 
-    await issueJwt("demo", { role: "app-provider" }, false);
-    await issueJwt("demo", { role: "app-provider" }, true);
+    await issueJwt("demo", { role: "app-provider" });
+    await issueJwt("demo", { role: "app-provider" });
 
     expect(fetchSpy).toHaveBeenCalledTimes(2);
-    const [redactedURL] = fetchSpy.mock.calls[0];
-    const [revealedURL] = fetchSpy.mock.calls[1];
-    expect(redactedURL).toBe("/api/instances/demo/jwt");
-    expect(revealedURL).toBe("/api/instances/demo/jwt?include_jwt=true");
+    const [firstURL] = fetchSpy.mock.calls[0];
+    const [secondURL] = fetchSpy.mock.calls[1];
+    expect(firstURL).toBe("/api/instances/demo/jwt");
+    expect(secondURL).toBe("/api/instances/demo/jwt");
   });
 
   it("url-encodes the instance name (defence against path traversal)", async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ schema_version: 1, token: "<redacted>", party: "x", audience: "y", role: "z", warning_dev_secret: "" }), {
+        new Response(JSON.stringify({ schema_version: 1, token: "header.payload.signature", party: "x", audience: "y", role: "z", warning_dev_secret: "" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
     );
     vi.stubGlobal("fetch", fetchSpy);
-    await issueJwt("../etc/passwd", { role: "app-provider" }, false);
+    await issueJwt("../etc/passwd", { role: "app-provider" });
     const [url] = fetchSpy.mock.calls[0];
     // %2F = '/', so '..%2Fetc%2Fpasswd' — never reaches the
     // server as a literal slash that could be mis-routed.
