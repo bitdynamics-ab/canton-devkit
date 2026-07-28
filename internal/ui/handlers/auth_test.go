@@ -68,7 +68,7 @@ func seedWithCredentials(t *testing.T, name, party string) {
 			Role:     "app-provider",
 			User:     party,
 			Audience: "https://canton.network.global",
-			JWT:      "", // we re-issue via the endpoint, not seed
+			JWT:      "eyJ.seed.token",
 		},
 	}
 	s.Parties = map[string]registry.PartyRef{
