@@ -375,7 +375,7 @@ func handleDetail(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid instance name", err)
 		return
 	}
-	inst, err := localnet.CollectStatus(r.Context(), name, true, false)
+	inst, err := localnet.CollectStatus(r.Context(), name, true)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "instance not registered", err)
