@@ -26,8 +26,7 @@ import {
 //      detail, remediation per the handler shape)
 //   4. POST request bodies trigger Content-Type: application/json
 //      via the conditional header — issueJwt is the canonical
-//      caller and its include_jwt query toggle is part of the
-//      redacted-by-default contract.
+//      caller always receives a usable LocalNet JWT.
 
 describe("SCHEMA_VERSION", () => {
   // Pinned constant. The Go test internal/ui/frontend_schema_test.go
