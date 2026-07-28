@@ -59,7 +59,7 @@ func TestBuildEnvExport_IncludesParticipantPorts(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedEnvState(t, "demo")
 
-	ex, err := BuildEnvExport("demo", false)
+	ex, err := BuildEnvExport("demo")
 	if err != nil {
 		t.Fatalf("BuildEnvExport: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestBuildEnvExport_AuthFileWrittenAndExported(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ex, err := BuildEnvExport("demo", false)
+	ex, err := BuildEnvExport("demo")
 	if err != nil {
 		t.Fatalf("BuildEnvExport: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestBuildEnvExport_AuthFileNotWrittenWhenDirMissing(t *testing.T) {
 	if err := registry.Write(s); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	ex, err := BuildEnvExport("ghost", false)
+	ex, err := BuildEnvExport("ghost")
 	if err != nil {
 		t.Fatalf("BuildEnvExport: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestBuildEnvExport_AuthFileRewriteTightensPerms(t *testing.T) {
 		t.Fatalf("pre-seed auth.json: %v", err)
 	}
 
-	if _, err := BuildEnvExport("demo", false); err != nil {
+	if _, err := BuildEnvExport("demo"); err != nil {
 		t.Fatalf("BuildEnvExport: %v", err)
 	}
 
@@ -210,7 +210,7 @@ func TestBuildEnvExport_ScanUIURL(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedEnvState(t, "demo")
 
-	ex, err := BuildEnvExport("demo", false)
+	ex, err := BuildEnvExport("demo")
 	if err != nil {
 		t.Fatalf("BuildEnvExport: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestBuildEnvExport_LedgerAPIURLs(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedEnvState(t, "demo")
 
-	ex, err := BuildEnvExport("demo", false)
+	ex, err := BuildEnvExport("demo")
 	if err != nil {
 		t.Fatalf("BuildEnvExport: %v", err)
 	}
@@ -270,7 +270,7 @@ func TestBuildEnvExport_LedgerAPIAliases(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ex, err := BuildEnvExport("demo", false)
+	ex, err := BuildEnvExport("demo")
 	if err != nil {
 		t.Fatalf("BuildEnvExport: %v", err)
 	}
@@ -301,7 +301,7 @@ func TestBuildEnvExport_NoScanUIWhenPortMissing(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ex, err := BuildEnvExport("noscan", false)
+	ex, err := BuildEnvExport("noscan")
 	if err != nil {
 		t.Fatalf("BuildEnvExport: %v", err)
 	}
@@ -318,7 +318,7 @@ func TestBuildEnvExport_PartyIDsDistinctFromUser(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedEnvState(t, "demo")
 
-	ex, err := BuildEnvExport("demo", false)
+	ex, err := BuildEnvExport("demo")
 	if err != nil {
 		t.Fatalf("BuildEnvExport: %v", err)
 	}
@@ -350,7 +350,7 @@ func TestBuildEnvExport_PartySkippedWhenEmpty(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	ex, err := BuildEnvExport("blank", false)
+	ex, err := BuildEnvExport("blank")
 	if err != nil {
 		t.Fatalf("BuildEnvExport: %v", err)
 	}
@@ -359,27 +359,17 @@ func TestBuildEnvExport_PartySkippedWhenEmpty(t *testing.T) {
 	}
 }
 
-// TestBuildEnvExport_JWTRedaction pins the default-redacted posture +
-// the opt-in path. The dev-only signing secret must never appear
-// unless includeJWT is explicitly set.
-func TestBuildEnvExport_JWTRedaction(t *testing.T) {
+// TestBuildEnvExport_JWTAlwaysRaw pins the LocalNet credential export.
+func TestBuildEnvExport_JWTAlwaysRaw(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedEnvState(t, "demo")
 
-	redacted, err := BuildEnvExport("demo", false)
+	ex, err := BuildEnvExport("demo")
 	if err != nil {
-		t.Fatalf("BuildEnvExport(redacted): %v", err)
+		t.Fatalf("BuildEnvExport: %v", err)
 	}
-	if redacted.Vars["CANTON_APP_USER_JWT"] != EnvJWTRedaction {
-		t.Errorf("default JWT = %q, want %q", redacted.Vars["CANTON_APP_USER_JWT"], EnvJWTRedaction)
-	}
-
-	raw, err := BuildEnvExport("demo", true)
-	if err != nil {
-		t.Fatalf("BuildEnvExport(raw): %v", err)
-	}
-	if raw.Vars["CANTON_APP_USER_JWT"] != "eyJ.autoken.sig" {
-		t.Errorf("raw JWT = %q, want the captured token", raw.Vars["CANTON_APP_USER_JWT"])
+	if ex.Vars["CANTON_APP_USER_JWT"] != "eyJ.autoken.sig" {
+		t.Errorf("JWT = %q, want the captured token", ex.Vars["CANTON_APP_USER_JWT"])
 	}
 }
 
@@ -387,7 +377,7 @@ func TestBuildEnvExport_JWTRedaction(t *testing.T) {
 // can map it to a clean 404 / user error.
 func TestBuildEnvExport_NotFound(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
-	if _, err := BuildEnvExport("ghost", false); err == nil {
+	if _, err := BuildEnvExport("ghost"); err == nil {
 		t.Fatal("expected error for unknown instance")
 	}
 }
@@ -398,7 +388,7 @@ func TestBuildEnvExport_SchemaVersion(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedEnvState(t, "demo")
 
-	ex, err := BuildEnvExport("demo", false)
+	ex, err := BuildEnvExport("demo")
 	if err != nil {
 		t.Fatalf("BuildEnvExport: %v", err)
 	}
