@@ -229,13 +229,10 @@ export interface JwtRequest {
 }
 
 // JwtResponse mirrors internal/ui/handlers/auth.go jwtResponse.
-// `token` is the redaction placeholder ("<redacted>") unless
-// the request was made with ?include_jwt=true; `redacted`
-// signals which path.
+// `token` always contains the raw LocalNet JWT.
 export interface JwtResponse {
   schema_version: number;
   token: string;
-  redacted?: boolean;
   party: string;
   audience: string;
   role: string;
@@ -243,18 +240,14 @@ export interface JwtResponse {
   expires_in_seconds?: number;
 }
 
-// issueJwt posts to the JWT endpoint. `includeJwt=true` triggers
-// the raw-token mode — UI surfaces it ONLY after the user clicks
-// "show token" so the response stays redacted-by-default for
-// screenshot shares.
+// issueJwt posts to the JWT endpoint. LocalNet returns the raw
+// dev-only token directly.
 export function issueJwt(
   name: string,
   req: JwtRequest,
-  includeJwt: boolean,
 ): Promise<JwtResponse> {
-  const qs = includeJwt ? "?include_jwt=true" : "";
   return apiFetch<JwtResponse>(
-    `/api/instances/${encodeURIComponent(name)}/jwt${qs}`,
+    `/api/instances/${encodeURIComponent(name)}/jwt`,
     {
       method: "POST",
       body: JSON.stringify(req),
@@ -270,16 +263,14 @@ export type AppConfigFormat = "env" | "json" | "yaml";
 // JSON-decode path would error. Inline a small fetch here that
 // returns the body verbatim.
 //
-// include_jwt=true: the app config is meant to be copy-pasted into a
-// dApp's environment, so a redacted token makes it unusable. LocalNet
-// is loopback-only with dev-secret tokens (the UI shows the dev-secret
-// warning), so the raw token is surfaced here on purpose.
+// App config includes raw LocalNet JWTs so it can be copied directly
+// into a dApp's environment.
 export async function fetchAppConfigText(
   name: string,
   format: "env" | "yaml",
 ): Promise<string> {
   const resp = await fetch(
-    `/api/instances/${encodeURIComponent(name)}/app-config?format=${format}&include_jwt=true`,
+    `/api/instances/${encodeURIComponent(name)}/app-config?format=${format}`,
   );
   if (!resp.ok) {
     const body = await resp.text();
@@ -302,7 +293,7 @@ export interface AppConfigPayload {
 
 export const fetchAppConfigJSON = (name: string) =>
   apiFetch<AppConfigPayload>(
-    `/api/instances/${encodeURIComponent(name)}/app-config?format=json&include_jwt=true`,
+    `/api/instances/${encodeURIComponent(name)}/app-config?format=json`,
   );
 
 // ── create-instance flow ──────────────────────────────────
