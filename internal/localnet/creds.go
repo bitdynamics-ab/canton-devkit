@@ -100,6 +100,8 @@ func printCredsTable(out io.Writer, creds []registry.Credential) {
 	for _, c := range creds {
 		_, _ = fmt.Fprintf(out, "%-15s %-25s %-35s %s\n", c.Role, c.User, c.Audience, c.JWT)
 	}
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "Use --format env or --format raw --role <r> for copy-pasteable output.")
 }
 
 func printCredsEnv(out io.Writer, creds []registry.Credential) {
