@@ -297,8 +297,7 @@ func TestAppConfig_ParityWithCLIEnv(t *testing.T) {
 		t.Fatalf("decode UI export: %v", err)
 	}
 
-	// Same builder, default-redacted — the CLI's collectEnv is a thin
-	// wrapper over this too.
+	// Same builder — the CLI's collectEnv is a thin wrapper over this too.
 	fromShared, err := localnet.BuildEnvExport("demo")
 	if err != nil {
 		t.Fatalf("BuildEnvExport: %v", err)
