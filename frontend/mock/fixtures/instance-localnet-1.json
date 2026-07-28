@@ -206,19 +206,19 @@
       "role": "app-provider",
       "user": "ledger-api-user",
       "audience": "https://canton.network.global",
-      "jwt": "<redacted>"
+      "jwt": "mock.app-provider.jwt"
     },
     "app-user": {
       "role": "app-user",
       "user": "ledger-api-user",
       "audience": "https://canton.network.global",
-      "jwt": "<redacted>"
+      "jwt": "mock.app-user.jwt"
     },
     "sv": {
       "role": "sv",
       "user": "ledger-api-user",
       "audience": "https://canton.network.global",
-      "jwt": "<redacted>"
+      "jwt": "mock.sv.jwt"
     }
   }
 }
