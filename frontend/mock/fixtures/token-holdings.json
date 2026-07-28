@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "source": "ledger",
+  "holdings": [
+    {
+      "instrument_id": "Amulet",
+      "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+      "amount": "38990.1600000000",
+      "source": "ledger"
+    }
+  ]
+}

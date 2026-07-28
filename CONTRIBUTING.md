@@ -21,10 +21,16 @@ make lint           # golangci-lint
 make frontend       # build the Web UI bundle (optional)
 ```
 
-### Web UI dev loop
+### Setup Web UI dev environment
 
-To iterate on the `frontend/` UI, run the backend API and the Vite dev
-server side by side.
+To iterate on the `frontend/` UI, use the Vite dev server on port 5173.
+Open **http://localhost:5173** (not `:7777`). Choose one of the two
+setups below depending on whether you need live LocalNet data.
+
+#### a. Real backend and real data
+
+Run the Go API server and Vite side by side. Vite proxies `/api` and
+`/events` to the backend on `:7777` — see `frontend/vite.config.ts`.
 
 **Terminal 1** — backend API + SSE (from repo root):
 
@@ -40,17 +46,35 @@ npm install     # first run only; run `nvm use` to match .nvmrc
 npm run dev
 ```
 
-Open **http://localhost:5173** (not 7777). Vite proxies `/api` and
-`/events` to the backend on `:7777` — see `frontend/vite.config.ts`.
+Live API data requires a running LocalNet (`dpm localnet up`).
 
-Notes:
+#### b. Mock data
 
-- You do **not** need `make frontend` for this loop; that target only
+For UI-only work without Go or LocalNet:
+
+```sh
+cd frontend
+npm install     # first run only; run `nvm use` to match .nvmrc
+npm run dev:mock
+```
+
+The Vite dev server serves mock API responses from
+`frontend/mock/fixtures/` via middleware — no backend on `:7777`
+required. Mutations are in-memory only (reset on server restart).
+
+To refresh fixtures from a live instance:
+
+```sh
+# With real backend + LocalNet running (setup a):
+npm run mock:seed -- --instance <name> [--as demo]
+```
+
+#### Notes
+
+- You do **not** need `make frontend` for either setup; that target only
   builds the production bundle embedded into the Go binary. The
   placeholder-bundle warning printed at `localnet ui` startup is
-  expected here since the browser loads the Vite dev server.
-- Live API data requires a running LocalNet (`dpm localnet up`); pure
-  UI/theming work renders without one.
+  expected in setup **a** since the browser loads the Vite dev server.
 
 For anything non-trivial, please [open an issue](https://github.com/bitdynamics-ab/canton-devkit/issues) first to discuss the change. For bugs, use the [bug report template](https://github.com/bitdynamics-ab/canton-devkit/issues/new?template=bug_report.yml).
 
