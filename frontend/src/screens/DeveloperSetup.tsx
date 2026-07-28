@@ -43,7 +43,7 @@ function JwtPanel({ name }: { name: string }) {
   useEffect(() => {
     let cancelled = false;
     setBusy(true);
-    issueJwt(name, { role, audience }, true)
+    issueJwt(name, { role, audience })
       .then((r) => {
         if (!cancelled) setJwt(r);
         setErr(null);
