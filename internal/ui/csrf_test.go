@@ -303,7 +303,7 @@ func TestRouter_AccessLogEmittedPerRequest(t *testing.T) {
 		}
 	}
 	// Stable rule: the access log MUST NOT carry the query string
-	// (?include_jwt=true would leak credential intent).
+	// Query strings must not affect the access-log privacy guarantee.
 	if strings.Contains(body, "?") {
 		t.Errorf("access log included query string — credential leak vector:\n%s", body)
 	}
