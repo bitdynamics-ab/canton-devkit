@@ -17,14 +17,11 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 )
 
-const statusJWTRedaction = "<redacted>"
-
 // StatusOptions captures `localnet status` flags.
 type StatusOptions struct {
 	Name       string
 	Format     string // "table" (default) or "json"
 	NoLive     bool
-	IncludeJWT bool
 }
 
 // statusProberFn is the test seam for live Docker service status.
@@ -33,7 +30,7 @@ var statusProberFn func(ctx context.Context, state *registry.State) ([]types.Ser
 // RunStatus prints the health summary for one instance. Docker probe failures
 // are soft-failures: users still get the registry view and an exit-0 status.
 func RunStatus(ctx context.Context, out io.Writer, errw io.Writer, opts *StatusOptions) int {
-	inst, err := CollectStatus(ctx, opts.Name, !opts.NoLive, opts.IncludeJWT)
+	inst, err := CollectStatus(ctx, opts.Name, !opts.NoLive)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
 			_, _ = fmt.Fprintf(errw, "no LocalNet instance named %q\nRun `dpm localnet list` to see available instances.\n", opts.Name)
@@ -65,9 +62,8 @@ func RunStatus(ctx context.Context, out io.Writer, errw io.Writer, opts *StatusO
 	return ExitSuccess
 }
 
-// CollectStatus is the exported entry point for non-CLI callers. includeJWT
-// controls JWT redaction; unauthenticated surfaces must pass false.
-func CollectStatus(ctx context.Context, name string, live, includeJWT bool) (types.Instance, error) {
+// CollectStatus is the exported entry point for non-CLI callers.
+func CollectStatus(ctx context.Context, name string, live bool) (types.Instance, error) {
 	s, err := registry.Read(name)
 	if err != nil {
 		return types.Instance{}, err
@@ -86,7 +82,7 @@ func CollectStatus(ctx context.Context, name string, live, includeJWT bool) (typ
 		ProjectDir:      s.ProjectDir,
 		DataDir:         s.DataDir,
 		Endpoints:       endpointsFromPorts(s.Name, s.Ports),
-		Credentials:     credentialsFor(s.Credentials, includeJWT),
+		Credentials:     credentialsFor(s.Credentials),
 	}
 
 	if live {
@@ -218,17 +214,13 @@ func endpointsFromPorts(instance string, ports map[string]int) []types.Endpoint 
 	return out
 }
 
-func credentialsFor(in map[string]registry.Credential, includeJWT bool) map[string]types.Credential {
+func credentialsFor(in map[string]registry.Credential) map[string]types.Credential {
 	if len(in) == 0 {
 		return nil
 	}
 	out := make(map[string]types.Credential, len(in))
 	for k, v := range in {
-		jwt := v.JWT
-		if !includeJWT && jwt != "" {
-			jwt = statusJWTRedaction
-		}
-		out[k] = types.Credential{Role: v.Role, User: v.User, Audience: v.Audience, JWT: jwt}
+		out[k] = types.Credential{Role: v.Role, User: v.User, Audience: v.Audience, JWT: v.JWT}
 	}
 	return out
 }
@@ -321,7 +313,7 @@ func writeStatusTable(w io.Writer, inst types.Instance) {
 		sort.Strings(roles)
 		for i, r := range roles {
 			cred := inst.Credentials[r]
-			idBody.WriteString(term.KV(r, fmt.Sprintf("%s %s", term.Textc(cred.User), term.Dimc("· "+cred.Audience)), 16))
+			idBody.WriteString(term.KV(r, fmt.Sprintf("%s %s %s", term.Textc(cred.User), term.Dimc("· "+cred.Audience), term.Dimc("· "+cred.JWT)), 16))
 			if i < len(roles)-1 {
 				idBody.WriteString("\n")
 			}
