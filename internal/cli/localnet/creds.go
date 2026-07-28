@@ -17,7 +17,7 @@ and are valid for the lifetime of the instance. They are captured at
 ` + "`localnet up`" + ` time and persisted in state.json (mode 0600).
 
 Formats:
-  table (default) — human-readable summary; JWTs are NOT printed
+  table (default) — human-readable summary including JWTs
   env             — export AUTH_<ROLE>_TOKEN=... lines for eval $(...)
   json            — array of credential objects (JWTs included)
   raw             — single JWT (requires --role)`,

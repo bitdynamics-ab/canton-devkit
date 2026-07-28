@@ -96,9 +96,9 @@ func filterCredentials(in map[string]registry.Credential, role string) []registr
 }
 
 func printCredsTable(out io.Writer, creds []registry.Credential) {
-	_, _ = fmt.Fprintf(out, "%-15s %-25s %s\n", "ROLE", "USER", "AUDIENCE")
+	_, _ = fmt.Fprintf(out, "%-15s %-25s %-40s %s\n", "ROLE", "USER", "AUDIENCE", "JWT")
 	for _, c := range creds {
-		_, _ = fmt.Fprintf(out, "%-15s %-25s %s\n", c.Role, c.User, c.Audience)
+		_, _ = fmt.Fprintf(out, "%-15s %-25s %-40s %s\n", c.Role, c.User, c.Audience, c.JWT)
 	}
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "Use --format env to export tokens, --format raw --role <r> for a single JWT.")

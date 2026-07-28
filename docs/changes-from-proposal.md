@@ -166,7 +166,7 @@ The teardown/bring-up ladder is therefore: `pause`/`resume` (freeze, RAM held) �
 
 **Proposal said:** not mentioned as a standalone command. `env` was the credential/config export surface.
 
-**Shipped:** `dpm localnet creds [name]` prints the HS256 JWTs captured at `up` time, in four formats: `table` (default — JWTs omitted for safety), `env` (shell-exportable `AUTH_<ROLE>_TOKEN=...` lines), `json` (full credential objects including JWTs), `raw` (single JWT, requires `--role`).
+**Shipped:** `dpm localnet creds [name]` prints the HS256 JWTs captured at `up` time, in four formats: `table` (default — includes JWTs), `env` (shell-exportable `AUTH_<ROLE>_TOKEN=...` lines), `json` (full credential objects including JWTs), `raw` (single JWT, requires `--role`).
 
 **Why:** `env` covers Ledger API endpoints and wallet URLs; `creds` is the dedicated surface for auth tokens. Separating them avoids combining sensitive credential material with non-sensitive endpoint strings in one command, and makes it easier to handle each category differently (e.g. redact tokens in logs while freely printing URLs).
 

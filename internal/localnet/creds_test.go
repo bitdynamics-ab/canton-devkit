@@ -56,7 +56,7 @@ func TestValidateCredsOptions(t *testing.T) {
 	}
 }
 
-func TestRunCreds_TableOmitsJWTs(t *testing.T) {
+func TestRunCreds_TableIncludesJWTs(t *testing.T) {
 	seedCredsInstance(t, "creds-table")
 
 	var out, errBuf bytes.Buffer
@@ -65,14 +65,14 @@ func TestRunCreds_TableOmitsJWTs(t *testing.T) {
 		t.Fatalf("RunCreds = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
 	}
 	stdout := out.String()
-	for _, want := range []string{"ROLE", "app-user", "app-provider", "sv"} {
+	for _, want := range []string{"ROLE", "USER", "AUDIENCE", "JWT", "app-user", "app-provider", "sv"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("table output missing %q: %q", want, stdout)
 		}
 	}
 	for _, token := range []string{"app-user-token", "app-provider-token", "sv-token"} {
-		if strings.Contains(stdout, token) {
-			t.Errorf("table output leaked JWT %q: %q", token, stdout)
+		if !strings.Contains(stdout, token) {
+			t.Errorf("table output missing JWT %q: %q", token, stdout)
 		}
 	}
 }
