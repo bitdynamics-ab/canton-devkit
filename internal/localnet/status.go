@@ -19,9 +19,9 @@ import (
 
 // StatusOptions captures `localnet status` flags.
 type StatusOptions struct {
-	Name       string
-	Format     string // "table" (default) or "json"
-	NoLive     bool
+	Name   string
+	Format string // "table" (default) or "json"
+	NoLive bool
 }
 
 // statusProberFn is the test seam for live Docker service status.

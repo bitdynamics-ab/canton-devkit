@@ -32,8 +32,8 @@ import (
 // builder, so both surfaces emit an identical apitypes.EnvExport.
 func buildEnv() *cobra.Command {
 	var (
-		name       string
-		format     string
+		name   string
+		format string
 	)
 	cmd := &cobra.Command{
 		Use:   "env [name]",
