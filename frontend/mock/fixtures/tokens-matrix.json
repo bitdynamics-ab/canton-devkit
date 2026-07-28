@@ -1,5 +1,7 @@
 {
-  "aliases": {},
+  "aliases": {
+    "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249": "app-user"
+  },
   "matrix": {
     "parties": [
       "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
@@ -18,14 +20,14 @@
       {
         "party": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
         "instrument_id": "Amulet",
-        "amount": "38990.1600000000"
+        "amount": "75470.1600000000"
       }
     ],
     "totals": [
       {
         "party": "",
         "instrument_id": "Amulet",
-        "amount": "38990.1600000000"
+        "amount": "75470.1600000000"
       }
     ]
   },
