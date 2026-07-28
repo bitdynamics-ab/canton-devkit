@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "instance": "localnet-1",
+  "instance": "demo",
   "role": "app-user",
   "contract": {
     "contract_id": "0076677cff95e66905e2e5c6c7ea53171836134ed216c422561d6ee5935e0f521cca1212208a4e466f276703d25651f7b6a57cf56270bd9bd3af142f08cca84c03624cea05",
