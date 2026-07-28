@@ -65,25 +65,17 @@ type jwtRequest struct {
 // preview. SchemaVersion is carried so a frontend bundled for v1
 // refuses a v2 backend cleanly.
 //
-// Token is REDACTED by default — the raw JWT only returns when
-// ?include_jwt=true is set, mirroring the CLI's --include-jwt
-// convention. Default-redacted keeps CI logs, screenshot-shares,
-// and "look at the response" demos from leaking a usable token.
+// Token always contains the raw LocalNet JWT. LocalNet is loopback-only
+// and the token is signed with the documented dev-only secret.
 type jwtResponse struct {
 	SchemaVersion int    `json:"schema_version"`
 	Token         string `json:"token"`
-	Redacted      bool   `json:"redacted,omitempty"`
 	Party         string `json:"party"`
 	Audience      string `json:"audience"`
 	Role          string `json:"role"`
 	WarningDev    string `json:"warning_dev_secret"`
 	ExpiresInSec  int    `json:"expires_in_seconds,omitempty"`
 }
-
-// jwtRedactionPlaceholder mirrors statusJWTRedaction in
-// internal/cli/localnet/status.go — same sentinel so the two
-// surfaces don't drift.
-const jwtRedactionPlaceholder = "<redacted>"
 
 // maxAuthBodyBytes caps request bodies for the auth POST. The JSON
 // payload is at most a few hundred bytes (role + ttl + audience);
@@ -153,25 +145,14 @@ func handleIssueJWT(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Default-redact (the CLI's --include-jwt convention): the
-	// dashboard must pass ?include_jwt=true when it actually wants
-	// to render the token, so screenshot shares and logs don't leak
-	// a usable signer.
-	includeJWT := r.URL.Query().Get("include_jwt") == "true"
-	respToken := jwtRedactionPlaceholder
-	if includeJWT {
-		respToken = token
-	}
-
 	// JWT issuance is a security-relevant event — every issue gets
-	// an audit line with the role, party, audience, and whether the
-	// raw token was returned.
-	auditJWTIssued(name, string(role), user, audience, includeJWT)
+	// an audit line with the role, party, and audience. The raw token
+	// is intentionally excluded from logs.
+	auditJWTIssued(name, string(role), user, audience)
 
 	writeJSON(w, http.StatusOK, jwtResponse{
 		SchemaVersion: SchemaVersion,
-		Token:         respToken,
-		Redacted:      !includeJWT,
+		Token:         token,
 		Party:         user,
 		Audience:      audience,
 		Role:          string(role),
@@ -183,11 +164,10 @@ func handleIssueJWT(w http.ResponseWriter, r *http.Request) {
 // auditJWTIssued writes a single audit line per JWT issuance.
 // Format is stable (parseable by log scrapers) and intentionally
 // does NOT include the raw token — even an audit log shouldn't
-// carry the secret. The `raw=true|false` field signals whether the
-// caller opted into the unredacted response.
-func auditJWTIssued(instance, role, party, audience string, raw bool) {
-	log.Printf("audit: jwt_issued instance=%q role=%q party=%q audience=%q raw=%t",
-		instance, role, party, audience, raw)
+// carry the secret.
+func auditJWTIssued(instance, role, party, audience string) {
+	log.Printf("audit: jwt_issued instance=%q role=%q party=%q audience=%q",
+		instance, role, party, audience)
 }
 
 // roleAllowed checks against the canonical role set. Adding a new
@@ -225,9 +205,8 @@ const (
 // the real on-ledger party ids. See CONTRIBUTING.md "CLI ↔ Web UI
 // parity".
 //
-// JWTs are redacted by default (matching the CLI's --include-jwt
-// convention and the jwt endpoint above); pass ?include_jwt=true to
-// emit raw tokens. Defaults to format=env.
+// JWTs are always included as raw LocalNet credentials. Defaults to
+// format=env.
 func handleAppConfig(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := registry.ValidateName(name); err != nil {
@@ -247,8 +226,7 @@ func handleAppConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	includeJWT := r.URL.Query().Get("include_jwt") == "true"
-	ex, err := localnet.BuildEnvExport(name, includeJWT)
+	ex, err := localnet.BuildEnvExport(name)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "instance not registered", err)

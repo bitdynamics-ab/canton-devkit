@@ -96,10 +96,10 @@ func TestEnv_ShellOutputIsPosixQuoted(t *testing.T) {
 		"export CANTON_PARTICIPANT_JSON_APP_USER_PORT='2975'",
 		// Scan UI surfaced explicitly with the instance-scoped scan vhost.
 		"export CANTON_SCAN_UI_URL='http://scan.demo.localhost:4480'",
-		"export CANTON_SV_JWT='<redacted>'",
+		"export CANTON_SV_JWT='eyJ.svtoken.sig'",
 		"export CANTON_SV_USER='sv-user'",
 		"export CANTON_SV_AUDIENCE='sv-aud'",
-		"export CANTON_APP_USER_JWT='<redacted>'",
+		"export CANTON_APP_USER_JWT='eyJ.aut.sig'",
 		// Real on-ledger party id, distinct from the user name.
 		"export CANTON_APP_USER_PARTY='app-user::1220abc'",
 	} {
@@ -160,7 +160,7 @@ func TestEnv_ShellQuotesNeutraliseInjection(t *testing.T) {
 	}
 }
 
-func TestEnv_JWTRedactionDefault(t *testing.T) {
+func TestEnv_JWTAlwaysRaw(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedEnvInstance(t, "demo")
 
@@ -173,17 +173,14 @@ func TestEnv_JWTRedactionDefault(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 
-	for _, leaked := range []string{"eyJ.svtoken.sig", "eyJ.aut.sig"} {
-		if strings.Contains(out.String(), leaked) {
-			t.Errorf("raw JWT %q leaked into default output:\n%s", leaked, out.String())
+	for _, want := range []string{"eyJ.svtoken.sig", "eyJ.aut.sig"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("raw JWT %q missing from default output:\n%s", want, out.String())
 		}
-	}
-	if !strings.Contains(out.String(), "<redacted>") {
-		t.Errorf("expected <redacted> placeholder, got\n%s", out.String())
 	}
 }
 
-func TestEnv_IncludeJWTOptIn(t *testing.T) {
+func TestEnv_NoJWTRedactionFlag(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedEnvInstance(t, "demo")
 
@@ -191,13 +188,12 @@ func TestEnv_IncludeJWTOptIn(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"--name", "demo", "--include-jwt"})
+	cmd.SetArgs([]string{"--name", "demo", "--help"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-
-	if !strings.Contains(out.String(), "export CANTON_SV_JWT='eyJ.svtoken.sig'") {
-		t.Errorf("expected raw JWT under --include-jwt, got\n%s", out.String())
+	if strings.Contains(out.String(), "include-jwt") {
+		t.Errorf("help still exposes removed --include-jwt flag:\n%s", out.String())
 	}
 }
 
@@ -432,12 +428,12 @@ func TestEnv_JSONShape(t *testing.T) {
 	if got.Vars["CANTON_SPLICE_VERSION"] != "0.6.4" {
 		t.Errorf("Vars[CANTON_SPLICE_VERSION] = %q, want 0.6.4", got.Vars["CANTON_SPLICE_VERSION"])
 	}
-	if got.Vars["CANTON_SV_JWT"] != "<redacted>" {
-		t.Errorf("Vars[CANTON_SV_JWT] = %q, want <redacted>", got.Vars["CANTON_SV_JWT"])
+	if got.Vars["CANTON_SV_JWT"] != "eyJ.svtoken.sig" {
+		t.Errorf("Vars[CANTON_SV_JWT] = %q, want raw JWT", got.Vars["CANTON_SV_JWT"])
 	}
 }
 
-func TestEnv_JSONIncludeJWT(t *testing.T) {
+func TestEnv_JSONAlwaysRaw(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedEnvInstance(t, "demo")
 
@@ -445,7 +441,7 @@ func TestEnv_JSONIncludeJWT(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"--name", "demo", "--format=json", "--include-jwt"})
+	cmd.SetArgs([]string{"--name", "demo", "--format=json"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -454,7 +450,7 @@ func TestEnv_JSONIncludeJWT(t *testing.T) {
 		t.Fatalf("unmarshal: %v\nbody=%s", err, out.String())
 	}
 	if got.Vars["CANTON_SV_JWT"] != "eyJ.svtoken.sig" {
-		t.Errorf("expected raw JWT under --include-jwt, got %q", got.Vars["CANTON_SV_JWT"])
+		t.Errorf("expected raw JWT by default, got %q", got.Vars["CANTON_SV_JWT"])
 	}
 }
 
