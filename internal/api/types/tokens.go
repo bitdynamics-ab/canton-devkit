@@ -202,10 +202,11 @@ type AllocationsResponse struct {
 	Aliases map[string]string `json:"aliases"`
 }
 
-// TransferSummary is one pending V2 TransferInstruction — a transfer the
-// receiver has not yet accepted. Acceptance archives the instruction, so
-// every active TransferInstruction contract is by definition still
-// pending; a scan of the interface IS the pending-offers list.
+// TransferSummary is one pending TransferInstruction (V1 or V2) — a
+// transfer the receiver has not yet accepted. Acceptance archives the
+// instruction, so every active TransferInstruction contract is by
+// definition still pending; a scan of the interface IS the pending-offers
+// list.
 type TransferSummary struct {
 	// ContractID is the TransferInstruction contract id — pass it straight
 	// to `transfer accept` / POST .../transfers/{id}/accept.
@@ -217,7 +218,9 @@ type TransferSummary struct {
 	InstrumentID string `json:"instrument_id"`
 	Amount       string `json:"amount"` // Daml Decimal string
 	// Generation is the token-standard generation the offer implements,
-	// "v1" or "v2", so a per-row accept routes without re-deriving it.
+	// "v1" or "v2", decoded from the instruction's own interface id.
+	// Informational for display; the accept path re-derives it server-side
+	// (see AcceptOptions.Gen), so a surface need not thread it back.
 	Generation string `json:"generation"`
 	// RequestedAt / ExecuteBefore are RFC3339; ExecuteBefore is the offer's
 	// expiry (an offer past it can no longer be accepted). Empty when unset.

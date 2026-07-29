@@ -21,7 +21,7 @@ func buildTransfers() *cobra.Command {
 	var format string
 	cmd := &cobra.Command{
 		Use:   "transfers",
-		Short: "List pending V2 transfer offers",
+		Short: "List pending transfer offers",
 		Long: `List the pending V2 transfer offers visible on this participant —
 TransferInstruction contracts the receiver has not yet accepted —
 optionally filtered with --party (matches either the sender or the
@@ -33,8 +33,18 @@ dial a different participant.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			// Auto-resolve the endpoint from the instance so the list works
 			// flag-free on a running LocalNet; an explicit --endpoint wins.
+			// If resolution fails the ports weren't captured — say so
+			// precisely (the same diagnosis the Web UI's 503 gives) rather
+			// than falling through to the generic "bring up a V2 LocalNet"
+			// remediation, which misleads when the instance is already up.
 			if opts.Endpoint == "" {
 				opts.Endpoint = token.ResolveLedgerEndpoint(opts.Instance, opts.Role)
+				if opts.Endpoint == "" {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+						"no captured ledger port for instance %q — restart it so ports are recorded, or pass --endpoint host:port\n",
+						opts.Instance)
+					return errSilent
+				}
 			}
 			rows, truncated, err := token.RunListPendingTransfers(cmd.Context(), opts)
 			if errors.Is(err, token.ErrNeedsV2LocalNet) {

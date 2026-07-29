@@ -149,6 +149,9 @@ export function TokensScreen() {
   const [offers, setOffers] = useState<TransferSummary[] | null>(null);
   const [offersErr, setOffersErr] = useState<string | null>(null);
   const [offersTruncated, setOffersTruncated] = useState(false);
+  // Instruction ids whose accept is in flight — the row's button is
+  // disabled while present so a double-click can't submit the accept twice.
+  const [acceptingIds, setAcceptingIds] = useState<Set<string>>(new Set());
 
   const [showCreate, setShowCreate] = useState(false);
   const [modal, setModal] = useState<
@@ -352,6 +355,8 @@ export function TokensScreen() {
   useEffect(() => {
     if (!instance) {
       setOffers(null);
+      setOffersErr(null);
+      setOffersTruncated(false);
       return;
     }
     let cancelled = false;
@@ -364,7 +369,10 @@ export function TokensScreen() {
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        setOffers([]);
+        // Keep offers null (not []) on error so the panel shows only the
+        // error, not a contradictory "No pending offers" empty state.
+        setOffers(null);
+        setOffersTruncated(false);
         setOffersErr(e instanceof ApiError ? e.message : "failed to load offers");
       });
     return () => {
@@ -440,13 +448,22 @@ export function TokensScreen() {
   // from the listed instruction, so no manual entry. bump() refreshes the
   // offers list, holdings, and summary once it settles.
   async function runAcceptAction(id: string, receiver: string) {
-    if (!instance) return;
+    if (!instance || acceptingIds.has(id)) return;
+    setAcceptingIds((s) => new Set(s).add(id));
     try {
       await acceptTransfer(instance, id, receiver || undefined, role);
+      // Drop the accepted offer immediately so the row and badge don't
+      // linger accept-enabled in the window before the refetch lands.
+      setOffers((prev) => (prev ? prev.filter((o) => o.contract_id !== id) : prev));
       setTopNotice({ tone: "ok", text: "Transfer accepted." });
     } catch (e) {
       setTopNotice(renderActionError(e, "accept failed"));
     } finally {
+      setAcceptingIds((s) => {
+        const n = new Set(s);
+        n.delete(id);
+        return n;
+      });
       bump();
     }
   }
@@ -763,6 +780,7 @@ export function TokensScreen() {
                     err={offersErr}
                     truncated={offersTruncated}
                     aliases={aliases}
+                    accepting={acceptingIds}
                     onAccept={(id, receiver) => runAcceptAction(id, receiver)}
                     onAcceptById={() => setModal({ kind: "accept" })}
                   />
@@ -1128,17 +1146,20 @@ function AllocateModal({
 }
 
 // expiryLabel renders a transfer offer's executeBefore as a compact,
-// human relative string ("in 23h", "in 5m", "expired"). "" when unset.
+// human relative string ("in 23h", "<1m", "expired"). "—" when unset.
+// Floors each bucket so it never overstates the time left (rounding up
+// could show "in 1h" on an offer with 31 minutes to live).
 function expiryLabel(iso?: string): { text: string; expired: boolean } {
   if (!iso) return { text: "—", expired: false };
   const ms = new Date(iso).getTime() - Date.now();
   if (Number.isNaN(ms)) return { text: "—", expired: false };
   if (ms <= 0) return { text: "expired", expired: true };
-  const mins = Math.round(ms / 60000);
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return { text: "<1m", expired: false };
   if (mins < 60) return { text: `in ${mins}m`, expired: false };
-  const hrs = Math.round(mins / 60);
+  const hrs = Math.floor(mins / 60);
   if (hrs < 48) return { text: `in ${hrs}h`, expired: false };
-  return { text: `in ${Math.round(hrs / 24)}d`, expired: false };
+  return { text: `in ${Math.floor(hrs / 24)}d`, expired: false };
 }
 
 // Lists the pending V2 transfer offers (TransferInstructions awaiting the
@@ -1146,12 +1167,13 @@ function expiryLabel(iso?: string): { text: string; expired: boolean } {
 // shows every visible offer, mirroring AllocationsPanel. This is what turns
 // "paste a transfer instruction id" into "click Accept on the offer".
 function PendingOffersPanel({
-  offers, err, truncated, aliases, onAccept, onAcceptById,
+  offers, err, truncated, aliases, accepting, onAccept, onAcceptById,
 }: {
   offers: TransferSummary[] | null;
   err: string | null;
   truncated: boolean;
   aliases: AliasMap;
+  accepting: Set<string>;
   onAccept: (id: string, receiver: string) => void;
   onAcceptById: () => void;
 }) {
@@ -1197,9 +1219,9 @@ function PendingOffersPanel({
                       size="sm"
                       icon={<IcCheck />}
                       onClick={() => onAccept(o.contract_id, o.receiver)}
-                      disabled={exp.expired}
+                      disabled={exp.expired || accepting.has(o.contract_id)}
                       title={exp.expired ? "This offer has expired and can no longer be accepted" : `Accept as ${partyLabel(aliases, o.receiver)}`}
-                    >Accept</Button>
+                    >{accepting.has(o.contract_id) ? "Accepting…" : "Accept"}</Button>
                   </td>
                 </tr>
               );

@@ -113,6 +113,9 @@ func TestRunListPendingTransfers_PartyFilter(t *testing.T) {
 		pendingTransferContract("00a", "alice::1220", "bob::1220", "MTK", "1.0", genV2, exp),
 		pendingTransferContract("00b", "carol::1220", "bob::1220", "ZHE", "2.0", genV2, exp),
 		pendingTransferContract("00c", "bob::1220", "erin::1220", "MTK", "3.0", genV2, exp),
+		// Neither leg is bob — must be excluded. This makes the filter
+		// load-bearing: without the post-decode check it would leak through.
+		pendingTransferContract("00d", "frank::1220", "george::1220", "MTK", "4.0", genV2, exp),
 	}
 	fake := &fakeLedger{
 		ActiveContractsFn: func(ctx context.Context, _ ledger.ActiveContractsRequest) (<-chan ledger.StreamItem[*lapiv2.GetActiveContractsResponse], error) {
@@ -128,11 +131,52 @@ func TestRunListPendingTransfers_PartyFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunListPendingTransfers: %v", err)
 	}
-	// bob is receiver of 00a, 00b and sender of 00c → all three survive; a
-	// non-party offer would be dropped. Pin the count + that erin's-only
-	// leg (as receiver) is reachable via bob-as-sender.
+	// bob is receiver of 00a/00b and sender of 00c → three survive; the
+	// frank→george offer (00d) is dropped.
 	if len(rows) != 3 {
-		t.Fatalf("party filter: got %d rows, want 3 (bob on every leg): %+v", len(rows), rows)
+		t.Fatalf("party filter: got %d rows, want 3: %+v", len(rows), rows)
+	}
+	for _, r := range rows {
+		if r.ContractID == "00d" {
+			t.Errorf("party filter leaked a non-bob offer: %+v", r)
+		}
+	}
+}
+
+// TestRunListPendingTransfers_Truncated pins the scan cap: with more
+// contracts than the cap, the list is partial and truncated is reported.
+func TestRunListPendingTransfers_Truncated(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "demo")
+	exp := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+
+	prev := pendingTransfersScanCap
+	pendingTransfersScanCap = 2
+	t.Cleanup(func() { pendingTransfersScanCap = prev })
+
+	contracts := []*lapiv2.GetActiveContractsResponse{
+		pendingTransferContract("00a", "alice::1220", "bob::1220", "MTK", "1.0", genV2, exp),
+		pendingTransferContract("00b", "carol::1220", "dave::1220", "MTK", "2.0", genV2, exp),
+		pendingTransferContract("00c", "erin::1220", "frank::1220", "MTK", "3.0", genV2, exp),
+	}
+	fake := &fakeLedger{
+		ActiveContractsFn: func(ctx context.Context, _ ledger.ActiveContractsRequest) (<-chan ledger.StreamItem[*lapiv2.GetActiveContractsResponse], error) {
+			return newStream(contracts, nil), nil
+		},
+	}
+	withFakeDial(t, fake)
+
+	rows, truncated, err := RunListPendingTransfers(context.Background(), ListPendingTransfersOptions{
+		Instance: "demo", Role: "app-user", Endpoint: "fake:0", Insecure: true,
+	})
+	if err != nil {
+		t.Fatalf("RunListPendingTransfers: %v", err)
+	}
+	if !truncated {
+		t.Errorf("truncated: got false, want true (3 contracts, cap 2)")
+	}
+	if len(rows) != 2 {
+		t.Errorf("rows: got %d, want 2 (capped)", len(rows))
 	}
 }
 

@@ -3,6 +3,7 @@ package token
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
@@ -14,9 +15,19 @@ import (
 // TransferInstruction the receiver has not yet accepted — and since
 // acceptance archives the instruction, every active TransferInstruction
 // contract in the ACS IS by definition still pending. So the list is a
-// plain ACS scan of the TransferInstruction interface, mirroring
-// RunListAllocations. Backs both the CLI `token transfers` verb and the
-// GET /api/tokens/transfers handler.
+// plain ACS scan of the TransferInstruction interface. It follows
+// RunListAllocations, with two differences the allocation list doesn't
+// need: the TransferInstruction filter is per-generation so it must first
+// probe the vetted surfaces, and the scan is bounded (see
+// pendingTransfersScanCap). It decodes both V1 and V2 instructions and
+// backs both the CLI `token transfers` verb and the GET
+// /api/tokens/transfers handler.
+
+// pendingTransfersScanCap bounds the ACS scan so a busy ledger can't OOM us
+// through the unbounded gRPC stream. A package var (not the maxHoldingsScan
+// const directly) so a test can lower it to exercise the truncated path
+// without streaming ten thousand contracts.
+var pendingTransfersScanCap = maxHoldingsScan
 
 // ListPendingTransfersOptions is the input for RunListPendingTransfers — an
 // ACS scan of the TransferInstruction interface, optionally filtered to one
@@ -32,8 +43,9 @@ type ListPendingTransfersOptions struct {
 }
 
 // RunListPendingTransfers ACS-queries the TransferInstruction interface and
-// returns the pending offers as summary rows, newest guard first. truncated
-// is true when the scan hit maxHoldingsScan and the list is partial.
+// returns the pending offers as summary rows, most-recently-requested
+// first. truncated is true when the scan hit pendingTransfersScanCap and
+// the list is partial.
 func RunListPendingTransfers(ctx context.Context, opts ListPendingTransfersOptions) (rows []types.TransferSummary, truncated bool, err error) {
 	if opts.Endpoint == "" {
 		return nil, false, ErrNeedsV2LocalNet
@@ -96,7 +108,7 @@ func RunListPendingTransfers(ctx context.Context, opts ListPendingTransfersOptio
 		// Bound the scan so a busy ledger can't OOM us through the
 		// unbounded gRPC stream; the caller surfaces truncated=true.
 		scanned++
-		if scanned > maxHoldingsScan {
+		if scanned > pendingTransfersScanCap {
 			truncated = true
 			break
 		}
@@ -129,6 +141,15 @@ func RunListPendingTransfers(ctx context.Context, opts ListPendingTransfersOptio
 			ExecuteBefore: tv.ExecuteBefore,
 		})
 	}
+	// Most-recently-requested first; RequestedAt is RFC3339-UTC so the
+	// string compare is chronological. ContractID breaks ties (and orders
+	// rows with no timestamp) so the result is deterministic.
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].RequestedAt != out[j].RequestedAt {
+			return out[i].RequestedAt > out[j].RequestedAt
+		}
+		return out[i].ContractID < out[j].ContractID
+	})
 	return out, truncated, nil
 }
 
