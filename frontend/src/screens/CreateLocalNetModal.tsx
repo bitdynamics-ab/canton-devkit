@@ -267,7 +267,7 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
           )}
           {stage.kind === "submitting" && <SubmittingBody name={name} />}
           {stage.kind === "progress" && (
-            <ProgressBody progress={progress} instance={stage.accepted.instance} />
+            <ProgressBody progress={progress} />
           )}
           {stage.kind === "error" && (
             <ErrorBody message={stage.message} remediation={stage.remediation} />
@@ -301,7 +301,7 @@ function ModalHeader({
     title = `Bringing up · ${stage.accepted.instance}`;
     if (progress.banner.kind === "done") {
       title = `${stage.accepted.instance} is ready`;
-      subtitle = "Click any service URL to open it";
+      subtitle = "";
     } else if (progress.banner.kind === "failed") {
       title = `Failed to bring up ${stage.accepted.instance}`;
       subtitle = progress.banner.summary ?? "see step detail below";
@@ -326,7 +326,9 @@ function ModalHeader({
       }}
     >
       <div style={{ fontWeight: 600, fontSize: fs.strong, color: W.text }}>{title}</div>
-      <div style={{ color: W.dim, fontSize: fs.lead, marginTop: 3 }}>{subtitle}</div>
+      {subtitle !== "" && (
+        <div style={{ color: W.dim, fontSize: fs.lead, marginTop: 3 }}>{subtitle}</div>
+      )}
     </header>
   );
 }
@@ -359,18 +361,6 @@ function ModalFooter({
         alignItems: "center",
       }}
     >
-      {stage.kind === "progress" && progress.startedAt && (
-        <span
-          style={{
-            color: W.dim,
-            fontSize: fs.label,
-            marginRight: "auto",
-            fontFamily: wMono,
-          }}
-        >
-          <Elapsed startedAt={progress.startedAt} />
-        </span>
-      )}
       {isRunning ? (
         <Button variant="secondary" size="md" onClick={onCancelInFlight}>
           Cancel
@@ -791,10 +781,8 @@ function SubmittingBody({ name }: { name: string }) {
 
 function ProgressBody({
   progress,
-  instance,
 }: {
   progress: ProgressState;
-  instance: string;
 }) {
   return (
     <div style={{ padding: "12px 18px" }}>
@@ -857,16 +845,6 @@ function ProgressBody({
           </pre>
         </details>
       )}
-      <div
-        style={{
-          marginTop: 10,
-          fontFamily: wMono,
-          fontSize: fs.micro,
-          color: W.faint,
-        }}
-      >
-        instance: <span style={{ color: W.brand }}>{instance}</span>
-      </div>
     </div>
   );
 }
@@ -912,23 +890,7 @@ function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
     return null;
   }
   if (banner.kind === "done") {
-    return (
-      <div
-        style={{
-          padding: "10px 14px",
-          background: `${tint(W.ok, 10)}`,
-          color: W.ok,
-          border: `1px solid ${W.ok}`,
-          borderRadius: 2,
-          fontSize: fs.data,
-          fontWeight: 600,
-        }}
-      >
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <IcCheck size={12} /> {banner.detail || "ready"}
-        </span>
-      </div>
-    );
+    return null;
   }
   if (banner.kind === "failed") {
     const remediation = remediationForCode(banner.errorCode);
@@ -1403,18 +1365,6 @@ function Field({
       )}
     </label>
   );
-}
-
-function Elapsed({ startedAt }: { startedAt: number }) {
-  const [, force] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => force((n) => n + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const sec = Math.floor((Date.now() - startedAt) / 1000);
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return <>{m}:{String(s).padStart(2, "0")} elapsed</>;
 }
 
 const overlayStyle: React.CSSProperties = {
