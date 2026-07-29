@@ -78,7 +78,8 @@ type ListAllocationsOptions struct {
 // AllocationFactory_Allocate. Returns the resulting Allocation (finalized) or
 // AllocationInstruction (pending) contract id.
 func RunAllocate(ctx context.Context, out io.Writer, opts AllocationOptions) (string, error) {
-	if err := requireFields("allocate", opts.Instance, opts.Instrument, opts.From, opts.To, opts.Amount); err != nil {
+	if err := requireFields("allocate", "instance", opts.Instance, "instrument", opts.Instrument,
+		"sender party", opts.From, "receiver party", opts.To, "amount", opts.Amount); err != nil {
 		return "", err
 	}
 	aliases := aliasMapForInstance(opts.Instance)
@@ -346,7 +347,7 @@ func RunAllocationCancel(ctx context.Context, out io.Writer, opts AllocationActi
 //     STAS_Account authorizer)
 //   - cancel   → the settlement executors (STAS_Parties executors)
 func runAllocationAction(ctx context.Context, out io.Writer, opts AllocationActionOptions, verb, choice string) error {
-	if err := requireFields(verb, opts.Instance, opts.AllocationID); err != nil {
+	if err := requireFields(verb, "instance", opts.Instance, "allocation id", opts.AllocationID); err != nil {
 		return err
 	}
 	if opts.Endpoint == "" {

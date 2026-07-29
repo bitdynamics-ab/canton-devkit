@@ -53,7 +53,7 @@ type PartyOptions struct {
 // the recorded PartyRef.
 func RunPartyNew(ctx context.Context, opts PartyOptions) (*registry.PartyRef, error) {
 	if !validAlias.MatchString(opts.Alias) {
-		return nil, fmt.Errorf("%w: %q must be a letter followed by letters, digits or hyphens",
+		return nil, fmt.Errorf("%w: %q must be lowercase — a letter a-z followed by lowercase letters, digits or hyphens",
 			ErrAliasInvalid, opts.Alias)
 	}
 

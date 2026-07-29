@@ -206,7 +206,8 @@ const (
 // ErrUnsupportedOnInstrument: Amulet doesn't implement
 // BurnMintFactoryV1 and there's no generic V2 mint interface.
 func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
-	if err := requireFields("mint", opts.Instance, opts.Instrument, opts.To, opts.Amount); err != nil {
+	if err := requireFields("mint", "instance", opts.Instance, "instrument", opts.Instrument,
+		"recipient party", opts.To, "amount", opts.Amount); err != nil {
 		return err
 	}
 	opts.To = ResolveAlias(aliasMapForInstance(opts.Instance), opts.To)
@@ -229,6 +230,9 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	// Live mint only for on-ledger test-token instruments. Amulet and
 	// registry-only instruments have no asset-specific mint.
 	if opts.Endpoint != "" && ref.Status == "on-ledger" {
+		if err := enforceSupplyCap(ctx, opts, ref); err != nil {
+			return err
+		}
 		return runMintLive(ctx, out, opts, ref)
 	}
 	emit(out, "mint", map[string]any{
@@ -242,7 +246,8 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 // ErrNeedsV2LocalNet so callers that haven't been updated to thread
 // through the endpoint get a clear remediation.
 func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error {
-	if err := requireFields("transfer", opts.Instance, opts.Instrument, opts.From, opts.To, opts.Amount); err != nil {
+	if err := requireFields("transfer", "instance", opts.Instance, "instrument", opts.Instrument,
+		"sender party", opts.From, "recipient party", opts.To, "amount", opts.Amount); err != nil {
 		return err
 	}
 	aliases := aliasMapForInstance(opts.Instance)
@@ -336,7 +341,8 @@ func runTransferOffLedger(ctx context.Context, out io.Writer, opts TransferOptio
 }
 
 func RunAccept(ctx context.Context, out io.Writer, opts AcceptOptions) error {
-	if err := requireFields("transfer accept", opts.Instance, opts.TransferInstructionID); err != nil {
+	if err := requireFields("transfer accept", "instance", opts.Instance,
+		"transfer instruction id", opts.TransferInstructionID); err != nil {
 		return err
 	}
 	// Resolve a --party alias to its full party id: both the on-ledger
@@ -373,7 +379,8 @@ func RunAccept(ctx context.Context, out io.Writer, opts AcceptOptions) error {
 // account. Amulet / registry-only instruments have no such path and
 // yield ErrUnsupportedOnInstrument.
 func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
-	if err := requireFields("burn", opts.Instance, opts.Instrument, opts.From, opts.Amount); err != nil {
+	if err := requireFields("burn", "instance", opts.Instance, "instrument", opts.Instrument,
+		"holder party", opts.From, "amount", opts.Amount); err != nil {
 		return err
 	}
 	opts.From = ResolveAlias(aliasMapForInstance(opts.Instance), opts.From)
@@ -606,6 +613,65 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, boo
 // addDecimal returns a + b for two Daml Decimal strings. Empty is treated
 // as "0". Aligns fractional widths ("1.0" + "1" → "2.0") and adds as
 // big.Ints so we don't depend on a big-decimal library.
+// ErrSupplyCapExceeded is returned when a mint would push an instrument's
+// circulating supply past the initial supply declared at create. CLI maps
+// it to a user error; the HTTP handler maps it to 422 so the Web UI can
+// render the numbers rather than a generic failure.
+var ErrSupplyCapExceeded = errors.New("mint exceeds the instrument's declared supply")
+
+// enforceSupplyCap rejects a mint that would take total supply past the
+// figure recorded at `token create`. The declared supply is devkit-side
+// bookkeeping, not a ledger invariant — the test token's TokenRules has no
+// cap, so a client minting against it directly still can — but it makes
+// the number the operator typed at create actually mean something.
+//
+// Skipped when the instrument has no declared supply (Amulet and anything
+// not created here), or when either figure isn't a decimal we can compare.
+// A scan failure is not treated as a violation: the mint proceeds rather
+// than being blocked by an unrelated read error.
+func enforceSupplyCap(ctx context.Context, opts MintOptions, ref registry.TokenRef) error {
+	declared, ok := new(big.Rat).SetString(ref.InitialSupply)
+	if !ok {
+		return nil // nothing declared (or unparseable) — no cap to enforce
+	}
+	want, ok := new(big.Rat).SetString(opts.Amount)
+	if !ok {
+		return nil // validateAmount already vetted this; be permissive here
+	}
+	sum, err := RunInstrumentSummary(ctx, BalanceOptions{
+		Instance: opts.Instance, Role: opts.Role, Insecure: opts.Insecure,
+		Endpoint: opts.Endpoint, Instrument: ref.InstrumentID,
+	})
+	if err != nil {
+		return nil // can't measure supply — don't block the mint on a read error
+	}
+	minted, ok := new(big.Rat).SetString(zeroIfEmpty(sum.TotalSupply))
+	if !ok {
+		return nil
+	}
+
+	after := new(big.Rat).Add(minted, want)
+	if after.Cmp(declared) <= 0 {
+		return nil
+	}
+	headroom := new(big.Rat).Sub(declared, minted)
+	if headroom.Sign() < 0 {
+		headroom.SetInt64(0)
+	}
+	return fmt.Errorf("%w: %s declares %s, %s already minted — at most %s more can be minted",
+		ErrSupplyCapExceeded, ref.Symbol, trimDecimal(declared),
+		trimDecimal(minted), trimDecimal(headroom))
+}
+
+// trimDecimal renders a Rat without trailing-zero noise, so an error reads
+// "2001" rather than "2001.0000000000".
+func trimDecimal(r *big.Rat) string {
+	if r.IsInt() {
+		return r.Num().String()
+	}
+	return strings.TrimRight(r.FloatString(10), "0")
+}
+
 func addDecimal(a, b string) (string, error) {
 	if a == "" {
 		a = "0"
@@ -685,10 +751,14 @@ func resolveInstrument(instance, ident string) (registry.TokenRef, error) {
 
 // requireFields surfaces the same "field X is required" wording as
 // the create wizard so every error in the token surface looks alike.
-func requireFields(verb string, fields ...string) error {
-	for i, v := range fields {
-		if v == "" {
-			return fmt.Errorf("%s: field at position %d is required", verb, i)
+// requireFields reports the first missing field by name. Callers pass
+// name/value pairs ("recipient party", opts.To) so the error tells the
+// operator which input to fill — this text surfaces directly in the Web
+// UI's form, where an internal field index means nothing.
+func requireFields(verb string, nameValuePairs ...string) error {
+	for i := 0; i+1 < len(nameValuePairs); i += 2 {
+		if nameValuePairs[i+1] == "" {
+			return fmt.Errorf("%s: %s is required", verb, nameValuePairs[i])
 		}
 	}
 	return nil

@@ -3,6 +3,7 @@ package token
 import (
 	"context"
 	"errors"
+	"math/big"
 	"strings"
 	"testing"
 
@@ -393,5 +394,36 @@ func holdingContract(owner, instrumentID, admin, amount string) *lapiv2.GetActiv
 				},
 			},
 		},
+	}
+}
+
+// TestTrimDecimal keeps supply figures readable in the cap error — an
+// operator who typed 2001 should see 2001, not 2001.0000000000.
+func TestTrimDecimal(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"2001", "2001"},
+		{"2001.0000000000", "2001"},
+		{"1.5", "1.5"},
+		{"0", "0"},
+	} {
+		r, ok := new(big.Rat).SetString(tc.in)
+		if !ok {
+			t.Fatalf("bad fixture %q", tc.in)
+		}
+		if got := trimDecimal(r); got != tc.want {
+			t.Errorf("trimDecimal(%s) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestEnforceSupplyCap_NoDeclaredSupplyIsUncapped proves instruments with
+// no recorded initial supply (Amulet, anything not created here) are never
+// blocked — the cap is opt-in via `token create`.
+func TestEnforceSupplyCap_NoDeclaredSupply(t *testing.T) {
+	err := enforceSupplyCap(context.Background(),
+		MintOptions{Instance: "nope", Amount: "1"},
+		registry.TokenRef{Symbol: "AMT", InstrumentID: "Amulet", InitialSupply: ""})
+	if err != nil {
+		t.Errorf("uncapped instrument should mint freely, got %v", err)
 	}
 }

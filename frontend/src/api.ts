@@ -1859,6 +1859,10 @@ export interface InstrumentSummary {
   instrument_id: string;
   admin: string;
   total_supply: string;
+  /** Initial supply recorded at create. Creating mints nothing, so this
+   *  is stated intent, not an on-ledger fact — shown only while it
+   *  differs from total_supply. Absent for unregistered instruments. */
+  declared_supply?: string;
   holder_count: number;
   contract_count: number;
   holders: HolderRow[];
