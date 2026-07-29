@@ -71,6 +71,33 @@ func TestCSRF_RejectsCrossOriginPost(t *testing.T) {
 	}
 }
 
+// TestCSRF_SkipOriginCheckAllowsCrossOriginPost pins the
+// --insecure-skip-origin-check escape hatch: when WithSkipOriginCheck
+// is set, a cross-origin POST must pass the CSRF gate (Host allowlist
+// still applies). Without this, a Vite/frontend-dev setup that cannot
+// keep Origin aligned with Host has no supported escape hatch.
+func TestCSRF_SkipOriginCheckAllowsCrossOriginPost(t *testing.T) {
+	assets, _ := AssetsHandler()
+	srv := New(Config{
+		Port:   0,
+		Router: NewRouter(assets, nil, WithSkipOriginCheck(true)),
+	})
+	addr, _ := srv.Listen()
+	go srv.Serve() //nolint:errcheck
+	defer func() { _ = srv.Shutdown(context.Background()) }()
+
+	req, _ := http.NewRequest("POST", "http://"+addr+"/api/typo", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusForbidden {
+		t.Errorf("skip-origin-check POST was rejected (403) — escape hatch not wired")
+	}
+}
+
 // TestCSRF_AcceptsSameOriginPost is the symmetric pin: a POST
 // with a matching Origin proceeds past the CSRF gate. We hit
 // /api/typo (which doesn't exist) so the response is 404 — the

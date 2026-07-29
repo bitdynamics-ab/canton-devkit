@@ -186,9 +186,9 @@ The teardown/bring-up ladder is therefore: `pause`/`resume` (freeze, RAM held) �
 
 **Proposal said:** a Web UI exists, but the proposal described it as a dashboard accessible alongside the CLI, not as a separately invocable CLI command.
 
-**Shipped:** `dpm localnet ui` starts the embedded Vite/React HTTP server (default port 7777, loopback-only). Flags: `--port`, `--host`, `--allow-non-loopback`. Non-loopback binding is refused by default as a DNS-rebinding defence; SSH tunnelling is the recommended remote-access path.
+**Shipped:** `dpm localnet ui` starts the embedded Vite/React HTTP server (default port 7777, loopback-only). Flags: `--port`, `--host`, `--allow-non-loopback`, `--insecure-skip-origin-check`. Non-loopback binding is refused by default as a DNS-rebinding defence; SSH tunnelling is the recommended remote-access path. `--insecure-skip-origin-check` disables the Origin/Referer CSRF gate for local frontend-dev setups (Vite proxy edge cases); the Host allowlist still applies.
 
-**Why:** Packaging the UI launch as a CLI subcommand keeps the single-binary model and lets users control when the UI server is running. The loopback-only default and the `--allow-non-loopback` guard are a deliberate security measure — the UI handles JWTs and party identifiers and is not designed for unauthenticated LAN-wide exposure.
+**Why:** Packaging the UI launch as a CLI subcommand keeps the single-binary model and lets users control when the UI server is running. The loopback-only default and the `--allow-non-loopback` guard are a deliberate security measure — the UI handles JWTs and party identifiers and is not designed for unauthenticated LAN-wide exposure. The Origin-check skip exists only as an explicit local-dev escape hatch when a frontend proxy cannot keep `Origin` aligned with `Host`.
 
 ---
 
