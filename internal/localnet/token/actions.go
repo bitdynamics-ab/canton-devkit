@@ -230,6 +230,9 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	// Live mint only for on-ledger test-token instruments. Amulet and
 	// registry-only instruments have no asset-specific mint.
 	if opts.Endpoint != "" && ref.Status == "on-ledger" {
+		if err := enforceSupplyCap(ctx, opts, ref); err != nil {
+			return err
+		}
 		return runMintLive(ctx, out, opts, ref)
 	}
 	emit(out, "mint", map[string]any{
@@ -610,6 +613,65 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, boo
 // addDecimal returns a + b for two Daml Decimal strings. Empty is treated
 // as "0". Aligns fractional widths ("1.0" + "1" → "2.0") and adds as
 // big.Ints so we don't depend on a big-decimal library.
+// ErrSupplyCapExceeded is returned when a mint would push an instrument's
+// circulating supply past the initial supply declared at create. CLI maps
+// it to a user error; the HTTP handler maps it to 422 so the Web UI can
+// render the numbers rather than a generic failure.
+var ErrSupplyCapExceeded = errors.New("mint exceeds the instrument's declared supply")
+
+// enforceSupplyCap rejects a mint that would take total supply past the
+// figure recorded at `token create`. The declared supply is devkit-side
+// bookkeeping, not a ledger invariant — the test token's TokenRules has no
+// cap, so a client minting against it directly still can — but it makes
+// the number the operator typed at create actually mean something.
+//
+// Skipped when the instrument has no declared supply (Amulet and anything
+// not created here), or when either figure isn't a decimal we can compare.
+// A scan failure is not treated as a violation: the mint proceeds rather
+// than being blocked by an unrelated read error.
+func enforceSupplyCap(ctx context.Context, opts MintOptions, ref registry.TokenRef) error {
+	declared, ok := new(big.Rat).SetString(ref.InitialSupply)
+	if !ok {
+		return nil // nothing declared (or unparseable) — no cap to enforce
+	}
+	want, ok := new(big.Rat).SetString(opts.Amount)
+	if !ok {
+		return nil // validateAmount already vetted this; be permissive here
+	}
+	sum, err := RunInstrumentSummary(ctx, BalanceOptions{
+		Instance: opts.Instance, Role: opts.Role, Insecure: opts.Insecure,
+		Endpoint: opts.Endpoint, Instrument: ref.InstrumentID,
+	})
+	if err != nil {
+		return nil // can't measure supply — don't block the mint on a read error
+	}
+	minted, ok := new(big.Rat).SetString(zeroIfEmpty(sum.TotalSupply))
+	if !ok {
+		return nil
+	}
+
+	after := new(big.Rat).Add(minted, want)
+	if after.Cmp(declared) <= 0 {
+		return nil
+	}
+	headroom := new(big.Rat).Sub(declared, minted)
+	if headroom.Sign() < 0 {
+		headroom.SetInt64(0)
+	}
+	return fmt.Errorf("%w: %s declares %s, %s already minted — at most %s more can be minted",
+		ErrSupplyCapExceeded, ref.Symbol, trimDecimal(declared),
+		trimDecimal(minted), trimDecimal(headroom))
+}
+
+// trimDecimal renders a Rat without trailing-zero noise, so an error reads
+// "2001" rather than "2001.0000000000".
+func trimDecimal(r *big.Rat) string {
+	if r.IsInt() {
+		return r.Num().String()
+	}
+	return strings.TrimRight(r.FloatString(10), "0")
+}
+
 func addDecimal(a, b string) (string, error) {
 	if a == "" {
 		a = "0"

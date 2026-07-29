@@ -1136,13 +1136,12 @@ function AllocationsPanel({
 // looking broken; once the declared amount is fully minted the note drops
 // away and the tile is just the number.
 function KpiRow({ s }: { s: InstrumentSummary }) {
-  const unminted = remainingToMint(s);
   const cards: Array<{ label: string; value: string; full?: string; hint?: string }> = [
     {
       label: "Total supply",
       value: statAmount(s.total_supply),
       full: s.total_supply,
-      hint: unminted ? `declared ${statAmount(s.declared_supply!)}` : undefined,
+      hint: supplyNote(s),
     },
     { label: "In circulation", value: statAmount(s.total_supply), full: s.total_supply, hint: "sum of all holdings" },
     { label: "Holders", value: String(s.holder_count) },
@@ -1190,6 +1189,22 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
       ))}
     </div>
   );
+}
+
+// supplyNote annotates the supply tile while minted and declared disagree:
+// "declared 2,001" under the cap, and an explicit over-supply note for
+// instruments minted past it before the cap was enforced. Returns undefined
+// once the two agree, so a settled instrument is just its number.
+function supplyNote(s: InstrumentSummary): string | undefined {
+  if (!s.declared_supply) return undefined;
+  const declared = Number(s.declared_supply);
+  const minted = Number(s.total_supply || "0");
+  if (!Number.isFinite(declared) || !Number.isFinite(minted)) return undefined;
+  if (minted === declared) return undefined;
+  if (minted > declared) {
+    return `declared ${statAmount(s.declared_supply)} · over by ${statAmount(String(minted - declared))}`;
+  }
+  return `declared ${statAmount(s.declared_supply)}`;
 }
 
 // remainingToMint reports how much of the declared initial supply has not
