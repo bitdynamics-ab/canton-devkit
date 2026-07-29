@@ -390,7 +390,7 @@ function handleInstanceRoute(
   const darInspectMatch = rest.match(/^\/dar\/([^/]+)\/inspect$/);
   if (darInspectMatch && method === "GET") {
     const body = structuredClone(store.darInspect);
-    body.dar_id = decodeURIComponent(darInspectMatch[1]);
+    body.main = decodeURIComponent(darInspectMatch[1]);
     jsonResponse(res, 200, body);
     return true;
   }
