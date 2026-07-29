@@ -873,7 +873,6 @@ function TransferModal({
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const [autoAccept, setAutoAccept] = useState(true);
-  const [atomic, setAtomic] = useState(false);
   const [busy, setBusy] = useState(false);
   const [plan, setPlan] = useState<import("../api").TransferPlan | null>(null);
 
@@ -895,7 +894,7 @@ function TransferModal({
     e.preventDefault();
     setBusy(true);
     try {
-      const res = await transferToken(instance, symbol, from, to, amount, reason || undefined, role, autoAccept, atomic && autoAccept);
+      const res = await transferToken(instance, symbol, from, to, amount, reason || undefined, role, autoAccept, false);
       // A non-auto-accept Offer returns an instruction id; anything settled just closes.
       onDone(!res.settled && res.transferInstructionId
         ? { instructionId: res.transferInstructionId, receiver: to }
@@ -922,17 +921,17 @@ function TransferModal({
           <input type="checkbox" checked={autoAccept} onChange={(e) => setAutoAccept(e.target.checked)} />
           Auto-accept (settle in one step. You own the receiver on LocalNet.)
         </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, color: autoAccept ? W.text2 : W.dim, fontSize: fs.meta, cursor: autoAccept ? "pointer" : "not-allowed" }}>
-          <input type="checkbox" checked={atomic && autoAccept} disabled={!autoAccept} onChange={(e) => setAtomic(e.target.checked)} />
-          Atomic (experimental) — batch transfer + accept into one all-or-nothing transaction
+        {/* Atomic batching is shown but not selectable: on this Splice version
+            ExecuteBatch cannot rebind the accept leg to the instruction the
+            transfer leg creates, so every submit fails. Offering an enabled
+            control whose only outcome is an error is worse than showing it
+            unavailable, so the checkbox stays visible (the CLI has --atomic,
+            and this documents the gap) but cannot be armed. */}
+        <label style={{ display: "flex", alignItems: "center", gap: 8, color: W.dim, fontSize: fs.meta, cursor: "not-allowed" }}>
+          <input type="checkbox" checked={false} disabled title="Unavailable on this Splice version" readOnly />
+          Atomic — batch transfer + accept into one all-or-nothing transaction
+          <span style={{ color: W.faint }}>(unavailable on this Splice version)</span>
         </label>
-        {atomic && autoAccept && (
-          <div role="status" style={{ ...notice("warn") }}>
-            Experimental and not yet supported on current Splice: the accept leg can’t
-            reference the transfer leg’s instruction within one batch, so the submit
-            errors and nothing commits. Uncheck to use the working sequential offer→accept path.
-          </div>
-        )}
 
         {plan && (
           <div style={{ background: W.surface2, border: `1px solid ${W.border}`, borderRadius: 4, padding: "10px 12px" }}>

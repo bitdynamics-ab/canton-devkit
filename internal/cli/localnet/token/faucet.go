@@ -19,9 +19,10 @@ func buildFaucet() *cobra.Command {
 		Short: "Fund a party from a well-known source (auto-accepted)",
 		Long: `Transfer <amount> of an instrument from a funded source party to
 <party>, auto-accepting the resulting TransferInstruction so the target is
-funded in one step. The source defaults to the role's own funded party
-(e.g. app-user holds the network's Amulet) — pass --source to fund from a
-different holder, such as a created token's issuer.
+funded in one step. The source defaults to the instrument's largest current
+holder — the network's Amulet party for Amulet, or wherever a created
+token's supply was minted — so pass --source only to fund from a specific
+holder.
 
 <party> and --source accept aliases. Requires --endpoint and --instrument.`,
 		Args: cobra.ExactArgs(2),
@@ -38,7 +39,7 @@ different holder, such as a created token's issuer.
 	}
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")
 	cmd.Flags().StringVar(&opts.Instrument, "instrument", "", "Instrument symbol or raw id. Required.")
-	cmd.Flags().StringVar(&opts.Source, "source", "", "Funding party (alias or id). Empty defaults to the role's own funded party.")
+	cmd.Flags().StringVar(&opts.Source, "source", "", "Funding party (alias or id). Empty defaults to the instrument's largest holder.")
 	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Required for the live transfer.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
 	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the submit.")
