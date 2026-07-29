@@ -64,6 +64,8 @@ func schemaShapeRoots() []any {
 		Allocation{},
 		AllocationSummary{},
 		AllocationsResponse{},
+		TransferSummary{},
+		PendingTransfersResponse{},
 		BatchResult{},
 		TokenActivityEvent{},
 		TokenCreateRequest{},
@@ -398,6 +400,13 @@ types.Party {
   role string
 }
 
+types.PendingTransfersResponse {
+  schema_version int
+  pending_transfers []types.TransferSummary
+  truncated bool
+  aliases map[string]string
+}
+
 types.PreflightCheck {
   label string
   result string
@@ -539,6 +548,17 @@ types.TransactionsListResponse {
   count int
   scanned_from int64
   window_truncated bool
+}
+
+types.TransferSummary {
+  contract_id string
+  sender string
+  receiver string
+  instrument_id string
+  amount string
+  generation string
+  requested_at string
+  execute_before string
 }
 
 types.TxReplayEvent {

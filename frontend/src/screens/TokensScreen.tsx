@@ -10,6 +10,7 @@ import {
   createToken,
   faucetToken,
   fetchAllocations,
+  fetchPendingTransfers,
   launchDemoToken,
   fetchTokenIdentity,
   fetchActivity,
@@ -27,6 +28,7 @@ import {
   type ActivityEvent,
   type AliasMap,
   type AllocationSummary,
+  type TransferSummary,
   type BalanceMatrix,
   type HoldingSource,
   type PartyRef,
@@ -132,7 +134,7 @@ export function TokensScreen() {
   const [parties, setParties] = useState<PartyRef[]>([]);
   const [showParties, setShowParties] = useState(false);
   const aliases: AliasMap = useMemo(() => aliasMapFrom(parties), [parties]);
-  const [detailTab, setDetailTab] = useState<"overview" | "activity" | "allocations">("overview");
+  const [detailTab, setDetailTab] = useState<"overview" | "activity" | "offers" | "allocations">("overview");
   const [activity, setActivity] = useState<ActivityEvent[] | null>(null);
   const [activityErr, setActivityErr] = useState<string | null>(null);
   // Requested page size; "Load more" grows it. activityTruncated is set
@@ -141,6 +143,15 @@ export function TokensScreen() {
   const [activityTruncated, setActivityTruncated] = useState(false);
   const [allocations, setAllocations] = useState<AllocationSummary[] | null>(null);
   const [allocationsErr, setAllocationsErr] = useState<string | null>(null);
+  // Pending transfer offers are fetched eagerly (not gated on the tab) so
+  // the "N" badge is visible without opening it — the whole point is that
+  // offers stop being undiscoverable. offers === null means "not loaded".
+  const [offers, setOffers] = useState<TransferSummary[] | null>(null);
+  const [offersErr, setOffersErr] = useState<string | null>(null);
+  const [offersTruncated, setOffersTruncated] = useState(false);
+  // Instruction ids whose accept is in flight — the row's button is
+  // disabled while present so a double-click can't submit the accept twice.
+  const [acceptingIds, setAcceptingIds] = useState<Set<string>>(new Set());
 
   const [showCreate, setShowCreate] = useState(false);
   const [modal, setModal] = useState<
@@ -338,6 +349,37 @@ export function TokensScreen() {
     };
   }, [instance, detailTab, role, refreshTick]);
 
+  // Eager (not tab-gated) so the Offers tab can show a live "N" badge. A
+  // scan failure (e.g. no live endpoint) leaves the badge off and surfaces
+  // only inside the panel, so an offline instance doesn't nag.
+  useEffect(() => {
+    if (!instance) {
+      setOffers(null);
+      setOffersErr(null);
+      setOffersTruncated(false);
+      return;
+    }
+    let cancelled = false;
+    fetchPendingTransfers(instance, undefined, role)
+      .then((r) => {
+        if (cancelled) return;
+        setOffers(r.transfers);
+        setOffersTruncated(r.truncated);
+        setOffersErr(null);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        // Keep offers null (not []) on error so the panel shows only the
+        // error, not a contradictory "No pending offers" empty state.
+        setOffers(null);
+        setOffersTruncated(false);
+        setOffersErr(e instanceof ApiError ? e.message : "failed to load offers");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instance, role, refreshTick]);
+
   // Selecting a different instrument resets the detail tab to Overview.
   useEffect(() => {
     setDetailTab("overview");
@@ -398,6 +440,30 @@ export function TokensScreen() {
     } catch (e) {
       setTopNotice(renderActionError(e, `${verb} failed`));
     } finally {
+      bump();
+    }
+  }
+
+  // Accepts a pending offer straight from its row — the id + receiver come
+  // from the listed instruction, so no manual entry. bump() refreshes the
+  // offers list, holdings, and summary once it settles.
+  async function runAcceptAction(id: string, receiver: string) {
+    if (!instance || acceptingIds.has(id)) return;
+    setAcceptingIds((s) => new Set(s).add(id));
+    try {
+      await acceptTransfer(instance, id, receiver || undefined, role);
+      // Drop the accepted offer immediately so the row and badge don't
+      // linger accept-enabled in the window before the refetch lands.
+      setOffers((prev) => (prev ? prev.filter((o) => o.contract_id !== id) : prev));
+      setTopNotice({ tone: "ok", text: "Transfer accepted." });
+    } catch (e) {
+      setTopNotice(renderActionError(e, "accept failed"));
+    } finally {
+      setAcceptingIds((s) => {
+        const n = new Set(s);
+        n.delete(id);
+        return n;
+      });
       bump();
     }
   }
@@ -572,7 +638,7 @@ export function TokensScreen() {
                       disabled={!!mintReason}
                       title={mintReason ? BURN_DISABLED_REASON : "Burn holdings (archive path)"}
                     >Burn</Button>
-                    <Button variant="secondary" size="sm" icon={<IcCheck />} onClick={() => setModal({ kind: "accept" })}>Accept transfer</Button>
+                    <Button variant="secondary" size="sm" icon={<IcCheck />} onClick={() => setDetailTab("offers")} title="See pending transfer offers you can accept">Accept transfer</Button>
                     <Button variant="secondary" size="sm" icon={<IcArrowRight />} onClick={() => setModal({ kind: "allocate", symbol: sym })} title="Allocate holdings to a settlement (DvP)">Allocate</Button>
                   </span>
                 </div>
@@ -583,11 +649,14 @@ export function TokensScreen() {
                 </div>
 
                 <div style={{ display: "flex", gap: 4, margin: "16px 0 2px", borderBottom: `1px solid ${W.border}` }}>
-                  {(["overview", "activity", "allocations"] as const).map((tab) => (
+                  {(["overview", "activity", "offers", "allocations"] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setDetailTab(tab)}
                       style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
                         background: "transparent",
                         border: "none",
                         borderBottom: `2px solid ${detailTab === tab ? W.brand : "transparent"}`,
@@ -600,6 +669,27 @@ export function TokensScreen() {
                       }}
                     >
                       {tab}
+                      {tab === "offers" && offers && offers.length > 0 && (
+                        <span
+                          title={`${offers.length} pending transfer offer${offers.length === 1 ? "" : "s"}`}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            minWidth: 16,
+                            height: 16,
+                            justifyContent: "center",
+                            padding: "0 5px",
+                            borderRadius: R.control,
+                            border: `1px solid ${tint(W.brand, 34)}`,
+                            background: tint(W.brand, 13),
+                            color: W.brand,
+                            fontSize: fs.micro,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {offers.length}
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -698,6 +788,18 @@ export function TokensScreen() {
                     limit={activityLimit}
                     truncated={activityTruncated}
                     onLoadMore={() => setActivityLimit((n) => n + ACTIVITY_PAGE)}
+                  />
+                )}
+
+                {detailTab === "offers" && (
+                  <PendingOffersPanel
+                    offers={offers}
+                    err={offersErr}
+                    truncated={offersTruncated}
+                    aliases={aliases}
+                    accepting={acceptingIds}
+                    onAccept={(id, receiver) => runAcceptAction(id, receiver)}
+                    onAcceptById={() => setModal({ kind: "accept" })}
                   />
                 )}
 
@@ -1057,6 +1159,100 @@ function AllocateModal({
         </div>
       </form>
     </ModalShell>
+  );
+}
+
+// expiryLabel renders a transfer offer's executeBefore as a compact,
+// human relative string ("in 23h", "<1m", "expired"). "—" when unset.
+// Floors each bucket so it never overstates the time left (rounding up
+// could show "in 1h" on an offer with 31 minutes to live).
+function expiryLabel(iso?: string): { text: string; expired: boolean } {
+  if (!iso) return { text: "—", expired: false };
+  const ms = new Date(iso).getTime() - Date.now();
+  if (Number.isNaN(ms)) return { text: "—", expired: false };
+  if (ms <= 0) return { text: "expired", expired: true };
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return { text: "<1m", expired: false };
+  if (mins < 60) return { text: `in ${mins}m`, expired: false };
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 48) return { text: `in ${hrs}h`, expired: false };
+  return { text: `in ${Math.floor(hrs / 24)}d`, expired: false };
+}
+
+// Lists the pending V2 transfer offers (TransferInstructions awaiting the
+// receiver's acceptance) with a per-row Accept. Not instrument-scoped —
+// shows every visible offer, mirroring AllocationsPanel. This is what turns
+// "paste a transfer instruction id" into "click Accept on the offer".
+function PendingOffersPanel({
+  offers, err, truncated, aliases, accepting, onAccept, onAcceptById,
+}: {
+  offers: TransferSummary[] | null;
+  err: string | null;
+  truncated: boolean;
+  aliases: AliasMap;
+  accepting: Set<string>;
+  onAccept: (id: string, receiver: string) => void;
+  onAcceptById: () => void;
+}) {
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", margin: "12px 0 8px" }}>
+        <h4 style={{ color: W.text2, margin: 0 }}>
+          Pending offers <span style={{ color: W.dim, fontWeight: 400, fontSize: fs.meta }}>· transfers awaiting acceptance across all instruments</span>
+        </h4>
+        <span style={{ marginLeft: "auto" }}>
+          <Button variant="ghost" size="sm" onClick={onAcceptById} title="Accept a transfer by pasting its instruction id">Accept by id…</Button>
+        </span>
+      </div>
+      {err && <div role="alert" style={{ color: W.err, fontSize: fs.meta }}>{err}</div>}
+      {offers === null && !err && <div style={{ color: W.dim, fontSize: fs.meta }}>Loading offers…</div>}
+      {offers !== null && (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data }}>
+          <thead>
+            <tr style={{ color: W.dim, textAlign: "left" }}>
+              <th style={th}>OFFER</th>
+              <th style={th}>FROM</th>
+              <th style={th}>TO</th>
+              <th style={th}>INSTRUMENT</th>
+              <th style={thNum}>AMOUNT</th>
+              <th style={th}>EXPIRES</th>
+              <th style={th}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {offers.map((o) => {
+              const exp = expiryLabel(o.execute_before);
+              return (
+                <tr key={o.contract_id}>
+                  <td style={td}><MonoId value={o.contract_id} size={11.5} color={W.mag} /></td>
+                  <td style={td}>{partyLabel(aliases, o.sender)}</td>
+                  <td style={td}>{partyLabel(aliases, o.receiver)}</td>
+                  <td style={{ ...td, fontFamily: wMono, fontSize: fs.label, color: W.text2 }}>{o.instrument_id}</td>
+                  <td style={tdNum}>{o.amount}</td>
+                  <td style={{ ...td, color: exp.expired ? W.err : W.dim, fontSize: fs.label }}>{exp.text}</td>
+                  <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={<IcCheck />}
+                      onClick={() => onAccept(o.contract_id, o.receiver)}
+                      disabled={exp.expired || accepting.has(o.contract_id)}
+                      title={exp.expired ? "This offer has expired and can no longer be accepted" : `Accept as ${partyLabel(aliases, o.receiver)}`}
+                    >{accepting.has(o.contract_id) ? "Accepting…" : "Accept"}</Button>
+                  </td>
+                </tr>
+              );
+            })}
+            {offers.length === 0 && (
+              <tr><td colSpan={7} style={{ ...td, color: W.dim }}>No pending offers. A transfer sent without auto-accept waits here for its receiver.</td></tr>
+            )}
+          </tbody>
+        </table>
+      )}
+      {truncated && (
+        <div style={{ color: W.dim, fontSize: fs.micro, marginTop: 6 }}>Showing the first offers — more exist than the scan cap.</div>
+      )}
+    </>
   );
 }
 
