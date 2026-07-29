@@ -144,7 +144,7 @@ export function TokensScreen() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [modal, setModal] = useState<
-    | { kind: "mint"; symbol: string }
+    | { kind: "mint"; symbol: string; amount?: string }
     | { kind: "transfer"; symbol: string }
     | { kind: "burn"; symbol: string }
     | { kind: "faucet"; symbol: string }
@@ -607,6 +607,23 @@ export function TokensScreen() {
                 {detailTab === "overview" && (
                   <>
                     {summary && <KpiRow s={summary} />}
+                    {summary && remainingToMint(summary) && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "10px 0 2px", flexWrap: "wrap" }}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={<IcArrowUp />}
+                          disabled={!!mintDisabledReason(active)}
+                          title={mintDisabledReason(active) ?? "Mint the declared supply that hasn't been issued yet"}
+                          onClick={() => setModal({ kind: "mint", symbol: sym, amount: remainingToMint(summary) })}
+                        >
+                          Mint {statAmount(remainingToMint(summary))} remaining
+                        </Button>
+                        <span style={{ color: W.dim, fontSize: fs.meta }}>
+                          creating an instrument records its supply; minting is what issues it
+                        </span>
+                      </div>
+                    )}
                     {summary && summary.holders.length > 0 && <HolderDistribution s={summary} aliases={aliases} />}
 
                     <h4 style={{ color: W.text2, margin: "16px 0 8px" }}>
@@ -733,6 +750,7 @@ export function TokensScreen() {
           instance={instance}
           role={role}
           parties={parties}
+          initial={modal.amount ? { amount: modal.amount } : undefined}
           onPartiesChanged={() => bump()}
           onClose={() => setModal(null)}
           submit={(v) => mintToken(instance, modal.symbol, v.to, v.amount, role)}
@@ -855,7 +873,6 @@ function TransferModal({
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const [autoAccept, setAutoAccept] = useState(true);
-  const [atomic, setAtomic] = useState(false);
   const [busy, setBusy] = useState(false);
   const [plan, setPlan] = useState<import("../api").TransferPlan | null>(null);
 
@@ -877,7 +894,7 @@ function TransferModal({
     e.preventDefault();
     setBusy(true);
     try {
-      const res = await transferToken(instance, symbol, from, to, amount, reason || undefined, role, autoAccept, atomic && autoAccept);
+      const res = await transferToken(instance, symbol, from, to, amount, reason || undefined, role, autoAccept, false);
       // A non-auto-accept Offer returns an instruction id; anything settled just closes.
       onDone(!res.settled && res.transferInstructionId
         ? { instructionId: res.transferInstructionId, receiver: to }
@@ -904,17 +921,17 @@ function TransferModal({
           <input type="checkbox" checked={autoAccept} onChange={(e) => setAutoAccept(e.target.checked)} />
           Auto-accept (settle in one step. You own the receiver on LocalNet.)
         </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, color: autoAccept ? W.text2 : W.dim, fontSize: fs.meta, cursor: autoAccept ? "pointer" : "not-allowed" }}>
-          <input type="checkbox" checked={atomic && autoAccept} disabled={!autoAccept} onChange={(e) => setAtomic(e.target.checked)} />
-          Atomic (experimental) — batch transfer + accept into one all-or-nothing transaction
+        {/* Atomic batching is shown but not selectable: on this Splice version
+            ExecuteBatch cannot rebind the accept leg to the instruction the
+            transfer leg creates, so every submit fails. Offering an enabled
+            control whose only outcome is an error is worse than showing it
+            unavailable, so the checkbox stays visible (the CLI has --atomic,
+            and this documents the gap) but cannot be armed. */}
+        <label style={{ display: "flex", alignItems: "center", gap: 8, color: W.dim, fontSize: fs.meta, cursor: "not-allowed" }}>
+          <input type="checkbox" checked={false} disabled title="Unavailable on this Splice version" readOnly />
+          Atomic — batch transfer + accept into one all-or-nothing transaction
+          <span style={{ color: W.faint }}>(unavailable on this Splice version)</span>
         </label>
-        {atomic && autoAccept && (
-          <div role="status" style={{ ...notice("warn") }}>
-            Experimental and not yet supported on current Splice: the accept leg can’t
-            reference the transfer leg’s instruction within one batch, so the submit
-            errors and nothing commits. Uncheck to use the working sequential offer→accept path.
-          </div>
-        )}
 
         {plan && (
           <div style={{ background: W.surface2, border: `1px solid ${W.border}`, borderRadius: 4, padding: "10px 12px" }}>
@@ -1111,9 +1128,20 @@ function AllocationsPanel({
 }
 
 // KPI strip from one ACS scan. Circulating == total supply on a UTXO ledger.
+//
+// `token create` records a declared initial supply but mints nothing, so a
+// freshly created instrument reads 0. Annotate the supply tile with what
+// was declared while the two differ, so that zero is explained rather than
+// looking broken; once the declared amount is fully minted the note drops
+// away and the tile is just the number.
 function KpiRow({ s }: { s: InstrumentSummary }) {
   const cards: Array<{ label: string; value: string; full?: string; hint?: string }> = [
-    { label: "Total supply", value: statAmount(s.total_supply), full: s.total_supply },
+    {
+      label: "Total supply",
+      value: statAmount(s.total_supply),
+      full: s.total_supply,
+      hint: supplyNote(s),
+    },
     { label: "In circulation", value: statAmount(s.total_supply), full: s.total_supply, hint: "sum of all holdings" },
     { label: "Holders", value: String(s.holder_count) },
     { label: "Holding contracts", value: String(s.contract_count), hint: "UTXOs" },
@@ -1160,6 +1188,34 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
       ))}
     </div>
   );
+}
+
+// supplyNote annotates the supply tile while minted and declared disagree:
+// "declared 2,001" under the cap, and an explicit over-supply note for
+// instruments minted past it before the cap was enforced. Returns undefined
+// once the two agree, so a settled instrument is just its number.
+function supplyNote(s: InstrumentSummary): string | undefined {
+  if (!s.declared_supply) return undefined;
+  const declared = Number(s.declared_supply);
+  const minted = Number(s.total_supply || "0");
+  if (!Number.isFinite(declared) || !Number.isFinite(minted)) return undefined;
+  if (minted === declared) return undefined;
+  if (minted > declared) {
+    return `declared ${statAmount(s.declared_supply)} · over by ${statAmount(String(minted - declared))}`;
+  }
+  return `declared ${statAmount(s.declared_supply)}`;
+}
+
+// remainingToMint reports how much of the declared initial supply has not
+// been minted yet, or "" when nothing is outstanding (or no supply was
+// declared). Drives both the supply-tile annotation and the mint CTA.
+function remainingToMint(s: InstrumentSummary): string {
+  if (!s.declared_supply) return "";
+  const declared = Number(s.declared_supply);
+  const minted = Number(s.total_supply || "0");
+  if (!Number.isFinite(declared) || !Number.isFinite(minted)) return "";
+  const rem = declared - minted;
+  return rem > 0 ? String(rem) : "";
 }
 
 // Group thousands, cap at two decimals; non-numeric strings pass through.

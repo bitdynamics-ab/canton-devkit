@@ -771,6 +771,7 @@ func sanitize400(msg string) string {
 //     success for mutations that don't return a body)
 //   - token.ErrNeedsV2LocalNet         → 412 Precondition Failed
 //   - token.ErrUnsupportedOnInstrument → 422 Unprocessable Entity
+//   - token.ErrSupplyCapExceeded       → 422 Unprocessable Entity
 //   - token.ErrSymbolInUse             → 409 Conflict
 //   - other                            → 400 / 500 with the message
 func mapTokenError(w http.ResponseWriter, err error, op string) {
@@ -788,6 +789,9 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 	case errors.Is(err, token.ErrUnsupportedOnInstrument):
 		writeErrorWithCode(w, http.StatusUnprocessableEntity,
 			"UNSUPPORTED_ON_INSTRUMENT", err.Error())
+	case errors.Is(err, token.ErrSupplyCapExceeded):
+		writeErrorWithCode(w, http.StatusUnprocessableEntity,
+			"SUPPLY_CAP_EXCEEDED", err.Error())
 	case errors.Is(err, token.ErrSymbolInUse):
 		writeErrorWithCode(w, http.StatusConflict,
 			"SYMBOL_IN_USE", err.Error())
