@@ -53,18 +53,32 @@ const INITIAL_PER_STEP: Record<StepName, StepState> = STEP_ORDER.reduce(
   {} as Record<StepName, StepState>,
 );
 
-export const INITIAL_STATE: ProgressState = {
-  perStep: INITIAL_PER_STEP,
-  terminal: [],
-  banner: { kind: "running" },
-  warnings: [],
-  startedAt: null,
-};
+function freshState(): ProgressState {
+  // New perStep / terminal / warnings every time so a reset never
+  // shares mutable arrays/maps with a prior create, and so React
+  // always sees a new state object when eventsUrl changes.
+  return {
+    perStep: { ...INITIAL_PER_STEP },
+    terminal: [],
+    banner: { kind: "running" },
+    warnings: [],
+    startedAt: null,
+  };
+}
+
+export const INITIAL_STATE: ProgressState = freshState();
+
+// ProgressAction is the reducer input: SSE events plus an internal
+// reset used when the modal switches to a new instance stream.
+export type ProgressAction = CreateProgressEvent | { kind: "reset" };
 
 // reducer is exported so tests can drive event sequences without any
-// React or DOM machinery. The action type IS the event union — events
-// ARE actions.
-export function reducer(state: ProgressState, ev: CreateProgressEvent): ProgressState {
+// React or DOM machinery. SSE event kinds ARE actions; "reset" clears
+// state between successive creates.
+export function reducer(state: ProgressState, ev: ProgressAction): ProgressState {
+  if (ev.kind === "reset") {
+    return freshState();
+  }
   // The first event stamps startedAt — this drives the modal's
   // "elapsed" counter without a mount-time timer that would be off by
   // the SSE connect latency.
@@ -177,6 +191,8 @@ export function parseEventId(lastEventId: string | undefined): number | null {
 // to render the "submitting…" footer between POST start and the 202
 // response. EventSource.close() runs on unmount AND on eventsUrl
 // change so a successive create cleanly tears down the old stream.
+// State is reset on every eventsUrl change so a second create does
+// not inherit the prior instance's terminal lines / step progress.
 export function useCreateProgress(eventsUrl: string | null): ProgressState {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
 
@@ -191,9 +207,11 @@ export function useCreateProgress(eventsUrl: string | null): ProgressState {
   const lastEventIdRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!eventsUrl) return;
-    // New stream → reset the watermark; sequence ids restart at 1.
+    // Always clear prior create state first — including when eventsUrl
+    // becomes null (modal back on the form) or switches instance.
+    dispatch({ kind: "reset" });
     lastEventIdRef.current = null;
+    if (!eventsUrl) return;
     const es = new EventSource(eventsUrl);
     es.onmessage = (msg) => {
       const id = parseEventId(msg.lastEventId);
