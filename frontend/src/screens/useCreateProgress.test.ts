@@ -295,7 +295,11 @@ describe("useCreateProgress SSE dedupe on reconnect", () => {
     );
     const { result, rerender } = renderHook(
       ({ url }: { url: string | null }) => useCreateProgress(url),
-      { initialProps: { url: "/api/instances/first/events" } },
+      {
+        initialProps: {
+          url: "/api/instances/first/events" as string | null,
+        },
+      },
     );
     act(() => {
       FakeEventSource.last!.emit(1, {
