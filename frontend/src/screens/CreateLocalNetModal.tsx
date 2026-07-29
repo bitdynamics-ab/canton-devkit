@@ -309,7 +309,7 @@ function ModalHeader({
       title = `Cancelled · ${stage.accepted.instance}`;
       subtitle = "the bring-up was cancelled before completion";
     } else {
-      subtitle = "streaming via /api/instances/" + stage.accepted.instance + "/events";
+      subtitle = "bring-up in progress";
     }
   } else if (stage.kind === "submitting") {
     title = `Starting · ${name}`;
@@ -369,12 +369,11 @@ function ModalFooter({
           }}
         >
           <Elapsed startedAt={progress.startedAt} />
-          {isRunning ? " · streaming" : ""}
         </span>
       )}
       {isRunning ? (
         <Button variant="secondary" size="md" onClick={onCancelInFlight}>
-          Cancel bring-up
+          Cancel
         </Button>
       ) : stage.kind === "form" ? (
         <>
@@ -910,23 +909,7 @@ function ErrorBody({
 
 function BannerStripe({ banner }: { banner: ProgressState["banner"] }) {
   if (banner.kind === "running") {
-    return (
-      <div
-        style={{
-          padding: "8px 12px",
-          background: `${tint(W.brand, 6)}`,
-          color: W.brand,
-          border: `1px solid ${tint(W.brand, 27)}`,
-          borderRadius: 2,
-          fontSize: fs.meta,
-          fontFamily: wMono,
-        }}
-      >
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <Dot color={W.brand} pulse /> streaming step events
-        </span>
-      </div>
-    );
+    return null;
   }
   if (banner.kind === "done") {
     return (
