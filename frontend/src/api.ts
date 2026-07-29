@@ -1664,6 +1664,19 @@ export interface AllocationSummary {
   committed: boolean;
 }
 
+// One pending V2 transfer offer — a TransferInstruction the receiver has
+// not yet accepted. contract_id is the id the accept endpoint takes.
+export interface TransferSummary {
+  contract_id: string;
+  sender: string;
+  receiver: string;
+  instrument_id: string;
+  amount: string;
+  generation: string; // "v1" | "v2"
+  requested_at?: string;
+  execute_before?: string;
+}
+
 export interface BatchActionResult {
   kind: string;
   ok: boolean;
@@ -2172,6 +2185,34 @@ export async function fetchAllocations(
     `/api/tokens/allocations?${params}`,
   );
   return { allocations: r.allocations ?? [], aliases: r.aliases ?? {} };
+}
+
+interface PendingTransfersListResponse {
+  schema_version: number;
+  pending_transfers: TransferSummary[];
+  truncated?: boolean;
+  aliases: AliasMap;
+}
+
+// Lists the pending V2 transfer offers visible on the participant
+// (optionally filtered to offers involving one party), plus the alias map
+// for labelling party ids and a truncated flag when the scan was capped.
+export async function fetchPendingTransfers(
+  instance: string,
+  party?: string,
+  role?: string,
+): Promise<{ transfers: TransferSummary[]; truncated: boolean; aliases: AliasMap }> {
+  const params = new URLSearchParams({ instance });
+  if (party) params.set("party", party);
+  if (role && role !== DEFAULT_ROLE) params.set("role", role);
+  const r = await apiFetch<PendingTransfersListResponse>(
+    `/api/tokens/transfers?${params}`,
+  );
+  return {
+    transfers: r.pending_transfers ?? [],
+    truncated: r.truncated ?? false,
+    aliases: r.aliases ?? {},
+  };
 }
 
 export interface AllocateInput {

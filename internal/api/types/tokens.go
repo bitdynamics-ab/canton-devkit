@@ -202,6 +202,49 @@ type AllocationsResponse struct {
 	Aliases map[string]string `json:"aliases"`
 }
 
+// TransferSummary is one pending TransferInstruction (V1 or V2) — a
+// transfer the receiver has not yet accepted. Acceptance archives the
+// instruction, so every active TransferInstruction contract is by
+// definition still pending; a scan of the interface IS the pending-offers
+// list.
+type TransferSummary struct {
+	// ContractID is the TransferInstruction contract id — pass it straight
+	// to `transfer accept` / POST .../transfers/{id}/accept.
+	ContractID string `json:"contract_id"`
+	// Sender / Receiver are the transfer's account owner parties.
+	Sender   string `json:"sender"`
+	Receiver string `json:"receiver"`
+	// InstrumentID is the instrument's id (its symbol for test tokens).
+	InstrumentID string `json:"instrument_id"`
+	Amount       string `json:"amount"` // Daml Decimal string
+	// Generation is the token-standard generation the offer implements,
+	// "v1" or "v2", decoded from the instruction's own interface id.
+	// Informational for display; the accept path re-derives it server-side
+	// (see AcceptOptions.Gen), so a surface need not thread it back.
+	Generation string `json:"generation"`
+	// RequestedAt / ExecuteBefore are RFC3339; ExecuteBefore is the offer's
+	// expiry (an offer past it can no longer be accepted). Empty when unset.
+	RequestedAt   string `json:"requested_at,omitempty"`
+	ExecuteBefore string `json:"execute_before,omitempty"`
+}
+
+// PendingTransfersResponse is the shared top-level body of the pending
+// transfer-offers list — GET /api/tokens/transfers (Web UI) and
+// `token transfers --format json` (CLI). Declared once so the two surfaces
+// cannot drift (repository policy: shared API shapes across CLI JSON and
+// Web UI).
+type PendingTransfersResponse struct {
+	SchemaVersion int `json:"schema_version"`
+	// PendingTransfers is never null on the wire — an empty scan yields [].
+	PendingTransfers []TransferSummary `json:"pending_transfers"`
+	// Truncated is true when the ACS scan hit its cap and the list is
+	// partial (the UI renders "showing N of many").
+	Truncated bool `json:"truncated,omitempty"`
+	// Aliases maps partyID → registered alias so a surface can label party
+	// ids without a second round-trip.
+	Aliases map[string]string `json:"aliases"`
+}
+
 // BatchActionResult is one action's outcome inside a BatchResult,
 // mirroring one TokenStandardActionResult (order-preserved).
 type BatchActionResult struct {

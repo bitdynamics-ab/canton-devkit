@@ -25,6 +25,7 @@ func TestAllTopLevelResponses_CarrySchemaVersion(t *testing.T) {
 		EnvExport{},
 		Instance{},
 		ListResponse{},
+		PendingTransfersResponse{},
 		PreflightReport{},
 		SkillsInstallResponse{},
 		SkillsListResponse{},
@@ -180,6 +181,16 @@ func TestSchemaVersion_ConsistentAcrossResponses(t *testing.T) {
 				return json.Marshal(AllocationsResponse{
 					SchemaVersion: SchemaVersion,
 					Allocations:   nil,
+				})
+			},
+			want: SchemaVersion,
+		},
+		{
+			name: "PendingTransfersResponse",
+			marshal: func() ([]byte, error) {
+				return json.Marshal(PendingTransfersResponse{
+					SchemaVersion:    SchemaVersion,
+					PendingTransfers: nil,
 				})
 			},
 			want: SchemaVersion,
