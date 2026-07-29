@@ -29,7 +29,8 @@ type FaucetOptions struct {
 // which holds the network's Amulet) — pass Source explicitly to fund from
 // a different holder (e.g. the issuer of a created token).
 func RunFaucet(ctx context.Context, out io.Writer, opts FaucetOptions) error {
-	if err := requireFields("faucet", opts.Instance, opts.Instrument, opts.To, opts.Amount); err != nil {
+	if err := requireFields("faucet", "instance", opts.Instance, "instrument", opts.Instrument,
+		"recipient party", opts.To, "amount", opts.Amount); err != nil {
 		return err
 	}
 	source := opts.Source

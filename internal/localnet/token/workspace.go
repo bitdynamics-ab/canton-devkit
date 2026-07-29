@@ -429,12 +429,19 @@ type HolderRow struct {
 // (= circulating, on a UTXO ledger), holder + contract counts, and
 // the per-holder distribution.
 type InstrumentSummary struct {
-	InstrumentID  string      `json:"instrument_id"`
-	Admin         string      `json:"admin"`
-	TotalSupply   string      `json:"total_supply"`
-	HolderCount   int         `json:"holder_count"`
-	ContractCount int         `json:"contract_count"`
-	Holders       []HolderRow `json:"holders"`
+	InstrumentID string `json:"instrument_id"`
+	Admin        string `json:"admin"`
+	TotalSupply  string `json:"total_supply"`
+	// DeclaredSupply is the initial supply recorded at `token create`.
+	// Creating an instrument does not mint anything — supply only exists
+	// once minted — so this is the operator's stated intent, not an
+	// on-ledger fact. Surfaced so a created-but-unminted instrument reads
+	// as "0 of 2001 minted" rather than an unexplained zero. Empty when
+	// the instrument isn't in the registry (e.g. Amulet).
+	DeclaredSupply string      `json:"declared_supply,omitempty"`
+	HolderCount    int         `json:"holder_count"`
+	ContractCount  int         `json:"contract_count"`
+	Holders        []HolderRow `json:"holders"`
 }
 
 // RunInstrumentSummary scans the workspace and aggregates the holdings
@@ -447,7 +454,29 @@ func RunInstrumentSummary(ctx context.Context, opts BalanceOptions) (*Instrument
 	if err != nil {
 		return nil, err
 	}
-	return summarizeInstrument(ws, opts.Instrument), nil
+	sum := summarizeInstrument(ws, opts.Instrument)
+	sum.DeclaredSupply = declaredSupply(opts.Instance, opts.Instrument)
+	return sum, nil
+}
+
+// declaredSupply returns the initial supply recorded for an instrument at
+// create time, matching on symbol or instrument id. Empty when the
+// instance has no record of it (Amulet, or an instrument created
+// elsewhere) — callers treat empty as "nothing was declared".
+func declaredSupply(instance, instrumentID string) string {
+	if instance == "" || instrumentID == "" {
+		return ""
+	}
+	state, err := registry.Read(instance)
+	if err != nil {
+		return ""
+	}
+	for _, ref := range state.Tokens {
+		if ref.InstrumentID == instrumentID || ref.Symbol == instrumentID {
+			return ref.InitialSupply
+		}
+	}
+	return ""
 }
 
 // summarizeInstrument pivots a workspace scan into one instrument's

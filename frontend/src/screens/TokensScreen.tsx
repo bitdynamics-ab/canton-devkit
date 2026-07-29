@@ -144,7 +144,7 @@ export function TokensScreen() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [modal, setModal] = useState<
-    | { kind: "mint"; symbol: string }
+    | { kind: "mint"; symbol: string; amount?: string }
     | { kind: "transfer"; symbol: string }
     | { kind: "burn"; symbol: string }
     | { kind: "faucet"; symbol: string }
@@ -607,6 +607,23 @@ export function TokensScreen() {
                 {detailTab === "overview" && (
                   <>
                     {summary && <KpiRow s={summary} />}
+                    {summary && remainingToMint(summary) && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "10px 0 2px", flexWrap: "wrap" }}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={<IcArrowUp />}
+                          disabled={!!mintDisabledReason(active)}
+                          title={mintDisabledReason(active) ?? "Mint the declared supply that hasn't been issued yet"}
+                          onClick={() => setModal({ kind: "mint", symbol: sym, amount: remainingToMint(summary) })}
+                        >
+                          Mint {statAmount(remainingToMint(summary))} remaining
+                        </Button>
+                        <span style={{ color: W.dim, fontSize: fs.meta }}>
+                          creating an instrument records its supply; minting is what issues it
+                        </span>
+                      </div>
+                    )}
                     {summary && summary.holders.length > 0 && <HolderDistribution s={summary} aliases={aliases} />}
 
                     <h4 style={{ color: W.text2, margin: "16px 0 8px" }}>
@@ -733,6 +750,7 @@ export function TokensScreen() {
           instance={instance}
           role={role}
           parties={parties}
+          initial={modal.amount ? { amount: modal.amount } : undefined}
           onPartiesChanged={() => bump()}
           onClose={() => setModal(null)}
           submit={(v) => mintToken(instance, modal.symbol, v.to, v.amount, role)}
@@ -1111,9 +1129,21 @@ function AllocationsPanel({
 }
 
 // KPI strip from one ACS scan. Circulating == total supply on a UTXO ledger.
+//
+// `token create` records a declared initial supply but mints nothing, so a
+// freshly created instrument reads 0. Annotate the supply tile with what
+// was declared while the two differ, so that zero is explained rather than
+// looking broken; once the declared amount is fully minted the note drops
+// away and the tile is just the number.
 function KpiRow({ s }: { s: InstrumentSummary }) {
+  const unminted = remainingToMint(s);
   const cards: Array<{ label: string; value: string; full?: string; hint?: string }> = [
-    { label: "Total supply", value: statAmount(s.total_supply), full: s.total_supply },
+    {
+      label: "Total supply",
+      value: statAmount(s.total_supply),
+      full: s.total_supply,
+      hint: unminted ? `declared ${statAmount(s.declared_supply!)}` : undefined,
+    },
     { label: "In circulation", value: statAmount(s.total_supply), full: s.total_supply, hint: "sum of all holdings" },
     { label: "Holders", value: String(s.holder_count) },
     { label: "Holding contracts", value: String(s.contract_count), hint: "UTXOs" },
@@ -1160,6 +1190,18 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
       ))}
     </div>
   );
+}
+
+// remainingToMint reports how much of the declared initial supply has not
+// been minted yet, or "" when nothing is outstanding (or no supply was
+// declared). Drives both the supply-tile annotation and the mint CTA.
+function remainingToMint(s: InstrumentSummary): string {
+  if (!s.declared_supply) return "";
+  const declared = Number(s.declared_supply);
+  const minted = Number(s.total_supply || "0");
+  if (!Number.isFinite(declared) || !Number.isFinite(minted)) return "";
+  const rem = declared - minted;
+  return rem > 0 ? String(rem) : "";
 }
 
 // Group thousands, cap at two decimals; non-numeric strings pass through.

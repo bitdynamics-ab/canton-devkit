@@ -206,7 +206,8 @@ const (
 // ErrUnsupportedOnInstrument: Amulet doesn't implement
 // BurnMintFactoryV1 and there's no generic V2 mint interface.
 func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
-	if err := requireFields("mint", opts.Instance, opts.Instrument, opts.To, opts.Amount); err != nil {
+	if err := requireFields("mint", "instance", opts.Instance, "instrument", opts.Instrument,
+		"recipient party", opts.To, "amount", opts.Amount); err != nil {
 		return err
 	}
 	opts.To = ResolveAlias(aliasMapForInstance(opts.Instance), opts.To)
@@ -242,7 +243,8 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 // ErrNeedsV2LocalNet so callers that haven't been updated to thread
 // through the endpoint get a clear remediation.
 func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error {
-	if err := requireFields("transfer", opts.Instance, opts.Instrument, opts.From, opts.To, opts.Amount); err != nil {
+	if err := requireFields("transfer", "instance", opts.Instance, "instrument", opts.Instrument,
+		"sender party", opts.From, "recipient party", opts.To, "amount", opts.Amount); err != nil {
 		return err
 	}
 	aliases := aliasMapForInstance(opts.Instance)
@@ -336,7 +338,8 @@ func runTransferOffLedger(ctx context.Context, out io.Writer, opts TransferOptio
 }
 
 func RunAccept(ctx context.Context, out io.Writer, opts AcceptOptions) error {
-	if err := requireFields("transfer accept", opts.Instance, opts.TransferInstructionID); err != nil {
+	if err := requireFields("transfer accept", "instance", opts.Instance,
+		"transfer instruction id", opts.TransferInstructionID); err != nil {
 		return err
 	}
 	// Resolve a --party alias to its full party id: both the on-ledger
@@ -373,7 +376,8 @@ func RunAccept(ctx context.Context, out io.Writer, opts AcceptOptions) error {
 // account. Amulet / registry-only instruments have no such path and
 // yield ErrUnsupportedOnInstrument.
 func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
-	if err := requireFields("burn", opts.Instance, opts.Instrument, opts.From, opts.Amount); err != nil {
+	if err := requireFields("burn", "instance", opts.Instance, "instrument", opts.Instrument,
+		"holder party", opts.From, "amount", opts.Amount); err != nil {
 		return err
 	}
 	opts.From = ResolveAlias(aliasMapForInstance(opts.Instance), opts.From)
@@ -685,10 +689,14 @@ func resolveInstrument(instance, ident string) (registry.TokenRef, error) {
 
 // requireFields surfaces the same "field X is required" wording as
 // the create wizard so every error in the token surface looks alike.
-func requireFields(verb string, fields ...string) error {
-	for i, v := range fields {
-		if v == "" {
-			return fmt.Errorf("%s: field at position %d is required", verb, i)
+// requireFields reports the first missing field by name. Callers pass
+// name/value pairs ("recipient party", opts.To) so the error tells the
+// operator which input to fill — this text surfaces directly in the Web
+// UI's form, where an internal field index means nothing.
+func requireFields(verb string, nameValuePairs ...string) error {
+	for i := 0; i+1 < len(nameValuePairs); i += 2 {
+		if nameValuePairs[i+1] == "" {
+			return fmt.Errorf("%s: %s is required", verb, nameValuePairs[i])
 		}
 	}
 	return nil
