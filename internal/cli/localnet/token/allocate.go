@@ -29,8 +29,10 @@ A committed allocation (--committed) locks the funds until
 --settlement-deadline passes — they cannot be withdrawn early. A
 non-committed allocation is withdrawable any time.
 
---endpoint is optional (empty auto-resolves from the instance). The settlement is
-executor-driven: settle it later with ` + "`token settle --allocation <id>`" + `.`,
+--endpoint is optional (empty auto-resolves from the instance). Batch
+settlement (SettleBatch) is not yet functional on LocalNet, so there is no
+settle command on either surface — release an allocation with
+` + "`token allocations withdraw|cancel`" + ` instead.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ep, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)

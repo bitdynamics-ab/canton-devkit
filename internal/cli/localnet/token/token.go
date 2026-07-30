@@ -36,6 +36,7 @@ Quick start (on a running instance):
 
 [HoldingV2]: https://github.com/canton-network/splice/blob/token-standard-v2-upcoming/token-standard/splice-api-token-holding-v2/daml/Splice/Api/Token/HoldingV2.daml`,
 	}
+	cmd.AddCommand(buildList())
 	cmd.AddCommand(buildCreate())
 	cmd.AddCommand(buildDemo())
 	cmd.AddCommand(buildMint())
