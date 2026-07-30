@@ -408,7 +408,7 @@ function handleInstanceRoute(
   const darVettingGetMatch = rest.match(/^\/dar\/([^/]+)\/vetting$/);
   if (darVettingGetMatch && method === "GET") {
     const body = structuredClone(store.darVetting);
-    body.dar_id = decodeURIComponent(darVettingGetMatch[1]);
+    body.main = decodeURIComponent(darVettingGetMatch[1]);
     jsonResponse(res, 200, body);
     return true;
   }
@@ -417,7 +417,8 @@ function handleInstanceRoute(
   if (darVettingPostMatch && method === "POST") {
     jsonResponse(res, 200, {
       schema_version: SCHEMA_VERSION,
-      dar_id: decodeURIComponent(darVettingPostMatch[1]),
+      instance: DEFAULT_INSTANCE,
+      main: decodeURIComponent(darVettingPostMatch[1]),
       role: decodeURIComponent(darVettingPostMatch[2]),
       vetted: true,
     });
