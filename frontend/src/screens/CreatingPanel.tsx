@@ -139,7 +139,7 @@ export function CreatingPanel({ name, onRefresh }: Props) {
               }}
             >
               <Button variant="secondary" onClick={onCancelLive}>
-                Cancel bring-up
+                Cancel
               </Button>
             </div>
           )}

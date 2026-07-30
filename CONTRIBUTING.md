@@ -31,6 +31,8 @@ setups below depending on whether you need live LocalNet data.
 
 Run the Go API server and Vite side by side. Vite proxies `/api` and
 `/events` to the backend on `:7777` — see `frontend/vite.config.ts`.
+The proxy keeps `changeOrigin: false` so the browser `Origin` stays
+aligned with `Host` and the CSRF gate accepts the request.
 
 **Terminal 1** — backend API + SSE (from repo root):
 
@@ -47,6 +49,15 @@ npm run dev
 ```
 
 Live API data requires a running LocalNet (`dpm localnet up`).
+
+If a custom frontend setup still trips
+`Origin/Referer host does not match server`, restart the backend with
+`--insecure-skip-origin-check` (prints a warning; Host allowlisting
+still applies):
+
+```sh
+go run ./cmd/canton-devkit localnet ui --port 7777 --insecure-skip-origin-check
+```
 
 #### b. Mock data
 

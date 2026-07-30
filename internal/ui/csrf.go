@@ -39,6 +39,25 @@ func withOriginCheck(next http.Handler) http.Handler {
 	})
 }
 
+// withSkipOriginCheck, when enabled, rewrites the request Origin to
+// match r.Host so every Origin==Host gate (CSRF middleware, SSE
+// handlers, per-route checks) passes. No-op when disabled. The Host
+// allowlist still runs outside this middleware.
+//
+// Opt-in only via `dpm localnet ui --insecure-skip-origin-check` for
+// frontend-dev setups that cannot keep Origin aligned with Host.
+func withSkipOriginCheck(enabled bool, next http.Handler) http.Handler {
+	if !enabled {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != "" {
+			r.Header.Set("Origin", "http://"+r.Host)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // withHostCheck rejects any request whose Host header host-part is not
 // a loopback name ({127.0.0.0/8, ::1, localhost}, plus any extra hosts
 // the operator explicitly allowed via --allow-non-loopback). Runs on
