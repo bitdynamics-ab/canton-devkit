@@ -15,6 +15,8 @@ Every deviation listed here is **intentional**, not an oversight or implementati
   - [Machine-readable output flag](#machine-readable-output-flag)
   - [Command aliases](#command-aliases)
 - [`localnet remove` (renamed from `clean`)](#localnet-remove-renamed-from-clean)
+- [`localnet list`](#localnet-list)
+  - [`--all` flag removed](#--all-flag-removed)
 - [`localnet up`](#localnet-up)
   - [`--allow-uncurated` flag (new)](#--allow-uncurated-flag-new)
   - [`--profile` flag (new)](#--profile-flag-new)
@@ -98,6 +100,18 @@ The following aliases are not in the proposal but are shipped:
 **Shipped:** the canonical command is `dpm localnet remove`, with `clean` retained as an alias. Both forms are equivalent: `dpm localnet remove dev` and `dpm localnet clean dev` do the same thing. The instance name is now a **positional argument** (`dpm localnet remove <name>`), matching `up`/`down`/`stop`/`start`; `--name <name>` is still accepted for backward compatibility, but passing both the positional and `--name` is an error. `--all` remains mutually exclusive with naming a single instance. Other flags are unchanged (`--force`, `--dry-run`).
 
 **Why:** `remove` names the action plainly — it removes the instance's containers, volumes, and registry state — and reads unambiguously next to the other lifecycle verbs (`down`, `stop`, `remove`), where "clean" could be mistaken for a non-destructive tidy-up. The `clean` alias is kept so existing scripts, CI pipelines, and muscle memory continue to work without a breaking change. Accepting the name positionally aligns `remove` with the rest of the lifecycle verbs, which already take `<name>` positionally.
+
+---
+
+## `localnet list`
+
+### `--all` flag removed
+
+**Proposal said:** `localnet list` enumerates LocalNet instances; it did not specify a running-only default or an `--all` filter.
+
+**Shipped:** `dpm localnet list` always shows every registered instance (running, creating, stopped, failed, and other statuses). There is no `--all` flag.
+
+**Why:** Filtering to running/creating by default hid stopped and failed instances — the ones operators usually need to find for cleanup or recovery. Always listing every registered instance matches the Web UI instance list and removes a flag that users had to remember when the default was the less useful view.
 
 ---
 
