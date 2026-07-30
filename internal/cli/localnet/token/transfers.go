@@ -31,21 +31,11 @@ receiver). Each row's OFFER id is what 'transfer accept --id' takes.
 dial a different participant.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// Auto-resolve the endpoint from the instance so the list works
-			// flag-free on a running LocalNet; an explicit --endpoint wins.
-			// If resolution fails the ports weren't captured — say so
-			// precisely (the same diagnosis the Web UI's 503 gives) rather
-			// than falling through to the generic "bring up a V2 LocalNet"
-			// remediation, which misleads when the instance is already up.
-			if opts.Endpoint == "" {
-				opts.Endpoint = token.ResolveLedgerEndpoint(opts.Instance, opts.Role)
-				if opts.Endpoint == "" {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-						"no captured ledger port for instance %q — restart it so ports are recorded, or pass --endpoint host:port\n",
-						opts.Instance)
-					return errSilent
-				}
+			ep, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			if err != nil {
+				return err
 			}
+			opts.Endpoint = ep
 			rows, truncated, err := token.RunListPendingTransfers(cmd.Context(), opts)
 			if errors.Is(err, token.ErrNeedsV2LocalNet) {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err.Error())

@@ -25,10 +25,15 @@ whom, classified as mint (new supply), burn (supply destroyed), or
 transfer. Derived from HoldingV2 create/archive events — no off-ledger
 transfer-events registry needed.
 
-Requires --endpoint (the participant ledger gRPC host:port) and
---instrument (the symbol or instrument id).`,
+Requires --instrument (the symbol or instrument id). --endpoint is
+optional: empty auto-resolves from the instance, like the Web UI.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			ep, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			if err != nil {
+				return err
+			}
+			opts.Endpoint = ep
 			res, err := token.RunActivityResult(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -74,7 +79,7 @@ Requires --endpoint (the participant ledger gRPC host:port) and
 		},
 	}
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")
-	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Required.")
+	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Empty auto-resolves from the instance.")
 	cmd.Flags().StringVar(&opts.Instrument, "instrument", "", "Instrument symbol or id. Required.")
 	cmd.Flags().IntVar(&opts.Limit, "limit", 50, "Max events to return (newest first).")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
@@ -82,7 +87,6 @@ Requires --endpoint (the participant ledger gRPC host:port) and
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json.")
 	_ = cmd.MarkFlagRequired("instance")
-	_ = cmd.MarkFlagRequired("endpoint")
 	_ = cmd.MarkFlagRequired("instrument")
 	return cmd
 }

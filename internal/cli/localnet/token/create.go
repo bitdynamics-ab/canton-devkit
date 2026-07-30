@@ -65,6 +65,14 @@ POST /api/tokens.`,
 				}
 			}
 
+			// Match the Web UI: when the instance is up, resolve its ledger
+			// port so create lands on-ledger; when it can't be resolved,
+			// leave it empty and fall through to a registry-only record —
+			// exactly what the UI's create does with liveLedgerEndpoint.
+			if opts.Endpoint == "" {
+				opts.Endpoint = token.ResolveLedgerEndpoint(opts.Instance, opts.Role)
+			}
+
 			res, err := token.RunCreate(out, opts)
 			if err != nil {
 				if errors.Is(err, token.ErrSymbolInUse) {

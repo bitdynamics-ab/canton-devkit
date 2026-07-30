@@ -24,11 +24,17 @@ holder — the network's Amulet party for Amulet, or wherever a created
 token's supply was minted — so pass --source only to fund from a specific
 holder.
 
-<party> and --source accept aliases. Requires --endpoint and --instrument.`,
+<party> and --source accept aliases. Requires --instrument; --endpoint is
+optional (empty auto-resolves from the instance, like the Web UI).`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.To = args[0]
 			opts.Amount = args[1]
+			ep, epErr := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			if epErr != nil {
+				return epErr
+			}
+			opts.Endpoint = ep
 			err := token.RunFaucet(cmd.Context(), cmd.OutOrStdout(), opts)
 			if errors.Is(err, token.ErrNeedsV2LocalNet) {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
@@ -40,13 +46,12 @@ holder.
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")
 	cmd.Flags().StringVar(&opts.Instrument, "instrument", "", "Instrument symbol or raw id. Required.")
 	cmd.Flags().StringVar(&opts.Source, "source", "", "Funding party (alias or id). Empty defaults to the instrument's largest holder.")
-	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Required for the live transfer.")
+	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Empty auto-resolves from the instance.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
 	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the submit.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&opts.RegistryURL, "registry-url", "", "Token registry base URL. Empty auto-derives from the instance's SV UI port.")
 	_ = cmd.MarkFlagRequired("instance")
 	_ = cmd.MarkFlagRequired("instrument")
-	_ = cmd.MarkFlagRequired("endpoint")
 	return cmd
 }
