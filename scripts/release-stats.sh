@@ -13,6 +13,11 @@
 # exposes CURRENT download counts (no history), so this persisted snapshot is
 # the only way to build a real time series later.
 #
+# Data sources (merged by tag): bitdynamics-ab/canton-devkit and
+# bitdynamics-ab/homebrew-canton-devkit. The Homebrew formula downloads most
+# assets from canton-devkit Releases; the tap repo is still included so any
+# direct downloads of mirrored assets are counted too.
+#
 # Outputs (into docs/assets/):
 #   release-downloads-by-version.svg   — per-version total downloads over time (line)
 #   release-downloads-by-platform.svg  — all-time total downloads per platform (bars, no .deb)
@@ -49,9 +54,9 @@ fetch_releases() {
   if command -v gh >/dev/null 2>&1; then
     gh api "repos/${repo}/releases" --paginate 2>/dev/null && return 0
   fi
-  local auth=()
-  [ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
-  curl -sSfL "${auth[@]}" \
+  local auth_header=""
+  [ -n "${GITHUB_TOKEN:-}" ] && auth_header="Authorization: Bearer ${GITHUB_TOKEN}"
+  curl -sSfL ${auth_header:+-H "${auth_header}"} \
     -H "Accept: application/vnd.github+json" \
     "https://api.github.com/repos/${repo}/releases?per_page=100"
 }
@@ -71,7 +76,7 @@ for repo in ${STATS_REPOS}; do
     continue
   fi
   echo "fetched ${count} releases from ${repo}" >&2
-  all_releases="$(jq -s 'add' <<< "${all_releases}" <<< "${batch}")"
+  all_releases="$(jq -s 'add' <(printf '%s' "${all_releases}") <(printf '%s' "${batch}"))"
 done
 
 release_count="$(printf '%s' "${all_releases}" | jq 'length')"

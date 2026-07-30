@@ -38,6 +38,14 @@ jobs:
         # actions/checkout@v7.0.0
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
+      - name: Seed history from release-stats-data branch
+        run: |
+          set -euo pipefail
+          history_file="docs/assets/release-downloads-history.jsonl"
+          if git fetch origin release-stats-data:refs/remotes/origin/release-stats-data 2>/dev/null; then
+            git show origin/release-stats-data:"${history_file}" > "${history_file}" 2>/dev/null || true
+          fi
+
       - name: Generate charts + append daily snapshot
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
