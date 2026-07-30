@@ -77,14 +77,18 @@ func NewRouter(assets http.Handler, hub *stream.Hub, opts ...RouterOption) http.
 	// everything, including 403s from CSRF/Host and 404s. The Host
 	// allowlist runs before the Origin gate because it applies to
 	// EVERY method (GET reads leak party IDs too) and is the
-	// DNS-rebinding defence the Origin check can't provide. Feature
-	// telemetry sits innermost so it only records requests that
-	// reached a real handler.
+	// DNS-rebinding defence the Origin check can't provide. When
+	// skipOriginCheck is set, rewrite Origin to match Host before
+	// any gate so CSRF + SSE + per-handler Origin checks all pass;
+	// Host allowlisting still applies. Feature telemetry sits
+	// innermost so it only records requests that reached a real
+	// handler.
 	return withAccessLog(
 		withHostCheck(cfg.allowedHosts,
-			withCommonHeaders(
-				withOriginCheck(
-					withFeatureTelemetry(mux)))))
+			withSkipOriginCheck(cfg.skipOriginCheck,
+				withCommonHeaders(
+					withOriginCheck(
+						withFeatureTelemetry(mux))))))
 }
 
 // routerConfig accumulates NewRouter options.
@@ -93,6 +97,11 @@ type routerConfig struct {
 	// accepts beyond the built-in loopback names; empty in the default
 	// loopback-only posture.
 	allowedHosts []string
+	// skipOriginCheck disables the CSRF / SSE Origin==Host gate.
+	// Used only on the `dpm localnet ui --insecure-skip-origin-check`
+	// path for Vite (or other) frontend-dev setups that cannot keep
+	// Origin aligned with Host.
+	skipOriginCheck bool
 }
 
 // RouterOption configures NewRouter without breaking its two-arg
@@ -112,6 +121,15 @@ func WithAllowedHosts(hosts ...string) RouterOption {
 				c.allowedHosts = append(c.allowedHosts, h)
 			}
 		}
+	}
+}
+
+// WithSkipOriginCheck disables the Origin==Host CSRF / SSE gate for
+// every request. The Host allowlist (DNS-rebinding defence) still
+// runs. Used only behind `dpm localnet ui --insecure-skip-origin-check`.
+func WithSkipOriginCheck(skip bool) RouterOption {
+	return func(c *routerConfig) {
+		c.skipOriginCheck = skip
 	}
 }
 

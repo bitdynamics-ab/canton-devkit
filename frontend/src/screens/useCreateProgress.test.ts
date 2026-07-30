@@ -24,6 +24,26 @@ describe("useCreateProgress reducer", () => {
     );
   });
 
+  it("reset clears terminal, warnings, steps, and banner", () => {
+    let state = reducer(INITIAL_STATE, {
+      kind: "output",
+      stream: "stdout",
+      text: "old",
+    });
+    state = reducer(state, { kind: "warn", message: "old-warn" });
+    state = reducer(state, {
+      kind: "step.started",
+      step: "preflight",
+    });
+    state = reducer(state, { kind: "done", detail: "ready" });
+    const reset = reducer(state, { kind: "reset" });
+    expect(reset.terminal).toEqual([]);
+    expect(reset.warnings).toEqual([]);
+    expect(reset.banner.kind).toBe("running");
+    expect(reset.startedAt).toBeNull();
+    expect(reset.perStep.preflight.status).toBe("pending");
+  });
+
   it("step.started flips a step to active and stamps startedAt", () => {
     const next = reducer(INITIAL_STATE, {
       kind: "step.started",
@@ -266,5 +286,55 @@ describe("useCreateProgress SSE dedupe on reconnect", () => {
       } as MessageEvent);
     });
     expect(result.current.warnings).toEqual(["one", "two"]);
+  });
+
+  it("clears terminal output when eventsUrl switches to a new instance", () => {
+    vi.stubGlobal(
+      "EventSource",
+      FakeEventSource as unknown as typeof EventSource,
+    );
+    const { result, rerender } = renderHook(
+      ({ url }: { url: string | null }) => useCreateProgress(url),
+      {
+        initialProps: {
+          url: "/api/instances/first/events" as string | null,
+        },
+      },
+    );
+    act(() => {
+      FakeEventSource.last!.emit(1, {
+        kind: "output",
+        stream: "stdout",
+        text: "from-first",
+      });
+      FakeEventSource.last!.emit(2, {
+        kind: "warn",
+        message: "warn-first",
+      });
+    });
+    expect(result.current.terminal).toEqual([
+      { stream: "stdout", text: "from-first" },
+    ]);
+    expect(result.current.warnings).toEqual(["warn-first"]);
+
+    // Close first stream (modal back to form), then open second.
+    rerender({ url: null });
+    expect(result.current.terminal).toEqual([]);
+    expect(result.current.warnings).toEqual([]);
+    expect(result.current.banner.kind).toBe("running");
+
+    rerender({ url: "/api/instances/second/events" });
+    expect(result.current.terminal).toEqual([]);
+    act(() => {
+      FakeEventSource.last!.emit(1, {
+        kind: "output",
+        stream: "stdout",
+        text: "from-second",
+      });
+    });
+    expect(result.current.terminal).toEqual([
+      { stream: "stdout", text: "from-second" },
+    ]);
+    expect(result.current.warnings).toEqual([]);
   });
 });

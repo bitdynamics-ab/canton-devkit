@@ -34,9 +34,10 @@ import (
 // already in use and we fell back to a free port via `--port 0`.
 func buildUI() *cobra.Command {
 	var (
-		port             int
-		host             string
-		allowNonLoopback bool
+		port                    int
+		host                    string
+		allowNonLoopback        bool
+		insecureSkipOriginCheck bool
 	)
 	cmd := &cobra.Command{
 		Use:   "ui",
@@ -72,6 +73,10 @@ identifiers and is not designed for LAN-wide exposure.`,
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), term.Warnc(
 					"warning: serving the build-time placeholder frontend — run `make frontend` before `go build` to embed the real Vite bundle"))
 			}
+			if insecureSkipOriginCheck {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), term.Warnc(
+					"warning: --insecure-skip-origin-check disables CSRF Origin checks; use only for local frontend development"))
+			}
 			hub := stream.New()
 			// Host-header allowlist (DNS-rebinding defence) is
 			// loopback-only by default. When the operator opts into a
@@ -82,6 +87,9 @@ identifiers and is not designed for LAN-wide exposure.`,
 			var routerOpts []ui.RouterOption
 			if allowNonLoopback {
 				routerOpts = append(routerOpts, ui.WithAllowedHosts(host))
+			}
+			if insecureSkipOriginCheck {
+				routerOpts = append(routerOpts, ui.WithSkipOriginCheck(true))
 			}
 			srv := ui.New(ui.Config{
 				Host:             host,
@@ -174,5 +182,9 @@ identifiers and is not designed for LAN-wide exposure.`,
 		"Allow binding on a non-loopback interface. Exposes the UI "+
 			"(JWTs, party IDs) on the network. Use only with an SSH "+
 			"tunnel or a firewall in front. Default: refused.")
+	cmd.Flags().BoolVar(&insecureSkipOriginCheck, "insecure-skip-origin-check", false,
+		"Disable Origin/Referer CSRF checks. For local frontend "+
+			"development only (for example a Vite proxy that cannot "+
+			"keep Origin aligned with Host). Default: checks enforced.")
 	return cmd
 }

@@ -48,12 +48,23 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Object-form proxy (not the string shorthand). Vite's string
+    // form forces changeOrigin:true, which rewrites Host to
+    // 127.0.0.1:7777 while the browser Origin stays localhost:5173 —
+    // that trips the Go CSRF Origin==Host gate with
+    // "Origin/Referer host does not match server". Keep the browser
+    // Host so Origin and Host stay aligned; the loopback Host
+    // allowlist still accepts "localhost".
     proxy: useMock
       ? undefined
       : {
-          "/api": "http://127.0.0.1:7777",
+          "/api": {
+            target: "http://127.0.0.1:7777",
+            changeOrigin: false,
+          },
           "/events": {
             target: "http://127.0.0.1:7777",
+            changeOrigin: false,
             ws: false, // SSE is plain HTTP, not WebSocket
           },
         },
