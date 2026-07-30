@@ -6,12 +6,14 @@
 package token
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -66,12 +68,68 @@ type CreateResult struct {
 // instrument ID, persists a TokenRef into state.json under the
 // per-instance flock, and returns the new entry. On a duplicate
 // symbol it returns ErrSymbolInUse without mutating anything.
+// isRoleName reports whether s is one of the token identity role names
+// (app-user / app-provider / sv).
+func isRoleName(s string) bool {
+	for _, r := range Roles() {
+		if s == r {
+			return true
+		}
+	}
+	return false
+}
+
+// firstLocalPartyForRole dials the ledger and returns the alphabetically
+// first local party hosted for the role — the default issuer, matching how
+// mint defaults --party and the Web UI's issuer picker offers the role's
+// party. Returns "" when it can't resolve (offline, no local party) so the
+// caller can fall back and let validation report a clear error.
+func firstLocalPartyForRole(opts CreateOptions, role string) string {
+	if role == "" {
+		role = "app-user"
+	}
+	ctx := context.Background()
+	client, cleanup, err := dialLedger(ctx, LedgerConn{
+		Endpoint: opts.Endpoint,
+		Insecure: opts.Insecure,
+		Instance: opts.Instance,
+		Role:     role,
+	})
+	if err != nil {
+		return ""
+	}
+	defer cleanup()
+	parties, err := localPartiesForRole(ctx, client, role)
+	if err != nil || len(parties) == 0 {
+		return ""
+	}
+	sort.Strings(parties)
+	return parties[0]
+}
+
 func RunCreate(out io.Writer, opts CreateOptions) (*CreateResult, error) {
 	// Resolve the issuer alias to its party id (as mint/transfer do).
 	// Without this the raw alias flows through as the admin party and the
 	// on-ledger TokenRules submit acts-as a non-existent party —
 	// UNKNOWN_SUBMITTERS.
 	opts.Issuer = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Issuer)
+
+	// Default/resolve the issuer to a live party when it wasn't given as a
+	// party id (no "::") — the CLI parallel to the Web UI's issuer picker,
+	// which offers the acting role's own party. An empty issuer defaults to
+	// the --role's party; a bare role name ("app-user") resolves to that
+	// role's party. Only on the on-ledger path (Endpoint set); the
+	// registry-only path keeps the issuer as typed. Best-effort: on failure
+	// the issuer is left as-is and validateCreate reports it.
+	if opts.Endpoint != "" && !strings.Contains(opts.Issuer, "::") {
+		role := opts.Role
+		if isRoleName(opts.Issuer) {
+			role = opts.Issuer
+		}
+		if p := firstLocalPartyForRole(opts, role); p != "" {
+			opts.Issuer = p
+		}
+	}
 
 	if err := validateCreate(opts); err != nil {
 		return nil, err

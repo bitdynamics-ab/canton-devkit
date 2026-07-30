@@ -166,3 +166,18 @@ func TestListTokens_EmptyReturnsEmptySlice(t *testing.T) {
 		t.Errorf("len = %d, want 0", len(got))
 	}
 }
+
+// TestIsRoleName pins the role-name check that gates issuer resolution:
+// only the identity roles match; a party id or arbitrary alias does not.
+func TestIsRoleName(t *testing.T) {
+	for _, r := range Roles() {
+		if !isRoleName(r) {
+			t.Errorf("isRoleName(%q) = false, want true", r)
+		}
+	}
+	for _, s := range []string{"", "alice", "app_user_x::1220ab", "app-users"} {
+		if isRoleName(s) {
+			t.Errorf("isRoleName(%q) = true, want false", s)
+		}
+	}
+}
