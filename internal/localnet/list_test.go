@@ -84,7 +84,7 @@ func TestRunListJSONSerialisesWarningAndPorts(t *testing.T) {
 	}
 
 	var out, errw bytes.Buffer
-	code := RunList(context.Background(), &out, &errw, &ListOptions{Format: "json", All: true})
+	code := RunList(context.Background(), &out, &errw, &ListOptions{Format: "json"})
 	if code != ExitSuccess {
 		t.Fatalf("RunList exit = %d, want %d; stderr=%s", code, ExitSuccess, errw.String())
 	}
@@ -124,7 +124,7 @@ func TestCollectListRowsStartedColumnUsesCreatedAt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read rewritten index: %v", err)
 	}
-	_, resp, _ := collectListRows(context.Background(), idx, &ListOptions{Format: "json", All: true})
+	_, resp, _ := collectListRows(context.Background(), idx)
 	if len(resp.Instances) != 1 {
 		t.Fatalf("instances = %+v, want one", resp.Instances)
 	}
@@ -166,12 +166,46 @@ func TestRunListTextIncludesWarning(t *testing.T) {
 	}
 
 	var out, errw bytes.Buffer
-	code := RunList(context.Background(), &out, &errw, &ListOptions{Format: "text", All: true})
+	code := RunList(context.Background(), &out, &errw, &ListOptions{Format: "text"})
 	if code != ExitSuccess {
 		t.Fatalf("RunList exit = %d, want %d; stderr=%s", code, ExitSuccess, errw.String())
 	}
 	if !strings.Contains(out.String(), "bad") || !strings.Contains(out.String(), "warning:") {
 		t.Fatalf("text output = %q, want row and warning", out.String())
+	}
+}
+
+func TestRunListIncludesStoppedAndFailed(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedListInstance(t, "alive", registry.StatusRunning, map[string]int{"app_user_ui": 4441})
+	seedListInstance(t, "down", registry.StatusStopped, map[string]int{"app_user_ui": 5441})
+	seedListInstance(t, "broken", registry.StatusFailed, map[string]int{"app_user_ui": 6441})
+
+	var out, errw bytes.Buffer
+	code := RunList(context.Background(), &out, &errw, &ListOptions{Format: "json"})
+	if code != ExitSuccess {
+		t.Fatalf("RunList exit = %d, want %d; stderr=%s", code, ExitSuccess, errw.String())
+	}
+
+	var got types.ListResponse
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\nbody=%s", err, out.String())
+	}
+	byName := map[string]string{}
+	for _, in := range got.Instances {
+		byName[in.Name] = in.Status
+	}
+	if len(byName) != 3 {
+		t.Fatalf("instances = %+v, want alive/down/broken", got.Instances)
+	}
+	if byName["alive"] != string(registry.StatusRunning) {
+		t.Errorf("alive status = %q, want running", byName["alive"])
+	}
+	if byName["down"] != string(registry.StatusStopped) {
+		t.Errorf("down status = %q, want stopped", byName["down"])
+	}
+	if byName["broken"] != string(registry.StatusFailed) {
+		t.Errorf("broken status = %q, want failed", byName["broken"])
 	}
 }
 

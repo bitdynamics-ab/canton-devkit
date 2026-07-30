@@ -24,7 +24,6 @@ func buildList() *cobra.Command {
 				localnet.RunList(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), opts))
 		},
 	}
-	cmd.Flags().BoolVar(&opts.All, "all", false, "Include stopped/failed instances (default: running only).")
 	cmd.Flags().StringVar(&opts.Format, "format", "text", "Output format: text or json.")
 	return cmd
 }

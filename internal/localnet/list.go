@@ -17,7 +17,6 @@ import (
 
 // ListOptions captures `localnet list` flags.
 type ListOptions struct {
-	All    bool
 	Format string // "text" (default) or "json"
 }
 
@@ -58,7 +57,7 @@ func RunList(ctx context.Context, out io.Writer, errw io.Writer, opts *ListOptio
 		return ExitSuccess
 	}
 
-	rows, resp, warning := collectListRows(ctx, idx, opts)
+	rows, resp, warning := collectListRows(ctx, idx)
 
 	if opts.Format == "json" {
 		if warning != "" {
@@ -74,7 +73,7 @@ func RunList(ctx context.Context, out io.Writer, errw io.Writer, opts *ListOptio
 	return ExitSuccess
 }
 
-func collectListRows(ctx context.Context, idx *registry.Index, opts *ListOptions) ([]listRow, types.ListResponse, string) {
+func collectListRows(ctx context.Context, idx *registry.Index) ([]listRow, types.ListResponse, string) {
 	rows := make([]listRow, 0, len(idx.Entries))
 	resp := types.ListResponse{
 		SchemaVersion: types.SchemaVersion,
@@ -83,9 +82,6 @@ func collectListRows(ctx context.Context, idx *registry.Index, opts *ListOptions
 
 	unreadable := make([]string, 0)
 	for _, e := range idx.Entries {
-		if !opts.All && e.Status != registry.StatusRunning && e.Status != registry.StatusCreating {
-			continue
-		}
 		ports := "—"
 		if s, err := registry.Read(e.Name); err == nil {
 			ports = formatPortRange(s.Ports)
@@ -128,8 +124,7 @@ func collectListRows(ctx context.Context, idx *registry.Index, opts *ListOptions
 
 func writeListText(out io.Writer, rows []listRow, warning string) {
 	if len(rows) == 0 {
-		_, _ = fmt.Fprintln(out, "No matching LocalNet instances.")
-		_, _ = fmt.Fprintln(out, "Use --all to include stopped/failed instances.")
+		_, _ = fmt.Fprintln(out, "No LocalNet instances registered.")
 		return
 	}
 
