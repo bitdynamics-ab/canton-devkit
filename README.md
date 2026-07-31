@@ -119,8 +119,8 @@ For general Canton and Daml questions, use the
 Release download counts aggregated from
 [`bitdynamics-ab/canton-devkit`](https://github.com/bitdynamics-ab/canton-devkit/releases)
 and
-[`bitdynamics-ab/homebrew-canton-devkit`](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases).
-Charts refresh daily via
+[`bitdynamics-ab/homebrew-canton-devkit`](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases)
+(merged by tag). Charts refresh daily via
 [`release-stats.yml`](.github/workflows/release-stats.yml); checksum
 files are excluded from the counts. Exact numbers:
 [release-downloads.md](https://github.com/bitdynamics-ab/canton-devkit/blob/release-stats-data/docs/assets/release-downloads.md).
