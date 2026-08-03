@@ -765,8 +765,10 @@ async function loadBars(
   }
 }
 
-// Latest value minus the point nearest 5 minutes back.
-function deltaFromSeries(s: Series | undefined, scale = 1): number | undefined {
+// Latest value minus the point nearest 5 minutes back. Exported so the
+// Overview throughput read-out reuses the same delta math the Metrics
+// screen shows.
+export function deltaFromSeries(s: Series | undefined, scale = 1): number | undefined {
   if (!s || s.points.length < 2) return undefined;
   const last = s.points[s.points.length - 1].v * scale;
   const targetT = s.points[s.points.length - 1].t - 5 * 60 * 1000;

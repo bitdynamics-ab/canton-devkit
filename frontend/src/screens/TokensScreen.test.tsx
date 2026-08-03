@@ -298,8 +298,8 @@ describe("TokensScreen", () => {
       { timeout: 4000 },
     );
     expect(screen.queryAllByText(/Holding contracts/i).length).toBeGreaterThan(0);
-    // Holder distribution table — share-of-supply.
-    expect(screen.queryAllByText(/Holder distribution/i).length).toBeGreaterThan(0);
+    // Merged Holders card — share-of-supply, nested UTXOs.
+    expect(screen.queryAllByText(/share of supply/i).length).toBeGreaterThan(0);
     expect(screen.queryAllByText(/100\.0%/).length).toBeGreaterThan(0);
   });
 
@@ -496,9 +496,9 @@ describe("TokensScreen", () => {
       { source: "ledger", rows: [{ party: "alice::abc", amount: "42.0" }] },
     );
     renderTokens();
-    // Wait for the live amount to render, then assert the banner is absent.
+    // Wait for a summary-driven balance to render, then assert the banner is absent.
     await waitFor(
-      () => expect(screen.queryAllByText("42.0").length).toBeGreaterThan(0),
+      () => expect(screen.queryAllByText("1275.0").length).toBeGreaterThan(0),
       { timeout: 4000 },
     );
     expect(screen.queryByText(/registry pseudo-balances/i)).not.toBeInTheDocument();

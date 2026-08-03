@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useSearchParams } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { W, wMono, wSans, wideCaps, tint, R, fs } from "../tokens";
 import { StatusBadge } from "../components/StatusBadge";
 import {
@@ -22,6 +22,7 @@ import { type ConnectionState, useConnectionHealth } from "./useConnectionHealth
 import { type InstanceSelection, useInstanceSelection } from "./useInstanceSelection";
 import { CommandPalette, openPalette } from "./CommandPalette";
 import { NAV, linkTo } from "./routes";
+import { ApiError, fetchMetricsSummary } from "../api";
 
 const NAV_ICON: Record<string, (p: { size?: number }) => JSX.Element> = {
   "/": IcOverview,
@@ -431,12 +432,40 @@ function HealthPill({ conn }: { conn: ConnectionState }) {
   );
 }
 
+// useMonitoringOff probes the selected instance's metrics: the summary
+// endpoint throws OBSERVABILITY_PROFILE_OFF when the instance was started
+// without the observability profile. Drives the "off" tag on the Metrics
+// nav row so the capability's absence is flagged where it's owned. Any
+// other outcome (running, unreachable, no instance) shows no tag.
+function useMonitoringOff(instance: string | null): boolean {
+  const [off, setOff] = useState(false);
+  useEffect(() => {
+    if (!instance) {
+      setOff(false);
+      return;
+    }
+    let cancelled = false;
+    fetchMetricsSummary(instance)
+      .then(() => {
+        if (!cancelled) setOff(false);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setOff(e instanceof ApiError && e.code === "OBSERVABILITY_PROFILE_OFF");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instance]);
+  return off;
+}
+
 function Sidebar() {
   // Thread the selected instance into per-instance routes so sidebar
   // clicks don't drop the selection.
   const [params] = useSearchParams();
   const instance = params.get("instance");
   const conn = useConnectionHealth();
+  const metricsOff = useMonitoringOff(instance);
   return (
     <nav
       style={{
@@ -470,6 +499,23 @@ function Sidebar() {
           >
             <Icon size={15} />
             {item.label}
+            {item.to === "/metrics" && metricsOff && (
+              <span
+                title="Started without the observability profile — no metrics collected"
+                style={{
+                  marginLeft: "auto",
+                  ...wideCaps,
+                  fontSize: fs.micro,
+                  color: W.faint,
+                  border: `1px solid ${W.border}`,
+                  borderRadius: R.control,
+                  padding: "0 5px",
+                  lineHeight: "15px",
+                }}
+              >
+                off
+              </span>
+            )}
           </NavLink>
         );
       })}

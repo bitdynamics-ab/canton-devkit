@@ -50,6 +50,16 @@ function mockListResponse(
           ),
         );
       }
+      // InstanceOverview probes metrics on mount; report observability
+      // off so it renders the "enable monitoring" strip, no range query.
+      if (url.includes("/metrics/summary")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ code: "OBSERVABILITY_PROFILE_OFF", error: "off" }),
+            { status: 409, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
       // RecentActivity's ledger-event scan, fired only for a running instance.
       if (url.includes("/transactions")) {
         if (txOverride) {
@@ -211,9 +221,10 @@ describe("Dashboard", () => {
     const hubbleCell = await screen.findByText("hubble");
     await userEvent.click(hubbleCell);
 
-    // InstanceDetail only renders once selection is non-null.
+    // InstanceOverview only renders once selection is non-null; its tab
+    // bar is the stable marker (the "Snapshots" tab isn't in the table).
     await waitFor(() => {
-      expect(screen.getByText(/instance detail/i)).toBeInTheDocument();
+      expect(screen.getByText("Snapshots")).toBeInTheDocument();
     });
   });
 
@@ -224,54 +235,9 @@ describe("Dashboard", () => {
     ]);
     renderDashboard();
 
-    // InstanceDetail renders only because auto-pick selected demo.
+    // InstanceOverview renders only because auto-pick selected demo.
     await waitFor(() => {
-      expect(screen.getByText(/instance detail/i)).toBeInTheDocument();
+      expect(screen.getByText("Snapshots")).toBeInTheDocument();
     });
-  });
-
-  it("shows the recent-activity panel with ledger events for a running instance", async () => {
-    mockListResponse([{ name: "demo", status: "running" }]);
-    renderDashboard();
-    await waitFor(() =>
-      expect(screen.getByText(/recent activity/i)).toBeInTheDocument(),
-    );
-    expect(await screen.findByText("exercise")).toBeInTheDocument();
-    // template id is shortened to Module:Entity for the EVENT column
-    expect(screen.getByText("Retail.Token:Token")).toBeInTheDocument();
-  });
-
-  it("recent-activity shows the party-JWT hint when the ledger needs a party JWT", async () => {
-    mockListResponse([{ name: "demo", status: "running" }], undefined, {
-      status: 503,
-      body: { code: "EXPLORER_NEEDS_PARTY_JWT", error: "jwt lacks party rights" },
-    });
-    renderDashboard();
-    await waitFor(() =>
-      expect(screen.getByText(/party-rights JWT/i)).toBeInTheDocument(),
-    );
-  });
-
-  it("recent-activity shows the restart-to-capture hint for the no-JWT-recorded 500", async () => {
-    // Instances predating JWT capture return a generic 500 distinguished by message, not code.
-    mockListResponse([{ name: "demo", status: "running" }], undefined, {
-      status: 500,
-      body: { code: "INTERNAL", error: "no JWT recorded for role app-provider" },
-    });
-    renderDashboard();
-    await waitFor(() =>
-      expect(screen.getByText(/restart the instance to capture/i)).toBeInTheDocument(),
-    );
-  });
-
-  it("recent-activity shows the empty hint when there are no ledger events", async () => {
-    mockListResponse([{ name: "demo", status: "running" }], undefined, {
-      status: 200,
-      body: { schema_version: 1, instance: "demo", role: "app-provider", ledger_end: 0, count: 0, transactions: [] },
-    });
-    renderDashboard();
-    await waitFor(() =>
-      expect(screen.getByText(/No recent ledger activity/i)).toBeInTheDocument(),
-    );
   });
 });

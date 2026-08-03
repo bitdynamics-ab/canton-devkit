@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   acceptTransfer,
@@ -36,7 +36,6 @@ import {
   type InstrumentRef,
   type InstrumentSummary,
   type Role,
-  type TokenHolding,
   type TokenRef,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
@@ -119,9 +118,11 @@ export function TokensScreen() {
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
   const [view, setView] = useState<"instruments" | "matrix">("instruments");
 
-  const [holdings, setHoldings] = useState<TokenHolding[]>([]);
   const [holdingsErr, setHoldingsErr] = useState<string | null>(null);
-  // "registry" (vs "ledger") drives the pseudo-balance disclaimer banner.
+  // "registry" (vs "ledger") drives the pseudo-balance disclaimer banner and
+  // the Holders footer label; the balances themselves now come from
+  // `summary.holders`, so the holdings fetch is kept only for its source tag
+  // and to reset the expand state on instrument change.
   const [holdingsSource, setHoldingsSource] = useState<HoldingSource>("ledger");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [contracts, setContracts] = useState<HoldingContract[]>([]);
@@ -131,6 +132,8 @@ export function TokensScreen() {
   // Which token the Holdings matrix is filtered to (null = full grid).
   const [matrixSymbol, setMatrixSymbol] = useState<string | null>(null);
   const [summary, setSummary] = useState<InstrumentSummary | null>(null);
+  // Wall-clock of the last successful balance scan, for the Holders footer.
+  const [scannedAt, setScannedAt] = useState("");
   const [parties, setParties] = useState<PartyRef[]>([]);
   const [showParties, setShowParties] = useState(false);
   const aliases: AliasMap = useMemo(() => aliasMapFrom(parties), [parties]);
@@ -240,7 +243,6 @@ export function TokensScreen() {
 
   useEffect(() => {
     if (!instance || !activeSymbol) {
-      setHoldings([]);
       return;
     }
     let cancelled = false;
@@ -249,7 +251,6 @@ export function TokensScreen() {
     fetchHoldings(instance, activeSymbol, undefined, role)
       .then((r) => {
         if (!cancelled) {
-          setHoldings(r.holdings);
           setHoldingsSource(r.source ?? "ledger");
           setHoldingsErr(null);
         }
@@ -291,7 +292,9 @@ export function TokensScreen() {
     let cancelled = false;
     fetchInstrumentSummary(instance, activeSymbol, role)
       .then((s) => {
-        if (!cancelled) setSummary(s);
+        if (cancelled) return;
+        setSummary(s);
+        setScannedAt(new Date().toLocaleTimeString("en-GB", { hour12: false }));
       })
       .catch(() => {
         if (!cancelled) setSummary(null);
@@ -405,7 +408,7 @@ export function TokensScreen() {
     setContracts([]);
     fetchHoldingContracts(instance, activeSymbol, party, role)
       .then((cs) => {
-        if (expandSeqRef.current === seq) setContracts(cs);
+        if (expandSeqRef.current === seq) setContracts(cs ?? []);
       })
       .catch(() => {
         if (expandSeqRef.current === seq) setContracts([]);
@@ -582,7 +585,10 @@ export function TokensScreen() {
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 14 }}>
-          <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 4, overflow: "hidden" }}>
+          <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: R.card, overflow: "hidden", alignSelf: "start" }}>
+            <div style={{ ...tableCaps, fontSize: fs.label, color: W.dim, padding: "9px 14px", background: W.surface2, borderBottom: `1px solid ${W.border}` }}>
+              On this instance
+            </div>
             {list.map((t) => {
               const sym = t.symbol ?? t.instrument_id;
               const isActive = sym === activeSymbol;
@@ -592,7 +598,9 @@ export function TokensScreen() {
                   onClick={() => setActiveSymbol(sym)}
                   style={{
                     display: "block", width: "100%", textAlign: "left", padding: "10px 14px",
-                    background: isActive ? tint(W.brand, 12) : "transparent", border: "none",
+                    background: isActive ? W.selRow : "transparent",
+                    borderLeft: `2px solid ${isActive ? W.brand : "transparent"}`,
+                    borderTop: "none", borderRight: "none", borderBottom: `1px solid ${W.border}`,
                     cursor: "pointer",
                     transition: `background-color ${FAST}`,
                   }}
@@ -606,6 +614,9 @@ export function TokensScreen() {
                 </button>
               );
             })}
+            <div style={{ padding: "10px 14px", background: W.sunken, borderTop: `1px solid ${W.border}`, fontFamily: wMono, fontSize: fs.label, color: W.faint }}>
+              dpm localnet token list
+            </div>
           </div>
 
           <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: 4, padding: 16 }}>
@@ -619,7 +630,8 @@ export function TokensScreen() {
                   <span style={{ color: W.dim, fontFamily: wMono, fontSize: fs.meta }}>
                     {sym} · {active.standard}
                   </span>
-                  <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                  <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
+                    <Button variant="primary" size="sm" icon={<IcArrowRight />} onClick={() => setModal({ kind: "transfer", symbol: sym })}>Transfer</Button>
                     <Button
                       variant="secondary"
                       size="sm"
@@ -628,8 +640,10 @@ export function TokensScreen() {
                       disabled={!!mintReason}
                       title={mintReason ?? "Mint new supply"}
                     >Mint</Button>
-                    <Button variant="secondary" size="sm" icon={<IcArrowRight />} onClick={() => setModal({ kind: "transfer", symbol: sym })}>Transfer</Button>
                     <Button variant="secondary" size="sm" icon={<IcDroplet />} onClick={() => setModal({ kind: "faucet", symbol: sym })} title="Fund a party from a funded source (auto-accepted)">Faucet</Button>
+                    <Button variant="secondary" size="sm" icon={<IcCheck />} onClick={() => setDetailTab("offers")} title="See pending transfer offers you can accept">Accept</Button>
+                    {/* Destructive action set apart, last, behind a divider. */}
+                    <span aria-hidden style={{ width: 1, height: 20, background: W.border, margin: "0 2px" }} />
                     <Button
                       variant="danger"
                       size="sm"
@@ -638,8 +652,6 @@ export function TokensScreen() {
                       disabled={!!mintReason}
                       title={mintReason ? BURN_DISABLED_REASON : "Burn holdings (archive path)"}
                     >Burn</Button>
-                    <Button variant="secondary" size="sm" icon={<IcCheck />} onClick={() => setDetailTab("offers")} title="See pending transfer offers you can accept">Accept transfer</Button>
-                    <Button variant="secondary" size="sm" icon={<IcArrowRight />} onClick={() => setModal({ kind: "allocate", symbol: sym })} title="Allocate holdings to a settlement (DvP)">Allocate</Button>
                   </span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, color: W.dim, fontSize: fs.meta, marginTop: 4, fontFamily: wMono }}>
@@ -714,69 +726,24 @@ export function TokensScreen() {
                         </span>
                       </div>
                     )}
-                    {summary && summary.holders.length > 0 && <HolderDistribution s={summary} aliases={aliases} />}
-
-                    <h4 style={{ color: W.text2, margin: "16px 0 8px" }}>
-                      Holdings <span style={{ color: W.dim, fontWeight: 400, fontSize: fs.meta }}>· a balance sums its Holding contracts. Click a row to expand.</span>
-                    </h4>
-                    {holdingsSource === "registry" && (
-                      <div role="status" style={{ ...notice("warn"), marginBottom: 8 }}>
-                        No live ledger reachable for <code>{instance}</code>. These are
-                        <b> registry pseudo-balances</b>. Local bookkeeping that shows the issuer
-                        holding the full supply and everyone else zero, <b>not</b> on-ledger holdings.
-                        Start the instance to see real balances.
-                      </div>
+                    {summary ? (
+                      <HoldersCard
+                        s={summary}
+                        aliases={aliases}
+                        adminParty={active.admin}
+                        expanded={expanded}
+                        contracts={contracts}
+                        onToggle={toggleExpand}
+                        source={holdingsSource}
+                        sym={sym}
+                        scannedAt={scannedAt}
+                        instance={instance}
+                      />
+                    ) : holdingsErr ? (
+                      <div role="alert" style={{ color: W.err, fontSize: fs.meta, marginTop: 12 }}>{holdingsErr}</div>
+                    ) : (
+                      <div style={{ color: W.dim, fontSize: fs.meta, marginTop: 12 }}>Loading holders…</div>
                     )}
-                    {holdingsErr && <div role="alert" style={{ color: W.err, fontSize: fs.meta }}>{holdingsErr}</div>}
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data }}>
-                      <thead>
-                        <tr style={{ color: W.dim, textAlign: "left" }}>
-                          <th style={th}>PARTY</th>
-                          <th style={thNum}>AMOUNT</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {holdings.map((h, i) => (
-                          <>
-                            <tr
-                              key={i}
-                              onClick={() => toggleExpand(h.party)}
-                              style={{ cursor: "pointer", background: expanded === h.party ? tint(W.brand, 12) : "transparent", transition: `background-color ${FAST}` }}
-                            >
-                              <td style={td}>
-                                <span style={{ color: W.brand, display: "inline-flex", alignItems: "center", width: 16, verticalAlign: "middle" }}>
-                                  {expanded === h.party ? <IcChevronDown size={12} /> : <IcChevronRight size={12} />}
-                                </span>
-                                {partyLabel(aliases, h.party)}
-                              </td>
-                              <td style={tdNum}>{h.amount}</td>
-                            </tr>
-                            {expanded === h.party && contracts.map((c) => (
-                              <tr key={c.contract_id} style={{ background: W.bg }}>
-                                <td style={{ ...td, paddingLeft: 34, fontSize: fs.label }}>
-                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                                    <span style={{ color: W.dim, fontFamily: wMono }}>└</span>
-                                    <MonoId value={c.contract_id} size={11} color={W.mag} />
-                                    {c.locked && (
-                                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: W.warn, fontSize: fs.micro, border: `1px solid ${tint(W.warn, 34)}`, background: tint(W.warn, 13), borderRadius: R.control, padding: "0 5px", height: 16 }}>
-                                        <Dot color={W.warn} size={5} /> Locked
-                                      </span>
-                                    )}
-                                  </span>
-                                </td>
-                                <td style={{ ...tdNum, color: W.text2 }}>{c.amount}</td>
-                              </tr>
-                            ))}
-                            {expanded === h.party && contracts.length === 0 && (
-                              <tr><td colSpan={2} style={{ ...td, paddingLeft: 34, color: W.dim, fontSize: fs.label }}>Loading contracts…</td></tr>
-                            )}
-                          </>
-                        ))}
-                        {holdings.length === 0 && (
-                          <tr><td colSpan={2} style={{ ...td, color: W.dim }}>No holdings yet.</td></tr>
-                        )}
-                      </tbody>
-                    </table>
                   </>
                 )}
 
@@ -1331,47 +1298,50 @@ function AllocationsPanel({
 // looking broken; once the declared amount is fully minted the note drops
 // away and the tile is just the number.
 function KpiRow({ s }: { s: InstrumentSummary }) {
-  const cards: Array<{ label: string; value: string; full?: string; hint?: string }> = [
-    {
-      label: "Total supply",
-      value: statAmount(s.total_supply),
-      full: s.total_supply,
-      hint: supplyNote(s),
-    },
-    { label: "In circulation", value: statAmount(s.total_supply), full: s.total_supply, hint: "sum of all holdings" },
-    { label: "Holders", value: String(s.holder_count) },
-    { label: "Holding contracts", value: String(s.contract_count), hint: "UTXOs" },
+  // The declared-vs-minted note (supplyNote) rides under the Total-supply
+  // cell's fixed caption when the two disagree — kept from the supply-cap
+  // work, additive to the mockup's "minted, less burns" sub-label.
+  const note = supplyNote(s);
+  const over = !!note && note.includes("over by");
+  const cards: Array<{ label: string; value: string; full?: string; sub: string; note?: string }> = [
+    { label: "Total supply", value: statAmount(s.total_supply), full: s.total_supply, sub: "minted, less burns", note },
+    { label: "In circulation", value: statAmount(s.total_supply), full: s.total_supply, sub: "sum of all holdings" },
+    { label: "Holders", value: String(s.holder_count), sub: "parties with a balance" },
+    { label: "Holding contracts", value: String(s.contract_count), sub: "UTXOs" },
   ];
   return (
+    // One bordered strip, four cells split by hairlines — reads as a single
+    // object, not four cards.
     <div
       style={{
+        background: W.surface,
+        border: `1px solid ${W.border}`,
+        borderRadius: R.card,
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-        gap: 12,
+        gridTemplateColumns: "repeat(4, 1fr)",
+        overflow: "hidden",
         margin: "16px 0 4px",
       }}
     >
-      {cards.map((c) => (
+      {cards.map((c, i) => (
         <div
           key={c.label}
           style={{
-            background: W.bg,
-            border: `1px solid ${W.border}`,
-            borderRadius: 4,
-            padding: "10px 12px",
+            padding: 14,
+            display: "flex",
+            flexDirection: "column",
+            gap: 5,
+            borderRight: i < 3 ? `1px solid ${W.border}` : "none",
           }}
         >
-          <div style={{ ...wideCaps, color: W.dim, fontSize: fs.label, marginBottom: 6 }}>
-            {c.label}
-          </div>
+          <div style={{ ...wideCaps, fontSize: fs.micro, color: W.dim }}>{c.label}</div>
           <div
             title={c.full && c.full !== c.value ? c.full : undefined}
             style={{
-              color: W.text,
-              fontSize: fs.title,
               fontFamily: wMono,
+              fontSize: fs.title,
+              color: W.text,
               fontVariantNumeric: "tabular-nums",
-              // Ellipsize an oversized value (full precision in the title).
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -1379,7 +1349,8 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
           >
             {c.value}
           </div>
-          {c.hint && <div style={{ color: W.dim, fontSize: fs.micro, marginTop: 2 }}>{c.hint}</div>}
+          <div style={{ fontSize: fs.label, color: W.faint }}>{c.sub}</div>
+          {c.note && <div style={{ fontSize: fs.micro, color: over ? W.warn : W.dim }}>{c.note}</div>}
         </div>
       ))}
     </div>
@@ -1421,18 +1392,43 @@ function statAmount(raw: string): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
-// Per-holder stake table (balance, share, UTXO count); backend sorts biggest-first.
-function HolderDistribution({ s, aliases }: { s: InstrumentSummary; aliases: AliasMap }) {
+// Holders + their holding-contract UTXOs in one nested card: each party row
+// (balance / share bar / UTXO count) expands to the UTXOs it's made of, with
+// a locked badge. Replaces the old split HolderDistribution + Holdings
+// tables — "holder distribution" appeared twice; now once, with the UTXO
+// breakdown nested under the holder it belongs to.
+function HoldersCard({
+  s, aliases, adminParty, expanded, contracts, onToggle, source, sym, scannedAt, instance,
+}: {
+  s: InstrumentSummary;
+  aliases: AliasMap;
+  adminParty: string;
+  expanded: string | null;
+  contracts: HoldingContract[];
+  onToggle: (party: string) => void;
+  source: HoldingSource;
+  sym: string;
+  scannedAt: string;
+  instance: string;
+}) {
   return (
-    <>
-      <h4 style={{ color: W.text2, margin: "16px 0 6px" }}>
-        Holder distribution{" "}
-        <span style={{ color: W.dim, fontWeight: 400, fontSize: fs.meta }}>· share of total supply</span>
-      </h4>
+    <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: R.card, overflow: "hidden", marginTop: 14 }}>
+      <div style={{ padding: "12px 14px", borderBottom: `1px solid ${W.border}`, display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        <span style={{ fontSize: fs.lead, fontWeight: 600, color: W.text }}>Holders</span>
+        <span style={{ fontSize: fs.meta, color: W.dim }}>share of supply · expand a party for its holding contracts</span>
+      </div>
+      {source === "registry" && (
+        <div role="status" style={{ ...notice("warn"), margin: 14 }}>
+          No live ledger reachable for <code>{instance}</code>. These are
+          <b> registry pseudo-balances</b> — local bookkeeping that shows the issuer
+          holding the full supply and everyone else zero, <b>not</b> on-ledger holdings.
+          Start the instance to see real balances.
+        </div>
+      )}
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data }}>
         <thead>
-          <tr style={{ color: W.dim, textAlign: "left" }}>
-            <th style={th}>HOLDER</th>
+          <tr style={{ color: W.dim, textAlign: "left", background: W.surface2 }}>
+            <th style={th}>PARTY</th>
             <th style={thNum}>BALANCE</th>
             <th style={th}>SHARE</th>
             <th style={thNum}>UTXOS</th>
@@ -1441,34 +1437,66 @@ function HolderDistribution({ s, aliases }: { s: InstrumentSummary; aliases: Ali
         <tbody>
           {s.holders.map((h) => {
             const pct = Number(h.pct_of_supply) || 0;
+            const isOpen = expanded === h.party;
             return (
-              <tr key={h.party}>
-                <td style={td}>{partyLabel(aliases, h.party)}</td>
-                <td style={tdNum}>{h.balance}</td>
-                <td style={td}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ flex: 1, height: 6, background: W.surface2, borderRadius: 2, minWidth: 40 }}>
-                      <div
-                        style={{
-                          width: `${Math.min(100, pct)}%`,
-                          height: "100%",
-                          background: W.brand,
-                          borderRadius: 2,
-                        }}
-                      />
-                    </div>
-                    <span style={{ fontFamily: wMono, fontVariantNumeric: "tabular-nums", color: W.text2, fontSize: fs.meta, minWidth: 44, textAlign: "right" }}>
-                      {h.pct_of_supply}%
+              <Fragment key={h.party}>
+                <tr onClick={() => onToggle(h.party)} style={{ cursor: "pointer", background: isOpen ? W.selRow : "transparent", transition: `background-color ${FAST}` }}>
+                  <td style={td}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ color: isOpen ? W.brand : W.dim, display: "inline-flex", width: 14 }}>
+                        {isOpen ? <IcChevronDown size={12} /> : <IcChevronRight size={12} />}
+                      </span>
+                      {partyLabel(aliases, h.party)}
+                      {h.party === adminParty && <span style={{ fontSize: fs.label, color: W.faint }}>issuer</span>}
                     </span>
-                  </div>
-                </td>
-                <td style={{ ...tdNum, color: W.text2 }}>{h.contract_count}</td>
-              </tr>
+                  </td>
+                  <td style={tdNum}>{h.balance}</td>
+                  <td style={td}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ flex: 1, height: 6, background: W.inset, borderRadius: 2, minWidth: 40 }}>
+                        <div style={{ width: `${Math.min(100, pct)}%`, height: "100%", background: W.brand, borderRadius: 2 }} />
+                      </div>
+                      <span style={{ fontFamily: wMono, fontVariantNumeric: "tabular-nums", color: W.text2, fontSize: fs.meta, minWidth: 44, textAlign: "right" }}>
+                        {h.pct_of_supply}%
+                      </span>
+                    </div>
+                  </td>
+                  <td style={{ ...tdNum, color: W.text2 }}>{h.contract_count}</td>
+                </tr>
+                {isOpen && (contracts ?? []).map((c) => (
+                  <tr key={c.contract_id} style={{ background: W.inset }}>
+                    <td style={{ ...td, paddingLeft: 34, fontSize: fs.label }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ color: W.dim, fontFamily: wMono }}>└</span>
+                        <MonoId value={c.contract_id} size={11} color={W.dim} />
+                        {c.locked && (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: W.warn, fontSize: fs.micro, border: `1px solid ${W.warnBorder}`, background: W.warnBg, borderRadius: R.control, padding: "0 5px", height: 16 }}>
+                            <Dot color={W.warn} size={5} /> locked
+                          </span>
+                        )}
+                      </span>
+                    </td>
+                    <td style={{ ...tdNum, color: W.text2 }}>{c.amount}</td>
+                    <td style={td} />
+                    <td style={td} />
+                  </tr>
+                ))}
+                {isOpen && (contracts ?? []).length === 0 && (
+                  <tr><td colSpan={4} style={{ ...td, paddingLeft: 34, color: W.dim, fontSize: fs.label }}>Loading contracts…</td></tr>
+                )}
+              </Fragment>
             );
           })}
+          {s.holders.length === 0 && (
+            <tr><td colSpan={4} style={{ ...td, color: W.dim }}>No holdings yet.</td></tr>
+          )}
         </tbody>
       </table>
-    </>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "9px 14px", background: W.sunken, borderTop: `1px solid ${W.border}`, fontFamily: wMono, fontSize: fs.label, color: W.faint }}>
+        <span>dpm localnet token balance --symbol {sym}</span>
+        <span>{source === "registry" ? "registry balances" : "ledger balances"}{scannedAt && ` · scanned ${scannedAt}`}</span>
+      </div>
+    </div>
   );
 }
 

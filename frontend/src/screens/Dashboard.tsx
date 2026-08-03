@@ -1,23 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ApiError,
-  fetchTransactions,
-  type InstanceSummary,
-  type TransactionEvent,
-  type TransactionRow,
-} from "../api";
+import { useCallback, useState } from "react";
+import { type InstanceSummary } from "../api";
 import { W, wMono, tableCaps, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
-import { IcPlus, IcRefresh } from "../components/icons";
+import { IcPlus } from "../components/icons";
 import { StatusBadge } from "../components/StatusBadge";
-import { MonoId } from "../components/MonoId";
 import { SkeletonTable, useLoadingDelay } from "../components/Skeleton";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { ContainerHealth } from "./ContainerHealth";
 import { CreateLocalNetModal } from "./CreateLocalNetModal";
 import { CreatingPanel } from "./CreatingPanel";
-import { DeveloperSetup } from "./DeveloperSetup";
-import { InstanceDetail } from "./InstanceDetail";
+import { InstanceOverview } from "./InstanceOverview";
 
 // Selection state lives in the URL (?instance=<name>) so the topbar
 // switcher and Dashboard share one source of truth and links survive.
@@ -113,8 +104,8 @@ export function Dashboard() {
       )}
 
       {sel.selected && (() => {
-        // While creating, show the live progress panel and hide the JWT
-        // generator — no point signing tokens before it's running.
+        // While creating, show the live progress panel above the overview —
+        // the overview's own tabs handle the running vs. not-running gate.
         const selectedRow = sel.instances.find((i) => i.name === sel.selected);
         const isCreating = selectedRow?.status === "creating";
         return (
@@ -122,16 +113,12 @@ export function Dashboard() {
             {isCreating && (
               <CreatingPanel name={sel.selected} onRefresh={sel.refresh} />
             )}
-            <InstanceDetail
+            <InstanceOverview
               name={sel.selected}
               statusHint={selectedRow?.status}
+              ports={selectedRow?.ports}
               onChanged={sel.refresh}
             />
-            {!isCreating && selectedRow?.status === "running" && (
-              <RecentActivity name={sel.selected} />
-            )}
-            <ContainerHealth name={sel.selected} />
-            {!isCreating && <DeveloperSetup name={sel.selected} />}
           </>
         );
       })()}
@@ -288,165 +275,3 @@ function ErrorPanel({ error }: { error: string }) {
     </div>
   );
 }
-
-// Snapshot with manual refresh — /transactions is a window scan, not an SSE stream.
-function RecentActivity({ name }: { name: string }) {
-  const [tick, setTick] = useState(0);
-  const [state, setState] = useState<
-    | { kind: "loading" }
-    | { kind: "ok"; rows: TransactionRow[]; truncated: boolean }
-    | { kind: "needs-jwt" }
-    | { kind: "err"; error: string }
-  >({ kind: "loading" });
-
-  useEffect(() => {
-    let cancelled = false;
-    setState({ kind: "loading" });
-    fetchTransactions(name, "app-provider", 40)
-      .then((r) => {
-        if (cancelled) return;
-        setState({ kind: "ok", rows: r.transactions, truncated: !!r.window_truncated });
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        if (e instanceof ApiError && e.code === "EXPLORER_NEEDS_PARTY_JWT") {
-          setState({ kind: "needs-jwt" });
-          return;
-        }
-        setState({ kind: "err", error: e instanceof ApiError ? e.message : "failed to load activity" });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [name, tick]);
-
-  const events = useMemo(() => {
-    if (state.kind !== "ok") return [];
-    const flat: { offset: number; key: string; time: string; kind: TransactionEvent["kind"]; event: string; cid: string }[] = [];
-    for (const tx of state.rows) {
-      if (tx.kind !== "transaction" || !tx.events) continue;
-      const time = tx.record_time ? tx.record_time.replace("T", " ").slice(11, 19) : `@${tx.offset}`;
-      tx.events.forEach((ev, i) => {
-        flat.push({
-          offset: tx.offset,
-          key: `${tx.offset}:${i}`,
-          time,
-          kind: ev.kind,
-          event: shortTemplate(ev.template),
-          cid: ev.contract_id,
-        });
-      });
-    }
-    flat.sort((a, b) => b.offset - a.offset);
-    return flat.slice(0, 14);
-  }, [state]);
-
-  const kindColor: Record<TransactionEvent["kind"], string> = {
-    create: W.ok,
-    exercise: W.info,
-    archive: W.err,
-  };
-
-  return (
-    <section
-      style={{
-        background: W.surface,
-        border: `1px solid ${W.border}`,
-        borderRadius: R.card,
-        padding: 16,
-        marginBottom: 16,
-      }}
-    >
-      <header style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-        <h3 style={{ margin: 0, fontSize: fs.lead, fontWeight: 600, color: W.text }}>Recent activity</h3>
-        <span style={{ color: W.dim, fontSize: fs.meta }}>
-          ledger events · as seen by the app-provider participant
-        </span>
-        <Button
-          variant="secondary"
-          icon={<IcRefresh />}
-          onClick={() => setTick((t) => t + 1)}
-          title="Refresh"
-          style={{ marginLeft: "auto" }}
-        >
-          Refresh
-        </Button>
-      </header>
-
-      {state.kind === "loading" && (
-        <div style={{ color: W.dim, fontSize: fs.data, padding: "8px 0" }}>Scanning recent ledger updates…</div>
-      )}
-      {state.kind === "needs-jwt" && (
-        <div style={{ color: W.dim, fontSize: fs.body, padding: "8px 0" }}>
-          Ledger activity needs a party-rights JWT. Splice LocalNet signs user-id tokens by
-          default. Open the Explorer to project through a specific party.
-        </div>
-      )}
-      {state.kind === "err" && (
-        <div style={{ color: W.dim, fontSize: fs.body, padding: "8px 0" }}>
-          {/no jwt recorded/i.test(state.error)
-            ? "Ledger activity needs recorded role JWTs. Restart the instance to capture them (older instances predate JWT capture)."
-            : `Ledger activity unavailable. ${state.error}.`}{" "}
-          Open the Explorer for the full ledger view.
-        </div>
-      )}
-      {state.kind === "ok" && events.length === 0 && (
-        <div style={{ color: W.dim, fontSize: fs.body, padding: "8px 0" }}>
-          No recent ledger activity. Run a token or DAR operation to see updates.
-        </div>
-      )}
-      {state.kind === "ok" && events.length > 0 && (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data, marginTop: 8 }}>
-          <thead>
-            <tr style={{ color: W.dim, textAlign: "left" }}>
-              <th style={actTh}>TIME</th>
-              <th style={actTh}>KIND</th>
-              <th style={actTh}>EVENT</th>
-              <th style={actTh}>CID</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.map((e) => (
-              <tr key={e.key} style={{ borderTop: `1px solid ${W.border}` }}>
-                <td style={{ ...actTd, color: W.dim, fontFamily: wMono, fontVariantNumeric: "tabular-nums", fontSize: fs.label }}>{e.time}</td>
-                <td style={actTd}>
-                  <span
-                    style={{
-                      color: kindColor[e.kind],
-                      border: `1px solid ${tint(kindColor[e.kind], 34)}`,
-                      background: tint(kindColor[e.kind], 13),
-                      borderRadius: R.control,
-                      padding: "1px 6px",
-                      fontSize: fs.label,
-                    }}
-                  >
-                    {e.kind}
-                  </span>
-                </td>
-                <td style={{ ...actTd, fontFamily: wMono, color: W.text2 }}>{e.event}</td>
-                <td style={actTd}>
-                  <MonoId value={e.cid} head={6} tail={6} size={11} color={W.info} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {state.kind === "ok" && state.truncated && (
-        <div style={{ color: W.dim, fontSize: fs.label, marginTop: 8 }}>
-          Showing the newest events of a clipped scan.
-        </div>
-      )}
-    </section>
-  );
-}
-
-// `<pkg>:Module:Entity` → `Module:Entity` for a compact EVENT column.
-function shortTemplate(t?: string): string {
-  if (!t) return "—";
-  const parts = t.split(":");
-  return parts.length >= 3 ? `${parts[parts.length - 2]}:${parts[parts.length - 1]}` : t;
-}
-
-const actTh: React.CSSProperties = { ...tableCaps, padding: "6px 10px 6px 0", fontSize: fs.label };
-const actTd: React.CSSProperties = { padding: "8px 10px 8px 0", verticalAlign: "middle" };
