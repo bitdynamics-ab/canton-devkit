@@ -180,6 +180,18 @@ describe("Dashboard", () => {
     expect(within(table).getByText("Stopped")).toBeInTheDocument();
   });
 
+  it("shows only the bring-up panel while an instance is creating (not the full Overview)", async () => {
+    // Regression: a creating instance rendered the bring-up panel AND the
+    // running-instance Overview (throughput / tabs / KPI rail) stacked below.
+    mockListResponse([{ name: "spinup", status: "creating" }]);
+    renderDashboard("/?instance=spinup");
+    await waitFor(() => {
+      expect(screen.getByText(/bring-up in progress/i)).toBeInTheDocument();
+    });
+    // The Overview's tab bar must not appear alongside the progress panel.
+    expect(screen.queryByRole("button", { name: /^snapshots$/i })).not.toBeInTheDocument();
+  });
+
   it("renders the EmptyState when no instances are registered", async () => {
     mockListResponse([]);
     renderDashboard();

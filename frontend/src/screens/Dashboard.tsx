@@ -104,22 +104,21 @@ export function Dashboard() {
       )}
 
       {sel.selected && (() => {
-        // While creating, show the live progress panel above the overview —
-        // the overview's own tabs handle the running vs. not-running gate.
         const selectedRow = sel.instances.find((i) => i.name === sel.selected);
         const isCreating = selectedRow?.status === "creating";
-        return (
-          <>
-            {isCreating && (
-              <CreatingPanel name={sel.selected} onRefresh={sel.refresh} />
-            )}
-            <InstanceOverview
-              name={sel.selected}
-              statusHint={selectedRow?.status}
-              ports={selectedRow?.ports}
-              onChanged={sel.refresh}
-            />
-          </>
+        // While creating, show ONLY the bring-up progress — the full Overview
+        // (throughput, endpoints, containers, JWT…) is meaningless until the
+        // instance is up, and rendering both reads as two merged screens.
+        // Once the status flips off "creating" the Overview takes over.
+        return isCreating ? (
+          <CreatingPanel name={sel.selected} onRefresh={sel.refresh} />
+        ) : (
+          <InstanceOverview
+            name={sel.selected}
+            statusHint={selectedRow?.status}
+            ports={selectedRow?.ports}
+            onChanged={sel.refresh}
+          />
         );
       })()}
     </div>
