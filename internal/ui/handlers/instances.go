@@ -1251,6 +1251,15 @@ type ContainersResponse struct {
 	UnhealthyCount  int `json:"unhealthy_count"`
 	RestartingCount int `json:"restarting_count"`
 	ExitedCount     int `json:"exited_count"`
+
+	// Aggregate live resource use from `docker stats`, summed across the
+	// project's containers. Pointers because docker stats is best-effort:
+	// nil means "not sampled" (the UI renders an em-dash, never a zero).
+	// Sourced from docker, so present whenever the instance is running —
+	// independent of the observability profile that gates ledger metrics.
+	CPUPercent    *float64 `json:"cpu_percent,omitempty"`
+	MemUsedBytes  *int64   `json:"mem_used_bytes,omitempty"`
+	MemLimitBytes *int64   `json:"mem_limit_bytes,omitempty"`
 }
 
 // handleInstanceContainers: GET /api/instances/{name}/containers.
@@ -1326,6 +1335,39 @@ func handleInstanceContainers() http.HandlerFunc {
 			case "exited", "dead":
 				resp.ExitedCount++
 			}
+		}
+
+		// Best-effort live CPU/memory via `docker stats`, summed across the
+		// project. Short timeout + swallowed error so a slow/failed sample
+		// never blocks or fails the container list; the fields stay nil and
+		// the UI shows an em-dash for that poll.
+		if len(health) > 0 {
+			names := make([]string, len(health))
+			for i, c := range health {
+				names[i] = c.Name
+			}
+			statCtx, statCancel := context.WithTimeout(r.Context(), 4*time.Second)
+			if stats, err := containers.Stats(statCtx, names); err == nil {
+				var cpu float64
+				var used, limit int64
+				var any bool
+				for _, c := range health {
+					if s, ok := stats[c.Name]; ok {
+						cpu += s.CPUPct
+						used += s.MemBytes
+						limit += s.MemLimit
+						any = true
+					}
+				}
+				if any {
+					resp.CPUPercent = &cpu
+					resp.MemUsedBytes = &used
+					if limit > 0 {
+						resp.MemLimitBytes = &limit
+					}
+				}
+			}
+			statCancel()
 		}
 		writeJSON(w, http.StatusOK, resp)
 	}

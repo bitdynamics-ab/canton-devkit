@@ -142,6 +142,7 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
     value?: number;
     series?: Series;
     delta?: number;
+    latencyMs?: number;
     err?: string;
   }>({});
 
@@ -196,7 +197,19 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
           value: prev.value,
           series,
           delta: deltaFromSeries(series),
+          latencyMs: prev.latencyMs,
         }));
+        // Avg mediator latency — real even where p99 is nil on Splice 0.6.x.
+        const lat = await fetchMetricsRange(
+          name,
+          scopeQ(Q.avgLatency, scope),
+          "1h",
+          undefined,
+          signal,
+        );
+        if (signal.aborted) return;
+        const latVal = decodePrometheusRange(lat, () => "ms")[0]?.points.at(-1)?.v;
+        setTps((prev) => ({ ...prev, latencyMs: latVal }));
       } catch (e) {
         if (signal.aborted || (e instanceof DOMException && e.name === "AbortError"))
           return;
@@ -314,7 +327,10 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
       {tab === "overview" && (
         <>
           {running && monitoring === "on" && (
-            <ThroughputPanel name={name} tps={tps} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 14, alignItems: "stretch" }}>
+              <ThroughputPanel name={name} tps={tps} />
+              <KpiRail latencyMs={tps.latencyMs} containers={containers} />
+            </div>
           )}
           {running && monitoring === "off" && (
             <MonitoringOffStrip
@@ -767,6 +783,82 @@ function ThroughputPanel({
 
 // ── Monitoring OFF strip ────────────────────────────────────
 
+// gib formats a byte count as gibibytes with one decimal.
+function gib(bytes: number): string {
+  return (bytes / (1 << 30)).toFixed(1);
+}
+
+// KpiRail is the read-out card beside the throughput chart. Only tiles with
+// a real source are shown: avg mediator latency (Prometheus; p99 is nil on
+// 0.6.x so we show avg), and CPU/Memory (docker stats, summed across the
+// project). Active contracts is omitted — no honest ACS-count metric exists.
+// Each value falls back to an em-dash (never a fabricated 0) when unsampled.
+function KpiRail({
+  latencyMs,
+  containers,
+}: {
+  latencyMs?: number;
+  containers: ContainersResponse | null;
+}) {
+  const cpu = containers?.cpu_percent;
+  const memUsed = containers?.mem_used_bytes;
+  const memLimit = containers?.mem_limit_bytes;
+  const n = containers?.containers.length ?? 0;
+  const rows: Array<{ label: string; sub: string; value: string; unit: string; tip?: string }> = [
+    {
+      label: "Latency avg",
+      sub: "mediator confirmation",
+      value: latencyMs != null ? latencyMs.toFixed(0) : "—",
+      unit: latencyMs != null ? "ms" : "",
+      tip: latencyMs == null ? "no latency samples yet" : undefined,
+    },
+    {
+      label: "CPU",
+      sub: `${n} container${n === 1 ? "" : "s"}`,
+      value: cpu != null ? cpu.toFixed(0) : "—",
+      unit: cpu != null ? "%" : "",
+      tip: cpu == null ? "docker stats unavailable" : undefined,
+    },
+    {
+      label: "Memory",
+      sub: memLimit ? "of granted" : "in use",
+      value: memUsed != null ? gib(memUsed) : "—",
+      unit: memUsed != null ? (memLimit ? `/ ${gib(memLimit)} GB` : "GB") : "",
+      tip: memUsed == null ? "docker stats unavailable" : undefined,
+    },
+  ];
+  return (
+    <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: R.card, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      {rows.map((r, i) => (
+        <div
+          key={r.label}
+          title={r.tip}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            padding: "13px 14px",
+            borderBottom: i < rows.length - 1 ? `1px solid ${W.border}` : "none",
+          }}
+        >
+          <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: fs.data, color: W.text }}>{r.label}</span>
+            <span style={{ fontSize: fs.label, color: W.dim }}>{r.sub}</span>
+          </span>
+          <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4 }}>
+            <span style={{ fontFamily: wMono, fontSize: fs.lead, color: W.text, fontVariantNumeric: "tabular-nums" }}>{r.value}</span>
+            {r.unit && <span style={{ fontSize: fs.label, color: W.dim }}>{r.unit}</span>}
+          </span>
+        </div>
+      ))}
+      <div style={{ marginTop: "auto", padding: "9px 14px", background: W.sunken, borderTop: `1px solid ${W.border}`, fontFamily: wMono, fontSize: fs.label, color: W.faint }}>
+        docker stats · dpm localnet metrics
+      </div>
+    </div>
+  );
+}
+
 function MonitoringOffStrip({
   containers,
   uptime,
@@ -778,11 +870,14 @@ function MonitoringOffStrip({
   busy: boolean;
   onEnable: () => void;
 }) {
-  // Only Docker-answerable facts ride here: container count + healthy and
-  // uptime. CPU/Memory are intentionally absent — ServiceStatus.CPUPct /
-  // Memory are never populated (no docker-stats source on 0.6.4).
+  // Docker-answerable facts ride here even with monitoring off: live
+  // CPU/Memory (from `docker stats`), container count + healthy, and uptime.
+  // Only the ledger metrics (throughput, latency) need Prometheus.
   const total = containers?.containers.length ?? 0;
   const healthy = containers?.healthy_count ?? 0;
+  const cpu = containers?.cpu_percent;
+  const memUsed = containers?.mem_used_bytes;
+  const memLimit = containers?.mem_limit_bytes;
   return (
     <div
       style={{
@@ -795,6 +890,13 @@ function MonitoringOffStrip({
         borderRadius: R.card,
       }}
     >
+      <Stat label="cpu" value={cpu != null ? `${cpu.toFixed(0)}%` : "—"} />
+      <Divider />
+      <Stat
+        label="memory"
+        value={memUsed != null ? (memLimit ? `${gib(memUsed)} / ${gib(memLimit)} GB` : `${gib(memUsed)} GB`) : "—"}
+      />
+      <Divider />
       <Stat label="containers" value={String(total)} suffix={`${healthy} healthy`} />
       <Divider />
       <Stat label="uptime" value={uptime ?? "—"} />

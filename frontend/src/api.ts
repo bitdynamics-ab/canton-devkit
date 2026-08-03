@@ -156,6 +156,13 @@ export interface ContainersResponse {
   unhealthy_count: number;
   restarting_count: number;
   exited_count: number;
+  // Aggregate live resource use from `docker stats`, summed across the
+  // project. Absent (undefined) when not sampled — render an em-dash, never
+  // a zero. Available whenever running (docker-sourced), unlike ledger
+  // metrics which need the observability profile.
+  cpu_percent?: number;
+  mem_used_bytes?: number;
+  mem_limit_bytes?: number;
 }
 
 // fetchContainers powers the live ContainerHealth panel — polled
