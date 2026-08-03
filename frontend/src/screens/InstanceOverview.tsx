@@ -383,11 +383,7 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
           </Panel>
         ))}
 
-      {tab === "snapshots" && (
-        <Panel padded={false}>
-          <BackupRestore instanceName={name} />
-        </Panel>
-      )}
+      {tab === "snapshots" && <BackupRestore instanceName={name} />}
     </section>
   );
 }
