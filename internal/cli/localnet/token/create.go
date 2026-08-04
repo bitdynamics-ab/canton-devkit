@@ -65,6 +65,12 @@ POST /api/tokens.`,
 				}
 			}
 
+			// Match the Web UI: when the instance is up, resolve its ledger
+			// port so create lands on-ledger; when it can't be resolved,
+			// leave it empty and fall through to a registry-only record —
+			// exactly what the UI's create does with liveLedgerEndpoint.
+			opts.Endpoint = bestEffortEndpoint(opts.Instance, opts.Role, opts.Endpoint)
+
 			res, err := token.RunCreate(out, opts)
 			if err != nil {
 				if errors.Is(err, token.ErrSymbolInUse) {
@@ -93,7 +99,7 @@ POST /api/tokens.`,
 	cmd.Flags().StringVar(&symbol, "symbol", "", "Short symbol (letters/digits/_, up to 16 chars).")
 	cmd.Flags().IntVar(&decimals, "decimals", 6, "Decimal precision (0..18).")
 	cmd.Flags().StringVar(&initialSupply, "initial-supply", "", "Initial supply as a decimal string (e.g. \"1000000\" or \"1.5\").")
-	cmd.Flags().StringVar(&issuer, "issuer", "", "Issuer party ID (the V2 instrument admin).")
+	cmd.Flags().StringVar(&issuer, "issuer", "", "Issuer party (id, alias, or role name; the V2 instrument admin). Empty defaults to --role; a role name must match --role.")
 	cmd.Flags().String("endpoint", "", "Participant gRPC endpoint (host:port). When set, create the instrument on-ledger (TokenRules for the issuer); otherwise record locally only.")
 	cmd.Flags().String("role", "app-user", "Role whose JWT authenticates the on-ledger create.")
 	cmd.Flags().Bool("insecure", true, "Use plaintext gRPC (LocalNet default).")
