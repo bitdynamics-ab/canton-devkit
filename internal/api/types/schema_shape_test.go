@@ -70,6 +70,7 @@ func schemaShapeRoots() []any {
 		TokenActivityEvent{},
 		TokenCreateRequest{},
 		TokenIdentityResponse{},
+		TokenListResponse{},
 		TokenRef{},
 		TransactionsListResponse{},
 		TxReplayResponse{},
@@ -381,6 +382,17 @@ types.InstanceSummary {
   volume_size string
 }
 
+types.InstrumentRef {
+  admin string
+  instrument_id string
+  name string
+  symbol string
+  decimals int
+  standard string
+  generation string
+  on_ledger bool
+}
+
 types.ListResponse {
   schema_version int
   instances []types.InstanceSummary
@@ -498,6 +510,12 @@ types.TokenIdentityResponse {
   instance string
   available_roles []string
   current_role string
+}
+
+types.TokenListResponse {
+  schema_version int
+  instruments *[]types.InstrumentRef
+  tokens *[]types.TokenRef
 }
 
 types.TokenRef {

@@ -177,33 +177,21 @@ func handleTokensList(w http.ResponseWriter, r *http.Request) {
 		writeErrorWithCode(w, http.StatusBadRequest, ErrCodeInvalidRequest, err.Error())
 		return
 	}
-	// On-chain instrument discovery: with a live endpoint, list ACS
-	// instruments (so Amulet and any minted token appear without a
-	// state.Tokens seed); otherwise fall back to the recorded list.
+	// Shared live-then-recorded decision + wire shape (token.ListInstruments,
+	// also behind `token ls`): with a live endpoint, on-chain ACS discovery
+	// (so Amulet and any minted token appear without a state.Tokens seed);
+	// otherwise the recorded list. liveLedgerEndpoint stays the resolution
+	// seam so offline handler tests force the recorded path deterministically.
 	role := roleFromQuery(r)
-	if ep := liveLedgerEndpoint(instance, role); ep != "" {
-		instruments, derr := token.RunInstruments(r.Context(), token.BalanceOptions{
-			Instance: instance, Role: role, Insecure: true, Endpoint: ep,
-		})
-		if derr == nil {
-			writeJSON(w, http.StatusOK, map[string]any{
-				"schema_version": types.SchemaVersion,
-				"instruments":    instruments,
-			})
-			return
-		}
-		// Discovery failed (e.g. ledger momentarily unreachable) — fall
-		// through to the recorded list rather than erroring the screen.
-	}
-	refs, err := token.ListTokens(instance)
+	resp, err := token.ListInstruments(r.Context(), token.BalanceOptions{
+		Instance: instance, Role: role, Insecure: true,
+		Endpoint: liveLedgerEndpoint(instance, role),
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "list tokens", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"schema_version": types.SchemaVersion,
-		"tokens":         refs,
-	})
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleTokenMatrix returns the party × instrument balance matrix.

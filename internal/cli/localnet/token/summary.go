@@ -24,10 +24,15 @@ supply (= circulating, on a UTXO ledger), number of holders, number of
 Holding contracts (UTXOs), and the per-holder distribution with each
 holder's share of supply.
 
-Requires --endpoint (the participant ledger gRPC host:port) and
---instrument (the symbol or instrument id).`,
+Requires --instrument (the symbol or instrument id). --endpoint is
+optional: empty auto-resolves from the instance, like the Web UI.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			ep, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			if err != nil {
+				return err
+			}
+			opts.Endpoint = ep
 			s, err := token.RunInstrumentSummary(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -65,14 +70,13 @@ Requires --endpoint (the participant ledger gRPC host:port) and
 		},
 	}
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")
-	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Required.")
+	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Empty auto-resolves from the instance.")
 	cmd.Flags().StringVar(&opts.Instrument, "instrument", "", "Instrument symbol or id. Required.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
 	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the scan.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json.")
 	_ = cmd.MarkFlagRequired("instance")
-	_ = cmd.MarkFlagRequired("endpoint")
 	_ = cmd.MarkFlagRequired("instrument")
 	return cmd
 }
