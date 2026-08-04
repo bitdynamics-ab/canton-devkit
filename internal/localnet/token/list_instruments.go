@@ -21,10 +21,11 @@ func ListInstruments(ctx context.Context, opts BalanceOptions) (types.TokenListR
 	resp := types.TokenListResponse{SchemaVersion: types.SchemaVersion}
 	if opts.Endpoint != "" {
 		if insts, err := RunInstruments(ctx, opts); err == nil {
-			resp.Instruments = make([]types.InstrumentRef, len(insts))
+			instruments := make([]types.InstrumentRef, len(insts))
 			for i, it := range insts {
-				resp.Instruments[i] = types.InstrumentRef(it)
+				instruments[i] = types.InstrumentRef(it)
 			}
+			resp.Instruments = &instruments
 			return resp, nil
 		}
 		// Discovery failed (e.g. ledger momentarily unreachable) — fall
@@ -34,9 +35,10 @@ func ListInstruments(ctx context.Context, opts BalanceOptions) (types.TokenListR
 	if err != nil {
 		return types.TokenListResponse{}, err
 	}
-	resp.Tokens = make([]types.TokenRef, len(refs))
+	tokens := make([]types.TokenRef, len(refs))
 	for i, r := range refs {
-		resp.Tokens[i] = types.TokenRef(r)
+		tokens[i] = types.TokenRef(r)
 	}
+	resp.Tokens = &tokens
 	return resp, nil
 }

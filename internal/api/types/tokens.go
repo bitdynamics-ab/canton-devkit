@@ -44,9 +44,12 @@ type InstrumentRef struct {
 // mutually exclusive — matching the Web UI's fetchInstruments, which reads
 // `instruments` when present and otherwise falls back to `tokens`.
 type TokenListResponse struct {
-	SchemaVersion int             `json:"schema_version"`
-	Instruments   []InstrumentRef `json:"instruments,omitempty"`
-	Tokens        []TokenRef      `json:"tokens,omitempty"`
+	SchemaVersion int `json:"schema_version"`
+	// Pointers preserve which branch was selected even when its result is
+	// empty: the wire emits either "instruments":[] or "tokens":[], never
+	// neither key and never both keys.
+	Instruments *[]InstrumentRef `json:"instruments,omitempty"`
+	Tokens      *[]TokenRef      `json:"tokens,omitempty"`
 }
 
 // TokenIdentityResponse is the act-as identity picker payload served by

@@ -87,9 +87,7 @@ func buildPartyList() *cobra.Command {
 			// always supplies a live endpoint so RunPartyList can lazy-seed
 			// the role parties). When no port is captured we leave it empty
 			// and fall back to the registry-only list. Explicit --endpoint wins.
-			if opts.Endpoint == "" {
-				opts.Endpoint = token.ResolveLedgerEndpoint(opts.Instance, opts.Role)
-			}
+			opts.Endpoint = bestEffortEndpoint(opts.Instance, opts.Role, opts.Endpoint)
 			parties, err := token.RunPartyList(cmd.Context(), opts)
 			if err != nil {
 				return err

@@ -402,7 +402,7 @@ The embedded skill docs are the same artifacts that back the Web UI's Agent Skil
 
 **Proposal said:** `token create` names an issuer but did not specify how a bare alias or role name resolves.
 
-**Shipped:** on the on-ledger path, an **empty** `--issuer` defaults to the acting `--role`'s own on-ledger party, and a **role name** (`app-user` / `app-provider` / `sv`) resolves to that role's party — the CLI parallel of the Web UI's issuer picker, which offers the acting role's party. A party id (`::`) or a registered alias is used as-is. An **unknown** issuer (neither a role, a registered alias, nor a party id — e.g. a typo) is **rejected**, not silently minted under the role's party.
+**Shipped:** on the on-ledger path, an **empty** `--issuer` defaults to the acting `--role`'s own on-ledger party, and a matching **role name** (`app-user` / `app-provider` / `sv`) resolves to that role's party — the CLI parallel of the Web UI's issuer picker, which offers the acting role's party. A role-name issuer must match `--role`; cross-role combinations are rejected so discovery and TokenRules creation cannot target different participants. A party id (`::`) or a registered alias is used as-is. An **unknown** issuer (neither a role, a registered alias, nor a party id — e.g. a typo) is **rejected**, not silently minted under the role's party.
 
 **Why:** The Web UI resolves the issuer from a party picker, so the CLI needs the same default to be usable without pasting a party id. Rejecting an unrecognised issuer prevents a mistyped `--issuer` from creating the token under the wrong party.
 

@@ -2,11 +2,14 @@ package token
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	localtoken "github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/spf13/cobra"
 )
@@ -108,8 +111,29 @@ func TestTokenLs_OfflineJSONUsesSharedResponse(t *testing.T) {
 	if resp.Instruments != nil {
 		t.Errorf("offline path must not set instruments, got %+v", resp.Instruments)
 	}
-	if len(resp.Tokens) != 1 || resp.Tokens[0].Symbol != "RTK" {
+	if resp.Tokens == nil || len(*resp.Tokens) != 1 || (*resp.Tokens)[0].Symbol != "RTK" {
 		t.Errorf("want one recorded RTK token, got %+v", resp.Tokens)
+	}
+}
+
+func TestTokenLs_EmptyOfflineJSONKeepsTokensArray(t *testing.T) {
+	seedInstanceWithLedgerPort(t, "empty", 0)
+	cmd := buildList()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--instance", "empty", "--format", "json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("token ls --json: %v", err)
+	}
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(out.Bytes(), &body); err != nil {
+		t.Fatalf("decode JSON: %v\n%s", err, out.String())
+	}
+	if got := string(body["tokens"]); got != "[]" {
+		t.Errorf("offline empty list must emit tokens:[], got %q in %s", got, out.String())
+	}
+	if _, ok := body["instruments"]; ok {
+		t.Errorf("offline response must omit instruments: %s", out.String())
 	}
 }
 
@@ -129,5 +153,42 @@ func TestAllocationWithdraw_ResolvesEndpoint(t *testing.T) {
 	}
 	if !strings.Contains(errBuf.String(), "no captured ledger port") {
 		t.Errorf("withdraw must resolve the endpoint and surface the missing-port diagnostic, got: %q", errBuf.String())
+	}
+}
+
+func TestAllocationAction_PassesResolvedEndpointToRunner(t *testing.T) {
+	seedInstanceWithLedgerPort(t, "demo", 7501)
+	var got localtoken.AllocationActionOptions
+	cmd := buildAllocationAction("withdraw", "test", func(_ context.Context, _ io.Writer, opts localtoken.AllocationActionOptions) error {
+		got = opts
+		return nil
+	})
+	cmd.SetArgs([]string{"--instance", "demo", "--allocation", "abc"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("withdraw: %v", err)
+	}
+	if got.Endpoint != "localhost:7501" {
+		t.Errorf("runner endpoint = %q, want localhost:7501", got.Endpoint)
+	}
+}
+
+func TestPartyList_AttemptsBestEffortEndpointResolution(t *testing.T) {
+	seedInstanceWithLedgerPort(t, "demo", 0)
+	prev := resolveLedgerEndpointFn
+	called := false
+	resolveLedgerEndpointFn = func(instance, role string) string {
+		called = instance == "demo" && role == "app-user"
+		return ""
+	}
+	t.Cleanup(func() { resolveLedgerEndpointFn = prev })
+
+	cmd := buildPartyList()
+	cmd.SetOut(io.Discard)
+	cmd.SetArgs([]string{"--instance", "demo"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("party ls: %v", err)
+	}
+	if !called {
+		t.Error("party ls did not attempt best-effort endpoint resolution")
 	}
 }

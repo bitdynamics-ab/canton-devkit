@@ -37,9 +37,7 @@ Web UI instrument list.
 			// Best-effort resolve (like create and the Web UI): a live
 			// endpoint gives on-chain discovery; empty falls back to the
 			// recorded list rather than erroring. Explicit --endpoint wins.
-			if opts.Endpoint == "" {
-				opts.Endpoint = token.ResolveLedgerEndpoint(opts.Instance, opts.Role)
-			}
+			opts.Endpoint = bestEffortEndpoint(opts.Instance, opts.Role, opts.Endpoint)
 			resp, err := token.ListInstruments(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -52,9 +50,12 @@ Web UI instrument list.
 			// A non-nil Instruments slice marks the live path — the same
 			// "instruments present" discriminator the Web UI keys on.
 			if resp.Instruments != nil {
-				return renderInstruments(out, resp.Instruments)
+				return renderInstruments(out, *resp.Instruments)
 			}
-			return renderRecorded(out, resp.Tokens)
+			if resp.Tokens == nil {
+				return fmt.Errorf("instrument list returned neither live nor recorded results")
+			}
+			return renderRecorded(out, *resp.Tokens)
 		},
 	}
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")

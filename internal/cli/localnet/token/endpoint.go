@@ -7,6 +7,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// resolveLedgerEndpointFn is the narrow test seam for best-effort callers,
+// whose fallback behavior otherwise hides whether resolution was attempted.
+var resolveLedgerEndpointFn = token.ResolveLedgerEndpoint
+
+func bestEffortEndpoint(instance, role, endpoint string) string {
+	if endpoint != "" {
+		return endpoint
+	}
+	return resolveLedgerEndpointFn(instance, role)
+}
+
 // resolveEndpoint fills a token verb's ledger endpoint from the instance
 // when the user didn't pass --endpoint — matching the Web UI, which never
 // asks for an endpoint: it resolves the instance's captured participant
@@ -20,10 +31,7 @@ import (
 // diagnosis the Web UI's 503 gives and returns errSilent so cobra exits
 // non-zero without dumping usage.
 func resolveEndpoint(cmd *cobra.Command, instance, role, endpoint string) (string, error) {
-	if endpoint != "" {
-		return endpoint, nil
-	}
-	ep := token.ResolveLedgerEndpoint(instance, role)
+	ep := bestEffortEndpoint(instance, role, endpoint)
 	if ep == "" {
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 			"no captured ledger port for instance %q — restart it so ports are recorded, or pass --endpoint host:port\n",
