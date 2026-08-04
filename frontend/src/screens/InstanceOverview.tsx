@@ -22,7 +22,7 @@ import {
   restartContainer,
   pauseInstance,
   recreateInstance,
-  scrubInstance,
+  removeInstance,
   setObservability,
   startInstance,
   stopInstance,
@@ -326,12 +326,12 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
           })
         }
         onRemove={() =>
-          act(() => scrubInstance(name), {
+          act(() => removeInstance(name), {
             confirm: {
-              title: "Remove from registry?",
-              body: `Deletes the ${name} entry and its state.json. Docker volumes (if any) are not touched.`,
+              title: "Permanently remove instance?",
+              body: `Deletes ${name}'s containers, Docker volumes, ledger data, and registry state. This cannot be undone.`,
               detail: `dpm localnet remove --name ${name}`,
-              confirmLabel: "Remove",
+              confirmLabel: "Remove permanently",
               danger: true,
             },
             refetch: false,
@@ -654,9 +654,9 @@ function ActionBar({
           icon={<IcX />}
           onClick={onRemove}
           disabled={busy}
-          title="Remove the registry entry only. Won't touch docker — run Down first if containers are live."
+          title="Permanently remove containers, Docker volumes, ledger data, and registry state."
         >
-          {busy ? "Removing…" : "Remove entry"}
+          {busy ? "Removing…" : "Remove instance"}
         </Button>
       </div>
     );
@@ -687,9 +687,9 @@ function ActionBar({
           icon={<IcX />}
           onClick={onRemove}
           disabled={busy}
-          title="Remove the registry entry + state.json. Docker volumes (if any) untouched."
+          title="Permanently remove containers, Docker volumes, ledger data, and registry state."
         >
-          {busy ? "Removing…" : "Remove entry"}
+          {busy ? "Removing…" : "Remove instance"}
         </Button>
       </div>
     );

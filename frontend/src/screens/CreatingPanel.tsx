@@ -3,7 +3,7 @@ import {
   STEP_LABELS,
   STEP_ORDER,
   cancelInstanceUp,
-  scrubInstance,
+  removeInstance,
   type StepName,
 } from "../api";
 import { W, wMono, tint, R, fs } from "../tokens";
@@ -77,7 +77,7 @@ export function CreatingPanel({ name, splice, ports, onRefresh }: Props) {
   }
   async function onScrub() {
     try {
-      await scrubInstance(name);
+      await removeInstance(name);
       onRefresh();
     } catch {
       onRefresh();
@@ -445,8 +445,8 @@ function ZombieHint({
         <li>The bring-up finished after the page loaded. Refresh to pick up the new state.</li>
         <li>
           The server was restarted mid-bring-up, orphaning the entry.
-          Click <strong>Remove entry</strong> to scrub it from the
-          registry, or refresh if you think it's recovered.
+          Click <strong>Remove instance</strong> to clean up its Docker
+          resources and registry state, or refresh if you think it recovered.
         </li>
       </ul>
       <div style={{ marginTop: 12, display: "flex", gap: 8, justifyContent: "flex-end" }}>
@@ -454,7 +454,7 @@ function ZombieHint({
           Refresh list
         </Button>
         <Button variant="danger" icon={<IcX />} onClick={onScrub}>
-          Remove entry
+          Remove instance
         </Button>
       </div>
     </div>

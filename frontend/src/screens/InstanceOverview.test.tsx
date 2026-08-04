@@ -226,6 +226,27 @@ describe("InstanceOverview — header + actions", () => {
       expect(urls(calls).some((u) => u.endsWith("/api/instances/demo/down"))).toBe(true),
     );
   });
+
+  it("Remove confirms volume deletion and sends DELETE", async () => {
+    const { calls } = setupFetch({ instanceStatus: "stopped" });
+    render(
+      <>
+        <InstanceOverview name="demo" statusHint="stopped" />
+        <ConfirmHost />
+      </>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /^Remove instance$/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Docker volumes, ledger data/i)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /remove permanently/i }));
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (c) => c.url.endsWith("/api/instances/demo") && c.method === "DELETE",
+        ),
+      ).toBe(true),
+    );
+  });
 });
 
 describe("InstanceOverview — monitoring gate", () => {
