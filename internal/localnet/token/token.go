@@ -88,9 +88,21 @@ func firstLocalPartyForRole(opts CreateOptions, role string) string {
 	if role == "" {
 		role = "app-user"
 	}
+	// Each role is hosted on its own participant with its own port, so the
+	// endpoint resolved for the acting --role (opts.Endpoint) only works
+	// when the target role matches it. For a different role, resolve that
+	// role's own port; give up if it isn't captured rather than querying
+	// the wrong participant.
+	ep := opts.Endpoint
+	if role != opts.Role {
+		ep = ResolveLedgerEndpoint(opts.Instance, role)
+		if ep == "" {
+			return ""
+		}
+	}
 	ctx := context.Background()
 	client, cleanup, err := dialLedger(ctx, LedgerConn{
-		Endpoint: opts.Endpoint,
+		Endpoint: ep,
 		Insecure: opts.Insecure,
 		Instance: opts.Instance,
 		Role:     role,
@@ -115,19 +127,30 @@ func RunCreate(out io.Writer, opts CreateOptions) (*CreateResult, error) {
 	opts.Issuer = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Issuer)
 
 	// Default/resolve the issuer to a live party when it wasn't given as a
-	// party id (no "::") — the CLI parallel to the Web UI's issuer picker,
-	// which offers the acting role's own party. An empty issuer defaults to
-	// the --role's party; a bare role name ("app-user") resolves to that
-	// role's party. Only on the on-ledger path (Endpoint set); the
-	// registry-only path keeps the issuer as typed. Best-effort: on failure
-	// the issuer is left as-is and validateCreate reports it.
+	// party id (no "::") — the CLI parallel to the Web UI's issuer picker.
+	// Only three inputs resolve, and only on the on-ledger path:
+	//   - empty  → the acting --role's own party (the UI default),
+	//   - a role name ("app-user") → that role's party.
+	// An unresolved non-role alias (e.g. a typo like "alcie") is REJECTED
+	// rather than silently redirected to the --role's party — otherwise a
+	// mistyped issuer would mint the token under the wrong party. The
+	// registry-only path (no endpoint) keeps the issuer as typed and lets
+	// validateCreate report it. firstLocalPartyForRole is best-effort: a
+	// resolution miss leaves the issuer unchanged for validateCreate.
 	if opts.Endpoint != "" && !strings.Contains(opts.Issuer, "::") {
-		role := opts.Role
-		if isRoleName(opts.Issuer) {
-			role = opts.Issuer
-		}
-		if p := firstLocalPartyForRole(opts, role); p != "" {
-			opts.Issuer = p
+		switch {
+		case opts.Issuer == "":
+			if p := firstLocalPartyForRole(opts, opts.Role); p != "" {
+				opts.Issuer = p
+			}
+		case isRoleName(opts.Issuer):
+			if p := firstLocalPartyForRole(opts, opts.Issuer); p != "" {
+				opts.Issuer = p
+			}
+		default:
+			return nil, fmt.Errorf(
+				"unknown issuer %q: pass a party id, a role name (%s), or a registered alias",
+				opts.Issuer, strings.Join(Roles(), ", "))
 		}
 	}
 

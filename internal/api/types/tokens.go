@@ -22,6 +22,33 @@ type TokenRef struct {
 	Status string `json:"status"`
 }
 
+// InstrumentRef is a token instrument discovered on-ledger (ACS) for the
+// instrument list. Field order/types mirror
+// internal/localnet/token.InstrumentRef so the two convert directly.
+type InstrumentRef struct {
+	Admin        string `json:"admin"`
+	InstrumentID string `json:"instrument_id"`
+	Name         string `json:"name,omitempty"`
+	Symbol       string `json:"symbol,omitempty"`
+	Decimals     int    `json:"decimals,omitempty"`
+	// Standard is the human label; Generation ("v1"/"v2") is the machine tag.
+	Standard   string `json:"standard,omitempty"`
+	Generation string `json:"generation,omitempty"`
+	OnLedger   bool   `json:"on_ledger"` // discovered from the ACS
+}
+
+// TokenListResponse is GET /api/tokens and `token ls --format json`: the
+// instance's instruments. With a live ledger, Instruments holds on-chain
+// ACS discovery (so Amulet and every minted token appear); offline, Tokens
+// holds the recorded refs. Exactly one is populated — the two keys are
+// mutually exclusive — matching the Web UI's fetchInstruments, which reads
+// `instruments` when present and otherwise falls back to `tokens`.
+type TokenListResponse struct {
+	SchemaVersion int             `json:"schema_version"`
+	Instruments   []InstrumentRef `json:"instruments,omitempty"`
+	Tokens        []TokenRef      `json:"tokens,omitempty"`
+}
+
 // TokenIdentityResponse is the act-as identity picker payload served by
 // GET /api/tokens/identity and the CLI `token identity --format json`.
 // CurrentRole echoes ?role= (default app-user) so the switcher can

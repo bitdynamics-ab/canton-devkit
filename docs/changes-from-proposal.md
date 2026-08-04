@@ -378,6 +378,46 @@ The embedded skill docs are the same artifacts that back the Web UI's Agent Skil
 
 ---
 
+### `token ls` — list instruments (new)
+
+**Proposal said:** the token surface named create / mint / transfer / burn / balance, but no instrument-listing verb.
+
+**Shipped:** `token ls` (aliases `list`, `instruments`) lists the instance's token instruments — the CLI counterpart of the Web UI instrument panel (`GET /api/tokens`). With a live ledger it is on-chain ACS discovery (so Amulet and every minted token appear); offline it falls back to the instruments recorded at create. `--format json` emits the same `types.TokenListResponse` the Web UI consumes.
+
+**Why:** The Web UI shipped an instrument list, so CLI ↔ Web UI parity (a load-bearing project rule) requires the same capability on the CLI. The live-then-recorded decision and the response shape are shared (`internal/localnet/token.ListInstruments` + `internal/api/types.TokenListResponse`) so the two surfaces cannot drift.
+
+---
+
+### Ledger endpoint auto-resolves on every token verb
+
+**Proposal said:** the token commands' connection details were unspecified beyond selecting an instance.
+
+**Shipped:** every `token` verb resolves the participant gRPC endpoint from the instance's captured ports when `--endpoint` is omitted — matching the Web UI, which never asks for an endpoint. `--endpoint` stays an explicit override; when no port is captured the command prints a remediation and exits non-zero rather than failing opaquely. `party ls` and `token ls` resolve best-effort (falling back to the registry-only list when offline).
+
+**Why:** Requiring a hand-typed `--endpoint` on a command the Web UI runs endpoint-free breaks CLI ↔ Web UI parity and makes the common case (`token <verb> --instance foo`) unusable on a running LocalNet.
+
+---
+
+### `token create` issuer defaults to the acting role's party
+
+**Proposal said:** `token create` names an issuer but did not specify how a bare alias or role name resolves.
+
+**Shipped:** on the on-ledger path, an **empty** `--issuer` defaults to the acting `--role`'s own on-ledger party, and a **role name** (`app-user` / `app-provider` / `sv`) resolves to that role's party — the CLI parallel of the Web UI's issuer picker, which offers the acting role's party. A party id (`::`) or a registered alias is used as-is. An **unknown** issuer (neither a role, a registered alias, nor a party id — e.g. a typo) is **rejected**, not silently minted under the role's party.
+
+**Why:** The Web UI resolves the issuer from a party picker, so the CLI needs the same default to be usable without pasting a party id. Rejecting an unrecognised issuer prevents a mistyped `--issuer` from creating the token under the wrong party.
+
+---
+
+### phantom `token settle` reference removed
+
+**Proposal said:** —
+
+**Shipped:** a stray reference to a non-existent `token settle` command was removed from CLI help/output. Settlement lives under the `allocations` surface (see [`allocations settle` deferred](#allocations-settle-deferred) above), never as a `token` verb.
+
+**Why:** Referencing a command that does not exist misleads users; the reference was dead and is gone.
+
+---
+
 ## `telemetry` (root-level, new)
 
 **Proposal said:** not mentioned. Adoption measurement was described as a reporting/documentation exercise.

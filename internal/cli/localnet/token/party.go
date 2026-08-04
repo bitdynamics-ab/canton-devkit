@@ -83,6 +83,13 @@ func buildPartyList() *cobra.Command {
 		Short:   "List registered party aliases",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			// Best-effort endpoint resolution, matching the Web UI (which
+			// always supplies a live endpoint so RunPartyList can lazy-seed
+			// the role parties). When no port is captured we leave it empty
+			// and fall back to the registry-only list. Explicit --endpoint wins.
+			if opts.Endpoint == "" {
+				opts.Endpoint = token.ResolveLedgerEndpoint(opts.Instance, opts.Role)
+			}
 			parties, err := token.RunPartyList(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -107,7 +114,7 @@ func buildPartyList() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")
-	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint — when set, seeds the role parties.")
+	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Empty best-effort auto-resolves; seeds role parties when reachable.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
 	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose participant to seed from.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")

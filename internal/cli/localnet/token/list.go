@@ -3,6 +3,7 @@ package token
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
@@ -14,7 +15,9 @@ import (
 // the CLI counterpart of the Web UI instrument panel (GET /api/tokens).
 // With a live ledger it is on-chain ACS discovery (so Amulet and every
 // minted token appear); offline it falls back to the instruments recorded
-// at create. Mirrors the handler's live-then-recorded logic and JSON keys.
+// at create. The live-then-recorded decision and the JSON shape are shared
+// with the handler via token.ListInstruments — this command only resolves
+// the endpoint and renders the text tables.
 func buildList() *cobra.Command {
 	var opts token.BalanceOptions
 	var format string
@@ -31,44 +34,27 @@ Web UI instrument list.
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			out := cmd.OutOrStdout()
-			// Best-effort resolve (like create): a live endpoint gives
-			// on-chain discovery; when it can't be resolved we fall back to
-			// the recorded list rather than erroring — exactly as the Web
-			// UI's instrument panel does.
+			// Best-effort resolve (like create and the Web UI): a live
+			// endpoint gives on-chain discovery; empty falls back to the
+			// recorded list rather than erroring. Explicit --endpoint wins.
 			if opts.Endpoint == "" {
 				opts.Endpoint = token.ResolveLedgerEndpoint(opts.Instance, opts.Role)
 			}
-			if opts.Endpoint != "" {
-				if insts, err := token.RunInstruments(cmd.Context(), opts); err == nil {
-					return renderInstruments(cmd, format, insts)
-				}
-				// Discovery failed (ledger momentarily unreachable) — fall
-				// through to the recorded list rather than erroring.
-			}
-			refs, err := token.ListTokens(opts.Instance)
+			resp, err := token.ListInstruments(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			if format == "json" {
 				enc := json.NewEncoder(out)
 				enc.SetIndent("", "  ")
-				// Same key ("tokens") as the handler's recorded-list branch.
-				return enc.Encode(map[string]any{
-					"schema_version": types.SchemaVersion,
-					"tokens":         refs,
-				})
+				return enc.Encode(resp)
 			}
-			if len(refs) == 0 {
-				_, _ = fmt.Fprintln(out, "No instruments. Create one with `token create`.")
-				return nil
+			// A non-nil Instruments slice marks the live path — the same
+			// "instruments present" discriminator the Web UI keys on.
+			if resp.Instruments != nil {
+				return renderInstruments(out, resp.Instruments)
 			}
-			cols := []term.Column{{Label: "SYMBOL"}, {Label: "NAME"}, {Label: "STATUS"}, {Label: "DECLARED"}}
-			body := make([][]string, 0, len(refs))
-			for _, t := range refs {
-				body = append(body, []string{t.Symbol, t.Name, t.Status, t.InitialSupply})
-			}
-			_, _ = fmt.Fprintln(out, term.Table(cols, body))
-			return nil
+			return renderRecorded(out, resp.Tokens)
 		},
 	}
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")
@@ -81,21 +67,8 @@ Web UI instrument list.
 	return cmd
 }
 
-// renderInstruments prints the on-chain discovery result — JSON under the
-// "instruments" key (matching GET /api/tokens) or a text table.
-func renderInstruments(cmd *cobra.Command, format string, insts []token.InstrumentRef) error {
-	out := cmd.OutOrStdout()
-	if format == "json" {
-		if insts == nil {
-			insts = []token.InstrumentRef{}
-		}
-		enc := json.NewEncoder(out)
-		enc.SetIndent("", "  ")
-		return enc.Encode(map[string]any{
-			"schema_version": types.SchemaVersion,
-			"instruments":    insts,
-		})
-	}
+// renderInstruments prints the live on-chain discovery result as a text table.
+func renderInstruments(out io.Writer, insts []types.InstrumentRef) error {
 	if len(insts) == 0 {
 		_, _ = fmt.Fprintln(out, "No instruments.")
 		return nil
@@ -108,6 +81,21 @@ func renderInstruments(cmd *cobra.Command, format string, insts []token.Instrume
 			sym = it.InstrumentID
 		}
 		body = append(body, []string{sym, it.Name, it.Standard, shortParty(it.Admin), yesNo(it.OnLedger)})
+	}
+	_, _ = fmt.Fprintln(out, term.Table(cols, body))
+	return nil
+}
+
+// renderRecorded prints the offline fallback (registry-recorded refs) as a text table.
+func renderRecorded(out io.Writer, refs []types.TokenRef) error {
+	if len(refs) == 0 {
+		_, _ = fmt.Fprintln(out, "No instruments. Create one with `token create`.")
+		return nil
+	}
+	cols := []term.Column{{Label: "SYMBOL"}, {Label: "NAME"}, {Label: "STATUS"}, {Label: "DECLARED"}}
+	body := make([][]string, 0, len(refs))
+	for _, t := range refs {
+		body = append(body, []string{t.Symbol, t.Name, t.Status, t.InitialSupply})
 	}
 	_, _ = fmt.Fprintln(out, term.Table(cols, body))
 	return nil
