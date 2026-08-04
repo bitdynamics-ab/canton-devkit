@@ -19,9 +19,8 @@ import (
 // CLI maps to ExitUserError; HTTP handler maps to 412 Precondition
 // Failed so the Web UI can render a meaningful remediation.
 var ErrNeedsV2LocalNet = errors.New(
-	"V2 ledger action not yet wired: bring up a V2 LocalNet first via " +
-		"`localnet up --version token-standard-v2 --profile tokens-v2`, " +
-		"then re-run")
+	"V2 ledger action needs a running Splice 0.6.11 or newer LocalNet; " +
+		"bring one up with `localnet up --version 0.6.12`, then re-run")
 
 // ErrUnsupportedOnInstrument signals that the asset implementing the
 // instrument doesn't expose a standard mint or burn choice. Amulet is

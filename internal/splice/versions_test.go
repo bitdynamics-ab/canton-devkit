@@ -61,6 +61,28 @@ func TestTokenStandardV2CatalogueEntry(t *testing.T) {
 	}
 }
 
+func TestSupportsTokenStandardV2(t *testing.T) {
+	tests := []struct {
+		tag  string
+		want bool
+	}{
+		{"0.5.18", false},
+		{"0.6.10", false},
+		{"0.6.11", true},
+		{"0.6.12", true},
+		{"0.7.0", true},
+		{"1.0.0", true},
+		{"token-standard-v2", true},
+		{"latest", false},
+		{"invalid", false},
+	}
+	for _, tt := range tests {
+		if got := SupportsTokenStandardV2(tt.tag); got != tt.want {
+			t.Errorf("SupportsTokenStandardV2(%q) = %v, want %v", tt.tag, got, tt.want)
+		}
+	}
+}
+
 func TestResolveSupportedTag(t *testing.T) {
 	for tag := range SupportedVersions {
 		v, err := Resolve(tag)

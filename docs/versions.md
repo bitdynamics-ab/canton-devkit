@@ -63,11 +63,14 @@ the canonical name in code and docs.
 | `image_repo` *(optional)* | catalogue maintainer | Overrides the default Docker image repository. Defaults to `ghcr.io/digital-asset/decentralized-canton-sync/docker`. Set to `ghcr.io/digital-asset/decentralized-canton-sync-dev/docker` for the V2 alpha track. The v06 adapter forwards this as the `IMAGE_REPO` compose env. |
 | `image_tag` *(optional)* | catalogue maintainer | Overrides the Docker image tag. Empty falls back to `tag`, which is right for stable releases; the branch-backed `token-standard-v2` alpha entry sets it explicitly to a `0.6.5-snapshot` tag. The adapter forwards it as the `IMAGE_TAG` compose env. |
 
-### The alpha channel
+### The legacy alpha channel
 
-DevKit's first alpha entry is the **Token Standard V2** snapshot pointed at by [`token-standard-v2-upcoming`](https://github.com/canton-network/splice/tree/token-standard-v2-upcoming). V2 publishes images to a separate `-dev` ghcr registry (hence the `image_repo` override) and runs only on Canton's *alpha* protocol version (initial protocol 35, alpha-version-support flags). The Canton config side of that requirement is delivered by a separate `--profile tokens-v2` overlay; selecting the alpha catalogue entry without the profile is supported but will not bring up a healthy stack.
+The `token-standard-v2` entry preserves the historical pre-release snapshot
+pointed at by [`token-standard-v2-upcoming`](https://github.com/canton-network/splice/tree/token-standard-v2-upcoming). It uses the separate `-dev` image repository and Canton's alpha protocol 35 through the `--profile tokens-v2` overlay.
 
-**Stability caveat:** the upstream V2 DevNet [is reset and upgraded on a weekly cadence](https://github.com/canton-network/splice/blob/token-standard-v2-upcoming/token-standard/TOKEN_STANDARD_V2_DEVNET.md), so the V2 entry's `commit` will rotate more often than a stable release. Refresh via `scripts/add-splice-version.sh` (modify the script to pass `--ref token-standard-v2-upcoming` for branch-tracking).
+Token Standard V2 was released on the normal stable channel in Splice 0.6.11.
+New LocalNets should use `--version 0.6.11` or newer without the alpha profile;
+the legacy entry remains only for reproducibility and compatibility testing.
 
 ## Discovering versions
 

@@ -1,227 +1,68 @@
-import { useCallback, useState } from "react";
-import { type InstanceSummary } from "../api";
-import { W, wMono, tableCaps, tint, R, fs } from "../tokens";
+import { W, wMono, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { IcPlus } from "../components/icons";
-import { StatusBadge } from "../components/StatusBadge";
-import { SkeletonTable, useLoadingDelay } from "../components/Skeleton";
+import { useLoadingDelay, SkeletonBar } from "../components/Skeleton";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { CreateLocalNetModal } from "./CreateLocalNetModal";
+import { useCreateInstance } from "../shell/useCreateInstance";
 import { CreatingPanel } from "./CreatingPanel";
 import { InstanceOverview } from "./InstanceOverview";
 
-// Selection state lives in the URL (?instance=<name>) so the topbar
-// switcher and Dashboard share one source of truth and links survive.
+// The Overview ("/") is detail-only: it shows exactly one instance — the
+// one the topbar switcher has selected. Fleet-level management (the list,
+// census, New instance) lives in the All-instances view, reached from the
+// switcher. Selection is URL-backed (?instance=), so the switcher and this
+// page share one source of truth.
 export function Dashboard() {
   const sel = useInstanceSelection();
-  const [createOpen, setCreateOpen] = useState(false);
+  const create = useCreateInstance();
   const showSkeleton = useLoadingDelay(sel.loading);
 
-  return (
-    <div>
-      <header
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          marginBottom: 12,
-        }}
-      >
-        <h1 style={{ fontSize: fs.title, fontWeight: 600, marginTop: 0, marginBottom: 0 }}>
-          LocalNet instances
-        </h1>
-        <Button
-          // Steps down to secondary when the empty-state hero CTA owns primary.
-          variant={sel.instances.length === 0 ? "secondary" : "primary"}
-          icon={<IcPlus />}
-          onClick={() => setCreateOpen(true)}
-        >
-          New instance
-        </Button>
-      </header>
+  if (sel.loading) {
+    return showSkeleton ? <DetailLoading /> : null;
+  }
+  if (sel.error) {
+    return <ErrorPanel error={sel.error} />;
+  }
+  if (sel.instances.length === 0) {
+    return <EmptyState onCreate={create.open} />;
+  }
+  if (!sel.selected) {
+    // Instances exist but none is running and none is pinned in the URL —
+    // auto-pick returns null. Nudge the user to choose from the switcher.
+    return <NoSelection />;
+  }
 
-      <CreateLocalNetModal
-        open={createOpen}
-        onClose={useCallback(() => setCreateOpen(false), [])}
-        onCreated={useCallback(
-          (name: string) => {
-            // useCallback'd so the modal's done-effect keeps a stable
-            // identity and doesn't refire each render.
-            sel.refresh();
-            sel.select(name);
-          },
-          [sel.refresh, sel.select],
-        )}
-      />
-
-      {sel.loading && showSkeleton && <InstanceTableLoading />}
-
-      {sel.error && <ErrorPanel error={sel.error} />}
-
-      {!sel.loading && !sel.error && (
-        <>
-          {sel.stale && (
-            <div
-              role="status"
-              style={{
-                background: `${tint(W.dim, 10)}`,
-                border: `1px solid ${W.dim}`,
-                color: W.dim,
-                borderRadius: R.control,
-                padding: "6px 12px",
-                marginBottom: 12,
-                fontSize: fs.meta,
-              }}
-            >
-              Couldn’t refresh. Showing last known state.
-            </div>
-          )}
-          {sel.warning && (
-            <div
-              style={{
-                background: `${tint(W.warn, 10)}`,
-                border: `1px solid ${W.warn}`,
-                color: W.warn,
-                borderRadius: R.control,
-                padding: "8px 12px",
-                marginBottom: 16,
-                fontSize: fs.data,
-              }}
-            >
-              {sel.warning}
-            </div>
-          )}
-          {sel.instances.length === 0 ? (
-            <EmptyState onCreate={() => setCreateOpen(true)} />
-          ) : (
-            <InstanceTable
-              instances={sel.instances}
-              selected={sel.selected}
-              onSelect={sel.select}
-            />
-          )}
-        </>
-      )}
-
-      {sel.selected && (() => {
-        const selectedRow = sel.instances.find((i) => i.name === sel.selected);
-        const isCreating = selectedRow?.status === "creating";
-        // While creating, show ONLY the bring-up progress — the full Overview
-        // (throughput, endpoints, containers, JWT…) is meaningless until the
-        // instance is up, and rendering both reads as two merged screens.
-        // Once the status flips off "creating" the Overview takes over.
-        return isCreating ? (
-          <CreatingPanel name={sel.selected} onRefresh={sel.refresh} />
-        ) : (
-          <InstanceOverview
-            name={sel.selected}
-            statusHint={selectedRow?.status}
-            ports={selectedRow?.ports}
-            onChanged={sel.refresh}
-          />
-        );
-      })()}
-    </div>
+  const selectedRow = sel.instances.find((i) => i.name === sel.selected);
+  const isCreating = selectedRow?.status === "creating";
+  // While creating, show ONLY the bring-up progress — the full Overview
+  // (throughput, endpoints, containers, JWT…) is meaningless until the
+  // instance is up. Once status flips off "creating" the Overview takes over.
+  return isCreating ? (
+    <CreatingPanel
+      name={sel.selected}
+      splice={selectedRow?.splice_version}
+      ports={selectedRow?.ports}
+      onRefresh={sel.refresh}
+    />
+  ) : (
+    <InstanceOverview
+      name={sel.selected}
+      statusHint={selectedRow?.status}
+      ports={selectedRow?.ports}
+      onChanged={sel.refresh}
+    />
   );
 }
 
-interface InstanceTableProps {
-  instances: InstanceSummary[];
-  selected: string | null;
-  onSelect: (name: string) => void;
-}
-
-function InstanceTable({ instances, selected, onSelect }: InstanceTableProps) {
+function DetailLoading() {
   return (
-    <div
-      style={{
-        background: W.surface,
-        border: `1px solid ${W.border}`,
-        borderRadius: R.card,
-        overflow: "hidden",
-      }}
-    >
-      <table
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          fontSize: fs.data,
-        }}
-      >
-        <thead>
-          <tr style={{ background: W.surface2, color: W.dim, textAlign: "left" }}>
-            <th style={th}>Name</th>
-            <th style={th}>State</th>
-            <th style={{ ...th, textAlign: "right" }}>Splice</th>
-            <th style={{ ...th, textAlign: "right" }}>Ports</th>
-          </tr>
-        </thead>
-        <tbody>
-          {instances.map((i) => {
-            const isSel = i.name === selected;
-            return (
-              <tr
-                key={i.name}
-                onClick={() => onSelect(i.name)}
-                style={{
-                  borderTop: `1px solid ${W.border}`,
-                  // Flat fill, no padding swap, so the row never shifts on select.
-                  background: isSel ? W.selRow : undefined,
-                  cursor: "pointer",
-                }}
-              >
-                <td style={td}>
-                  <strong style={{ color: isSel ? W.brand : W.text }}>
-                    {i.name}
-                  </strong>
-                </td>
-                <td style={td}>
-                  <StatusBadge status={i.status} />
-                </td>
-                <td style={{ ...td, ...numCell, color: W.text2 }}>
-                  {i.splice_version}
-                </td>
-                <td style={{ ...td, ...numCell, color: W.text2 }}>{i.ports}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <SkeletonBar height={40} width="40%" style={{ display: "block" }} />
+      <SkeletonBar height={220} style={{ display: "block" }} />
+      <SkeletonBar height={220} style={{ display: "block" }} />
     </div>
   );
 }
-
-function InstanceTableLoading() {
-  return (
-    <div
-      style={{
-        background: W.surface,
-        border: `1px solid ${W.border}`,
-        borderRadius: R.card,
-        overflow: "hidden",
-      }}
-    >
-      <SkeletonTable columns={[2, 1.4, 1, 1.4]} rows={3} rowHeight={40} />
-    </div>
-  );
-}
-
-const th: React.CSSProperties = {
-  ...tableCaps,
-  padding: "8px 12px",
-  fontSize: fs.label,
-};
-
-const td: React.CSSProperties = {
-  padding: "10px 12px",
-  verticalAlign: "middle",
-};
-
-const numCell: React.CSSProperties = {
-  textAlign: "right",
-  fontFamily: wMono,
-  fontVariantNumeric: "tabular-nums",
-};
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
@@ -253,6 +94,23 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
         </code>{" "}
         in your terminal.
       </p>
+    </div>
+  );
+}
+
+function NoSelection() {
+  return (
+    <div
+      style={{
+        background: W.surface,
+        border: `1px solid ${W.border}`,
+        borderRadius: R.card,
+        padding: 16,
+        color: W.dim,
+        fontSize: fs.body,
+      }}
+    >
+      No instance selected. Pick one from the instance switcher in the top bar.
     </div>
   );
 }

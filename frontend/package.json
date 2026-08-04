@@ -6,8 +6,6 @@
   "description": "M2 Web UI for canton-devkit. Built with Vite + React + TypeScript. Output is consumed by internal/ui/assets.go via go:embed.",
   "scripts": {
     "dev": "vite",
-    "dev:mock": "VITE_MOCK_API=1 vite",
-    "mock:seed": "tsx mock/seed.ts",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",

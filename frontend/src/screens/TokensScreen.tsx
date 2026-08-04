@@ -31,6 +31,8 @@ import {
   type TransferSummary,
   type BalanceMatrix,
   type HoldingSource,
+  type HolderRow,
+  type TokenHolding,
   type PartyRef,
   type HoldingContract,
   type InstrumentRef,
@@ -92,14 +94,63 @@ const BURN_DISABLED_REASON =
 // Remediation for the on-ledger create 412 (TEST_TOKEN_DAR_UNAVAILABLE).
 const TOKEN_DAR_UNAVAILABLE_HINT =
   "The test-token DAR isn't published for this instance's Splice version, so on-ledger " +
-  "V2 tokens can't be created here. Bring up a token-standard-v2 instance " +
-  "(localnet up --version token-standard-v2 --profile tokens-v2) and re-run.";
+  "V2 tokens can't be created here. Bring up Splice 0.6.11 or newer " +
+  "(localnet up --version 0.6.12) and re-run.";
 
 export function createErrorText(e: unknown): string {
   if (e instanceof ApiError && e.code === "TEST_TOKEN_DAR_UNAVAILABLE") {
     return TOKEN_DAR_UNAVAILABLE_HINT;
   }
   return e instanceof ApiError ? e.message : "create failed";
+}
+
+// Collapse the two-column instrument/detail layout to a single column on
+// narrow viewports (phones, tablets, split panes). Breakpoint accounts for
+// the ~285px non-collapsing sidebar: below ~1024px the fixed 320px list +
+// detail can't sit side by side without squeezing the detail to nothing, so
+// they stack instead of forcing horizontal scroll. matchMedia is mocked in
+// the test setup.
+function useIsNarrow(maxWidth = 1024): boolean {
+  const query = `(max-width: ${maxWidth}px)`;
+  const [narrow, setNarrow] = useState(
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia(query).matches
+      : false,
+  );
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia(query);
+    const sync = () => setNarrow(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, [query]);
+  return narrow;
+}
+
+// Holder rows synthesized from the holdings payload, for the offline path:
+// the live instrument summary (an ACS scan) is unreachable but the registry
+// pseudo-balances are. Lets the Holders table render (with HoldersCard's
+// "registry pseudo-balances" disclaimer) instead of hanging on "Loading
+// holders…". pct is share-of-total; registry balances aren't on-ledger
+// UTXOs, so contract_count is 0.
+function summaryFromHoldings(holdings: TokenHolding[] | null): InstrumentSummary | null {
+  if (!holdings) return null;
+  const total = holdings.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
+  const holders: HolderRow[] = holdings.map((h) => ({
+    party: h.party,
+    balance: h.amount,
+    contract_count: 0,
+    pct_of_supply: total > 0 ? (((Number(h.amount) || 0) / total) * 100).toFixed(1) : "0",
+  }));
+  return {
+    instrument_id: "",
+    admin: "",
+    total_supply: String(total),
+    holder_count: holders.length,
+    contract_count: 0,
+    holders,
+  };
 }
 
 export function TokensScreen() {
@@ -120,10 +171,12 @@ export function TokensScreen() {
 
   const [holdingsErr, setHoldingsErr] = useState<string | null>(null);
   // "registry" (vs "ledger") drives the pseudo-balance disclaimer banner and
-  // the Holders footer label; the balances themselves now come from
-  // `summary.holders`, so the holdings fetch is kept only for its source tag
-  // and to reset the expand state on instrument change.
+  // the Holders footer label. The live summary (an ACS scan) is the primary
+  // source of holder balances; `holdings` is the fallback the Holders table
+  // renders when that scan is unreachable but the registry pseudo-balances
+  // are (an offline instance) — otherwise the table hangs on "Loading holders…".
   const [holdingsSource, setHoldingsSource] = useState<HoldingSource>("ledger");
+  const [holdings, setHoldings] = useState<TokenHolding[] | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [contracts, setContracts] = useState<HoldingContract[]>([]);
   const expandSeqRef = useRef(0);
@@ -137,6 +190,13 @@ export function TokensScreen() {
   const [parties, setParties] = useState<PartyRef[]>([]);
   const [showParties, setShowParties] = useState(false);
   const aliases: AliasMap = useMemo(() => aliasMapFrom(parties), [parties]);
+  const isNarrow = useIsNarrow();
+  // Prefer the live summary; fall back to registry pseudo-balances so the
+  // Holders table renders on an offline instance instead of hanging.
+  const holdersView = useMemo(
+    () => summary ?? summaryFromHoldings(holdings),
+    [summary, holdings],
+  );
   const [detailTab, setDetailTab] = useState<"overview" | "activity" | "offers" | "allocations">("overview");
   const [activity, setActivity] = useState<ActivityEvent[] | null>(null);
   const [activityErr, setActivityErr] = useState<string | null>(null);
@@ -248,9 +308,11 @@ export function TokensScreen() {
     let cancelled = false;
     setExpanded(null);
     setContracts([]);
+    setHoldings(null);
     fetchHoldings(instance, activeSymbol, undefined, role)
       .then((r) => {
         if (!cancelled) {
+          setHoldings(r.holdings);
           setHoldingsSource(r.source ?? "ledger");
           setHoldingsErr(null);
         }
@@ -424,8 +486,8 @@ export function TokensScreen() {
       return {
         tone: "warn",
         text:
-          "V2 ledger action not yet wired on this instance. Bring up a V2 LocalNet first " +
-          "(localnet up --version token-standard-v2 --profile tokens-v2) and re-run.",
+          "This action needs a running Splice 0.6.11 or newer LocalNet " +
+          "(localnet up --version 0.6.12).",
       };
     }
     if (e instanceof ApiError && e.code === "TEST_TOKEN_DAR_UNAVAILABLE") {
@@ -512,32 +574,41 @@ export function TokensScreen() {
 
   return (
     <section style={{ padding: 24, display: "flex", flexDirection: "column", gap: 14 }}>
-      <Header right={
-        <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <RoleSwitcher role={role} roles={availableRoles} onChange={setRole} />
-          <Button variant="secondary" size="sm" onClick={() => setShowParties(true)}>
-            Parties{parties.length > 0 ? ` (${parties.length})` : ""}
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={<IcPlus />}
-            onClick={() => setShowCreate(true)}
-          >
-            Create token
-          </Button>
-          <Button
-            variant={view !== "matrix" && list.length === 0 ? "secondary" : "primary"}
-            size="sm"
-            icon={<IcBolt />}
-            disabled={demoBusy}
-            onClick={() => void launchDemo()}
-            title="Provision a live, transferable demo token in one click"
-          >
-            {demoBusy ? "Launching…" : "Launch demo"}
-          </Button>
-        </span>
-      } />
+      <Header
+        subtitle={
+          <>
+            {list.length} {list.length === 1 ? "instrument" : "instruments"} on{" "}
+            <code style={{ fontFamily: wMono }}>{instance}</code> · {parties.length}{" "}
+            {parties.length === 1 ? "party" : "parties"} · Token Standard V2
+          </>
+        }
+        right={
+          <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <RoleSwitcher role={role} roles={availableRoles} onChange={setRole} />
+            <Button variant="ghost" size="sm" onClick={() => setShowParties(true)}>
+              Parties{parties.length > 0 ? ` (${parties.length})` : ""}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<IcBolt />}
+              disabled={demoBusy}
+              onClick={() => void launchDemo()}
+              title="Provision a live, transferable demo token in one click"
+            >
+              {demoBusy ? "Launching…" : "Launch demo"}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              icon={<IcPlus />}
+              onClick={() => setShowCreate(true)}
+            >
+              New instrument
+            </Button>
+          </span>
+        }
+      />
 
       {topNotice && (
         <div role="status" style={notice(topNotice.tone)}>{topNotice.text}</div>
@@ -584,7 +655,7 @@ export function TokensScreen() {
           </div>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isNarrow ? "minmax(0, 1fr)" : "320px minmax(0, 1fr)", gap: 14 }}>
           <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: R.card, overflow: "hidden", alignSelf: "start" }}>
             <div style={{ ...tableCaps, fontSize: fs.label, color: W.dim, padding: "9px 14px", background: W.surface2, borderBottom: `1px solid ${W.border}` }}>
               On this instance
@@ -630,7 +701,7 @@ export function TokensScreen() {
                   <span style={{ color: W.dim, fontFamily: wMono, fontSize: fs.meta }}>
                     {sym} · {active.standard}
                   </span>
-                  <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
                     <Button variant="primary" size="sm" icon={<IcArrowRight />} onClick={() => setModal({ kind: "transfer", symbol: sym })}>Transfer</Button>
                     <Button
                       variant="secondary"
@@ -708,7 +779,7 @@ export function TokensScreen() {
 
                 {detailTab === "overview" && (
                   <>
-                    {summary && <KpiRow s={summary} />}
+                    {summary && <KpiRow s={summary} narrow={isNarrow} />}
                     {summary && remainingToMint(summary) && (
                       <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "10px 0 2px", flexWrap: "wrap" }}>
                         <Button
@@ -726,9 +797,9 @@ export function TokensScreen() {
                         </span>
                       </div>
                     )}
-                    {summary ? (
+                    {holdersView ? (
                       <HoldersCard
-                        s={summary}
+                        s={holdersView}
                         aliases={aliases}
                         adminParty={active.admin}
                         expanded={expanded}
@@ -1297,12 +1368,15 @@ function AllocationsPanel({
 // was declared while the two differ, so that zero is explained rather than
 // looking broken; once the declared amount is fully minted the note drops
 // away and the tile is just the number.
-function KpiRow({ s }: { s: InstrumentSummary }) {
+function KpiRow({ s, narrow }: { s: InstrumentSummary; narrow: boolean }) {
   // The declared-vs-minted note (supplyNote) rides under the Total-supply
   // cell's fixed caption when the two disagree — kept from the supply-cap
   // work, additive to the mockup's "minted, less burns" sub-label.
   const note = supplyNote(s);
   const over = !!note && note.includes("over by");
+  // 4-across on desktop, 2×2 on a narrow viewport so the strip never forces
+  // horizontal scroll.
+  const cols = narrow ? 2 : 4;
   const cards: Array<{ label: string; value: string; full?: string; sub: string; note?: string }> = [
     { label: "Total supply", value: statAmount(s.total_supply), full: s.total_supply, sub: "minted, less burns", note },
     { label: "In circulation", value: statAmount(s.total_supply), full: s.total_supply, sub: "sum of all holdings" },
@@ -1313,12 +1387,14 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
     // One bordered strip, four cells split by hairlines — reads as a single
     // object, not four cards.
     <div
+      role="group"
+      aria-label="Instrument summary"
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
         borderRadius: R.card,
         display: "grid",
-        gridTemplateColumns: "repeat(4, 1fr)",
+        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
         overflow: "hidden",
         margin: "16px 0 4px",
       }}
@@ -1331,7 +1407,8 @@ function KpiRow({ s }: { s: InstrumentSummary }) {
             display: "flex",
             flexDirection: "column",
             gap: 5,
-            borderRight: i < 3 ? `1px solid ${W.border}` : "none",
+            borderRight: i % cols !== cols - 1 ? `1px solid ${W.border}` : "none",
+            borderBottom: i < cards.length - cols ? `1px solid ${W.border}` : "none",
           }}
         >
           <div style={{ ...wideCaps, fontSize: fs.micro, color: W.dim }}>{c.label}</div>
@@ -1440,7 +1517,18 @@ function HoldersCard({
             const isOpen = expanded === h.party;
             return (
               <Fragment key={h.party}>
-                <tr onClick={() => onToggle(h.party)} style={{ cursor: "pointer", background: isOpen ? W.selRow : "transparent", transition: `background-color ${FAST}` }}>
+                <tr
+                  onClick={() => onToggle(h.party)}
+                  tabIndex={0}
+                  aria-expanded={isOpen}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onToggle(h.party);
+                    }
+                  }}
+                  style={{ cursor: "pointer", background: isOpen ? W.selRow : "transparent", transition: `background-color ${FAST}` }}
+                >
                   <td style={td}>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                       <span style={{ color: isOpen ? W.brand : W.dim, display: "inline-flex", width: 14 }}>
@@ -1711,12 +1799,14 @@ function MatrixLens({
   );
 }
 
-function Header({ right }: { right?: React.ReactNode }) {
+function Header({ right, subtitle }: { right?: React.ReactNode; subtitle?: React.ReactNode }) {
   return (
-    <header style={{ display: "flex", alignItems: "center", gap: 12 }}>
-      <h2 style={{ color: W.text, fontSize: fs.title, margin: 0 }}>Tokens</h2>
-      <span style={{ color: W.dim, fontSize: fs.lead }}>Token Standard instruments + actions</span>
-      <span style={{ marginLeft: "auto" }}>{right}</span>
+    <header style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap", rowGap: 10 }}>
+      <h1 style={{ color: W.text, fontSize: fs.title, fontWeight: 600, margin: 0 }}>Instruments</h1>
+      <span style={{ color: W.dim, fontSize: fs.meta }}>
+        {subtitle ?? "Token Standard instruments + actions"}
+      </span>
+      <span style={{ marginLeft: "auto", alignSelf: "center" }}>{right}</span>
     </header>
   );
 }

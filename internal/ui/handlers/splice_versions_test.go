@@ -10,8 +10,8 @@ import (
 )
 
 // TestSpliceVersions_ListsCuratedCatalogue pins the basic contract:
-// every entry in splice.SupportedVersions appears in the response,
-// and the count matches.
+// every stable entry in splice.SupportedVersions appears in the response,
+// while legacy alpha snapshots stay out of the normal UI picker.
 func TestSpliceVersions_ListsCuratedCatalogue(t *testing.T) {
 	mux := http.NewServeMux()
 	MountSpliceVersions(mux)
@@ -33,9 +33,15 @@ func TestSpliceVersions_ListsCuratedCatalogue(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 
-	if len(resp.Versions) != len(splice.SupportedVersions) {
-		t.Errorf("versions length = %d, want %d (one per curated entry)",
-			len(resp.Versions), len(splice.SupportedVersions))
+	wantVersions := 0
+	for _, v := range splice.SupportedVersions {
+		if !v.IsAlpha() {
+			wantVersions++
+		}
+	}
+	if len(resp.Versions) != wantVersions {
+		t.Errorf("versions length = %d, want %d (one per stable curated entry)",
+			len(resp.Versions), wantVersions)
 	}
 
 	gotTags := make(map[string]SpliceVersionEntry, len(resp.Versions))
@@ -43,6 +49,12 @@ func TestSpliceVersions_ListsCuratedCatalogue(t *testing.T) {
 		gotTags[v.Tag] = v
 	}
 	for tag, v := range splice.SupportedVersions {
+		if v.IsAlpha() {
+			if _, ok := gotTags[tag]; ok {
+				t.Errorf("legacy alpha entry %q should not appear in the UI catalogue", tag)
+			}
+			continue
+		}
 		got, ok := gotTags[tag]
 		if !ok {
 			t.Errorf("missing entry for tag %q", tag)
@@ -169,6 +181,27 @@ func TestSpliceVersions_OfflineFlag_ProducesCatalogueOnly(t *testing.T) {
 			t.Errorf("offline mode produced status %q for tag %q; expected supported|latest only",
 				v.Status, v.Tag)
 		}
+	}
+}
+
+func TestSpliceVersions_TokenStandardV2Capability(t *testing.T) {
+	resp := buildCatalogueOnlyResponse("")
+	got := make(map[string]bool, len(resp.Versions))
+	for _, v := range resp.Versions {
+		got[v.Tag] = v.V2Capable
+	}
+	for _, tag := range []string{"0.5.18", "0.6.10"} {
+		if got[tag] {
+			t.Errorf("%s marked V2-capable before the 0.6.11 release", tag)
+		}
+	}
+	for _, tag := range []string{"0.6.11", "0.6.12"} {
+		if !got[tag] {
+			t.Errorf("%s not marked V2-capable", tag)
+		}
+	}
+	if _, ok := got["token-standard-v2"]; ok {
+		t.Error("legacy token-standard-v2 alpha entry should not appear offline")
 	}
 }
 

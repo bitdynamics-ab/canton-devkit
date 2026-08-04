@@ -13,23 +13,21 @@ full contract IDs in every command.
 > implement on stable Splice releases. Creating a **new** instrument uses
 > the Token Standard V2
 > ([CIP-0112](https://github.com/global-synchronizer-foundation/cips/blob/main/cip-0112/cip-0112.md),
-> approved but not yet final) surface, which is an opt-in *alpha* track
-> (see [the alpha caveat](#the-v2-alpha-caveat)); it will be promoted to
-> the default channel once V2 lands in mainline Splice.
+> released in Splice 0.6.11) surface. Splice 0.6.11 and newer include the
+> V2 APIs and test-token DARs on the normal stable release channel.
 
 ---
 
-## Prerequisites — bring up a V2 LocalNet
+## Prerequisites — bring up a current LocalNet
 
-V2 needs a special Splice build (alpha protocol 35) and a profile overlay:
+Use Splice 0.6.11 or newer; no alpha protocol or extra profile is required:
 
 ```bash
-# list versions — the V2 entry is tagged channel: alpha
+# list curated versions
 canton-devkit localnet versions
 
-# bring up a V2-capable instance (up warns loudly if you select the
-# alpha version without --profile tokens-v2)
-canton-devkit localnet up --name v2 --version token-standard-v2 --profile tokens-v2
+# bring up a stable V2-capable instance
+canton-devkit localnet up --name v2 --version 0.6.12
 
 # confirm the instance is healthy
 canton-devkit localnet status --name v2
@@ -123,16 +121,15 @@ Add `--format json` to any read command (`balance`, `balances`,
 
 ---
 
-## The V2 alpha caveat
+## V2 release compatibility
 
-V2 runs only on the upstream **alpha** Splice build (snapshot image on the
-`-dev` ghcr repo, `initial-protocol-version=35`). Consequences to know:
+Token Standard V2 was released in Splice 0.6.11. For normal development:
 
-- **The upstream V2 DevNet resets periodically.** The catalogue entry may
-  need refreshing each release cycle — see [Splice version catalogue](versions.md).
-- **Use `--profile tokens-v2`.** Selecting the alpha version without it
-  brings up a stack that can't run the V2 protocol; `up` warns loudly
-  at bring-up.
+- **Use Splice 0.6.11 or newer.** These stable releases include the V2 API
+  packages and `splice-test-token-v2` DAR used by DevKit's create flow.
+- **No V2 profile is needed.** The legacy `token-standard-v2` catalogue entry
+  and `--profile tokens-v2` overlay exist only to reproduce the pre-release
+  alpha environment.
 - **Loopback-only dev auth.** Per-role JWTs are signed with a literal
   `unsafe` dev secret. They are valid only against your local stack —
   never reuse them against DevNet/TestNet/MainNet.

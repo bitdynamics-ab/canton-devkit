@@ -103,6 +103,9 @@ type SpliceVersionEntry struct {
 	// Note carries a human remediation hint when Status indicates
 	// the tag needs attention. Empty for "supported"/"latest".
 	Note string `json:"note,omitempty"`
+	// V2Capable is true when the release includes the released Token Standard
+	// V2 APIs and implementation (Splice 0.6.11 and newer).
+	V2Capable bool `json:"v2_capable"`
 }
 
 // SpliceVersionsResponse is the GET response envelope. Includes
@@ -199,10 +202,17 @@ func handleSpliceVersions(w http.ResponseWriter, r *http.Request) {
 func mapStatusRowsToEntries(rows []splice.VersionStatus) []SpliceVersionEntry {
 	out := make([]SpliceVersionEntry, 0, len(rows))
 	for _, r := range rows {
+		// Alpha-channel snapshots (e.g. the token-standard-v2 pre-release)
+		// are unstable and not something to offer in the curated version
+		// picker; power users can still reach them via --allow-uncurated.
+		if r.Channel == "alpha" {
+			continue
+		}
 		entry := SpliceVersionEntry{
-			Tag:    r.Tag,
-			Major:  r.Major,
-			Commit: r.CataloguedCommit,
+			Tag:       r.Tag,
+			Major:     r.Major,
+			Commit:    r.CataloguedCommit,
+			V2Capable: splice.SupportsTokenStandardV2(r.Tag),
 		}
 		switch r.Status {
 		case splice.StatusSupported:
@@ -247,11 +257,15 @@ func mapStatusRowsToEntries(rows []splice.VersionStatus) []SpliceVersionEntry {
 func buildCatalogueOnlyResponse(warning string) SpliceVersionsResponse {
 	entries := make([]SpliceVersionEntry, 0, len(splice.SupportedVersions))
 	for tag, v := range splice.SupportedVersions {
+		if v.IsAlpha() {
+			continue
+		}
 		entry := SpliceVersionEntry{
-			Tag:    tag,
-			Status: "supported",
-			Major:  v.Major,
-			Commit: v.Commit,
+			Tag:       tag,
+			Status:    "supported",
+			Major:     v.Major,
+			Commit:    v.Commit,
+			V2Capable: splice.SupportsTokenStandardV2(tag),
 		}
 		if tag == splice.LatestAlias {
 			entry.Status = "latest"

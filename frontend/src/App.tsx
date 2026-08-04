@@ -3,9 +3,11 @@ import { Route, Routes, useLocation } from "react-router-dom";
 import { SCHEMA_VERSION, fetchVersion } from "./api";
 import { Shell } from "./shell/Shell";
 import { InstanceSelectionProvider } from "./shell/useInstanceSelection";
+import { CreateInstanceProvider } from "./shell/useCreateInstance";
 import { ErrorBoundary } from "./shell/ErrorBoundary";
 import { ConfirmHost } from "./components/ConfirmDialog";
 import { Dashboard } from "./screens/Dashboard";
+import { AllInstances } from "./screens/AllInstances";
 import { DoctorScreen } from "./screens/DoctorScreen";
 import { Placeholder } from "./screens/Placeholder";
 import { MetricsScreen } from "./screens/MetricsScreen";
@@ -46,9 +48,11 @@ export function App() {
 
   return (
     <InstanceSelectionProvider>
-      <Shell>
-        <RoutedSurface />
-      </Shell>
+      <CreateInstanceProvider>
+        <Shell>
+          <RoutedSurface />
+        </Shell>
+      </CreateInstanceProvider>
       {/* One confirm-dialog host; confirmDialog() from anywhere resolves against it. */}
       <ConfirmHost />
     </InstanceSelectionProvider>
@@ -62,6 +66,7 @@ function RoutedSurface() {
   return (
     <Routes>
       <Route path="/" element={<Guard routeKey={loc.pathname}><Dashboard /></Guard>} />
+      <Route path="/instances/*" element={<Guard routeKey={loc.pathname}><AllInstances /></Guard>} />
       <Route path="/doctor/*" element={<Guard routeKey={loc.pathname}><DoctorScreen /></Guard>} />
       <Route path="/wallet/*" element={<Guard routeKey={loc.pathname}><WalletScreen /></Guard>} />
       <Route path="/explorer/*" element={<Guard routeKey={loc.pathname}><ExplorerScreen /></Guard>} />

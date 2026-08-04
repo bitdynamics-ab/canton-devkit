@@ -305,7 +305,11 @@ export function DARScreen() {
           <div style={{ color: W.dim, fontSize: fs.meta, fontFamily: wMono }}>
             {state.kind === "ok"
               ? `${uploadedCount} uploaded on ${name} · ${builtinHidden} built-in hidden`
-              : "loading…"}
+              : state.kind === "loading"
+                ? "loading…"
+                : state.kind === "port-missing"
+                  ? `participant ports unavailable on ${name}`
+                  : `could not load packages on ${name}`}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1595,6 +1599,7 @@ function DARListLoading() {
 function ErrorPanel({ msg }: { msg: string }) {
   return (
     <div
+      role="alert"
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,

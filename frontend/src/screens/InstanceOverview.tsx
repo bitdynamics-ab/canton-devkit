@@ -13,6 +13,7 @@ import {
   fetchAppConfigJSON,
   fetchAppConfigText,
   fetchContainers,
+  fetchContracts,
   fetchInstance,
   fetchMetricsRange,
   fetchMetricsSummary,
@@ -230,6 +231,44 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
     };
   }, [name, running]);
 
+  // Active-contract count for the KPI rail. There is no honest ACS-cardinality
+  // metric in Prometheus, so we count the ledger's ACS snapshot directly — a
+  // real read that doesn't need the observability profile. `sv` is the broadest
+  // single-party view; the count is capped at ACS_LIMIT (rendered "N+"). A
+  // dedicated count endpoint would avoid shipping payloads just to count.
+  // TODO(BIT-parity): if a backend ACS-count endpoint lands, mirror it to the CLI.
+  const [acs, setAcs] = useState<{ count: number; capped: boolean } | undefined>(
+    undefined,
+  );
+  useEffect(() => {
+    if (!running) {
+      setAcs(undefined);
+      return;
+    }
+    const ACS_LIMIT = 1000;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const r = await fetchContracts(name, "sv", ACS_LIMIT);
+        if (!cancelled) {
+          setAcs({ count: r.contracts.length, capped: r.contracts.length >= ACS_LIMIT });
+        }
+      } catch {
+        // No sv visibility / ledger unreachable → em-dash, never a fake 0.
+        if (!cancelled) setAcs(undefined);
+      }
+    };
+    tick();
+    const t = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      tick();
+    }, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [name, running]);
+
   async function act(
     fn: () => Promise<unknown>,
     opts: { confirm?: Parameters<typeof confirmDialog>[0]; refetch?: boolean } = {},
@@ -327,9 +366,9 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
       {tab === "overview" && (
         <>
           {running && monitoring === "on" && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 14, alignItems: "stretch" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 14, alignItems: "start" }}>
               <ThroughputPanel name={name} tps={tps} />
-              <KpiRail latencyMs={tps.latencyMs} containers={containers} />
+              <KpiRail latencyMs={tps.latencyMs} acs={acs} containers={containers} />
             </div>
           )}
           {running && monitoring === "off" && (
@@ -704,11 +743,9 @@ function ThroughputPanel({
   name: string;
   tps: { value?: number; series?: Series; delta?: number; err?: string };
 }) {
-  // TODO(metrics): the mockup's KPI rail also showed Latency p99, Active
-  // contracts, CPU and Memory. On Splice 0.6.4 p99 is NaN (+Inf-only
-  // histogram), there is no ACS-cardinality metric, and CPU/mem have no
-  // docker-stats source — so the rail is omitted and throughput runs full
-  // width. Reinstate the rail here once those signals are populated.
+  // The KPI rail (Latency avg / Active contracts / CPU / Memory) renders
+  // beside this panel — see KpiRail. p99 is NaN on Splice 0.6.x (+Inf-only
+  // histogram) so latency shows the real mediator avg instead.
   const delta = tps.delta;
   const deltaColor = delta === undefined ? W.dim : delta > 0 ? W.ok : delta < 0 ? W.dim : W.dim;
   const deltaText =
@@ -771,7 +808,7 @@ function ThroughputPanel({
           <AreaChart
             series={tps.series ?? { label: "tx/s", color: THROUGHPUT_COLOR, points: [] }}
             width={860}
-            height={150}
+            height={182}
             yLabel="tx/s"
           />
         )}
@@ -788,16 +825,18 @@ function gib(bytes: number): string {
   return (bytes / (1 << 30)).toFixed(1);
 }
 
-// KpiRail is the read-out card beside the throughput chart. Only tiles with
-// a real source are shown: avg mediator latency (Prometheus; p99 is nil on
-// 0.6.x so we show avg), and CPU/Memory (docker stats, summed across the
-// project). Active contracts is omitted — no honest ACS-count metric exists.
-// Each value falls back to an em-dash (never a fabricated 0) when unsampled.
+// KpiRail is the read-out card beside the throughput chart. Every tile has a
+// real source: avg mediator latency (Prometheus; p99 is nil on 0.6.x so we
+// show avg), active contracts (ledger ACS snapshot, sv view, capped → "N+"),
+// and CPU/Memory (docker stats, summed across the project). Each value falls
+// back to an em-dash (never a fabricated 0) when unsampled.
 function KpiRail({
   latencyMs,
+  acs,
   containers,
 }: {
   latencyMs?: number;
+  acs?: { count: number; capped: boolean };
   containers: ContainersResponse | null;
 }) {
   const cpu = containers?.cpu_percent;
@@ -811,6 +850,13 @@ function KpiRail({
       value: latencyMs != null ? latencyMs.toFixed(0) : "—",
       unit: latencyMs != null ? "ms" : "",
       tip: latencyMs == null ? "no latency samples yet" : undefined,
+    },
+    {
+      label: "Active contracts",
+      sub: "ACS · sv view",
+      value: acs ? (acs.capped ? "1000" : String(acs.count)) : "—",
+      unit: acs?.capped ? "+" : "",
+      tip: acs == null ? "ledger ACS snapshot unavailable" : acs.capped ? "capped at 1000 — more exist" : undefined,
     },
     {
       label: "CPU",
@@ -853,7 +899,7 @@ function KpiRail({
         </div>
       ))}
       <div style={{ marginTop: "auto", padding: "9px 14px", background: W.sunken, borderTop: `1px solid ${W.border}`, fontFamily: wMono, fontSize: fs.label, color: W.faint }}>
-        docker stats · dpm localnet metrics
+        docker stats · ledger ACS · metrics
       </div>
     </div>
   );
@@ -1147,8 +1193,17 @@ function ContainersPanel({
             return (
               <div
                 key={c.name}
+                role="button"
+                tabIndex={0}
                 onClick={() => setLogsFor(c.name)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setLogsFor(c.name);
+                  }
+                }}
                 title={`View logs for ${c.name}`}
+                aria-label={`View logs for ${c.name}`}
                 style={{ ...gridRowStyle(CONTAINER_COLS), ...cellRowStyle, cursor: "pointer" }}
               >
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 8, overflow: "hidden" }}>

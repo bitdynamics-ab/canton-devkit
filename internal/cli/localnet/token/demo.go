@@ -28,7 +28,7 @@ func buildDemo() *cobra.Command {
 		Long: `Launch a transferable demo token end-to-end in a single command. The
 flow adapts to the instance:
 
-  token-standard-v2 instance: allocate an issuer party, create a V2
+  Splice 0.6.11+ instance: allocate an issuer party, create a V2
     instrument on-ledger, and mint the initial supply to a distinct
     holder party (the test token can't self-mint to the issuer), giving
     a transferable balance.

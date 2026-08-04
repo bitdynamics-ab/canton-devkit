@@ -316,6 +316,9 @@ export interface SpliceVersionEntry {
   major: string;
   commit: string;
   note?: string;
+  // True when the release includes the released Token Standard V2 APIs and
+  // implementation (Splice 0.6.11+).
+  v2_capable?: boolean;
 }
 
 export interface SpliceVersionsResponse {
