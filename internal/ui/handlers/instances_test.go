@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
@@ -107,6 +108,34 @@ func TestList_RegisteredInstancesAppearSorted(t *testing.T) {
 	}
 	if got.Instances[0].Ports != "4441–4487" {
 		t.Errorf("alpha.Ports = %q, want %q", got.Instances[0].Ports, "4441–4487")
+	}
+}
+
+func TestList_RunningInstanceIncludesStartedAgo(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "demo", "0.6.12",
+		map[string]int{"app_user_ui": 4441}, registry.StatusRunning)
+	state, err := registry.Read("demo")
+	if err != nil {
+		t.Fatalf("read seeded instance: %v", err)
+	}
+	state.CreatedAt = time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339)
+	if err := registry.Write(state); err != nil {
+		t.Fatalf("rewrite seeded instance: %v", err)
+	}
+	srv := servingMux(t)
+
+	resp, err := http.Get(srv.URL + "/api/instances")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var got types.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.Instances) != 1 || !strings.Contains(got.Instances[0].StartedAgo, "h") {
+		t.Fatalf("instances = %+v, want running age derived from created_at", got.Instances)
 	}
 }
 

@@ -342,7 +342,7 @@ func handleList(w http.ResponseWriter, _ *http.Request) {
 			Name:          e.Name,
 			Status:        string(e.Status),
 			SpliceVersion: e.SpliceVersion,
-			StartedAgo:    "", // computed by the renderer, not the API
+			StartedAgo:    localnet.InstanceStartedAgo(e.CreatedAt, e.Status),
 		}
 		// Best-effort, matching `localnet list`: a corrupt state
 		// file becomes a response warning, not a fatal error.
