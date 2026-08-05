@@ -1,16 +1,16 @@
 # Homebrew install
 
 `canton-devkit` ships a Homebrew formula for macOS (Apple Silicon) and
-Linux (x86_64). The formula and downloadable build artifacts live in the
-dedicated tap repository
+Linux (x86_64). The formula lives in the dedicated tap repository
 [`bitdynamics-ab/homebrew-canton-devkit`](https://github.com/bitdynamics-ab/homebrew-canton-devkit),
-following the standard Homebrew tap layout.
+following the standard Homebrew tap layout. Release tarballs (and their
+`SHA256SUMS`) are published on this repository's
+[GitHub Releases](https://github.com/bitdynamics-ab/canton-devkit/releases);
+the formula's `url` fields point here.
 
-This source repository does not keep a `Formula/` directory. Homebrew
-distribution files are maintained in `homebrew-canton-devkit`; this repository only
-keeps the canonical `install.sh` script and docs that describe the process.
-The tap repository keeps the Homebrew formula, APT repository metadata,
-and a redirecting `install.sh` for backward compatibility.
+This source repository does not keep a `Formula/` directory. The tap
+holds only the Homebrew formula; APT metadata lives under `apt/` in this
+repository, and the canonical `install.sh` lives at the repo root.
 
 ## Install
 
@@ -23,10 +23,11 @@ brew tap bitdynamics-ab/canton-devkit
 brew install bitdynamics-ab/canton-devkit/canton-devkit
 ```
 
-> Note: the formula's `url` + `sha256` are rewritten automatically by
-> the release workflow on every release tag (see below), so the tap
-> always installs the latest published release. There is no `--HEAD`
-> install path — the formula installs prebuilt release artifacts only.
+> Note: the formula's `version` + `sha256` fields are rewritten
+> automatically by the release workflow on every release tag (see
+> below), so the tap always installs the latest published release. There
+> is no `--HEAD` install path — the formula installs prebuilt release
+> artifacts only.
 
 ## Upgrade
 
@@ -42,26 +43,21 @@ brew upgrade canton-devkit
 This is **automatic** on every release tag (`v*`). `.github/workflows/release.yml`:
 
 1. Builds and publishes the per-platform tarballs and a single GNU
-   `sha256sum` manifest named `SHA256SUMS` to a public GitHub Release in
-   `bitdynamics-ab/homebrew-canton-devkit`.
+   `sha256sum` manifest named `SHA256SUMS` to a GitHub Release on
+   `bitdynamics-ab/canton-devkit`.
 2. Reads the `darwin_arm64` and `linux_amd64` digests out of
    `dist/SHA256SUMS`, rewrites the `version` + two `sha256` fields of the
-   public builds repo's `Formula/canton-devkit.rb`, and commits the
-   change back via the GitHub contents API (commit message
+   tap's `Formula/canton-devkit.rb`, and commits the change back via the
+   GitHub contents API (commit message
    `chore: bump Homebrew formula to <tag>`).
 
 No maintainer action is required for a normal release.
 
-### Manual / break-glass: `scripts/update-homebrew-formula.sh`
-
-`scripts/update-homebrew-formula.sh v0.1.0 [path/to/homebrew-canton-devkit]`
-does the same rewrite locally against a checked-out public builds repo.
-Use it only when the automated step failed, or to re-pin an existing
-tag. It downloads `SHA256SUMS` from the public release, extracts the two
-digests, rewrites the formula in place, and prints a diff — it does
-**not** commit or push, so review the diff and commit by hand. This
-keeps a human in the loop when the release tarballs themselves might be
-wrong.
+If the automated formula bump fails, edit
+`Formula/canton-devkit.rb` in a local clone of the tap: set `version` to
+the bare semver and replace the two `sha256` lines with the
+`darwin_arm64` / `linux_amd64` digests from that release's `SHA256SUMS`
+on canton-devkit, then commit and push to the tap's `main`.
 
 ## Smoke test
 
@@ -87,7 +83,8 @@ command tree is reachable.
 ## What's not supported (yet)
 
 - **Windows** — Homebrew doesn't target Windows. Use the standalone
-  artifact from the [public builds release page](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases).
+  artifact from the
+  [canton-devkit releases page](https://github.com/bitdynamics-ab/canton-devkit/releases).
 - **Linux ARM** — not in the release matrix. Could be added in a
   follow-up if there's demand.
 - **macOS Intel** — same; the project's compatibility matrix is
