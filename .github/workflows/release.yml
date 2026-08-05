@@ -235,20 +235,12 @@ jobs:
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/')
         # softprops/action-gh-release@v3
-        # Do not set generate_release_notes: when the release is created from
-        # the GitHub UI with "Generate release notes", softprops would prepend
-        # that body to a newly generated changelog and duplicate "What's Changed".
-        # Upload assets only; preserve any existing UI-authored body.
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
         with:
           files: dist/*
 
       - name: Install GitHub CLI (sha256-verified)
         if: startsWith(github.ref, 'refs/tags/')
-        # The self-hosted runner has no `gh` preinstalled — install it
-        # here rather than relying on runner-image contents, so the
-        # subsequent formula / APT steps below (which shell out to `gh`)
-        # don't fail with "gh: command not found".
         run: |
           set -euo pipefail
           tar="/tmp/gh-${GH_CLI_VERSION}-linux-amd64.tar.gz"
