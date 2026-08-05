@@ -235,17 +235,20 @@ jobs:
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/')
         # softprops/action-gh-release@v3
+        # Do not set generate_release_notes: when the release is created from
+        # the GitHub UI with "Generate release notes", softprops would prepend
+        # that body to a newly generated changelog and duplicate "What's Changed".
+        # Upload assets only; preserve any existing UI-authored body.
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
         with:
-          generate_release_notes: true
           files: dist/*
 
       - name: Install GitHub CLI (sha256-verified)
         if: startsWith(github.ref, 'refs/tags/')
         # The self-hosted runner has no `gh` preinstalled — install it
         # here rather than relying on runner-image contents, so the
-        # subsequent public-builds-repo steps below (which all shell out
-        # to `gh`) don't fail with "gh: command not found".
+        # subsequent formula / APT steps below (which shell out to `gh`)
+        # don't fail with "gh: command not found".
         run: |
           set -euo pipefail
           tar="/tmp/gh-${GH_CLI_VERSION}-linux-amd64.tar.gz"
@@ -260,23 +263,6 @@ jobs:
           echo "$bindir" >> "$GITHUB_PATH"
           "$bindir/gh" --version
 
-      - name: Publish to public builds repo
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GH_TOKEN: ${{ secrets.BUILDS_REPO_TOKEN }}
-          VERSION: ${{ steps.meta.outputs.devkit_version }}
-        run: |
-          # Fetch release notes from the primary release just created above.
-          # Use GITHUB_TOKEN (not BUILDS_REPO_TOKEN) to read from this repo.
-          notes=$(GH_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
-            gh release view "${VERSION}" --repo "${GITHUB_REPOSITORY}" --json body --jq '.body')
-
-          gh release create "${VERSION}" \
-            --repo bitdynamics-ab/homebrew-canton-devkit \
-            --title "${VERSION}" \
-            --notes "${notes}" \
-            dist/*
-
       - name: Update Homebrew formula in public builds repo
         if: startsWith(github.ref, 'refs/tags/')
         env:
@@ -286,11 +272,13 @@ jobs:
           # SHA256SUMS lives at dist/SHA256SUMS — tarballs land directly
           # in dist/ and the checksum file uses GNU sha256sum format.
           # Filenames stay the same so the regex anchors still match.
+          # Formula url fields already point at this repo's GitHub Releases;
+          # we only rewrite version + sha256 in the tap.
           sha_darwin=$(grep "_${VERSION}_darwin_arm64.tar.gz$" dist/SHA256SUMS | awk '{print $1}')
           sha_linux=$(grep "_${VERSION}_linux_amd64.tar.gz$" dist/SHA256SUMS | awk '{print $1}')
           version_num="${VERSION#v}"
 
-          # Fetch current formula from the public builds repo
+          # Fetch current formula from the Homebrew tap
           gh api repos/bitdynamics-ab/homebrew-canton-devkit/contents/Formula/canton-devkit.rb \
             --jq '.content' | base64 -d > /tmp/canton-devkit.rb
 
@@ -317,10 +305,10 @@ jobs:
             -f sha="$file_sha" \
             -f branch="main"
 
-      - name: Update public APT repository in public builds repo
+      - name: Update APT repository on main
         if: startsWith(github.ref, 'refs/tags/')
         env:
-          GH_TOKEN: ${{ secrets.BUILDS_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.meta.outputs.devkit_version }}
         run: |
           set -euo pipefail
@@ -328,10 +316,13 @@ jobs:
           deb_asset="dist/canton-devkit_${version_num}_amd64.deb"
           test -f "${deb_asset}"
 
+          # Clone this repo's main (not the tag checkout) so we can append
+          # the new .deb under apt/ and push a metadata commit. Served at
+          # raw.githubusercontent.com/.../canton-devkit/main/apt/
           work="$(mktemp -d)"
           trap 'rm -rf "${work}"' EXIT
           gh auth setup-git
-          gh repo clone bitdynamics-ab/homebrew-canton-devkit "${work}/repo" -- --depth 1
+          gh repo clone "${GITHUB_REPOSITORY}" "${work}/repo" -- --depth 1 --branch main
 
           repo="${work}/repo"
           pool="${repo}/apt/pool/main/c/canton-devkit"
@@ -408,8 +399,7 @@ jobs:
           git -C "${repo}" -c user.name="github-actions[bot]" \
             -c user.email="github-actions[bot]@users.noreply.github.com" \
             commit -m "chore: update APT repo for ${VERSION}"
-          git -C "${repo}" push
-
+          git -C "${repo}" push origin main
       - name: Install DPM CLI (sha256-verified)
         run: |
           set -euo pipefail

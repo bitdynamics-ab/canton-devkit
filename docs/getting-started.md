@@ -82,8 +82,8 @@ surface minimal and conflict-free.
 
 ## 3. Install — standalone binary
 
-Standalone builds are published from the distribution repository
-[`bitdynamics-ab/homebrew-canton-devkit`](https://github.com/bitdynamics-ab/homebrew-canton-devkit).
+Standalone builds are published on this repository's
+[GitHub Releases](https://github.com/bitdynamics-ab/canton-devkit/releases).
 Release archives are named
 `canton-devkit_v<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) — each
 contains the `canton-devkit` binary plus `LICENSE` and `README.md`. Every
@@ -134,20 +134,22 @@ brew update
 brew upgrade canton-devkit
 ```
 
-The formula downloads platform-specific release tarballs from the tap
-repository release page:
-[`bitdynamics-ab/homebrew-canton-devkit/releases`](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases).
+The formula downloads platform-specific release tarballs from this
+repository's
+[releases page](https://github.com/bitdynamics-ab/canton-devkit/releases);
+the tap only hosts the Homebrew formula.
 
 > See the [Homebrew guide](homebrew.md) for the tap layout and how the
 > formula is kept in sync on each release.
 
 ### APT — Debian / Ubuntu (amd64)
 
-Tagged releases update a static APT repository hosted from the public
-builds repo. Add it once, then install or upgrade with normal APT:
+Tagged releases update a static APT repository under `apt/` on this
+repository's `main` branch. Add it once, then install or upgrade with
+normal APT:
 
 ```bash
-echo "deb [trusted=yes arch=amd64] https://raw.githubusercontent.com/bitdynamics-ab/homebrew-canton-devkit/main/apt stable main" \
+echo "deb [trusted=yes arch=amd64] https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/canton-devkit.list
 sudo apt update
 sudo apt install canton-devkit
@@ -179,7 +181,7 @@ Direct `.deb` install also works:
 VERSION=v0.12.2   # replace with the latest release tag
 DEB_VERSION="${VERSION#v}"
 ASSET="canton-devkit_${DEB_VERSION}_amd64.deb"
-base="https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases/download/${VERSION}"
+base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}"
 curl -fLO "${base}/${ASSET}"
 curl -fLO "${base}/SHA256SUMS"
 grep " ${ASSET}\$" SHA256SUMS | sha256sum -c - || { echo "checksum mismatch"; exit 1; }
@@ -194,13 +196,13 @@ Docker CLI, Compose v2, ports, disk, memory, and host prerequisites.
 ### Manual download — macOS (Apple Silicon)
 
 Download the binary for your platform from the
-[releases page](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases),
+[releases page](https://github.com/bitdynamics-ab/canton-devkit/releases),
 verify its checksum, mark it executable, and put it on your `PATH`:
 
 ```bash
 VERSION=v0.12.2   # replace with the latest release tag
 ASSET="canton-devkit_${VERSION}_darwin_arm64.tar.gz"
-base="https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases/download/${VERSION}"
+base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}"
 curl -fLO "${base}/${ASSET}"
 curl -fLO "${base}/SHA256SUMS"
 # verify against the release checksums (recommended)
@@ -218,7 +220,7 @@ canton-devkit version
 ```bash
 VERSION=v0.12.2   # replace with the latest release tag
 ASSET="canton-devkit_${VERSION}_linux_amd64.tar.gz"
-base="https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases/download/${VERSION}"
+base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}"
 curl -fLO "${base}/${ASSET}"
 curl -fLO "${base}/SHA256SUMS"
 grep " ${ASSET}\$" SHA256SUMS | sha256sum -c - || { echo "checksum mismatch"; exit 1; }
@@ -233,7 +235,7 @@ canton-devkit version
 ```powershell
 $Version = "v0.12.2"   # replace with the latest release tag
 $Asset = "canton-devkit_${Version}_windows_amd64.zip"
-$base = "https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases/download/$Version"
+$base = "https://github.com/bitdynamics-ab/canton-devkit/releases/download/$Version"
 Invoke-WebRequest -Uri "$base/$Asset" -OutFile $Asset
 Invoke-WebRequest -Uri "$base/SHA256SUMS" -OutFile SHA256SUMS
 # verify against the release checksums

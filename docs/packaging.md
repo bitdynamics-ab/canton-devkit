@@ -148,10 +148,10 @@ release workflow runs the same `--dry-run` validation on every run
 The release workflow builds a Debian package from the exact same
 `linux/amd64` binary used in the standalone tarball and DPM component.
 It publishes the `.deb` as a release asset and updates a static APT repo
-in the public builds repository:
+under `apt/` on this repository's `main` branch:
 
 ```sh
-echo "deb [trusted=yes arch=amd64] https://raw.githubusercontent.com/bitdynamics-ab/homebrew-canton-devkit/main/apt stable main" \
+echo "deb [trusted=yes arch=amd64] https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/canton-devkit.list
 sudo apt update
 sudo apt install canton-devkit
@@ -191,9 +191,8 @@ timeouts, so package installation never fails if telemetry is disabled or
 the collector is unreachable.
 
 The hosted repo is generated on every release by preserving all existing
-`apt/pool/main/c/canton-devkit/*.deb` files in
-`bitdynamics-ab/homebrew-canton-devkit`, adding the new version, and
-rewriting `Packages` and `Packages.gz` under
+`apt/pool/main/c/canton-devkit/*.deb` files in this repository, adding
+the new version, and rewriting `Packages` and `Packages.gz` under
 `apt/dists/stable/main/binary-amd64/` and the `Release` file at
 `apt/dists/stable/`.
 
