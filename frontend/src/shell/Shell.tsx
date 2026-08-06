@@ -15,6 +15,7 @@ import {
   IcSun,
   IcMoon,
   IcBook,
+  IcAlert,
   IcChevronDown,
   IcPlus,
 } from "../components/icons";
@@ -38,6 +39,7 @@ const NAV_ICON: Record<string, (p: { size?: number }) => JSX.Element> = {
 };
 
 const DOCS_URL = "https://bitdynamics-ab.github.io/canton-devkit/";
+const ISSUES_URL = "https://github.com/bitdynamics-ab/canton-devkit/issues/new";
 
 interface ShellProps {
   children: React.ReactNode;
@@ -140,6 +142,27 @@ function TopBar() {
       <PaletteHint />
       <HealthPill conn={conn} />
       <ThemeToggle />
+      <a
+        href={ISSUES_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Report an issue on GitHub"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "0 10px",
+          height: 28,
+          borderRadius: 2,
+          border: `1px solid ${W.border}`,
+          color: W.text2,
+          fontSize: fs.meta,
+          textDecoration: "none",
+        }}
+      >
+        <IcAlert size={13} />
+        Report issue
+      </a>
       <a
         className="app-docs-link"
         href={DOCS_URL}

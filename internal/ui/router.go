@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/campaign"
 	"github.com/bitdynamics-ab/canton-devkit/internal/telemetry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/handlers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
@@ -303,6 +304,10 @@ func handleHealthz(w http.ResponseWriter, _ *http.Request) {
 type versionPayload struct {
 	Name          string `json:"name"`
 	SchemaVersion int    `json:"schema_version"`
+	// CampaignCode is this install's stable social-campaign code, present only
+	// on a campaign build (empty/omitted otherwise). The Web UI stamps it on
+	// every screen as a screenshot watermark. See internal/campaign.
+	CampaignCode string `json:"campaign_code,omitempty"`
 }
 
 // handleVersion is the schema-handshake endpoint. Returns the server's
@@ -316,6 +321,7 @@ func handleVersion(w http.ResponseWriter, _ *http.Request) {
 	_ = enc.Encode(versionPayload{
 		Name:          "canton-devkit",
 		SchemaVersion: schemaVersion,
+		CampaignCode:  campaign.Code(),
 	})
 }
 

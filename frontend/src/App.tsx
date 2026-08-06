@@ -6,6 +6,7 @@ import { InstanceSelectionProvider } from "./shell/useInstanceSelection";
 import { CreateInstanceProvider } from "./shell/useCreateInstance";
 import { ErrorBoundary } from "./shell/ErrorBoundary";
 import { ConfirmHost } from "./components/ConfirmDialog";
+import { CampaignWatermark } from "./components/CampaignWatermark";
 import { Dashboard } from "./screens/Dashboard";
 import { AllInstances } from "./screens/AllInstances";
 import { DoctorScreen } from "./screens/DoctorScreen";
@@ -25,6 +26,7 @@ export function App() {
     "loading",
   );
   const [serverVersion, setServerVersion] = useState<number | null>(null);
+  const [campaignCode, setCampaignCode] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,6 +34,7 @@ export function App() {
       .then((v) => {
         if (cancelled) return;
         setServerVersion(v.schema_version);
+        setCampaignCode(v.campaign_code ?? null);
         setStatus(v.schema_version === SCHEMA_VERSION ? "ready" : "mismatch");
       })
       .catch(() => {
@@ -55,6 +58,8 @@ export function App() {
       </CreateInstanceProvider>
       {/* One confirm-dialog host; confirmDialog() from anywhere resolves against it. */}
       <ConfirmHost />
+      {/* Campaign build only: a corner watermark on every screen. */}
+      {campaignCode && <CampaignWatermark code={campaignCode} />}
     </InstanceSelectionProvider>
   );
 }
