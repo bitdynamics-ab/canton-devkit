@@ -169,7 +169,8 @@ describe("InstanceOverview — header + actions", () => {
     await waitFor(() => expect(screen.getByText(/Splice 0.6.4/)).toBeInTheDocument());
     expect(screen.getByRole("heading", { name: "demo" })).toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
-    expect(screen.getByText(/ports 61200-61250/)).toBeInTheDocument();
+    // ports now appears both in the header subtitle and the vitals-rail footer.
+    expect(screen.getAllByText(/ports 61200-61250/).length).toBeGreaterThan(0);
   });
 
   it("Stop posts to /stop (not /down) on a running instance", async () => {
@@ -319,7 +320,7 @@ describe("InstanceOverview — JWT + app config", () => {
       expect(screen.getByText("payload")).toBeInTheDocument();
       expect(screen.getByText("signature")).toBeInTheDocument();
     });
-    await userEvent.click(screen.getByRole("button", { name: /copy token/i }));
+    await userEvent.click(screen.getByRole("button", { name: /copy jwt/i }));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("header.payload.signature");
   });
 

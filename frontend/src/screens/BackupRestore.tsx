@@ -11,6 +11,9 @@ import { IcCheck, IcDownload } from "../components/icons";
 
 interface Props {
   instanceName: string;
+  /** Flips true while a snapshot capture is in flight so the parent header
+   *  can show "Snapshotting…" instead of the paused-container "partial". */
+  onSnapshotting?: (active: boolean) => void;
 }
 
 type RestoreState =
@@ -19,7 +22,7 @@ type RestoreState =
   | { kind: "success"; response: RestoreResponse }
   | { kind: "error"; message: string };
 
-export function BackupRestore({ instanceName }: Props) {
+export function BackupRestore({ instanceName, onSnapshotting }: Props) {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [restore, setRestore] = useState<RestoreState>({ kind: "idle" });
@@ -38,6 +41,7 @@ export function BackupRestore({ instanceName }: Props) {
 
   async function onDownload() {
     setDownloading(true);
+    onSnapshotting?.(true);
     setDownloadError(null);
     try {
       await downloadSnapshot(instanceName);
@@ -47,6 +51,7 @@ export function BackupRestore({ instanceName }: Props) {
       );
     } finally {
       setDownloading(false);
+      onSnapshotting?.(false);
     }
   }
 
@@ -109,7 +114,8 @@ export function BackupRestore({ instanceName }: Props) {
             </Button>
           </div>
           <div style={{ fontSize: fs.label, color: W.dim }}>
-            pg_dumpall of the instance's Postgres · pauses writes briefly while it dumps
+            pg_dumpall of the instance's Postgres · writers pause for a consistent
+            capture (the instance shows <b>Snapshotting…</b> and resumes automatically)
           </div>
           <div style={cliBox}>
             dpm localnet snapshot --name {instanceName} --to ./{instanceName}.tgz

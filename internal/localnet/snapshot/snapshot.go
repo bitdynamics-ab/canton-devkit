@@ -247,6 +247,14 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 		name, term.Amberc("--to"), dest)))
 	_, _ = fmt.Fprintln(out, term.Step(term.StepCheck, "Reading registry state", state.ComposeProject, ""))
 
+	// Warn before the pause so an operator isn't surprised by the brief
+	// downtime. The node containers are frozen for the dump; the Web UI
+	// surfaces this as a "Snapshotting…" status, and the CLI says it plainly
+	// here (parity). The pause always resumes — see the deferred resume below.
+	_, _ = fmt.Fprintln(out, term.Warnc(fmt.Sprintf(
+		"⚠  %s pauses briefly for a consistent capture — writers are quiesced "+
+			"for the dump and resume automatically.", name)))
+
 	// Quiesce writers before the dump. pg_dumpall is a single-step
 	// whole-cluster backup, and Canton's rule for that path is that no
 	// component writes to the database while the backup is in progress.

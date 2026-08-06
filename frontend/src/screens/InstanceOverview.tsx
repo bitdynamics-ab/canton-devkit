@@ -33,6 +33,7 @@ import { Button } from "../components/Button";
 import {
   Dot,
   IcAlert,
+  IcCopy,
   IcDownload,
   IcEject,
   IcPause,
@@ -79,6 +80,10 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
   const [refetchTick, setRefetchTick] = useState(0);
   const [busy, setBusy] = useState(false);
   const [actionErr, setActionErr] = useState<string | null>(null);
+  // A snapshot pauses the node containers for a consistent capture, which
+  // the reconciler would otherwise surface as "partial". BackupRestore flips
+  // this while a capture is in flight so the header reads "Snapshotting…".
+  const [snapshotting, setSnapshotting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,6 +112,7 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
   // the Containers panel all read one poll instead of three.
   const [containers, setContainers] = useState<ContainersResponse | null>(null);
   const [containersAbsent, setContainersAbsent] = useState(false);
+  const [containersAt, setContainersAt] = useState<number | null>(null);
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -116,6 +122,7 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
         if (!cancelled) {
           setContainers(r);
           setContainersAbsent(false);
+          setContainersAt(Date.now());
         }
       } catch (e) {
         if (cancelled) return;
@@ -297,6 +304,7 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
       <Header
         name={name}
         status={status}
+        snapshotting={snapshotting}
         ports={ports}
         instance={instance}
         busy={busy}
@@ -340,6 +348,18 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
       />
 
       <TabBar tab={tab} onChange={setTab} />
+
+      {running && (
+        <VitalsRail
+          ports={ports}
+          createdAt={instance?.created_at}
+          uptime={instance?.uptime}
+          containers={containers}
+          endpoints={instance?.endpoints ?? []}
+          updatedAt={containersAt}
+          snapshotting={snapshotting}
+        />
+      )}
 
       {actionErr && (
         <div
@@ -415,7 +435,7 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1.25fr",
+                gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.25fr)",
                 gap: 14,
                 alignItems: "start",
               }}
@@ -438,7 +458,9 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
           </Panel>
         ))}
 
-      {tab === "snapshots" && <BackupRestore instanceName={name} />}
+      {tab === "snapshots" && (
+        <BackupRestore instanceName={name} onSnapshotting={setSnapshotting} />
+      )}
     </section>
   );
 }
@@ -448,6 +470,7 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
 function Header({
   name,
   status,
+  snapshotting,
   ports,
   instance,
   busy,
@@ -461,6 +484,7 @@ function Header({
 }: {
   name: string;
   status: string;
+  snapshotting?: boolean;
   ports?: string;
   instance: Instance | null;
   busy: boolean;
@@ -472,11 +496,16 @@ function Header({
   onDown: () => void;
   onRemove: () => void;
 }) {
+  // While running, the vitals rail below carries ports / uptime / created,
+  // so the subtitle stays as just the Splice version. When stopped (rail
+  // hidden), keep ports + created here so they're not lost.
+  const running = status === "running";
   const meta: string[] = [];
   if (instance?.splice_version) meta.push(`Splice ${instance.splice_version}`);
-  if (ports) meta.push(`ports ${ports}`);
-  if (instance?.uptime) meta.push(`up ${instance.uptime}`);
-  if (instance?.created_at) meta.push(`created ${instance.created_at}`);
+  if (!running) {
+    if (ports) meta.push(`ports ${ports}`);
+    if (instance?.created_at) meta.push(`created ${instance.created_at}`);
+  }
 
   return (
     <div
@@ -500,7 +529,11 @@ function Header({
           >
             {name}
           </h1>
-          {status && <StatusBadge status={status} variant="pill" />}
+          {snapshotting ? (
+            <StatusBadge status="snapshotting" variant="pill" pulse />
+          ) : (
+            status && <StatusBadge status={status} variant="pill" />
+          )}
           {instance?.live_probe_failed && (
             <span
               style={{
@@ -1011,6 +1044,197 @@ function Divider() {
   return <span style={{ width: 1, height: 18, background: W.border }} />;
 }
 
+// ── Instance vitals rail ────────────────────────────────────
+// Compact operational summary under the tabs: containers / uptime / CPU /
+// memory / wallet UIs, drawn from the same live sources the detail panels
+// use (docker stats + the status-endpoint HTTP probes). Additive to the
+// Overview throughput + KPI rail — an at-a-glance "is my stack up?" strip
+// that rides on every tab while the instance is running.
+function VitalsRail({
+  ports,
+  createdAt,
+  uptime,
+  containers,
+  endpoints,
+  updatedAt,
+  snapshotting,
+}: {
+  ports?: string;
+  createdAt?: string;
+  uptime?: string;
+  containers: ContainersResponse | null;
+  endpoints: Endpoint[];
+  updatedAt: number | null;
+  snapshotting?: boolean;
+}) {
+  const list = containers?.containers ?? [];
+  const total = list.length;
+  const running = total ? list.filter((c) => c.state === "running").length : 0;
+  const healthy = containers?.healthy_count ?? 0;
+  const starting = containers?.starting_count ?? 0;
+  const unhealthy = containers?.unhealthy_count ?? 0;
+  const noHealthcheck = Math.max(0, running - healthy - starting - unhealthy);
+  const cpu = containers?.cpu_percent;
+  const memUsed = containers?.mem_used_bytes;
+  const memLimit = containers?.mem_limit_bytes;
+
+  // Wallet UIs = the HTTP-probed wallet endpoints; "serving" = probe OK.
+  const walletUIs = endpoints.filter(
+    (e) => /wallet/i.test(e.label) && e.reachability != null,
+  );
+  const walletServing = walletUIs.filter((e) => e.reachability === "ok").length;
+
+  const contSub = [
+    `${healthy} probed healthy`,
+    unhealthy > 0 ? `${unhealthy} unhealthy` : null,
+    starting > 0 ? `${starting} starting` : null,
+    noHealthcheck > 0 ? `${noHealthcheck} no healthcheck` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const sep = <span style={{ width: 1, alignSelf: "stretch", background: W.border }} />;
+
+  return (
+    <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: R.card }}>
+      <div style={{ display: "flex", alignItems: "stretch", gap: 20, padding: "13px 16px", overflowX: "auto" }}>
+        <VitalTile
+          caption="Containers"
+          value={snapshotting ? String(total || running) : String(running || total)}
+          unit={snapshotting ? "containers" : "running"}
+          sub={snapshotting ? "writers paused · capturing snapshot" : contSub || undefined}
+          tone={
+            snapshotting
+              ? W.brand
+              : total > 0 && unhealthy === 0
+                ? W.ok
+                : unhealthy > 0
+                  ? W.warn
+                  : undefined
+          }
+        />
+        {sep}
+        <VitalTile
+          caption="Uptime"
+          value={uptime ?? "—"}
+          sub={createdAt ? `since ${createdAt.slice(11, 19)}Z` : undefined}
+        />
+        {sep}
+        <VitalTile
+          caption="CPU"
+          value={cpu != null ? cpu.toFixed(0) : "—"}
+          unit={cpu != null ? "%" : ""}
+          sub="all containers"
+        />
+        {sep}
+        <VitalTile
+          caption="Memory"
+          value={memUsed != null ? gib(memUsed) : "—"}
+          unit={memUsed != null ? (memLimit ? `/ ${gib(memLimit)} GB` : "GB") : ""}
+          sub="of granted"
+        />
+        {sep}
+        <VitalTile
+          caption="Wallet UIs"
+          value={walletUIs.length ? String(walletServing) : "—"}
+          unit={walletUIs.length ? `/ ${walletUIs.length} serving` : ""}
+          sub="http probed"
+          tone={
+            walletUIs.length > 0 && walletServing === walletUIs.length
+              ? W.ok
+              : walletUIs.length > 0
+                ? W.warn
+                : undefined
+          }
+        />
+      </div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+          padding: "8px 16px",
+          borderTop: `1px solid ${W.border}`,
+          fontFamily: wMono,
+          fontSize: fs.label,
+          color: W.faint,
+        }}
+      >
+        <span>
+          {ports ? `ports ${ports}` : ""}
+          {ports && createdAt ? " · " : ""}
+          {createdAt ? `created ${createdAt}` : ""}
+        </span>
+        <Freshness at={updatedAt} />
+      </div>
+    </div>
+  );
+}
+
+function VitalTile({
+  caption,
+  value,
+  unit,
+  sub,
+  tone,
+}: {
+  caption: string;
+  value: string;
+  unit?: string;
+  sub?: string;
+  tone?: string;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0, flex: "1 1 0" }}>
+      <span style={{ ...wideCaps, fontSize: fs.micro, color: W.dim } as CSSProperties}>{caption}</span>
+      <span style={{ display: "flex", alignItems: "baseline", gap: 6, whiteSpace: "nowrap" }}>
+        <span
+          style={{
+            fontFamily: wMono,
+            fontSize: fs.lead,
+            fontWeight: 600,
+            color: tone ?? W.text,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {value}
+        </span>
+        {unit && <span style={{ fontSize: fs.label, color: W.faint }}>{unit}</span>}
+      </span>
+      {sub && (
+        <span
+          title={sub}
+          style={{
+            fontSize: fs.micro,
+            color: W.faint,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {sub}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Self-ticking relative timestamp so only this label re-renders each second,
+// not the whole overview. `at` is epoch ms of the last docker-stats poll.
+function Freshness({ at }: { at: number | null }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => (n + 1) % 1000), 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (!at) return null;
+  const secs = Math.max(0, Math.round((Date.now() - at) / 1000));
+  const rel = secs < 1 ? "just now" : secs < 60 ? `${secs}s ago` : `${Math.round(secs / 60)}m ago`;
+  return <span>docker · updated {rel}</span>;
+}
+
 // ── Endpoints panel ─────────────────────────────────────────
 
 function EndpointsPanel({
@@ -1294,12 +1518,16 @@ function ContainersPanel({
 const ROLES = ["app-provider", "app-user", "sv"] as const;
 type Role = (typeof ROLES)[number];
 
+// "app-provider" → "App-provider", "sv" → "SV" for the segmented control.
+const roleLabel = (r: string) => (r === "sv" ? "SV" : r.charAt(0).toUpperCase() + r.slice(1));
+
 function JwtPanel({ name }: { name: string }) {
   const [role, setRole] = useState<Role>("app-provider");
   const [audience, setAudience] = useState("https://canton.network.global");
   const [jwt, setJwt] = useState<JwtResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1323,77 +1551,115 @@ function JwtPanel({ name }: { name: string }) {
   }, [name, role, audience]);
 
   const token = jwt?.token ?? null;
+  const subject = token ? decodeJwtSub(token) ?? jwt?.party ?? roleLabel(role) : "—";
+  const meta = jwtMeta(jwt);
+
+  function copyToken() {
+    if (!token) return;
+    navigator.clipboard?.writeText(token);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  }
+
   return (
     <div style={panelStyle}>
       <div style={{ ...panelHeaderStyle, flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
-        <span style={panelTitleStyle}>JWT</span>
+        <span style={panelTitleStyle}>JWT generator</span>
         <span style={{ fontSize: fs.meta, color: W.dim }}>
-          signed with the Splice LocalNet dev secret — this instance only
+          Signed against Splice LocalNet dev secret
         </span>
       </div>
-      <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-        <FieldRow label="role">
+      <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={fieldColStyle}>
+          <span style={fieldCaptionStyle}>Role</span>
           <Segmented
             options={ROLES as unknown as string[]}
             value={role}
             onChange={(v) => setRole(v as Role)}
+            format={roleLabel}
           />
-        </FieldRow>
-        <FieldRow label="audience">
+        </div>
+        <div style={fieldColStyle}>
+          <span style={fieldCaptionStyle}>Audience</span>
           <input
             value={audience}
             onChange={(e) => setAudience(e.target.value)}
-            style={{
-              flex: 1,
-              background: W.inset,
-              color: W.text,
-              border: `1px solid ${W.border}`,
-              borderRadius: R.control,
-              padding: "6px 10px",
-              fontSize: fs.meta,
-              fontFamily: wMono,
-            }}
+            aria-label="JWT audience"
+            style={appInputStyle}
           />
-        </FieldRow>
-        <FieldRow label="party">
-          {jwt?.party ? (
-            <MonoId value={jwt.party} size={fs.meta} color={W.text2} />
-          ) : (
-            <code style={{ color: W.dim, fontFamily: wMono, fontSize: fs.meta }}>—</code>
-          )}
-        </FieldRow>
-        <TokenBox token={busy ? "…" : token ?? "—"} revealed={!!token} />
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <Button
-            variant="secondary"
-            onClick={() => token && navigator.clipboard?.writeText(token)}
-            disabled={!token}
-          >
-            Copy token
-          </Button>
-          {jwtMeta(jwt) && (
-            <span style={{ fontFamily: wMono, fontSize: fs.label, color: W.faint }}>
-              {jwtMeta(jwt)}
-            </span>
-          )}
         </div>
-        {jwt?.warning_dev_secret && (
+
+        {/* Result card: subject + copy, then the color-coded token. */}
+        <div
+          style={{
+            border: `1px solid ${W.border}`,
+            borderRadius: R.control,
+            overflow: "hidden",
+            background: W.inset,
+          }}
+        >
           <div
             style={{
               display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
               gap: 8,
-              alignItems: "flex-start",
-              padding: "9px 10px",
-              border: `1px solid ${W.warnBorder}`,
-              background: W.warnBg,
-              borderRadius: R.control,
-              color: W.warn,
-              fontSize: fs.meta,
-              lineHeight: 1.5,
+              padding: "8px 12px",
+              borderBottom: `1px solid ${W.border}`,
             }}
           >
-            <IcAlert size={13} style={{ marginTop: 2 }} />
-            <span>{jwt.warning_dev_secret}</span>
+            <span
+              style={{
+                fontFamily: wMono,
+                fontSize: fs.meta,
+                color: W.text2,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {subject}
+            </span>
+            <button
+              type="button"
+              onClick={copyToken}
+              disabled={!token}
+              aria-label="Copy JWT"
+              title={copied ? "Copied" : "Copy token"}
+              style={iconBtnStyle(!token)}
+            >
+              <IcCopy size={14} />
+            </button>
+          </div>
+          <div
+            style={{
+              padding: "10px 12px",
+              fontFamily: wMono,
+              fontSize: fs.label,
+              wordBreak: "break-all",
+              lineHeight: 1.6,
+            }}
+          >
+            <JwtToken token={busy ? "…" : token ?? "—"} revealed={!!token} />
+          </div>
+          {meta && (
+            <div
+              style={{
+                padding: "6px 12px",
+                borderTop: `1px solid ${W.border}`,
+                fontFamily: wMono,
+                fontSize: fs.label,
+                color: W.faint,
+              }}
+            >
+              {meta}
+            </div>
+          )}
+        </div>
+
+        {jwt?.warning_dev_secret && (
+          <div style={{ fontSize: fs.meta, color: W.warn, lineHeight: 1.5 }}>
+            {jwt.warning_dev_secret}
           </div>
         )}
         {err && <div style={{ color: W.err, fontSize: fs.meta }}>{err}</div>}
@@ -1402,36 +1668,22 @@ function JwtPanel({ name }: { name: string }) {
   );
 }
 
-function TokenBox({ token, revealed }: { token: string; revealed: boolean }) {
+// Color-coded JWT: header · payload · signature (blue · muted · amber),
+// matching the jwt.io convention. Borderless — the result card frames it.
+function JwtToken({ token, revealed }: { token: string; revealed: boolean }) {
   const parts = token.split(".");
-  const isJwt = parts.length === 3 && revealed;
-  return (
-    <div
-      style={{
-        background: W.inset,
-        border: `1px solid ${W.border}`,
-        borderRadius: R.control,
-        padding: "10px 12px",
-        fontFamily: wMono,
-        fontSize: fs.label,
-        wordBreak: "break-all",
-        lineHeight: 1.6,
-        color: W.text2,
-      }}
-    >
-      {isJwt ? (
-        <>
-          <span style={{ color: W.brandText }}>{parts[0]}</span>
-          <span style={{ color: W.faint }}>.</span>
-          <span style={{ color: W.text2 }}>{parts[1]}</span>
-          <span style={{ color: W.faint }}>.</span>
-          <span style={{ color: W.amber }}>{parts[2]}</span>
-        </>
-      ) : (
-        <span style={{ color: W.dim }}>{token}</span>
-      )}
-    </div>
-  );
+  if (parts.length === 3 && revealed) {
+    return (
+      <>
+        <span style={{ color: W.brandText }}>{parts[0]}</span>
+        <span style={{ color: W.faint }}>.</span>
+        <span style={{ color: W.text2 }}>{parts[1]}</span>
+        <span style={{ color: W.faint }}>.</span>
+        <span style={{ color: W.amber }}>{parts[2]}</span>
+      </>
+    );
+  }
+  return <span style={{ color: W.dim }}>{token}</span>;
 }
 
 // ── App config panel ────────────────────────────────────────
@@ -1441,6 +1693,7 @@ function AppConfigPanel({ name }: { name: string }) {
   const [body, setBody] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1465,27 +1718,85 @@ function AppConfigPanel({ name }: { name: string }) {
     };
   }, [name, format]);
 
+  function copyBody() {
+    if (!body) return;
+    navigator.clipboard?.writeText(body);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  }
+
   return (
     <div style={panelStyle}>
-      <div style={{ ...panelHeaderStyle, alignItems: "flex-start" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <span style={panelTitleStyle}>App config</span>
-          <span style={{ fontSize: fs.meta, color: W.dim }}>
-            endpoints and party ids for your app or CI job
-          </span>
-        </div>
-        <div style={{ marginLeft: "auto" }}>
-          <Segmented
-            options={["env", "json", "yaml"] as AppConfigFormat[]}
-            value={format}
-            onChange={(v) => setFormat(v as AppConfigFormat)}
-          />
-        </div>
+      <div style={{ ...panelHeaderStyle, flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+        <span style={panelTitleStyle}>App config</span>
+        <span style={{ fontSize: fs.meta, color: W.dim }}>
+          endpoints + party IDs in your preferred format
+        </span>
       </div>
       <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+        {/* Format tabs + copy / download. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+            borderBottom: `1px solid ${W.border}`,
+          }}
+        >
+          {(["env", "json", "yaml"] as AppConfigFormat[]).map((f) => {
+            const active = f === format;
+            return (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setFormat(f)}
+                style={{
+                  appearance: "none",
+                  background: "transparent",
+                  border: "none",
+                  borderBottom: `2px solid ${active ? W.brand : "transparent"}`,
+                  cursor: "pointer",
+                  padding: "6px 10px",
+                  marginBottom: -1,
+                  fontSize: fs.meta,
+                  fontFamily: "inherit",
+                  fontWeight: active ? 600 : 400,
+                  letterSpacing: 0.4,
+                  textTransform: "uppercase",
+                  color: active ? W.text : W.dim,
+                }}
+              >
+                {f}
+              </button>
+            );
+          })}
+          <span style={{ marginLeft: "auto", display: "flex", gap: 2 }}>
+            <button
+              type="button"
+              onClick={copyBody}
+              disabled={!body}
+              aria-label="Copy config"
+              title={copied ? "Copied" : "Copy"}
+              style={iconBtnStyle(!body)}
+            >
+              <IcCopy size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => saveEnv(name, body)}
+              disabled={!body || format !== "env"}
+              aria-label="Download .env"
+              title={format === "env" ? "Download as .env" : "Switch to ENV to save a .env file"}
+              style={iconBtnStyle(!body || format !== "env")}
+            >
+              <IcDownload size={14} />
+            </button>
+          </span>
+        </div>
         <pre
           style={{
             margin: 0,
+            minWidth: 0,
             background: W.inset,
             border: `1px solid ${W.border}`,
             borderRadius: R.control,
@@ -1494,42 +1805,17 @@ function AppConfigPanel({ name }: { name: string }) {
             fontSize: fs.label,
             color: W.text2,
             lineHeight: 1.7,
-            maxHeight: 200,
+            maxHeight: 220,
             overflow: "auto",
-            whiteSpace: "pre-wrap",
-            overflowWrap: "anywhere",
+            whiteSpace: "pre",
+            overflowWrap: "normal",
           }}
         >
           {busy ? "…" : body || "—"}
         </pre>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <Button
-            variant="secondary"
-            onClick={() => navigator.clipboard?.writeText(body)}
-            disabled={!body}
-          >
-            Copy
-          </Button>
-          <Button
-            variant="secondary"
-            icon={<IcDownload />}
-            onClick={() => saveEnv(name, body)}
-            disabled={!body || format !== "env"}
-            title={format === "env" ? "Download as .env" : "Switch to env to save a .env file"}
-          >
-            Save .env
-          </Button>
-          <span
-            style={{
-              marginLeft: "auto",
-              fontFamily: wMono,
-              fontSize: fs.label,
-              color: W.faint,
-            }}
-          >
-            eval "$(dpm localnet env {name})"
-          </span>
-        </div>
+        <span style={{ fontFamily: wMono, fontSize: fs.label, color: W.faint }}>
+          eval "$(dpm localnet env {name})"
+        </span>
         {err && <div style={{ color: W.err, fontSize: fs.meta }}>{err}</div>}
       </div>
     </div>
@@ -1747,23 +2033,16 @@ function PanelFooter({ left }: { left: string }) {
   );
 }
 
-function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "76px 1fr", gap: 12, alignItems: "center" }}>
-      <span style={{ fontSize: fs.meta, color: W.dim }}>{label}</span>
-      {children}
-    </div>
-  );
-}
-
 function Segmented({
   options,
   value,
   onChange,
+  format,
 }: {
   options: string[];
   value: string;
   onChange: (v: string) => void;
+  format?: (v: string) => string;
 }) {
   return (
     <div
@@ -1797,7 +2076,7 @@ function Segmented({
               color: active ? W.onAccentSolid : W.text2,
             }}
           >
-            {opt}
+            {format ? format(opt) : opt}
           </button>
         );
       })}
@@ -1832,6 +2111,48 @@ const panelTitleStyle: CSSProperties = {
   fontWeight: 600,
   color: W.text,
 };
+
+// Label-above-control field group (Role / Audience in the JWT card).
+const fieldColStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  alignItems: "stretch",
+};
+
+const fieldCaptionStyle: CSSProperties = {
+  fontSize: fs.meta,
+  fontWeight: 600,
+  color: W.text2,
+};
+
+const appInputStyle: CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  background: W.inset,
+  color: W.text,
+  border: `1px solid ${W.border}`,
+  borderRadius: R.control,
+  padding: "6px 10px",
+  fontSize: fs.meta,
+  fontFamily: wMono,
+};
+
+// Borderless icon button for the copy / download affordances in card headers.
+function iconBtnStyle(disabled: boolean): CSSProperties {
+  return {
+    appearance: "none",
+    background: "transparent",
+    border: "none",
+    cursor: disabled ? "default" : "pointer",
+    color: disabled ? W.faint : W.dim,
+    padding: 4,
+    borderRadius: R.control,
+    display: "inline-flex",
+    alignItems: "center",
+    opacity: disabled ? 0.5 : 1,
+  };
+}
 
 const headerLinkStyle: CSSProperties = {
   marginLeft: "auto",
@@ -1941,6 +2262,20 @@ function decodeJwtAlg(token?: string): string | null {
     const json = atob(seg.replace(/-/g, "+").replace(/_/g, "/"));
     const hdr = JSON.parse(json) as { alg?: unknown };
     return typeof hdr.alg === "string" ? hdr.alg : null;
+  } catch {
+    return null;
+  }
+}
+
+// The token's `sub` claim — the ledger-api user the JWT authenticates as.
+// Labels the result card (e.g. "ledger-api-user").
+function decodeJwtSub(token?: string | null): string | null {
+  const seg = token?.split(".")[1];
+  if (!seg) return null;
+  try {
+    const json = atob(seg.replace(/-/g, "+").replace(/_/g, "/"));
+    const payload = JSON.parse(json) as { sub?: unknown };
+    return typeof payload.sub === "string" ? payload.sub : null;
   } catch {
     return null;
   }
