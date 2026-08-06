@@ -147,6 +147,11 @@ func TestSnapshot_RoundTrip(t *testing.T) {
 	if !faSnap.Quiesced || !faSnap.Resumed {
 		t.Errorf("snapshot must quiesce+resume writers: quiesced=%v resumed=%v", faSnap.Quiesced, faSnap.Resumed)
 	}
+	// The operator is warned about the brief pause before it happens, so the
+	// downtime isn't a surprise (CLI parity with the Web UI's "Snapshotting…").
+	if !strings.Contains(out.String(), "pauses briefly") {
+		t.Errorf("snapshot must warn about the brief pause before quiescing; out=%q", out.String())
+	}
 
 	// Restore into a FRESH registry root. Restore requires the target
 	// instance to already exist (it was `up`, so its Compose volume

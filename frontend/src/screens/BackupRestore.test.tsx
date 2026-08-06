@@ -43,6 +43,26 @@ describe("BackupRestore card", () => {
     ).toBeTruthy();
   });
 
+  it("signals onSnapshotting around a capture so the header can show 'Snapshotting…'", async () => {
+    // No-op the submit so the download promise stays pending (the iframe
+    // never fires `load`) — the capture is "in flight" after the click.
+    vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
+    const onSnapshotting = vi.fn();
+    render(
+      <BackupRestore instanceName="pebble" onSnapshotting={onSnapshotting} />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /download snapshot/i }),
+    );
+    // true the instant the capture starts (drives the header's
+    // "Snapshotting…" pill instead of the paused-container "partial")…
+    expect(onSnapshotting).toHaveBeenNthCalledWith(1, true);
+    // …and false once the download settles, so the pill clears.
+    await waitFor(() => expect(onSnapshotting).toHaveBeenCalledWith(false), {
+      timeout: 3000,
+    });
+  });
+
   it("dispatches a POST form to /api/instances/:name/snapshot on download", async () => {
     // Spy HTMLFormElement.prototype.submit because jsdom doesn't
     // actually navigate; we just want to assert the form is built
