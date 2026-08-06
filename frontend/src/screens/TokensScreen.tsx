@@ -1048,7 +1048,7 @@ function TransferModal({
 
   return (
     <ModalShell title={`Transfer ${symbol}`} onClose={onClose}>
-      <form onSubmit={onSubmit} style={{ display: "grid", gap: 10 }}>
+      <form onSubmit={onSubmit} style={{ display: "grid", gap: 10, minWidth: 0 }}>
         <Field label="From party">
           <PartyPicker instance={instance} role={role} parties={parties} value={from} onChange={setFrom} onPartiesChanged={onPartiesChanged} placeholder="Select sender" />
         </Field>
@@ -1057,9 +1057,11 @@ function TransferModal({
         </Field>
         <Field label="Amount"><input value={amount} onChange={(e) => setAmount(e.target.value)} style={input} required /></Field>
         <Field label="Reason (optional)"><input value={reason} onChange={(e) => setReason(e.target.value)} style={input} /></Field>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, color: W.text2, fontSize: fs.meta, cursor: "pointer" }}>
-          <input type="checkbox" checked={autoAccept} onChange={(e) => setAutoAccept(e.target.checked)} />
-          Auto-accept (settle in one step. You own the receiver on LocalNet.)
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, color: W.text2, fontSize: fs.meta, cursor: "pointer", minWidth: 0 }}>
+          <input type="checkbox" checked={autoAccept} onChange={(e) => setAutoAccept(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
+          <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+            Auto-accept (settle in one step. You own the receiver on LocalNet.)
+          </span>
         </label>
         {/* Atomic batching is shown but not selectable: on this Splice version
             ExecuteBatch cannot rebind the accept leg to the instruction the
@@ -1067,51 +1069,53 @@ function TransferModal({
             control whose only outcome is an error is worse than showing it
             unavailable, so the checkbox stays visible (the CLI has --atomic,
             and this documents the gap) but cannot be armed. */}
-        <label style={{ display: "flex", alignItems: "center", gap: 8, color: W.dim, fontSize: fs.meta, cursor: "not-allowed" }}>
-          <input type="checkbox" checked={false} disabled title="Unavailable on this Splice version" readOnly />
-          Atomic — batch transfer + accept into one all-or-nothing transaction
-          <span style={{ color: W.faint }}>(unavailable on this Splice version)</span>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, color: W.dim, fontSize: fs.meta, cursor: "not-allowed", minWidth: 0 }}>
+          <input type="checkbox" checked={false} disabled title="Unavailable on this Splice version" readOnly style={{ marginTop: 2, flexShrink: 0 }} />
+          <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+            Atomic — batch transfer + accept into one all-or-nothing transaction{" "}
+            <span style={{ color: W.faint }}>(unavailable on this Splice version)</span>
+          </span>
         </label>
 
         {plan && (
-          <div style={{ background: W.surface2, border: `1px solid ${W.border}`, borderRadius: 4, padding: "10px 12px" }}>
+          <div style={{ background: W.surface2, border: `1px solid ${W.border}`, borderRadius: 4, padding: "10px 12px", minWidth: 0, overflow: "hidden" }}>
             <div style={{ color: W.dim, fontSize: fs.meta, fontWeight: 500, marginBottom: 6 }}>
               Coin selection preview
             </div>
             {plan.sufficient ? (
-              <div style={{ display: "grid", gap: 4, fontFamily: wMono, fontSize: fs.label }}>
+              <div style={{ display: "grid", gap: 4, fontFamily: wMono, fontSize: fs.label, minWidth: 0 }}>
                 {plan.inputs.map((i) => (
-                  <div key={i.contract_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: W.text2 }}>
+                  <div key={i.contract_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, minWidth: 0 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: W.text2, minWidth: 0, overflow: "hidden" }}>
                       <MonoId value={i.contract_id} size={11.5} color={W.text2} /> consume
                     </span>
-                    <span style={{ color: W.err, fontVariantNumeric: "tabular-nums" }}>−{i.amount}</span>
+                    <span style={{ color: W.err, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>−{i.amount}</span>
                   </div>
                 ))}
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: W.text2 }}>→ {shortParty(to || from)} receive</span>
-                  <span style={{ color: W.ok, fontVariantNumeric: "tabular-nums" }}>+{amount}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, minWidth: 0 }}>
+                  <span style={{ color: W.text2, minWidth: 0, overflowWrap: "anywhere" }}>→ {shortParty(to || from)} receive</span>
+                  <span style={{ color: W.ok, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>+{amount}</span>
                 </div>
                 {Number(plan.change) > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span style={{ color: W.text2 }}>→ {shortParty(from)} change</span>
-                    <span style={{ color: W.ok, fontVariantNumeric: "tabular-nums" }}>+{plan.change}</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, minWidth: 0 }}>
+                    <span style={{ color: W.text2, minWidth: 0, overflowWrap: "anywhere" }}>→ {shortParty(from)} change</span>
+                    <span style={{ color: W.ok, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>+{plan.change}</span>
                   </div>
                 )}
                 <div style={{ height: 1, background: W.border, margin: "3px 0" }} />
-                <div style={{ display: "flex", justifyContent: "space-between", color: W.dim }}>
-                  <span>{plan.inputs.length} input {plan.inputs.length === 1 ? "contract" : "contracts"} · total {plan.total_input}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", color: W.dim, gap: 8, minWidth: 0 }}>
+                  <span style={{ overflowWrap: "anywhere" }}>{plan.inputs.length} input {plan.inputs.length === 1 ? "contract" : "contracts"} · total {plan.total_input}</span>
                 </div>
               </div>
             ) : (
-              <div style={{ color: W.warn, fontSize: fs.meta }}>
+              <div style={{ color: W.warn, fontSize: fs.meta, overflowWrap: "anywhere" }}>
                 Insufficient: holds {plan.total_input}, short {plan.shortfall}.
               </div>
             )}
           </div>
         )}
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, flexWrap: "wrap", minWidth: 0 }}>
           <Button variant="ghost" size="md" onClick={onClose}>Cancel</Button>
           <Button
             variant="primary"
@@ -2200,8 +2204,8 @@ function PartyPicker({
 
   if (mode === "create") {
     return (
-      <div style={{ display: "grid", gap: 6 }}>
-        <div style={{ display: "flex", gap: 6 }}>
+      <div style={{ display: "grid", gap: 6, minWidth: 0, width: "100%" }}>
+        <div style={{ display: "flex", gap: 6, minWidth: 0 }}>
           <input
             autoFocus
             value={newAlias}
@@ -2213,7 +2217,7 @@ function PartyPicker({
               }
             }}
             placeholder="new alias (e.g. bob)"
-            style={{ ...input, flex: 1 }}
+            style={{ ...input, flex: 1, width: "auto", minWidth: 0 }}
           />
           <Button
             variant="secondary"
@@ -2239,7 +2243,7 @@ function PartyPicker({
 
   if (mode === "raw" || (value !== "" && !known)) {
     return (
-      <div style={{ display: "grid", gap: 4 }}>
+      <div style={{ display: "grid", gap: 4, minWidth: 0, width: "100%" }}>
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -2261,7 +2265,7 @@ function PartyPicker({
   }
 
   return (
-    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+    <div style={{ display: "flex", gap: 6, alignItems: "center", minWidth: 0, width: "100%" }}>
       <select
         value={value}
         onChange={(e) => {
@@ -2270,7 +2274,7 @@ function PartyPicker({
           if (v === "__raw__") { setMode("raw"); onChange(""); return; }
           onChange(v);
         }}
-        style={{ ...input, cursor: "pointer", flex: 1 }}
+        style={{ ...input, cursor: "pointer", flex: 1, width: "auto", minWidth: 0 }}
       >
         <option value="">{placeholder}</option>
         {all.map((p) => (
@@ -2292,21 +2296,22 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
   return (
     <div role="dialog" aria-label={title} style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
-      display: "grid", placeItems: "center", zIndex: 50,
+      display: "grid", placeItems: "center", zIndex: 50, padding: 16,
     }}>
       <div style={{
         background: W.surface, border: `1px solid ${W.border}`,
-        borderRadius: 8, padding: 18, width: 420, maxWidth: "92vw",
+        borderRadius: 8, padding: 18, width: 480, maxWidth: "100%",
+        maxHeight: "90vh", overflow: "auto", minWidth: 0,
       }}>
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
-          <h3 style={{ color: W.text, margin: 0, fontSize: fs.strong }}>{title}</h3>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 12, gap: 8, minWidth: 0 }}>
+          <h3 style={{ color: W.text, margin: 0, fontSize: fs.strong, minWidth: 0, overflowWrap: "anywhere" }}>{title}</h3>
           <Button
             variant="ghost"
             size="sm"
             icon={<IcX />}
             aria-label="close"
             onClick={onClose}
-            style={{ marginLeft: "auto" }}
+            style={{ marginLeft: "auto", flexShrink: 0 }}
           />
         </div>
         {children}
@@ -2317,7 +2322,7 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label style={{ display: "grid", gap: 4 }}>
+    <label style={{ display: "grid", gap: 4, minWidth: 0 }}>
       <span style={{ color: W.dim, fontSize: fs.label }}>{label}</span>
       {children}
     </label>
@@ -2325,6 +2330,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 const input: React.CSSProperties = {
+  width: "100%",
+  maxWidth: "100%",
   background: W.surface2, color: W.text, border: `1px solid ${W.border}`,
   borderRadius: 2, padding: "6px 8px", fontSize: fs.data,
 };
