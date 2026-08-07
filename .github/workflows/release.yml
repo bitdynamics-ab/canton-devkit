@@ -298,7 +298,10 @@ jobs:
             -f branch="main"
 
       - name: Update APT repository on main
-        if: startsWith(github.ref, 'refs/tags/')
+        # Disabled: pushes directly to main, which is blocked by branch
+        # protection rules requiring PRs. See follow-up issue to rework
+        # this to go through a pull request instead.
+        if: false && startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.meta.outputs.devkit_version }}
