@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
@@ -129,16 +130,17 @@ func probeUIEndpoints(ctx context.Context, s *registry.State, endpoints []types.
 	wg.Wait()
 }
 
-// uiProbeErrorDetail humanizes transport errors. EOF — TCP accepted,
-// zero HTTP bytes back — gets its own wording because "EOF" alone
-// tells the user nothing.
+// uiProbeErrorDetail humanizes transport errors. EOF and ECONNRESET —
+// TCP accepted, zero HTTP bytes back, whichever way the peer slams
+// the connection shut — get their own wording because the raw error
+// alone tells the user nothing.
 func uiProbeErrorDetail(err error) string {
 	var uerr *url.Error
 	if errors.As(err, &uerr) {
 		err = uerr.Err
 	}
 	switch {
-	case errors.Is(err, io.EOF):
+	case errors.Is(err, io.EOF), errors.Is(err, syscall.ECONNRESET):
 		return "connection accepted but no HTTP response (empty reply)"
 	case errors.Is(err, context.DeadlineExceeded):
 		return fmt.Sprintf("no HTTP response within %s", uiProbeTimeout)
