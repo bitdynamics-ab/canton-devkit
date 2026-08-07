@@ -1,0 +1,224 @@
+{
+  "schema_version": 1,
+  "name": "localnet-1",
+  "splice_version": "0.6.12",
+  "status": "running",
+  "created_at": "2026-07-27T08:46:35Z",
+  "uptime": "11h 56m",
+  "compose_project": "canton-localnet-1",
+  "docker_network": "localnet-1",
+  "container_prefix": "localnet-1-",
+  "project_dir": "/Users/zzz/.canton-devkit/cache/splice-0.6.12-17fd29aa",
+  "data_dir": "/Users/zzz/.canton-devkit/localnet/localnet-1",
+  "services": [
+    {
+      "name": "ans-web-ui-app-provider",
+      "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/ans-web-ui:0.6.12",
+      "state": "healthy",
+      "ports": "[{ 8080 0 tcp}]"
+    },
+    {
+      "name": "ans-web-ui-app-user",
+      "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/ans-web-ui:0.6.12",
+      "state": "healthy",
+      "ports": "[{ 8080 0 tcp}]"
+    },
+    {
+      "name": "canton",
+      "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/canton:0.6.12",
+      "state": "healthy",
+      "ports": "[{127.0.0.1 2901 61475 tcp} {127.0.0.1 2902 61476 tcp} {127.0.0.1 2975 61477 tcp} {127.0.0.1 3901 61478 tcp} {127.0.0.1 3902 61479 tcp} {127.0.0.1 3975 61480 tcp} {127.0.0.1 4901 61481 tcp} {127.0.0.1 4902 61482 tcp} {127.0.0.1 4975 61483 tcp} {127.0.0.1 10013 61484 tcp}]"
+    },
+    {
+      "name": "nginx",
+      "image": "nginx:1.27.0",
+      "state": "healthy",
+      "ports": "[{127.0.0.1 61245 61245 tcp} {127.0.0.1 61246 61246 tcp} {127.0.0.1 61247 61247 tcp}]"
+    },
+    {
+      "name": "postgres",
+      "image": "postgres:14",
+      "state": "healthy",
+      "ports": "[{127.0.0.1 5432 61249 tcp}]"
+    },
+    {
+      "name": "scan-web-ui",
+      "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/scan-web-ui:0.6.12",
+      "state": "healthy",
+      "ports": "[{ 8080 0 tcp}]"
+    },
+    {
+      "name": "splice",
+      "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/splice-app:0.6.12",
+      "state": "healthy",
+      "ports": "[{127.0.0.1 2903 61485 tcp} {127.0.0.1 3903 61486 tcp} {127.0.0.1 4903 61487 tcp} {127.0.0.1 10013 61488 tcp}]"
+    },
+    {
+      "name": "sv-web-ui",
+      "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/sv-web-ui:0.6.12",
+      "state": "healthy",
+      "ports": "[{ 8080 0 tcp}]"
+    },
+    {
+      "name": "swagger-ui",
+      "image": "swaggerapi/swagger-ui",
+      "state": "healthy",
+      "ports": "[{127.0.0.1 8080 61248 tcp}]"
+    },
+    {
+      "name": "wallet-web-ui-app-provider",
+      "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/wallet-web-ui:0.6.12",
+      "state": "healthy",
+      "ports": "[{ 8080 0 tcp}]"
+    },
+    {
+      "name": "wallet-web-ui-app-user",
+      "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/wallet-web-ui:0.6.12",
+      "state": "healthy",
+      "ports": "[{ 8080 0 tcp}]"
+    },
+    {
+      "name": "wallet-web-ui-sv",
+      "image": "ghcr.io/digital-asset/decentralized-canton-sync/docker/wallet-web-ui:0.6.12",
+      "state": "healthy",
+      "ports": "[{ 8080 0 tcp}]"
+    }
+  ],
+  "endpoints": [
+    {
+      "key": "app_provider_ui",
+      "label": "Wallet · app-provider",
+      "url": "http://wallet.app-provider.localnet-1.localhost:61246",
+      "port": 61246,
+      "scheme": "http",
+      "reachability": "ok"
+    },
+    {
+      "key": "app_user_ui",
+      "label": "Wallet · app-user",
+      "url": "http://wallet.app-user.localnet-1.localhost:61245",
+      "port": 61245,
+      "scheme": "http",
+      "reachability": "ok"
+    },
+    {
+      "key": "canton_metrics",
+      "label": "canton_metrics",
+      "url": "tcp://localhost:61484",
+      "port": 61484,
+      "scheme": "tcp"
+    },
+    {
+      "key": "participant_admin_app-provider",
+      "label": "participant_admin_app-provider",
+      "url": "tcp://localhost:61479",
+      "port": 61479,
+      "scheme": "tcp"
+    },
+    {
+      "key": "participant_admin_app-user",
+      "label": "participant_admin_app-user",
+      "url": "tcp://localhost:61476",
+      "port": 61476,
+      "scheme": "tcp"
+    },
+    {
+      "key": "participant_admin_sv",
+      "label": "participant_admin_sv",
+      "url": "tcp://localhost:61482",
+      "port": 61482,
+      "scheme": "tcp"
+    },
+    {
+      "key": "participant_json_app-provider",
+      "label": "participant_json_app-provider",
+      "url": "tcp://localhost:61480",
+      "port": 61480,
+      "scheme": "tcp"
+    },
+    {
+      "key": "participant_json_app-user",
+      "label": "participant_json_app-user",
+      "url": "tcp://localhost:61477",
+      "port": 61477,
+      "scheme": "tcp"
+    },
+    {
+      "key": "participant_json_sv",
+      "label": "participant_json_sv",
+      "url": "tcp://localhost:61483",
+      "port": 61483,
+      "scheme": "tcp"
+    },
+    {
+      "key": "participant_ledger_app-provider",
+      "label": "participant_ledger_app-provider",
+      "url": "tcp://localhost:61478",
+      "port": 61478,
+      "scheme": "tcp"
+    },
+    {
+      "key": "participant_ledger_app-user",
+      "label": "participant_ledger_app-user",
+      "url": "tcp://localhost:61475",
+      "port": 61475,
+      "scheme": "tcp"
+    },
+    {
+      "key": "participant_ledger_sv",
+      "label": "participant_ledger_sv",
+      "url": "tcp://localhost:61481",
+      "port": 61481,
+      "scheme": "tcp"
+    },
+    {
+      "key": "postgres",
+      "label": "Postgres",
+      "url": "postgresql://localhost:61249",
+      "port": 61249,
+      "scheme": "postgresql"
+    },
+    {
+      "key": "splice_metrics",
+      "label": "splice_metrics",
+      "url": "tcp://localhost:61488",
+      "port": 61488,
+      "scheme": "tcp"
+    },
+    {
+      "key": "sv_ui",
+      "label": "Wallet · sv",
+      "url": "http://wallet.sv.localnet-1.localhost:61247",
+      "port": 61247,
+      "scheme": "http",
+      "reachability": "ok"
+    },
+    {
+      "key": "swagger_ui",
+      "label": "Swagger · JSON API",
+      "url": "http://localhost:61248",
+      "port": 61248,
+      "scheme": "http"
+    }
+  ],
+  "credentials": {
+    "app-provider": {
+      "role": "app-provider",
+      "user": "ledger-api-user",
+      "audience": "https://canton.network.global",
+      "jwt": "mock.app-provider.jwt"
+    },
+    "app-user": {
+      "role": "app-user",
+      "user": "ledger-api-user",
+      "audience": "https://canton.network.global",
+      "jwt": "mock.app-user.jwt"
+    },
+    "sv": {
+      "role": "sv",
+      "user": "ledger-api-user",
+      "audience": "https://canton.network.global",
+      "jwt": "mock.sv.jwt"
+    }
+  }
+}

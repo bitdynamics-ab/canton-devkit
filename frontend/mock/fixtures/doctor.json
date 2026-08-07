@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "sections": [
+    {
+      "title": "System",
+      "checks": [
+        {
+          "label": "Docker CLI",
+          "result": "pass"
+        },
+        {
+          "label": "Docker daemon",
+          "result": "pass",
+          "detail": "v29.6.1"
+        },
+        {
+          "label": "Docker Compose v2",
+          "result": "pass",
+          "detail": "v5.3.0"
+        },
+        {
+          "label": "Host prerequisites (darwin)",
+          "result": "pass",
+          "detail": "Docker Desktop must be running"
+        },
+        {
+          "label": "Platform support",
+          "result": "pass",
+          "detail": "darwin/arm64 is a supported platform"
+        }
+      ]
+    },
+    {
+      "title": "Resources",
+      "checks": [
+        {
+          "label": "Docker memory",
+          "result": "warn",
+          "detail": "8.84 GB available, 12.00 GB recommended for this version",
+          "remediation": [
+            "Increase Docker Desktop's memory in Preferences → Resources → Memory."
+          ]
+        },
+        {
+          "label": "Disk space",
+          "result": "pass",
+          "detail": "178.29 GB free at /Users/zzz/.canton-devkit/localnet"
+        }
+      ]
+    },
+    {
+      "title": "Network",
+      "checks": [
+        {
+          "label": "Ephemeral loopback ports",
+          "result": "pass",
+          "detail": "host can allocate ephemeral loopback ports (probed 4)"
+        },
+        {
+          "label": "UI ports reachability (running instances)",
+          "result": "pass",
+          "detail": "3 UI endpoints answering HTTP across 1 running instance"
+        }
+      ]
+    }
+  ],
+  "summary": "0 issues · 1 warning — host is ready (advisories above)"
+}

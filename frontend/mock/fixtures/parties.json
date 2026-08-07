@@ -1,0 +1,12 @@
+{
+  "parties": [
+    {
+      "alias": "app-user",
+      "party_id": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+      "role": "app-user",
+      "is_local": true,
+      "created_at": "2026-07-27T20:42:40Z"
+    }
+  ],
+  "schema_version": 1
+}

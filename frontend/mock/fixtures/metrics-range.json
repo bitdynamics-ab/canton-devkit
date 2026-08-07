@@ -1,0 +1,17 @@
+{
+  "status": "success",
+  "data": {
+    "resultType": "matrix",
+    "result": [
+      {
+        "metric": { "__name__": "canton_transactions_total", "instance": "demo" },
+        "values": [
+          [1717065600, "10"],
+          [1717065660, "12"],
+          [1717065720, "11"],
+          [1717065780, "14"]
+        ]
+      }
+    ]
+  }
+}

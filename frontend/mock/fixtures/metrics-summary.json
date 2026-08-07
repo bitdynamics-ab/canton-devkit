@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "instance": "demo",
+  "scope": "instance",
+  "metrics": {
+    "ledger_tps_5m": 12.4,
+    "mediator_p50_seconds": 0.045,
+    "mediator_p95_seconds": 0.12,
+    "mediator_p99_seconds": 0.21,
+    "jvm_heap_used_bytes": 536870912,
+    "postgres_conn_count": 8
+  },
+  "latency": {
+    "p50_ms": 45,
+    "p95_ms": 120,
+    "p99_ms": 210
+  },
+  "dashboards": {
+    "grafana_url": "http://127.0.0.1:3000/d/canton-localnet"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "instance": "demo",
+  "role": "app-user",
+  "contract": {
+    "contract_id": "0076677cff95e66905e2e5c6c7ea53171836134ed216c422561d6ee5935e0f521cca1212208a4e466f276703d25651f7b6a57cf56270bd9bd3af142f08cca84c03624cea05",
+    "template_id": "727c0fb9711d59b506fbb3cff2342e55eb583bb88682a946220525c304feca4a:Splice.Wallet.Install:WalletAppInstall",
+    "package_name": "splice-wallet",
+    "payload": {
+      "dsoParty": "DSO::122045dfff30d2dc721ec558fc0f41872c18fbb44a0865e17a75fbc6a46f902f0f55",
+      "endUserName": "app-user",
+      "endUserParty": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249",
+      "validatorParty": "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+    },
+    "signatories": [
+      "app_user_localnet_1-localparty-1::122049adfabecad759e6eb37a5eae894955c5bd7f3325e2ef434b9f2808ca02ab249"
+    ],
+    "observers": [],
+    "created_at": "2026-07-27T08:48:21Z",
+    "created_offset": 18,
+    "archived": false
+  }
+}

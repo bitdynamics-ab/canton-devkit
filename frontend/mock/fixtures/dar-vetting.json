@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "instance": "demo",
+  "main": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a",
+  "participants": [
+    { "role": "app-user", "vetted": true },
+    { "role": "app-provider", "vetted": false },
+    { "role": "sv", "vetted": true }
+  ]
+}

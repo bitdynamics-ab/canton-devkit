@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "instance": "demo",
+  "role": "app-user",
+  "dars": [
+    {
+      "main": "de2cc2f90eb523414ff54e899951dadd8789a4c07e0f71f6d6c9eaf57d412a54",
+      "name": "canton-builtin-admin-workflow-ping",
+      "version": "3.4.0",
+      "description": "System package"
+    },
+    {
+      "main": "29317e3b7b165d2bbf16721bcca0ec4869e53eddb2738bddf790d61af28e0099",
+      "name": "splice-api-token-transfer-instruction-v2",
+      "version": "1.0.0",
+      "description": "splice-api-token-transfer-instruction-v2-1.0.0"
+    },
+    {
+      "main": "1215d3ee8f3cb428d062d8708c2deca33c91ff99f5edefa70616646e57f93012",
+      "name": "splice-util-token-standard-wallet",
+      "version": "1.1.0",
+      "description": "splice-util-token-standard-wallet-1.1.0"
+    },
+    {
+      "main": "74ee4c91b80c80b6860005ce627bdaed8f7fe6bdf3e60c9dbf3f48402d55126a",
+      "name": "splice-util-batched-markers",
+      "version": "1.0.3",
+      "description": "splice-util-batched-markers-1.0.3"
+    },
+    {
+      "main": "9a8f41a2b1456d357dee5677565c21b9a5aa45b80f0ed6be469694445dd4f6e1",
+      "name": "splice-token-standard-utils",
+      "version": "2.0.0",
+      "description": "splice-token-standard-utils-2.0.0"
+    },
+    {
+      "main": "866ea53bea2afc099c560ad4c386a1736859841b17c422836f133d605ee51616",
+      "name": "splice-wallet-payments",
+      "version": "0.1.22",
+      "description": "splice-wallet-payments-0.1.22"
+    },
+    {
+      "main": "9cffe65feb664c9550937433067e9f969e3795c6fb38715e06a5e04fc1ae1f83",
+      "name": "splice-amulet-name-service",
+      "version": "0.1.23",
+      "description": "splice-amulet-name-service-0.1.23"
+    },
+    {
+      "main": "051a3b0563a6fa4df4cb34448081e48b061e555aa1a265abf6ae8f3f4cafe439",
+      "name": "splice-api-token-allocation-v2",
+      "version": "1.0.0",
+      "description": "splice-api-token-allocation-v2-1.0.0"
+    },
+    {
+      "main": "9818a0b5b827109de03a04c8f6151cde9d1e7fe5123dbb2dfeb0e52d7271287c",
+      "name": "splice-api-token-allocation-instruction-v2",
+      "version": "1.0.0",
+      "description": "splice-api-token-allocation-instruction-v2-1.0.0"
+    },
+    {
+      "main": "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a",
+      "name": "splice-amulet",
+      "version": "0.1.22",
+      "description": "splice-amulet-0.1.22"
+    },
+    {
+      "main": "727c0fb9711d59b506fbb3cff2342e55eb583bb88682a946220525c304feca4a",
+      "name": "splice-wallet",
+      "version": "0.1.23",
+      "description": "splice-wallet-0.1.23"
+    },
+    {
+      "main": "217edf88c015ee080de2132a208cf23c14e9a2773198c0d4078985ab25ad4be1",
+      "name": "splice-validator-lifecycle",
+      "version": "0.1.8",
+      "description": "splice-validator-lifecycle-0.1.8"
+    },
+    {
+      "main": "4ded6b668cb3b64f7a88a30874cd41c75829f5e064b3fbbadf41ec7e8363354f",
+      "name": "splice-api-token-metadata-v1",
+      "version": "1.0.0",
+      "description": "splice-api-token-metadata-v1-1.0.0"
+    },
+    {
+      "main": "6fe848530b2404017c4a12874c956ad7d5c8a419ee9b040f96b5c13172d2e193",
+      "name": "splice-api-token-allocation-request-v1",
+      "version": "1.0.0",
+      "description": "splice-api-token-allocation-request-v1-1.0.0"
+    },
+    {
+      "main": "93c942ae2b4c2ba674fb152fe38473c507bda4e82b4e4c5da55a552a9d8cce1d",
+      "name": "splice-api-token-allocation-v1",
+      "version": "1.0.0",
+      "description": "splice-api-token-allocation-v1-1.0.0"
+    },
+    {
+      "main": "adc16315a8943a8433886694720a2a000ae84c2315c4414bd6d0db4d1660de9c",
+      "name": "splice-api-token-allocation-request-v2",
+      "version": "1.0.0",
+      "description": "splice-api-token-allocation-request-v2-1.0.0"
+    },
+    {
+      "main": "55ba4deb0ad4662c4168b39859738a0e91388d252286480c7331b3f71a517281",
+      "name": "splice-api-token-transfer-instruction-v1",
+      "version": "1.0.0",
+      "description": "splice-api-token-transfer-instruction-v1-1.0.0"
+    },
+    {
+      "main": "4b7ecfc366d79ccc5ed07c80f26fe489cf2dfd43ce2856c06a78e6a048db7032",
+      "name": "splice-api-token-holding-v2",
+      "version": "1.0.0",
+      "description": "splice-api-token-holding-v2-1.0.0"
+    },
+    {
+      "main": "5c1097a9bad0af4bcfe6d3fb0fe55112d3d11f18eae57ddfb14c20836fee226c",
+      "name": "splice-api-token-transfer-events-v2",
+      "version": "1.0.0",
+      "description": "splice-api-token-transfer-events-v2-1.0.0"
+    },
+    {
+      "main": "718a0f77e505a8de22f188bd4c87fe74101274e9d4cb1bfac7d09aec7158d35b",
+      "name": "splice-api-token-holding-v1",
+      "version": "1.0.0",
+      "description": "splice-api-token-holding-v1-1.0.0"
+    },
+    {
+      "main": "275064aacfe99cea72ee0c80563936129563776f67415ef9f13e4297eecbc520",
+      "name": "splice-api-token-allocation-instruction-v1",
+      "version": "1.0.0",
+      "description": "splice-api-token-allocation-instruction-v1-1.0.0"
+    }
+  ]
+}

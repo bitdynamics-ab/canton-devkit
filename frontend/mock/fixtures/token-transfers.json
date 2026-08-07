@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "pending_transfers": [
+    {
+      "contract_id": "00transfer1",
+      "sender": "dso::demo",
+      "receiver": "app_user_demo-localparty-1::mock",
+      "instrument_id": "DEMO",
+      "amount": "250.000000",
+      "generation": "v2",
+      "requested_at": "2026-08-07T10:00:00Z",
+      "execute_before": "2026-08-08T10:00:00Z"
+    }
+  ],
+  "truncated": false,
+  "aliases": {
+    "dso::demo": "demo-issuer",
+    "app_user_demo-localparty-1::mock": "app-user"
+  }
+}
