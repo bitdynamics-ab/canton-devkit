@@ -1,0 +1,146 @@
+{
+  "analyzedPackage": {
+    "name": "pkg-app",
+    "version": "1.0.0",
+    "packageId": "0e19228eafae391c5088c96c3a123642bb1d3a2475e4af170cf5ca02df4da506",
+    "lfVersion": "2.2"
+  },
+  "dependencies": [
+    {
+      "name": "pkg-iclaim",
+      "version": "1.0.0",
+      "packageId": "48a5291c5df9173ccfada5cf2c162bc05d26b6aadea57b6f770ef4f497572a48"
+    },
+    {
+      "name": "pkg-registry",
+      "version": "1.0.0",
+      "packageId": "26194f380c4940c016d1815601b61d14efee736a704764303e288dd00e465110"
+    }
+  ],
+  "summary": {
+    "totalInteractions": 5,
+    "byType": {
+      "Exercise": 1,
+      "Fetch": 1,
+      "ImplementsInterface": 1,
+      "FetchInterface": 1,
+      "Create": 1
+    },
+    "byTargetPackage": {
+      "pkg-registry": 3,
+      "pkg-iclaim": 2
+    }
+  },
+  "interactions": [
+    {
+      "type": "FetchInterface",
+      "source": {
+        "package": "pkg-app",
+        "file": "App.daml"
+      },
+      "caller": {
+        "package": "pkg-app",
+        "version": "1.0.0",
+        "packageId": "0e19228eafae391c5088c96c3a123642bb1d3a2475e4af170cf5ca02df4da506",
+        "module": "App",
+        "template": "Workflow",
+        "choice": "FetchClaim"
+      },
+      "target": {
+        "package": "pkg-iclaim",
+        "version": "1.0.0",
+        "packageId": "48a5291c5df9173ccfada5cf2c162bc05d26b6aadea57b6f770ef4f497572a48",
+        "module": "IClaim",
+        "interface": "IClaim"
+      }
+    },
+    {
+      "type": "Fetch",
+      "source": {
+        "package": "pkg-app",
+        "file": "App.daml"
+      },
+      "caller": {
+        "package": "pkg-app",
+        "version": "1.0.0",
+        "packageId": "0e19228eafae391c5088c96c3a123642bb1d3a2475e4af170cf5ca02df4da506",
+        "module": "App",
+        "template": "Workflow",
+        "choice": "FetchByCid"
+      },
+      "target": {
+        "package": "pkg-registry",
+        "version": "1.0.0",
+        "packageId": "26194f380c4940c016d1815601b61d14efee736a704764303e288dd00e465110",
+        "module": "Registry",
+        "template": "Asset"
+      }
+    },
+    {
+      "type": "Create",
+      "source": {
+        "package": "pkg-app",
+        "file": "App.daml"
+      },
+      "caller": {
+        "package": "pkg-app",
+        "version": "1.0.0",
+        "packageId": "0e19228eafae391c5088c96c3a123642bb1d3a2475e4af170cf5ca02df4da506",
+        "module": "App",
+        "template": "Workflow",
+        "choice": "CreateAsset"
+      },
+      "target": {
+        "package": "pkg-registry",
+        "version": "1.0.0",
+        "packageId": "26194f380c4940c016d1815601b61d14efee736a704764303e288dd00e465110",
+        "module": "Registry",
+        "template": "Asset"
+      }
+    },
+    {
+      "type": "Exercise",
+      "source": {
+        "package": "pkg-app",
+        "file": "App.daml"
+      },
+      "caller": {
+        "package": "pkg-app",
+        "version": "1.0.0",
+        "packageId": "0e19228eafae391c5088c96c3a123642bb1d3a2475e4af170cf5ca02df4da506",
+        "module": "App",
+        "template": "Workflow",
+        "choice": "TransferAsset"
+      },
+      "target": {
+        "package": "pkg-registry",
+        "version": "1.0.0",
+        "packageId": "26194f380c4940c016d1815601b61d14efee736a704764303e288dd00e465110",
+        "module": "Registry",
+        "template": "Asset",
+        "choice": "UpdateOwner",
+        "consuming": true
+      }
+    },
+    {
+      "type": "ImplementsInterface",
+      "source": {
+        "file": "App.daml"
+      },
+      "caller": {
+        "package": "pkg-app",
+        "version": "1.0.0",
+        "packageId": "0e19228eafae391c5088c96c3a123642bb1d3a2475e4af170cf5ca02df4da506",
+        "module": "App",
+        "template": "MyToken"
+      },
+      "target": {
+        "package": "pkg-iclaim",
+        "version": "1.0.0",
+        "packageId": "48a5291c5df9173ccfada5cf2c162bc05d26b6aadea57b6f770ef4f497572a48",
+        "module": "IClaim",
+        "interface": "IClaim"
+      }
+    }
+  ]
+}

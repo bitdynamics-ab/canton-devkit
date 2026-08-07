@@ -1,0 +1,93 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
+import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
+import { AnalyzerScreen } from "./AnalyzerScreen";
+
+afterEach(() => vi.unstubAllGlobals());
+
+const REPORT = {
+  analyzed_package: { name: "pkg-app", version: "1.0.0", package_id: "aa11", lf_version: "2.2" },
+  dependencies: [{ name: "pkg-registry", version: "1.0.0", package_id: "bb22" }],
+  summary: { total_interactions: 1, by_type: { Exercise: 1 }, by_target_package: { "pkg-registry": 1 } },
+  interactions: [
+    {
+      type: "Exercise",
+      source: { package: "pkg-app", file: "App.daml", start_line: 12 },
+      caller: { package: "pkg-app", version: "1.0.0", package_id: "aa11", module: "App", choice: "TransferAsset" },
+      target: { package: "pkg-registry", version: "1.0.0", package_id: "bb22", module: "Registry", choice: "UpdateOwner", consuming: true },
+    },
+  ],
+};
+
+function stubFetch(status: { available: boolean; runtime?: string; source?: string; detail?: string }) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      const json = (body: unknown) =>
+        Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } }));
+      if (url.startsWith("/api/version")) return json({ name: "canton-devkit", schema_version: 1 });
+      if (url.startsWith("/api/instances/demo/analyzer/")) return json({ schema_version: 1, instance: "demo", package_id: "aa11", dar_name: "pkg-app-1.0.0.dar", report: REPORT });
+      if (url.startsWith("/api/instances/demo/dar")) return json({ schema_version: 1, instance: "demo", role: "app-user", dars: [{ main: "aa11", name: "pkg-app", version: "1.0.0" }] });
+      if (url.startsWith("/api/instances")) return json({ schema_version: 1, instances: [{ name: "demo", status: "running" }] });
+      if (url.startsWith("/api/analyzer/status"))
+        return json({ schema_version: 1, available: status.available, runtime: status.runtime ?? (status.available ? "component" : ""), source: status.source ?? (status.available ? "dpm component 0.1.0" : ""), detail: status.detail ?? "" });
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }),
+  );
+}
+
+function renderScreen() {
+  return render(
+    <MemoryRouter initialEntries={["/analyzer?instance=demo"]}>
+      <InstanceSelectionProvider>
+        <AnalyzerScreen />
+      </InstanceSelectionProvider>
+    </MemoryRouter>,
+  );
+}
+
+describe("AnalyzerScreen", () => {
+  it("renders highlights, then the summary pivot and interactions", async () => {
+    stubFetch({ available: true });
+    renderScreen();
+    // the deployed DAR appears as a button; clicking it loads the report
+    const darBtn = await screen.findByRole("button", { name: /pkg-app 1\.0\.0/ }, { timeout: 4000 });
+    await userEvent.click(darBtn);
+
+    // Highlights is the default view — the consuming exercise is surfaced.
+    expect(await screen.findByText(/consuming exercise/i)).toBeInTheDocument();
+
+    // Summary pivot lists the target package with its per-type counts.
+    await userEvent.click(screen.getByRole("button", { name: "summary" }));
+    expect(await screen.findByText("pkg-registry")).toBeInTheDocument();
+    expect(screen.getByText("TARGET PACKAGE")).toBeInTheDocument();
+
+    // Interactions carries the caller/target plus a source column.
+    await userEvent.click(screen.getByRole("button", { name: "interactions" }));
+    expect(await screen.findByText(/TransferAsset/)).toBeInTheDocument();
+    expect(screen.getByText(/UpdateOwner/)).toBeInTheDocument();
+    expect(screen.getByText("SOURCE")).toBeInTheDocument();
+    expect(screen.getByText("App.daml:12")).toBeInTheDocument();
+  });
+
+  it("filters interactions when a summary row is clicked", async () => {
+    stubFetch({ available: true });
+    renderScreen();
+    const darBtn = await screen.findByRole("button", { name: /pkg-app 1\.0\.0/ }, { timeout: 4000 });
+    await userEvent.click(darBtn);
+    await userEvent.click(screen.getByRole("button", { name: "summary" }));
+    await userEvent.click(await screen.findByText("pkg-registry"));
+    // clicking the row jumps to the filtered interaction list
+    expect(await screen.findByText(/Filtered to/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear" })).toBeInTheDocument();
+  });
+
+  it("shows a not-configured notice when the analyzer is unavailable", async () => {
+    stubFetch({ available: false, detail: "install the analyzer as a DPM component" });
+    renderScreen();
+    expect(await screen.findByText("Analyzer not configured")).toBeInTheDocument();
+    expect(screen.getByText("oci://ghcr.io/certora/daml-analyzer:0.1.0")).toBeInTheDocument();
+  });
+});

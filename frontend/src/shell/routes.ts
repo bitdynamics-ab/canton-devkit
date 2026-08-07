@@ -22,6 +22,7 @@ export const NAV: readonly NavEntry[] = [
   { to: "/wallet", label: "Wallet", instanceScoped: true },
   { to: "/explorer", label: "Explorer", instanceScoped: true },
   { to: "/dar", label: "DAR Manager", instanceScoped: true },
+  { to: "/analyzer", label: "Analyzer", instanceScoped: true },
   { to: "/metrics", label: "Metrics", instanceScoped: true },
   { to: "/tokens", label: "Tokens", instanceScoped: true },
   { to: "/agent", label: "Agent Skills", instanceScoped: false },

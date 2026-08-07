@@ -1,0 +1,35 @@
+name: daml-analyzer image
+
+# Builds the pinned daml-analyzer image (build/daml-analyzer/Dockerfile) and
+# pushes it to GHCR. Manual dispatch: the analyzer image changes rarely (only
+# when the pinned upstream commit is bumped), so it is not built on every push.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag (keep in sync with analyzer.DefaultImage)"
+        required: true
+        default: "0.1.0-143a7e2"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    runs-on: [self-hosted, Linux]
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        run: |
+          set -euo pipefail
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          image="ghcr.io/${owner}/daml-analyzer:${{ inputs.tag }}"
+          docker build -t "$image" build/daml-analyzer
+          docker push "$image"
+          echo "pushed $image"

@@ -46,6 +46,8 @@ func TestSchemaShape_GoldenPinsFieldLevelShape(t *testing.T) {
 // exported shape not listed escapes the pin.
 func schemaShapeRoots() []any {
 	return []any{
+		AnalyzerResponse{},
+		AnalyzerStatusResponse{},
 		ContractsListResponse{},
 		ContractDetailResponse{},
 		DARListResponse{},
@@ -221,6 +223,72 @@ types.AllocationsResponse {
   schema_version int
   allocations []types.AllocationSummary
   aliases map[string]string
+}
+
+types.AnalyzerEndpoint {
+  package string
+  version string
+  package_id string
+  module string
+  template string
+  interface string
+  choice string
+  consuming *bool
+}
+
+types.AnalyzerInteraction {
+  type string
+  source *types.AnalyzerSource
+  caller types.AnalyzerEndpoint
+  target types.AnalyzerEndpoint
+}
+
+types.AnalyzerPackage {
+  name string
+  version string
+  package_id string
+  lf_version string
+}
+
+types.AnalyzerPackageRef {
+  name string
+  version string
+  package_id string
+}
+
+types.AnalyzerReport {
+  analyzed_package types.AnalyzerPackage
+  dependencies []types.AnalyzerPackageRef
+  summary types.AnalyzerSummary
+  interactions []types.AnalyzerInteraction
+}
+
+types.AnalyzerResponse {
+  schema_version int
+  instance string
+  dar_name string
+  package_id string
+  report *types.AnalyzerReport
+}
+
+types.AnalyzerSource {
+  package string
+  file string
+  start_line *int
+}
+
+types.AnalyzerStatusResponse {
+  schema_version int
+  available bool
+  runtime string
+  source string
+  detail string
+}
+
+types.AnalyzerSummary {
+  total_interactions int
+  by_type map[string]int
+  by_target_package map[string]int
 }
 
 types.BatchActionResult {

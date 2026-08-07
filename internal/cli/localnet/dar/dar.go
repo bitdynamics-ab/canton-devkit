@@ -22,6 +22,7 @@ package Daml-LF compiled code for deployment to a Canton ledger.
 Available commands (offline, file-based):
   info           Inspect a local DAR and show its packages, LF version, deps
   diff           Compare two DAR files with SCU-aware upgrade signals
+  analyze        Report a local DAR's cross-package interactions (daml-analyzer)
 
 Available commands (participant Admin API):
   upload         Upload a DAR to a participant
@@ -38,6 +39,7 @@ Available commands (participant Admin API):
 	}
 	cmd.AddCommand(buildInfo())
 	cmd.AddCommand(buildDiff())
+	cmd.AddCommand(buildAnalyze())
 	cmd.AddCommand(buildUpload())
 	cmd.AddCommand(buildListUploaded())
 	cmd.AddCommand(buildDownload())
