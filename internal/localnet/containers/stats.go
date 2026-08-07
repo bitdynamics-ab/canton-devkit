@@ -103,7 +103,7 @@ func parseSize(s string) int64 {
 	if err != nil {
 		return 0
 	}
-	var mult float64 = 1
+	var mult float64
 	switch strings.ToLower(strings.TrimSpace(s[i:])) {
 	case "b", "":
 		mult = 1
@@ -115,6 +115,9 @@ func parseSize(s string) int64 {
 		mult = 1 << 30
 	case "tb", "tib":
 		mult = 1 << 40
+	default:
+		// Unknown unit (e.g. PiB) — 0 rather than silently mis-scaling.
+		return 0
 	}
 	return int64(num * mult)
 }

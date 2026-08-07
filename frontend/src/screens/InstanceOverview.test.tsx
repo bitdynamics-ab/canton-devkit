@@ -340,6 +340,112 @@ describe("InstanceOverview — JWT + app config", () => {
   });
 });
 
+describe("InstanceOverview — fetch lifecycle", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("shows the error line when the instance fetch fails", async () => {
+    setupFetch();
+    // setupFetch already stubbed every other endpoint (containers, jwt,
+    // app-config, ...) with a sane running-instance shape; wrap it so
+    // only the exact /api/instances/{name} GET 404s.
+    const base = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (/\/api\/instances\/[^/?]+(?:\?|$)/.test(url)) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ code: "INSTANCE_NOT_FOUND", error: "instance ghost not found" }),
+              { status: 404, headers: { "Content-Type": "application/json" } },
+            ),
+          );
+        }
+        return base(url, init);
+      }),
+    );
+
+    render(<InstanceOverview name="ghost" statusHint="running" />);
+    await waitFor(() => {
+      expect(screen.getByText(/instance ghost not found/i)).toBeInTheDocument();
+    });
+  });
+
+  it("re-fetches when the name prop changes", async () => {
+    // Without the useEffect dep on `name`, the first instance would stick forever.
+    setupFetch();
+    const base = globalThis.fetch;
+    let i = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (/\/api\/instances\/[^/?]+(?:\?|$)/.test(url)) {
+          i++;
+          const which = i === 1 ? "demo" : "hubble";
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                schema_version: 1,
+                name: which,
+                splice_version: i === 1 ? "0.6.4" : "0.6.3",
+                status: "stopped",
+                created_at: "2026-05-25T10:00:00Z",
+                compose_project: `cdk-${which}`,
+                docker_network: `cdk-${which}_default`,
+                container_prefix: `cdk-${which}`,
+                project_dir: `/x/${which}`,
+                data_dir: `/x/${which}/data`,
+              }),
+              { status: 200, headers: { "Content-Type": "application/json" } },
+            ),
+          );
+        }
+        return base(url, init);
+      }),
+    );
+
+    const { rerender } = render(<InstanceOverview name="demo" statusHint="stopped" />);
+    await waitFor(() => {
+      expect(screen.getByText(/Splice 0.6.4/)).toBeInTheDocument();
+    });
+    rerender(<InstanceOverview name="hubble" statusHint="stopped" />);
+    await waitFor(() => {
+      expect(screen.getByText(/Splice 0.6.3/)).toBeInTheDocument();
+    });
+  });
+
+  it("uses a neutral error banner for non-stop action failures", async () => {
+    setupFetch({ instanceStatus: "stopped" });
+    // setupFetch already stubbed a full running-instance fetch; wrap it so
+    // only /start diverges to a failure, exercising the generic (non-stop)
+    // action-error path.
+    const base = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (typeof url === "string" && url.endsWith("/start")) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ code: "START_FAILED", error: "boom" }), {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            }),
+          );
+        }
+        return base(url, init);
+      }),
+    );
+
+    render(<InstanceOverview name="demo" statusHint="stopped" />);
+
+    const startBtn = await screen.findByRole("button", { name: /^Start$/ });
+    fireEvent.click(startBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Action failed: boom");
+    });
+    expect(screen.getByRole("alert")).not.toHaveTextContent("Stop failed");
+  });
+});
+
 describe("InstanceOverview — tabs", () => {
   afterEach(() => vi.unstubAllGlobals());
 

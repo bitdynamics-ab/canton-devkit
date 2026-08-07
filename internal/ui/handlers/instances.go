@@ -1348,29 +1348,40 @@ func handleInstanceContainers() http.HandlerFunc {
 			}
 			statCtx, statCancel := context.WithTimeout(r.Context(), 4*time.Second)
 			if stats, err := containers.Stats(statCtx, names); err == nil {
-				var cpu float64
-				var used, limit int64
-				var any bool
-				for _, c := range health {
-					if s, ok := stats[c.Name]; ok {
-						cpu += s.CPUPct
-						used += s.MemBytes
-						limit += s.MemLimit
-						any = true
-					}
-				}
-				if any {
-					resp.CPUPercent = &cpu
-					resp.MemUsedBytes = &used
-					if limit > 0 {
-						resp.MemLimitBytes = &limit
-					}
-				}
+				resp.CPUPercent, resp.MemUsedBytes, resp.MemLimitBytes = aggregateContainerStats(health, stats)
 			}
 			statCancel()
 		}
 		writeJSON(w, http.StatusOK, resp)
 	}
+}
+
+// aggregateContainerStats sums per-container docker-stats samples across a
+// project's containers. Returns nil pointers (never a fabricated zero) when
+// no container in health had a matching sample — e.g. the docker stats call
+// raced a container that just exited. MemLimitBytes stays nil if the summed
+// limit is 0 (no container reported one).
+func aggregateContainerStats(health []ContainerHealth, stats map[string]containers.Stat) (cpu *float64, used, limit *int64) {
+	var cpuSum float64
+	var usedSum, limitSum int64
+	var any bool
+	for _, c := range health {
+		if s, ok := stats[c.Name]; ok {
+			cpuSum += s.CPUPct
+			usedSum += s.MemBytes
+			limitSum += s.MemLimit
+			any = true
+		}
+	}
+	if !any {
+		return nil, nil, nil
+	}
+	used = &usedSum
+	cpu = &cpuSum
+	if limitSum > 0 {
+		limit = &limitSum
+	}
+	return cpu, used, limit
 }
 
 // containersList wraps the shared containers.List (called from

@@ -14,6 +14,7 @@ func TestParseSize(t *testing.T) {
 		{"1.5GiB", int64(1.5 * (1 << 30))},
 		{"  256MiB ", 256 << 20},
 		{"garbage", 0},
+		{"1PiB", 0}, // unknown unit — must not silently mis-scale as bytes
 	}
 	for _, c := range cases {
 		if got := parseSize(c.in); got != c.want {
