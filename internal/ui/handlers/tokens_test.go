@@ -158,6 +158,52 @@ func TestTokens_HoldingsRegistryFallbackTagged(t *testing.T) {
 	}
 }
 
+// A stopped instance still retains its allocated participant ports. Those
+// ports must not be mistaken for a live ledger: the UI should receive the
+// same registry pseudo-balance fallback as an instance with no captured port.
+func TestTokens_HoldingsStoppedRecordedPortFallsBack(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	s := registry.NewState("demo", "0.6.12")
+	s.Status = registry.StatusStopped
+	s.Ports["participant_ledger_app-user"] = 42002
+	s.Tokens = map[string]registry.TokenRef{
+		"RTK": {
+			Name:          "Retail Token",
+			Symbol:        "RTK",
+			InitialSupply: "1000000",
+			IssuerParty:   "alice::abc",
+			InstrumentID:  "RTK",
+			Status:        "on-ledger",
+		},
+	}
+	if err := registry.Write(s); err != nil {
+		t.Fatalf("seed registry: %v", err)
+	}
+
+	srv := tokensSrv(t)
+	resp, err := http.Get(srv.URL + "/api/tokens/RTK/holdings?instance=demo")
+	if err != nil {
+		t.Fatalf("GET holdings: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("holdings status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	var got struct {
+		Source   string `json:"source"`
+		Holdings []struct {
+			Amount string `json:"amount"`
+		} `json:"holdings"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode holdings: %v", err)
+	}
+	if got.Source != "registry" || len(got.Holdings) != 1 || got.Holdings[0].Amount != "1000000" {
+		t.Fatalf("stopped-instance fallback drifted: %+v", got)
+	}
+}
+
 // TestTokens_CreateDuplicateIsConflict pins the symbol-collision
 // mapping: ErrSymbolInUse → 409. The frontend uses this code to
 // surface a focused "pick a different symbol" message.
@@ -295,6 +341,7 @@ func TestHandleTokensCreate_WiresEndpointAndRole(t *testing.T) {
 	st := &registry.State{
 		SchemaVersion: 1,
 		Name:          inst,
+		Status:        registry.StatusRunning,
 		Ports:         map[string]int{"participant_ledger_app-user": 13902},
 	}
 	if err := registry.Write(st); err != nil {

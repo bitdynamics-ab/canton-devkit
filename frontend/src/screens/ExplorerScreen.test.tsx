@@ -41,7 +41,7 @@ const TX_ROWS = [
 // assert the filter query params the screen built.
 const urlsSeen: string[] = [];
 
-function stubFetch() {
+function stubFetch(contracts: unknown[] = []) {
   urlsSeen.length = 0;
   vi.stubGlobal(
     "fetch",
@@ -92,7 +92,7 @@ function stubFetch() {
           instance: "demo",
           role: "app-user",
           ledger_end: 30,
-          contracts: [],
+          contracts,
         });
       }
       return json({ code: "NOT_FOUND", error: "not stubbed: " + url }, 404);
@@ -172,5 +172,32 @@ describe("ExplorerScreen — transactions filters + replay", () => {
     expect(screen.queryByRole("button", { name: "5m" })).toBeNull();
     expect(screen.queryByRole("button", { name: "24h" })).toBeNull();
     expect(screen.getByRole("button", { name: "Refresh snapshot" })).toBeInTheDocument();
+  });
+
+  it("renders the scalar from a nested Daml amount instead of object coercion", async () => {
+    stubFetch([
+      {
+        contract_id: "amulet-1",
+        template_id: "pkg:Splice.Amulet:Amulet",
+        payload: {
+          amount: {
+            createdAt: { number: 9 },
+            initialAmount: "4790.1600000000",
+            ratePerRound: { rate: "0.0038051800" },
+          },
+        },
+        signatories: ["alice::1"],
+        observers: [],
+        created_at: "2026-06-08T10:00:00Z",
+      },
+    ]);
+    render(
+      <Providers>
+        <ExplorerScreen />
+      </Providers>,
+    );
+
+    expect(await screen.findByText("4790.1600000000")).toBeInTheDocument();
+    expect(screen.queryByText("[object Object]")).toBeNull();
   });
 });

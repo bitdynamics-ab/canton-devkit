@@ -31,7 +31,10 @@ export interface MockStore {
   metricsSummary: JsonRecord;
   metricsRange: JsonRecord;
   tokens: JsonRecord;
+  tokenIdentity: JsonRecord;
   tokensMatrix: JsonRecord;
+  tokenAllocations: JsonRecord;
+  tokenTransfers: JsonRecord;
   tokenSummary: JsonRecord;
   tokenActivity: JsonRecord;
   tokenHoldings: JsonRecord;
@@ -113,7 +116,24 @@ export function createStore(fixtureDir = FIXTURES_DIR): MockStore {
     }),
     metricsRange: load("metrics-range.json", { status: "success", data: { result: [] } }),
     tokens: load("tokens.json", { schema_version: SCHEMA_VERSION, instruments: [] }),
+    tokenIdentity: load("token-identity.json", {
+      schema_version: SCHEMA_VERSION,
+      instance: DEFAULT_INSTANCE,
+      available_roles: ["app-user", "app-provider", "sv"],
+      current_role: "app-user",
+    }),
     tokensMatrix: load("tokens-matrix.json", { schema_version: SCHEMA_VERSION, matrix: {} }),
+    tokenAllocations: load("token-allocations.json", {
+      schema_version: SCHEMA_VERSION,
+      allocations: [],
+      aliases: {},
+    }),
+    tokenTransfers: load("token-transfers.json", {
+      schema_version: SCHEMA_VERSION,
+      pending_transfers: [],
+      truncated: false,
+      aliases: {},
+    }),
     tokenSummary: load("token-summary.json", { schema_version: SCHEMA_VERSION, summary: {} }),
     tokenActivity: load("token-activity.json", { schema_version: SCHEMA_VERSION, events: [] }),
     tokenHoldings: load("token-holdings.json", {

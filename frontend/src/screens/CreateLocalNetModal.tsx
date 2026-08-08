@@ -47,7 +47,6 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
   const [prometheus, setPrometheus] = useState(false);
   const [grafana, setGrafana] = useState(false);
   const [observabilityMode, setObservabilityMode] = useState("auto");
-  const [tokensV2, setTokensV2] = useState(false);
   const [portBase, setPortBase] = useState("");
   const [versions, setVersions] = useState<SpliceVersionEntry[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(false);
@@ -75,7 +74,6 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
       setAllowUncurated(false);
       setPrometheus(false);
       setGrafana(false);
-      setTokensV2(false);
       setPortBase("");
       setStage({ kind: "form" });
       requestAnimationFrame(() => inputRef.current?.focus());
@@ -167,6 +165,11 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
     };
   }, [open, stage.kind, version, allowUncurated]);
 
+  // Stable Splice releases include Token Standard V2 from 0.6.11 onward.
+  // This is informational only: no alpha protocol/profile is required.
+  const v2Capable =
+    versions.find((v) => v.tag === version)?.v2_capable ?? false;
+
   if (!open) return null;
 
   const nameValid = NAME_RE.test(name);
@@ -187,7 +190,6 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
           const profiles = [
             ...(prometheus ? ["prometheus"] : []),
             ...(grafana ? ["grafana"] : []),
-            ...(tokensV2 ? ["tokens-v2"] : []),
           ];
           return profiles.length ? { profiles } : {};
         })(),
@@ -257,8 +259,7 @@ export function CreateLocalNetModal({ open, onClose, onCreated }: Props) {
               setGrafana={setGrafana}
               observabilityMode={observabilityMode}
               setObservabilityMode={setObservabilityMode}
-              tokensV2={tokensV2}
-              setTokensV2={setTokensV2}
+              v2Capable={v2Capable}
               portBase={portBase}
               setPortBase={setPortBase}
               preflight={preflight}
@@ -414,8 +415,7 @@ interface FormBodyProps {
   setGrafana: (b: boolean) => void;
   observabilityMode: string;
   setObservabilityMode: (s: string) => void;
-  tokensV2: boolean;
-  setTokensV2: (b: boolean) => void;
+  v2Capable: boolean;
   portBase: string;
   setPortBase: (s: string) => void;
   preflight: PreflightState;
@@ -440,8 +440,7 @@ function FormBody({
   setGrafana,
   observabilityMode,
   setObservabilityMode,
-  tokensV2,
-  setTokensV2,
+  v2Capable,
   portBase,
   setPortBase,
   preflight,
@@ -609,53 +608,42 @@ function FormBody({
         </Field>
       )}
 
-      <label
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          gap: 10,
-          padding: "10px 12px",
-          background: W.surface2,
-          borderRadius: 4,
-          border: `1px solid ${tokensV2 ? W.brand : W.border}`,
-          cursor: "pointer",
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={tokensV2}
-          onChange={(e) => setTokensV2(e.target.checked)}
-          style={{ marginTop: 2 }}
-        />
-        <div style={{ flex: 1, fontSize: fs.meta, color: W.text2 }}>
-          <strong style={{ color: W.text }}>Token Standard V2 (alpha)</strong>
-          <span
-            style={{
-              marginLeft: 8,
-              fontSize: fs.micro,
-              padding: "1px 6px",
-              borderRadius: 2,
-              background: `${tint(W.brand, 10)}`,
-              color: W.brand,
-              fontFamily: wMono,
-            }}
-          >
-            protocol 35
-          </span>
-          <div style={{ color: W.dim, fontSize: fs.label, marginTop: 3, lineHeight: 1.5 }}>
-            Injects the alpha-protocol Canton config for CIP-0112 token
-            flows. Requires a V2-capable Splice version (e.g.{" "}
-            <code style={{ fontFamily: wMono }}>token-standard-v2</code>). The
-            instance settles at status <strong>partial</strong>. The V2
-            splice healthcheck never reports healthy, but token flows work.
-            Equivalent to{" "}
-            <code style={{ fontFamily: wMono, marginLeft: 4 }}>
-              --profile tokens-v2
-            </code>{" "}
-            on the CLI.
+      {v2Capable && (
+        <div
+          role="status"
+          aria-label="Token Standard V2 included"
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 10,
+            padding: "10px 12px",
+            background: W.surface2,
+            borderRadius: 4,
+            border: `1px solid ${W.border}`,
+          }}
+        >
+          <div style={{ flex: 1, fontSize: fs.meta, color: W.text2 }}>
+            <strong style={{ color: W.text }}>Token Standard V2</strong>
+            <span
+              style={{
+                marginLeft: 8,
+                fontSize: fs.micro,
+                padding: "1px 6px",
+                borderRadius: 2,
+                background: `${tint(W.brand, 10)}`,
+                color: W.brand,
+                fontFamily: wMono,
+              }}
+            >
+              included
+            </span>
+            <div style={{ color: W.dim, fontSize: fs.label, marginTop: 3, lineHeight: 1.5 }}>
+              Included in Splice 0.6.11 and newer. Create, mint, and exercise
+              V2 instruments without an extra profile or alpha protocol.
+            </div>
           </div>
         </div>
-      </label>
+      )}
 
       <details style={{ marginTop: 4 }}>
         <summary
@@ -751,7 +739,6 @@ function FormBody({
           {version || "latest"}
           {prometheus ? " --profile prometheus" : ""}
           {grafana ? " --profile grafana" : ""}
-          {tokensV2 ? " --profile tokens-v2" : ""}
           {portBase.trim() ? ` --port-base ${portBase.trim()}` : ""}
         </span>
       </div>
@@ -1070,28 +1057,112 @@ export function VersionPicker({
     );
   }
 
-  const sorted = [...versions].sort((a, b) => {
-    if (a.status === "latest" && b.status !== "latest") return -1;
-    if (b.status === "latest" && a.status !== "latest") return 1;
-    return compareSpliceTags(b.tag, a.tag);
-  });
+  // Curated = the launch-ready catalogue (latest / supported / the pinned
+  // token-standard build). Those become segmented pills. "available" tags are
+  // known upstream but not adopted locally, so they'd overflow a pill row and
+  // stay in a compact "N more" select — nothing is hidden, the common case is
+  // one click.
+  const curated = versions
+    .filter((v) => isCurated(v.status))
+    .sort((a, b) => {
+      if (a.status === "latest" && b.status !== "latest") return -1;
+      if (b.status === "latest" && a.status !== "latest") return 1;
+      return compareSpliceTags(b.tag, a.tag);
+    });
+  const others = versions
+    .filter((v) => !isCurated(v.status))
+    .sort((a, b) => compareSpliceTags(b.tag, a.tag));
+  const selectedEntry = versions.find((v) => v.tag === selected);
+  const selectedIsOther = selectedEntry != null && !isCurated(selectedEntry.status);
 
   return (
-    <select
-      value={selected}
-      onChange={(e) => onSelect(e.target.value)}
-      style={selectStyle}
-      aria-label="Splice version"
-    >
-      {sorted.map((v) => (
-        <option key={v.tag} value={v.tag}>
-          {v.tag}
-          {v.status === "latest" ? " (latest)" : ""}
-          {v.major ? ` · major ${v.major}` : ""}
-        </option>
-      ))}
-    </select>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div
+        role="radiogroup"
+        aria-label="Splice version"
+        style={{ display: "flex", flexWrap: "wrap", gap: 6 }}
+      >
+        {curated.map((v) => {
+          const on = v.tag === selected;
+          return (
+            <button
+              key={v.tag}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => onSelect(v.tag)}
+              style={versionPill(on)}
+            >
+              {v.tag}
+              {v.status === "latest" && (
+                <span style={{ fontSize: fs.micro, opacity: 0.85 }}>latest</span>
+              )}
+            </button>
+          );
+        })}
+        {others.length > 0 && (
+          <select
+            value={selectedIsOther ? selected : ""}
+            onChange={(e) => e.target.value && onSelect(e.target.value)}
+            aria-label={`${others.length} more Splice versions`}
+            style={{
+              ...versionPill(selectedIsOther),
+              appearance: "auto",
+              paddingRight: 6,
+            }}
+          >
+            <option value="">＋ {others.length} more…</option>
+            {others.map((v) => (
+              <option key={v.tag} value={v.tag}>
+                {v.tag}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      {selectedEntry && (
+        <div style={{ fontSize: fs.label, color: W.dim, fontFamily: wMono }}>
+          {VERSION_STATUS_LABEL[selectedEntry.status]} · sha{" "}
+          {selectedEntry.commit.slice(0, 7)}
+          {selectedEntry.note ? ` · ${selectedEntry.note}` : ""}
+        </div>
+      )}
+    </div>
   );
+}
+
+// The launch-ready catalogue the pills surface; everything else is an
+// upstream tag not yet adopted locally.
+function isCurated(status: SpliceVersionEntry["status"]): boolean {
+  return (
+    status === "latest" || status === "supported" || status === "catalogued-only"
+  );
+}
+
+const VERSION_STATUS_LABEL: Record<SpliceVersionEntry["status"], string> = {
+  latest: "latest curated",
+  supported: "supported",
+  "catalogued-only": "catalogued only",
+  available: "available · run add-splice-version to adopt",
+  drifted: "drifted from upstream",
+};
+
+function versionPill(on: boolean): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "5px 12px",
+    borderRadius: R.control,
+    border: `1px solid ${on ? W.brand : W.border}`,
+    background: on ? W.brand : W.surface,
+    color: on ? W.onAccent : W.text,
+    fontFamily: wMono,
+    fontSize: fs.meta,
+    fontWeight: on ? 600 : 500,
+    fontVariantNumeric: "tabular-nums",
+    cursor: "pointer",
+  };
 }
 
 // Semver-aware ordering (negative ⇒ a older than b) so a release

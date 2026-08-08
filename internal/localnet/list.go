@@ -89,10 +89,7 @@ func collectListRows(ctx context.Context, idx *registry.Index) ([]listRow, types
 			unreadable = append(unreadable, e.Name)
 		}
 
-		startedAgo := ""
-		if e.Status == registry.StatusRunning {
-			startedAgo = humanSince(e.CreatedAt)
-		}
+		startedAgo := InstanceStartedAgo(e.CreatedAt, e.Status)
 		row := listRow{
 			Name:          e.Name,
 			SpliceVersion: e.SpliceVersion,
@@ -233,6 +230,15 @@ func humanSince(ts string) string {
 	default:
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	}
+}
+
+// InstanceStartedAgo is the shared CLI/Web UI projection for a running
+// instance's age. Non-running instances intentionally have no uptime.
+func InstanceStartedAgo(createdAt string, status registry.Status) string {
+	if status != registry.StatusRunning {
+		return ""
+	}
+	return humanSince(createdAt)
 }
 
 // liveContainerCheck returns "yes" if at least one running container

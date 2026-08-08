@@ -476,22 +476,98 @@ function handleTokensRoute(
   }
 
   if (path === "/api/tokens" && method === "POST") {
-    jsonResponse(res, 201, {
-      schema_version: SCHEMA_VERSION,
-      symbol: "NEW",
-      name: "New Token",
-      instrument_id: "NEW",
+    void readRequestBody(_req).then((raw) => {
+      const body = parseJsonBody<{
+        name?: string;
+        symbol?: string;
+        decimals?: number;
+        initial_supply?: string;
+        issuer?: string;
+      }>(raw);
+      const symbol = body?.symbol ?? "NEW";
+      const issuer = body?.issuer ?? "alice::abc";
+      const ref = {
+        name: body?.name ?? "New Token",
+        symbol,
+        decimals: body?.decimals ?? 6,
+        initial_supply: body?.initial_supply ?? "0",
+        issuer_party: issuer,
+        instrument_id: symbol,
+        created_at: new Date().toISOString(),
+        status: "recorded",
+      };
+      const instruments = (store.tokens.instruments as unknown[]) ?? [];
+      instruments.push({ ...ref, admin: issuer, generation: "v2", on_ledger: true });
+      store.tokens.instruments = instruments;
+      jsonResponse(res, 201, ref);
     });
     return true;
   }
 
   if (path === "/api/tokens/demo" && method === "POST") {
-    jsonResponse(res, 201, {
-      schema_version: SCHEMA_VERSION,
-      symbol: "DEMO",
-      instrument_id: "DEMO",
-      minted: "1000",
+    void readRequestBody(_req).then((raw) => {
+      const body = parseJsonBody<{ symbol?: string; initial_supply?: string; decimals?: number }>(raw);
+      const symbol = body?.symbol ?? "DEMO";
+      const initialSupply = body?.initial_supply ?? "1000000";
+      const decimals = body?.decimals ?? 6;
+      const issuerPartyId = "dso::demo";
+      const holderPartyId = "app_user_demo-localparty-1::mock";
+      const issuer = {
+        alias: "demo-issuer",
+        party_id: issuerPartyId,
+        role: "app-provider",
+        is_local: true,
+        created_at: new Date().toISOString(),
+      };
+      const holder = {
+        alias: "app-user",
+        party_id: holderPartyId,
+        role: "app-user",
+        is_local: true,
+        created_at: new Date().toISOString(),
+      };
+      const ref = {
+        name: symbol,
+        symbol,
+        decimals,
+        initial_supply: initialSupply,
+        issuer_party: issuerPartyId,
+        instrument_id: symbol,
+        created_at: new Date().toISOString(),
+        status: "recorded",
+      };
+      const instruments = (store.tokens.instruments as unknown[]) ?? [];
+      if (!instruments.some((i) => (i as { symbol?: string }).symbol === symbol)) {
+        instruments.push({ ...ref, admin: issuerPartyId, generation: "v2", on_ledger: true });
+      }
+      store.tokens.instruments = instruments;
+      jsonResponse(res, 201, { token: ref, issuer, holder, seeded: true });
     });
+    return true;
+  }
+
+  if (path === "/api/tokens/identity" && method === "GET") {
+    const instance = url.searchParams.get("instance") ?? DEFAULT_INSTANCE;
+    const identity = structuredClone(store.tokenIdentity) as {
+      schema_version: number;
+      instance: string;
+      available_roles?: string[];
+      current_role?: string;
+    };
+    identity.instance = instance;
+    identity.available_roles = identity.available_roles ?? ["app-user", "app-provider", "sv"];
+    identity.current_role = url.searchParams.get("role") ?? identity.current_role ?? "app-user";
+    jsonResponse(res, 200, identity);
+    return true;
+  }
+
+  if (path === "/api/tokens/allocations" && method === "GET") {
+    jsonResponse(res, 200, store.tokenAllocations);
+    return true;
+  }
+
+  if (path === "/api/tokens/transfers" && method === "GET") {
+    jsonResponse(res, 200, store.tokenTransfers);
     return true;
   }
 
@@ -499,6 +575,17 @@ function handleTokensRoute(
   if (!symbolMatch) return false;
   const symbol = decodeURIComponent(symbolMatch[1]);
   const sub = symbolMatch[2] ?? "";
+
+  if (sub === "/allocate" && method === "POST") {
+    jsonResponse(res, 200, { schema_version: SCHEMA_VERSION, allocation_id: "00allocation-mock" });
+    return true;
+  }
+
+  const allocationActionMatch = path.match(/^\/api\/tokens\/allocations\/([^/]+)\/(withdraw|cancel)$/);
+  if (allocationActionMatch && method === "POST") {
+    noContent(res);
+    return true;
+  }
 
   if (sub === "" && method === "GET") {
     jsonResponse(res, 200, {
@@ -541,7 +628,11 @@ function handleTokensRoute(
       });
       return true;
     }
-    jsonResponse(res, 201, { schema_version: SCHEMA_VERSION, transfer_id: "tx-mock-1" });
+    jsonResponse(res, 201, {
+      schema_version: SCHEMA_VERSION,
+      transfer_instruction_id: "tx-mock-1",
+      settled: false,
+    });
     return true;
   }
 

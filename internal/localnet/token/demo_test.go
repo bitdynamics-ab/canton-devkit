@@ -46,6 +46,29 @@ func TestRunDemo_RequiresInstance(t *testing.T) {
 	}
 }
 
+func TestV2InstrumentCreateCapableUsesStableReleaseBoundary(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	tests := []struct {
+		name    string
+		version string
+		want    bool
+	}{
+		{"before-v2", "0.6.10", false},
+		{"v2-release", "0.6.11", true},
+		{"latest-v2", "0.6.12", true},
+		{"legacy-v2", "token-standard-v2", true},
+	}
+	for _, tt := range tests {
+		if err := registry.Write(registry.NewState(tt.name, tt.version)); err != nil {
+			t.Fatalf("seed %s: %v", tt.name, err)
+		}
+		if got := v2InstrumentCreateCapable(tt.name); got != tt.want {
+			t.Errorf("v2InstrumentCreateCapable(%q at %s) = %v, want %v",
+				tt.name, tt.version, got, tt.want)
+		}
+	}
+}
+
 func TestRunDemo_ComposesPartyCreateMintFaucet(t *testing.T) {
 	stubDemoV2Capable(t, true)
 	var order []string

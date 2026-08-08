@@ -48,14 +48,13 @@ const darFetchMaxBytes = 64 << 20 // 64 MiB — these DARs are well under 1 MiB
 var darBundleBaseURL = "https://raw.githubusercontent.com/canton-network/splice"
 
 // errDARNotPublished is returned by fetchDAR for an HTTP 404 — the DAR
-// isn't committed at that commit. The splice-test-token-v2 example only
-// lives on the token-standard-v2 stream, not on a release tag like 0.6.4.
+// isn't committed at that commit. Stable releases before 0.6.11 do not
+// publish the splice-test-token-v2 example.
 var errDARNotPublished = errors.New("DAR not published at this commit")
 
 // ErrTokenDARUnavailable is returned when a required test-token DAR isn't
-// published for the instance's Splice version — on-ledger V2 token create
-// needs a token-standard-v2 instance. An actionable precondition rather
-// than a raw GitHub 404.
+// published for the instance's Splice version. An actionable precondition
+// is more useful than surfacing a raw GitHub 404.
 var ErrTokenDARUnavailable = errors.New("test-token DAR not available for this Splice version")
 
 // ensureTokenDARs uploads any test-token DAR not already vetted, fetching
@@ -115,12 +114,11 @@ func tokenBundleCommit(instance string) (string, error) {
 }
 
 // darUnavailableError wraps ErrTokenDARUnavailable with an actionable
-// message: the test-token DAR is only published on the token-standard-v2
-// stream, so on-ledger V2 tokens need such an instance.
+// message: the test-token DAR is published in stable Splice 0.6.11 and newer.
 func darUnavailableError(pkg, version string) error {
 	return fmt.Errorf("%w: %q is not published for Splice %q — on-ledger V2 tokens "+
-		"need a token-standard-v2 instance (`dpm localnet up --version token-standard-v2 "+
-		"--profile tokens-v2`), or upload the DAR manually with `dpm localnet dar upload`",
+		"need Splice 0.6.11 or newer (`dpm localnet up --version 0.6.12`), "+
+		"or upload the DAR manually with `dpm localnet dar upload`",
 		ErrTokenDARUnavailable, pkg, version)
 }
 

@@ -14,7 +14,7 @@ import {
   type Role,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { W, wMono, tableCaps, R, tint, fs } from "../tokens";
+import { W, wMono, tableCaps, wideCaps, R, tint, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { MonoId } from "../components/MonoId";
 import { SkeletonTable, useLoadingDelay } from "../components/Skeleton";
@@ -23,17 +23,32 @@ import {
   IcAlert,
   IcArrowRight,
   IcCheck,
+  IcExplorer,
+  IcRefresh,
   IcUpload,
   IcX,
 } from "../components/icons";
 import { DARPackageTree } from "./DARPackageTree";
 import { DARDiff } from "./DARDiff";
 
-// Three-column DAR manager: upload + vetting + watch (left), package
-// list (middle), inspect tree / structural diff (right). Vetting is
-// live per-participant end-to-end.
+// DAR manager: a horizontal upload bar, a package table (with an
+// inline filter/search/refresh header and a watch-mode footer), and a
+// right detail rail that only exists once a package is selected.
+// Vetting is live per-participant end-to-end.
 
 const ROLES: Role[] = ["app-user", "app-provider", "sv"];
+
+// Package table column template — shared by the header band and rows.
+const COLS = "1.6fr 0.55fr 1.1fr 1.15fr";
+
+// Built-in packages the app-DARs filter hides (Canton/Splice/Daml SDK).
+function isBuiltin(name: string): boolean {
+  return (
+    name.startsWith("canton-builtin-") ||
+    name.startsWith("splice-") ||
+    name.startsWith("daml-")
+  );
+}
 
 type UploadState =
   | { kind: "idle" }
@@ -68,8 +83,10 @@ export function DARScreen() {
   const [compareHash, setCompareHash] = useState<string | null>(null);
   const [upload, setUpload] = useState<UploadState>({ kind: "idle" });
   const [dragOver, setDragOver] = useState(false);
-  const [filter, setFilter] = useState<"all" | "app">("all");
-  const [tick, setTick] = useState(0); // bump to refetch after upload
+  // Default to app DARs — the SDK built-ins are noise for most flows.
+  const [filter, setFilter] = useState<"all" | "app">("app");
+  const [search, setSearch] = useState("");
+  const [tick, setTick] = useState(0); // bump to refetch (after upload / manual refresh)
   const [vetting, setVetting] = useState<Record<string, VetState>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -163,16 +180,25 @@ export function DARScreen() {
   const rows = useMemo(() => {
     if (state.kind !== "ok") return [] as DARRow[];
     let list = state.data.dars;
-    if (filter === "app") {
+    if (filter === "app") list = list.filter((d) => !isBuiltin(d.name));
+    const q = search.trim().toLowerCase();
+    if (q) {
       list = list.filter(
         (d) =>
-          !d.name.startsWith("canton-builtin-") &&
-          !d.name.startsWith("splice-") &&
-          !d.name.startsWith("daml-"),
+          d.name.toLowerCase().includes(q) ||
+          d.main.toLowerCase().includes(q),
       );
     }
     return list;
-  }, [state, filter]);
+  }, [state, filter, search]);
+
+  // Subtitle counts describe the whole listing, independent of the tab.
+  const builtinHidden =
+    state.kind === "ok"
+      ? state.data.dars.filter((d) => isBuiltin(d.name)).length
+      : 0;
+  const uploadedCount =
+    state.kind === "ok" ? state.data.dars.length - builtinHidden : 0;
 
   useEffect(() => {
     setVetting({});
@@ -220,6 +246,30 @@ export function DARScreen() {
     [state, rows, selectedHash],
   );
 
+  // Switching the selected package drops any stale comparison so the
+  // new drawer opens on the inspect view, not a leftover diff.
+  useEffect(() => {
+    setCompareHash(null);
+  }, [selectedHash]);
+
+  // Escape closes the detail rail (and any active comparison).
+  useEffect(() => {
+    if (!selectedHash) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSelectedHash(null);
+        setCompareHash(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedHash]);
+
+  function closeDrawer() {
+    setSelectedHash(null);
+    setCompareHash(null);
+  }
+
   if (!name) {
     return (
       <section style={{ padding: 24 }}>
@@ -231,28 +281,47 @@ export function DARScreen() {
   }
 
   return (
-    <section style={{ padding: 24 }}>
+    <section
+      style={{
+        padding: 24,
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+      }}
+    >
       <header
         style={{
           display: "flex",
           alignItems: "flex-end",
           justifyContent: "space-between",
-          marginBottom: 14,
           gap: 16,
           flexWrap: "wrap",
         }}
       >
-        <div>
-          <h2 style={{ color: W.text, fontSize: fs.title, margin: 0 }}>
-            DAR Manager
-          </h2>
-          <div style={{ color: W.dim, fontSize: fs.lead, marginTop: 3 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <h1 style={{ color: W.text, fontSize: fs.title, fontWeight: 600, margin: 0 }}>
+            Packages
+          </h1>
+          <div style={{ color: W.dim, fontSize: fs.meta, fontFamily: wMono }}>
             {state.kind === "ok"
-              ? `${state.data.dars.length} packages on ${role} participant`
-              : "loading…"}
+              ? `${uploadedCount} uploaded on ${name} · ${builtinHidden} built-in hidden`
+              : state.kind === "loading"
+                ? "loading…"
+                : state.kind === "port-missing"
+                  ? `participant ports unavailable on ${name}`
+                  : `could not load packages on ${name}`}
           </div>
         </div>
-        <RoleSwitcher role={role} onChange={setRole} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ color: W.dim, fontSize: fs.meta }}>Viewing</span>
+          <Segmented
+            variant="solid"
+            ariaLabel="Viewing participant"
+            value={role}
+            onChange={(v) => setRole(v as Role)}
+            options={ROLES.map((r) => ({ label: r, value: r }))}
+          />
+        </div>
       </header>
 
       {state.kind === "loading" && <DARListLoading />}
@@ -265,271 +334,376 @@ export function DARScreen() {
       )}
 
       {state.kind === "ok" && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "320px 1fr 360px",
-            gap: 14,
-            alignItems: "start",
-          }}
-        >
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <Card>
-              <div
-                role="button"
-                tabIndex={0}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOver(true);
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragOver(false);
-                  void doUpload(e.dataTransfer.files);
-                }}
-                onClick={() => fileInputRef.current?.click()}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    fileInputRef.current?.click();
-                  }
-                }}
-                aria-label="Drop DAR file here or click to choose"
-                style={{
-                  margin: 14,
-                  border: `1px dashed ${dragOver ? W.brand : tint(W.brand, 33)}`,
-                  borderRadius: R.control,
-                  padding: "22px 16px",
-                  textAlign: "center",
-                  background: dragOver ? tint(W.brand, 10) : "transparent",
-                  cursor: "pointer",
-                  transition: "background-color 120ms, border-color 120ms",
-                }}
-              >
-                {upload.kind === "uploading" ? (
-                  <UploadProgress state={upload} />
-                ) : (
-                  <>
-                    <div
-                      style={{
-                        color: W.brand,
-                        marginBottom: 8,
-                        display: "flex",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <IcUpload size={22} />
-                    </div>
-                    <div
-                      style={{
-                        fontWeight: 600,
-                        marginBottom: 3,
-                        fontSize: fs.data,
-                        color: W.text,
-                      }}
-                    >
-                      Drop DAR here
-                    </div>
-                    <div style={{ color: W.dim, fontSize: fs.label }}>
-                      or click to browse · multiple .dar accepted
-                    </div>
-                  </>
-                )}
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".dar"
-                multiple
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  if (e.target.files) void doUpload(e.target.files);
-                }}
-              />
-              <div
-                style={{
-                  padding: "4px 14px 14px",
-                  borderTop: `1px solid ${W.border}`,
-                }}
-              >
-                <SectionLabel>Vet on upload</SectionLabel>
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
-                >
-                  {(["sv", "app-provider", "app-user"] as Role[]).map((r) => (
-                    <VetToggle
-                      key={r}
-                      on={vetTargets[r]}
-                      onChange={(v) =>
-                        setVetTargets((s) => ({ ...s, [r]: v }))
-                      }
-                      label={`${r} participant`}
-                    />
-                  ))}
-                </div>
-                <div
-                  style={{
-                    marginTop: 12,
-                    padding: "8px 10px",
-                    background: W.border,
-                    borderRadius: 2,
-                    fontSize: fs.label,
-                    color: selectedRoles.length === 0 ? W.warn : W.text2,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {selectedRoles.length === 0 ? (
-                    <>
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6,
-                          color: W.warn,
-                        }}
-                      >
-                        <IcAlert size={12} /> Pick at least one target.
-                      </span>{" "}
-                      Drops will be refused until a participant is selected.
-                    </>
-                  ) : (
-                    <>
-                      Each dropped DAR
-                      uploads in parallel to <strong>{selectedRoles.length}</strong>{" "}
-                      participant{selectedRoles.length === 1 ? "" : "s"} with
-                      <code style={{ fontFamily: wMono, marginLeft: 4 }}>
-                        vet_all_packages=true
-                      </code>
-                      .
-                    </>
-                  )}
-                </div>
-              </div>
-            </Card>
+        <>
+          <UploadBar
+            dragOver={dragOver}
+            uploading={upload.kind === "uploading" ? upload : null}
+            vetTargets={vetTargets}
+            selectedCount={selectedRoles.length}
+            onToggleTarget={(r, v) =>
+              setVetTargets((s) => ({ ...s, [r]: v }))
+            }
+            onBrowse={() => fileInputRef.current?.click()}
+            onDragOver={() => setDragOver(true)}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(files) => {
+              setDragOver(false);
+              void doUpload(files);
+            }}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".dar"
+            multiple
+            style={{ display: "none" }}
+            onChange={(e) => {
+              if (e.target.files) void doUpload(e.target.files);
+            }}
+          />
 
-            {(upload.kind === "success" || upload.kind === "partial") && (
-              <UploadResultBanner
-                kind={upload.kind}
-                total={upload.total}
-                results={upload.results}
-              />
-            )}
-            {upload.kind === "error" && <ErrorBanner msg={upload.message} />}
-
-            <WatchModeCard instance={name} />
-
-          </div>
+          {(upload.kind === "success" || upload.kind === "partial") && (
+            <UploadResultBanner
+              kind={upload.kind}
+              total={upload.total}
+              results={upload.results}
+            />
+          )}
+          {upload.kind === "error" && <ErrorBanner msg={upload.message} />}
 
           <div
             style={{
-              background: W.surface,
-              border: `1px solid ${W.border}`,
-              borderRadius: 4,
-              overflow: "hidden",
+              display: "grid",
+              gridTemplateColumns: selected ? "1fr 380px" : "1fr",
+              gap: 14,
+              alignItems: "start",
             }}
           >
             <div
               style={{
-                padding: "11px 14px",
-                borderBottom: `1px solid ${W.border}`,
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
+                background: W.surface,
+                border: `1px solid ${W.border}`,
+                borderRadius: R.card,
+                overflow: "hidden",
               }}
             >
-              <div>
-                <div
-                  style={{ color: W.text, fontSize: fs.lead, fontWeight: 600 }}
-                >
-                  Packages on {role} participant
-                </div>
-                <div style={{ color: W.dim, fontSize: fs.label, marginTop: 2 }}>
-                  {filter === "app" ? "filter: app DARs only" : "all packages"}{" "}
-                  · {rows.length} results
-                </div>
-              </div>
-              <span style={{ marginLeft: "auto" }} />
-              <FilterBtn
-                active={filter === "all"}
-                onClick={() => setFilter("all")}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 14px",
+                  borderBottom: `1px solid ${W.border}`,
+                  flexWrap: "wrap",
+                }}
               >
-                all
-              </FilterBtn>
-              <FilterBtn
-                active={filter === "app"}
-                onClick={() => setFilter("app")}
-              >
-                app DARs only
-              </FilterBtn>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1.6fr 0.6fr 1fr 0.8fr",
-                gap: 14,
-                padding: "9px 14px",
-                color: W.dim,
-                fontSize: fs.micro,
-                ...tableCaps,
-                borderBottom: `1px solid ${W.border}`,
-              }}
-            >
-              <span>Package</span>
-              <span>Version</span>
-              <span>Package-id</span>
-              <span>Vetting</span>
-            </div>
-
-            {rows.length === 0 && (
-              <div style={{ padding: 18, color: W.dim, fontSize: fs.body }}>
-                No packages match the current filter.
-              </div>
-            )}
-            <div style={{ maxHeight: "55vh", overflowY: "auto" }}>
-              {rows.map((d) => (
-                <PkgRow
-                  key={d.main}
-                  row={d}
-                  active={d.main === selectedHash}
-                  vet={vetting[d.main]}
-                  onClick={() => setSelectedHash(d.main)}
+                <Segmented
+                  variant="outline"
+                  ariaLabel="Package filter"
+                  value={filter}
+                  onChange={(v) => setFilter(v as "all" | "app")}
+                  options={[
+                    { label: "App DARs", value: "app" },
+                    { label: "All packages", value: "all" },
+                  ]}
                 />
-              ))}
-            </div>
-            <div
-              style={{
-                padding: "10px 14px",
-                color: W.dim,
-                fontSize: fs.label,
-                display: "flex",
-                justifyContent: "space-between",
-                borderTop: `1px solid ${W.border}`,
-              }}
-            >
-              <span>{rows.length} packages</span>
-              <span>↑↓ navigate · ↵ inspect · esc close</span>
-            </div>
-          </div>
+                <label
+                  style={{
+                    marginLeft: "auto",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    height: 28,
+                    padding: "0 10px",
+                    border: `1px solid ${W.border}`,
+                    borderRadius: R.control,
+                    color: W.dim,
+                    minWidth: 200,
+                    background: W.surface,
+                  }}
+                >
+                  <IcExplorer size={13} />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Filter by name or id"
+                    aria-label="Filter packages by name or id"
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      outline: "none",
+                      color: W.text,
+                      fontSize: fs.meta,
+                      fontFamily: "inherit",
+                      width: "100%",
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setTick((n) => n + 1)}
+                  aria-label="Refresh package list"
+                  title="Refresh"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 28,
+                    height: 28,
+                    border: `1px solid ${W.border}`,
+                    borderRadius: R.control,
+                    background: W.surface,
+                    color: W.text2,
+                    cursor: "pointer",
+                  }}
+                >
+                  <IcRefresh size={13} />
+                </button>
+              </div>
 
-          <InspectDrawer
-            row={selected}
-            instance={name}
-            role={role}
-            compareWith={compareHash}
-            onClearCompare={() => setCompareHash(null)}
-            allRows={rows}
-            onCompare={(other) => setCompareHash(other)}
-          />
-        </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: COLS,
+                  gap: 14,
+                  padding: "7px 14px",
+                  background: W.surface2,
+                  borderBottom: `1px solid ${W.border}`,
+                  color: W.dim,
+                  fontSize: fs.label,
+                  ...tableCaps,
+                }}
+              >
+                <span>Package</span>
+                <span>Version</span>
+                <span>Package-id</span>
+                <span>Vetted on</span>
+              </div>
+
+              {rows.length === 0 && (
+                <div style={{ padding: 18, color: W.dim, fontSize: fs.body }}>
+                  {search.trim()
+                    ? "No packages match your filter."
+                    : "No packages match the current filter."}
+                </div>
+              )}
+              <div style={{ maxHeight: "55vh", overflowY: "auto" }}>
+                {rows.map((d) => (
+                  <PkgRow
+                    key={d.main}
+                    row={d}
+                    active={d.main === selectedHash}
+                    vet={vetting[d.main]}
+                    onSelect={() => setSelectedHash(d.main)}
+                  />
+                ))}
+              </div>
+
+              <WatchFooter instance={name} />
+            </div>
+
+            {selected && (
+              <InspectDrawer
+                key={selected.main}
+                row={selected}
+                instance={name}
+                role={role}
+                allRows={rows}
+                compareWith={compareHash}
+                onCompare={(other) => setCompareHash(other)}
+                onClearCompare={() => setCompareHash(null)}
+                onClose={closeDrawer}
+              />
+            )}
+          </div>
+        </>
       )}
     </section>
   );
 }
 
-// Renders the latest DAR-watch SSE event as a "Watching"/"Idle" badge.
-function WatchModeCard({ instance }: { instance: string }) {
+// ── Upload bar ──────────────────────────────────────────
+// Collapsed dropzone: dropping (or browsing) IS the action, so there's
+// no separate submit button. Per-participant "Vet on upload" checkboxes
+// sit inline; the whole bar is a drop target.
+function UploadBar({
+  dragOver,
+  uploading,
+  vetTargets,
+  selectedCount,
+  onToggleTarget,
+  onBrowse,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+}: {
+  dragOver: boolean;
+  uploading: Extract<UploadState, { kind: "uploading" }> | null;
+  vetTargets: Record<Role, boolean>;
+  selectedCount: number;
+  onToggleTarget: (r: Role, v: boolean) => void;
+  onBrowse: () => void;
+  onDragOver: () => void;
+  onDragLeave: () => void;
+  onDrop: (files: FileList) => void;
+}) {
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        onDragOver();
+      }}
+      onDragLeave={onDragLeave}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDrop(e.dataTransfer.files);
+      }}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 16,
+        flexWrap: "wrap",
+        padding: "12px 14px",
+        background: dragOver ? tint(W.brand, 8) : W.surface,
+        border: `1px dashed ${dragOver ? W.brand : W.borderHi}`,
+        borderRadius: R.card,
+        transition: "background-color 120ms, border-color 120ms",
+      }}
+    >
+      {uploading ? (
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <UploadProgress state={uploading} />
+        </div>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={onBrowse}
+            aria-label="Drop .dar files here or browse"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 10,
+              background: "transparent",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              color: W.text,
+              textAlign: "left",
+            }}
+          >
+            <span style={{ color: W.brand, display: "inline-flex" }}>
+              <IcUpload size={17} />
+            </span>
+            <span style={{ fontSize: fs.data, fontWeight: 600, color: W.text }}>
+              Drop .dar files here
+            </span>
+            <span style={{ fontSize: fs.meta, color: W.dim }}>
+              or{" "}
+              <span style={{ color: W.brandText, fontWeight: 500 }}>browse</span>{" "}
+              · 64 MB per file
+            </span>
+          </button>
+          <span
+            aria-hidden
+            style={{ width: 1, height: 24, background: W.border }}
+          />
+          <span style={{ fontSize: fs.meta, color: W.dim }}>Vet on upload</span>
+          <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+            {(["sv", "app-provider", "app-user"] as Role[]).map((r) => (
+              <VetCheckbox
+                key={r}
+                on={vetTargets[r]}
+                label={r}
+                onChange={(v) => onToggleTarget(r, v)}
+              />
+            ))}
+          </div>
+          {selectedCount === 0 ? (
+            <span
+              style={{
+                marginLeft: "auto",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                color: W.warn,
+                fontSize: fs.label,
+              }}
+            >
+              <IcAlert size={12} /> pick at least one target
+            </span>
+          ) : (
+            <span
+              style={{
+                marginLeft: "auto",
+                fontFamily: wMono,
+                fontSize: fs.label,
+                color: W.faint,
+              }}
+            >
+              uploads in parallel · vet_all_packages=true
+            </span>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function VetCheckbox({
+  on,
+  label,
+  onChange,
+}: {
+  on: boolean;
+  label: string;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={on}
+      aria-label={`vet on upload — ${label}`}
+      onClick={() => onChange(!on)}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 7,
+        background: "transparent",
+        border: "none",
+        padding: 0,
+        cursor: "pointer",
+        fontFamily: wMono,
+        fontSize: fs.meta,
+        color: W.text,
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 14,
+          height: 14,
+          borderRadius: R.control,
+          background: on ? W.accentSolid : "transparent",
+          border: `1px solid ${on ? W.accentSolid : W.borderHi}`,
+        }}
+      >
+        {on && <IcCheck size={10} style={{ color: W.onAccentSolid }} />}
+      </span>
+      {label}
+    </button>
+  );
+}
+
+// ── Watch-mode footer ───────────────────────────────────
+// Reflects the live dar-watch SSE state (there is no start/stop API —
+// the watcher is a CLI process, so this is a status indicator, not a
+// control). Shows the command to start one.
+function WatchFooter({ instance }: { instance: string }) {
   const [last, setLast] = useState<DARWatchEvent | null>(null);
   const [active, setActive] = useState(false);
   const [, setNow] = useState(Date.now());
@@ -550,63 +724,83 @@ function WatchModeCard({ instance }: { instance: string }) {
     };
   }, [instance]);
 
-  const ago = last ? formatAgo(Date.now() / 1000 - last.at) : "never";
+  const ago = last ? formatAgo(Date.now() / 1000 - last.at) : null;
   return (
-    <Card title="Watch mode" subtitle="dpm dar watch → live rebuild">
-      <div
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        flexWrap: "wrap",
+        padding: "10px 14px",
+        background: W.sunken,
+        borderTop: `1px solid ${W.border}`,
+      }}
+    >
+      <span
+        title={
+          active
+            ? "A dar watcher is running for this instance"
+            : "Idle — start a watcher with the command shown"
+        }
         style={{
-          display: "flex",
-          flexDirection: "column",
+          display: "inline-flex",
+          alignItems: "center",
           gap: 8,
           fontSize: fs.meta,
-          fontFamily: wMono,
+          color: W.text2,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span
+          aria-hidden
+          style={{
+            width: 26,
+            height: 15,
+            borderRadius: 999,
+            background: active ? W.ok : W.borderHi,
+            display: "inline-flex",
+            alignItems: "center",
+            padding: 2,
+            transition: "background 120ms",
+          }}
+        >
           <span
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "2px 8px",
-              borderRadius: R.control,
-              fontSize: fs.meta,
-              background: active ? tint(W.ok, 13) : W.border,
-              color: active ? W.ok : W.dim,
-              fontWeight: 500,
+              width: 11,
+              height: 11,
+              borderRadius: "50%",
+              background: "#FFF",
+              transform: active ? "translateX(11px)" : "translateX(0)",
+              transition: "transform 120ms",
             }}
-          >
-            <Dot color={active ? W.ok : W.dim} size={6} pulse={active} />
-            {active ? "Watching" : "Idle"}
-          </span>
-          {last && (
-            <span style={{ color: W.dim, fontSize: fs.label }}>{last.event}</span>
-          )}
-        </div>
-        <Row k="last event" v={ago} vColor={last ? W.text : W.dim} />
-        <Row k="detail" v={last?.detail ?? "—"} vColor={W.dim} />
-        <div style={{ height: 1, background: W.border, margin: "4px 0" }} />
-        <div style={{ color: W.dim, fontSize: fs.label, fontFamily: "inherit" }}>
-          Start a watcher with:
-          <pre
-            style={{
-              background: W.border,
-              padding: "6px 8px",
-              marginTop: 4,
-              borderRadius: 2,
-              fontFamily: wMono,
-              fontSize: fs.label,
-              color: W.text2,
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            {`dpm localnet dar watch \\
-  --instance ${instance} \\
-  --publish-to http://127.0.0.1:7777`}
-          </pre>
-        </div>
-      </div>
-    </Card>
+          />
+        </span>
+        <span style={{ fontWeight: 600, color: active ? W.ok : W.text2 }}>
+          {active ? "Watching" : "Idle"}
+        </span>
+        <span style={{ color: W.dim }}>Watch mode</span>
+      </span>
+      <span style={{ fontSize: fs.meta, color: W.dim }}>
+        rebuild and re-upload when a .daml file changes
+      </span>
+      {last && ago && (
+        <span
+          style={{ fontFamily: wMono, fontSize: fs.label, color: W.faint }}
+        >
+          {last.event} · {ago}
+        </span>
+      )}
+      <span
+        style={{
+          marginLeft: "auto",
+          fontFamily: wMono,
+          fontSize: fs.label,
+          color: W.faint,
+        }}
+      >
+        dpm localnet dar watch --instance {instance}
+      </span>
+    </div>
   );
 }
 
@@ -618,44 +812,69 @@ function formatAgo(deltaSec: number): string {
   return `${Math.floor(deltaSec / 86400)}d ago`;
 }
 
+function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let v = n;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i += 1;
+  }
+  return `${v.toFixed(i > 0 && v < 10 ? 1 : 0)} ${units[i]}`;
+}
+
 // undefined means not yet requested.
 type VetState =
   | { kind: "loading" }
   | { kind: "ok"; rows: DARVettingRow[] }
   | { kind: "err" };
 
+function roleAbbr(role: Role): string {
+  return role === "app-user" ? "user" : role === "app-provider" ? "prov" : "sv";
+}
+
 function PkgRow({
   row,
   active,
   vet,
-  onClick,
+  onSelect,
 }: {
   row: DARRow;
   active: boolean;
   vet: VetState | undefined;
-  onClick: () => void;
+  onSelect: () => void;
 }) {
   return (
     <div
-      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      aria-pressed={active}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
       style={{
         display: "grid",
-        gridTemplateColumns: "1.6fr 0.6fr 1fr 0.8fr",
+        gridTemplateColumns: COLS,
         gap: 14,
-        padding: "10px 14px",
+        padding: "11px 14px",
         alignItems: "center",
-        background: active ? tint(W.brand, 12) : "transparent",
+        background: active ? W.selRow : "transparent",
+        borderLeft: `2px solid ${active ? W.brand : "transparent"}`,
         borderBottom: `1px solid ${W.border}`,
         cursor: "pointer",
         transition: "background-color 120ms",
       }}
     >
-      <code
+      <span
         style={{
-          fontFamily: wMono,
-          color: W.text,
-          fontSize: fs.meta,
+          fontSize: fs.data,
           fontWeight: active ? 600 : 500,
+          color: active ? W.brandText : W.text,
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
@@ -663,25 +882,39 @@ function PkgRow({
         title={row.name}
       >
         {row.name}
-      </code>
-      <code
+      </span>
+      <span
         style={{
           fontFamily: wMono,
-          color: W.brand,
-          fontSize: fs.label,
+          color: W.text2,
+          fontSize: fs.meta,
           fontVariantNumeric: "tabular-nums",
         }}
       >
         {row.version}
+      </span>
+      <code
+        style={{
+          fontFamily: wMono,
+          color: W.dim,
+          fontSize: fs.meta,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+        title={row.main}
+      >
+        {row.main.length > 13
+          ? `${row.main.slice(0, 6)}…${row.main.slice(-5)}`
+          : row.main}
       </code>
-      <MonoId value={row.main} head={12} tail={6} size={11} color={W.dim} />
       <VettingCell vet={vet} />
     </div>
   );
 }
 
-// Per-participant vetting as a "U P S" dot trio: green vetted, grey
-// unvetted, amber "?" when a participant couldn't be probed.
+// Per-participant vetting as a relabeled "sv prov user" dot trio: green
+// vetted, grey unvetted, amber when a participant couldn't be probed.
 function VettingCell({ vet }: { vet: VetState | undefined }) {
   if (!vet || vet.kind === "loading") {
     return (
@@ -701,16 +934,15 @@ function VettingCell({ vet }: { vet: VetState | undefined }) {
   return (
     <span
       style={{
-        display: "flex",
+        display: "inline-flex",
         alignItems: "center",
-        gap: 8,
+        gap: 6,
+        flexWrap: "wrap",
         fontFamily: wMono,
-        fontSize: fs.micro,
+        fontSize: fs.label,
       }}
     >
       {vet.rows.map((r) => {
-        const abbr =
-          r.role === "app-user" ? "U" : r.role === "app-provider" ? "P" : "S";
         const color = r.error ? W.warn : r.vetted ? W.ok : W.dim;
         const title = r.error
           ? `${r.role}: ${r.error}`
@@ -719,11 +951,15 @@ function VettingCell({ vet }: { vet: VetState | undefined }) {
           <span
             key={r.role}
             title={title}
-            style={{ display: "flex", alignItems: "center", gap: 3, color }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              color: r.error ? W.warn : W.text2,
+            }}
           >
             <Dot color={color} size={6} />
-            {abbr}
-            {r.error ? "?" : ""}
+            {roleAbbr(r.role)}
           </span>
         );
       })}
@@ -731,118 +967,180 @@ function VettingCell({ vet }: { vet: VetState | undefined }) {
   );
 }
 
+// ── Detail rail ─────────────────────────────────────────
 function InspectDrawer({
   row,
   instance,
   role,
-  compareWith,
-  onClearCompare,
   allRows,
+  compareWith,
   onCompare,
+  onClearCompare,
+  onClose,
 }: {
-  row: DARRow | null;
+  row: DARRow;
   instance: string;
   role: Role;
-  compareWith: string | null;
-  onClearCompare: () => void;
   allRows: DARRow[];
+  compareWith: string | null;
   onCompare: (other: string) => void;
+  onClearCompare: () => void;
+  onClose: () => void;
 }) {
-  if (!row) {
-    return (
-      <div
-        style={{
-          background: W.surface,
-          border: `1px solid ${W.border}`,
-          borderRadius: R.card,
-          padding: 14,
-          textAlign: "left",
-          color: W.dim,
-          fontSize: fs.body,
-          lineHeight: 1.5,
-        }}
-      >
-        Select a package to inspect its tree, per-participant vetting, and
-        structural diff.
-      </div>
-    );
-  }
+  const [summary, setSummary] = useState<{
+    modules: number;
+    templates: number;
+    sizeBytes: number;
+  } | null>(null);
+  const [showCompare, setShowCompare] = useState(false);
+  const compareRow = allRows.find((r) => r.main === compareWith) ?? null;
+
   return (
-    <div
+    <aside
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         overflow: "hidden",
       }}
     >
-      <header style={{ padding: "14px 16px", borderBottom: `1px solid ${W.border}` }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-          <span style={{ color: W.text, fontWeight: 600, fontSize: fs.data }}>
-            {row.name}
-          </span>
-          <span style={{ color: W.brand, fontWeight: 400, fontSize: fs.meta, fontFamily: wMono }}>
-            {row.version}
-          </span>
-        </div>
-        {row.description && row.description !== `${row.name}-${row.version}` && (
-          <div style={{ color: W.dim, fontSize: fs.meta, marginTop: 4 }}>
-            {row.description}
-          </div>
-        )}
-      </header>
-      <Section label="Identity">
+      <header
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 10,
+          padding: "12px 14px",
+          borderBottom: `1px solid ${W.border}`,
+        }}
+      >
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "70px 1fr",
-            gap: 12,
-            padding: "4px 0",
-            alignItems: "center",
+            display: "flex",
+            flexDirection: "column",
+            gap: 2,
+            minWidth: 0,
           }}
         >
-          <span style={{ color: W.dim, fontSize: fs.meta }}>pkg-id</span>
-          <MonoId value={row.main} head={10} tail={8} size={11} color={W.mag} />
+          <span style={{ fontSize: fs.lead, fontWeight: 600, color: W.text }}>
+            {row.name} {row.version}
+          </span>
+          {summary && (
+            <span
+              style={{ fontSize: fs.label, color: W.dim, fontFamily: wMono }}
+              title="total package size (.dalf bytes)"
+            >
+              {formatBytes(summary.sizeBytes)}
+            </span>
+          )}
         </div>
-        <KV label="name" value={row.name} mono />
-        <KV label="version" value={row.version} mono />
-        {row.description && (
-          <KV label="desc" value={row.description} />
-        )}
-      </Section>
-      <Section label="Per-participant vetting">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close details"
+          title="Close"
+          style={{
+            marginLeft: "auto",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 24,
+            height: 24,
+            borderRadius: R.control,
+            border: "none",
+            background: "transparent",
+            color: W.dim,
+            cursor: "pointer",
+          }}
+        >
+          <IcX size={13} />
+        </button>
+      </header>
+
+      <DrawerSection label="Package id">
+        <MonoId
+          value={row.main}
+          full
+          size={fs.label}
+          color={W.text2}
+          style={{ wordBreak: "break-all", whiteSpace: "normal", lineHeight: 1.6 }}
+        />
+      </DrawerSection>
+
+      <DrawerSection label="Vetting">
         <VettingPanel instance={instance} mainID={row.main} />
-      </Section>
-      <Section
-        label={compareWith ? "Structural diff" : "Package contents"}
+      </DrawerSection>
+
+      <DrawerSection
+        label={compareWith ? "Structural diff" : "Structure"}
+        aside={
+          !compareWith && summary
+            ? `${summary.modules} module${summary.modules === 1 ? "" : "s"} · ${summary.templates} template${summary.templates === 1 ? "" : "s"}`
+            : undefined
+        }
+        last
+      >
+        {compareWith ? (
+          <DARDiff instance={instance} a={row.main} b={compareWith} role={role} />
+        ) : (
+          <DARPackageTree
+            instance={instance}
+            mainID={row.main}
+            role={role}
+            onLoaded={setSummary}
+          />
+        )}
+      </DrawerSection>
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+          alignItems: "center",
+          padding: "12px 14px",
+          background: W.sunken,
+          borderTop: `1px solid ${W.border}`,
+        }}
       >
         {compareWith ? (
           <>
+            <span style={{ fontSize: fs.meta, color: W.dim }}>
+              Comparing with{" "}
+              {compareRow ? `${compareRow.name}@${compareRow.version}` : "—"}
+            </span>
             <Button
               variant="ghost"
               size="sm"
+              style={{ marginLeft: "auto" }}
               onClick={onClearCompare}
-              aria-label="exit diff mode"
+              aria-label="exit compare"
               icon={<IcArrowRight style={{ transform: "rotate(180deg)" }} />}
             >
-              back to inspect
+              Back to inspect
             </Button>
-            <div style={{ marginTop: 8 }}>
-              <DARDiff instance={instance} a={row.main} b={compareWith} role={role} />
-            </div>
           </>
+        ) : showCompare ? (
+          <CompareSelector
+            allRows={allRows}
+            currentMain={row.main}
+            onPick={(m) => {
+              onCompare(m);
+              setShowCompare(false);
+            }}
+          />
         ) : (
-          <>
-            <DARPackageTree instance={instance} mainID={row.main} role={role} />
-            <CompareSelector
-              allRows={allRows}
-              currentMain={row.main}
-              onPick={onCompare}
-            />
-          </>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<IcArrowRight />}
+            onClick={() => setShowCompare(true)}
+            disabled={allRows.length < 2}
+          >
+            Compare with…
+          </Button>
         )}
-      </Section>
-    </div>
+      </div>
+    </aside>
   );
 }
 
@@ -859,7 +1157,7 @@ function CompareSelector({
   const others = allRows.filter((r) => r.main !== currentMain);
   if (others.length === 0) return null;
   return (
-    <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <span style={{ color: W.dim, fontSize: fs.label }}>Compare with</span>
       <select
         onChange={(e) => {
@@ -867,11 +1165,11 @@ function CompareSelector({
         }}
         defaultValue=""
         style={{
-          background: W.border,
+          background: W.surface,
           color: W.text,
           border: `1px solid ${W.border}`,
-          borderRadius: 2,
-          padding: "3px 6px",
+          borderRadius: R.control,
+          padding: "4px 6px",
           fontSize: fs.label,
           fontFamily: wMono,
         }}
@@ -952,21 +1250,25 @@ function VettingPanel({
     return <div style={{ color: W.err, fontSize: fs.meta }}>Vetting: {state.msg}</div>;
   }
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {state.rows.map((r) => (
         <div
           key={r.role}
           style={{
             display: "flex",
+            justifyContent: "space-between",
             alignItems: "center",
             gap: 10,
-            fontFamily: wMono,
             fontSize: fs.meta,
           }}
         >
-          <span style={{ width: 100, color: W.text2 }}>{r.role}</span>
+          <span style={{ fontFamily: wMono, color: W.text2 }}>
+            {r.role === "sv" ? "sv participant" : r.role}
+          </span>
           {r.error ? (
-            <span style={{ color: W.warn, fontSize: fs.label }}>{r.error}</span>
+            <span style={{ color: W.warn, fontSize: fs.label }} title={r.error}>
+              unavailable
+            </span>
           ) : (
             <button
               type="button"
@@ -976,7 +1278,7 @@ function VettingPanel({
               disabled={pending === r.role}
               onClick={() => flip(r.role, !r.vetted)}
               style={{
-                display: "flex",
+                display: "inline-flex",
                 alignItems: "center",
                 gap: 8,
                 background: "transparent",
@@ -984,8 +1286,11 @@ function VettingPanel({
                 padding: 0,
                 cursor: pending === r.role ? "wait" : "pointer",
                 color: r.vetted ? W.ok : W.dim,
+                fontFamily: wMono,
+                fontSize: fs.meta,
               }}
             >
+              <span>{r.vetted ? "vetted" : "unvetted"}</span>
               <span
                 style={{
                   width: 22,
@@ -1009,7 +1314,6 @@ function VettingPanel({
                   }}
                 />
               </span>
-              <span>{r.vetted ? "vetted" : "unvetted"}</span>
             </button>
           )}
         </div>
@@ -1017,6 +1321,44 @@ function VettingPanel({
       {error && (
         <div style={{ color: W.err, fontSize: fs.label, marginTop: 4 }}>{error}</div>
       )}
+    </div>
+  );
+}
+
+function DrawerSection({
+  label,
+  aside,
+  last,
+  children,
+}: {
+  label: string;
+  aside?: React.ReactNode;
+  last?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        padding: "12px 14px",
+        borderBottom: last ? undefined : `1px solid ${W.border}`,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <span style={{ ...wideCaps, fontSize: fs.micro, color: W.dim }}>
+          {label}
+        </span>
+        {aside && (
+          <span
+            style={{ fontSize: fs.label, color: W.faint, fontFamily: wMono }}
+          >
+            {aside}
+          </span>
+        )}
+      </div>
+      <div>{children}</div>
     </div>
   );
 }
@@ -1155,264 +1497,65 @@ function ErrorBanner({ msg }: { msg: string }) {
   );
 }
 
-function RoleSwitcher({
-  role,
+function Segmented({
+  options,
+  value,
   onChange,
+  variant = "solid",
+  ariaLabel,
 }: {
-  role: Role;
-  onChange: (r: Role) => void;
+  options: Array<{ label: string; value: string }>;
+  value: string;
+  onChange: (v: string) => void;
+  variant?: "solid" | "outline";
+  ariaLabel?: string;
 }) {
   return (
     <div
+      role="group"
+      aria-label={ariaLabel}
       style={{
-        display: "flex",
-        gap: 4,
-        padding: 3,
-        background: W.border,
-        borderRadius: 2,
+        display: "inline-flex",
+        padding: 2,
+        gap: 2,
+        background: W.inset,
+        borderRadius: R.control,
+        width: "max-content",
       }}
     >
-      {ROLES.map((r) => {
-        const active = r === role;
+      {options.map((o) => {
+        const active = o.value === value;
+        const activeBg =
+          variant === "solid" ? W.accentSolid : W.surface;
+        const activeColor =
+          variant === "solid" ? W.onAccentSolid : W.text;
         return (
           <button
-            key={r}
-            onClick={() => onChange(r)}
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            aria-pressed={active}
             style={{
-              background: active ? tint(W.brand, 16) : "transparent",
-              color: active ? W.brand : W.dim,
-              border: "none",
+              appearance: "none",
+              border:
+                variant === "outline" && active
+                  ? `1px solid ${W.border}`
+                  : "1px solid transparent",
+              cursor: "pointer",
+              padding: "4px 12px",
               borderRadius: R.control,
-              padding: "5px 12px",
               fontSize: fs.meta,
-              fontFamily: wMono,
+              fontFamily: "inherit",
               fontWeight: active ? 600 : 500,
-              cursor: active ? "default" : "pointer",
-              transition: "background-color 120ms",
+              whiteSpace: "nowrap",
+              background: active ? activeBg : "transparent",
+              color: active ? activeColor : W.text2,
             }}
           >
-            {r}
+            {o.label}
           </button>
         );
       })}
-    </div>
-  );
-}
-
-function VetToggle({
-  on,
-  label,
-  onChange,
-}: {
-  on: boolean;
-  label: string;
-  onChange: (next: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={`vet on upload — ${label}`}
-      onClick={() => onChange(!on)}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 9,
-        padding: "5px 8px",
-        background: W.border,
-        border: "none",
-        borderRadius: 2,
-        fontSize: fs.meta,
-        cursor: "pointer",
-        width: "100%",
-        textAlign: "left",
-        outline: "none",
-      }}
-    >
-      <span
-        style={{
-          width: 24,
-          height: 14,
-          background: on ? W.brand : W.borderHi,
-          borderRadius: 999,
-          position: "relative",
-          flexShrink: 0,
-          transition: "background 120ms",
-        }}
-      >
-        <span
-          style={{
-            position: "absolute",
-            top: 2,
-            left: on ? 12 : 2,
-            width: 10,
-            height: 10,
-            borderRadius: "50%",
-            background: "#FFF",
-            transition: "left 120ms",
-          }}
-        />
-      </span>
-      <span style={{ color: on ? W.text : W.dim }}>{label}</span>
-    </button>
-  );
-}
-
-function FilterBtn({
-  active,
-  children,
-  onClick,
-}: {
-  active: boolean;
-  children: React.ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        padding: "4px 10px",
-        fontSize: fs.label,
-        borderRadius: 2,
-        border: `1px solid ${active ? W.brand : W.border}`,
-        background: active ? `${tint(W.brand, 10)}` : "transparent",
-        color: active ? W.brand : W.dim,
-        cursor: "pointer",
-        fontFamily: wMono,
-        fontWeight: active ? 600 : 500,
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Card({
-  title,
-  subtitle,
-  children,
-}: {
-  title?: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      style={{
-        background: W.surface,
-        border: `1px solid ${W.border}`,
-        borderRadius: 4,
-        overflow: "hidden",
-      }}
-    >
-      {title && (
-        <div
-          style={{
-            padding: "11px 14px",
-            borderBottom: `1px solid ${W.border}`,
-          }}
-        >
-          <div style={{ color: W.text, fontSize: fs.lead, fontWeight: 600 }}>
-            {title}
-          </div>
-          {subtitle && (
-            <div style={{ color: W.dim, fontSize: fs.label, marginTop: 1 }}>
-              {subtitle}
-            </div>
-          )}
-        </div>
-      )}
-      <div style={{ padding: title ? 14 : 0 }}>{children}</div>
-    </div>
-  );
-}
-
-function Section({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div style={{ padding: "12px 16px", borderBottom: `1px solid ${W.border}` }}>
-      <SectionLabel>{label}</SectionLabel>
-      <div style={{ marginTop: 8 }}>{children}</div>
-    </div>
-  );
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        color: W.dim,
-        fontSize: fs.micro,
-        ...tableCaps,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function KV({
-  label,
-  value,
-  mono,
-  color,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-  color?: string;
-}) {
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "70px 1fr",
-        gap: 12,
-        padding: "4px 0",
-      }}
-    >
-      <span style={{ color: W.dim, fontSize: fs.meta }}>{label}</span>
-      <span
-        style={{
-          color: color ?? W.text2,
-          fontSize: mono ? fs.label : fs.meta,
-          fontFamily: mono ? wMono : undefined,
-          fontVariantNumeric: mono ? "tabular-nums" : undefined,
-          wordBreak: "break-word",
-        }}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function Row({
-  k,
-  v,
-  vColor,
-}: {
-  k: string;
-  v: string;
-  vColor?: string;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        gap: 12,
-        padding: "4px 0",
-      }}
-    >
-      <span style={{ color: W.dim, fontSize: fs.meta }}>{k}</span>
-      <span style={{ color: vColor ?? W.text }}>{v}</span>
     </div>
   );
 }
@@ -1456,10 +1599,11 @@ function DARListLoading() {
 function ErrorPanel({ msg }: { msg: string }) {
   return (
     <div
+      role="alert"
       style={{
         background: W.surface,
         border: `1px solid ${W.border}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 16,
         color: W.err,
         fontSize: fs.data,
@@ -1482,7 +1626,7 @@ function EmptyPanel({
       style={{
         background: `${tint(W.warn, 6)}`,
         border: `1px solid ${W.warn}`,
-        borderRadius: 4,
+        borderRadius: R.card,
         padding: 20,
       }}
     >

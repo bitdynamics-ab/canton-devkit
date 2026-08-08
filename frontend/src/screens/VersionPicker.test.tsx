@@ -4,16 +4,11 @@ import userEvent from "@testing-library/user-event";
 import type { SpliceVersionEntry } from "../api";
 import { VersionPicker, compareSpliceTags } from "./CreateLocalNetModal";
 
-// VersionPicker — pins the "always a <select> dropdown, never a
-// free-text <input>" invariant for the curated Splice catalogue
-// picker (an earlier build regressed to an <input> fallback when the
-// version list came back empty).
-//
-// Two contracts under test:
-//   1. With versions: native HTML <select> + one <option> per entry,
-//      "latest" first, semver-desc next; onChange fires onSelect.
-//   2. Without versions (loading / API-error): still a <select>,
-//      disabled, with a single placeholder option — never an <input>.
+// VersionPicker — curated Splice versions render as segmented PILLS
+// (radiogroup); non-curated "available" tags fall into a compact "more"
+// <select> so a 30-entry catalogue doesn't overflow a pill row. The
+// load-bearing invariant is unchanged: never a free-text <input>. The
+// empty / loading / error states still fall back to a disabled <select>.
 
 const FIXTURES: SpliceVersionEntry[] = [
   { tag: "0.6.4", status: "latest", major: "0.6", commit: "abc1234567890" },
@@ -21,49 +16,44 @@ const FIXTURES: SpliceVersionEntry[] = [
   { tag: "0.5.18", status: "supported", major: "0.5", commit: "fed7890123456" },
 ];
 
-describe("VersionPicker — curated catalogue dropdown", () => {
-  it("renders a native <select> when versions are present", () => {
+describe("VersionPicker — curated catalogue pills", () => {
+  it("renders a radiogroup of pills when versions are present", () => {
     render(
-      <VersionPicker
-        versions={FIXTURES}
-        selected="0.6.4"
-        onSelect={() => {}}
-      />,
+      <VersionPicker versions={FIXTURES} selected="0.6.4" onSelect={() => {}} />,
     );
-
-    // Accessible-name lookup plus a tagName pin: a refactor to a
-    // custom combobox must preserve the aria-label, and the "must be
-    // a <select>" assertion enforces native semantics.
-    const select = screen.getByLabelText(/splice version/i);
-    expect(select.tagName).toBe("SELECT");
-    expect(select).not.toBeDisabled();
+    // The aria-label is preserved on the radiogroup; each curated version
+    // is a radio pill.
+    expect(
+      screen.getByRole("radiogroup", { name: /splice version/i }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("radio")).toHaveLength(FIXTURES.length);
   });
 
-  it("never renders an <input> when versions are present (regression guard)", () => {
+  it("never renders a free-text <input> (regression guard)", () => {
     const { container } = render(
-      <VersionPicker
-        versions={FIXTURES}
-        selected="0.6.4"
-        onSelect={() => {}}
-      />,
+      <VersionPicker versions={FIXTURES} selected="0.6.4" onSelect={() => {}} />,
     );
-    // Whatever the picker renders, it must NOT be a text input.
+    // The entire point of this file: the picker must never be a text input.
     expect(container.querySelector("input")).toBeNull();
   });
 
-  it("lists every supplied version as an <option>", () => {
+  it("renders a pill for every curated version", () => {
     render(
-      <VersionPicker
-        versions={FIXTURES}
-        selected="0.6.4"
-        onSelect={() => {}}
-      />,
+      <VersionPicker versions={FIXTURES} selected="0.6.4" onSelect={() => {}} />,
     );
-    const options = screen.getAllByRole("option");
-    expect(options).toHaveLength(FIXTURES.length);
-    expect(options.map((o) => o.getAttribute("value"))).toEqual(
-      expect.arrayContaining(["0.6.4", "0.6.3", "0.5.18"]),
+    for (const f of FIXTURES) {
+      expect(
+        screen.getByRole("radio", { name: new RegExp(f.tag.replace(/\./g, "\\.")) }),
+      ).toBeInTheDocument();
+    }
+  });
+
+  it("marks the selected version via aria-checked", () => {
+    render(
+      <VersionPicker versions={FIXTURES} selected="0.6.4" onSelect={() => {}} />,
     );
+    expect(screen.getByRole("radio", { name: /0\.6\.4/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /0\.6\.3/ })).not.toBeChecked();
   });
 
   it("sorts 'latest' first regardless of tag-string order", () => {
@@ -74,39 +64,47 @@ describe("VersionPicker — curated catalogue dropdown", () => {
       { tag: "0.6.4", status: "latest", major: "0.6", commit: "abc1" },
     ];
     render(
-      <VersionPicker
-        versions={shuffled}
-        selected="0.6.4"
-        onSelect={() => {}}
-      />,
+      <VersionPicker versions={shuffled} selected="0.6.4" onSelect={() => {}} />,
     );
-    const options = screen.getAllByRole("option");
-    expect(options[0].getAttribute("value")).toBe("0.6.4");
+    expect(screen.getAllByRole("radio")[0]).toHaveTextContent("0.6.4");
   });
 
-  it("annotates the latest entry with a ' (latest)' suffix", () => {
+  it("labels the latest pill and shows the selected version's status + sha", () => {
     render(
-      <VersionPicker
-        versions={FIXTURES}
-        selected="0.6.4"
-        onSelect={() => {}}
-      />,
+      <VersionPicker versions={FIXTURES} selected="0.6.4" onSelect={() => {}} />,
     );
-    expect(screen.getByText(/0\.6\.4 \(latest\)/)).toBeTruthy();
+    expect(screen.getByRole("radio", { name: /0\.6\.4/ })).toHaveTextContent(
+      /latest/i,
+    );
+    // Metadata line — real status label + short commit sha.
+    expect(screen.getByText(/latest curated · sha abc1234/i)).toBeInTheDocument();
   });
 
-  it("fires onSelect with the chosen tag on change", async () => {
+  it("fires onSelect with the chosen tag when a pill is clicked", async () => {
     const onSelect = vi.fn();
     render(
-      <VersionPicker
-        versions={FIXTURES}
-        selected="0.6.4"
-        onSelect={onSelect}
-      />,
+      <VersionPicker versions={FIXTURES} selected="0.6.4" onSelect={onSelect} />,
     );
-    const select = screen.getByLabelText(/splice version/i);
-    await userEvent.selectOptions(select, "0.5.18");
+    await userEvent.click(screen.getByRole("radio", { name: /0\.5\.18/ }));
     expect(onSelect).toHaveBeenCalledWith("0.5.18");
+  });
+
+  it("keeps non-curated 'available' tags out of the pills but reachable via a 'more' select", async () => {
+    const onSelect = vi.fn();
+    const withAvailable: SpliceVersionEntry[] = [
+      ...FIXTURES,
+      { tag: "0.6.14", status: "available", major: "", commit: "999aaaa1111" },
+    ];
+    render(
+      <VersionPicker versions={withAvailable} selected="0.6.4" onSelect={onSelect} />,
+    );
+    // Still only the 3 curated pills.
+    expect(screen.getAllByRole("radio")).toHaveLength(3);
+    expect(screen.queryByRole("radio", { name: /0\.6\.14/ })).toBeNull();
+    // The available tag lives in the "more" select and still selects.
+    const more = screen.getByRole("combobox", { name: /more splice versions/i });
+    await userEvent.selectOptions(more, "0.6.14");
+    expect(onSelect).toHaveBeenCalledWith("0.6.14");
   });
 
   it("renders a disabled <select> when versions are empty (NOT an <input>)", () => {

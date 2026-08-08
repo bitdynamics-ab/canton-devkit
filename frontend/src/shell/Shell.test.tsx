@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { Shell } from "./Shell";
 import { InstanceSelectionProvider } from "./useInstanceSelection";
+import { CreateInstanceProvider } from "./useCreateInstance";
 
 // Shell tests — exercise the InstanceSwitcher dropdown, the
 // CommandPalette open/close flow, and the SkipLink target wiring.
@@ -72,12 +73,14 @@ function renderShell(initialPath = "/") {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <InstanceSelectionProvider>
-        <Shell>
-          <Routes>
-            <Route path="/" element={<div>home content</div>} />
-            <Route path="/explorer" element={<div>explorer content</div>} />
-          </Routes>
-        </Shell>
+        <CreateInstanceProvider>
+          <Shell>
+            <Routes>
+              <Route path="/" element={<div>home content</div>} />
+              <Route path="/explorer" element={<div>explorer content</div>} />
+            </Routes>
+          </Shell>
+        </CreateInstanceProvider>
       </InstanceSelectionProvider>
     </MemoryRouter>,
   );
@@ -150,40 +153,36 @@ describe("Shell — CommandPalette hotkey", () => {
 describe("Shell — sidebar nav preserves ?instance=", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  // The bug: clicking a sidebar tab on a per-instance route used to
-  // drop the ?instance= query, bouncing the user to "No instance
-  // selected" on every nav. Pin the fix: sidebar links for
-  // instance-scoped routes must thread the current instance.
-  it("threads ?instance= into instance-scoped routes (Explorer, Wallet, DAR, Metrics, Tokens)", async () => {
+  // Every route preserves selection, even host-level screens that do not
+  // consume it. Otherwise Doctor → Wallet can silently target another
+  // running instance (or no instance at all).
+  it("threads ?instance= into every sidebar route", async () => {
     renderShell("/wallet?instance=demo");
     await waitFor(() => expect(screen.getByText("demo")).toBeInTheDocument());
 
-    for (const label of ["Explorer", "DAR Manager", "Metrics", "Tokens", "Wallet"]) {
+    for (const label of ["Overview", "Doctor", "Wallet", "Explorer", "DAR Manager", "Metrics", "Tokens", "Agent Skills"]) {
       const link = screen.getByRole("link", { name: label });
       const href = link.getAttribute("href") || "";
       expect(href, `${label} dropped the instance param`).toContain("instance=demo");
     }
   });
 
-  it("leaves instance-INDEPENDENT routes (Overview, Agent Skills) without ?instance=", async () => {
-    renderShell("/wallet?instance=demo");
-    await waitFor(() => expect(screen.getByText("demo")).toBeInTheDocument());
-
-    for (const label of ["Overview", "Agent Skills"]) {
-      const link = screen.getByRole("link", { name: label });
-      const href = link.getAttribute("href") || "";
-      expect(href, `${label} should not carry instance param`).not.toContain("instance=");
-    }
-  });
-
-  it("omits ?instance= entirely when no instance is in URL", async () => {
+  it("threads an auto-selected running instance from a bare URL", async () => {
     renderShell("/");
-    // No auto-pick assertion needed — just verify the link is bare.
     await waitFor(() =>
-      expect(screen.getByRole("link", { name: "Explorer" })).toBeInTheDocument(),
+      expect(screen.getByText("demo")).toBeInTheDocument(),
     );
     const href = screen.getByRole("link", { name: "Explorer" }).getAttribute("href") || "";
-    expect(href).not.toContain("instance=");
+    expect(href).toContain("instance=demo");
+  });
+
+  it("exposes responsive shell hooks for the mobile layout", async () => {
+    const { container } = renderShell("/?instance=demo");
+    await waitFor(() => expect(screen.getByText("demo")).toBeInTheDocument());
+    expect(container.querySelector(".app-shell")).not.toBeNull();
+    expect(container.querySelector(".app-topbar")).not.toBeNull();
+    expect(container.querySelector(".app-sidebar")).not.toBeNull();
+    expect(container.querySelector(".app-main")).not.toBeNull();
   });
 });
 

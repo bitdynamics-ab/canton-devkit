@@ -1,241 +1,68 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ApiError,
-  fetchTransactions,
-  type InstanceSummary,
-  type TransactionEvent,
-  type TransactionRow,
-} from "../api";
-import { W, wMono, tableCaps, tint, R, fs } from "../tokens";
+import { W, wMono, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
-import { IcPlus, IcRefresh } from "../components/icons";
-import { StatusBadge } from "../components/StatusBadge";
-import { MonoId } from "../components/MonoId";
-import { SkeletonTable, useLoadingDelay } from "../components/Skeleton";
+import { IcPlus } from "../components/icons";
+import { useLoadingDelay, SkeletonBar } from "../components/Skeleton";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
-import { ContainerHealth } from "./ContainerHealth";
-import { CreateLocalNetModal } from "./CreateLocalNetModal";
+import { useCreateInstance } from "../shell/useCreateInstance";
 import { CreatingPanel } from "./CreatingPanel";
-import { DeveloperSetup } from "./DeveloperSetup";
-import { InstanceDetail } from "./InstanceDetail";
+import { InstanceOverview } from "./InstanceOverview";
 
-// Selection state lives in the URL (?instance=<name>) so the topbar
-// switcher and Dashboard share one source of truth and links survive.
+// The Overview ("/") is detail-only: it shows exactly one instance — the
+// one the topbar switcher has selected. Fleet-level management (the list,
+// census, New instance) lives in the All-instances view, reached from the
+// switcher. Selection is URL-backed (?instance=), so the switcher and this
+// page share one source of truth.
 export function Dashboard() {
   const sel = useInstanceSelection();
-  const [createOpen, setCreateOpen] = useState(false);
+  const create = useCreateInstance();
   const showSkeleton = useLoadingDelay(sel.loading);
 
-  return (
-    <div>
-      <header
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          marginBottom: 12,
-        }}
-      >
-        <h1 style={{ fontSize: fs.title, fontWeight: 600, marginTop: 0, marginBottom: 0 }}>
-          LocalNet instances
-        </h1>
-        <Button
-          // Steps down to secondary when the empty-state hero CTA owns primary.
-          variant={sel.instances.length === 0 ? "secondary" : "primary"}
-          icon={<IcPlus />}
-          onClick={() => setCreateOpen(true)}
-        >
-          New instance
-        </Button>
-      </header>
+  if (sel.loading) {
+    return showSkeleton ? <DetailLoading /> : null;
+  }
+  if (sel.error) {
+    return <ErrorPanel error={sel.error} />;
+  }
+  if (sel.instances.length === 0) {
+    return <EmptyState onCreate={create.open} />;
+  }
+  if (!sel.selected) {
+    // Instances exist but none is running and none is pinned in the URL —
+    // auto-pick returns null. Nudge the user to choose from the switcher.
+    return <NoSelection />;
+  }
 
-      <CreateLocalNetModal
-        open={createOpen}
-        onClose={useCallback(() => setCreateOpen(false), [])}
-        onCreated={useCallback(
-          (name: string) => {
-            // useCallback'd so the modal's done-effect keeps a stable
-            // identity and doesn't refire each render.
-            sel.refresh();
-            sel.select(name);
-          },
-          [sel.refresh, sel.select],
-        )}
-      />
-
-      {sel.loading && showSkeleton && <InstanceTableLoading />}
-
-      {sel.error && <ErrorPanel error={sel.error} />}
-
-      {!sel.loading && !sel.error && (
-        <>
-          {sel.stale && (
-            <div
-              role="status"
-              style={{
-                background: `${tint(W.dim, 10)}`,
-                border: `1px solid ${W.dim}`,
-                color: W.dim,
-                borderRadius: R.control,
-                padding: "6px 12px",
-                marginBottom: 12,
-                fontSize: fs.meta,
-              }}
-            >
-              Couldn’t refresh. Showing last known state.
-            </div>
-          )}
-          {sel.warning && (
-            <div
-              style={{
-                background: `${tint(W.warn, 10)}`,
-                border: `1px solid ${W.warn}`,
-                color: W.warn,
-                borderRadius: R.control,
-                padding: "8px 12px",
-                marginBottom: 16,
-                fontSize: fs.data,
-              }}
-            >
-              {sel.warning}
-            </div>
-          )}
-          {sel.instances.length === 0 ? (
-            <EmptyState onCreate={() => setCreateOpen(true)} />
-          ) : (
-            <InstanceTable
-              instances={sel.instances}
-              selected={sel.selected}
-              onSelect={sel.select}
-            />
-          )}
-        </>
-      )}
-
-      {sel.selected && (() => {
-        // While creating, show the live progress panel and hide the JWT
-        // generator — no point signing tokens before it's running.
-        const selectedRow = sel.instances.find((i) => i.name === sel.selected);
-        const isCreating = selectedRow?.status === "creating";
-        return (
-          <>
-            {isCreating && (
-              <CreatingPanel name={sel.selected} onRefresh={sel.refresh} />
-            )}
-            <InstanceDetail
-              name={sel.selected}
-              statusHint={selectedRow?.status}
-              onChanged={sel.refresh}
-            />
-            {!isCreating && selectedRow?.status === "running" && (
-              <RecentActivity name={sel.selected} />
-            )}
-            <ContainerHealth name={sel.selected} />
-            {!isCreating && <DeveloperSetup name={sel.selected} />}
-          </>
-        );
-      })()}
-    </div>
+  const selectedRow = sel.instances.find((i) => i.name === sel.selected);
+  const isCreating = selectedRow?.status === "creating";
+  // While creating, show ONLY the bring-up progress — the full Overview
+  // (throughput, endpoints, containers, JWT…) is meaningless until the
+  // instance is up. Once status flips off "creating" the Overview takes over.
+  return isCreating ? (
+    <CreatingPanel
+      name={sel.selected}
+      splice={selectedRow?.splice_version}
+      ports={selectedRow?.ports}
+      onRefresh={sel.refresh}
+    />
+  ) : (
+    <InstanceOverview
+      name={sel.selected}
+      statusHint={selectedRow?.status}
+      ports={selectedRow?.ports}
+      onChanged={sel.refresh}
+    />
   );
 }
 
-interface InstanceTableProps {
-  instances: InstanceSummary[];
-  selected: string | null;
-  onSelect: (name: string) => void;
-}
-
-function InstanceTable({ instances, selected, onSelect }: InstanceTableProps) {
+function DetailLoading() {
   return (
-    <div
-      style={{
-        background: W.surface,
-        border: `1px solid ${W.border}`,
-        borderRadius: R.card,
-        overflow: "hidden",
-      }}
-    >
-      <table
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          fontSize: fs.data,
-        }}
-      >
-        <thead>
-          <tr style={{ background: W.surface2, color: W.dim, textAlign: "left" }}>
-            <th style={th}>Name</th>
-            <th style={th}>State</th>
-            <th style={{ ...th, textAlign: "right" }}>Splice</th>
-            <th style={{ ...th, textAlign: "right" }}>Ports</th>
-          </tr>
-        </thead>
-        <tbody>
-          {instances.map((i) => {
-            const isSel = i.name === selected;
-            return (
-              <tr
-                key={i.name}
-                onClick={() => onSelect(i.name)}
-                style={{
-                  borderTop: `1px solid ${W.border}`,
-                  // Flat fill, no padding swap, so the row never shifts on select.
-                  background: isSel ? W.selRow : undefined,
-                  cursor: "pointer",
-                }}
-              >
-                <td style={td}>
-                  <strong style={{ color: isSel ? W.brand : W.text }}>
-                    {i.name}
-                  </strong>
-                </td>
-                <td style={td}>
-                  <StatusBadge status={i.status} />
-                </td>
-                <td style={{ ...td, ...numCell, color: W.text2 }}>
-                  {i.splice_version}
-                </td>
-                <td style={{ ...td, ...numCell, color: W.text2 }}>{i.ports}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <SkeletonBar height={40} width="40%" style={{ display: "block" }} />
+      <SkeletonBar height={220} style={{ display: "block" }} />
+      <SkeletonBar height={220} style={{ display: "block" }} />
     </div>
   );
 }
-
-function InstanceTableLoading() {
-  return (
-    <div
-      style={{
-        background: W.surface,
-        border: `1px solid ${W.border}`,
-        borderRadius: R.card,
-        overflow: "hidden",
-      }}
-    >
-      <SkeletonTable columns={[2, 1.4, 1, 1.4]} rows={3} rowHeight={40} />
-    </div>
-  );
-}
-
-const th: React.CSSProperties = {
-  ...tableCaps,
-  padding: "8px 12px",
-  fontSize: fs.label,
-};
-
-const td: React.CSSProperties = {
-  padding: "10px 12px",
-  verticalAlign: "middle",
-};
-
-const numCell: React.CSSProperties = {
-  textAlign: "right",
-  fontFamily: wMono,
-  fontVariantNumeric: "tabular-nums",
-};
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
@@ -271,6 +98,23 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
   );
 }
 
+function NoSelection() {
+  return (
+    <div
+      style={{
+        background: W.surface,
+        border: `1px solid ${W.border}`,
+        borderRadius: R.card,
+        padding: 16,
+        color: W.dim,
+        fontSize: fs.body,
+      }}
+    >
+      No instance selected. Pick one from the instance switcher in the top bar.
+    </div>
+  );
+}
+
 function ErrorPanel({ error }: { error: string }) {
   return (
     <div
@@ -288,165 +132,3 @@ function ErrorPanel({ error }: { error: string }) {
     </div>
   );
 }
-
-// Snapshot with manual refresh — /transactions is a window scan, not an SSE stream.
-function RecentActivity({ name }: { name: string }) {
-  const [tick, setTick] = useState(0);
-  const [state, setState] = useState<
-    | { kind: "loading" }
-    | { kind: "ok"; rows: TransactionRow[]; truncated: boolean }
-    | { kind: "needs-jwt" }
-    | { kind: "err"; error: string }
-  >({ kind: "loading" });
-
-  useEffect(() => {
-    let cancelled = false;
-    setState({ kind: "loading" });
-    fetchTransactions(name, "app-provider", 40)
-      .then((r) => {
-        if (cancelled) return;
-        setState({ kind: "ok", rows: r.transactions, truncated: !!r.window_truncated });
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        if (e instanceof ApiError && e.code === "EXPLORER_NEEDS_PARTY_JWT") {
-          setState({ kind: "needs-jwt" });
-          return;
-        }
-        setState({ kind: "err", error: e instanceof ApiError ? e.message : "failed to load activity" });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [name, tick]);
-
-  const events = useMemo(() => {
-    if (state.kind !== "ok") return [];
-    const flat: { offset: number; key: string; time: string; kind: TransactionEvent["kind"]; event: string; cid: string }[] = [];
-    for (const tx of state.rows) {
-      if (tx.kind !== "transaction" || !tx.events) continue;
-      const time = tx.record_time ? tx.record_time.replace("T", " ").slice(11, 19) : `@${tx.offset}`;
-      tx.events.forEach((ev, i) => {
-        flat.push({
-          offset: tx.offset,
-          key: `${tx.offset}:${i}`,
-          time,
-          kind: ev.kind,
-          event: shortTemplate(ev.template),
-          cid: ev.contract_id,
-        });
-      });
-    }
-    flat.sort((a, b) => b.offset - a.offset);
-    return flat.slice(0, 14);
-  }, [state]);
-
-  const kindColor: Record<TransactionEvent["kind"], string> = {
-    create: W.ok,
-    exercise: W.info,
-    archive: W.err,
-  };
-
-  return (
-    <section
-      style={{
-        background: W.surface,
-        border: `1px solid ${W.border}`,
-        borderRadius: R.card,
-        padding: 16,
-        marginBottom: 16,
-      }}
-    >
-      <header style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-        <h3 style={{ margin: 0, fontSize: fs.lead, fontWeight: 600, color: W.text }}>Recent activity</h3>
-        <span style={{ color: W.dim, fontSize: fs.meta }}>
-          ledger events · as seen by the app-provider participant
-        </span>
-        <Button
-          variant="secondary"
-          icon={<IcRefresh />}
-          onClick={() => setTick((t) => t + 1)}
-          title="Refresh"
-          style={{ marginLeft: "auto" }}
-        >
-          Refresh
-        </Button>
-      </header>
-
-      {state.kind === "loading" && (
-        <div style={{ color: W.dim, fontSize: fs.data, padding: "8px 0" }}>Scanning recent ledger updates…</div>
-      )}
-      {state.kind === "needs-jwt" && (
-        <div style={{ color: W.dim, fontSize: fs.body, padding: "8px 0" }}>
-          Ledger activity needs a party-rights JWT. Splice LocalNet signs user-id tokens by
-          default. Open the Explorer to project through a specific party.
-        </div>
-      )}
-      {state.kind === "err" && (
-        <div style={{ color: W.dim, fontSize: fs.body, padding: "8px 0" }}>
-          {/no jwt recorded/i.test(state.error)
-            ? "Ledger activity needs recorded role JWTs. Restart the instance to capture them (older instances predate JWT capture)."
-            : `Ledger activity unavailable. ${state.error}.`}{" "}
-          Open the Explorer for the full ledger view.
-        </div>
-      )}
-      {state.kind === "ok" && events.length === 0 && (
-        <div style={{ color: W.dim, fontSize: fs.body, padding: "8px 0" }}>
-          No recent ledger activity. Run a token or DAR operation to see updates.
-        </div>
-      )}
-      {state.kind === "ok" && events.length > 0 && (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.data, marginTop: 8 }}>
-          <thead>
-            <tr style={{ color: W.dim, textAlign: "left" }}>
-              <th style={actTh}>TIME</th>
-              <th style={actTh}>KIND</th>
-              <th style={actTh}>EVENT</th>
-              <th style={actTh}>CID</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.map((e) => (
-              <tr key={e.key} style={{ borderTop: `1px solid ${W.border}` }}>
-                <td style={{ ...actTd, color: W.dim, fontFamily: wMono, fontVariantNumeric: "tabular-nums", fontSize: fs.label }}>{e.time}</td>
-                <td style={actTd}>
-                  <span
-                    style={{
-                      color: kindColor[e.kind],
-                      border: `1px solid ${tint(kindColor[e.kind], 34)}`,
-                      background: tint(kindColor[e.kind], 13),
-                      borderRadius: R.control,
-                      padding: "1px 6px",
-                      fontSize: fs.label,
-                    }}
-                  >
-                    {e.kind}
-                  </span>
-                </td>
-                <td style={{ ...actTd, fontFamily: wMono, color: W.text2 }}>{e.event}</td>
-                <td style={actTd}>
-                  <MonoId value={e.cid} head={6} tail={6} size={11} color={W.info} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {state.kind === "ok" && state.truncated && (
-        <div style={{ color: W.dim, fontSize: fs.label, marginTop: 8 }}>
-          Showing the newest events of a clipped scan.
-        </div>
-      )}
-    </section>
-  );
-}
-
-// `<pkg>:Module:Entity` → `Module:Entity` for a compact EVENT column.
-function shortTemplate(t?: string): string {
-  if (!t) return "—";
-  const parts = t.split(":");
-  return parts.length >= 3 ? `${parts[parts.length - 2]}:${parts[parts.length - 1]}` : t;
-}
-
-const actTh: React.CSSProperties = { ...tableCaps, padding: "6px 10px 6px 0", fontSize: fs.label };
-const actTd: React.CSSProperties = { padding: "8px 10px 8px 0", verticalAlign: "middle" };

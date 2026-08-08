@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   ApiError,
   downloadSnapshot,
@@ -80,228 +80,145 @@ export function BackupRestore({ instanceName }: Props) {
     }
   }
 
+  const cliBox: CSSProperties = {
+    fontFamily: wMono,
+    fontSize: fs.label,
+    color: W.text2,
+    background: W.inset,
+    border: `1px solid ${W.border}`,
+    borderRadius: R.control,
+    padding: "8px 10px",
+    overflowX: "auto",
+    whiteSpace: "nowrap",
+  };
+
   return (
-    <section
-      style={{
-        marginTop: 16,
-        borderTop: `1px solid ${W.border}`,
-        paddingTop: 16,
-      }}
-      aria-label="Backup and restore"
-    >
-      <header
-        style={{
-          marginBottom: 12,
-          display: "flex",
-          alignItems: "baseline",
-          gap: 12,
-        }}
-      >
-        <div style={{ fontWeight: 600, fontSize: fs.lead, color: W.text }}>
-          Backup &amp; restore
+    // Two side-by-side cards (Take a snapshot | Restore); rendered flush —
+    // the parent Panel supplies the outer card, so no self-separator.
+    <div style={{ padding: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }} aria-label="Backup and restore">
+      {/* Take a snapshot */}
+      <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: R.card, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "12px 14px", borderBottom: `1px solid ${W.border}` }}>
+          <div style={{ fontWeight: 600, fontSize: fs.lead, color: W.text }}>Take a snapshot</div>
+          <div style={{ color: W.dim, fontSize: fs.label, marginTop: 2 }}>logical database dump + registry state</div>
         </div>
-        <span style={{ color: W.dim, fontSize: fs.label }}>
-          logical database dump + registry state
-        </span>
-      </header>
-
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <Button
-          variant="secondary"
-          icon={<IcDownload />}
-          onClick={onDownload}
-          disabled={downloading}
-        >
-          {downloading ? "Preparing…" : "Download snapshot"}
-        </Button>
-        <span style={{ color: W.dim, fontSize: fs.meta }}>
-          mirrors{" "}
-          <code style={{ fontFamily: wMono, color: W.text2 }}>
-            dpm localnet snapshot --name {instanceName} --to ./
-            {instanceName}.tgz
-          </code>
-        </span>
-      </div>
-
-      {downloadError && (
-        <div
-          role="alert"
-          style={{
-            marginTop: 10,
-            background: `${tint(W.err, 6)}`,
-            border: `1px solid ${W.err}`,
-            borderRadius: R.control,
-            padding: "8px 12px",
-            fontSize: fs.meta,
-            color: W.err,
-          }}
-        >
-          Download failed: {downloadError}
-        </div>
-      )}
-
-      <div style={{ marginTop: 18 }}>
-        <div
-          style={{
-            color: W.text,
-            fontSize: fs.lead,
-            fontWeight: 600,
-            marginBottom: 6,
-          }}
-        >
-          Restore from snapshot
-        </div>
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragOver(false);
-            const file = e.dataTransfer.files?.[0] ?? null;
-            void onFileChosen(file);
-          }}
-          onClick={() => fileInputRef.current?.click()}
-          role="button"
-          tabIndex={0}
-          aria-label="Drop snapshot file here or click to choose"
-          style={{
-            border: `1px dashed ${dragOver ? W.brand : W.border}`,
-            background: dragOver ? `${tint(W.brand, 6)}` : "transparent",
-            borderRadius: R.control,
-            padding: "14px 16px",
-            cursor: "pointer",
-            color: W.dim,
-            fontSize: fs.meta,
-            textAlign: "center",
-            transition: `background-color ${FAST}, border-color ${FAST}`,
-          }}
-        >
-          {restore.kind === "uploading" ? (
-            <UploadProgress
-              filename={restore.filename}
-              progress={restore.progress}
-            />
-          ) : (
-            <>
-              <div style={{ color: W.text2, marginBottom: 4 }}>
-                Drop a .tgz here or click to choose
-              </div>
-              <div style={{ fontSize: fs.label, color: W.dim }}>
-                will restore to instance{" "}
-                <code style={{ fontFamily: wMono, color: W.text2 }}>
-                  {targetName || "—"}
-                </code>
-              </div>
-            </>
+        <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div>
+            <Button variant="secondary" icon={<IcDownload />} onClick={onDownload} disabled={downloading}>
+              {downloading ? "Preparing…" : "Download snapshot"}
+            </Button>
+          </div>
+          <div style={{ fontSize: fs.label, color: W.dim }}>
+            pg_dumpall of the instance's Postgres · pauses writes briefly while it dumps
+          </div>
+          <div style={cliBox}>
+            dpm localnet snapshot --name {instanceName} --to ./{instanceName}.tgz
+          </div>
+          {downloadError && (
+            <div role="alert" style={{ background: W.errBg, border: `1px solid ${W.errBorder}`, borderRadius: R.control, padding: "8px 12px", fontSize: fs.meta, color: W.err }}>
+              Download failed: {downloadError}
+            </div>
           )}
         </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".tgz,.tar.gz,application/gzip"
-          style={{ display: "none" }}
-          onChange={(e) => void onFileChosen(e.target.files?.[0] ?? null)}
-        />
-
-        <div
-          style={{
-            marginTop: 10,
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            flexWrap: "wrap",
-            fontSize: fs.meta,
-          }}
-        >
-          <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <span style={{ color: W.dim }}>target name:</span>
-            <input
-              type="text"
-              value={targetName}
-              onChange={(e) => setTargetName(e.target.value)}
-              style={{
-                background: "transparent",
-                color: W.text,
-                border: `1px solid ${W.border}`,
-                borderRadius: R.control,
-                padding: "2px 6px",
-                fontSize: fs.meta,
-                fontFamily: wMono,
-                width: 140,
-              }}
-              aria-label="Restore target instance name"
-            />
-          </label>
-          <label
-            style={{
-              display: "flex",
-              gap: 6,
-              alignItems: "center",
-              color: W.dim,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={force}
-              onChange={(e) => setForce(e.target.checked)}
-              aria-label="Force restore on version mismatch"
-            />
-            <span>
-              <code style={{ fontFamily: wMono, color: W.text2 }}>--force</code>{" "}
-              (bypass Splice-version check)
-            </span>
-          </label>
-        </div>
-
-        {restore.kind === "success" && (
-          <div
-            role="status"
-            style={{
-              marginTop: 10,
-              background: `${tint(W.brand, 6)}`,
-              border: `1px solid ${W.brand}`,
-              borderRadius: R.control,
-              padding: "8px 12px",
-              fontSize: fs.meta,
-              color: W.text2,
-            }}
-          >
-            <span
-              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-            >
-              <IcCheck size={12} /> Restored
-            </span>{" "}
-            <code style={{ fontFamily: wMono, color: W.brand }}>
-              {restore.response.name}
-            </code>
-            . Bring it up via{" "}
-            <code style={{ fontFamily: wMono, color: W.text }}>
-              dpm localnet up --name {restore.response.name}
-            </code>{" "}
-            (or use the create flow).
-          </div>
-        )}
-        {restore.kind === "error" && (
-          <div
-            role="alert"
-            style={{
-              marginTop: 10,
-              background: `${tint(W.err, 6)}`,
-              border: `1px solid ${W.err}`,
-              borderRadius: R.control,
-              padding: "8px 12px",
-              fontSize: fs.meta,
-              color: W.err,
-            }}
-          >
-            Restore failed: {restore.message}
-          </div>
-        )}
       </div>
-    </section>
+
+      {/* Restore */}
+      <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: R.card, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "12px 14px", borderBottom: `1px solid ${W.border}` }}>
+          <div style={{ fontWeight: 600, fontSize: fs.lead, color: W.text }}>Restore</div>
+          <div style={{ color: W.dim, fontSize: fs.label, marginTop: 2 }}>
+            replaces the state of{" "}
+            <code style={{ fontFamily: wMono, color: W.text2 }}>{instanceName}</code>
+          </div>
+        </div>
+        <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              void onFileChosen(e.dataTransfer.files?.[0] ?? null);
+            }}
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Drop snapshot file here or click to choose"
+            style={{
+              border: `1px dashed ${dragOver ? W.brand : W.borderHi}`,
+              background: dragOver ? tint(W.brand, 6) : W.sunken,
+              borderRadius: R.control,
+              padding: "18px 16px",
+              cursor: "pointer",
+              textAlign: "center",
+              transition: `background-color ${FAST}, border-color ${FAST}`,
+            }}
+          >
+            {restore.kind === "uploading" ? (
+              <UploadProgress filename={restore.filename} progress={restore.progress} />
+            ) : (
+              <>
+                <div style={{ color: W.text2, marginBottom: 4, fontSize: fs.meta }}>Drop a .tgz here or click to choose</div>
+                <div style={{ fontSize: fs.label, color: W.dim }}>
+                  will restore to instance{" "}
+                  <code style={{ fontFamily: wMono, color: W.text2 }}>{targetName || "—"}</code>
+                </div>
+              </>
+            )}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".tgz,.tar.gz,application/gzip"
+            style={{ display: "none" }}
+            onChange={(e) => void onFileChosen(e.target.files?.[0] ?? null)}
+          />
+
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontSize: fs.meta }}>
+            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <span style={{ color: W.dim }}>target name:</span>
+              <input
+                type="text"
+                value={targetName}
+                onChange={(e) => setTargetName(e.target.value)}
+                style={{ background: "transparent", color: W.text, border: `1px solid ${W.border}`, borderRadius: R.control, padding: "2px 6px", fontSize: fs.meta, fontFamily: wMono, width: 130 }}
+                aria-label="Restore target instance name"
+              />
+            </label>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", color: W.dim }}>
+              <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} aria-label="Force restore on version mismatch" />
+              <span>
+                <code style={{ fontFamily: wMono, color: W.text2 }}>--force</code> (bypass Splice-version check)
+              </span>
+            </label>
+          </div>
+
+          {restore.kind === "success" && (
+            <div role="status" style={{ background: W.okBg, border: `1px solid ${W.okBorder}`, borderRadius: R.control, padding: "8px 12px", fontSize: fs.meta, color: W.text2 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: W.ok }}>
+                <IcCheck size={12} /> Restored
+              </span>{" "}
+              <code style={{ fontFamily: wMono, color: W.text }}>{restore.response.name}</code>. Bring it up via{" "}
+              <code style={{ fontFamily: wMono, color: W.text }}>dpm localnet up --name {restore.response.name}</code>.
+            </div>
+          )}
+          {restore.kind === "error" && (
+            <div role="alert" style={{ background: W.errBg, border: `1px solid ${W.errBorder}`, borderRadius: R.control, padding: "8px 12px", fontSize: fs.meta, color: W.err }}>
+              Restore failed: {restore.message}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

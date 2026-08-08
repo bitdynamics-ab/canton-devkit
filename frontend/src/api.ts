@@ -156,6 +156,13 @@ export interface ContainersResponse {
   unhealthy_count: number;
   restarting_count: number;
   exited_count: number;
+  // Aggregate live resource use from `docker stats`, summed across the
+  // project. Absent (undefined) when not sampled — render an em-dash, never
+  // a zero. Available whenever running (docker-sourced), unlike ledger
+  // metrics which need the observability profile.
+  cpu_percent?: number;
+  mem_used_bytes?: number;
+  mem_limit_bytes?: number;
 }
 
 // fetchContainers powers the live ContainerHealth panel — polled
@@ -309,6 +316,9 @@ export interface SpliceVersionEntry {
   major: string;
   commit: string;
   note?: string;
+  // True when the release includes the released Token Standard V2 APIs and
+  // implementation (Splice 0.6.11+).
+  v2_capable?: boolean;
 }
 
 export interface SpliceVersionsResponse {
@@ -1382,16 +1392,16 @@ async function postInstanceAction(name: string, action: string): Promise<void> {
   }
 }
 
-// scrubInstance invokes DELETE /api/instances/{name} — removes the
-// registry entry entirely. Use for cleanup of zombie creating
-// entries (e.g. server restart killed the goroutine mid-up,
-// leaving an orphan record) or for failed instances the user
-// wants to retry the name of.
+// removeInstance invokes DELETE /api/instances/{name}. It mirrors
+// `localnet remove`: compose containers and named volumes are removed before
+// the registry entry. It also repairs zombie creating entries after a server
+// restart; when state.json is already gone, only the orphan index row can be
+// scrubbed because no compose-project identifier remains.
 //
 // Backend refuses on `running` (409 INSTANCE_RUNNING — wants the
 // real `down` flow) or while a job is actively creating (409
 // INSTANCE_CREATING — caller should cancel /up first).
-export async function scrubInstance(name: string): Promise<void> {
+export async function removeInstance(name: string): Promise<void> {
   const resp = await fetch(`/api/instances/${encodeURIComponent(name)}`, {
     method: "DELETE",
   });

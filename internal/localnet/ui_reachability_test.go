@@ -7,10 +7,12 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
@@ -110,6 +112,27 @@ func TestUIProbeErrorDetail_Timeout(t *testing.T) {
 	got := uiProbeErrorDetail(context.DeadlineExceeded)
 	if !strings.Contains(got, "no HTTP response within") {
 		t.Errorf("timeout detail = %q", got)
+	}
+}
+
+// TestUIProbeErrorDetail_ECONNRESET pins the classification directly
+// (rather than relying on a real TCP close racing EOF vs. ECONNRESET
+// depending on OS/timing, which is what made
+// TestDefaultUIProbe_EmptyReplyIsUnreachable flake on Linux CI): both
+// io.EOF and syscall.ECONNRESET, wrapped the way http.Client wraps
+// transport errors in a *url.Error, must classify as "empty reply".
+func TestUIProbeErrorDetail_ECONNRESET(t *testing.T) {
+	for name, cause := range map[string]error{
+		"EOF":        io.EOF,
+		"ECONNRESET": syscall.ECONNRESET,
+	} {
+		t.Run(name, func(t *testing.T) {
+			wrapped := &url.Error{Op: "Get", URL: "http://127.0.0.1:1", Err: cause}
+			got := uiProbeErrorDetail(wrapped)
+			if !strings.Contains(got, "empty reply") {
+				t.Errorf("uiProbeErrorDetail(%v) = %q, want the empty-reply explanation", cause, got)
+			}
+		})
 	}
 }
 

@@ -11,7 +11,7 @@ targeted remediation.
 **Symptom:** Canton container restarts repeatedly; `up` times out.
 
 **Cause:** Docker memory below the version's floor. Splice 0.6.x needs
-≈8 GiB; the V2 alpha similar. Docker Desktop defaults to allocating
+≈8 GiB. Docker Desktop defaults to allocating
 50% of host memory, which on smaller machines lands below that floor.
 
 **Fix:** Raise Docker memory to the recommended value (`doctor` prints
@@ -28,12 +28,12 @@ pass a different instance name (each name gets its own block). Note: Docker may
 reassign ephemeral host ports across a restart — re-read them from
 `localnet status` rather than caching old values.
 
-## V2 instance: ledger port refused / scan registry 502
+## Legacy V2 alpha instance: ledger port refused / scan registry 502
 
 **Symptom:** token commands fail with `connection refused` on the
 participant port, or Amulet transfers return `HTTP 502` from nginx.
 
-**Cause:** The V2 alpha image ships a broken in-container healthcheck, so
+**Cause:** The legacy V2 alpha image ships a broken in-container healthcheck, so
 the Splice container can read `health: starting` for a long time even
 when functional — and the off-ledger scan registry (behind nginx) isn't
 ready until the Splice app fully boots.

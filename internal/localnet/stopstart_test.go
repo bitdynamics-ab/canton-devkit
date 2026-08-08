@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"reflect"
 	"testing"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
@@ -151,8 +150,14 @@ func TestRunStart_FallsBackToUpWhenContainersGone(t *testing.T) {
 			if o.Version != "0.6.4" {
 				t.Errorf("up reused version = %q, want 0.6.4", o.Version)
 			}
-			if want := []string{"sv", "app-provider", "app-user", "swagger-ui", "prometheus"}; !reflect.DeepEqual(o.Profiles, want) {
-				t.Errorf("up profiles = %v, want %v", o.Profiles, want)
+			// RunUp reads the persisted state and recovers only opt-in profiles.
+			// Passing the full set here would expose adapter-internal profiles
+			// such as "sv" to the public --profile validator and fail start.
+			if len(o.Profiles) != 0 {
+				t.Errorf("up profiles = %v, want empty so RunUp can recover opt-ins", o.Profiles)
+			}
+			if err := ValidateProfiles(o.Profiles); err != nil {
+				t.Errorf("fallback passed invalid public profiles: %v", err)
 			}
 			return ExitSuccess
 		},

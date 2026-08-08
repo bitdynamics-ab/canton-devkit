@@ -21,6 +21,15 @@ describe("seed-utils", () => {
       "/api/instances/mynet",
     );
     expect(targets.find((t) => t.file === "contracts.json")?.path).toContain("role=app-user");
+    expect(targets.find((t) => t.file === "token-identity.json")?.path).toBe(
+      "/api/tokens/identity?instance=mynet&role=app-user",
+    );
+    expect(targets.find((t) => t.file === "token-allocations.json")?.path).toBe(
+      "/api/tokens/allocations?instance=mynet",
+    );
+    expect(targets.find((t) => t.file === "token-transfers.json")?.path).toBe(
+      "/api/tokens/transfers?instance=mynet",
+    );
   });
 
   it("buildDerivedTargets adds contract and token drill-down", () => {

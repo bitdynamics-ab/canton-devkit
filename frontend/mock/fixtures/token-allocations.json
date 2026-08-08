@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "allocations": [
+    {
+      "contract_id": "00allocation1",
+      "status": "proposed",
+      "settlement_id": "settlement-1",
+      "authorizer": "dso::demo",
+      "leg_count": 1,
+      "committed": false
+    }
+  ],
+  "aliases": {
+    "dso::demo": "demo-issuer",
+    "app_user_demo-localparty-1::mock": "app-user"
+  }
+}

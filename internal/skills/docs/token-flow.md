@@ -8,9 +8,9 @@ description: Create and exercise Canton Token Standard flows (create, mint, tran
 Exercise token-standard operations on LocalNet via `dpm localnet token`.
 Both generations are supported, routed per instrument: CIP-0056 (Final —
 existing assets such as Canton Coin) for reads and transfers; creating a
-new instrument uses Token Standard V2 (CIP-0112, alpha) and needs
-`--version token-standard-v2 --profile tokens-v2`. For LocalNet testing
-only — not a production issuer/custodian/wallet.
+new instrument uses Token Standard V2 (CIP-0112), released in Splice
+0.6.11. For LocalNet testing only — not a production
+issuer/custodian/wallet.
 
 ## When to use
 The user asks to "create a test token", "mint/transfer/burn tokens", or
@@ -18,11 +18,10 @@ The user asks to "create a test token", "mint/transfer/burn tokens", or
 
 ## Safe workflow
 
-1. **Ensure LocalNet is up with the tokens-v2 profile** (the V2
-   on-ledger surfaces need it; see `dpm localnet versions` for an
-   alpha-channel Splice version that supports it):
+1. **Ensure LocalNet is running Splice 0.6.11 or newer**. V2 is included
+   in stable releases and needs no extra profile:
    ```
-   dpm localnet up dev --profile tokens-v2
+   dpm localnet up dev --version 0.6.12
    dpm localnet status dev
    ```
 
@@ -47,7 +46,7 @@ The user asks to "create a test token", "mint/transfer/burn tokens", or
 ## Guardrails
 - This is a LocalNet faucet/testing surface, not production token
   infrastructure. Do not point it at MainNet.
-- Creating/minting/burning targets Token Standard V2 (CIP-0112, alpha)
+- Creating/minting/burning targets Token Standard V2 (CIP-0112)
   instruments; CIP-0056 instruments support reads and transfers only.
 - All operations go through the Ledger API / Registry API on the
   selected instance; verify with `token balance` after each step.

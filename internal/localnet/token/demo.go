@@ -52,7 +52,7 @@ var (
 // RunDemo provisions a live, transferable demo token in one call, composing
 // the same Run* verbs the CLI/UI use so it can't drift. A live ledger endpoint
 // is required (empty → ErrNeedsV2LocalNet). The path is capability-chosen:
-//   - token-standard-v2 instance: create a new "DEMO" instrument and mint its
+//   - Splice 0.6.11+ instance: create a new "DEMO" instrument and mint its
 //     supply to a fresh holder party (the test token can't self-mint to the
 //     issuer, so the holder both receives and can transfer the balance);
 //   - standard (V1) instance: fund a fresh holder with Amulet from the
@@ -206,15 +206,14 @@ func runDemoV1(ctx context.Context, out io.Writer, opts DemoOptions) (*DemoResul
 const amuletSymbol = "Amulet"
 
 // v2InstrumentCreateCapable reports whether the instance can create a new V2
-// instrument (its Splice version ships the splice-test-token-v2 DAR, i.e. the
-// alpha channel). Unknown versions default to false → the V1 path.
+// instrument because its Splice version ships the released V2 APIs and the
+// splice-test-token-v2 DAR. Unknown and pre-0.6.11 versions use the V1 path.
 func v2InstrumentCreateCapable(instance string) bool {
 	st, err := registry.Read(instance)
 	if err != nil {
 		return false
 	}
-	v, ok := splice.SupportedVersions[st.SpliceVersion]
-	return ok && v.IsAlpha()
+	return splice.SupportsTokenStandardV2(st.SpliceVersion)
 }
 
 // applyDemoV1Defaults fills the V1-demo tunables. The seed is smaller than the

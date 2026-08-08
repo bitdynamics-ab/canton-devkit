@@ -80,4 +80,111 @@ describe("mock router", () => {
     const body = JSON.parse(res.body);
     expect(body.code).toBe("NOT_FOUND");
   });
+
+  it("GET /api/tokens/identity returns roles for the requested instance", () => {
+    const router = createMockRouter();
+    const res = mockRes();
+    router.handle(mockReq("GET"), res, "/api/tokens/identity?instance=demo&role=app-provider");
+    expect(res.status).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.schema_version).toBe(1);
+    expect(body.instance).toBe("demo");
+    expect(body.available_roles).toContain("app-user");
+    expect(body.current_role).toBe("app-provider");
+  });
+
+  it("GET /api/tokens/allocations returns the seeded list", () => {
+    const router = createMockRouter();
+    const res = mockRes();
+    router.handle(mockReq("GET"), res, "/api/tokens/allocations?instance=demo");
+    expect(res.status).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(Array.isArray(body.allocations)).toBe(true);
+    expect(typeof body.aliases).toBe("object");
+  });
+
+  it("GET /api/tokens/transfers returns the pending offers list", () => {
+    const router = createMockRouter();
+    const res = mockRes();
+    router.handle(mockReq("GET"), res, "/api/tokens/transfers?instance=demo");
+    expect(res.status).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(Array.isArray(body.pending_transfers)).toBe(true);
+    expect(typeof body.aliases).toBe("object");
+  });
+
+  it("POST /api/tokens/identity does not fall through to the token-detail route", () => {
+    // The generic /api/tokens/{symbol} regex must not swallow /identity.
+    const router = createMockRouter();
+    const res = mockRes();
+    router.handle(mockReq("GET"), res, "/api/tokens/identity");
+    const body = JSON.parse(res.body);
+    expect(body.available_roles).toBeDefined();
+    expect(body.symbol).toBeUndefined();
+  });
+
+  it("POST /api/tokens returns a full TokenRef", async () => {
+    const router = createMockRouter();
+    const res = mockRes();
+    router.handle(
+      mockReq("POST", JSON.stringify({ name: "RTK", symbol: "RTK", decimals: 6, initial_supply: "1000", issuer: "alice::abc" })),
+      res,
+      "/api/tokens?instance=demo",
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    expect(res.status).toBe(201);
+    const body = JSON.parse(res.body);
+    expect(body.symbol).toBe("RTK");
+    expect(body.issuer_party).toBe("alice::abc");
+    expect(body.instrument_id).toBe("RTK");
+  });
+
+  it("POST /api/tokens/demo returns the DemoResult shape", async () => {
+    const router = createMockRouter();
+    const res = mockRes();
+    router.handle(mockReq("POST", "{}"), res, "/api/tokens/demo?instance=demo");
+    await new Promise((r) => setTimeout(r, 10));
+    expect(res.status).toBe(201);
+    const body = JSON.parse(res.body);
+    expect(body.token.symbol).toBeDefined();
+    expect(body.issuer.party_id).toBeDefined();
+    expect(body.holder).toBeDefined();
+    expect(body.seeded).toBe(true);
+  });
+
+  it("POST /api/tokens/{symbol}/allocate returns an allocation id", async () => {
+    const router = createMockRouter();
+    const res = mockRes();
+    router.handle(mockReq("POST", "{}"), res, "/api/tokens/DEMO/allocate?instance=demo");
+    expect(res.status).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.allocation_id).toBeDefined();
+  });
+
+  it("POST /api/tokens/allocations/{id}/withdraw and /cancel return 204", () => {
+    const router = createMockRouter();
+    for (const action of ["withdraw", "cancel"]) {
+      const res = mockRes();
+      router.handle(
+        mockReq("POST", "{}"),
+        res,
+        `/api/tokens/allocations/00allocation1/${action}?instance=demo`,
+      );
+      expect(res.status).toBe(204);
+    }
+  });
+
+  it("POST /api/tokens/{symbol}/transfer returns transfer_instruction_id + settled", async () => {
+    const router = createMockRouter();
+    const res = mockRes();
+    router.handle(
+      mockReq("POST", JSON.stringify({ from: "bob", to: "alice", amount: "100" })),
+      res,
+      "/api/tokens/RTK/transfer?instance=demo",
+    );
+    expect(res.status).toBe(201);
+    const body = JSON.parse(res.body);
+    expect(body.transfer_instruction_id).toBe("tx-mock-1");
+    expect(body.settled).toBe(false);
+  });
 });
