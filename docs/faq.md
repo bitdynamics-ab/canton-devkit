@@ -50,15 +50,13 @@ curated.
 Both, routed per instrument. Reads and transfers work against
 **CIP-0056** (Final) instruments — what existing assets such as Canton
 Coin implement on stable Splice releases. Creating a **new** instrument
-uses **Token Standard V2 (CIP-0112**, approved but not yet final**)**,
-which requires the alpha track below. See [tokens.md](tokens.md).
+uses **Token Standard V2 (CIP-0112)**, released in Splice 0.6.11. See
+[tokens.md](tokens.md).
 
-**Why is V2 "alpha" and what does `--profile tokens-v2` do?**
-V2 runs on a special upstream Splice build (alpha protocol 35) on the
-`-dev` image repo. `--profile tokens-v2` injects the Canton config that
-enables alpha-version-support + protocol 35. Without it the stack can't
-run the V2 protocol; `up` warns loudly if you select the alpha version
-without the profile.
+**Does V2 require `--profile tokens-v2`?**
+No. Splice 0.6.11 and newer include V2 on the stable release path. The
+`token-standard-v2` version alias and `--profile tokens-v2` reproduce the
+older alpha environment and are not needed for a normal current LocalNet.
 
 **Why can't I mint or burn Amulet?**
 Amulet (Canton Coin) has no developer-facing mint/burn surface — those

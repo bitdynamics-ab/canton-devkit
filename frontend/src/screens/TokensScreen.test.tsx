@@ -20,6 +20,7 @@ function stubFetch(
     source: "ledger" | "registry";
     rows: Array<{ party: string; amount: string }>;
   },
+  opts?: { summaryFails?: boolean },
 ) {
   vi.stubGlobal(
     "fetch",
@@ -107,6 +108,15 @@ function stubFetch(
         return json({ schema_version: 1, events, truncated: false });
       }
       if (url.startsWith("/api/tokens/") && url.includes("/summary")) {
+        if (opts?.summaryFails) {
+          // Offline instance: the live ACS scan behind the summary is
+          // unreachable (P2 repro — 503), while holdings still returns
+          // registry pseudo-balances (200).
+          return json(
+            { error: "no live ledger", code: "PARTICIPANT_PORT_NOT_RECORDED" },
+            503,
+          );
+        }
         return json({
           schema_version: 1,
           summary: {
@@ -177,11 +187,27 @@ function renderTokens() {
   );
 }
 
+function stubNarrowViewport() {
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(max-width: 1024px)",
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })),
+  );
+}
+
 describe("TokensScreen", () => {
-  it("renders the Tokens header even before an instance resolves", () => {
+  it("renders the Instruments header even before an instance resolves", () => {
     stubFetch([]);
     renderTokens();
-    expect(screen.getByText("Tokens")).toBeInTheDocument();
+    expect(screen.getByText("Instruments")).toBeInTheDocument();
   });
 
   it("lists instruments from /api/tokens once they load", async () => {
@@ -293,14 +319,39 @@ describe("TokensScreen", () => {
     stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
     renderTokens();
     // KPI strip — supply + holder/contract counts.
-    await waitFor(
-      () => expect(screen.queryAllByText(/Total supply/i).length).toBeGreaterThan(0),
+    const strip = await screen.findByRole(
+      "group",
+      { name: "Instrument summary" },
       { timeout: 4000 },
     );
+    expect(strip).toHaveStyle({
+      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    });
+    expect(strip.children).toHaveLength(4);
     expect(screen.queryAllByText(/Holding contracts/i).length).toBeGreaterThan(0);
-    // Holder distribution table — share-of-supply.
-    expect(screen.queryAllByText(/Holder distribution/i).length).toBeGreaterThan(0);
+    // Merged Holders card — share-of-supply, nested UTXOs.
+    expect(screen.queryAllByText(/share of supply/i).length).toBeGreaterThan(0);
     expect(screen.queryAllByText(/100\.0%/).length).toBeGreaterThan(0);
+  });
+
+  it("renders the instrument KPI strip as a 2 by 2 grid on narrow viewports", async () => {
+    stubNarrowViewport();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+
+    const strip = await screen.findByRole(
+      "group",
+      { name: "Instrument summary" },
+      { timeout: 4000 },
+    );
+    expect(strip).toHaveStyle({
+      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    });
+    expect(strip.children).toHaveLength(4);
+    expect(within(strip).getByText("Total supply")).toBeInTheDocument();
+    expect(within(strip).getByText("In circulation")).toBeInTheDocument();
+    expect(within(strip).getByText("Holders")).toBeInTheDocument();
+    expect(within(strip).getByText("Holding contracts")).toBeInTheDocument();
   });
 
   it("switches to the Activity tab and renders the mint/transfer feed", async () => {
@@ -448,6 +499,28 @@ describe("TokensScreen", () => {
     expect(screen.queryByText(/on-ledger holdings/i)).toBeInTheDocument();
   });
 
+  // Regression (P2): on an offline instance the live summary (an ACS scan)
+  // 503s while the holdings endpoint still returns registry pseudo-balances
+  // (200). The Holders table must render those rows — previously it was
+  // gated on the summary alone and hung forever on "Loading holders…".
+  it("renders registry holders from the holdings payload when the live summary is unavailable", async () => {
+    stubFetch(
+      [{ symbol: "RTK", name: "Retail Token" }],
+      { source: "registry", rows: [{ party: "alice::abc", amount: "1000000" }] },
+      { summaryFails: true },
+    );
+    renderTokens();
+    // The holder balance from the holdings fallback appears...
+    await waitFor(
+      () => expect(screen.queryAllByText("1000000").length).toBeGreaterThan(0),
+      { timeout: 4000 },
+    );
+    // ...the table is no longer stuck on the loading placeholder...
+    expect(screen.queryByText(/Loading holders/i)).not.toBeInTheDocument();
+    // ...and the pseudo-balance disclaimer is present (registry, not on-ledger).
+    expect(screen.queryByText(/registry pseudo-balances/i)).toBeInTheDocument();
+  });
+
   // Selecting "app-provider" must re-plumb the role: the screen refetches
   // with role=app-provider; before the switch, calls omit role (app-user default).
   it("threads the selected identity through token API calls", async () => {
@@ -496,9 +569,9 @@ describe("TokensScreen", () => {
       { source: "ledger", rows: [{ party: "alice::abc", amount: "42.0" }] },
     );
     renderTokens();
-    // Wait for the live amount to render, then assert the banner is absent.
+    // Wait for a summary-driven balance to render, then assert the banner is absent.
     await waitFor(
-      () => expect(screen.queryAllByText("42.0").length).toBeGreaterThan(0),
+      () => expect(screen.queryAllByText("1275.0").length).toBeGreaterThan(0),
       { timeout: 4000 },
     );
     expect(screen.queryByText(/registry pseudo-balances/i)).not.toBeInTheDocument();
@@ -506,16 +579,16 @@ describe("TokensScreen", () => {
 });
 
 // createErrorText: the on-ledger create 412 (TEST_TOKEN_DAR_UNAVAILABLE)
-// must surface the actionable token-standard-v2 remedy in the create
+// must surface the actionable stable-version remedy in the create
 // modal, not the raw backend message — matching the NEEDS_V2_LOCALNET
 // remediation pattern.
 describe("createErrorText", () => {
-  it("maps the on-ledger DAR 412 to the token-standard-v2 remedy", () => {
+  it("maps the on-ledger DAR 412 to the Splice 0.6.11+ remedy", () => {
     const e = new ApiError(412, {
       code: "TEST_TOKEN_DAR_UNAVAILABLE",
       error: "test-token DAR not available for this Splice version",
     });
-    expect(createErrorText(e)).toMatch(/token-standard-v2/);
+    expect(createErrorText(e)).toMatch(/0\.6\.11 or newer/);
   });
   it("passes the raw server message through for other API errors", () => {
     const e = new ApiError(409, { code: "SYMBOL_IN_USE", error: "symbol RTK already in use" });

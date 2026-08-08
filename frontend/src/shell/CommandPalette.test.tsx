@@ -71,11 +71,9 @@ describe("CommandPalette filter", () => {
   });
 });
 
-// Integration test for the palette → router navigation path. The
-// shared NAV table in ./routes flags instance-scoped routes; the
-// palette must thread `?instance=` into those links the same way
-// the sidebar does. Without this guard, ⌘K → Wallet
-// silently drops the selection and lands on the empty state.
+// Integration test for the palette → router navigation path. Every
+// destination carries `?instance=` so navigating through a host-level screen
+// cannot silently reset the selected LocalNet.
 function LocationProbe() {
   // Surfaces the current pathname + search so assertions can read
   // exactly what navigate() landed on.
@@ -127,7 +125,7 @@ function renderPalette(initialPath: string) {
 describe("CommandPalette — nav preserves ?instance=", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("threads ?instance= when navigating to an instance-scoped route", async () => {
+  it("threads ?instance= when navigating to an instance route", async () => {
     renderPalette("/?instance=demo");
     const user = userEvent.setup();
 
@@ -135,7 +133,7 @@ describe("CommandPalette — nav preserves ?instance=", () => {
     await user.keyboard("{Meta>}k{/Meta}");
     await screen.findByRole("dialog", { name: /command palette/i });
 
-    // Click the Wallet row (Wallet is instance-scoped per NAV).
+    // Click the Wallet row.
     const wallet = await screen.findByRole("option", { name: /Wallet/ });
     await user.click(wallet);
 
@@ -146,7 +144,7 @@ describe("CommandPalette — nav preserves ?instance=", () => {
     });
   });
 
-  it("does not append ?instance= to instance-INDEPENDENT routes", async () => {
+  it("preserves ?instance= on host-level routes too", async () => {
     renderPalette("/wallet?instance=demo");
     const user = userEvent.setup();
 
@@ -157,10 +155,9 @@ describe("CommandPalette — nav preserves ?instance=", () => {
     await user.click(overview);
 
     await waitFor(() => {
-      // Overview should be bare; the param is dropped intentionally
-      // because the destination route doesn't read it.
-      expect(screen.getByTestId("location")).toHaveTextContent(/^\/$/);
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "/?instance=demo",
+      );
     });
   });
 });
-

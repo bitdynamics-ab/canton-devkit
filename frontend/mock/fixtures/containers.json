@@ -101,5 +101,8 @@
   "starting_count": 0,
   "unhealthy_count": 0,
   "restarting_count": 0,
-  "exited_count": 0
+  "exited_count": 0,
+  "cpu_percent": 41.3,
+  "mem_used_bytes": 6657199308,
+  "mem_limit_bytes": 12884901888
 }

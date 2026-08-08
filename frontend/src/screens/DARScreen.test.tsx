@@ -39,6 +39,7 @@ function stubFetch(handlers: Record<string, unknown>) {
         typeof val === "function"
           ? (val as (u: string, i?: RequestInit) => unknown)(url, init)
           : val;
+      if (body instanceof Response) return Promise.resolve(body);
       return Promise.resolve(
         new Response(JSON.stringify(body), {
           status: 200,
@@ -139,6 +140,30 @@ const fakeDAR = {
 };
 
 describe("DARScreen", () => {
+  it("replaces the loading label with an accessible error state", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource as unknown as typeof EventSource);
+    stubFetch({
+      "/api/instances/demo/dar": () =>
+        new Response(
+          JSON.stringify({ code: "INTERNAL", error: "list dars" }),
+          {
+            status: 502,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      "/api/instances": {
+        schema_version: 1,
+        instances: [{ name: "demo", status: "running" }],
+      },
+    });
+
+    render(withProviders(<DARScreen />));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("list dars");
+    expect(screen.getByText("could not load packages on demo")).toBeInTheDocument();
+    expect(screen.queryByText("loading…")).not.toBeInTheDocument();
+  });
+
   it("renders the watch-mode indicator with the Idle badge by default", async () => {
     // Replace EventSource before the screen mounts so its useEffect
     // picks up the stub.

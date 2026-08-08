@@ -58,8 +58,23 @@ export function buildSeedTargets(opts: SeedOptions): SeedTarget[] {
       optional: true,
     },
     {
+      file: "token-identity.json",
+      path: `/api/tokens/identity${q({ instance, role })}`,
+      optional: true,
+    },
+    {
       file: "tokens-matrix.json",
       path: `/api/tokens/matrix${q({ instance, role })}`,
+      optional: true,
+    },
+    {
+      file: "token-allocations.json",
+      path: `/api/tokens/allocations${q({ instance })}`,
+      optional: true,
+    },
+    {
+      file: "token-transfers.json",
+      path: `/api/tokens/transfers${q({ instance })}`,
       optional: true,
     },
     {

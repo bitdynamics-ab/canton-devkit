@@ -20,18 +20,17 @@ const useMock = process.env.VITE_MOCK_API === "1";
 // Vite config for the canton-devkit Web UI.
 //
 // build.outDir is set to ../internal/ui/dist so `npm run build`
-// drops its output directly where the Go binary's go:embed
-// picks it up. The Makefile target `make frontend` runs `npm
-// ci && npm run build` in this directory — no separate copy
-// step needed.
+// drops its output directly where the Go binary's go:embed picks it
+// up. The Makefile target `make frontend` runs `npm ci && npm run
+// build` in this directory — no separate copy step needed.
 //
-// server.proxy forwards /api and /events to the Go backend
-// during `npm run dev` so the dev server (port 5173) can talk
-// to a running `dpm localnet ui --port 7777`. Both must be up
-// for the dev loop to work.
+// server.proxy forwards /api and /events to the Go backend during
+// `npm run dev` so the dev server (port 5173) can talk to a running
+// `dpm localnet ui --port 7777`. Both must be up for the dev loop to
+// work.
 //
-// `npm run dev:mock` sets VITE_MOCK_API=1 and serves fixtures
-// from frontend/mock/ via middleware — no Go backend required.
+// `npm run dev:mock` sets VITE_MOCK_API=1 and serves fixtures from
+// frontend/mock/ via middleware — no Go backend required.
 export default defineConfig({
   plugins: [react(), useMock && mockApiPluginVite()].filter(Boolean),
   define: {
@@ -41,9 +40,8 @@ export default defineConfig({
     outDir: "../internal/ui/dist",
     emptyOutDir: true,
     sourcemap: true,
-    // Produce a manifest so the future asset-fingerprint test
-    // can verify hashed filenames land
-    // where index.html references them.
+    // Produce a manifest so the future asset-fingerprint test can
+    // verify hashed filenames land where index.html references them.
     manifest: true,
   },
   server: {

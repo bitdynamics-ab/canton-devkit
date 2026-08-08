@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "instance": "demo",
+  "available_roles": ["app-user", "app-provider", "sv"],
+  "current_role": "app-user"
+}

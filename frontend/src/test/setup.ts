@@ -33,8 +33,8 @@ if (!window.matchMedia) {
   });
 }
 
-// navigator.clipboard.writeText — DeveloperSetup's Copy buttons
-// hit this. jsdom omits the Clipboard API entirely, so tests that
+// navigator.clipboard.writeText — the Overview's JWT / App-config Copy
+// buttons hit this. jsdom omits the Clipboard API entirely, so tests that
 // click Copy would otherwise throw. Tests can spy on this via
 // vi.spyOn(navigator.clipboard, "writeText").
 //

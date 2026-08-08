@@ -842,8 +842,7 @@ function AcsRow({
 }) {
   const payloadPreview = useMemo(() => {
     const p = row.payload ?? {};
-    const amt = p.amount ?? p.balance ?? p.value ?? null;
-    return amt !== null && amt !== undefined ? String(amt) : "—";
+    return previewPayloadValue(p.amount ?? p.balance ?? p.value);
   }, [row.payload]);
   const tplParts = row.template_id.split(":");
   const shortTpl =
@@ -922,6 +921,22 @@ function AcsRow({
       </span>
     </div>
   );
+}
+
+function previewPayloadValue(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (["string", "number", "bigint", "boolean"].includes(typeof value)) {
+    return String(value);
+  }
+  if (typeof value !== "object" || Array.isArray(value)) return "—";
+
+  const record = value as Record<string, unknown>;
+  for (const key of ["initialAmount", "amount", "balance", "value", "quantity"]) {
+    if (record[key] === value) continue;
+    const preview = previewPayloadValue(record[key]);
+    if (preview !== "—") return preview;
+  }
+  return "—";
 }
 
 // Filters are applied server-side over the offset window, so narrowing

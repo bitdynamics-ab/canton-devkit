@@ -8,8 +8,10 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 )
@@ -107,6 +109,34 @@ func TestList_RegisteredInstancesAppearSorted(t *testing.T) {
 	}
 	if got.Instances[0].Ports != "4441–4487" {
 		t.Errorf("alpha.Ports = %q, want %q", got.Instances[0].Ports, "4441–4487")
+	}
+}
+
+func TestList_RunningInstanceIncludesStartedAgo(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "demo", "0.6.12",
+		map[string]int{"app_user_ui": 4441}, registry.StatusRunning)
+	state, err := registry.Read("demo")
+	if err != nil {
+		t.Fatalf("read seeded instance: %v", err)
+	}
+	state.CreatedAt = time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339)
+	if err := registry.Write(state); err != nil {
+		t.Fatalf("rewrite seeded instance: %v", err)
+	}
+	srv := servingMux(t)
+
+	resp, err := http.Get(srv.URL + "/api/instances")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var got types.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.Instances) != 1 || !strings.Contains(got.Instances[0].StartedAgo, "h") {
+		t.Fatalf("instances = %+v, want running age derived from created_at", got.Instances)
 	}
 }
 
@@ -269,4 +299,62 @@ func TestCreate_RejectsOutOfRangePortBase(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAggregateContainerStats pins the "never a fabricated zero" contract:
+// nil when docker stats had no sample for any of the project's containers,
+// summed values when at least one did, and a nil MemLimitBytes when no
+// container reported a limit.
+func TestAggregateContainerStats(t *testing.T) {
+	health := []ContainerHealth{{Name: "demo-canton-1"}, {Name: "demo-postgres-1"}}
+
+	t.Run("no samples returns nil, not zero", func(t *testing.T) {
+		cpu, used, limit := aggregateContainerStats(health, map[string]containers.Stat{})
+		if cpu != nil || used != nil || limit != nil {
+			t.Fatalf("got cpu=%v used=%v limit=%v, want all nil", cpu, used, limit)
+		}
+	})
+
+	t.Run("sums across matched containers", func(t *testing.T) {
+		stats := map[string]containers.Stat{
+			"demo-canton-1":   {CPUPct: 12.5, MemBytes: 740 << 20, MemLimit: 2 << 30},
+			"demo-postgres-1": {CPUPct: 3.0, MemBytes: 128 << 20, MemLimit: 2 << 30},
+		}
+		cpu, used, limit := aggregateContainerStats(health, stats)
+		if cpu == nil || *cpu != 15.5 {
+			t.Errorf("cpu = %v, want 15.5", cpu)
+		}
+		if used == nil || *used != (740<<20)+(128<<20) {
+			t.Errorf("used = %v, want %d", used, (740<<20)+(128<<20))
+		}
+		if limit == nil || *limit != (2<<30)+(2<<30) {
+			t.Errorf("limit = %v, want %d", limit, (2<<30)+(2<<30))
+		}
+	})
+
+	t.Run("partial sample still aggregates the matched container", func(t *testing.T) {
+		stats := map[string]containers.Stat{
+			"demo-canton-1": {CPUPct: 12.5, MemBytes: 740 << 20, MemLimit: 2 << 30},
+		}
+		cpu, used, limit := aggregateContainerStats(health, stats)
+		if cpu == nil || *cpu != 12.5 {
+			t.Errorf("cpu = %v, want 12.5", cpu)
+		}
+		if used == nil || *used != 740<<20 {
+			t.Errorf("used = %v, want %d", used, 740<<20)
+		}
+		if limit == nil || *limit != 2<<30 {
+			t.Errorf("limit = %v, want %d", limit, 2<<30)
+		}
+	})
+
+	t.Run("zero summed limit stays nil", func(t *testing.T) {
+		stats := map[string]containers.Stat{
+			"demo-canton-1": {CPUPct: 1, MemBytes: 10, MemLimit: 0},
+		}
+		_, _, limit := aggregateContainerStats(health, stats)
+		if limit != nil {
+			t.Errorf("limit = %v, want nil when summed limit is 0", limit)
+		}
+	})
 }

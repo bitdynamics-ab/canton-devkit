@@ -23,9 +23,17 @@ interface Props {
   instance: string;
   mainID: string;
   role: Role;
+  // Optional: report the DAR's module/template counts and total package
+  // size once the inspect fetch resolves, so a parent can render a
+  // one-line "N modules · M templates" summary without a second fetch.
+  onLoaded?: (summary: {
+    modules: number;
+    templates: number;
+    sizeBytes: number;
+  }) => void;
 }
 
-export function DARPackageTree({ instance, mainID, role }: Props) {
+export function DARPackageTree({ instance, mainID, role, onLoaded }: Props) {
   const [state, setState] = useState<
     | { kind: "loading" }
     | { kind: "ok"; data: DARInspectResponse }
@@ -45,6 +53,19 @@ export function DARPackageTree({ instance, mainID, role }: Props) {
         setState({ kind: "ok", data });
         const main = data.packages.find((p) => p.is_main);
         if (main) setExpandedPkgs(new Set([main.package_id]));
+        // Summary counts describe the DAR's own package (is_main);
+        // size sums every .dalf (the DAR's on-disk payload).
+        const summaryPkg = main ?? data.packages[0];
+        const modules = summaryPkg?.contents?.modules?.length ?? 0;
+        const templates = (summaryPkg?.contents?.modules ?? []).reduce(
+          (n, m) => n + (m.templates?.length ?? 0),
+          0,
+        );
+        const sizeBytes = data.packages.reduce(
+          (n, p) => n + (p.size_bytes ?? 0),
+          0,
+        );
+        onLoaded?.({ modules, templates, sizeBytes });
       })
       .catch((e: unknown) => {
         if (cancelled) return;

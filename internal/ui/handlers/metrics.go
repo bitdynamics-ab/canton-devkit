@@ -280,7 +280,7 @@ func handleMetricsSummary() http.HandlerFunc {
 			"p99_ms": secondsToMs(out[string(metricsq.HeadlineMediatorP99)]),
 		}
 		dashboards := map[string]string{
-			"grafana_url": grafanaURLForState(state),
+			"grafana_url": grafanaURLForState(ctx, state),
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"schema_version": 1,
@@ -309,17 +309,24 @@ func promScopeFor(ctx context.Context, project string) string {
 // to the same view. See assets/grafana/dashboards/canton-localnet.json.
 const grafanaDashboardUID = "canton-localnet-v1"
 
-// grafanaURLForState deep-links to the bundled dashboard when obs is on, or ""
-// so the frontend can render an "enable observability" CTA.
-func grafanaURLForState(state *registry.State) string {
+// sharedGrafanaURLForUI mirrors the CLI seam so tests can exercise shared
+// observability without invoking Docker port discovery.
+var sharedGrafanaURLForUI = localnet.SharedGrafanaURL
+
+// grafanaURLForState deep-links to the per-instance dashboard when present,
+// otherwise to the host-shared Grafana filtered to this instance.
+func grafanaURLForState(ctx context.Context, state *registry.State) string {
 	if state == nil {
 		return ""
 	}
 	port, ok := state.Ports["grafana_ui"]
-	if !ok || port == 0 {
+	if ok && port > 0 {
+		return fmt.Sprintf("http://localhost:%d/d/%s", port, grafanaDashboardUID)
+	}
+	if !localnet.InstanceObservabilityEnabled(state.Name) {
 		return ""
 	}
-	return fmt.Sprintf("http://localhost:%d/d/%s", port, grafanaDashboardUID)
+	return sharedGrafanaURLForUI(ctx, state.Name)
 }
 
 // secondsToMs converts seconds to milliseconds, nil-safe so "no sample" stays

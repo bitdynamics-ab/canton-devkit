@@ -20,17 +20,18 @@ function stubFetch(captured: { lastPostBody?: unknown }) {
     "fetch",
     vi.fn().mockImplementation((rawUrl: string, init?: RequestInit) => {
       const url = typeof rawUrl === "string" ? rawUrl : (rawUrl as URL).toString();
-      if (url === "/api/splice-versions" || url.startsWith("/api/splice-versions")) {
+      if (url === "/api/splice/versions" || url.startsWith("/api/splice/versions")) {
         return Promise.resolve(
           new Response(
             JSON.stringify({
               schema_version: 1,
               versions: [
                 {
-                  tag: "latest",
-                  canonical_tag: "0.6.4",
-                  status: "stable",
-                  is_default: true,
+                  tag: "0.6.12",
+                  major: "0.6",
+                  commit: "17fd29aad170e8f20074aa64624c4506177ea7bd",
+                  status: "latest",
+                  v2_capable: true,
                 },
               ],
             }),
@@ -40,7 +41,7 @@ function stubFetch(captured: { lastPostBody?: unknown }) {
       }
       if (url.startsWith("/api/preflight")) {
         return Promise.resolve(
-          new Response(JSON.stringify({ schema_version: 1, findings: [] }), {
+          new Response(JSON.stringify({ schema_version: 1, ok: true, sections: [] }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           }),
@@ -130,5 +131,30 @@ describe("CreateLocalNetModal observability toggles", () => {
     await waitFor(() => expect(captured.lastPostBody).toBeDefined());
     const body = captured.lastPostBody as { profiles?: string[] };
     expect(body.profiles).toEqual(["prometheus"]);
+  });
+
+  it("shows V2 as included and never submits the legacy alpha profile", async () => {
+    const captured: { lastPostBody?: unknown } = {};
+    stubFetch(captured);
+    render(
+      <Providers>
+        <CreateLocalNetModal open onClose={() => {}} onCreated={() => {}} />
+      </Providers>,
+    );
+
+    expect(
+      await screen.findByRole("status", { name: /token standard v2 included/i }),
+    ).toHaveTextContent(/without an extra profile or alpha protocol/i);
+    expect(screen.queryByLabelText(/enable token standard v2/i)).toBeNull();
+
+    fireEvent.change(screen.getByPlaceholderText(/demo, pr-841/), {
+      target: { value: "demo" },
+    });
+    const createBtn = screen.getByRole("button", { name: /create localnet/i });
+    await waitFor(() => expect(createBtn).not.toBeDisabled());
+    fireEvent.click(createBtn);
+    await waitFor(() => expect(captured.lastPostBody).toBeDefined());
+    const body = captured.lastPostBody as { profiles?: string[] };
+    expect(body.profiles ?? []).not.toContain("tokens-v2");
   });
 });

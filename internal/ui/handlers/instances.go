@@ -71,7 +71,7 @@ func MountInstances(mux *http.ServeMux, hub *stream.Hub) {
 		mux.HandleFunc("POST /api/instances", handleCreate(hub))
 		mux.HandleFunc("GET /api/instances/{name}/events", handleInstanceEvents(hub))
 		mux.HandleFunc("DELETE /api/instances/{name}/up", handleCancelUp(hub))
-		mux.HandleFunc("DELETE /api/instances/{name}", handleScrubInstance(hub))
+		mux.HandleFunc("DELETE /api/instances/{name}", handleRemoveInstance(hub))
 		mux.HandleFunc("POST /api/instances/{name}/down", handleDownInstance())
 		mux.HandleFunc("POST /api/instances/{name}/up", handleResumeInstance(hub))
 		mux.HandleFunc("POST /api/instances/{name}/recreate", handleRecreateInstance(hub))
@@ -342,7 +342,7 @@ func handleList(w http.ResponseWriter, _ *http.Request) {
 			Name:          e.Name,
 			Status:        string(e.Status),
 			SpliceVersion: e.SpliceVersion,
-			StartedAgo:    "", // computed by the renderer, not the API
+			StartedAgo:    localnet.InstanceStartedAgo(e.CreatedAt, e.Status),
 		}
 		// Best-effort, matching `localnet list`: a corrupt state
 		// file becomes a response warning, not a fatal error.
@@ -1251,6 +1251,15 @@ type ContainersResponse struct {
 	UnhealthyCount  int `json:"unhealthy_count"`
 	RestartingCount int `json:"restarting_count"`
 	ExitedCount     int `json:"exited_count"`
+
+	// Aggregate live resource use from `docker stats`, summed across the
+	// project's containers. Pointers because docker stats is best-effort:
+	// nil means "not sampled" (the UI renders an em-dash, never a zero).
+	// Sourced from docker, so present whenever the instance is running —
+	// independent of the observability profile that gates ledger metrics.
+	CPUPercent    *float64 `json:"cpu_percent,omitempty"`
+	MemUsedBytes  *int64   `json:"mem_used_bytes,omitempty"`
+	MemLimitBytes *int64   `json:"mem_limit_bytes,omitempty"`
 }
 
 // handleInstanceContainers: GET /api/instances/{name}/containers.
@@ -1327,8 +1336,52 @@ func handleInstanceContainers() http.HandlerFunc {
 				resp.ExitedCount++
 			}
 		}
+
+		// Best-effort live CPU/memory via `docker stats`, summed across the
+		// project. Short timeout + swallowed error so a slow/failed sample
+		// never blocks or fails the container list; the fields stay nil and
+		// the UI shows an em-dash for that poll.
+		if len(health) > 0 {
+			names := make([]string, len(health))
+			for i, c := range health {
+				names[i] = c.Name
+			}
+			statCtx, statCancel := context.WithTimeout(r.Context(), 4*time.Second)
+			if stats, err := containers.Stats(statCtx, names); err == nil {
+				resp.CPUPercent, resp.MemUsedBytes, resp.MemLimitBytes = aggregateContainerStats(health, stats)
+			}
+			statCancel()
+		}
 		writeJSON(w, http.StatusOK, resp)
 	}
+}
+
+// aggregateContainerStats sums per-container docker-stats samples across a
+// project's containers. Returns nil pointers (never a fabricated zero) when
+// no container in health had a matching sample — e.g. the docker stats call
+// raced a container that just exited. MemLimitBytes stays nil if the summed
+// limit is 0 (no container reported one).
+func aggregateContainerStats(health []ContainerHealth, stats map[string]containers.Stat) (cpu *float64, used, limit *int64) {
+	var cpuSum float64
+	var usedSum, limitSum int64
+	var any bool
+	for _, c := range health {
+		if s, ok := stats[c.Name]; ok {
+			cpuSum += s.CPUPct
+			usedSum += s.MemBytes
+			limitSum += s.MemLimit
+			any = true
+		}
+	}
+	if !any {
+		return nil, nil, nil
+	}
+	used = &usedSum
+	cpu = &cpuSum
+	if limitSum > 0 {
+		limit = &limitSum
+	}
+	return cpu, used, limit
 }
 
 // containersList wraps the shared containers.List (called from
@@ -1604,23 +1657,25 @@ func parseClampedInt(s string, lo, hi int) (int, error) {
 	return n, nil
 }
 
-// handleScrubInstance: DELETE /api/instances/{name}.
+type runRemoveFunc func(context.Context, io.Writer, io.Writer, *localnet.RemoveOptions) int
+
+// handleRemoveInstance: DELETE /api/instances/{name}.
 //
-// Registry-level cleanup: removes the per-instance state.json + dir
-// and the index entry — for orphaned `creating` entries left by a
-// server restart, or for instances that finished badly and the user
-// wants to retry the name. 204 on success; honest 404 for an
-// unknown name.
+// Destructive cleanup equivalent to `localnet remove`: removes the compose
+// project's containers and named volumes before deleting state.json and the
+// registry entry. This distinction is load-bearing: `down` preserves volumes
+// for a later resume, while `remove` must not leave an old ledger database to
+// be attached to a future instance that reuses the same name.
 //
-// Refuses (409) to scrub a `running` instance (stop it via POST
-// /down first) and refuses while a create job is in flight (that
-// would race the goroutine; cancel via DELETE /up first).
-//
-// Does NOT remove docker resources — the up may have crashed
-// before docker got involved (the common zombie case is exactly
-// this), and trying `docker compose down` against an unknown
-// project would 5xx for no benefit.
-func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
+// Orphaned index entries with no state.json are still scrubbed. Without state
+// there is no trustworthy compose-project identifier, so that repair path can
+// only remove the index entry. Running instances and active create jobs are
+// refused; callers must bring them down or cancel creation first.
+func handleRemoveInstance(hub *stream.Hub) http.HandlerFunc {
+	return handleRemoveInstanceWithRunner(hub, localnet.RunRemove)
+}
+
+func handleRemoveInstanceWithRunner(hub *stream.Hub, runRemove runRemoveFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 		if err := registry.ValidateName(name); err != nil {
@@ -1640,23 +1695,6 @@ func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
 			return
 		}
 
-		// Acquire the per-instance flock so the read +
-		// status check + index/state delete is a true CAS. Without
-		// this a concurrent POST /api/instances or POST /up that
-		// races the goroutine-Active probe above could re-register
-		// the same name between our Read and Delete. The lock
-		// excludes both create and resume paths (they take the
-		// same lock around their work).
-		release, lerr := registry.Lock(name)
-		if lerr != nil {
-			writeErrorWithCode(w, http.StatusConflict,
-				"INSTANCE_BUSY",
-				"instance "+name+" is busy — another operation holds the lock",
-				"wait for the in-flight operation to finish, then retry")
-			return
-		}
-		defer release()
-
 		state, err := registry.Read(name)
 		if err != nil {
 			if errors.Is(err, registry.ErrNotFound) {
@@ -1672,32 +1710,33 @@ func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
 				//      clicks Remove with no way to repair it.
 				//      Treat Delete as idempotent here: scrub
 				//      the index entry so list reflects truth.
-				if idx, ierr := registry.ReadIndex(); ierr == nil {
-					for _, e := range idx.Entries {
-						if e.Name == name {
-							hub.ClearBuffer(progress.TopicFor(name))
-							if derr := registry.Delete(name); derr != nil {
-								writeError(w, http.StatusInternalServerError,
-									"scrub orphan index entry", derr)
-								return
-							}
-							log.Printf("scrub orphan index entry %q via DELETE (state.json was missing)", name)
-							w.WriteHeader(http.StatusNoContent)
-							return
-						}
+				idx, ierr := registry.ReadIndex()
+				if ierr != nil {
+					writeError(w, http.StatusInternalServerError, "read registry index", ierr)
+					return
+				}
+				indexed := false
+				for _, e := range idx.Entries {
+					if e.Name == name {
+						indexed = true
+						break
 					}
 				}
-				writeErrorWithCode(w, http.StatusNotFound,
-					ErrCodeNotFound,
-					"instance "+name+" not registered")
+				if !indexed {
+					writeErrorWithCode(w, http.StatusNotFound,
+						ErrCodeNotFound,
+						"instance "+name+" not registered")
+					return
+				}
+			} else {
+				writeError(w, http.StatusInternalServerError, "read state", err)
 				return
 			}
-			writeError(w, http.StatusInternalServerError, "read state", err)
-			return
 		}
 
-		// Block on `running` — that needs a real `down` flow.
-		if state.Status == registry.StatusRunning {
+		// Block on `running` — DELETE intentionally mirrors CLI remove without
+		// --force so an accidental click cannot destroy a live ledger.
+		if state != nil && state.Status == registry.StatusRunning {
 			writeErrorWithCode(w, http.StatusConflict,
 				"INSTANCE_RUNNING",
 				"instance "+name+" is running — stop it first",
@@ -1705,16 +1744,34 @@ func handleScrubInstance(hub *stream.Hub) http.HandlerFunc {
 			return
 		}
 
-		// Clean the in-memory event buffer if any; then the
-		// on-disk state + index entry.
-		hub.ClearBuffer(progress.TopicFor(name))
-		if err := registry.Delete(name); err != nil {
-			writeError(w, http.StatusInternalServerError, "delete state", err)
+		ctx, cancel := context.WithTimeout(r.Context(), downTimeout)
+		defer cancel()
+
+		var outBuf, errBuf bytes.Buffer
+		exit := runRemove(ctx, &outBuf, &errBuf, &localnet.RemoveOptions{Name: name})
+		if exit == localnet.ExitSuccess {
+			hub.ClearBuffer(progress.TopicFor(name))
+			log.Printf("remove instance %q via DELETE: ok", name)
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 
-		log.Printf("scrub instance %q via DELETE", name)
-		w.WriteHeader(http.StatusNoContent)
+		status := http.StatusInternalServerError
+		switch exit {
+		case localnet.ExitUserError:
+			status = http.StatusConflict
+		case localnet.ExitTimeout:
+			status = http.StatusRequestTimeout
+		}
+		cause := errBuf.String()
+		if cause == "" {
+			cause = "remove failed with exit code " + strconv.FormatUint(uint64(exit), 10)
+		}
+		log.Printf("remove instance %q: exit=%d out=%s err=%s", name, exit, outBuf.String(), cause)
+		writeErrorWithCode(w, status,
+			"REMOVE_FAILED",
+			"failed to remove "+name+": "+firstNonWarningLine(cause),
+			"retry with `dpm localnet remove "+name+"` from a terminal for full output")
 	}
 }
 

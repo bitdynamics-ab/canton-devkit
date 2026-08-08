@@ -105,6 +105,21 @@ type Version struct {
 // only lives in one place.
 func (v Version) IsAlpha() bool { return v.Channel == "alpha" }
 
+// SupportsTokenStandardV2 reports whether a Splice release includes the
+// released CIP-0112 APIs and implementation. Token Standard V2 shipped in
+// Splice 0.6.11; the old branch-backed catalogue alias remains supported for
+// reproducibility of pre-release LocalNets.
+func SupportsTokenStandardV2(tag string) bool {
+	if tag == "token-standard-v2" {
+		return true
+	}
+	v, ok := parseSemver(tag)
+	if !ok {
+		return false
+	}
+	return v[0] > 0 || (v[0] == 0 && (v[1] > 6 || (v[1] == 6 && v[2] >= 11)))
+}
+
 // catalogueFile is the embedded JSON catalogue. Kept as a separate file
 // (rather than literal Go code) so the maintainer refresh script can
 // append entries with a tiny JSON edit instead of regenerating Go

@@ -60,7 +60,7 @@
   --bg-page: #0f1012; --bg-sunken: #0b0c0e; --bg-surface: #16171a;
   --bg-raised: #1e1f23; --bg-inset: #101113;
   --text-primary: #e4e5e8; --text-secondary: #aeb1b8;
-  --text-muted: #75787f; --text-faint: #6e7178;
+  --text-muted: #90939b; --text-faint: #888b93;
   --border-subtle: #1e1f23; --border-default: #2a2c31; --border-strong: #3a3d44;
   --hover-tint: #1a1b1f; --active-tint: #212227;
   --accent: #8b93f2; --accent-hover: #9aa1f5; --accent-active: #a6acf6;
@@ -82,7 +82,7 @@
   --bg-page: #fbfbfc; --bg-sunken: #f7f7f8; --bg-surface: #ffffff;
   --bg-raised: #f4f5f6; --bg-inset: #eeeff1;
   --text-primary: #1b1c1f; --text-secondary: #54575e;
-  --text-muted: #82868e; --text-faint: #8a8d95;
+  --text-muted: #5c5f67; --text-faint: #6a6d76;
   --border-subtle: #eeeff1; --border-default: #e1e3e6; --border-strong: #c6c9ce;
   --hover-tint: #f4f5f6; --active-tint: #eeeff1;
   --accent: #4a52c9; --accent-hover: #3d45be; --accent-active: #333ba8;
@@ -165,6 +165,65 @@ a {
   border-radius: 2px;
 }
 
+/* Application shell. minmax(0, 1fr) is deliberate: content grids and tables
+ * must scroll inside main instead of widening the document. On narrow screens
+ * the sidebar becomes a horizontal nav rail so every destination remains
+ * available without sacrificing the content column. */
+.app-shell {
+  grid-template-columns: 232px minmax(0, 1fr);
+  grid-template-rows: 52px minmax(0, 1fr);
+}
+
+.app-topbar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  gap: 14px;
+  min-width: 0;
+  padding: 0 16px;
+}
+
+.app-sidebar {
+  grid-column: 1;
+  grid-row: 2;
+  flex-direction: column;
+  min-width: 0;
+  padding: 16px 10px 10px;
+  border-right: 1px solid var(--border-default);
+}
+
+.app-main {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  padding: 24px;
+}
+
+.instance-switcher-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 460px;
+  max-width: calc(100vw - 20px);
+}
+
+.instance-switcher {
+  min-width: 0;
+}
+
+.instance-switcher > button {
+  max-width: 100%;
+}
+
+.instance-switcher > button strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.instance-switcher-grid {
+  grid-template-columns: minmax(0, 1fr) auto 72px 108px;
+}
+
 /* Sidebar nav items — hover/active tints live here since inline styles
  * can't express :hover. */
 .side-nav-link {
@@ -201,6 +260,79 @@ a {
 }
 .side-nav-link.active svg {
   color: var(--accent);
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 52px 48px minmax(0, 1fr);
+  }
+
+  .app-topbar {
+    grid-column: 1;
+    gap: 7px;
+    padding: 0 10px;
+  }
+
+  .app-route-title,
+  .app-palette-hint,
+  .app-health-pill,
+  .app-docs-link {
+    display: none !important;
+  }
+
+  .app-sidebar {
+    grid-column: 1;
+    grid-row: 2;
+    flex-direction: row;
+    gap: 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-default);
+    scrollbar-width: none;
+  }
+
+  .app-sidebar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .app-sidebar-label {
+    display: none;
+  }
+
+  .app-sidebar .side-nav-link {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 7px 9px;
+    white-space: nowrap;
+  }
+
+  .app-main {
+    grid-column: 1;
+    grid-row: 3;
+    padding: 12px;
+  }
+
+  .instance-switcher-menu {
+    position: fixed;
+    top: 56px;
+    left: 10px;
+    width: calc(100vw - 20px);
+  }
+
+  .instance-switcher {
+    max-width: 170px;
+  }
+
+  .instance-switcher-grid {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .instance-switcher-optional {
+    display: none;
+  }
 }
 
 /* Button system (components/Button.tsx) — hover/active tints live here

@@ -1,5 +1,5 @@
-import { NavLink, useLocation, useSearchParams } from "react-router-dom";
-import { useState } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { W, wMono, wSans, wideCaps, tint, R, fs } from "../tokens";
 import { StatusBadge } from "../components/StatusBadge";
 import {
@@ -16,12 +16,15 @@ import {
   IcMoon,
   IcBook,
   IcChevronDown,
+  IcPlus,
 } from "../components/icons";
 import { useTheme, toggleTheme } from "../theme";
 import { type ConnectionState, useConnectionHealth } from "./useConnectionHealth";
 import { type InstanceSelection, useInstanceSelection } from "./useInstanceSelection";
+import { useCreateInstance } from "./useCreateInstance";
 import { CommandPalette, openPalette } from "./CommandPalette";
 import { NAV, linkTo } from "./routes";
+import { ApiError, fetchMetricsSummary } from "../api";
 
 const NAV_ICON: Record<string, (p: { size?: number }) => JSX.Element> = {
   "/": IcOverview,
@@ -35,7 +38,6 @@ const NAV_ICON: Record<string, (p: { size?: number }) => JSX.Element> = {
 };
 
 const DOCS_URL = "https://bitdynamics-ab.github.io/canton-devkit/";
-const REPO_URL = "https://github.com/bitdynamics-ab/canton-devkit";
 
 interface ShellProps {
   children: React.ReactNode;
@@ -44,10 +46,9 @@ interface ShellProps {
 export function Shell({ children }: ShellProps) {
   return (
     <div
+      className="app-shell"
       style={{
         display: "grid",
-        gridTemplateColumns: "232px 1fr",
-        gridTemplateRows: "52px 1fr",
         height: "100vh",
         fontFamily: wSans,
         background: W.bg,
@@ -58,13 +59,11 @@ export function Shell({ children }: ShellProps) {
       <Sidebar />
       <main
         id="main-content"
+        className="app-main"
         // tabIndex=-1 so the SkipLink can programmatically focus it.
         tabIndex={-1}
         style={{
-          gridColumn: "2",
-          gridRow: "2",
           overflow: "auto",
-          padding: 24,
           background: W.bg,
           // SkipLink target is a focus destination, not a control; no outline.
           outline: "none",
@@ -97,8 +96,12 @@ function SkipLink() {
   );
 }
 
-// Match on pathname only; instance-scoped routes carry a query string.
+// Match on pathname only; every route may carry the selection query string.
+// The Overview ("/") and the fleet table ("/instances") are two faces of
+// one section, so both read "Instances" in the breadcrumb — the switcher,
+// not the breadcrumb, says which instance you're looking at.
 function currentRouteLabel(pathname: string): string {
+  if (pathname === "/" || pathname.startsWith("/instances")) return "Instances";
   const hit = NAV.find((n) => n.to === pathname);
   return hit ? hit.label : "";
 }
@@ -110,13 +113,10 @@ function TopBar() {
   const title = currentRouteLabel(pathname);
   return (
     <header
+      className="app-topbar"
       style={{
-        gridColumn: "1 / span 2",
-        gridRow: "1",
         display: "flex",
         alignItems: "center",
-        gap: 14,
-        padding: "0 16px",
         background: W.bg,
         borderBottom: `1px solid ${W.border}`,
       }}
@@ -124,6 +124,7 @@ function TopBar() {
       <LogoLockup />
       {title && (
         <span
+          className="app-route-title"
           style={{
             fontSize: fs.body,
             fontWeight: 600,
@@ -140,6 +141,7 @@ function TopBar() {
       <HealthPill conn={conn} />
       <ThemeToggle />
       <a
+        className="app-docs-link"
         href={DOCS_URL}
         target="_blank"
         rel="noopener noreferrer"
@@ -169,6 +171,7 @@ function ThemeToggle() {
   const next = theme === "dark" ? "light" : "dark";
   return (
     <button
+      className="app-theme-toggle"
       type="button"
       onClick={toggleTheme}
       title={`Switch to ${next} theme`}
@@ -193,15 +196,42 @@ function ThemeToggle() {
 
 function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  const create = useCreateInstance();
   if (sel.loading) {
     return <span style={pillStyle(W.dim)}>Loading instances…</span>;
   }
   if (sel.error || sel.instances.length === 0) {
-    return <span style={pillStyle(W.dim)}>No instances</span>;
+    // No instances (fresh install / registry error): the switcher has nothing
+    // to switch, so it becomes the create affordance — a dead "No instances"
+    // pill would strand a first-time user with no way to spin one up.
+    return (
+      <button
+        onClick={() => create.open()}
+        title="Create a LocalNet instance"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          height: 28,
+          padding: "0 12px",
+          borderRadius: 2,
+          border: `1px solid ${W.border}`,
+          background: W.surface,
+          color: W.brandText,
+          fontSize: fs.meta,
+          fontWeight: 500,
+          cursor: "pointer",
+        }}
+      >
+        <IcPlus size={13} />
+        New instance
+      </button>
+    );
   }
   const selected = sel.instances.find((i) => i.name === sel.selected);
   return (
-    <div style={{ position: "relative" }}>
+    <div className="instance-switcher" style={{ position: "relative" }}>
       <button
         onClick={() => setOpen((v) => !v)}
         onBlur={() => {
@@ -245,71 +275,173 @@ function InstanceSwitcher({ sel }: { sel: InstanceSelection }) {
         <IcChevronDown size={12} style={{ color: W.dim }} />
       </button>
       {open && (
-        <ul
-          role="listbox"
+        <div
+          className="instance-switcher-menu"
           style={{
-            position: "absolute",
-            top: "calc(100% + 4px)",
-            left: 0,
-            margin: 0,
-            padding: 4,
-            listStyle: "none",
             background: W.surface,
             border: `1px solid ${W.border}`,
             borderRadius: R.card,
-            minWidth: 240,
             zIndex: 10,
             boxShadow: "0 6px 20px rgba(0,0,0,0.16)",
+            overflow: "hidden",
           }}
         >
-          {sel.instances.map((i) => (
-            <li key={i.name}>
-              <button
-                role="option"
-                aria-selected={i.name === sel.selected}
-                onMouseDown={(e) => {
-                  // mouseDown fires before the button's onBlur, so the
-                  // menu doesn't close before the click lands.
-                  e.preventDefault();
-                  sel.select(i.name);
-                  setOpen(false);
-                }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  width: "100%",
-                  padding: "7px 10px",
-                  background:
-                    i.name === sel.selected ? W.brandSoft : "transparent",
-                  border: "none",
-                  borderRadius: R.control,
-                  color: i.name === sel.selected ? W.brandText : W.text,
-                  fontFamily: wMono,
-                  fontSize: fs.meta,
-                  textAlign: "left",
-                  cursor: "pointer",
-                }}
-              >
-                <span style={{ flex: 1 }}>{i.name}</span>
-                <StatusBadge status={i.status} />
-                <span
-                  style={{
-                    color: W.dim,
-                    fontSize: fs.label,
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
-                  {i.splice_version}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+          <div
+            className="instance-switcher-grid"
+            style={{
+              ...SWITCHER_GRID,
+              padding: "7px 12px",
+              background: W.surface2,
+              borderBottom: `1px solid ${W.border}`,
+            }}
+          >
+            <span style={switcherCap}>Instance</span>
+            <span style={switcherCap}>State</span>
+            <span className="instance-switcher-optional" style={{ ...switcherCap, textAlign: "right" }}>Uptime</span>
+            <span className="instance-switcher-optional" style={{ ...switcherCap, textAlign: "right" }}>Ports</span>
+          </div>
+          <ul role="listbox" style={{ margin: 0, padding: 0, listStyle: "none" }}>
+            {sel.instances.map((i) => {
+              const isSel = i.name === sel.selected;
+              return (
+                <li key={i.name}>
+                  <button
+                    className="instance-switcher-grid"
+                    role="option"
+                    aria-selected={isSel}
+                    onMouseDown={(e) => {
+                      // mouseDown fires before the trigger's onBlur, so the
+                      // menu doesn't close before the click lands.
+                      e.preventDefault();
+                      sel.select(i.name);
+                      setOpen(false);
+                    }}
+                    style={{
+                      ...SWITCHER_GRID,
+                      width: "100%",
+                      padding: "8px 12px",
+                      background: isSel ? W.brandSoft : "transparent",
+                      border: "none",
+                      borderTop: `1px solid ${W.border}`,
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                        minWidth: 0,
+                      }}
+                    >
+                      <StatusDot status={i.status} />
+                      <strong
+                        style={{
+                          color: isSel ? W.brandText : W.text,
+                          fontFamily: wMono,
+                          fontSize: fs.meta,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {i.name}
+                      </strong>
+                    </span>
+                    <StatusBadge status={i.status} />
+                    <span className="instance-switcher-optional" style={switcherNum}>{i.started_ago || "—"}</span>
+                    <span className="instance-switcher-optional" style={switcherNum}>{i.ports || "—"}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "6px 8px",
+              borderTop: `1px solid ${W.border}`,
+              background: W.surface2,
+            }}
+          >
+            <button
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setOpen(false);
+                create.open();
+              }}
+              style={switcherAction(W.brandText)}
+            >
+              <IcPlus size={13} />
+              New instance
+            </button>
+            <button
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setOpen(false);
+                navigate(linkTo("/instances", sel.selected));
+              }}
+              style={switcherAction(W.dim)}
+            >
+              All instances
+              <kbd style={kbdHint}>⌘K</kbd>
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
 }
+
+// Shared column template for the switcher header + rows so they align.
+const SWITCHER_GRID: React.CSSProperties = {
+  display: "grid",
+  alignItems: "center",
+  gap: 12,
+};
+
+const switcherCap: React.CSSProperties = {
+  ...wideCaps,
+  fontSize: fs.micro,
+  color: W.dim,
+};
+
+const switcherNum: React.CSSProperties = {
+  textAlign: "right",
+  fontFamily: wMono,
+  fontSize: fs.label,
+  color: W.dim,
+  fontVariantNumeric: "tabular-nums",
+};
+
+function switcherAction(color: string): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "5px 8px",
+    background: "transparent",
+    border: "none",
+    borderRadius: R.control,
+    color,
+    fontSize: fs.meta,
+    fontWeight: 500,
+    cursor: "pointer",
+  };
+}
+
+const kbdHint: React.CSSProperties = {
+  fontFamily: wMono,
+  fontSize: fs.micro,
+  color: W.faint,
+  border: `1px solid ${W.border}`,
+  borderRadius: 3,
+  padding: "0 4px",
+  marginLeft: 6,
+};
 
 function statusColor(status: string): string {
   return status === "running"
@@ -332,6 +464,7 @@ function PaletteHint() {
   const mod = isMac ? "⌘" : "Ctrl";
   return (
     <button
+      className="app-palette-hint"
       type="button"
       onClick={openPalette}
       title="Open the command palette"
@@ -410,6 +543,7 @@ function HealthPill({ conn }: { conn: ConnectionState }) {
   })();
   return (
     <span
+      className="app-health-pill"
       title={tooltip}
       style={{
         display: "inline-flex",
@@ -431,25 +565,50 @@ function HealthPill({ conn }: { conn: ConnectionState }) {
   );
 }
 
+// useMonitoringOff probes the selected instance's metrics: the summary
+// endpoint throws OBSERVABILITY_PROFILE_OFF when the instance was started
+// without the observability profile. Drives the "off" tag on the Metrics
+// nav row so the capability's absence is flagged where it's owned. Any
+// other outcome (running, unreachable, no instance) shows no tag.
+function useMonitoringOff(instance: string | null): boolean {
+  const [off, setOff] = useState(false);
+  useEffect(() => {
+    if (!instance) {
+      setOff(false);
+      return;
+    }
+    let cancelled = false;
+    fetchMetricsSummary(instance)
+      .then(() => {
+        if (!cancelled) setOff(false);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setOff(e instanceof ApiError && e.code === "OBSERVABILITY_PROFILE_OFF");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instance]);
+  return off;
+}
+
 function Sidebar() {
-  // Thread the selected instance into per-instance routes so sidebar
-  // clicks don't drop the selection.
-  const [params] = useSearchParams();
-  const instance = params.get("instance");
-  const conn = useConnectionHealth();
+  // Use the resolved selection, not only the raw query parameter: on a bare
+  // URL the provider may auto-pick a running instance, and links must carry
+  // that pick forward instead of showing it in the header then dropping it.
+  const sel = useInstanceSelection();
+  const instance = sel.selected;
+  const metricsOff = useMonitoringOff(instance);
   return (
     <nav
+      className="app-sidebar"
       style={{
-        gridColumn: "1",
-        gridRow: "2",
         display: "flex",
-        flexDirection: "column",
         background: W.sunken,
-        borderRight: `1px solid ${W.border}`,
-        padding: "16px 10px 10px",
       }}
     >
       <div
+        className="app-sidebar-label"
         style={{
           ...wideCaps,
           fontSize: fs.micro,
@@ -464,60 +623,33 @@ function Sidebar() {
         return (
           <NavLink
             key={item.to}
-            to={linkTo(item.to, item.instanceScoped, instance)}
+            to={linkTo(item.to, instance)}
             end={item.to === "/"}
             className="side-nav-link"
           >
             <Icon size={15} />
             {item.label}
+            {item.to === "/metrics" && metricsOff && (
+              <span
+                title="Started without the observability profile — no metrics collected"
+                style={{
+                  marginLeft: "auto",
+                  ...wideCaps,
+                  fontSize: fs.micro,
+                  color: W.faint,
+                  border: `1px solid ${W.border}`,
+                  borderRadius: R.control,
+                  padding: "0 5px",
+                  lineHeight: "15px",
+                }}
+              >
+                off
+              </span>
+            )}
           </NavLink>
         );
       })}
-      <div style={{ flex: 1 }} />
-      <div
-        style={{
-          borderTop: `1px solid ${W.border}`,
-          padding: "10px 8px 2px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 4,
-          fontSize: fs.label,
-          color: W.faint,
-          fontFamily: wMono,
-        }}
-      >
-        <span>
-          UI version: <UiVersion />
-        </span>
-        <span>
-          {conn.serverVersion != null
-            ? `schema v${conn.serverVersion}`
-            : "connecting…"}
-        </span>
-      </div>
     </nav>
-  );
-}
-
-// UiVersion renders the build commit id, linking to the GitHub commit
-// when it's a real sha. The "dev" fallback (no git checkout, or Vitest
-// where Vite's `define` doesn't apply) has no commit to point at, so it
-// renders as plain text.
-function UiVersion() {
-  const commit = typeof __UI_COMMIT__ !== "undefined" ? __UI_COMMIT__ : "dev";
-  if (commit === "dev") {
-    return <>{commit}</>;
-  }
-  return (
-    <a
-      href={`${REPO_URL}/commit/${commit}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={`View commit ${commit} on GitHub`}
-      style={{ color: "inherit", textDecoration: "underline" }}
-    >
-      {commit}
-    </a>
   );
 }
 

@@ -56,17 +56,21 @@ type LedgerConn struct {
 	Role     string // "sv" / "app-provider" / "app-user"
 }
 
-// ResolveLedgerEndpoint returns the role's participant ledger gRPC
-// endpoint (host:port) recorded in the instance's registry state, or ""
-// when no such port was captured. Empty role defaults to "app-user". Both
-// the CLI and the Web UI handler call it, so the two surfaces resolve the
-// same participant from the same key (`participant_ledger_<role>`).
+// ResolveLedgerEndpoint returns the role's participant ledger gRPC endpoint
+// (host:port) only while the registry says the instance is running. Stopped,
+// paused, failed, and mid-transition instances retain their allocated ports,
+// but those ports are not live endpoints; returning them would bypass the
+// registry fallback and produce a connection-refused error. Empty role
+// defaults to "app-user". Both the CLI and Web UI call this shared resolver.
 func ResolveLedgerEndpoint(instance, role string) string {
 	if role == "" {
 		role = string(splice.RoleAppUser)
 	}
 	state, err := registry.Read(instance)
 	if err != nil {
+		return ""
+	}
+	if state.Status != registry.StatusRunning {
 		return ""
 	}
 	if port, ok := state.Ports["participant_ledger_"+role]; ok && port > 0 {
@@ -319,7 +323,7 @@ type Generation int
 
 const (
 	genV1 Generation = 1 // Token Standard V1 (CIP-0056) — splice-api-token-*-v1
-	genV2 Generation = 2 // Token Standard V2 (CIP-0112) — splice-api-token-*-v2 (alpha)
+	genV2 Generation = 2 // Token Standard V2 (CIP-0112) — splice-api-token-*-v2
 )
 
 func (g Generation) String() string {

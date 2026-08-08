@@ -213,10 +213,13 @@ func RunStart(ctx context.Context, prog Progress, out, errw io.Writer, opts *Sta
 		_, _ = fmt.Fprintf(out,
 			"Containers for %q were removed — running localnet up to recreate them...\n",
 			state.Name)
+		// RunUp restores opt-in profiles from the persisted full profile set.
+		// Do not pass composeProfiles(state) here: it also contains adapter-
+		// internal names such as "sv", which are deliberately rejected by
+		// RunUp's user-facing --profile validator.
 		return runUp(ctx, prog, &UpOptions{
-			Name:     state.Name,
-			Version:  state.SpliceVersion,
-			Profiles: composeProfiles(state),
+			Name:    state.Name,
+			Version: state.SpliceVersion,
 		})
 	}
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
@@ -152,22 +153,42 @@ func TestMetricsSummary_ResponseShapeStable(t *testing.T) {
 	}
 }
 
-// TestGrafanaURLForState mirrors the CLI's grafanaURLFor: only emit
-// a deep link when state.Ports["grafana_ui"] is populated. Pins the
-// CLI ↔ Web UI parity contract on the dashboard discoverability
-// surface so the two sides can't drift on the link shape.
+// TestGrafanaURLForState mirrors the CLI's grafanaURLFor: prefer a dedicated
+// port, then fall back to the host-shared dashboard for registered targets.
 func TestGrafanaURLForState(t *testing.T) {
-	if got := grafanaURLForState(nil); got != "" {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	ctx := context.Background()
+	if got := grafanaURLForState(ctx, nil); got != "" {
 		t.Errorf("nil state should yield empty url; got %q", got)
 	}
-	off := &registry.State{Ports: map[string]int{}}
-	if got := grafanaURLForState(off); got != "" {
+	off := &registry.State{Name: "off", Ports: map[string]int{}}
+	if got := grafanaURLForState(ctx, off); got != "" {
 		t.Errorf("obs-off should yield empty url; got %q", got)
 	}
 	on := &registry.State{Ports: map[string]int{"grafana_ui": 3001}}
 	want := "http://localhost:3001/d/canton-localnet-v1"
-	if got := grafanaURLForState(on); got != want {
+	if got := grafanaURLForState(ctx, on); got != want {
 		t.Errorf("grafanaURLForState = %q, want %q", got, want)
+	}
+
+	shared := &registry.State{
+		Name: "shared",
+		Ports: map[string]int{
+			localnet.PortCantonMetrics: 10013,
+			localnet.PortSpliceMetrics: 10014,
+		},
+	}
+	if err := localnet.RegisterInstanceTargets(shared); err != nil {
+		t.Fatalf("register shared target: %v", err)
+	}
+	oldSharedURL := sharedGrafanaURLForUI
+	sharedGrafanaURLForUI = func(context.Context, string) string {
+		return "http://127.0.0.1:3300/d/canton-localnet-v1?var-instance=shared"
+	}
+	t.Cleanup(func() { sharedGrafanaURLForUI = oldSharedURL })
+	want = "http://127.0.0.1:3300/d/canton-localnet-v1?var-instance=shared"
+	if got := grafanaURLForState(ctx, shared); got != want {
+		t.Errorf("shared grafanaURLForState = %q, want %q", got, want)
 	}
 }
 

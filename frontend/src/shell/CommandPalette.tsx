@@ -6,10 +6,10 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { W, wMono, wSans, tint, R, wideCaps, fs } from "../tokens";
 import { useInstanceSelection } from "./useInstanceSelection";
-import { NAV, isInstanceScoped, linkTo } from "./routes";
+import { NAV, linkTo } from "./routes";
 
 interface Action {
   id: string;
@@ -42,10 +42,10 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const sel = useInstanceSelection();
-  // Carry `?instance=` into instance-scoped routes; otherwise ⌘K →
-  // "Wallet" lands on the empty state despite a selected instance.
-  const [searchParams] = useSearchParams();
-  const instance = searchParams.get("instance");
+  // Carry the selected instance through every navigation. Host-level
+  // destinations ignore it, but preserving it keeps the next operation on
+  // the same LocalNet and also handles an auto-selected running instance.
+  const instance = sel.selected;
 
   useEffect(() => {
     function onKey(e: globalThis.KeyboardEvent) {
@@ -79,7 +79,7 @@ export function CommandPalette() {
   const actions = useMemo<Action[]>(() => {
     const nav = NAV_ACTIONS.map<Action>((a) => ({
       ...a,
-      perform: () => navigate(linkTo(a.path, isInstanceScoped(a.path), instance)),
+      perform: () => navigate(linkTo(a.path, instance)),
     }));
     const instances = sel.instances.map<Action>((i) => ({
       id: `inst-${i.name}`,
