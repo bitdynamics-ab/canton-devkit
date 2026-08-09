@@ -294,7 +294,7 @@ The embedded skill docs are the same artifacts that back the Web UI's Agent Skil
 
 **Proposal said:** DAR commands connect to participants via the named instance implicitly.
 
-**Shipped:** Each `dar` subcommand carries its own connection flags: `--admin-host`, `--token`, `--insecure` (defaults to `true`), `--ca-cert`, `--instance` (alias `--name`), `--role` (default `app-user`). There is no standalone `dar connect` command.
+**Shipped:** Each `dar` subcommand carries its own connection flags: `--admin-host`, `--token`, `--insecure` (defaults to `true`), `--ca-cert`, `--instance` (alias `--name`), `--role` (default `app-provider`). There is no standalone `dar connect` command.
 
 **Why:** Per-command connection flags make the DAR subcommands usable against any Ledger API endpoint, not just DevKit-managed instances. This gives operators more flexibility in CI and multi-environment workflows without requiring a running LocalNet registry.
 
@@ -421,9 +421,9 @@ The embedded skill docs are the same artifacts that back the Web UI's Agent Skil
 
 **Proposal said:** role selection was unspecified; early implementation defaulted `--role` / `?role=` to `app-user`.
 
-**Shipped:** every token surface (CLI `--role`, Web UI identity switcher / `tokenQuery` omission, `roleFromQuery`, and `token.DefaultRole`) falls back to **`app-provider`**. The shared Explorer resolver (`internal/localnet.ResolveLedgerEndpoint`) and Explorer CLI/UI (`contracts` / `tx`, Web ACS/transactions handlers, Explorer screen) use the same **`app-provider`** empty-role default so omitting `--role` / `?role=` cannot drift across surfaces. DAR keeps its own `app-user` default.
+**Shipped:** every participant-scoped surface falls back to **`app-provider`** when role is omitted: token CLI/UI (`token.DefaultRole`, `roleFromQuery`, `tokenQuery`), Explorer (`internal/localnet.ResolveLedgerEndpoint`, `contracts` / `tx`, Web ACS/transactions handlers, Explorer screen), DAR (`dar --role`, Web DAR list/inspect/upload fallback, DAR screen), and the Wallet screen's role picker. Explicit `--role` / `?role=` / upload `roles` still win.
 
-**Why:** The provider participant is the mint/create operator on LocalNet. Defaulting to `app-user` made `--instance` alone resolve the wrong (often uncaptured) participant ledger port, so endpoint auto-resolution looked broken. Aligning token and Explorer on `app-provider` restores instance-only usability and keeps both surfaces on the same participant.
+**Why:** The provider participant is the mint/create operator on LocalNet. Defaulting to `app-user` made `--instance` alone resolve the wrong (often uncaptured) participant ledger port, so endpoint auto-resolution looked broken. Aligning every surface on `app-provider` restores instance-only usability and keeps CLI ↔ Web UI on the same participant.
 
 ---
 

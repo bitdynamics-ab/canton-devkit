@@ -93,7 +93,7 @@ func handleDARList(w http.ResponseWriter, r *http.Request) {
 	}
 	role := r.URL.Query().Get("role")
 	if role == "" {
-		role = "app-user"
+		role = "app-provider"
 	}
 	if !validRole[role] {
 		writeErrorWithCode(w, http.StatusBadRequest,
@@ -221,7 +221,7 @@ func handleDARUpload(w http.ResponseWriter, r *http.Request) {
 		if single := strings.TrimSpace(r.FormValue("role")); single != "" {
 			rawRoles = []string{single}
 		} else {
-			rawRoles = []string{"app-user"}
+			rawRoles = []string{"app-provider"}
 		}
 	}
 	seen := map[string]bool{}

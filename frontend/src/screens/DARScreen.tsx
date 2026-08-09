@@ -36,7 +36,9 @@ import { DARDiff } from "./DARDiff";
 // right detail rail that only exists once a package is selected.
 // Vetting is live per-participant end-to-end.
 
-const ROLES: Role[] = ["app-user", "app-provider", "sv"];
+// Default (app-provider) first — matches CLI dar --role and handler
+// empty-role fallback.
+const ROLES: Role[] = ["app-provider", "app-user", "sv"];
 
 // Package table column template — shared by the header band and rows.
 const COLS = "1.6fr 0.55fr 1.1fr 1.15fr";
@@ -60,7 +62,7 @@ type UploadState =
 export function DARScreen() {
   const sel = useInstanceSelection();
   const name = sel.selected;
-  const [role, setRole] = useState<Role>("app-user");
+  const [role, setRole] = useState<Role>("app-provider");
   // Participants an upload fans out to (parallel, backend-side).
   // Orthogonal to `role`, which drives only the package LIST.
   const [vetTargets, setVetTargets] = useState<Record<Role, boolean>>({

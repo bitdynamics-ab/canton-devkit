@@ -711,9 +711,9 @@ export interface MetricsSummary {
 // ── DAR Manager ─────────────────────────────────────────
 //
 // The Web UI lists DARs uploaded to a participant. Role defaults
-// to app-user (the common dev target). The backend reads the
-// per-role admin port from state.json so the browser
-// doesn't need to know about gRPC.
+// to app-provider (same canonical default as Tokens / Explorer).
+// The backend reads the per-role admin port from state.json so the
+// browser doesn't need to know about gRPC.
 export type Role = "app-user" | "app-provider" | "sv";
 
 export interface DARRow {
@@ -734,7 +734,7 @@ export interface DARListResponse {
   dars: DARRow[];
 }
 
-export const fetchDARList = (name: string, role: Role = "app-user") =>
+export const fetchDARList = (name: string, role: Role = "app-provider") =>
   apiFetch<DARListResponse>(
     `/api/instances/${encodeURIComponent(name)}/dar?role=${role}`,
   );
@@ -859,7 +859,7 @@ export interface DARInspectResponse {
 export const fetchDARInspect = (
   instance: string,
   mainID: string,
-  role: Role = "app-user",
+  role: Role = "app-provider",
 ) =>
   apiFetch<DARInspectResponse>(
     `/api/instances/${encodeURIComponent(instance)}/dar/${encodeURIComponent(mainID)}/inspect?role=${role}`,
@@ -916,7 +916,7 @@ export const fetchDARDiff = (
   instance: string,
   a: string,
   b: string,
-  role: Role = "app-user",
+  role: Role = "app-provider",
 ) =>
   apiFetch<DARDiffResponse>(
     `/api/instances/${encodeURIComponent(instance)}/dar/diff?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&role=${role}`,

@@ -24,7 +24,7 @@ import { ContractDetailDrawer } from "./ContractDetailDrawer";
 import { TxReplayDrawer } from "./TxReplayDrawer";
 
 // Default (app-provider) first — matches CLI Explorer / shared
-// ResolveLedgerEndpoint empty-role fallback. DAR keeps app-user.
+// ResolveLedgerEndpoint empty-role fallback.
 const ROLES: Role[] = ["app-provider", "app-user", "sv"];
 // Template/party dot palette, ordered so neighbouring indices differ in
 // hue; no red (reserved for errors).
