@@ -182,7 +182,7 @@ func seedOnLedgerToken(t *testing.T, instance, symbol, issuer string) {
 func TestRunMint_AutoResolvesEndpointHitsSelfMintGuard(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo")
-	setLedgerPort(t, "demo", "app-user", 65535)
+	setLedgerPort(t, "demo", DefaultRole, 65535)
 	seedOnLedgerToken(t, "demo", "XYZ", "issuer::abc")
 
 	err := RunMint(context.Background(), nil, MintOptions{
@@ -206,7 +206,7 @@ func TestRunMint_AutoResolvesEndpointHitsSelfMintGuard(t *testing.T) {
 func TestRunMint_AutoResolvesEndpointDistinctReceiver(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo")
-	setLedgerPort(t, "demo", "app-user", 1)
+	setLedgerPort(t, "demo", DefaultRole, 1)
 	seedOnLedgerToken(t, "demo", "XYZ", "issuer::abc")
 
 	err := RunMint(context.Background(), nil, MintOptions{
@@ -262,7 +262,7 @@ func TestRunTransfer_UnknownSymbol(t *testing.T) {
 func TestRunTransfer_AutoResolvesEndpoint(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo")
-	setLedgerPort(t, "demo", "app-user", 1)
+	setLedgerPort(t, "demo", DefaultRole, 1)
 	seedOnLedgerToken(t, "demo", "XYZ", "issuer::abc")
 
 	err := RunTransfer(context.Background(), nil, TransferOptions{

@@ -102,7 +102,7 @@ func RunAllocate(ctx context.Context, out io.Writer, opts AllocationOptions) (st
 		return "", ErrNeedsV2LocalNet
 	}
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	// LocalNet single-operator default: self-execute settlement unless the
 	// caller named an executor.
@@ -253,7 +253,7 @@ func RunListAllocations(ctx context.Context, opts ListAllocationsOptions) ([]typ
 		return nil, ErrNeedsV2LocalNet
 	}
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	party := ResolveAlias(aliasMapForInstance(opts.Instance), opts.Party)
 
@@ -355,7 +355,7 @@ func runAllocationAction(ctx context.Context, out io.Writer, opts AllocationActi
 		return ErrNeedsV2LocalNet
 	}
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	opts.Party = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Party)
 

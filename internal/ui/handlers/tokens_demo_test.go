@@ -25,7 +25,7 @@ func TestTokens_DemoProvisionsLiveToken(t *testing.T) {
 		SchemaVersion: 1,
 		Name:          inst,
 		Status:        registry.StatusRunning,
-		Ports:         map[string]int{"participant_ledger_app-user": 13902},
+		Ports:         map[string]int{"participant_ledger_app-provider": 13902},
 	}
 	if err := registry.Write(st); err != nil {
 		t.Fatalf("registry.Write: %v", err)

@@ -51,7 +51,7 @@ func RunListPendingTransfers(ctx context.Context, opts ListPendingTransfersOptio
 		return nil, false, ErrNeedsV2LocalNet
 	}
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	party := ResolveAlias(aliasMapForInstance(opts.Instance), opts.Party)
 

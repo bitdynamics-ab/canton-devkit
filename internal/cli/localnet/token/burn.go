@@ -60,7 +60,7 @@ to skip the prompt (required when running non-interactively / in CI).`,
 		"Skip the irreversible-burn confirmation prompt (required for non-interactive / CI use)")
 	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Defaults to the instance's captured ledger port; set to override which participant the live burn dials.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
-	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the burn.")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-provider", "Role whose JWT authenticates the burn.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	_ = cmd.MarkFlagRequired("instance")
 	_ = cmd.MarkFlagRequired("instrument")

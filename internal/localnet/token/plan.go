@@ -34,7 +34,7 @@ type PlanInput struct {
 // (Sufficient=false + Shortfall) so the UI can render it inline.
 func RunTransferPlan(ctx context.Context, opts TransferOptions) (*TransferPlan, error) {
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	opts.From = ResolveAlias(aliasMapForInstance(opts.Instance), opts.From)
 	ref := instrumentRefOrRaw(opts.Instance, opts.Instrument)

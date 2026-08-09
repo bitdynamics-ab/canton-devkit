@@ -146,7 +146,7 @@ type BalanceOptions struct {
 	// Token is optional: empty triggers per-role JWT auto-issuance
 	// via registry.State.Credentials → splice.SignToken (see
 	// dialLedger's token resolution chain). Role defaults to
-	// "app-user" — pass "sv" or "app-provider" to dial a different
+	// "app-provider" — pass "sv" or "app-user" to dial a different
 	// participant.
 	Endpoint string
 	Token    string
@@ -217,7 +217,7 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 		return err
 	}
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	// Auto-discover the endpoint from the instance's captured ledger port
 	// when none was passed, so a live mint (and its self-mint guard) works
@@ -262,7 +262,7 @@ func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error
 		return err
 	}
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	// Auto-discover the endpoint from the instance's captured ledger port
 	// when none was passed. Explicit --endpoint wins; if still empty (no
@@ -349,7 +349,7 @@ func RunAccept(ctx context.Context, out io.Writer, opts AcceptOptions) error {
 	// off-ledger path need a real party id, not an alias.
 	opts.Party = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Party)
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	// Auto-discover the endpoint from the instance's captured ledger port
 	// when none was passed. Explicit --endpoint wins; if still empty fall
@@ -390,7 +390,7 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 		return err
 	}
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	// Auto-discover the endpoint from the instance's captured ledger port
 	// when none was passed. Explicit --endpoint wins.

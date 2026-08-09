@@ -61,10 +61,10 @@ type LedgerConn struct {
 // paused, failed, and mid-transition instances retain their allocated ports,
 // but those ports are not live endpoints; returning them would bypass the
 // registry fallback and produce a connection-refused error. Empty role
-// defaults to "app-user". Both the CLI and Web UI call this shared resolver.
+// defaults to app-provider. Both the CLI and Web UI call this shared resolver.
 func ResolveLedgerEndpoint(instance, role string) string {
 	if role == "" {
-		role = string(splice.RoleAppUser)
+		role = DefaultRole
 	}
 	state, err := registry.Read(instance)
 	if err != nil {
@@ -283,7 +283,7 @@ func resolveLedgerTokenRaw(conn LedgerConn) (string, error) {
 
 	role := conn.Role
 	if role == "" {
-		role = string(splice.RoleAppUser)
+		role = DefaultRole
 	}
 
 	// Path #2: captured credentials from `localnet up`.

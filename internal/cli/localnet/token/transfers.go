@@ -94,7 +94,7 @@ dial a different participant.`,
 	cmd.Flags().StringVar(&opts.Party, "party", "", "Filter to offers involving one party (alias or id). Empty lists all visible.")
 	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Empty auto-resolves from the instance.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
-	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the scan.")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-provider", "Role whose JWT authenticates the scan.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json.")
 	_ = cmd.MarkFlagRequired("instance")

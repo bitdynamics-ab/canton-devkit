@@ -266,7 +266,7 @@ func findPartyByHint(ctx context.Context, c *ledger.Client, hint string) (string
 
 func roleOrDefault(role string) string {
 	if role == "" {
-		return "app-user"
+		return DefaultRole
 	}
 	return role
 }

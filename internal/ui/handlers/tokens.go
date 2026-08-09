@@ -120,7 +120,7 @@ func handlePartiesCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	role := req.Role
 	if role == "" {
-		role = "app-user"
+		role = token.DefaultRole
 	}
 	ep := liveLedgerEndpoint(instance, role)
 	if ep == "" {
@@ -700,7 +700,7 @@ var runTokenDemo = token.RunDemo
 func roleFromQuery(r *http.Request) string {
 	role := r.URL.Query().Get("role")
 	if role == "" {
-		role = "app-user"
+		role = token.DefaultRole
 	}
 	return role
 }

@@ -31,7 +31,7 @@ underlying Daml choice (BurnMintV1.Mint) refuses non-issuer submitters.`,
 	cmd.Flags().StringVar(&opts.To, "to", "", "Recipient party id. Required.")
 	cmd.Flags().StringVar(&opts.Amount, "amount", "", "Decimal amount to mint. Required.")
 	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Defaults to the instance's captured ledger port; set to override which participant the live mint dials.")
-	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the mint.")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-provider", "Role whose JWT authenticates the mint.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	_ = cmd.MarkFlagRequired("instance")
 	_ = cmd.MarkFlagRequired("instrument")

@@ -94,7 +94,7 @@ row came from. With --party, filter to a single party; with
 	cmd.Flags().StringVar(&opts.Instrument, "instrument", "", "Filter to a single instrument (symbol or raw id).")
 	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Defaults to the instance's captured ledger port; set to override which participant the live ACS query dials.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT for the participant. Empty (the common case) auto-issues a per-role token via `localnet creds` machinery.")
-	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT the live ACS query authenticates as (sv / app-provider / app-user).")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-provider", "Role whose JWT the live ACS query authenticates as (sv / app-provider / app-user).")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json.")
 	_ = cmd.MarkFlagRequired("instance")

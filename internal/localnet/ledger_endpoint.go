@@ -34,7 +34,7 @@ type LedgerEndpoint struct {
 //  1. instance — if empty, fall back to the only registered instance
 //     (errors when zero or more than one is registered, so the
 //     ambiguity is surfaced rather than guessed).
-//  2. role — defaults to "app-user" when empty (same default the UI
+//  2. role — defaults to "app-provider" when empty (same default the UI
 //     and `dar` commands use).
 //  3. endpoint — state.Ports["participant_ledger_"+role], captured at
 //     `up`/`restart` by CaptureCantonPorts. Missing port → a clear
@@ -53,7 +53,7 @@ func ResolveLedgerEndpoint(instance, role string) (LedgerEndpoint, error) {
 		return LedgerEndpoint{}, err
 	}
 	if role == "" {
-		role = string(splice.RoleAppUser)
+		role = string(splice.RoleAppProvider)
 	}
 
 	state, err := registry.Read(name)

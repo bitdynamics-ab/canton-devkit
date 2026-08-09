@@ -65,28 +65,28 @@ func TestResolveLedgerEndpoint_CapturedCreds(t *testing.T) {
 			"app-provider": {Role: "app-provider", JWT: "captured-app-provider-jwt"},
 		})
 
-	// Default role → app-user.
+	// Default role → app-provider.
 	got, err := ResolveLedgerEndpoint("dev", "")
 	if err != nil {
 		t.Fatalf("ResolveLedgerEndpoint: %v", err)
 	}
-	if got.Endpoint != "localhost:2901" {
-		t.Errorf("endpoint = %q, want localhost:2901", got.Endpoint)
+	if got.Endpoint != "localhost:3901" {
+		t.Errorf("endpoint = %q, want localhost:3901", got.Endpoint)
 	}
-	if got.Token != "captured-app-user-jwt" {
-		t.Errorf("token = %q, want captured-app-user-jwt", got.Token)
+	if got.Token != "captured-app-provider-jwt" {
+		t.Errorf("token = %q, want captured-app-provider-jwt", got.Token)
 	}
-	if got.Role != "app-user" {
-		t.Errorf("role = %q, want app-user (default)", got.Role)
+	if got.Role != "app-provider" {
+		t.Errorf("role = %q, want app-provider (default)", got.Role)
 	}
 
 	// Explicit role selects the matching port + JWT.
-	got, err = ResolveLedgerEndpoint("dev", "app-provider")
+	got, err = ResolveLedgerEndpoint("dev", "app-user")
 	if err != nil {
-		t.Fatalf("ResolveLedgerEndpoint(app-provider): %v", err)
+		t.Fatalf("ResolveLedgerEndpoint(app-user): %v", err)
 	}
-	if got.Endpoint != "localhost:3901" || got.Token != "captured-app-provider-jwt" {
-		t.Errorf("app-provider resolved to %q / %q", got.Endpoint, got.Token)
+	if got.Endpoint != "localhost:2901" || got.Token != "captured-app-user-jwt" {
+		t.Errorf("app-user resolved to %q / %q", got.Endpoint, got.Token)
 	}
 }
 
@@ -120,8 +120,8 @@ func TestResolveLedgerEndpoint_SignTokenFallback(t *testing.T) {
 func TestResolveLedgerEndpoint_DefaultInstance(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedLedgerInstance(t, "solo",
-		map[string]int{"participant_ledger_app-user": 2901},
-		map[string]registry.Credential{"app-user": {Role: "app-user", JWT: "jwt"}})
+		map[string]int{"participant_ledger_app-provider": 2901},
+		map[string]registry.Credential{"app-provider": {Role: "app-provider", JWT: "jwt"}})
 
 	got, err := ResolveLedgerEndpoint("", "") // no --name
 	if err != nil {

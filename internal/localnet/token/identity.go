@@ -6,16 +6,16 @@ import "github.com/bitdynamics-ab/canton-devkit/internal/splice"
 // when no role is chosen. Matches the CLI's --role default and the Web
 // UI's roleFromQuery / DEFAULT_ROLE, so live-ledger endpoint discovery
 // and JWT minting pick the same participant.
-const DefaultRole = string(splice.RoleAppUser)
+const DefaultRole = string(splice.RoleAppProvider)
 
 // Roles returns the act-as identities a LocalNet issues tokens for, in
-// UI order with the default (app-user) first. Shared by the CLI `token
-// identity` verb and the Web UI switcher so both list the same set in
-// the same order. Reorders splice.AllRoles() (which leads with sv).
+// UI order with the default (app-provider) first. Shared by the CLI
+// `token identity` verb and the Web UI switcher so both list the same
+// set in the same order. Reorders splice.AllRoles() (which leads with sv).
 func Roles() []string {
 	return []string{
-		string(splice.RoleAppUser),
 		string(splice.RoleAppProvider),
+		string(splice.RoleAppUser),
 		string(splice.RoleSV),
 	}
 }
