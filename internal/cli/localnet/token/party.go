@@ -45,11 +45,12 @@ Web UI party manager.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.Alias = args[0]
-			ep, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			resolved, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
 			if err != nil {
 				return err
 			}
-			opts.Endpoint = ep
+			opts.Endpoint = resolved.Endpoint
+			opts.Role = resolved.Role
 			ref, err := token.RunPartyNew(cmd.Context(), opts)
 			if err != nil {
 				return err

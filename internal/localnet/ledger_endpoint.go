@@ -34,8 +34,12 @@ type LedgerEndpoint struct {
 //  1. instance — if empty, fall back to the only registered instance
 //     (errors when zero or more than one is registered, so the
 //     ambiguity is surfaced rather than guessed).
-//  2. role — defaults to "app-provider" when empty (same default the UI
-//     and `dar` commands use).
+//  2. role — defaults to "app-user" when empty. This resolver is shared
+//     by CLI Explorer (`contracts` / `tx`), whose flags and help still
+//     default to app-user. Token surfaces use
+//     internal/localnet/token.ResolveLedgerEndpoint (app-provider) or
+//     pass an explicit role — do not change this Explorer default to
+//     match the token surface.
 //  3. endpoint — state.Ports["participant_ledger_"+role], captured at
 //     `up`/`restart` by CaptureCantonPorts. Missing port → a clear
 //     "restart to capture ports" error.
@@ -53,7 +57,7 @@ func ResolveLedgerEndpoint(instance, role string) (LedgerEndpoint, error) {
 		return LedgerEndpoint{}, err
 	}
 	if role == "" {
-		role = string(splice.RoleAppProvider)
+		role = string(splice.RoleAppUser)
 	}
 
 	state, err := registry.Read(name)

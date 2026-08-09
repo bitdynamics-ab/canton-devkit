@@ -44,8 +44,14 @@ to skip the prompt (required when running non-interactively / in CI).`,
 					return errSilent
 				}
 			}
-			err := token.RunBurn(cmd.Context(), cmd.OutOrStdout(), opts)
-			if errors.Is(err, token.ErrNeedsV2LocalNet) {
+			resolved, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			if err != nil {
+				return err
+			}
+			opts.Endpoint = resolved.Endpoint
+			opts.Role = resolved.Role
+			err = token.RunBurn(cmd.Context(), cmd.OutOrStdout(), opts)
+			if errors.Is(err, token.ErrNeedsV2LocalNet) || errors.Is(err, token.ErrUnresolvedLedgerEndpoint) {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
 				return errSilent
 			}

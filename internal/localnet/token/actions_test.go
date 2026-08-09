@@ -98,8 +98,11 @@ func TestRunMint_UnsupportedOnInstrument(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
+	// Explicit endpoint so the unsupported-instrument path is reached
+	// (a missing captured port is ErrUnresolvedLedgerEndpoint instead).
 	err := RunMint(context.Background(), nil, MintOptions{
 		Instance: "demo", Instrument: "RTK", To: "bob::xyz", Amount: "100",
+		Endpoint: "localhost:1",
 	})
 	if !errors.Is(err, ErrUnsupportedOnInstrument) {
 		t.Errorf("RunMint should surface ErrUnsupportedOnInstrument for assets without standard mint; got %v", err)
@@ -223,10 +226,11 @@ func TestRunMint_AutoResolvesEndpointDistinctReceiver(t *testing.T) {
 	}
 }
 
-// TestRunMint_UnsupportedWhenNoLedgerPort: with no captured port,
-// auto-resolution yields "" so RunMint keeps the registry-fallback
-// behaviour and surfaces ErrUnsupportedOnInstrument.
-func TestRunMint_UnsupportedWhenNoLedgerPort(t *testing.T) {
+// TestRunMint_UnresolvedWhenNoLedgerPort: with no captured port,
+// auto-resolution yields "" and RunMint returns the actionable
+// unresolved-endpoint error (instance, role, restart, --endpoint) —
+// never ErrUnsupportedOnInstrument.
+func TestRunMint_UnresolvedWhenNoLedgerPort(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "demo")
 	seedOnLedgerToken(t, "demo", "XYZ", "issuer::abc")
@@ -234,8 +238,17 @@ func TestRunMint_UnsupportedWhenNoLedgerPort(t *testing.T) {
 	err := RunMint(context.Background(), nil, MintOptions{
 		Instance: "demo", Instrument: "XYZ", To: "bob::xyz", Amount: "100",
 	})
-	if !errors.Is(err, ErrUnsupportedOnInstrument) {
-		t.Errorf("no captured port should keep the registry fallback; got %v", err)
+	if !errors.Is(err, ErrUnresolvedLedgerEndpoint) {
+		t.Errorf("no captured port should surface ErrUnresolvedLedgerEndpoint; got %v", err)
+	}
+	if errors.Is(err, ErrUnsupportedOnInstrument) {
+		t.Errorf("missing port must not be mislabeled as unsupported instrument")
+	}
+	msg := err.Error()
+	for _, want := range []string{"demo", DefaultRole, "restart", "--endpoint"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("unresolved error missing %q: %v", want, err)
+		}
 	}
 }
 

@@ -18,8 +18,14 @@ raw id) into --to's account on the V2 LocalNet. Issuer-only; the
 underlying Daml choice (BurnMintV1.Mint) refuses non-issuer submitters.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			err := token.RunMint(cmd.Context(), cmd.OutOrStdout(), opts)
-			if errors.Is(err, token.ErrNeedsV2LocalNet) {
+			resolved, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			if err != nil {
+				return err
+			}
+			opts.Endpoint = resolved.Endpoint
+			opts.Role = resolved.Role
+			err = token.RunMint(cmd.Context(), cmd.OutOrStdout(), opts)
+			if errors.Is(err, token.ErrNeedsV2LocalNet) || errors.Is(err, token.ErrUnresolvedLedgerEndpoint) {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
 				return errSilent
 			}

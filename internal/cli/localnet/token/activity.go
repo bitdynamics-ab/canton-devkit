@@ -29,11 +29,12 @@ Requires --instrument (the symbol or instrument id). --endpoint is
 optional: empty auto-resolves from the instance, like the Web UI.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ep, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			resolved, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
 			if err != nil {
 				return err
 			}
-			opts.Endpoint = ep
+			opts.Endpoint = resolved.Endpoint
+			opts.Role = resolved.Role
 			res, err := token.RunActivityResult(cmd.Context(), opts)
 			if err != nil {
 				return err

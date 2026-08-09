@@ -233,13 +233,22 @@ func TestTokens_CreateDuplicateIsConflict(t *testing.T) {
 func TestTokens_MintUnsupportedOnInstrument(t *testing.T) {
 	seedForTokens(t, "demo")
 	srv := tokensSrv(t)
-	// Create first so the symbol resolves.
+	// Create offline first so the symbol resolves as a recorded (not
+	// on-ledger) instrument.
 	create := `{"name":"x","symbol":"RTK","decimals":6,"initial_supply":"1","issuer":"alice::abc"}`
 	cr, _ := http.Post(srv.URL+"/api/tokens?instance=demo", "application/json", strings.NewReader(create))
 	if cr.StatusCode != http.StatusCreated {
 		t.Fatalf("setup create status = %d, want 201", cr.StatusCode)
 	}
 	_ = cr.Body.Close()
+
+	// seedForTokens forces an empty endpoint. Override only for mint so
+	// it reaches the instrument-capability check instead of the new
+	// unresolved-endpoint 503 — a recorded RTK still yields
+	// ErrUnsupportedOnInstrument when an endpoint is present.
+	prev := liveLedgerEndpoint
+	liveLedgerEndpoint = func(string, string) string { return "localhost:1" }
+	t.Cleanup(func() { liveLedgerEndpoint = prev })
 
 	mint := `{"to":"bob","amount":"5"}`
 	resp, err := http.Post(srv.URL+"/api/tokens/RTK/mint?instance=demo", "application/json", strings.NewReader(mint))

@@ -45,8 +45,8 @@ function stubFetch(
         return json({
           schema_version: 1,
           instance: "demo",
-          available_roles: ["app-user", "app-provider", "sv"],
-          current_role: "app-user",
+          available_roles: ["app-provider", "app-user", "sv"],
+          current_role: "app-provider",
         });
       }
       if (url.startsWith("/api/tokens/matrix")) {
@@ -521,8 +521,9 @@ describe("TokensScreen", () => {
     expect(screen.queryByText(/registry pseudo-balances/i)).toBeInTheDocument();
   });
 
-  // Selecting "app-provider" must re-plumb the role: the screen refetches
-  // with role=app-provider; before the switch, calls omit role (app-user default).
+  // Selecting "app-user" must re-plumb the role: the screen refetches
+  // with role=app-user; before the switch, default calls use app-provider
+  // (the omitted tokenQuery default / useIdentityRole fallback).
   it("threads the selected identity through token API calls", async () => {
     const user = userEvent.setup();
     stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
@@ -537,17 +538,19 @@ describe("TokensScreen", () => {
       () => expect(screen.queryAllByText(/Retail Token/).length).toBeGreaterThan(0),
       { timeout: 4000 },
     );
-    // Default calls carry no explicit role (app-user is the omitted default).
-    expect(calledWith("role=app-provider")).toBe(false);
+    // Default calls use app-provider (and tokenQuery omits it on paths that
+    // go through tokenQuery; fetchInstruments always sends the role).
+    expect(calledWith("role=app-provider")).toBe(true);
+    expect(calledWith("role=app-user")).toBe(false);
 
     // Switch identity via the header segmented control.
     await user.click(
-      await screen.findByRole("button", { name: /app-provider/i }, { timeout: 4000 }),
+      await screen.findByRole("button", { name: /^app-user$/i }, { timeout: 4000 }),
     );
 
     // The switch triggers a refetch of the token list under the new role.
     await waitFor(
-      () => expect(calledWith("/api/tokens?instance=demo&role=app-provider")).toBe(true),
+      () => expect(calledWith("/api/tokens?instance=demo&role=app-user")).toBe(true),
       { timeout: 4000 },
     );
   });

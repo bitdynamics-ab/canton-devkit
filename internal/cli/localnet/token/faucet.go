@@ -30,11 +30,12 @@ optional (empty auto-resolves from the instance, like the Web UI).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.To = args[0]
 			opts.Amount = args[1]
-			ep, epErr := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			resolved, epErr := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
 			if epErr != nil {
 				return epErr
 			}
-			opts.Endpoint = ep
+			opts.Endpoint = resolved.Endpoint
+			opts.Role = resolved.Role
 			err := token.RunFaucet(cmd.Context(), cmd.OutOrStdout(), opts)
 			if errors.Is(err, token.ErrNeedsV2LocalNet) {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err.Error())

@@ -39,8 +39,14 @@ TransferFactory response indicates the sender pre-approved them.`,
 		opts.Role, _ = cmd.Flags().GetString("role")
 		opts.Insecure, _ = cmd.Flags().GetBool("insecure")
 		opts.RegistryURL, _ = cmd.Flags().GetString("registry-url")
-		err := token.RunTransfer(cmd.Context(), cmd.OutOrStdout(), opts)
-		if errors.Is(err, token.ErrNeedsV2LocalNet) {
+		resolved, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+		if err != nil {
+			return err
+		}
+		opts.Endpoint = resolved.Endpoint
+		opts.Role = resolved.Role
+		err = token.RunTransfer(cmd.Context(), cmd.OutOrStdout(), opts)
+		if errors.Is(err, token.ErrNeedsV2LocalNet) || errors.Is(err, token.ErrUnresolvedLedgerEndpoint) {
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
 			return errSilent
 		}
@@ -79,8 +85,14 @@ choice on the Ledger API. Idempotent on the registry side — accepting
 twice is rejected by the underlying Daml choice.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			err := token.RunAccept(cmd.Context(), cmd.OutOrStdout(), opts)
-			if errors.Is(err, token.ErrNeedsV2LocalNet) {
+			resolved, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			if err != nil {
+				return err
+			}
+			opts.Endpoint = resolved.Endpoint
+			opts.Role = resolved.Role
+			err = token.RunAccept(cmd.Context(), cmd.OutOrStdout(), opts)
+			if errors.Is(err, token.ErrNeedsV2LocalNet) || errors.Is(err, token.ErrUnresolvedLedgerEndpoint) {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
 				return errSilent
 			}

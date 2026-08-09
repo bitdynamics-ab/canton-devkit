@@ -1700,11 +1700,13 @@ export interface BatchResult {
   ok: boolean;
 }
 
-// Matches the backend default in roleFromQuery — keep in sync.
-const DEFAULT_ROLE = "app-user";
+// Matches the backend token.DefaultRole / roleFromQuery — keep in sync.
+// Explorer and DAR callers below keep their own app-user defaults.
+const DEFAULT_ROLE = "app-provider";
 
 // tokenQuery builds `?instance=...&role=...` (role omitted when it just
 // repeats the default), so every token endpoint forwards role uniformly.
+// Selecting app-user must send role=app-user (no longer the omitted default).
 function tokenQuery(instance: string, role?: string): string {
   const params = new URLSearchParams({ instance });
   if (role && role !== DEFAULT_ROLE) params.set("role", role);
@@ -1807,13 +1809,13 @@ interface PartiesResponse {
 }
 
 // Lists the instance's registered party aliases.
-export const fetchParties = (instance: string, role = "app-user") =>
+export const fetchParties = (instance: string, role = "app-provider") =>
   apiFetch<PartiesResponse>(
     `/api/parties?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
   ).then((r) => r.parties);
 
 // Allocates a party under an alias and grants the role's user act/read-as.
-export const createParty = (instance: string, alias: string, role = "app-user") =>
+export const createParty = (instance: string, alias: string, role = "app-provider") =>
   apiFetch<PartyRef>(`/api/parties?instance=${encodeURIComponent(instance)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1845,7 +1847,7 @@ interface HoldingContractsResponse {
 // TokenRef list (mapped to InstrumentRef) when the ledger is unreachable.
 export async function fetchInstruments(
   instance: string,
-  role = "app-user",
+  role = "app-provider",
 ): Promise<InstrumentRef[]> {
   const r = await apiFetch<InstrumentsResponse>(
     `/api/tokens?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
@@ -1864,7 +1866,7 @@ export async function fetchInstruments(
   }));
 }
 
-export const fetchMatrix = (instance: string, role = "app-user") =>
+export const fetchMatrix = (instance: string, role = "app-provider") =>
   apiFetch<MatrixResponse>(
     `/api/tokens/matrix?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
   ).then((r) => r.matrix);
@@ -1899,7 +1901,7 @@ interface InstrumentSummaryResponse {
 export const fetchInstrumentSummary = (
   instance: string,
   symbol: string,
-  role = "app-user",
+  role = "app-provider",
 ) =>
   apiFetch<InstrumentSummaryResponse>(
     `/api/tokens/${encodeURIComponent(symbol)}/summary?instance=${encodeURIComponent(
@@ -1948,7 +1950,7 @@ export interface ActivityPage {
 export const fetchActivity = (
   instance: string,
   symbol: string,
-  role = "app-user",
+  role = "app-provider",
   limit = 50,
 ): Promise<ActivityPage> =>
   apiFetch<ActivityResponse>(
@@ -1961,7 +1963,7 @@ export const fetchHoldingContracts = (
   instance: string,
   symbol: string,
   party: string,
-  role = "app-user",
+  role = "app-provider",
 ) => {
   const params = new URLSearchParams({
     instance,
@@ -2126,7 +2128,7 @@ export async function planTransfer(
   symbol: string,
   from: string,
   amount: string,
-  role = "app-user",
+  role = "app-provider",
 ): Promise<TransferPlan> {
   const params = new URLSearchParams({ instance, role, plan: "1" });
   const resp = await fetch(

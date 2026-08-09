@@ -44,6 +44,11 @@ Every deviation listed here is **intentional**, not an oversight or implementati
   - [`burn` requires explicit confirmation](#burn-requires-explicit-confirmation)
   - [`--instance` required flag](#--instance-required-flag)
   - [`--name` collision in `token create`](#--name-collision-in-token-create)
+  - [`token ls` — list instruments (new)](#token-ls--list-instruments-new)
+  - [Ledger endpoint auto-resolves on every token verb](#ledger-endpoint-auto-resolves-on-every-token-verb)
+  - [`--role` defaults to `app-provider`](#--role-defaults-to-app-provider)
+  - [`token create` issuer defaults to the acting role's party](#token-create-issuer-defaults-to-the-acting-roles-party)
+  - [phantom `token settle` reference removed](#phantom-token-settle-reference-removed)
 - [`telemetry` (root-level, new)](#telemetry-root-level-new)
 
 ---
@@ -406,9 +411,19 @@ The embedded skill docs are the same artifacts that back the Web UI's Agent Skil
 
 **Proposal said:** the token commands' connection details were unspecified beyond selecting an instance.
 
-**Shipped:** every `token` verb resolves the participant gRPC endpoint from the instance's captured ports when `--endpoint` is omitted — matching the Web UI, which never asks for an endpoint. `--endpoint` stays an explicit override; when no port is captured the command prints a remediation and exits non-zero rather than failing opaquely. `party ls` and `token ls` resolve best-effort (falling back to the registry-only list when offline).
+**Shipped:** every `token` verb resolves the participant gRPC endpoint from the instance's captured ports when `--endpoint` is omitted — matching the Web UI, which never asks for an endpoint. `--endpoint` stays an explicit override; when no port is captured the command prints a remediation and exits non-zero rather than failing opaquely. `party ls` and `token ls` resolve best-effort (falling back to the registry-only list when offline). Successful resolution announces the host:port and role (CLI stderr + JSON/UI `endpoint`/`role` fields) so operators can see which participant a verb dialed.
 
 **Why:** Requiring a hand-typed `--endpoint` on a command the Web UI runs endpoint-free breaks CLI ↔ Web UI parity and makes the common case (`token <verb> --instance foo`) unusable on a running LocalNet.
+
+---
+
+### `--role` defaults to `app-provider`
+
+**Proposal said:** role selection was unspecified; early implementation defaulted `--role` / `?role=` to `app-user`.
+
+**Shipped:** every token surface (CLI `--role`, Web UI identity switcher / `tokenQuery` omission, `roleFromQuery`, and `token.DefaultRole`) falls back to **`app-provider`**. Explorer (`contracts` / `tx`) and DAR keep their own `app-user` defaults.
+
+**Why:** The provider participant is the mint/create operator on LocalNet. Defaulting to `app-user` made `--instance` alone resolve the wrong (often uncaptured) participant ledger port, so endpoint auto-resolution looked broken. Aligning CLI and UI on `app-provider` restores instance-only usability and keeps both surfaces on the same participant.
 
 ---
 

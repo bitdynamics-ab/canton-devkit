@@ -98,10 +98,14 @@ type ActivityEvent struct {
 
 // ActivityResult is the activity feed plus a Truncated flag set when the
 // underlying stream hit maxActivityScan, so the UI can render "showing N of
-// many" rather than silently misreporting the feed.
+// many" rather than silently misreporting the feed. Endpoint and Role are
+// the shared resolution metadata (endpoint contract): which participant
+// host:port and act-as role produced the feed.
 type ActivityResult struct {
 	Events    []ActivityEvent `json:"events"`
 	Truncated bool            `json:"truncated,omitempty"`
+	Endpoint  string          `json:"endpoint,omitempty"`
+	Role      string          `json:"role,omitempty"`
 }
 
 // rawHoldingDelta is one create/archive of a Holding contract.
@@ -252,6 +256,14 @@ func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult
 	if limit <= 0 {
 		limit = 50
 	}
+	if opts.Role == "" {
+		opts.Role = DefaultRole
+	}
+	withResolution := func(res ActivityResult) ActivityResult {
+		res.Endpoint = opts.Endpoint
+		res.Role = opts.Role
+		return res
+	}
 	conn := LedgerConn{
 		Endpoint: opts.Endpoint,
 		Token:    opts.Token,
@@ -272,7 +284,7 @@ func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult
 		return ActivityResult{}, err
 	}
 	if len(parties) == 0 {
-		return ActivityResult{Events: []ActivityEvent{}}, nil
+		return withResolution(ActivityResult{Events: []ActivityEvent{}}), nil
 	}
 
 	// Query every vetted holding surface (V1 + V2) so a V1 instrument like
@@ -282,7 +294,7 @@ func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult
 		return ActivityResult{}, err
 	}
 	if !surfaces.Any() {
-		return ActivityResult{Events: []ActivityEvent{}}, nil
+		return withResolution(ActivityResult{Events: []ActivityEvent{}}), nil
 	}
 
 	// Prefer the EventLog path when vetted; fall through to netting if it
@@ -296,7 +308,7 @@ func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult
 			return ActivityResult{}, elErr
 		}
 		if elErr == nil && len(res.Events) > 0 {
-			return res, nil
+			return withResolution(res), nil
 		}
 	}
 
@@ -329,10 +341,10 @@ func RunActivityResult(ctx context.Context, opts BalanceOptions) (ActivityResult
 	}
 
 	decimals := instrumentDecimals(opts.Instance, opts.Instrument)
-	return ActivityResult{
+	return withResolution(ActivityResult{
 		Events:    buildActivity(txs, opts.Instrument, decimals, limit),
 		Truncated: truncated,
-	}, nil
+	}), nil
 }
 
 // isEventLogFallbackSafe reports whether an EventLog-path error should fall

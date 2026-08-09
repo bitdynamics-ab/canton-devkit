@@ -54,7 +54,7 @@ type TokenListResponse struct {
 
 // TokenIdentityResponse is the act-as identity picker payload served by
 // GET /api/tokens/identity and the CLI `token identity --format json`.
-// CurrentRole echoes ?role= (default app-user) so the switcher can
+// CurrentRole echoes ?role= (default app-provider) so the switcher can
 // highlight the active identity without a second round-trip.
 type TokenIdentityResponse struct {
 	SchemaVersion  int      `json:"schema_version"`

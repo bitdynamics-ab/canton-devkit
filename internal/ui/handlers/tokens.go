@@ -315,6 +315,10 @@ func handleTokenActivity(w http.ResponseWriter, r *http.Request) {
 		"events":         res.Events,
 		"truncated":      res.Truncated,
 		"aliases":        aliasMap(instance),
+		// Shared resolution metadata (endpoint contract): which
+		// participant host:port and act-as role produced this feed.
+		"endpoint": ep,
+		"role":     role,
 	})
 }
 
@@ -696,7 +700,9 @@ var runTokenAccept = func(ctx context.Context, opts token.AcceptOptions) error {
 // seed flag through to RunDemo.
 var runTokenDemo = token.RunDemo
 
-// roleFromQuery returns the `?role=` value, defaulting to app-user.
+// roleFromQuery returns the `?role=` value, defaulting to
+// token.DefaultRole (app-provider). Explorer/DAR handlers keep their
+// own app-user defaults and do not use this helper.
 func roleFromQuery(r *http.Request) string {
 	role := r.URL.Query().Get("role")
 	if role == "" {
@@ -761,6 +767,7 @@ func sanitize400(msg string) string {
 //   - nil                              → 204 No Content (idempotent
 //     success for mutations that don't return a body)
 //   - token.ErrNeedsV2LocalNet         → 412 Precondition Failed
+//   - token.ErrUnresolvedLedgerEndpoint → 503 PARTICIPANT_PORT_NOT_RECORDED
 //   - token.ErrUnsupportedOnInstrument → 422 Unprocessable Entity
 //   - token.ErrSupplyCapExceeded       → 422 Unprocessable Entity
 //   - token.ErrSymbolInUse             → 409 Conflict
@@ -777,6 +784,9 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 	case errors.Is(err, token.ErrNeedsV2LocalNet):
 		writeErrorWithCode(w, http.StatusPreconditionFailed,
 			"NEEDS_V2_LOCALNET", err.Error())
+	case errors.Is(err, token.ErrUnresolvedLedgerEndpoint):
+		writeErrorWithCode(w, http.StatusServiceUnavailable,
+			"PARTICIPANT_PORT_NOT_RECORDED", err.Error())
 	case errors.Is(err, token.ErrUnsupportedOnInstrument):
 		writeErrorWithCode(w, http.StatusUnprocessableEntity,
 			"UNSUPPORTED_ON_INSTRUMENT", err.Error())
