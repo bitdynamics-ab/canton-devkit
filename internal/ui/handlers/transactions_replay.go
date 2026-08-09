@@ -2,7 +2,7 @@
 //
 // GET /api/instances/{name}/transactions/{update_id}/replay
 //
-//	?role=<app-user|app-provider|sv>   (default app-user)
+//	?role=<app-user|app-provider|sv>   (default app-provider)
 //	?party=<id>[&party=…]              (default: the JWT's own parties)
 //
 // Fetches one transaction by its update id with the LEDGER_EFFECTS
@@ -41,7 +41,7 @@ func handleTxReplay(w http.ResponseWriter, r *http.Request) {
 	}
 	role := r.URL.Query().Get("role")
 	if role == "" {
-		role = "app-user"
+		role = "app-provider"
 	}
 	if !validRole[role] {
 		writeErrorWithCode(w, http.StatusBadRequest,

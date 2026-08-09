@@ -23,7 +23,9 @@ import { TX_KIND_COLOR, W, wMono, tableCaps, wideCaps, tint, R, FAST, fs } from 
 import { ContractDetailDrawer } from "./ContractDetailDrawer";
 import { TxReplayDrawer } from "./TxReplayDrawer";
 
-const ROLES: Role[] = ["app-user", "app-provider", "sv"];
+// Default (app-provider) first — matches CLI Explorer / shared
+// ResolveLedgerEndpoint empty-role fallback. DAR keeps app-user.
+const ROLES: Role[] = ["app-provider", "app-user", "sv"];
 // Template/party dot palette, ordered so neighbouring indices differ in
 // hue; no red (reserved for errors).
 const PALETTE = [
@@ -42,7 +44,7 @@ const prefersReducedMotion =
 export function ExplorerScreen() {
   const sel = useInstanceSelection();
   const name = sel.selected;
-  const [role, setRole] = useState<Role>("app-user");
+  const [role, setRole] = useState<Role>("app-provider");
   const [view, setView] = useState<View>("contracts");
   const [state, setState] = useState<
     | { kind: "loading" }

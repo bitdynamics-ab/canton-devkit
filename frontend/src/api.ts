@@ -1021,7 +1021,7 @@ export interface ContractsListResponse {
 
 export const fetchContracts = (
   name: string,
-  role: Role = "app-user",
+  role: Role = "app-provider",
   limit = 100,
 ) =>
   apiFetch<ContractsListResponse>(
@@ -1057,7 +1057,7 @@ export interface ContractDetailResponse {
 export const fetchContractDetail = (
   name: string,
   contractId: string,
-  role: Role = "app-user",
+  role: Role = "app-provider",
 ) =>
   apiFetch<ContractDetailResponse>(
     `/api/instances/${encodeURIComponent(name)}/contracts/${encodeURIComponent(contractId)}?role=${role}`,
@@ -1094,7 +1094,7 @@ export interface ContractStreamEvent {
 // (strict-tail semantics — direct curl, smoke tests).
 export function openContractsStream(
   name: string,
-  role: Role = "app-user",
+  role: Role = "app-provider",
   since?: number,
 ): EventSource {
   const sinceParam =
@@ -1161,7 +1161,7 @@ export interface TransactionFilters {
 
 export const fetchTransactions = (
   name: string,
-  role: Role = "app-user",
+  role: Role = "app-provider",
   limit = 100,
   filters: TransactionFilters = {},
 ) => {
@@ -1216,7 +1216,7 @@ export interface TxReplayResponse {
 export const fetchTxReplay = (
   name: string,
   updateId: string,
-  role: Role = "app-user",
+  role: Role = "app-provider",
   parties?: string[],
 ) => {
   const params = new URLSearchParams({ role });

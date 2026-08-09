@@ -421,9 +421,9 @@ The embedded skill docs are the same artifacts that back the Web UI's Agent Skil
 
 **Proposal said:** role selection was unspecified; early implementation defaulted `--role` / `?role=` to `app-user`.
 
-**Shipped:** every token surface (CLI `--role`, Web UI identity switcher / `tokenQuery` omission, `roleFromQuery`, and `token.DefaultRole`) falls back to **`app-provider`**. Explorer (`contracts` / `tx`) and DAR keep their own `app-user` defaults.
+**Shipped:** every token surface (CLI `--role`, Web UI identity switcher / `tokenQuery` omission, `roleFromQuery`, and `token.DefaultRole`) falls back to **`app-provider`**. The shared Explorer resolver (`internal/localnet.ResolveLedgerEndpoint`) and Explorer CLI/UI (`contracts` / `tx`, Web ACS/transactions handlers, Explorer screen) use the same **`app-provider`** empty-role default so omitting `--role` / `?role=` cannot drift across surfaces. DAR keeps its own `app-user` default.
 
-**Why:** The provider participant is the mint/create operator on LocalNet. Defaulting to `app-user` made `--instance` alone resolve the wrong (often uncaptured) participant ledger port, so endpoint auto-resolution looked broken. Aligning CLI and UI on `app-provider` restores instance-only usability and keeps both surfaces on the same participant.
+**Why:** The provider participant is the mint/create operator on LocalNet. Defaulting to `app-user` made `--instance` alone resolve the wrong (often uncaptured) participant ledger port, so endpoint auto-resolution looked broken. Aligning token and Explorer on `app-provider` restores instance-only usability and keeps both surfaces on the same participant.
 
 ---
 
