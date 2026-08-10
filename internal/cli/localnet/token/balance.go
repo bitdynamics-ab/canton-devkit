@@ -37,6 +37,13 @@ row came from. With --party, filter to a single party; with
 --instrument, filter to a single instrument (by symbol or raw id).`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if opts.Role == "" {
+				opts.Role = token.DefaultRole
+			}
+			// Resolve the endpoint the same way RunBalance does so the
+			// JSON payload can echo which participant/role produced the
+			// balance (empty = registry pseudo-balance). Explicit wins.
+			resolvedEndpoint := bestEffortEndpoint(opts.Instance, opts.Role, opts.Endpoint)
 			rows, truncated, err := token.RunBalance(cmd.Context(), nil, opts)
 			if err != nil {
 				return err
@@ -57,10 +64,11 @@ row came from. With --party, filter to a single party; with
 				// GET /api/tokens/{symbol}/holdings — a bare array has no
 				// slot to version the shape or carry provenance.
 				return enc.Encode(types.TokenHoldingsResponse{
-					SchemaVersion: types.SchemaVersion,
-					Source:        types.HoldingSource(src),
-					Holdings:      toHoldings(rows),
-					Truncated:     truncated,
+					SchemaVersion:    types.SchemaVersion,
+					ResolvedEndpoint: types.ResolvedEndpoint{Endpoint: resolvedEndpoint, Role: opts.Role},
+					Source:           types.HoldingSource(src),
+					Holdings:         toHoldings(rows),
+					Truncated:        truncated,
 				})
 			}
 			// The SOURCE column makes a registry pseudo-balance visibly

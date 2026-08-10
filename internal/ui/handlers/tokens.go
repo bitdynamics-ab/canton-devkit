@@ -183,14 +183,18 @@ func handleTokensList(w http.ResponseWriter, r *http.Request) {
 	// otherwise the recorded list. liveLedgerEndpoint stays the resolution
 	// seam so offline handler tests force the recorded path deterministically.
 	role := roleFromQuery(r)
+	endpoint := liveLedgerEndpoint(instance, role)
 	resp, err := token.ListInstruments(r.Context(), token.BalanceOptions{
 		Instance: instance, Role: role, Insecure: true,
-		Endpoint: liveLedgerEndpoint(instance, role),
+		Endpoint: endpoint,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "list tokens", err)
 		return
 	}
+	// Echo the endpoint contract so the Web UI payload matches `token ls
+	// --format json` (empty endpoint = recorded/offline fallback).
+	resp.ResolvedEndpoint = types.ResolvedEndpoint{Endpoint: endpoint, Role: role}
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -370,10 +374,11 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 		source = token.SourceLedger
 	}
 	writeJSON(w, http.StatusOK, types.TokenHoldingsResponse{
-		SchemaVersion: types.SchemaVersion,
-		Source:        types.HoldingSource(source),
-		Holdings:      toHoldings(rows),
-		Truncated:     truncated,
+		SchemaVersion:    types.SchemaVersion,
+		ResolvedEndpoint: types.ResolvedEndpoint{Endpoint: endpoint, Role: role},
+		Source:           types.HoldingSource(source),
+		Holdings:         toHoldings(rows),
+		Truncated:        truncated,
 	})
 }
 

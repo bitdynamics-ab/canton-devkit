@@ -1,5 +1,21 @@
 package types
 
+// ResolvedEndpoint is the shared endpoint-contract metadata every
+// participant-scoped token response echoes: the participant gRPC
+// host:port a verb dialed and the act-as role whose JWT authenticated
+// it. Embedded (not nested) so the fields sit at the top level of each
+// response body — CLI `--format json` and the Web UI emit identical
+// `endpoint`/`role` keys. Empty Endpoint means the call fell back to the
+// registry (no live participant); the fields are still emitted so a
+// surface can always report which participant/role was targeted.
+type ResolvedEndpoint struct {
+	// Endpoint is the resolved participant gRPC host:port, or "" when no
+	// live port was captured and the response is registry-derived.
+	Endpoint string `json:"endpoint"`
+	// Role is the act-as role whose JWT authenticated the call.
+	Role string `json:"role"`
+}
+
 // TokenRef is the registry-cached descriptor of a V2 token instrument
 // created via `localnet token create`. Later commands and the Web UI
 // resolve `--instrument <id|symbol>` against this map. Lives in
@@ -45,6 +61,9 @@ type InstrumentRef struct {
 // `instruments` when present and otherwise falls back to `tokens`.
 type TokenListResponse struct {
 	SchemaVersion int `json:"schema_version"`
+	// ResolvedEndpoint echoes the participant host:port + role this list
+	// was resolved against (endpoint "" on the recorded/offline fallback).
+	ResolvedEndpoint
 	// Pointers preserve which branch was selected even when its result is
 	// empty: the wire emits either "instruments":[] or "tokens":[], never
 	// neither key and never both keys.
@@ -106,6 +125,9 @@ type TokenHolding struct {
 // the two surfaces cannot drift.
 type TokenHoldingsResponse struct {
 	SchemaVersion int `json:"schema_version"`
+	// ResolvedEndpoint echoes the participant host:port + role this balance
+	// was read from (endpoint "" on the registry-derived fallback).
+	ResolvedEndpoint
 	// Source is the response-level provenance (matches every row's
 	// Source), lifted here so the UI can render one disclaimer banner
 	// without scanning every row.
@@ -225,6 +247,9 @@ type AllocationSummary struct {
 // shared API shapes across CLI JSON and Web UI).
 type AllocationsResponse struct {
 	SchemaVersion int `json:"schema_version"`
+	// ResolvedEndpoint echoes the participant host:port + role this scan
+	// was resolved against.
+	ResolvedEndpoint
 	// Allocations is never null on the wire — an empty scan yields [].
 	Allocations []AllocationSummary `json:"allocations"`
 	// Aliases maps partyID → registered alias so a surface can label party
@@ -265,6 +290,9 @@ type TransferSummary struct {
 // Web UI).
 type PendingTransfersResponse struct {
 	SchemaVersion int `json:"schema_version"`
+	// ResolvedEndpoint echoes the participant host:port + role this scan
+	// was resolved against.
+	ResolvedEndpoint
 	// PendingTransfers is never null on the wire — an empty scan yields [].
 	PendingTransfers []TransferSummary `json:"pending_transfers"`
 	// Truncated is true when the ACS scan hit its cap and the list is

@@ -1601,11 +1601,21 @@ export interface TokenHolding {
 
 export interface TokensListResponse {
   schema_version: number;
+  // Endpoint contract: the participant host:port + role this list was
+  // resolved against ("" endpoint = recorded/offline fallback). Mirrors
+  // internal/api/types.ResolvedEndpoint.
+  endpoint: string;
+  role: string;
   tokens: TokenRef[];
 }
 
 export interface TokenHoldingsResponse {
   schema_version: number;
+  // Endpoint contract: the participant host:port + role this balance was
+  // read from ("" endpoint = registry pseudo-balance). Mirrors
+  // internal/api/types.ResolvedEndpoint.
+  endpoint: string;
+  role: string;
   // Response-level provenance (matches every row's source); the UI
   // renders one disclaimer banner when "registry".
   source: HoldingSource;
@@ -2179,6 +2189,10 @@ export const acceptTransfer = (
 
 interface AllocationsListResponse {
   schema_version: number;
+  // Endpoint contract: participant host:port + role this scan resolved
+  // against. Mirrors internal/api/types.ResolvedEndpoint.
+  endpoint: string;
+  role: string;
   allocations: AllocationSummary[];
   aliases: AliasMap;
 }
@@ -2201,6 +2215,10 @@ export async function fetchAllocations(
 
 interface PendingTransfersListResponse {
   schema_version: number;
+  // Endpoint contract: participant host:port + role this scan resolved
+  // against. Mirrors internal/api/types.ResolvedEndpoint.
+  endpoint: string;
+  role: string;
   pending_transfers: TransferSummary[];
   truncated?: boolean;
   aliases: AliasMap;

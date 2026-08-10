@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	localtoken "github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
 )
 
@@ -12,16 +14,51 @@ import (
 // flag default to token.DefaultRole (app-provider). Table-driven so a
 // future verb that regresses to app-user fails loudly.
 func TestCLIRoleFlags_DefaultAppProvider(t *testing.T) {
+	// roleDefault returns the resolved --role default for a command,
+	// looking through the parent's flag set when the flag is inherited
+	// (e.g. the allocation-action subcommands register it on the parent).
+	roleDefault := func(c *cobra.Command) string {
+		if f := c.Flags().Lookup("role"); f != nil {
+			return f.DefValue
+		}
+		if f := c.InheritedFlags().Lookup("role"); f != nil {
+			return f.DefValue
+		}
+		return "<no --role flag>"
+	}
+	allocations := buildAllocations()
+	sub := func(parent *cobra.Command, name string) *cobra.Command {
+		for _, c := range parent.Commands() {
+			if c.Name() == name {
+				return c
+			}
+		}
+		t.Fatalf("subcommand %q not found under %q", name, parent.Name())
+		return nil
+	}
 	builders := []struct {
 		name string
 		flag func() string
 	}{
-		{"mint", func() string { return buildMint().Flags().Lookup("role").DefValue }},
-		{"burn", func() string { return buildBurn().Flags().Lookup("role").DefValue }},
-		{"transfer", func() string { return buildTransfer().Flags().Lookup("role").DefValue }},
-		{"transfer accept", func() string { return buildTransferAccept().Flags().Lookup("role").DefValue }},
-		{"activity", func() string { return buildActivity().Flags().Lookup("role").DefValue }},
-		{"ls", func() string { return buildList().Flags().Lookup("role").DefValue }},
+		{"mint", func() string { return roleDefault(buildMint()) }},
+		{"burn", func() string { return roleDefault(buildBurn()) }},
+		{"transfer", func() string { return roleDefault(buildTransfer()) }},
+		{"transfer accept", func() string { return roleDefault(buildTransferAccept()) }},
+		{"activity", func() string { return roleDefault(buildActivity()) }},
+		{"ls", func() string { return roleDefault(buildList()) }},
+		{"allocate", func() string { return roleDefault(buildAllocate()) }},
+		{"allocations", func() string { return roleDefault(allocations) }},
+		{"allocations withdraw", func() string { return roleDefault(sub(allocations, "withdraw")) }},
+		{"allocations cancel", func() string { return roleDefault(sub(allocations, "cancel")) }},
+		{"balance", func() string { return roleDefault(buildBalance()) }},
+		{"balances", func() string { return roleDefault(buildBalances()) }},
+		{"create", func() string { return roleDefault(buildCreate()) }},
+		{"demo", func() string { return roleDefault(buildDemo()) }},
+		{"faucet", func() string { return roleDefault(buildFaucet()) }},
+		{"party new", func() string { return roleDefault(buildPartyNew()) }},
+		{"party ls", func() string { return roleDefault(buildPartyList()) }},
+		{"summary", func() string { return roleDefault(buildSummary()) }},
+		{"transfers", func() string { return roleDefault(buildTransfers()) }},
 	}
 	for _, tc := range builders {
 		t.Run(tc.name, func(t *testing.T) {

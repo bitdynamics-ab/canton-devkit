@@ -37,12 +37,19 @@ Web UI instrument list.
 			// Best-effort resolve (like create and the Web UI): a live
 			// endpoint gives on-chain discovery; empty falls back to the
 			// recorded list rather than erroring. Explicit --endpoint wins.
+			if opts.Role == "" {
+				opts.Role = token.DefaultRole
+			}
 			opts.Endpoint = bestEffortEndpoint(opts.Instance, opts.Role, opts.Endpoint)
 			resp, err := token.ListInstruments(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			if format == "json" {
+				// Echo the endpoint-contract metadata so the JSON payload
+				// records which participant/role produced this list (empty
+				// endpoint = recorded/offline fallback).
+				resp.ResolvedEndpoint = types.ResolvedEndpoint{Endpoint: opts.Endpoint, Role: opts.Role}
 				enc := json.NewEncoder(out)
 				enc.SetIndent("", "  ")
 				return enc.Encode(resp)

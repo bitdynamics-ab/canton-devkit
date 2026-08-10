@@ -56,9 +56,10 @@ Web UI.`,
 				// Same top-level shape as GET /api/tokens/allocations so
 				// CLI JSON and Web UI cannot drift.
 				return enc.Encode(types.AllocationsResponse{
-					SchemaVersion: types.SchemaVersion,
-					Allocations:   rows,
-					Aliases:       token.PartyAliasMap(opts.Instance),
+					SchemaVersion:    types.SchemaVersion,
+					ResolvedEndpoint: types.ResolvedEndpoint{Endpoint: resolved.Endpoint, Role: resolved.Role},
+					Allocations:      rows,
+					Aliases:          token.PartyAliasMap(opts.Instance),
 				})
 			}
 			if len(rows) == 0 {

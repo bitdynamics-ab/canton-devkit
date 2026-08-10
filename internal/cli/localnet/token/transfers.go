@@ -56,6 +56,7 @@ dial a different participant.`,
 				// JSON and Web UI cannot drift.
 				return enc.Encode(types.PendingTransfersResponse{
 					SchemaVersion:    types.SchemaVersion,
+					ResolvedEndpoint: types.ResolvedEndpoint{Endpoint: resolved.Endpoint, Role: resolved.Role},
 					PendingTransfers: rows,
 					Truncated:        truncated,
 					Aliases:          token.PartyAliasMap(opts.Instance),
