@@ -37,12 +37,19 @@ Web UI instrument list.
 			// Best-effort resolve (like create and the Web UI): a live
 			// endpoint gives on-chain discovery; empty falls back to the
 			// recorded list rather than erroring. Explicit --endpoint wins.
+			if opts.Role == "" {
+				opts.Role = token.DefaultRole
+			}
 			opts.Endpoint = bestEffortEndpoint(opts.Instance, opts.Role, opts.Endpoint)
 			resp, err := token.ListInstruments(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			if format == "json" {
+				// Echo the endpoint-contract metadata so the JSON payload
+				// records which participant/role produced this list (empty
+				// endpoint = recorded/offline fallback).
+				resp.ResolvedEndpoint = types.ResolvedEndpoint{Endpoint: opts.Endpoint, Role: opts.Role}
 				enc := json.NewEncoder(out)
 				enc.SetIndent("", "  ")
 				return enc.Encode(resp)
@@ -61,7 +68,7 @@ Web UI instrument list.
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")
 	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Empty auto-resolves from the instance.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
-	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the scan.")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-provider", "Role whose JWT authenticates the scan.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json.")
 	_ = cmd.MarkFlagRequired("instance")

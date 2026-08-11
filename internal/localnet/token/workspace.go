@@ -358,7 +358,7 @@ func sortedUnique(in []string) []string {
 // matrix. The live-ledger entrypoint both CLI and the HTTP handler call.
 func RunBalanceMatrix(ctx context.Context, opts BalanceOptions) (*BalanceMatrix, error) {
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	// Resolve the endpoint from the instance when none was passed, so
 	// `token balances` works with just --instance.
@@ -383,7 +383,7 @@ func RunBalanceMatrix(ctx context.Context, opts BalanceOptions) (*BalanceMatrix,
 // lens (expand a balance into its contracts).
 func RunWorkspaceHoldings(ctx context.Context, opts BalanceOptions) ([]HoldingContract, error) {
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	ws, err := scanWorkspace(ctx, opts)
 	if err != nil {
@@ -407,7 +407,7 @@ func RunWorkspaceHoldings(ctx context.Context, opts BalanceOptions) ([]HoldingCo
 // state.Tokens seed required, so Amulet + any minted token appear.
 func RunInstruments(ctx context.Context, opts BalanceOptions) ([]InstrumentRef, error) {
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	ws, err := scanWorkspace(ctx, opts)
 	if err != nil {
@@ -448,7 +448,7 @@ type InstrumentSummary struct {
 // of one instrument (opts.Instrument) into the KPI + distribution view.
 func RunInstrumentSummary(ctx context.Context, opts BalanceOptions) (*InstrumentSummary, error) {
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	ws, err := scanWorkspace(ctx, opts)
 	if err != nil {

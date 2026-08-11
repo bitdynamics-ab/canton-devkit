@@ -555,8 +555,8 @@ function handleTokensRoute(
       current_role?: string;
     };
     identity.instance = instance;
-    identity.available_roles = identity.available_roles ?? ["app-user", "app-provider", "sv"];
-    identity.current_role = url.searchParams.get("role") ?? identity.current_role ?? "app-user";
+    identity.available_roles = identity.available_roles ?? ["app-provider", "app-user", "sv"];
+    identity.current_role = url.searchParams.get("role") ?? identity.current_role ?? "app-provider";
     jsonResponse(res, 200, identity);
     return true;
   }

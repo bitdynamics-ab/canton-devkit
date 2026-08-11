@@ -67,7 +67,7 @@ func handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	}
 	role := r.URL.Query().Get("role")
 	if role == "" {
-		role = "app-user"
+		role = "app-provider"
 	}
 	if !validRole[role] {
 		writeErrorWithCode(w, http.StatusBadRequest,

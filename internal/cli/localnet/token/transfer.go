@@ -39,8 +39,14 @@ TransferFactory response indicates the sender pre-approved them.`,
 		opts.Role, _ = cmd.Flags().GetString("role")
 		opts.Insecure, _ = cmd.Flags().GetBool("insecure")
 		opts.RegistryURL, _ = cmd.Flags().GetString("registry-url")
-		err := token.RunTransfer(cmd.Context(), cmd.OutOrStdout(), opts)
-		if errors.Is(err, token.ErrNeedsV2LocalNet) {
+		resolved, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+		if err != nil {
+			return err
+		}
+		opts.Endpoint = resolved.Endpoint
+		opts.Role = resolved.Role
+		err = token.RunTransfer(cmd.Context(), cmd.OutOrStdout(), opts)
+		if errors.Is(err, token.ErrNeedsV2LocalNet) || errors.Is(err, token.ErrUnresolvedLedgerEndpoint) {
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
 			return errSilent
 		}
@@ -57,7 +63,7 @@ TransferFactory response indicates the sender pre-approved them.`,
 	parent.Flags().String("reason", "", "Optional human-readable reason recorded on the TransferInstruction.")
 	parent.Flags().String("endpoint", "", "Participant gRPC endpoint (host:port). Defaults to the instance's captured ledger port; set to override which participant the live transfer dials.")
 	parent.Flags().String("token", "", "Bearer JWT. Empty auto-issues a per-role token via the creds machinery.")
-	parent.Flags().String("role", "app-user", "Role whose JWT authenticates the submit (sv / app-provider / app-user).")
+	parent.Flags().String("role", "app-provider", "Role whose JWT authenticates the submit (sv / app-provider / app-user).")
 	parent.Flags().Bool("insecure", true, "Use plaintext gRPC (LocalNet default).")
 	parent.Flags().String("registry-url", "", "Token registry base URL. Empty auto-derives the LocalNet scan registry from the instance's SV UI port.")
 	_ = parent.MarkFlagRequired("instance")
@@ -79,8 +85,14 @@ choice on the Ledger API. Idempotent on the registry side — accepting
 twice is rejected by the underlying Daml choice.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			err := token.RunAccept(cmd.Context(), cmd.OutOrStdout(), opts)
-			if errors.Is(err, token.ErrNeedsV2LocalNet) {
+			resolved, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			if err != nil {
+				return err
+			}
+			opts.Endpoint = resolved.Endpoint
+			opts.Role = resolved.Role
+			err = token.RunAccept(cmd.Context(), cmd.OutOrStdout(), opts)
+			if errors.Is(err, token.ErrNeedsV2LocalNet) || errors.Is(err, token.ErrUnresolvedLedgerEndpoint) {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
 				return errSilent
 			}
@@ -92,7 +104,7 @@ twice is rejected by the underlying Daml choice.`,
 	cmd.Flags().StringVar(&opts.Party, "party", "", "Receiver party acting on the instruction. Defaults to the JWT's first granted party (set explicitly on multi-party participants).")
 	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Defaults to the instance's captured ledger port; set to override which participant the live accept dials.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
-	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the submit.")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-provider", "Role whose JWT authenticates the submit.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&opts.RegistryURL, "registry-url", "", "Token registry base URL. Empty auto-derives from the instance's SV UI port.")
 	_ = cmd.MarkFlagRequired("instance")

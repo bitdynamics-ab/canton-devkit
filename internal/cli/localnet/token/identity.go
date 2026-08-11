@@ -21,7 +21,7 @@ func buildIdentity() *cobra.Command {
 		Use:   "identity",
 		Short: "List act-as identities (roles) for the instance's token commands",
 		Long: `Show the roles a LocalNet bring-up issues tokens for — the identities
-every token verb can act as via --role. The default identity is app-user,
+every token verb can act as via --role. The default identity is app-provider,
 matching the per-verb --role default and the Web UI's identity switcher.
 
 Switching identity is done per command with --role; this verb enumerates
@@ -59,7 +59,7 @@ the available choices and (with --role) marks the active one.`,
 		},
 	}
 	cmd.Flags().StringVar(&instance, "instance", "", "Instance name (echoed in --format json).")
-	cmd.Flags().StringVar(&role, "role", "", "Active identity to mark (default app-user).")
+	cmd.Flags().StringVar(&role, "role", "", "Active identity to mark (default app-provider).")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json.")
 	return cmd
 }

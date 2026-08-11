@@ -45,6 +45,7 @@ func handlePendingTransfersList(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, types.PendingTransfersResponse{
 		SchemaVersion:    types.SchemaVersion,
+		ResolvedEndpoint: types.ResolvedEndpoint{Endpoint: ep, Role: role},
 		PendingTransfers: rows,
 		Truncated:        truncated,
 		Aliases:          aliasMap(instance),

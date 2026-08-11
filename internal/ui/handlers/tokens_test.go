@@ -204,6 +204,79 @@ func TestTokens_HoldingsStoppedRecordedPortFallsBack(t *testing.T) {
 	}
 }
 
+// TestTokens_ResponsesEchoEndpointAndRole pins the endpoint contract on
+// the Web UI JSON: the tokens list and holdings payloads carry the
+// resolved participant endpoint + act-as role so a surface can show
+// which participant a read dialed. Covers both the offline fallback
+// (empty endpoint, default role) and the live-endpoint case.
+func TestTokens_ResponsesEchoEndpointAndRole(t *testing.T) {
+	type meta struct {
+		Endpoint string `json:"endpoint"`
+		Role     string `json:"role"`
+	}
+	getMeta := func(t *testing.T, url string) meta {
+		t.Helper()
+		resp, err := http.Get(url)
+		if err != nil {
+			t.Fatalf("GET %s: %v", url, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200", url, resp.StatusCode)
+		}
+		var m meta
+		if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+			t.Fatalf("decode %s: %v", url, err)
+		}
+		return m
+	}
+
+	t.Run("offline fallback echoes default role and empty endpoint", func(t *testing.T) {
+		seedForTokens(t, "demo") // pins liveLedgerEndpoint → ""
+		create := `{"name":"Retail Token","symbol":"RTK","decimals":6,"initial_supply":"1000000","issuer":"alice::abc"}`
+		cr, err := http.Post(tokensSrvURL(t)+"/api/tokens?instance=demo", "application/json", strings.NewReader(create))
+		if err != nil {
+			t.Fatalf("POST create: %v", err)
+		}
+		_ = cr.Body.Close()
+		srv := tokensSrv(t)
+
+		list := getMeta(t, srv.URL+"/api/tokens?instance=demo")
+		if list.Endpoint != "" || list.Role != token.DefaultRole {
+			t.Errorf("list meta = %+v, want empty endpoint + role %q", list, token.DefaultRole)
+		}
+		hold := getMeta(t, srv.URL+"/api/tokens/RTK/holdings?instance=demo")
+		if hold.Endpoint != "" || hold.Role != token.DefaultRole {
+			t.Errorf("holdings meta = %+v, want empty endpoint + role %q", hold, token.DefaultRole)
+		}
+	})
+
+	t.Run("live endpoint and explicit role are echoed back", func(t *testing.T) {
+		t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+		s := registry.NewState("demo", "0.6.4")
+		s.Status = registry.StatusRunning
+		if err := registry.Write(s); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		prev := liveLedgerEndpoint
+		liveLedgerEndpoint = func(_, role string) string { return "localhost:6001" }
+		t.Cleanup(func() { liveLedgerEndpoint = prev })
+		srv := tokensSrv(t)
+
+		list := getMeta(t, srv.URL+"/api/tokens?instance=demo&role=app-user")
+		if list.Endpoint != "localhost:6001" || list.Role != "app-user" {
+			t.Errorf("list meta = %+v, want localhost:6001 + app-user", list)
+		}
+	})
+}
+
+// tokensSrvURL is tokensSrv but returns just the base URL, for a POST
+// that shares a request with a later GET against a fresh server.
+func tokensSrvURL(t *testing.T) string {
+	t.Helper()
+	return tokensSrv(t).URL
+}
+
 // TestTokens_CreateDuplicateIsConflict pins the symbol-collision
 // mapping: ErrSymbolInUse → 409. The frontend uses this code to
 // surface a focused "pick a different symbol" message.
@@ -233,13 +306,22 @@ func TestTokens_CreateDuplicateIsConflict(t *testing.T) {
 func TestTokens_MintUnsupportedOnInstrument(t *testing.T) {
 	seedForTokens(t, "demo")
 	srv := tokensSrv(t)
-	// Create first so the symbol resolves.
+	// Create offline first so the symbol resolves as a recorded (not
+	// on-ledger) instrument.
 	create := `{"name":"x","symbol":"RTK","decimals":6,"initial_supply":"1","issuer":"alice::abc"}`
 	cr, _ := http.Post(srv.URL+"/api/tokens?instance=demo", "application/json", strings.NewReader(create))
 	if cr.StatusCode != http.StatusCreated {
 		t.Fatalf("setup create status = %d, want 201", cr.StatusCode)
 	}
 	_ = cr.Body.Close()
+
+	// seedForTokens forces an empty endpoint. Override only for mint so
+	// it reaches the instrument-capability check instead of the new
+	// unresolved-endpoint 503 — a recorded RTK still yields
+	// ErrUnsupportedOnInstrument when an endpoint is present.
+	prev := liveLedgerEndpoint
+	liveLedgerEndpoint = func(string, string) string { return "localhost:1" }
+	t.Cleanup(func() { liveLedgerEndpoint = prev })
 
 	mint := `{"to":"bob","amount":"5"}`
 	resp, err := http.Post(srv.URL+"/api/tokens/RTK/mint?instance=demo", "application/json", strings.NewReader(mint))
@@ -342,7 +424,7 @@ func TestHandleTokensCreate_WiresEndpointAndRole(t *testing.T) {
 		SchemaVersion: 1,
 		Name:          inst,
 		Status:        registry.StatusRunning,
-		Ports:         map[string]int{"participant_ledger_app-user": 13902},
+		Ports:         map[string]int{"participant_ledger_app-provider": 13902},
 	}
 	if err := registry.Write(st); err != nil {
 		t.Fatalf("registry.Write: %v", err)

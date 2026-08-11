@@ -38,6 +38,25 @@ var ErrUnsupportedOnInstrument = errors.New(
 		"splice-test-token-v2 instrument via `localnet token create` for a token " +
 		"that implements asset-specific mint via TokenRules_OfferMint")
 
+// ErrUnresolvedLedgerEndpoint signals that a live on-ledger action could
+// not resolve a participant host:port for the instance+role. Distinct
+// from ErrUnsupportedOnInstrument so a missing captured port is never
+// misreported as "this instrument doesn't support mint/burn". HTTP
+// maps to 503 PARTICIPANT_PORT_NOT_RECORDED; CLI prints the wrapped
+// remediation (instance, role, restart, --endpoint).
+var ErrUnresolvedLedgerEndpoint = errors.New("unresolved ledger endpoint")
+
+// unresolvedLedgerEndpoint builds the actionable missing-port error
+// required by the endpoint contract: instance, role, restart remedy,
+// and the --endpoint override.
+func unresolvedLedgerEndpoint(instance, role string) error {
+	return fmt.Errorf(
+		"%w: instance %q role %q has no recorded participant ledger port — "+
+			"restart it (`localnet down %s` then `localnet up %s`) so ports are captured, "+
+			"or pass --endpoint host:port",
+		ErrUnresolvedLedgerEndpoint, instance, role, instance, instance)
+}
+
 // MintOptions / TransferOptions / BurnOptions / BalanceOptions are the
 // input shapes for each action. In the orchestration layer (not the CLI
 // package) so the HTTP handler can populate them from a JSON body.
@@ -47,10 +66,11 @@ type MintOptions struct {
 	To         string // recipient party
 	Amount     string // decimal string
 
-	// Endpoint, when set, runs the live asset-specific mint
-	// (TokenRules_OfferMint) for a splice-test-token-v2 instrument the
-	// issuer created on-ledger. Empty Endpoint, or an instrument with
-	// no asset-specific mint path (e.g. Amulet), yields
+	// Endpoint, when set (or auto-resolved from Instance+Role), runs the
+	// live asset-specific mint (TokenRules_OfferMint) for a
+	// splice-test-token-v2 instrument the issuer created on-ledger. An
+	// unresolvable endpoint yields ErrUnresolvedLedgerEndpoint; an
+	// instrument with no asset-specific mint path (e.g. Amulet) yields
 	// ErrUnsupportedOnInstrument.
 	Endpoint string
 	Role     string
@@ -146,7 +166,7 @@ type BalanceOptions struct {
 	// Token is optional: empty triggers per-role JWT auto-issuance
 	// via registry.State.Credentials → splice.SignToken (see
 	// dialLedger's token resolution chain). Role defaults to
-	// "app-user" — pass "sv" or "app-provider" to dial a different
+	// "app-provider" — pass "sv" or "app-user" to dial a different
 	// participant.
 	Endpoint string
 	Token    string
@@ -200,10 +220,10 @@ const (
 
 // RunMint mints supply of an on-ledger test-token instrument via its
 // asset-specific TokenRules_OfferMint choice (requires Endpoint and a
-// TokenRef with status "on-ledger"). Everything else — Amulet,
-// registry-only instruments, or a missing Endpoint — returns
-// ErrUnsupportedOnInstrument: Amulet doesn't implement
-// BurnMintFactoryV1 and there's no generic V2 mint interface.
+// TokenRef with status "on-ledger"). Amulet and registry-only
+// instruments return ErrUnsupportedOnInstrument. A missing captured
+// ledger port returns ErrUnresolvedLedgerEndpoint before any instrument
+// capability check — never mislabeled as unsupported.
 func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	if err := requireFields("mint", "instance", opts.Instance, "instrument", opts.Instrument,
 		"recipient party", opts.To, "amount", opts.Amount); err != nil {
@@ -217,7 +237,7 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 		return err
 	}
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	// Auto-discover the endpoint from the instance's captured ledger port
 	// when none was passed, so a live mint (and its self-mint guard) works
@@ -225,10 +245,17 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	if opts.Endpoint == "" {
 		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
 	}
+	if opts.Endpoint == "" {
+		emit(out, "mint", map[string]any{
+			"instance": opts.Instance, "role": opts.Role,
+			"endpoint": "", "to": opts.To, "amount": opts.Amount,
+		})
+		return unresolvedLedgerEndpoint(opts.Instance, opts.Role)
+	}
 	ref := instrumentRefOrRaw(opts.Instance, opts.Instrument)
 	// Live mint only for on-ledger test-token instruments. Amulet and
 	// registry-only instruments have no asset-specific mint.
-	if opts.Endpoint != "" && ref.Status == "on-ledger" {
+	if ref.Status == "on-ledger" {
 		if err := enforceSupplyCap(ctx, opts, ref); err != nil {
 			return err
 		}
@@ -236,6 +263,7 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	}
 	emit(out, "mint", map[string]any{
 		"instrument": ref, "to": opts.To, "amount": opts.Amount,
+		"endpoint": opts.Endpoint, "role": opts.Role,
 	})
 	return ErrUnsupportedOnInstrument
 }
@@ -262,7 +290,7 @@ func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error
 		return err
 	}
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	// Auto-discover the endpoint from the instance's captured ledger port
 	// when none was passed. Explicit --endpoint wins; if still empty (no
@@ -349,7 +377,7 @@ func RunAccept(ctx context.Context, out io.Writer, opts AcceptOptions) error {
 	// off-ledger path need a real party id, not an alias.
 	opts.Party = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Party)
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	// Auto-discover the endpoint from the instance's captured ledger port
 	// when none was passed. Explicit --endpoint wins; if still empty fall
@@ -390,19 +418,27 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 		return err
 	}
 	if opts.Role == "" {
-		opts.Role = "app-user"
+		opts.Role = DefaultRole
 	}
 	// Auto-discover the endpoint from the instance's captured ledger port
 	// when none was passed. Explicit --endpoint wins.
 	if opts.Endpoint == "" {
 		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
 	}
+	if opts.Endpoint == "" {
+		emit(out, "burn", map[string]any{
+			"instance": opts.Instance, "role": opts.Role,
+			"endpoint": "", "from": opts.From, "amount": opts.Amount,
+		})
+		return unresolvedLedgerEndpoint(opts.Instance, opts.Role)
+	}
 	ref := instrumentRefOrRaw(opts.Instance, opts.Instrument)
-	if opts.Endpoint != "" && ref.Status == "on-ledger" {
+	if ref.Status == "on-ledger" {
 		return runBurnLive(ctx, out, opts, ref)
 	}
 	emit(out, "burn", map[string]any{
 		"instrument": ref, "from": opts.From, "amount": opts.Amount,
+		"endpoint": opts.Endpoint, "role": opts.Role,
 	})
 	return ErrUnsupportedOnInstrument
 }

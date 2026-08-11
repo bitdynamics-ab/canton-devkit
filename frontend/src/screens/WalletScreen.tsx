@@ -8,7 +8,7 @@ import { Dot, IcAlert, IcRefresh } from "../components/icons";
 // Embeds Splice's per-role Wallet UI (the `<role>_ui` host port from
 // state.json) in an iframe. Splice 0.6.4 sends no X-Frame-Options, so it
 // loads directly; the "Open in new tab" fallback covers a future SAMEORIGIN.
-const ROLES: Role[] = ["app-user", "app-provider", "sv"];
+const ROLES: Role[] = ["app-provider", "app-user", "sv"];
 
 // Hardcoded AUTH_<ROLE>_WALLET_ADMIN_USER_NAME values from env/<role>-auth-on.env.
 // Password is ignored: LocalNet auth is dev-only HS-256 with the secret "unsafe".
@@ -35,7 +35,7 @@ function walletEndpointFor(role: Role, endpoints: Instance["endpoints"]) {
 export function WalletScreen() {
   const sel = useInstanceSelection();
   const name = sel.selected;
-  const [role, setRole] = useState<Role>("app-user");
+  const [role, setRole] = useState<Role>("app-provider");
   const [state, setState] = useState<
     | { kind: "loading" }
     | { kind: "ok"; instance: Instance }

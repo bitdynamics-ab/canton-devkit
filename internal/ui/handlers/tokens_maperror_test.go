@@ -23,6 +23,7 @@ func TestMapTokenError(t *testing.T) {
 	}{
 		{"nil → 204", nil, http.StatusNoContent},
 		{"needs-v2 → 412", token.ErrNeedsV2LocalNet, http.StatusPreconditionFailed},
+		{"unresolved endpoint → 503", token.ErrUnresolvedLedgerEndpoint, http.StatusServiceUnavailable},
 		{"plain validation → 400", errors.New("amount must be > 0"), http.StatusBadRequest},
 		{"grpc NotFound → 404", status.Error(codes.NotFound, "no such instrument"), http.StatusNotFound},
 		{"grpc PermissionDenied → 403", status.Error(codes.PermissionDenied, "nope"), http.StatusForbidden},

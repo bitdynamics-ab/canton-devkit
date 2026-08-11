@@ -115,7 +115,7 @@ func buildContractsLs() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&instance, "name", "", "Instance to read from (default: the only registered instance)")
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "Participant gRPC endpoint host:port (overrides registry auto-discovery)")
-	cmd.Flags().StringVar(&role, "role", "", "Participant role to read from: sv, app-provider, or app-user (default: app-user)")
+	cmd.Flags().StringVar(&role, "role", "app-provider", "Participant role to read from: sv, app-provider, or app-user (default: app-provider)")
 	cmd.Flags().StringSliceVar(&parties, "party", nil, "Party ID filter; repeat or comma-separate for multi-party. Omit to project through the JWT's own parties.")
 	cmd.Flags().StringSliceVar(&templates, "template", nil, "Template filter — \"#pkg-name:Module:Entity\" (LF-v2 package-name reference) or \"<pkg-id>:Module:Entity\" (exact pin). Repeat for multiple.")
 	cmd.Flags().StringVar(&format, "format", "text", "output format: text or json")
@@ -180,7 +180,7 @@ func buildContractsWatch() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&instance, "name", "", "Instance to read from (default: the only registered instance)")
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "Participant gRPC endpoint host:port (overrides registry auto-discovery)")
-	cmd.Flags().StringVar(&role, "role", "", "Participant role to read from: sv, app-provider, or app-user (default: app-user)")
+	cmd.Flags().StringVar(&role, "role", "app-provider", "Participant role to read from: sv, app-provider, or app-user (default: app-provider)")
 	cmd.Flags().StringSliceVar(&parties, "party", nil, "Party ID filter (repeatable). Omit to project through the JWT's own parties.")
 	cmd.Flags().StringSliceVar(&templates, "template", nil, "Template filter — \"#pkg-name:Module:Entity\" (LF-v2 package-name reference) or \"<pkg-id>:Module:Entity\" (exact pin). Repeatable.")
 	cmd.Flags().StringVar(&format, "format", "text", "output format: text or json (NDJSON in stream mode)")
@@ -288,7 +288,7 @@ func buildTxLs() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&instance, "name", "", "Instance to read from (default: the only registered instance)")
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "Participant gRPC endpoint host:port (overrides registry auto-discovery)")
-	cmd.Flags().StringVar(&role, "role", "", "Participant role to read from: sv, app-provider, or app-user (default: app-user)")
+	cmd.Flags().StringVar(&role, "role", "app-provider", "Participant role to read from: sv, app-provider, or app-user (default: app-provider)")
 	cmd.Flags().StringSliceVar(&parties, "party", nil, "Party ID filter (repeatable). Omit to project through the JWT's own parties.")
 	cmd.Flags().StringSliceVar(&templates, "template", nil, "Template filter — \"#pkg-name:Module:Entity\" (LF-v2 package-name reference) or \"<pkg-id>:Module:Entity\" (exact pin). Repeatable.")
 	cmd.Flags().StringVar(&format, "format", "text", "output format: text or json")
@@ -406,7 +406,7 @@ func buildTxReplay() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&instance, "name", "", "Instance to read from (default: the only registered instance)")
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "Participant gRPC endpoint host:port (overrides registry auto-discovery)")
-	cmd.Flags().StringVar(&role, "role", "", "Participant role to read from: sv, app-provider, or app-user (default: app-user)")
+	cmd.Flags().StringVar(&role, "role", "app-provider", "Participant role to read from: sv, app-provider, or app-user (default: app-provider)")
 	cmd.Flags().StringSliceVar(&parties, "party", nil, "Party ID filter (repeatable)")
 	cmd.Flags().StringVar(&format, "format", "text", "output format: text or json")
 	cmd.Flags().StringVar(&token, "token", "", "Bearer JWT (default: resolved per-role from the registry)")
@@ -568,7 +568,7 @@ func resolveOffsetWindow(fromOff, toOff int64, fromSet, toSet bool, ledgerEnd in
 // port → captured JWT → SignToken fallback). --endpoint and --token
 // remain explicit overrides; an explicit --endpoint wins outright,
 // and an explicit --token overrides the resolved JWT. `role` defaults
-// to app-user inside the resolver when empty.
+// to app-provider inside the resolver when empty.
 func dialLedger(ctx context.Context, instance, endpoint, token, role string) (*ledger.Client, func(), error) {
 	if endpoint == "" {
 		resolved, err := localnet.ResolveLedgerEndpoint(instance, role)

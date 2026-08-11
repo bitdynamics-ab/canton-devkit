@@ -45,11 +45,12 @@ Web UI party manager.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.Alias = args[0]
-			ep, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			resolved, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
 			if err != nil {
 				return err
 			}
-			opts.Endpoint = ep
+			opts.Endpoint = resolved.Endpoint
+			opts.Role = resolved.Role
 			ref, err := token.RunPartyNew(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -67,7 +68,7 @@ Web UI party manager.`,
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")
 	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Empty auto-resolves from the instance.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
-	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose participant hosts the new party.")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-provider", "Role whose participant hosts the new party.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json.")
 	_ = cmd.MarkFlagRequired("instance")
@@ -114,7 +115,7 @@ func buildPartyList() *cobra.Command {
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")
 	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Empty best-effort auto-resolves; seeds role parties when reachable.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
-	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose participant to seed from.")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-provider", "Role whose participant to seed from.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json.")
 	_ = cmd.MarkFlagRequired("instance")

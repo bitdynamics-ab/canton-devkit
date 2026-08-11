@@ -219,6 +219,7 @@ types.AllocationSummary {
 
 types.AllocationsResponse {
   schema_version int
+  ResolvedEndpoint types.ResolvedEndpoint
   allocations []types.AllocationSummary
   aliases map[string]string
 }
@@ -414,6 +415,7 @@ types.Party {
 
 types.PendingTransfersResponse {
   schema_version int
+  ResolvedEndpoint types.ResolvedEndpoint
   pending_transfers []types.TransferSummary
   truncated bool
   aliases map[string]string
@@ -438,6 +440,11 @@ types.PreflightReport {
 types.PreflightSection {
   title string
   checks []types.PreflightCheck
+}
+
+types.ResolvedEndpoint {
+  endpoint string
+  role string
 }
 
 types.ServiceStatus {
@@ -514,6 +521,7 @@ types.TokenIdentityResponse {
 
 types.TokenListResponse {
   schema_version int
+  ResolvedEndpoint types.ResolvedEndpoint
   instruments *[]types.InstrumentRef
   tokens *[]types.TokenRef
 }

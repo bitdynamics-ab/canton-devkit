@@ -220,8 +220,8 @@ describe("WalletScreen smoke", () => {
       name: "demo",
       endpoints: [
         {
-          key: "app_user_ui",
-          label: "Wallet · app-user",
+          key: "app_provider_ui",
+          label: "Wallet · app-provider",
           url: "http://wallet.localhost:60470",
           port: 60470,
           scheme: "http",
@@ -244,8 +244,8 @@ describe("WalletScreen smoke", () => {
       name: "demo",
       endpoints: [
         {
-          key: "app_user_ui",
-          label: "Wallet · app-user",
+          key: "app_provider_ui",
+          label: "Wallet · app-provider",
           url: "http://localhost:4485",
           port: 4485,
           scheme: "http",

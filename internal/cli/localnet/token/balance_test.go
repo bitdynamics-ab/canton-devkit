@@ -90,6 +90,15 @@ func TestBalance_RegistryFallback_JSONEnvelope(t *testing.T) {
 	if got.Holdings[0].Amount != "1000000" {
 		t.Errorf("issuer pseudo-balance = %q, want 1000000", got.Holdings[0].Amount)
 	}
+	// Endpoint contract: the JSON echoes which participant/role produced
+	// the balance. The offline fallback has no captured port (empty
+	// endpoint) but still reports the resolved default role.
+	if got.Endpoint != "" {
+		t.Errorf("endpoint = %q, want empty on registry fallback", got.Endpoint)
+	}
+	if got.Role != token.DefaultRole {
+		t.Errorf("role = %q, want %q", got.Role, token.DefaultRole)
+	}
 }
 
 // TestBalanceRowJSONParity pins that token.BalanceRow (the neutral

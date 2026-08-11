@@ -71,7 +71,7 @@ orchestration via POST /api/tokens/demo.`,
 		},
 	}
 	cmd.Flags().StringVar(&instance, "instance", "", "Instance name. Required.")
-	cmd.Flags().StringVar(&role, "role", "app-user", "Role whose JWT authenticates the on-ledger provisioning.")
+	cmd.Flags().StringVar(&role, "role", "app-provider", "Role whose JWT authenticates the on-ledger provisioning.")
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Auto-discovered from the instance when empty.")
 	cmd.Flags().BoolVar(&insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&symbol, "symbol", "DEMO", "Instrument symbol.")

@@ -38,10 +38,11 @@ The top-bar **Projecting through** widget controls two things:
    sticks to the URL's `?instance=` query parameter, so it
    survives navigating between tabs and reloading the page.
 2. **Role** — which Splice JWT to authenticate with. The choices
-   are `app-user`, `app-provider`, and `sv`. Each role is a
+   are `app-provider` (default), `app-user`, and `sv`. Each role is a
    different user in the participant's user management; the
    contracts you see are the ones that role's user has rights to
-   read.
+   read. The default matches the CLI (`contracts` / `tx --role`) and
+   the shared ledger-endpoint resolver.
 
 Switching either control re-runs the ACS snapshot. There is no
 client-side filtering across roles — you get a fresh view from the

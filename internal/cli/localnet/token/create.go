@@ -101,7 +101,7 @@ POST /api/tokens.`,
 	cmd.Flags().StringVar(&initialSupply, "initial-supply", "", "Initial supply as a decimal string (e.g. \"1000000\" or \"1.5\").")
 	cmd.Flags().StringVar(&issuer, "issuer", "", "Issuer party (id, alias, or role name; the V2 instrument admin). Empty defaults to --role; a role name must match --role.")
 	cmd.Flags().String("endpoint", "", "Participant gRPC endpoint (host:port). When set, create the instrument on-ledger (TokenRules for the issuer); otherwise record locally only.")
-	cmd.Flags().String("role", "app-user", "Role whose JWT authenticates the on-ledger create.")
+	cmd.Flags().String("role", "app-provider", "Role whose JWT authenticates the on-ledger create.")
 	cmd.Flags().Bool("insecure", true, "Use plaintext gRPC (LocalNet default).")
 	_ = cmd.MarkFlagRequired("instance")
 	return cmd

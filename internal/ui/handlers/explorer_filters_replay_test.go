@@ -161,7 +161,7 @@ func TestTransactions_BadFromTo400(t *testing.T) {
 	seedInstanceWithCreds(t, "dev", 1) // port need not be live; we 400 first
 	srv := contractsTxMux(t)
 
-	resp, err := http.Get(srv.URL + "/api/instances/dev/transactions?from=notanumber")
+	resp, err := http.Get(srv.URL + "/api/instances/dev/transactions?role=app-user&from=notanumber")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -179,7 +179,10 @@ func TestTransactions_FromGreaterThanTo400(t *testing.T) {
 	seedInstanceWithCreds(t, "dev", port)
 	srv := contractsTxMux(t)
 
-	resp, err := http.Get(srv.URL + "/api/instances/dev/transactions?from=500&to=100")
+	// Explicit role=app-user matches seedInstanceWithCreds (app-user
+	// port+JWT). Omitting role would default to app-provider and 503
+	// before the from>to guard runs.
+	resp, err := http.Get(srv.URL + "/api/instances/dev/transactions?role=app-user&from=500&to=100")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}

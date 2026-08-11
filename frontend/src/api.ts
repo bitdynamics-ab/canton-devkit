@@ -711,9 +711,9 @@ export interface MetricsSummary {
 // ── DAR Manager ─────────────────────────────────────────
 //
 // The Web UI lists DARs uploaded to a participant. Role defaults
-// to app-user (the common dev target). The backend reads the
-// per-role admin port from state.json so the browser
-// doesn't need to know about gRPC.
+// to app-provider (same canonical default as Tokens / Explorer).
+// The backend reads the per-role admin port from state.json so the
+// browser doesn't need to know about gRPC.
 export type Role = "app-user" | "app-provider" | "sv";
 
 export interface DARRow {
@@ -734,7 +734,7 @@ export interface DARListResponse {
   dars: DARRow[];
 }
 
-export const fetchDARList = (name: string, role: Role = "app-user") =>
+export const fetchDARList = (name: string, role: Role = "app-provider") =>
   apiFetch<DARListResponse>(
     `/api/instances/${encodeURIComponent(name)}/dar?role=${role}`,
   );
@@ -859,7 +859,7 @@ export interface DARInspectResponse {
 export const fetchDARInspect = (
   instance: string,
   mainID: string,
-  role: Role = "app-user",
+  role: Role = "app-provider",
 ) =>
   apiFetch<DARInspectResponse>(
     `/api/instances/${encodeURIComponent(instance)}/dar/${encodeURIComponent(mainID)}/inspect?role=${role}`,
@@ -916,7 +916,7 @@ export const fetchDARDiff = (
   instance: string,
   a: string,
   b: string,
-  role: Role = "app-user",
+  role: Role = "app-provider",
 ) =>
   apiFetch<DARDiffResponse>(
     `/api/instances/${encodeURIComponent(instance)}/dar/diff?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&role=${role}`,
@@ -1021,7 +1021,7 @@ export interface ContractsListResponse {
 
 export const fetchContracts = (
   name: string,
-  role: Role = "app-user",
+  role: Role = "app-provider",
   limit = 100,
 ) =>
   apiFetch<ContractsListResponse>(
@@ -1057,7 +1057,7 @@ export interface ContractDetailResponse {
 export const fetchContractDetail = (
   name: string,
   contractId: string,
-  role: Role = "app-user",
+  role: Role = "app-provider",
 ) =>
   apiFetch<ContractDetailResponse>(
     `/api/instances/${encodeURIComponent(name)}/contracts/${encodeURIComponent(contractId)}?role=${role}`,
@@ -1094,7 +1094,7 @@ export interface ContractStreamEvent {
 // (strict-tail semantics — direct curl, smoke tests).
 export function openContractsStream(
   name: string,
-  role: Role = "app-user",
+  role: Role = "app-provider",
   since?: number,
 ): EventSource {
   const sinceParam =
@@ -1161,7 +1161,7 @@ export interface TransactionFilters {
 
 export const fetchTransactions = (
   name: string,
-  role: Role = "app-user",
+  role: Role = "app-provider",
   limit = 100,
   filters: TransactionFilters = {},
 ) => {
@@ -1216,7 +1216,7 @@ export interface TxReplayResponse {
 export const fetchTxReplay = (
   name: string,
   updateId: string,
-  role: Role = "app-user",
+  role: Role = "app-provider",
   parties?: string[],
 ) => {
   const params = new URLSearchParams({ role });
@@ -1601,11 +1601,21 @@ export interface TokenHolding {
 
 export interface TokensListResponse {
   schema_version: number;
+  // Endpoint contract: the participant host:port + role this list was
+  // resolved against ("" endpoint = recorded/offline fallback). Mirrors
+  // internal/api/types.ResolvedEndpoint.
+  endpoint: string;
+  role: string;
   tokens: TokenRef[];
 }
 
 export interface TokenHoldingsResponse {
   schema_version: number;
+  // Endpoint contract: the participant host:port + role this balance was
+  // read from ("" endpoint = registry pseudo-balance). Mirrors
+  // internal/api/types.ResolvedEndpoint.
+  endpoint: string;
+  role: string;
   // Response-level provenance (matches every row's source); the UI
   // renders one disclaimer banner when "registry".
   source: HoldingSource;
@@ -1700,11 +1710,13 @@ export interface BatchResult {
   ok: boolean;
 }
 
-// Matches the backend default in roleFromQuery — keep in sync.
-const DEFAULT_ROLE = "app-user";
+// Matches the backend token.DefaultRole / roleFromQuery — keep in sync.
+// Explorer and DAR callers below keep their own app-user defaults.
+const DEFAULT_ROLE = "app-provider";
 
 // tokenQuery builds `?instance=...&role=...` (role omitted when it just
 // repeats the default), so every token endpoint forwards role uniformly.
+// Selecting app-user must send role=app-user (no longer the omitted default).
 function tokenQuery(instance: string, role?: string): string {
   const params = new URLSearchParams({ instance });
   if (role && role !== DEFAULT_ROLE) params.set("role", role);
@@ -1807,13 +1819,13 @@ interface PartiesResponse {
 }
 
 // Lists the instance's registered party aliases.
-export const fetchParties = (instance: string, role = "app-user") =>
+export const fetchParties = (instance: string, role = "app-provider") =>
   apiFetch<PartiesResponse>(
     `/api/parties?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
   ).then((r) => r.parties);
 
 // Allocates a party under an alias and grants the role's user act/read-as.
-export const createParty = (instance: string, alias: string, role = "app-user") =>
+export const createParty = (instance: string, alias: string, role = "app-provider") =>
   apiFetch<PartyRef>(`/api/parties?instance=${encodeURIComponent(instance)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1845,7 +1857,7 @@ interface HoldingContractsResponse {
 // TokenRef list (mapped to InstrumentRef) when the ledger is unreachable.
 export async function fetchInstruments(
   instance: string,
-  role = "app-user",
+  role = "app-provider",
 ): Promise<InstrumentRef[]> {
   const r = await apiFetch<InstrumentsResponse>(
     `/api/tokens?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
@@ -1864,7 +1876,7 @@ export async function fetchInstruments(
   }));
 }
 
-export const fetchMatrix = (instance: string, role = "app-user") =>
+export const fetchMatrix = (instance: string, role = "app-provider") =>
   apiFetch<MatrixResponse>(
     `/api/tokens/matrix?instance=${encodeURIComponent(instance)}&role=${encodeURIComponent(role)}`,
   ).then((r) => r.matrix);
@@ -1899,7 +1911,7 @@ interface InstrumentSummaryResponse {
 export const fetchInstrumentSummary = (
   instance: string,
   symbol: string,
-  role = "app-user",
+  role = "app-provider",
 ) =>
   apiFetch<InstrumentSummaryResponse>(
     `/api/tokens/${encodeURIComponent(symbol)}/summary?instance=${encodeURIComponent(
@@ -1948,7 +1960,7 @@ export interface ActivityPage {
 export const fetchActivity = (
   instance: string,
   symbol: string,
-  role = "app-user",
+  role = "app-provider",
   limit = 50,
 ): Promise<ActivityPage> =>
   apiFetch<ActivityResponse>(
@@ -1961,7 +1973,7 @@ export const fetchHoldingContracts = (
   instance: string,
   symbol: string,
   party: string,
-  role = "app-user",
+  role = "app-provider",
 ) => {
   const params = new URLSearchParams({
     instance,
@@ -2126,7 +2138,7 @@ export async function planTransfer(
   symbol: string,
   from: string,
   amount: string,
-  role = "app-user",
+  role = "app-provider",
 ): Promise<TransferPlan> {
   const params = new URLSearchParams({ instance, role, plan: "1" });
   const resp = await fetch(
@@ -2177,6 +2189,10 @@ export const acceptTransfer = (
 
 interface AllocationsListResponse {
   schema_version: number;
+  // Endpoint contract: participant host:port + role this scan resolved
+  // against. Mirrors internal/api/types.ResolvedEndpoint.
+  endpoint: string;
+  role: string;
   allocations: AllocationSummary[];
   aliases: AliasMap;
 }
@@ -2199,6 +2215,10 @@ export async function fetchAllocations(
 
 interface PendingTransfersListResponse {
   schema_version: number;
+  // Endpoint contract: participant host:port + role this scan resolved
+  // against. Mirrors internal/api/types.ResolvedEndpoint.
+  endpoint: string;
+  role: string;
   pending_transfers: TransferSummary[];
   truncated?: boolean;
   aliases: AliasMap;
