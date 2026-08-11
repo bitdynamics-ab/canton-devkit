@@ -89,9 +89,10 @@ func handleAllocationsList(w http.ResponseWriter, r *http.Request) {
 		rows = []types.AllocationSummary{}
 	}
 	writeJSON(w, http.StatusOK, types.AllocationsResponse{
-		SchemaVersion: types.SchemaVersion,
-		Allocations:   rows,
-		Aliases:       aliasMap(instance),
+		SchemaVersion:    types.SchemaVersion,
+		ResolvedEndpoint: types.ResolvedEndpoint{Endpoint: ep, Role: role},
+		Allocations:      rows,
+		Aliases:          aliasMap(instance),
 	})
 }
 

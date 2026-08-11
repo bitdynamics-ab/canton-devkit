@@ -120,6 +120,51 @@ func TestContracts_MissingParticipantPort(t *testing.T) {
 	}
 }
 
+// TestContracts_DefaultRoleIsAppProvider pins the Explorer empty-role
+// fallback: omitting ?role= looks up participant_ledger_app-provider
+// (same default as the CLI and shared ResolveLedgerEndpoint), not
+// app-user.
+func TestContracts_DefaultRoleIsAppProvider(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	srv := contractsTxMux(t)
+
+	// Only an app-user port → omit-role must 503 (looking up provider).
+	seedInstance(t, "demo", "0.6.4",
+		map[string]int{"participant_ledger_app-user": 9999},
+		registry.StatusRunning)
+	resp, err := http.Get(srv.URL + "/api/instances/demo/contracts") // no ?role=
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		_ = resp.Body.Close()
+		t.Fatalf("status = %d, want 503 (default role looks up app-provider port)", resp.StatusCode)
+	}
+	body := readErrBody(t, resp)
+	if got := toStr(body["code"]); got != "PARTICIPANT_PORT_NOT_RECORDED" {
+		t.Errorf("error code = %q, want PARTICIPANT_PORT_NOT_RECORDED", got)
+	}
+
+	// Provider port present, no JWT → 500 names app-provider (proves
+	// the default role, not app-user, was selected).
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "demo", "0.6.4",
+		map[string]int{"participant_ledger_app-provider": 9999},
+		registry.StatusRunning)
+	resp, err = http.Get(srv.URL + "/api/instances/demo/contracts")
+	if err != nil {
+		t.Fatalf("GET provider-port: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500 (provider port found, JWT missing)", resp.StatusCode)
+	}
+	body = readErrBody(t, resp)
+	if msg := toStr(body["error"]); !strings.Contains(msg, "app-provider") {
+		t.Errorf("missing-cred error should name app-provider, got %q", msg)
+	}
+}
+
 func TestContracts_MissingCredential(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	// Port present but no JWT recorded.

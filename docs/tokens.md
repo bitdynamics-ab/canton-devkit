@@ -33,12 +33,14 @@ canton-devkit localnet up --name v2 --version 0.6.12
 canton-devkit localnet status --name v2
 ```
 
-All token subcommands take `--instance <name>` and, for on-ledger
-actions, `--endpoint <participant host:port>` (the participant ledger
-gRPC port — `localnet status --name v2` prints it). Where a `--token`
-flag exists it can stay empty — a per-role dev JWT is auto-issued
+All token subcommands take `--instance <name>`. For on-ledger actions,
+`--endpoint <participant host:port>` is optional: when omitted the
+command resolves the acting role's captured participant ledger gRPC
+port from the instance (the same port `localnet status --name v2`
+prints). An explicit `--endpoint` always wins. Where a `--token` flag
+exists it can stay empty — a per-role dev JWT is auto-issued
 (`mint`/`create`/`demo` always auto-issue); `--role` defaults to
-`app-user`.
+`app-provider` (the provider participant that mints/creates).
 
 ---
 

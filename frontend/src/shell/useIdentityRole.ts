@@ -1,13 +1,14 @@
 // Act-as identity (role) selection for the Tokens screen, threaded
 // through every token API call. Persisted per instance in localStorage
 // so a reload (and each instance) keeps its own last-used role; falls
-// back to "app-user" (the backend default) when unset/unavailable.
+// back to "app-provider" (the backend token.DefaultRole) when
+// unset/unavailable. Explorer / DAR keep their own app-user defaults.
 
 import { useCallback, useState } from "react";
 import type { Role } from "../api";
 
-const DEFAULT_ROLE: Role = "app-user";
-const VALID: readonly Role[] = ["app-user", "app-provider", "sv"];
+const DEFAULT_ROLE: Role = "app-provider";
+const VALID: readonly Role[] = ["app-provider", "app-user", "sv"];
 
 function storageKey(instance: string): string {
   return `cdk-token-role:${instance}`;

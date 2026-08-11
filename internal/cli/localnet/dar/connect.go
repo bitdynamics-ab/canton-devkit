@@ -35,7 +35,7 @@ type connectFlags struct {
 	Instance string
 	// Role selects which participant within the named instance to
 	// target. Splice LocalNet runs three participants (sv,
-	// app-provider, app-user). Defaults to "app-user".
+	// app-provider, app-user). Defaults to "app-provider".
 	Role string
 }
 
@@ -52,8 +52,8 @@ func (f *connectFlags) register(cmd *cobra.Command) {
 		"PEM-encoded CA bundle for TLS verification (when --insecure=false).")
 	cmd.Flags().StringVar(&f.Instance, "instance", "",
 		"DevKit LocalNet instance name")
-	cmd.Flags().StringVar(&f.Role, "role", "app-user",
-		"Participant role within --instance: sv, app-provider, or app-user.")
+	cmd.Flags().StringVar(&f.Role, "role", "app-provider",
+		"Participant role within --instance: sv, app-provider, or app-user (default: app-provider).")
 	// Accept --name as an alias for --instance so the dar verbs take the
 	// same instance selector as the rest of the CLI. A normalize alias —
 	// not a second flag — so --instance's resolution/validation stays

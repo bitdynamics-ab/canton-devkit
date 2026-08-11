@@ -132,7 +132,7 @@ function withProviders(ui: React.ReactElement) {
 const fakeDAR = {
   schema_version: 1,
   instance: "demo",
-  role: "app-user",
+  role: "app-provider",
   dars: [
     { main: "a".repeat(64), name: "demo-pkg", version: "1.0.0" },
     { main: "b".repeat(64), name: "other-pkg", version: "0.1.0" },

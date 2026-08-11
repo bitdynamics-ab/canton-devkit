@@ -236,7 +236,7 @@ func looksLikePackageID(s string) bool {
 func resolveRoleParam(w http.ResponseWriter, r *http.Request) (string, bool) {
 	role := r.URL.Query().Get("role")
 	if role == "" {
-		role = "app-user"
+		role = "app-provider"
 	}
 	if !validRole[role] {
 		writeErrorWithCode(w, http.StatusBadRequest,

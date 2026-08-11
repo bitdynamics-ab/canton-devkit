@@ -37,6 +37,13 @@ row came from. With --party, filter to a single party; with
 --instrument, filter to a single instrument (by symbol or raw id).`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if opts.Role == "" {
+				opts.Role = token.DefaultRole
+			}
+			// Resolve the endpoint the same way RunBalance does so the
+			// JSON payload can echo which participant/role produced the
+			// balance (empty = registry pseudo-balance). Explicit wins.
+			resolvedEndpoint := bestEffortEndpoint(opts.Instance, opts.Role, opts.Endpoint)
 			rows, truncated, err := token.RunBalance(cmd.Context(), nil, opts)
 			if err != nil {
 				return err
@@ -57,10 +64,11 @@ row came from. With --party, filter to a single party; with
 				// GET /api/tokens/{symbol}/holdings — a bare array has no
 				// slot to version the shape or carry provenance.
 				return enc.Encode(types.TokenHoldingsResponse{
-					SchemaVersion: types.SchemaVersion,
-					Source:        types.HoldingSource(src),
-					Holdings:      toHoldings(rows),
-					Truncated:     truncated,
+					SchemaVersion:    types.SchemaVersion,
+					ResolvedEndpoint: types.ResolvedEndpoint{Endpoint: resolvedEndpoint, Role: opts.Role},
+					Source:           types.HoldingSource(src),
+					Holdings:         toHoldings(rows),
+					Truncated:        truncated,
 				})
 			}
 			// The SOURCE column makes a registry pseudo-balance visibly
@@ -94,7 +102,7 @@ row came from. With --party, filter to a single party; with
 	cmd.Flags().StringVar(&opts.Instrument, "instrument", "", "Filter to a single instrument (symbol or raw id).")
 	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Defaults to the instance's captured ledger port; set to override which participant the live ACS query dials.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT for the participant. Empty (the common case) auto-issues a per-role token via `localnet creds` machinery.")
-	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT the live ACS query authenticates as (sv / app-provider / app-user).")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-provider", "Role whose JWT the live ACS query authenticates as (sv / app-provider / app-user).")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json.")
 	_ = cmd.MarkFlagRequired("instance")

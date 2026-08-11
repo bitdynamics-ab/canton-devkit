@@ -10,7 +10,7 @@ import (
 
 // TestTokenIdentity_ListsRolesAndEchoesCurrent covers the identity
 // endpoint: it returns the full role set (token.Roles()) and echoes the
-// ?role= the request used, defaulting to app-user.
+// ?role= the request used, defaulting to app-provider.
 func TestTokenIdentity_ListsRolesAndEchoesCurrent(t *testing.T) {
 	seedForTokens(t, "demo")
 	srv := tokensSrv(t)
@@ -20,7 +20,7 @@ func TestTokenIdentity_ListsRolesAndEchoesCurrent(t *testing.T) {
 		query       string
 		wantCurrent string
 	}{
-		{"default role", "", "app-user"},
+		{"default role", "", "app-provider"},
 		{"explicit app-user", "&role=app-user", "app-user"},
 		{"explicit app-provider", "&role=app-provider", "app-provider"},
 		{"explicit sv", "&role=sv", "sv"},
@@ -63,10 +63,10 @@ func TestTokenIdentity_ListsRolesAndEchoesCurrent(t *testing.T) {
 					t.Errorf("available_roles[%d] = %q, want %q (order matters)", i, got.AvailableRoles[i], r)
 				}
 			}
-			// app-user must lead so the switcher highlights the same
+			// app-provider must lead so the switcher highlights the same
 			// identity roleFromQuery falls back to.
-			if got.AvailableRoles[0] != "app-user" {
-				t.Errorf("available_roles must lead with app-user; got %q", got.AvailableRoles[0])
+			if got.AvailableRoles[0] != "app-provider" {
+				t.Errorf("available_roles must lead with app-provider; got %q", got.AvailableRoles[0])
 			}
 		})
 	}

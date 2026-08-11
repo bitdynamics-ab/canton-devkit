@@ -120,7 +120,7 @@ func handlePartiesCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	role := req.Role
 	if role == "" {
-		role = "app-user"
+		role = token.DefaultRole
 	}
 	ep := liveLedgerEndpoint(instance, role)
 	if ep == "" {
@@ -183,14 +183,18 @@ func handleTokensList(w http.ResponseWriter, r *http.Request) {
 	// otherwise the recorded list. liveLedgerEndpoint stays the resolution
 	// seam so offline handler tests force the recorded path deterministically.
 	role := roleFromQuery(r)
+	endpoint := liveLedgerEndpoint(instance, role)
 	resp, err := token.ListInstruments(r.Context(), token.BalanceOptions{
 		Instance: instance, Role: role, Insecure: true,
-		Endpoint: liveLedgerEndpoint(instance, role),
+		Endpoint: endpoint,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "list tokens", err)
 		return
 	}
+	// Echo the endpoint contract so the Web UI payload matches `token ls
+	// --format json` (empty endpoint = recorded/offline fallback).
+	resp.ResolvedEndpoint = types.ResolvedEndpoint{Endpoint: endpoint, Role: role}
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -315,6 +319,10 @@ func handleTokenActivity(w http.ResponseWriter, r *http.Request) {
 		"events":         res.Events,
 		"truncated":      res.Truncated,
 		"aliases":        aliasMap(instance),
+		// Shared resolution metadata (endpoint contract): which
+		// participant host:port and act-as role produced this feed.
+		"endpoint": ep,
+		"role":     role,
 	})
 }
 
@@ -366,10 +374,11 @@ func handleTokenHoldings(w http.ResponseWriter, r *http.Request) {
 		source = token.SourceLedger
 	}
 	writeJSON(w, http.StatusOK, types.TokenHoldingsResponse{
-		SchemaVersion: types.SchemaVersion,
-		Source:        types.HoldingSource(source),
-		Holdings:      toHoldings(rows),
-		Truncated:     truncated,
+		SchemaVersion:    types.SchemaVersion,
+		ResolvedEndpoint: types.ResolvedEndpoint{Endpoint: endpoint, Role: role},
+		Source:           types.HoldingSource(source),
+		Holdings:         toHoldings(rows),
+		Truncated:        truncated,
 	})
 }
 
@@ -696,11 +705,13 @@ var runTokenAccept = func(ctx context.Context, opts token.AcceptOptions) error {
 // seed flag through to RunDemo.
 var runTokenDemo = token.RunDemo
 
-// roleFromQuery returns the `?role=` value, defaulting to app-user.
+// roleFromQuery returns the `?role=` value, defaulting to
+// token.DefaultRole (app-provider). Explorer/DAR handlers keep their
+// own app-user defaults and do not use this helper.
 func roleFromQuery(r *http.Request) string {
 	role := r.URL.Query().Get("role")
 	if role == "" {
-		role = "app-user"
+		role = token.DefaultRole
 	}
 	return role
 }
@@ -761,6 +772,7 @@ func sanitize400(msg string) string {
 //   - nil                              → 204 No Content (idempotent
 //     success for mutations that don't return a body)
 //   - token.ErrNeedsV2LocalNet         → 412 Precondition Failed
+//   - token.ErrUnresolvedLedgerEndpoint → 503 PARTICIPANT_PORT_NOT_RECORDED
 //   - token.ErrUnsupportedOnInstrument → 422 Unprocessable Entity
 //   - token.ErrSupplyCapExceeded       → 422 Unprocessable Entity
 //   - token.ErrSymbolInUse             → 409 Conflict
@@ -777,6 +789,9 @@ func mapTokenError(w http.ResponseWriter, err error, op string) {
 	case errors.Is(err, token.ErrNeedsV2LocalNet):
 		writeErrorWithCode(w, http.StatusPreconditionFailed,
 			"NEEDS_V2_LOCALNET", err.Error())
+	case errors.Is(err, token.ErrUnresolvedLedgerEndpoint):
+		writeErrorWithCode(w, http.StatusServiceUnavailable,
+			"PARTICIPANT_PORT_NOT_RECORDED", err.Error())
 	case errors.Is(err, token.ErrUnsupportedOnInstrument):
 		writeErrorWithCode(w, http.StatusUnprocessableEntity,
 			"UNSUPPORTED_ON_INSTRUMENT", err.Error())

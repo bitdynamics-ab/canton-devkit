@@ -78,7 +78,7 @@ function stubFetch(contracts: unknown[] = []) {
         return json({
           schema_version: 1,
           instance: "demo",
-          role: "app-user",
+          role: "app-provider",
           ledger_end: 30,
           count: TX_ROWS.length,
           scanned_from: 0,
@@ -90,7 +90,7 @@ function stubFetch(contracts: unknown[] = []) {
         return json({
           schema_version: 1,
           instance: "demo",
-          role: "app-user",
+          role: "app-provider",
           ledger_end: 30,
           contracts,
         });
@@ -120,6 +120,27 @@ describe("ExplorerScreen — transactions filters + replay", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it("defaults the Explorer role to app-provider", async () => {
+    stubFetch();
+    render(
+      <Providers>
+        <ExplorerScreen />
+      </Providers>,
+    );
+    const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>;
+    await waitFor(() => {
+      const contractsCall = fetchMock.mock.calls
+        .map(([u]) => String(u))
+        .find((u) => u.includes("/contracts?") || u.includes("/contracts&"));
+      // Snapshot fetch uses /contracts?role=...&limit=...
+      const snap = fetchMock.mock.calls
+        .map(([u]) => String(u))
+        .find((u) => u.includes("/contracts") && u.includes("role="));
+      expect(snap ?? contractsCall).toBeTruthy();
+      expect(snap ?? contractsCall).toContain("role=app-provider");
+    });
   });
 
   it("forwards party / template / offset filters to the transactions endpoint (#24)", async () => {

@@ -24,7 +24,7 @@ func TestResolveLedgerEndpointRequiresRunningInstance(t *testing.T) {
 			t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 			s := registry.NewState("demo", "0.6.12")
 			s.Status = tt.status
-			s.Ports["participant_ledger_app-user"] = 42002
+			s.Ports["participant_ledger_"+DefaultRole] = 42002
 			if err := registry.Write(s); err != nil {
 				t.Fatalf("seed registry: %v", err)
 			}

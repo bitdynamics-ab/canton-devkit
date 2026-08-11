@@ -108,7 +108,7 @@ func handleContractsList(w http.ResponseWriter, r *http.Request) {
 	}
 	role := r.URL.Query().Get("role")
 	if role == "" {
-		role = "app-user"
+		role = "app-provider"
 	}
 	if !validRole[role] {
 		writeErrorWithCode(w, http.StatusBadRequest,
@@ -352,7 +352,7 @@ func handleContractsStream(w http.ResponseWriter, r *http.Request) {
 	}
 	role := r.URL.Query().Get("role")
 	if role == "" {
-		role = "app-user"
+		role = "app-provider"
 	}
 	if !validRole[role] {
 		writeErrorWithCode(w, http.StatusBadRequest,
@@ -637,7 +637,7 @@ func handleContractDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	role := r.URL.Query().Get("role")
 	if role == "" {
-		role = "app-user"
+		role = "app-provider"
 	}
 	if !validRole[role] {
 		writeErrorWithCode(w, http.StatusBadRequest,

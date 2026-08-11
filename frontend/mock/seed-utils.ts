@@ -183,7 +183,7 @@ export function validateSchema(body: unknown): boolean {
 export function parseSeedArgs(argv: string[]): SeedOptions | { error: string } {
   let baseUrl = "http://127.0.0.1:7777";
   let instance = "";
-  let role = "app-user";
+  let role = "app-provider";
   let asName: string | undefined;
   let dryRun = false;
 
@@ -199,7 +199,7 @@ export function parseSeedArgs(argv: string[]): SeedOptions | { error: string } {
         error: [
           "Usage: npm run mock:seed -- --instance <name> [options]",
           "  --base-url URL   Backend base URL (default http://127.0.0.1:7777)",
-          "  --role ROLE      Role for scoped endpoints (default app-user)",
+          "  --role ROLE      Role for scoped endpoints (default app-provider)",
           "  --as NAME        Rewrite instance name in output (e.g. demo)",
           "  --dry-run        Print targets without writing files",
         ].join("\n"),

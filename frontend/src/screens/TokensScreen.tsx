@@ -62,8 +62,8 @@ import {
 
 // Fallback identity list; the real set comes from GET
 // /api/tokens/identity. Seeds the switcher for the first render and
-// covers a fetch failure. Default (app-user) first.
-const IDENTITY_ROLES: Role[] = ["app-user", "app-provider", "sv"];
+// covers a fetch failure. Default (app-provider) first.
+const IDENTITY_ROLES: Role[] = ["app-provider", "app-user", "sv"];
 
 // Activity feed page size; "Load more" grows the limit by this step.
 const ACTIVITY_PAGE = 50;
@@ -2158,7 +2158,7 @@ function PartyPicker({
   parties,
   value,
   onChange,
-  role = "app-user",
+  role = "app-provider",
   onPartiesChanged,
   placeholder = "Select party",
 }: {

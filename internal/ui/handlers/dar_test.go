@@ -360,10 +360,11 @@ func TestDARList_HappyPath(t *testing.T) {
 		},
 	}
 	port := startDARStub(t, stub)
-	seedDARInstance(t, "demo", map[string]int{"app-user": port})
+	seedDARInstance(t, "demo", map[string]int{"app-provider": port})
 
 	srv, _ := darMux(t)
-	resp, err := http.Get(srv.URL + "/api/instances/demo/dar?role=app-user")
+	// Omit ?role= — empty-role fallback is app-provider.
+	resp, err := http.Get(srv.URL + "/api/instances/demo/dar")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -382,8 +383,8 @@ func TestDARList_HappyPath(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.Instance != "demo" || got.Role != "app-user" {
-		t.Errorf("instance/role = %q/%q, want demo/app-user", got.Instance, got.Role)
+	if got.Instance != "demo" || got.Role != "app-provider" {
+		t.Errorf("instance/role = %q/%q, want demo/app-provider", got.Instance, got.Role)
 	}
 	if len(got.Dars) != 2 {
 		t.Fatalf("dars count = %d, want 2", len(got.Dars))

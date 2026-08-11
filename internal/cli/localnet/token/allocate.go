@@ -35,11 +35,12 @@ settle command on either surface — release an allocation with
 ` + "`token allocations withdraw|cancel`" + ` instead.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ep, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			resolved, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
 			if err != nil {
 				return err
 			}
-			opts.Endpoint = ep
+			opts.Endpoint = resolved.Endpoint
+			opts.Role = resolved.Role
 			id, err := token.RunAllocate(cmd.Context(), cmd.OutOrStdout(), opts)
 			if errors.Is(err, token.ErrNeedsV2LocalNet) {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
@@ -66,7 +67,7 @@ settle command on either surface — release an allocation with
 	cmd.Flags().BoolVar(&opts.Committed, "committed", false, "Commit the allocation: lock funds until the settlement deadline (no early withdraw).")
 	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). When set, run the live allocate; otherwise print the not-wired remediation.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
-	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the submit.")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-provider", "Role whose JWT authenticates the submit.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&opts.RegistryURL, "registry-url", "", "Token registry base URL. Empty auto-derives from the instance's SV UI port.")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json (json prints the allocation id).")

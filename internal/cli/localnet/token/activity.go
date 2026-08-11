@@ -29,11 +29,12 @@ Requires --instrument (the symbol or instrument id). --endpoint is
 optional: empty auto-resolves from the instance, like the Web UI.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ep, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			resolved, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
 			if err != nil {
 				return err
 			}
-			opts.Endpoint = ep
+			opts.Endpoint = resolved.Endpoint
+			opts.Role = resolved.Role
 			res, err := token.RunActivityResult(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -83,7 +84,7 @@ optional: empty auto-resolves from the instance, like the Web UI.`,
 	cmd.Flags().StringVar(&opts.Instrument, "instrument", "", "Instrument symbol or id. Required.")
 	cmd.Flags().IntVar(&opts.Limit, "limit", 50, "Max events to return (newest first).")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
-	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the scan.")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-provider", "Role whose JWT authenticates the scan.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json.")
 	_ = cmd.MarkFlagRequired("instance")

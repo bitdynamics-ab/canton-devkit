@@ -30,11 +30,12 @@ optional (empty auto-resolves from the instance, like the Web UI).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.To = args[0]
 			opts.Amount = args[1]
-			ep, epErr := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			resolved, epErr := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
 			if epErr != nil {
 				return epErr
 			}
-			opts.Endpoint = ep
+			opts.Endpoint = resolved.Endpoint
+			opts.Role = resolved.Role
 			err := token.RunFaucet(cmd.Context(), cmd.OutOrStdout(), opts)
 			if errors.Is(err, token.ErrNeedsV2LocalNet) {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
@@ -48,7 +49,7 @@ optional (empty auto-resolves from the instance, like the Web UI).`,
 	cmd.Flags().StringVar(&opts.Source, "source", "", "Funding party (alias or id). Empty defaults to the instrument's largest holder.")
 	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Empty auto-resolves from the instance.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
-	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the submit.")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-provider", "Role whose JWT authenticates the submit.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&opts.RegistryURL, "registry-url", "", "Token registry base URL. Empty auto-derives from the instance's SV UI port.")
 	_ = cmd.MarkFlagRequired("instance")

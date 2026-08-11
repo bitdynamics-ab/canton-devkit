@@ -32,11 +32,12 @@ and whether it is committed (funds locked until the settlement deadline).
 Web UI.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ep, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			resolved, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
 			if err != nil {
 				return err
 			}
-			opts.Endpoint = ep
+			opts.Endpoint = resolved.Endpoint
+			opts.Role = resolved.Role
 			rows, err := token.RunListAllocations(cmd.Context(), opts)
 			if errors.Is(err, token.ErrNeedsV2LocalNet) {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
@@ -55,9 +56,10 @@ Web UI.`,
 				// Same top-level shape as GET /api/tokens/allocations so
 				// CLI JSON and Web UI cannot drift.
 				return enc.Encode(types.AllocationsResponse{
-					SchemaVersion: types.SchemaVersion,
-					Allocations:   rows,
-					Aliases:       token.PartyAliasMap(opts.Instance),
+					SchemaVersion:    types.SchemaVersion,
+					ResolvedEndpoint: types.ResolvedEndpoint{Endpoint: resolved.Endpoint, Role: resolved.Role},
+					Allocations:      rows,
+					Aliases:          token.PartyAliasMap(opts.Instance),
 				})
 			}
 			if len(rows) == 0 {
@@ -91,7 +93,7 @@ Web UI.`,
 	cmd.Flags().StringVar(&opts.Party, "party", "", "Filter to one authorizer party (alias or id). Empty lists all visible.")
 	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Empty auto-resolves from the instance.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
-	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the scan.")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-provider", "Role whose JWT authenticates the scan.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json.")
 	_ = cmd.MarkFlagRequired("instance")
@@ -122,11 +124,12 @@ func buildAllocationAction(verb, short string, run allocationActionFn) *cobra.Co
 			// otherwise withdraw/cancel pass an empty endpoint and always
 			// hit ErrNeedsV2LocalNet even on a live instance with a
 			// captured port. An explicit --endpoint still wins.
-			ep, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
+			resolved, err := resolveEndpoint(cmd, opts.Instance, opts.Role, opts.Endpoint)
 			if err != nil {
 				return err
 			}
-			opts.Endpoint = ep
+			opts.Endpoint = resolved.Endpoint
+			opts.Role = resolved.Role
 			err = run(cmd.Context(), cmd.OutOrStdout(), opts)
 			if errors.Is(err, token.ErrNeedsV2LocalNet) {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
@@ -140,7 +143,7 @@ func buildAllocationAction(verb, short string, run allocationActionFn) *cobra.Co
 	cmd.Flags().StringVar(&opts.Party, "party", "", "Party exercising the choice. Defaults to the JWT's first granted party.")
 	cmd.Flags().StringVar(&opts.Endpoint, "endpoint", "", "Participant gRPC endpoint (host:port). Empty auto-resolves from the instance.")
 	cmd.Flags().StringVar(&opts.Token, "token", "", "Bearer JWT. Empty auto-issues a per-role token.")
-	cmd.Flags().StringVar(&opts.Role, "role", "app-user", "Role whose JWT authenticates the submit.")
+	cmd.Flags().StringVar(&opts.Role, "role", "app-provider", "Role whose JWT authenticates the submit.")
 	cmd.Flags().BoolVar(&opts.Insecure, "insecure", true, "Use plaintext gRPC (LocalNet default).")
 	cmd.Flags().StringVar(&opts.RegistryURL, "registry-url", "", "Token registry base URL. Empty auto-derives from the instance's SV UI port.")
 	_ = cmd.MarkFlagRequired("instance")
