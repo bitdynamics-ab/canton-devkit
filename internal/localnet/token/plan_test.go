@@ -7,12 +7,6 @@ import (
 )
 
 func TestRunTransferPlanValidatesBeforeDial(t *testing.T) {
-	prevResolve := resolveTransferPlanEndpoint
-	resolveTransferPlanEndpoint = func(string, string) string {
-		panic("invalid preview must not resolve an endpoint")
-	}
-	t.Cleanup(func() { resolveTransferPlanEndpoint = prevResolve })
-
 	tests := []struct {
 		name  string
 		opts  TransferOptions
@@ -74,14 +68,16 @@ func TestRunTransferPlanValidatesBeforeDial(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.valid {
-				resolveTransferPlanEndpoint = func(string, string) string { return "" }
-				defer func() {
-					resolveTransferPlanEndpoint = func(string, string) string {
-						panic("invalid preview must not resolve an endpoint")
-					}
-				}()
+			resolver := func(string, string) string {
+				panic("invalid preview must not resolve an endpoint")
 			}
+			if tc.valid {
+				resolver = func(string, string) string { return "" }
+			}
+			prevResolve := resolveTransferPlanEndpoint
+			resolveTransferPlanEndpoint = resolver
+			t.Cleanup(func() { resolveTransferPlanEndpoint = prevResolve })
+
 			_, err := RunTransferPlan(context.Background(), tc.opts)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("RunTransferPlan() error = %v, want containing %q", err, tc.want)
