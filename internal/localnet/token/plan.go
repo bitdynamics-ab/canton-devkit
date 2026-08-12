@@ -33,10 +33,20 @@ type PlanInput struct {
 // consume/change split. Insufficient funds is a non-error result
 // (Sufficient=false + Shortfall) so the UI can render it inline.
 func RunTransferPlan(ctx context.Context, opts TransferOptions) (*TransferPlan, error) {
+	if err := requireFields("transfer plan", "instance", opts.Instance, "instrument", opts.Instrument,
+		"sender party", opts.From, "amount", opts.Amount); err != nil {
+		return nil, err
+	}
 	if opts.Role == "" {
 		opts.Role = DefaultRole
 	}
 	opts.From = ResolveAlias(aliasMapForInstance(opts.Instance), opts.From)
+	if err := validatePartyID("--from", opts.From); err != nil {
+		return nil, err
+	}
+	if err := validateAmount("transfer", opts.Amount); err != nil {
+		return nil, err
+	}
 	ref := instrumentRefOrRaw(opts.Instance, opts.Instrument)
 	conn := LedgerConn{
 		Endpoint: opts.Endpoint,
