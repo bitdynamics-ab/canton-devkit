@@ -27,6 +27,8 @@ type PlanInput struct {
 	Amount     string `json:"amount"`
 }
 
+var resolveTransferPlanEndpoint = ResolveLedgerEndpoint
+
 // RunTransferPlan computes the coin selection for a transfer without
 // submitting it. Dials, lists the sender's holdings of the instrument,
 // greedily selects smallest-first to cover the amount, and reports the
@@ -53,7 +55,7 @@ func RunTransferPlan(ctx context.Context, opts TransferOptions) (*TransferPlan, 
 		return nil, err
 	}
 	if opts.Endpoint == "" {
-		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
+		opts.Endpoint = resolveTransferPlanEndpoint(opts.Instance, opts.Role)
 	}
 	if opts.Endpoint == "" {
 		return nil, unresolvedLedgerEndpoint(opts.Instance, opts.Role)
