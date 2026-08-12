@@ -1015,17 +1015,35 @@ function TransferModal({
   const [autoAccept, setAutoAccept] = useState(true);
   const [busy, setBusy] = useState(false);
   const [plan, setPlan] = useState<import("../api").TransferPlan | null>(null);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [planPending, setPlanPending] = useState(false);
 
   useEffect(() => {
     if (!from || !amount) {
       setPlan(null);
+      setPlanError(null);
+      setPlanPending(false);
       return;
     }
+    setPlan(null);
+    setPlanError(null);
+    setPlanPending(true);
     let cancelled = false;
     const t = setTimeout(() => {
       planTransfer(instance, symbol, from, amount, role)
-        .then((p) => { if (!cancelled) setPlan(p); })
-        .catch(() => { if (!cancelled) setPlan(null); });
+        .then((p) => {
+          if (!cancelled) {
+            setPlan(p);
+            setPlanPending(false);
+          }
+        })
+        .catch((err: unknown) => {
+          if (!cancelled) {
+            setPlan(null);
+            setPlanError(err instanceof ApiError ? err.message : "could not compute transfer plan");
+            setPlanPending(false);
+          }
+        });
     }, 350);
     return () => { cancelled = true; clearTimeout(t); };
   }, [instance, symbol, from, amount, role]);
@@ -1056,6 +1074,7 @@ function TransferModal({
           <PartyPicker instance={instance} role={role} parties={parties} value={to} onChange={setTo} onPartiesChanged={onPartiesChanged} placeholder="Select recipient" />
         </Field>
         <Field label="Amount"><input value={amount} onChange={(e) => setAmount(e.target.value)} style={input} required /></Field>
+        {planError && <div role="alert" style={{ color: W.err, fontSize: fs.meta, overflowWrap: "anywhere" }}>{planError}</div>}
         <Field label="Reason (optional)"><input value={reason} onChange={(e) => setReason(e.target.value)} style={input} /></Field>
         <label style={{ display: "flex", alignItems: "flex-start", gap: 8, color: W.text2, fontSize: fs.meta, cursor: "pointer", minWidth: 0 }}>
           <input type="checkbox" checked={autoAccept} onChange={(e) => setAutoAccept(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
@@ -1121,7 +1140,7 @@ function TransferModal({
             variant="primary"
             size="md"
             type="submit"
-            disabled={busy || !from || !to || !amount || (plan ? !plan.sufficient : false)}
+            disabled={busy || planPending || !!planError || !from || !to || !amount || (plan ? !plan.sufficient : false)}
           >
             {busy ? "Submitting…" : "Transfer"}
           </Button>

@@ -2141,7 +2141,7 @@ export async function planTransfer(
   role = "app-provider",
 ): Promise<TransferPlan> {
   const params = new URLSearchParams({ instance, role, plan: "1" });
-  const resp = await fetch(
+  const body = await apiFetch<{ plan: TransferPlan }>(
     `/api/tokens/${encodeURIComponent(symbol)}/transfer?${params}`,
     {
       method: "POST",
@@ -2149,10 +2149,6 @@ export async function planTransfer(
       body: JSON.stringify({ from, to: from, amount }),
     },
   );
-  if (!resp.ok) {
-    throw new ApiError(resp.status, { code: "PLAN_FAILED", error: "could not compute transfer plan" });
-  }
-  const body = (await resp.json()) as { plan: TransferPlan };
   return body.plan;
 }
 

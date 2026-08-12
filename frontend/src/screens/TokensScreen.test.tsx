@@ -20,7 +20,7 @@ function stubFetch(
     source: "ledger" | "registry";
     rows: Array<{ party: string; amount: string }>;
   },
-  opts?: { summaryFails?: boolean },
+  opts?: { previewFails?: boolean; summaryFails?: boolean },
 ) {
   vi.stubGlobal(
     "fetch",
@@ -70,6 +70,12 @@ function stubFetch(
         });
       }
       if (url.includes("/transfer") && url.includes("plan=1")) {
+        if (opts?.previewFails) {
+          return json(
+            { code: "INVALID_REQUEST", error: 'amount "browser transfer" is not a valid decimal' },
+            400,
+          );
+        }
         return json({
           schema_version: 1,
           plan: {
@@ -282,6 +288,25 @@ describe("TokensScreen", () => {
       { timeout: 4000 },
     );
     expect(screen.queryByText(/change/i)).toBeInTheDocument();
+  });
+
+  it("shows a preview validation error and disables transfer", async () => {
+    const user = userEvent.setup();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }], undefined, { previewFails: true });
+    renderTokens();
+    await user.click(await screen.findByRole("button", { name: "Transfer" }, { timeout: 4000 }));
+    await user.selectOptions(
+      await screen.findByRole("combobox", { name: /from party/i }),
+      "bob::def",
+    );
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: /to party/i }),
+      "alice::abc",
+    );
+    await user.type(await screen.findByRole("textbox", { name: /amount/i }), "browser transfer");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("not a valid decimal");
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Transfer" })).toBeDisabled();
   });
 
   it("party picker lists registered aliases and offers inline create", async () => {

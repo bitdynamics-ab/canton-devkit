@@ -12,6 +12,7 @@ import {
   issueJwt,
   mintToken,
   openContractsStream,
+  planTransfer,
   setObservability,
   transferToken,
 } from "./api";
@@ -145,6 +146,33 @@ describe("apiFetch", () => {
       ),
     );
     await expect(apiFetch("/api/version")).resolves.toBeUndefined();
+  });
+});
+
+describe("planTransfer", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("preserves structured validation errors from the preview endpoint", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            code: "INVALID_REQUEST",
+            error: 'amount "browser transfer" is not a valid decimal',
+          }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    await expect(planTransfer("demo", "DEMO", "alice::abc", "browser transfer")).rejects.toMatchObject({
+      status: 400,
+      code: "INVALID_REQUEST",
+      message: 'amount "browser transfer" is not a valid decimal',
+    });
   });
 });
 
