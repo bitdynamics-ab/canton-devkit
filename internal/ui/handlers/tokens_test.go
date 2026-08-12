@@ -629,7 +629,7 @@ func TestHandleTokenTransfer_ReturnsInstructionID(t *testing.T) {
 
 func TestHandleTokenTransferPlan_InvalidAmountReturnsStructuredError(t *testing.T) {
 	prevEndpoint := liveLedgerEndpoint
-	liveLedgerEndpoint = func(string, string) string { return "localhost:1" }
+	liveLedgerEndpoint = func(string, string) string { return "" }
 	t.Cleanup(func() { liveLedgerEndpoint = prevEndpoint })
 
 	srv := tokensSrv(t)
@@ -654,6 +654,32 @@ func TestHandleTokenTransferPlan_InvalidAmountReturnsStructuredError(t *testing.
 	}
 	if !strings.Contains(got.Error, "not a valid decimal") {
 		t.Errorf("error = %q, want decimal validation error", got.Error)
+	}
+}
+
+func TestHandleTokenTransferPlan_ValidInputWithoutEndpointReturns503(t *testing.T) {
+	prevEndpoint := liveLedgerEndpoint
+	liveLedgerEndpoint = func(string, string) string { return "" }
+	t.Cleanup(func() { liveLedgerEndpoint = prevEndpoint })
+
+	srv := tokensSrv(t)
+	body := bytes.NewBufferString(`{"from":"alice::fingerprint","to":"bob::fingerprint","amount":"1"}`)
+	resp, err := http.Post(srv.URL+"/api/tokens/TOK/transfer?instance=demo&plan=1", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST transfer plan: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", resp.StatusCode)
+	}
+	var got struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.Code != "PARTICIPANT_PORT_NOT_RECORDED" {
+		t.Errorf("code = %q, want PARTICIPANT_PORT_NOT_RECORDED", got.Code)
 	}
 }
 

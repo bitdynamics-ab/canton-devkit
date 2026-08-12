@@ -47,6 +47,9 @@ func RunTransferPlan(ctx context.Context, opts TransferOptions) (*TransferPlan, 
 	if err := validateAmount("transfer", opts.Amount); err != nil {
 		return nil, err
 	}
+	if opts.Endpoint == "" {
+		return nil, unresolvedLedgerEndpoint(opts.Instance, opts.Role)
+	}
 	ref := instrumentRefOrRaw(opts.Instance, opts.Instrument)
 	conn := LedgerConn{
 		Endpoint: opts.Endpoint,

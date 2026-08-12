@@ -535,11 +535,6 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 	}
 	// plan=1 → dry-run coin selection (consume/change preview), no submit.
 	if r.URL.Query().Get("plan") == "1" {
-		if opts.Endpoint == "" {
-			writeErrorWithCode(w, http.StatusServiceUnavailable, "PARTICIPANT_PORT_NOT_RECORDED",
-				"no live ledger endpoint for instance "+instance)
-			return
-		}
 		plan, perr := token.RunTransferPlan(r.Context(), opts)
 		if perr != nil {
 			mapTokenError(w, perr, "transfer plan")
