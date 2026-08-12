@@ -629,7 +629,9 @@ func TestHandleTokenTransfer_ReturnsInstructionID(t *testing.T) {
 
 func TestHandleTokenTransferPlan_InvalidAmountReturnsStructuredError(t *testing.T) {
 	prevEndpoint := liveLedgerEndpoint
-	liveLedgerEndpoint = func(string, string) string { return "" }
+	liveLedgerEndpoint = func(string, string) string {
+		panic("invalid preview must not resolve an endpoint")
+	}
 	t.Cleanup(func() { liveLedgerEndpoint = prevEndpoint })
 
 	srv := tokensSrv(t)
@@ -658,9 +660,9 @@ func TestHandleTokenTransferPlan_InvalidAmountReturnsStructuredError(t *testing.
 }
 
 func TestHandleTokenTransferPlan_ValidInputWithoutEndpointReturns503(t *testing.T) {
-	prevEndpoint := liveLedgerEndpoint
-	liveLedgerEndpoint = func(string, string) string { return "" }
-	t.Cleanup(func() { liveLedgerEndpoint = prevEndpoint })
+	dir := t.TempDir()
+	t.Setenv("DPM_REGISTRY_DIR", dir)
+	t.Setenv("XDG_DATA_HOME", dir)
 
 	srv := tokensSrv(t)
 	body := bytes.NewBufferString(`{"from":"alice::fingerprint","to":"bob::fingerprint","amount":"1"}`)

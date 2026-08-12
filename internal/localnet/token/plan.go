@@ -34,18 +34,26 @@ type PlanInput struct {
 // (Sufficient=false + Shortfall) so the UI can render it inline.
 func RunTransferPlan(ctx context.Context, opts TransferOptions) (*TransferPlan, error) {
 	if err := requireFields("transfer plan", "instance", opts.Instance, "instrument", opts.Instrument,
-		"sender party", opts.From, "amount", opts.Amount); err != nil {
+		"sender party", opts.From, "recipient party", opts.To, "amount", opts.Amount); err != nil {
 		return nil, err
 	}
 	if opts.Role == "" {
 		opts.Role = DefaultRole
 	}
-	opts.From = ResolveAlias(aliasMapForInstance(opts.Instance), opts.From)
+	aliases := aliasMapForInstance(opts.Instance)
+	opts.From = ResolveAlias(aliases, opts.From)
+	opts.To = ResolveAlias(aliases, opts.To)
 	if err := validatePartyID("--from", opts.From); err != nil {
+		return nil, err
+	}
+	if err := validatePartyID("--to", opts.To); err != nil {
 		return nil, err
 	}
 	if err := validateAmount("transfer", opts.Amount); err != nil {
 		return nil, err
+	}
+	if opts.Endpoint == "" {
+		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
 	}
 	if opts.Endpoint == "" {
 		return nil, unresolvedLedgerEndpoint(opts.Instance, opts.Role)
