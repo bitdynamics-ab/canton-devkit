@@ -531,15 +531,9 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 		Amount:     body.Amount,
 		Role:       role,
 		Insecure:   true,
-		Endpoint:   liveLedgerEndpoint(instance, role),
 	}
 	// plan=1 → dry-run coin selection (consume/change preview), no submit.
 	if r.URL.Query().Get("plan") == "1" {
-		if opts.Endpoint == "" {
-			writeErrorWithCode(w, http.StatusServiceUnavailable, "PARTICIPANT_PORT_NOT_RECORDED",
-				"no live ledger endpoint for instance "+instance)
-			return
-		}
 		plan, perr := token.RunTransferPlan(r.Context(), opts)
 		if perr != nil {
 			mapTokenError(w, perr, "transfer plan")
@@ -551,7 +545,9 @@ func handleTokenTransfer(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	// Live-submit: opts already carries the resolved endpoint/role.
+	// Live-submit resolves the endpoint after the preview branch so preview
+	// validation never touches registry/endpoint state first.
+	opts.Endpoint = liveLedgerEndpoint(instance, role)
 	opts.NoWait = body.NoWait
 	opts.AutoAccept = body.AutoAccept
 	// Atomic batches transfer+accept into one BatchingUtilityV2
