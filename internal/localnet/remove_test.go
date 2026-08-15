@@ -3,6 +3,7 @@ package localnet
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -74,6 +75,89 @@ func TestRunRemove_RunningRefusedWithoutForce(t *testing.T) {
 	// Registry must be PRESERVED — we refused.
 	if _, err := registry.Read("live-one"); err != nil {
 		t.Errorf("running instance must survive a refused remove, got err=%v", err)
+	}
+}
+
+func TestRunRemove_RunningConfirmedTearsDownAndDeletes(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstanceStatus(t, "live-yes", registry.StatusRunning)
+
+	asked := ""
+	downCalled := false
+	var out, errBuf bytes.Buffer
+	code := RunRemove(context.Background(), &out, &errBuf, &RemoveOptions{
+		Name: "live-yes",
+		ConfirmStop: func(name string) (bool, error) {
+			asked = name
+			return true, nil
+		},
+		NewRunner: func(string, []string, []string, []string, string, io.Writer) composeDowner {
+			return removeVolumesCapture(func(_ context.Context, removeVolumes bool) error {
+				downCalled = true
+				if !removeVolumes {
+					t.Error("confirmed remove must pass removeVolumes=true")
+				}
+				return nil
+			})
+		},
+	})
+	if code != ExitSuccess {
+		t.Fatalf("RunRemove = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
+	}
+	if asked != "live-yes" {
+		t.Errorf("ConfirmStop asked about %q, want %q", asked, "live-yes")
+	}
+	if !downCalled {
+		t.Error("a confirmed remove must tear the running instance down")
+	}
+	if _, err := registry.Read("live-yes"); err != registry.ErrNotFound {
+		t.Errorf("registry entry should be gone after a confirmed remove, got err=%v", err)
+	}
+}
+
+func TestRunRemove_RunningDeclinedKeepsInstance(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstanceStatus(t, "live-no", registry.StatusRunning)
+
+	var out, errBuf bytes.Buffer
+	code := RunRemove(context.Background(), &out, &errBuf, &RemoveOptions{
+		Name:        "live-no",
+		ConfirmStop: func(string) (bool, error) { return false, nil },
+		NewRunner: func(string, []string, []string, []string, string, io.Writer) composeDowner {
+			return downerFn(func(context.Context) error {
+				t.Error("declined remove must not tear anything down")
+				return nil
+			})
+		},
+	})
+	if code != ExitUserError {
+		t.Fatalf("RunRemove = %d, want ExitUserError", code)
+	}
+	if _, err := registry.Read("live-no"); err != nil {
+		t.Errorf("declined remove must preserve the instance, got err=%v", err)
+	}
+}
+
+// A ConfirmStop that cannot ask (non-interactive stdin) surfaces its
+// error and leaves the instance alone.
+func TestRunRemove_ConfirmErrorKeepsInstance(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstanceStatus(t, "live-err", registry.StatusRunning)
+
+	var out, errBuf bytes.Buffer
+	code := RunRemove(context.Background(), &out, &errBuf, &RemoveOptions{
+		Name:        "live-err",
+		ConfirmStop: func(string) (bool, error) { return false, errors.New("stdin is not a terminal") },
+		NewRunner:   nilDowner(),
+	})
+	if code != ExitUserError {
+		t.Fatalf("RunRemove = %d, want ExitUserError", code)
+	}
+	if !bytes.Contains(errBuf.Bytes(), []byte("stdin is not a terminal")) {
+		t.Errorf("confirmation error should be surfaced; got %q", errBuf.String())
+	}
+	if _, err := registry.Read("live-err"); err != nil {
+		t.Errorf("unconfirmed remove must preserve the instance, got err=%v", err)
 	}
 }
 
@@ -206,6 +290,31 @@ func TestRunRemove_DryRunChangesNothing(t *testing.T) {
 	}
 	if !bytes.Contains(out.Bytes(), []byte("would remove")) {
 		t.Errorf("dry-run output should describe the plan; got %q", out.String())
+	}
+}
+
+func TestRunRemove_DryRunRunningReportsPromptWithoutAsking(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstanceStatus(t, "dry-live", registry.StatusRunning)
+
+	var out, errBuf bytes.Buffer
+	code := RunRemove(context.Background(), &out, &errBuf, &RemoveOptions{
+		Name:   "dry-live",
+		DryRun: true,
+		ConfirmStop: func(string) (bool, error) {
+			t.Error("dry-run must not ask for confirmation")
+			return false, nil
+		},
+		NewRunner: nilDowner(),
+	})
+	if code != ExitSuccess {
+		t.Fatalf("RunRemove = %d, want ExitSuccess; stderr=%q", code, errBuf.String())
+	}
+	if !bytes.Contains(out.Bytes(), []byte("would ask to tear it down first")) {
+		t.Errorf("dry-run should say the running instance would be confirmed; got %q", out.String())
+	}
+	if _, err := registry.Read("dry-live"); err != nil {
+		t.Errorf("dry-run must not remove the instance, got err=%v", err)
 	}
 }
 

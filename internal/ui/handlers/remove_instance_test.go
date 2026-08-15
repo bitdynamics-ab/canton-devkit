@@ -37,7 +37,7 @@ func TestRemoveInstance_DelegatesToLocalnetRemove(t *testing.T) {
 			t.Errorf("remove name = %q, want old-test", opts.Name)
 		}
 		if opts.Force {
-			t.Error("Web UI remove must not force-delete a running instance")
+			t.Error("remove must not force unless the caller asked for it")
 		}
 		return localnet.ExitSuccess
 	})
@@ -57,6 +57,37 @@ func TestRemoveInstance_DelegatesToLocalnetRemove(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("DELETE did not delegate to localnet.RunRemove")
+	}
+}
+
+// ?force=true is the wire form of the CLI's confirmation prompt: the Web UI
+// sends it once the user accepts the remove dialog, and the running instance
+// is then torn down and removed in one step.
+func TestRemoveInstance_RunningInstanceRemovedWithForce(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedInstance(t, "live-force", "0.6.12", nil, registry.StatusRunning)
+
+	forced := false
+	srv := serveRemoveHandler(t, func(_ context.Context, _, _ io.Writer, opts *localnet.RemoveOptions) int {
+		forced = opts.Force
+		return localnet.ExitSuccess
+	})
+
+	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/api/instances/live-force?force=true", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", resp.StatusCode)
+	}
+	if !forced {
+		t.Error("?force=true must propagate to RemoveOptions.Force")
 	}
 }
 

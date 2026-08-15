@@ -326,12 +326,16 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
           })
         }
         onRemove={() =>
-          act(() => removeInstance(name), {
+          act(() => removeInstance(name, running), {
             confirm: {
-              title: "Permanently remove instance?",
-              body: `Deletes ${name}'s containers, Docker volumes, ledger data, and registry state. This cannot be undone.`,
-              detail: `dpm localnet remove --name ${name}`,
-              confirmLabel: "Remove permanently",
+              title: running ? "Stop and permanently remove instance?" : "Permanently remove instance?",
+              body: running
+                ? `Stops ${name}, then deletes its containers, Docker volumes, ledger data, and registry state. This cannot be undone.`
+                : `Deletes ${name}'s containers, Docker volumes, ledger data, and registry state. This cannot be undone.`,
+              detail: running
+                ? `dpm localnet remove --name ${name} --force`
+                : `dpm localnet remove --name ${name}`,
+              confirmLabel: running ? "Stop and remove" : "Remove permanently",
               danger: true,
             },
             refetch: false,
@@ -624,6 +628,15 @@ function ActionBar({
           title="Tear down (docker compose down) — remove containers and networks. Data volumes preserved; Start will recreate them."
         >
           {busy ? "…" : "Down"}
+        </Button>
+        <Button
+          variant="ghost"
+          icon={<IcX />}
+          onClick={onRemove}
+          disabled={busy}
+          title="Stop the instance, then permanently remove its containers, Docker volumes, ledger data, and registry state."
+        >
+          {busy ? "Removing…" : "Remove instance"}
         </Button>
       </div>
     );

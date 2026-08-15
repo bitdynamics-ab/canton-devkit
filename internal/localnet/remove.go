@@ -21,10 +21,20 @@ type RemoveOptions struct {
 	Name string
 	// All removes every registered instance (walks the index).
 	All bool
-	// Force allows removing a RUNNING instance — remove tears it
-	// down (compose down --volumes) first. Without Force, a running
-	// instance is refused with a "run down first" hint.
+	// Force allows removing a RUNNING instance without asking — remove
+	// tears it down (compose down --volumes) first.
 	Force bool
+	// ConfirmStop is asked, per instance, whether a RUNNING instance
+	// may be torn down and removed. It is only consulted when Force is
+	// false. Returning true proceeds exactly as Force would; false
+	// leaves the instance untouched. A non-nil error means confirmation
+	// could not be obtained (e.g. non-interactive stdin) and is
+	// surfaced to the user.
+	//
+	// A nil ConfirmStop means the caller cannot prompt: a running
+	// instance is then refused with a "run down first, or --force" hint.
+	// The Web UI's DELETE handler relies on that refusal.
+	ConfirmStop func(name string) (bool, error)
 	// DryRun prints what WOULD be removed without touching anything.
 	DryRun bool
 
@@ -44,16 +54,16 @@ type RemoveOptions struct {
 // orphaned or corrupted instance state.
 //
 // Safety rules:
-//   - A RUNNING instance is refused unless --force (which tears it
-//     down first). This prevents a `remove` from silently nuking a
-//     live demo.
+//   - A RUNNING instance is never torn down silently: with --force it
+//     is, otherwise ConfirmStop must approve it. Callers that cannot
+//     prompt (nil ConfirmStop) refuse it outright.
 //   - --dry-run prints the plan and changes nothing.
 //   - Orphaned entries (index row present, state.json gone) are
 //     scrubbed idempotently.
 //
 // Exit code: ExitSuccess when every targeted instance was removed
 // (or nothing matched). ExitUserError when a running instance was
-// refused without --force. ExitRuntimeFailure on a teardown/delete
+// declined or refused. ExitRuntimeFailure on a teardown/delete
 // error.
 func RunRemove(ctx context.Context, out io.Writer, errw io.Writer, opts *RemoveOptions) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
@@ -174,11 +184,19 @@ func removeOne(ctx context.Context, out io.Writer, errw io.Writer, opts *RemoveO
 
 	running := state.Status == registry.StatusRunning
 	if running && !opts.Force {
-		_, _ = fmt.Fprintf(errw,
-			"%s is running — refusing to remove. Run `localnet down %s` first, "+
-				"or pass --force to tear it down and remove in one step.\n",
-			name, name)
-		return ExitUserError
+		if opts.ConfirmStop == nil {
+			_, _ = fmt.Fprintf(errw, "%s\n", runningRefusedMessage(name))
+			return ExitUserError
+		}
+		ok, cerr := opts.ConfirmStop(name)
+		if cerr != nil {
+			_, _ = fmt.Fprintf(errw, "%s: %s\n", name, cerr)
+			return ExitUserError
+		}
+		if !ok {
+			_, _ = fmt.Fprintf(out, "Left %q running — nothing removed.\n", name)
+			return ExitUserError
+		}
 	}
 
 	// Best-effort teardown of any lingering docker resources. Even a
@@ -256,6 +274,13 @@ func removeOne(ctx context.Context, out io.Writer, errw io.Writer, opts *RemoveO
 	return ExitSuccess
 }
 
+func runningRefusedMessage(name string) string {
+	return fmt.Sprintf(
+		"%s is running — refusing to remove. Run `localnet down %s` first, "+
+			"or pass --force to tear it down and remove in one step.",
+		name, name)
+}
+
 func removeIndexHasEntry(name string) (bool, error) {
 	idx, err := registry.ReadIndex()
 	if err != nil {
@@ -286,17 +311,17 @@ func dryRunRemoveOne(out io.Writer, errw io.Writer, opts *RemoveOptions, name st
 	}
 
 	running := state.Status == registry.StatusRunning
-	if running && !opts.Force {
-		_, _ = fmt.Fprintf(errw,
-			"%s is running — refusing to remove. Run `localnet down %s` first, "+
-				"or pass --force to tear it down and remove in one step.\n",
-			name, name)
+	if running && !opts.Force && opts.ConfirmStop == nil {
+		_, _ = fmt.Fprintf(errw, "%s\n", runningRefusedMessage(name))
 		return ExitUserError
 	}
 
 	extra := ""
-	if running {
-		extra = " (running — would be torn down via --force)"
+	switch {
+	case running && opts.Force:
+		extra = " (running — would be torn down first)"
+	case running:
+		extra = " (running — would ask to tear it down first)"
 	}
 	_, _ = fmt.Fprintf(out,
 		"would remove %q%s: state.json + data dir %s + docker resources for project %s\n",

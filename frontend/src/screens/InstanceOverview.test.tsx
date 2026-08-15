@@ -247,6 +247,27 @@ describe("InstanceOverview — header + actions", () => {
       ).toBe(true),
     );
   });
+
+  it("Remove on a running instance offers to stop it and forces the DELETE", async () => {
+    const { calls } = setupFetch();
+    render(
+      <>
+        <InstanceOverview name="demo" statusHint="running" />
+        <ConfirmHost />
+      </>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /^Remove instance$/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Stops demo, then deletes/i)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /^stop and remove$/i }));
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (c) => c.url.endsWith("/api/instances/demo?force=true") && c.method === "DELETE",
+        ),
+      ).toBe(true),
+    );
+  });
 });
 
 describe("InstanceOverview — monitoring gate", () => {
