@@ -75,6 +75,23 @@ func IsTerminal(w io.Writer) bool {
 	if !ok {
 		return false
 	}
+	return isTTY(f)
+}
+
+// CanPrompt reports whether r can answer an interactive prompt. A
+// non-*os.File reader (test buffer, in-process pipe) is assumed to be
+// scripted and answerable; a real file — including a character device
+// like /dev/null, which no TTY check based on os.ModeCharDevice alone
+// would catch — is not.
+func CanPrompt(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	if !ok {
+		return true
+	}
+	return isTTY(f)
+}
+
+func isTTY(f *os.File) bool {
 	return isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())
 }
 

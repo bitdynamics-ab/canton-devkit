@@ -125,7 +125,16 @@ canton-devkit localnet remove --all
 sudo rm /usr/local/bin/canton-devkit
 ```
 
-`remove` (alias: `clean`) refuses to touch a running instance unless you
-pass `--force` (which tears it down first). Use `--dry-run` to preview.
+`remove` (alias: `clean`) asks before it touches a running instance:
+
+```
+demo is running. Removing it stops the instance and deletes its containers,
+volumes, ledger data, and registry state. This cannot be undone.
+Stop and remove demo? [y/N]:
+```
+
+Answer `y` to stop and remove it in one step; anything else leaves the
+instance alone. Pass `--force` to skip the prompt — required when stdin
+is not a terminal, such as in CI. Use `--dry-run` to preview.
 
 For common questions, see the [FAQ](faq.md).

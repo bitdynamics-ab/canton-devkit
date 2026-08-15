@@ -1398,11 +1398,14 @@ async function postInstanceAction(name: string, action: string): Promise<void> {
 // restart; when state.json is already gone, only the orphan index row can be
 // scrubbed because no compose-project identifier remains.
 //
-// Backend refuses on `running` (409 INSTANCE_RUNNING — wants the
-// real `down` flow) or while a job is actively creating (409
-// INSTANCE_CREATING — caller should cancel /up first).
-export async function removeInstance(name: string): Promise<void> {
-  const resp = await fetch(`/api/instances/${encodeURIComponent(name)}`, {
+// A running instance is refused (409 INSTANCE_RUNNING) unless `force` is
+// set — the wire form of the CLI's confirmation prompt, which callers pass
+// only once the user has accepted the remove dialog. A job that is actively
+// creating is always refused (409 INSTANCE_CREATING — caller should cancel
+// /up first).
+export async function removeInstance(name: string, force = false): Promise<void> {
+  const qs = force ? "?force=true" : "";
+  const resp = await fetch(`/api/instances/${encodeURIComponent(name)}${qs}`, {
     method: "DELETE",
   });
   if (!resp.ok && resp.status !== 404) {

@@ -13,6 +13,7 @@ import {
   mintToken,
   openContractsStream,
   planTransfer,
+  removeInstance,
   setObservability,
   transferToken,
 } from "./api";
@@ -224,6 +225,31 @@ describe("issueJwt", () => {
     // %2F = '/', so '..%2Fetc%2Fpasswd' — never reaches the
     // server as a literal slash that could be mis-routed.
     expect(url).toBe("/api/instances/..%2Fetc%2Fpasswd/jwt");
+  });
+});
+
+describe("removeInstance", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("omits ?force by default so the backend still guards a running instance", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await removeInstance("demo");
+
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("/api/instances/demo");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("sends ?force=true once the user has confirmed the teardown", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await removeInstance("demo", true);
+
+    const [url] = fetchSpy.mock.calls[0];
+    expect(url).toBe("/api/instances/demo?force=true");
   });
 });
 

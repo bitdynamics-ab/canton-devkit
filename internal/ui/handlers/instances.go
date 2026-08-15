@@ -1669,8 +1669,12 @@ type runRemoveFunc func(context.Context, io.Writer, io.Writer, *localnet.RemoveO
 //
 // Orphaned index entries with no state.json are still scrubbed. Without state
 // there is no trustworthy compose-project identifier, so that repair path can
-// only remove the index entry. Running instances and active create jobs are
-// refused; callers must bring them down or cancel creation first.
+// only remove the index entry. Active create jobs are refused; the caller must
+// cancel creation first.
+//
+// A RUNNING instance requires `?force=true` — the wire form of the CLI's
+// confirmation prompt, set by the Web UI only once the user accepts the
+// remove dialog, so an unconfirmed click cannot destroy a live ledger.
 func handleRemoveInstance(hub *stream.Hub) http.HandlerFunc {
 	return handleRemoveInstanceWithRunner(hub, localnet.RunRemove)
 }
@@ -1734,13 +1738,17 @@ func handleRemoveInstanceWithRunner(hub *stream.Hub, runRemove runRemoveFunc) ht
 			}
 		}
 
-		// Block on `running` — DELETE intentionally mirrors CLI remove without
-		// --force so an accidental click cannot destroy a live ledger.
-		if state != nil && state.Status == registry.StatusRunning {
+		force := r.URL.Query().Get("force") == "true"
+
+		// Block on `running` unless the caller confirmed via ?force=true —
+		// the CLI's prompt equivalent, so an accidental unconfirmed request
+		// cannot destroy a live ledger.
+		if state != nil && state.Status == registry.StatusRunning && !force {
 			writeErrorWithCode(w, http.StatusConflict,
 				"INSTANCE_RUNNING",
 				"instance "+name+" is running — stop it first",
-				"run `dpm localnet down "+name+"` from a terminal")
+				"retry with ?force=true to stop and remove it, "+
+					"or run `dpm localnet down "+name+"` from a terminal")
 			return
 		}
 
@@ -1748,7 +1756,7 @@ func handleRemoveInstanceWithRunner(hub *stream.Hub, runRemove runRemoveFunc) ht
 		defer cancel()
 
 		var outBuf, errBuf bytes.Buffer
-		exit := runRemove(ctx, &outBuf, &errBuf, &localnet.RemoveOptions{Name: name})
+		exit := runRemove(ctx, &outBuf, &errBuf, &localnet.RemoveOptions{Name: name, Force: force})
 		if exit == localnet.ExitSuccess {
 			hub.ClearBuffer(progress.TopicFor(name))
 			log.Printf("remove instance %q via DELETE: ok", name)
