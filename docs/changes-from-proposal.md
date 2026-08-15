@@ -15,6 +15,7 @@ Every deviation listed here is **intentional**, not an oversight or implementati
   - [Machine-readable output flag](#machine-readable-output-flag)
   - [Command aliases](#command-aliases)
 - [`localnet remove` (renamed from `clean`)](#localnet-remove-renamed-from-clean)
+  - [Running instances are confirmed, not refused](#running-instances-are-confirmed-not-refused)
 - [`localnet list`](#localnet-list)
   - [`--all` flag removed](#--all-flag-removed)
 - [`localnet up`](#localnet-up)
@@ -105,6 +106,14 @@ The following aliases are not in the proposal but are shipped:
 **Shipped:** the canonical command is `dpm localnet remove`, with `clean` retained as an alias. Both forms are equivalent: `dpm localnet remove dev` and `dpm localnet clean dev` do the same thing. The instance name is now a **positional argument** (`dpm localnet remove <name>`), matching `up`/`down`/`stop`/`start`; `--name <name>` is still accepted for backward compatibility, but passing both the positional and `--name` is an error. `--all` remains mutually exclusive with naming a single instance. Other flags are unchanged (`--force`, `--dry-run`).
 
 **Why:** `remove` names the action plainly — it removes the instance's containers, volumes, and registry state — and reads unambiguously next to the other lifecycle verbs (`down`, `stop`, `remove`), where "clean" could be mistaken for a non-destructive tidy-up. The `clean` alias is kept so existing scripts, CI pipelines, and muscle memory continue to work without a breaking change. Accepting the name positionally aligns `remove` with the rest of the lifecycle verbs, which already take `<name>` positionally.
+
+### Running instances are confirmed, not refused
+
+**Proposal said:** —
+
+**Shipped:** a running instance no longer ends the command with `refusing to remove`. On an interactive terminal `remove` prints what will be destroyed and asks `Stop and remove <name>? [y/N]:`; answering `y` tears the instance down and removes it in one step, anything else leaves it untouched and exits non-zero. `--force` skips the prompt and is **required** when stdin is not a terminal — a piped or redirected stdin fails with a `--force` hint rather than blocking on a prompt nobody can answer. `--dry-run` never prompts; it reports that the running instance would be confirmed first. The Web UI equivalent is `DELETE /api/instances/{name}?force=true`, which the remove dialog sends only after the user accepts it; an unconfirmed DELETE on a running instance still returns 409.
+
+**Why:** The refusal made the common case — "throw this instance away" — a two-command chore (`down` then `remove`) and reported `Removed 0 of 1 instance(s)` for what the user plainly intended. A confirmation keeps the protection against destroying a live ledger by accident while letting one command finish the job. Non-interactive callers keep the old strictness, so CI cannot destroy a running instance without saying so explicitly.
 
 ---
 
