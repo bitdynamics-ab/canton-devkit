@@ -46,6 +46,10 @@ export default defineConfig({
 					items: [{ slug: 'getting-started' }],
 				},
 				{
+					label: 'Case studies',
+					items: [{ slug: 'case-studies/cip0112-token', label: 'Issue a CIP-0112 token' }],
+				},
+				{
 					label: 'Guides',
 					items: [
 						{ slug: 'guides/localnet-lifecycle' },
