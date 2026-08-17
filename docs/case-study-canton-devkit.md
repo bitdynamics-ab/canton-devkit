@@ -1,4 +1,4 @@
-# Boot Canton locally and issue a CIP-0112 token with Canton DevKit
+# Running a local Canton network with Canton DevKit
 
 *A case study on Canton DevKit — a CLI and Web UI for running a local Canton + Splice network and working with Canton Token Standard tokens. Built by Bit Dynamics under a Canton Dev Fund grant.*
 

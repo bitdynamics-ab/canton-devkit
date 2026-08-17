@@ -47,7 +47,7 @@ export default defineConfig({
 				},
 				{
 					label: 'Case studies',
-					items: [{ slug: 'case-studies/cip0112-token', label: 'Issue a CIP-0112 token' }],
+					items: [{ slug: 'case-studies/running-canton-locally', label: 'Running Canton locally' }],
 				},
 				{
 					label: 'Guides',
