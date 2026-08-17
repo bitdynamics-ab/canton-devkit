@@ -298,11 +298,12 @@ render_bar_chart() {
 
 # --- View 1: per-version total downloads over time ------------------------
 by_version_data="$(printf '%s' "${model}" | jq '
-  { labels: [ .releases[].tag ],
-    series: [ { name: "Total downloads",
-                color: "#2563eb",
-                values: [ .releases[].total ] } ]
-  }
+  (.releases | map(select(.total > 0))) as $releases
+  | { labels: [ $releases[].tag ],
+      series: [ { name: "Total downloads",
+                  color: "#2563eb",
+                  values: [ $releases[].total ] } ]
+    }
 ')"
 render_line_chart "${OUT_DIR}/release-downloads-by-version.svg" \
   "Total downloads, by release" "${by_version_data}"
