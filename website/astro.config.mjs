@@ -46,6 +46,10 @@ export default defineConfig({
 					items: [{ slug: 'getting-started' }],
 				},
 				{
+					label: 'Case studies',
+					items: [{ slug: 'case-studies/running-canton-locally', label: 'Running Canton locally' }],
+				},
+				{
 					label: 'Guides',
 					items: [
 						{ slug: 'guides/localnet-lifecycle' },
