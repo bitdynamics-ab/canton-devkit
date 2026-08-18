@@ -75,7 +75,7 @@ canton-devkit localnet token party new alice --instance $INST --endpoint $EP --r
 canton-devkit localnet token party new bob   --instance $INST --endpoint $EP --role app-user
 canton-devkit localnet token party ls        --instance $INST --endpoint $EP
 
-# 2. Create your own native V2 instrument (auto-uploads the test-token DARs)
+# 2. Create your own native V2 instrument (auto-uploads and vets the test-token DARs on every participant)
 canton-devkit localnet token create --instance $INST --endpoint $EP --non-interactive \
   --name "Retail Token" --symbol RTK --decimals 6 --initial-supply 1000000 --issuer alice
 
@@ -108,7 +108,7 @@ Add `--format json` to any read command (`balance`, `balances`,
 
 | Command | What it does |
 |---|---|
-| `token create` | Create an on-ledger V2 instrument (TokenRules) for an issuer. Auto-uploads the bundled `splice-test-token-v2` DARs if not vetted. `--non-interactive` for CI; otherwise a wizard. |
+| `token create` | Create an on-ledger V2 instrument (TokenRules) for an issuer. Auto-uploads and vets the bundled `splice-test-token-v2` DARs on every LocalNet participant (`sv`, `app-provider`, `app-user`) if not already vetted. `--non-interactive` for CI; otherwise a wizard. |
 | `token demo` | One-command demo: allocate an issuer, create a V2 instrument on-ledger, mint the initial supply, and fund a holder so the token is transferable immediately (`--symbol DEMO`, `--supply 1000000` defaults). Same orchestration as the UI's Launch-demo-token button. |
 | `token mint` | Mint new supply to a party (`TokenRules_OfferMint`, controller = issuer). Native CIP-0112 v2 instruments only. |
 | `token transfer` | Sender-initiated transfer. `--auto-accept` chains the receiver-side accept (LocalNet default convenience); `--no-wait` returns the instruction id to hand off. |

@@ -23,8 +23,9 @@ import (
 
 // ensureTokenRules creates the issuer's TokenRules contract if it doesn't
 // already exist. The issuer party (opts.Issuer) is the admin/signatory;
-// the auto-grant on dial covers the rights.
-func ensureTokenRules(opts CreateOptions) error {
+// the auto-grant on dial covers the rights. Returns the roles the
+// test-token DARs were vetted on (sv, app-provider, app-user).
+func ensureTokenRules(out io.Writer, opts CreateOptions) ([]string, error) {
 	ctx := context.Background()
 	conn := LedgerConn{
 		Endpoint: opts.Endpoint,
@@ -34,7 +35,7 @@ func ensureTokenRules(opts CreateOptions) error {
 	}
 	client, cleanup, err := dialLedger(ctx, conn)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer cleanup()
 
@@ -47,30 +48,34 @@ func ensureTokenRules(opts CreateOptions) error {
 		_ = client.GrantUserActAndReadAs(ctx, exerciseUserID, []string{admin})
 	}
 
-	// Bundle the test-token DARs before any package-name-scoped query:
-	// findTokenRules filters by the #splice-test-token-v2 package name,
-	// which the participant rejects with PACKAGE_NAMES_NOT_FOUND until the
-	// package is vetted. No-op when already vetted.
-	if err := ensureTokenDARs(ctx, client, opts.Instance, nil); err != nil {
-		return err
+	// Bundle the test-token DARs on every LocalNet participant before
+	// any package-name-scoped query: findTokenRules filters by the
+	// #splice-test-token-v2 package name, which the participant rejects
+	// with PACKAGE_NAMES_NOT_FOUND until the package is vetted. No-op
+	// when already vetted on all three roles.
+	vetted, err := ensureTokenDARs(ctx, client, opts, out)
+	if err != nil {
+		return nil, err
 	}
 
 	existing, err := findTokenRules(ctx, client, admin)
 	if err != nil {
-		return fmt.Errorf("look up existing TokenRules: %w", err)
+		return vetted, fmt.Errorf("look up existing TokenRules: %w", err)
 	}
 	if existing != "" {
-		return nil
+		return vetted, nil
 	}
 	_, err = createTokenRules(ctx, client, admin)
-	return err
+	return vetted, err
 }
 
 // runMintLive performs an asset-specific mint: find the issuer's
 // TokenRules, exercise TokenRules_OfferMint (controller = admin), then
 // accept the resulting TokenTransferOffer so the holding lands in the
-// receiver's account. The auto-grant covers acting as both admin and
-// receiver (LocalNet hosts them on the same participant).
+// receiver's account. The auto-grant covers acting as admin on the
+// create participant; the receiver is often hosted on another
+// LocalNet participant (app-user), which is why token create vets the
+// test-token DARs on every participant.
 //
 // Not batched (unlike transfer+accept): TokenRules_OfferMint is an
 // asset-specific choice and BatchingUtilityV2's TokenStandardAction set

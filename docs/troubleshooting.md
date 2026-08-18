@@ -57,14 +57,18 @@ ready until the Splice app fully boots.
 ## Token: "package not vetted" / manual DAR upload
 
 **Symptom:** `token create` errors that `splice-test-token-v2` isn't
-vetted.
+vetted, or mint/transfer to a party on another participant fails
+because that participant never received the DAR.
 
-**Fix:** `token create --instance <i> --endpoint <host:port>`
-auto-fetches and uploads the test-token + burn-mint DARs (pinned to
-the instance's Splice commit). If you're offline or the fetch fails,
-upload them manually with
+**Fix:** `token create --instance <i>` auto-fetches the test-token DARs
+(pinned to the instance's Splice commit), caches them under
+`~/.canton-devkit/localnet/.dar-cache/<commit>/`, and uploads plus vets
+them on every LocalNet participant (`sv`, `app-provider`, `app-user`).
+If you're offline or the fetch fails, upload the cached file (or a
+manually downloaded DAR) with
 `localnet dar upload <dar> --instance <i> --all-participants` and
-retry.
+retry. Instances created before this fan-out can re-run `token create`
+or use that manual upload.
 
 ## Token: mint/burn disabled in the Web UI
 
