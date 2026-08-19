@@ -39,6 +39,16 @@ var dialLedgerFn = func(ctx context.Context, conn LedgerConn) (LedgerClient, fun
 	return dialLedger(ctx, conn)
 }
 
+// dialLedgerConcreteFn is the seam for mint/transfer accept paths that open
+// a *ledger.Client. Tests replace it to assert which participant the accept
+// step dials without needing a live gRPC server.
+var dialLedgerConcreteFn = dialLedger
+
+// dialSenderFn is the seam for the initial (sender-side) dial in runMintLive
+// and runTransferLiveOnLedger. Tests replace it with a stub that returns a
+// pre-built no-op client so execution reaches the accept-side dial.
+var dialSenderFn = dialLedger
+
 // LedgerConn captures everything a live ledger call needs: the gRPC
 // endpoint and the Bearer JWT the participant accepts.
 type LedgerConn struct {
@@ -54,6 +64,25 @@ type LedgerConn struct {
 	// per-role audience the participant expects.
 	Instance string
 	Role     string // "sv" / "app-provider" / "app-user"
+}
+
+// resolveAcceptConn returns the LedgerConn that the accept step should use.
+// When the receiver party lives on a different role than the sender, the
+// conn is re-pointed at the receiver's participant; otherwise the sender's
+// conn is returned unchanged so the same connection is reused.
+func resolveAcceptConn(conn LedgerConn, instance, receiverPartyID string) LedgerConn {
+	role := receiverRole(instance, receiverPartyID)
+	if role == "" || role == conn.Role {
+		return conn
+	}
+	ep := ResolveLedgerEndpoint(instance, role)
+	if ep == "" {
+		return conn
+	}
+	acceptConn := conn
+	acceptConn.Endpoint = ep
+	acceptConn.Role = role
+	return acceptConn
 }
 
 // ResolveLedgerEndpoint returns the role's participant ledger gRPC endpoint

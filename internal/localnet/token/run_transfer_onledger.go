@@ -68,7 +68,7 @@ func runTransferLiveOnLedger(ctx context.Context, out io.Writer, opts TransferOp
 		Instance: opts.Instance,
 		Role:     opts.Role,
 	}
-	client, cleanup, err := dialLedger(ctx, conn)
+	client, cleanup, err := dialSenderFn(ctx, conn)
 	if err != nil {
 		return "", err
 	}
@@ -171,10 +171,25 @@ func runTransferLiveOnLedger(ctx context.Context, out io.Writer, opts TransferOp
 	// receiver). The self-custodial receiver needs no AccountConfig of its
 	// own, but the accept still references the sender's config.
 	if opts.AutoAccept && !opts.NoWait && instructionID != "" {
+		// Accept on the receiver's own participant; the sender's node
+		// cannot act as a party it doesn't host.
+		acceptClient := client
+		var acceptCleanup func()
+		senderConn := LedgerConn{
+			Endpoint: opts.Endpoint, Insecure: opts.Insecure,
+			Instance: opts.Instance, Role: opts.Role,
+		}
+		if aconn := resolveAcceptConn(senderConn, opts.Instance, opts.To); aconn.Role != opts.Role {
+			acceptClient, acceptCleanup, err = dialLedgerConcreteFn(ctx, aconn)
+			if err != nil {
+				return instructionID, fmt.Errorf("dial receiver participant for accept: %w", err)
+			}
+			defer acceptCleanup()
+		}
 		receiverParties := accountPartiesOf(admin, opts.To, "")
 		acceptActAs := dedupParties(append(append(append([]string{}, senderParties...), receiverParties...), admin))
 		if err := acceptTestTokenTransfer(
-			ctx, client, instructionID, acceptActAs, receiverParties, tokenRulesCID, accountConfigCIDs,
+			ctx, acceptClient, instructionID, acceptActAs, receiverParties, tokenRulesCID, accountConfigCIDs,
 		); err != nil {
 			return instructionID, fmt.Errorf("auto-accept on-ledger transfer %s: %w", instructionID, err)
 		}
@@ -241,11 +256,28 @@ func runAcceptOnLedgerIfTestToken(ctx context.Context, out io.Writer, opts Accep
 		configCIDs = append(configCIDs, cid)
 	}
 
+	// Accept on the receiver's own participant; the initial client dials
+	// the sender-side role which cannot act as receiver parties on a
+	// different node.
+	acceptClient := client
+	var acceptCleanup func()
+	initialConn := LedgerConn{
+		Endpoint: opts.Endpoint, Insecure: opts.Insecure,
+		Instance: opts.Instance, Role: opts.Role,
+	}
+	if aconn := resolveAcceptConn(initialConn, opts.Instance, receiver.Owner); aconn.Role != opts.Role {
+		var aerr error
+		acceptClient, acceptCleanup, aerr = dialLedgerConcreteFn(ctx, aconn)
+		if aerr != nil {
+			return true, fmt.Errorf("dial receiver participant for accept: %w", aerr)
+		}
+		defer acceptCleanup()
+	}
 	actors := accountPartiesOf(admin, receiver.Owner, receiver.Provider)
 	actAs := dedupParties(append(append(
 		append([]string{}, accountPartiesOf(admin, sender.Owner, sender.Provider)...),
 		actors...), admin))
-	if err := acceptTestTokenTransfer(ctx, client, opts.TransferInstructionID, actAs, actors, tokenRulesCID, configCIDs); err != nil {
+	if err := acceptTestTokenTransfer(ctx, acceptClient, opts.TransferInstructionID, actAs, actors, tokenRulesCID, configCIDs); err != nil {
 		return true, fmt.Errorf("exercise on-ledger TransferInstruction_Accept: %w", err)
 	}
 	emit(out, "accept: submitted", map[string]any{
