@@ -175,11 +175,7 @@ func runTransferLiveOnLedger(ctx context.Context, out io.Writer, opts TransferOp
 		// cannot act as a party it doesn't host.
 		acceptClient := client
 		var acceptCleanup func()
-		senderConn := LedgerConn{
-			Endpoint: opts.Endpoint, Insecure: opts.Insecure,
-			Instance: opts.Instance, Role: opts.Role,
-		}
-		if aconn := resolveAcceptConn(senderConn, opts.Instance, opts.To); aconn.Role != opts.Role {
+		if aconn := resolveAcceptConn(conn, opts.Instance, opts.To); aconn.Role != opts.Role {
 			acceptClient, acceptCleanup, err = dialLedgerConcreteFn(ctx, aconn)
 			if err != nil {
 				return instructionID, fmt.Errorf("dial receiver participant for accept: %w", err)
@@ -261,11 +257,7 @@ func runAcceptOnLedgerIfTestToken(ctx context.Context, out io.Writer, opts Accep
 	// different node.
 	acceptClient := client
 	var acceptCleanup func()
-	initialConn := LedgerConn{
-		Endpoint: opts.Endpoint, Insecure: opts.Insecure,
-		Instance: opts.Instance, Role: opts.Role,
-	}
-	if aconn := resolveAcceptConn(initialConn, opts.Instance, receiver.Owner); aconn.Role != opts.Role {
+	if aconn := resolveAcceptConn(conn, opts.Instance, receiver.Owner); aconn.Role != opts.Role {
 		var aerr error
 		acceptClient, acceptCleanup, aerr = dialLedgerConcreteFn(ctx, aconn)
 		if aerr != nil {
