@@ -432,7 +432,7 @@ func handleTokensCreate(w http.ResponseWriter, r *http.Request) {
 		mapTokenError(w, err, "create")
 		return
 	}
-	writeJSON(w, http.StatusCreated, res.TokenRef)
+	writeJSON(w, http.StatusCreated, res.Response())
 }
 
 // handleTokensDemo provisions a live demo token in one call (issuer →

@@ -30,6 +30,7 @@ func TestAllTopLevelResponses_CarrySchemaVersion(t *testing.T) {
 		SkillsInstallResponse{},
 		SkillsListResponse{},
 		Snapshot{},
+		TokenCreateResponse{},
 		TokenHoldingsResponse{},
 		TokenIdentityResponse{},
 		TokenListResponse{},

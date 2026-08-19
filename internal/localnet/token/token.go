@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
@@ -62,6 +63,18 @@ type CreateOptions struct {
 // registry.TokenRef shape (which mirrors api/types.TokenRef).
 type CreateResult struct {
 	TokenRef registry.TokenRef
+	// Empty for a registry-only create (no --endpoint), which vets nothing.
+	VettedRoles []string
+}
+
+// Response is the wire shape both surfaces emit, so `token create
+// --format json` and POST /api/tokens cannot drift.
+func (r *CreateResult) Response() types.TokenCreateResponse {
+	return types.TokenCreateResponse{
+		SchemaVersion: types.SchemaVersion,
+		TokenRef:      types.TokenRef(r.TokenRef),
+		VettedRoles:   r.VettedRoles,
+	}
 }
 
 // RunCreate validates the inputs, generates a deterministic
@@ -224,7 +237,7 @@ func RunCreate(out io.Writer, opts CreateOptions) (*CreateResult, error) {
 					"uploaded). Subsequent commands can resolve --instrument by symbol.")
 		}
 	}
-	return &CreateResult{TokenRef: ref}, nil
+	return &CreateResult{TokenRef: ref, VettedRoles: vettedRoles}, nil
 }
 
 // ListTokens reads the per-instance Tokens registry. Returns an empty
