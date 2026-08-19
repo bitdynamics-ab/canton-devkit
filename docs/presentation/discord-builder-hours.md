@@ -6,11 +6,11 @@ Use these as spoken answers, not a word-for-word script.
 
 **1. What does canton-devkit add beyond cn-quickstart?**
 
-They start from the same Splice LocalNet, but they optimize for different things. [cn-quickstart](<https://github.com/digital-asset/cn-quickstart>) is an application-provider starter project: Daml models, a Spring Boot backend, a React front end, a Gradle build, and a bundled LocalNet with an observability stack, all driven by `make start`. It is the right place to begin if you want a working reference application.
+They serve different purposes. [cn-quickstart](<https://github.com/digital-asset/cn-quickstart>) is a reference application that shows how to build a real multi-party Canton app: Daml models, a Spring Boot backend, a React front end, and a LocalNet bundled specifically to support that app. The LocalNet tooling there is customized for cn-quickstart's own workflow.
 
-canton-devkit is not an application. It fetches the bare Splice LocalNet definition directly from `canton-network/splice` — the `cluster/compose/localnet/` subtree — and treats the network itself as the product: named instances, host preflight, readiness waiting, exported endpoints and JWTs, ledger and token inspection, snapshot and restore. Application code is deliberately out of scope.
+canton-devkit is a generic tool, not an application. It uses the same Compose definitions that power the real Canton network — pulled directly from `canton-network/splice` — and adds a CLI on top: named instances, host preflight, readiness waiting, exported endpoints and JWTs. On top of the network itself, it provides helpers for DAR management, ledger inspection, and Token Standard V2 operations so developers can test their own applications against a LocalNet without building that plumbing themselves.
 
-So the honest comparison is: if you want an example app to learn from, use cn-quickstart. If you want to drive a LocalNet from a CLI or CI job and inspect what is on the ledger, that is the gap DevKit fills.
+So the honest comparison is: start with cn-quickstart if you want a working reference app to learn from. Use DevKit if you want a generic, scriptable LocalNet and testing helpers for your own application development.
 
 **2. Walk us through what we are looking at on screen.**
 
