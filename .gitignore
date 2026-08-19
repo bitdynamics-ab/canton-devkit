@@ -40,3 +40,5 @@ internal/ui/dist/*
 
 # workspace files
 *.code-workspace
+.omo/
+artifacts
