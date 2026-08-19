@@ -157,6 +157,14 @@ func handleStopInstance() http.HandlerFunc {
 	}
 }
 
+// Indirected so tests can drive the bring-up paths without booting a
+// real Canton stack: RunUp outlives the request on a detached context.
+var (
+	listContainers = containers.List
+	runStart       = localnet.RunStart
+	runUp          = localnet.RunUp
+)
+
 // handleStartInstance: POST /api/instances/{name}/start.
 //
 // Mirrors the CLI's intelligent `localnet start`:
@@ -173,14 +181,6 @@ func handleStopInstance() http.HandlerFunc {
 //
 // The 204-vs-202 split lets the frontend branch: 204 → just refetch;
 // 202 → open the existing create-progress modal.
-// Indirected so tests can drive the start path without booting a real
-// Canton stack, which outlives the request and skews every later run.
-var (
-	listContainers = containers.List
-	runStart       = localnet.RunStart
-	runUp          = localnet.RunUp
-)
-
 func handleStartInstance(hub *stream.Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
@@ -765,7 +765,7 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 			defer jobs.Unregister(req.Name)
 
 			prog := progress.New(hub, req.Name)
-			exitCode := localnet.RunUp(jobCtx, prog, opts)
+			exitCode := runUp(jobCtx, prog, opts)
 			log.Printf("create instance %q: exit_code=%d", req.Name, exitCode)
 		}()
 
@@ -873,7 +873,7 @@ func handleResumeInstance(hub *stream.Hub) http.HandlerFunc {
 			defer hub.ClearBuffer(topic)
 			defer jobs.Unregister(name)
 			prog := progress.New(hub, name)
-			exitCode := localnet.RunUp(jobCtx, prog, opts)
+			exitCode := runUp(jobCtx, prog, opts)
 			log.Printf("resume instance %q: exit_code=%d", name, exitCode)
 		}()
 
@@ -1076,7 +1076,7 @@ func realRecreateWork(ctx context.Context, hub *stream.Hub, name, version string
 		Version:  version,
 		Profiles: profiles,
 	}
-	exitCode := localnet.RunUp(ctx, prog, upOpts)
+	exitCode := runUp(ctx, prog, upOpts)
 	log.Printf("restart instance %q: down_exit=%d up_exit=%d",
 		name, downExit, exitCode)
 }

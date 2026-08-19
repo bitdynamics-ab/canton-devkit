@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
 
@@ -41,6 +42,13 @@ func TestMain(m *testing.M) {
 	// 202-assertion.)
 	runPreflightForVersion = func(_ context.Context, _ splice.Version) types.PreflightReport {
 		return types.PreflightReport{SchemaVersion: types.SchemaVersion, OK: true}
+	}
+
+	// Bring-up runs on a detached context and outlives the test, so a
+	// default no-op keeps any test from stranding a real Canton stack.
+	// Tests asserting on bring-up override this with a recording stub.
+	runUp = func(context.Context, localnet.Progress, *localnet.UpOptions) int {
+		return localnet.ExitSuccess
 	}
 
 	code := m.Run()
