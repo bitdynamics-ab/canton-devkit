@@ -451,11 +451,12 @@ The embedded skill docs are the same artifacts that back the Web UI's Agent Skil
 
 **Proposal said:** `token create` was described as a creation wizard; how the underlying token packages reach the participants was not specified.
 
-**Shipped:** on the on-ledger path, `token create` uploads and vets the bundled Splice test-token DARs on **all three** LocalNet participants (`sv`, `app-provider`, `app-user`), not only the acting role's participant. Three user-visible consequences:
+**Shipped:** on the on-ledger path, `token create` uploads and vets the bundled Splice test-token DARs on **all three** LocalNet participants (`sv`, `app-provider`, `app-user`), not only the acting role's participant. Four user-visible consequences:
 
 - On success the command prints `Vetted test-token DARs on sv, app-provider, app-user`.
-- The DARs are cached under `~/.canton-devkit/localnet/.dar-cache/<splice-commit>/`, so repeat runs (and offline runs after the first) do not re-download them.
-- `token create` now fails with an actionable error when any role's participant ledger port is missing from the instance state, instead of silently vetting a subset.
+- `token create --format json` and `POST /api/tokens` return the same body, which now carries `schema_version` and a `vetted_roles` array. `vetted_roles` is omitted on a registry-only create (no `--endpoint`), which vets nothing. The instrument's own fields keep their existing top-level position.
+- The DARs are cached under `~/.canton-devkit/localnet/.dar-cache/<splice-commit>/`, so repeat runs (and offline runs after the first) do not re-download them. Each cached file is written to a temporary name and renamed into place, so an interrupted run cannot leave a truncated DAR that later runs would trust.
+- `token create` now fails with an actionable error when any role's participant admin port is missing from the instance state, instead of silently vetting a subset.
 
 `token mint` and `token transfer --auto-accept` also dial the **receiver's** participant for the accept leg rather than the sender's.
 
