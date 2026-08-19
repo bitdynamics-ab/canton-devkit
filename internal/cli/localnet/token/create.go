@@ -89,7 +89,7 @@ POST /api/tokens.`,
 			if format == "json" {
 				enc := json.NewEncoder(out)
 				enc.SetIndent("", "  ")
-				if err := enc.Encode(res.TokenRef); err != nil {
+				if err := enc.Encode(res.Response()); err != nil {
 					return fmt.Errorf("encode result: %w", err)
 				}
 			}

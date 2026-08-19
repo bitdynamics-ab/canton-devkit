@@ -38,6 +38,16 @@ type TokenRef struct {
 	Status string `json:"status"`
 }
 
+// TokenCreateResponse is POST /api/tokens and `token create --format
+// json`. TokenRef is embedded, not nested, so the instrument's fields
+// stay where they have always been on the wire.
+type TokenCreateResponse struct {
+	SchemaVersion int `json:"schema_version"`
+	TokenRef
+	// Absent on a registry-only create (no endpoint), which vets nothing.
+	VettedRoles []string `json:"vetted_roles,omitempty"`
+}
+
 // InstrumentRef is a token instrument discovered on-ledger (ACS) for the
 // instrument list. Field order/types mirror
 // internal/localnet/token.InstrumentRef so the two convert directly.

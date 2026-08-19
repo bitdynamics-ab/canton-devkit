@@ -10,9 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	adminv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2/admin"
-
-	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/darops"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
@@ -22,29 +20,33 @@ import (
 // package; token create fetches and uploads the bundle instead of
 // `dar upload --all-participants`.
 
-// tokenBundleDARs are the prebuilt DARs the test token needs, keyed by
-// package name (what resolvePackageID checks) → the DAR filename.
+// tokenBundleDARs are the prebuilt DARs the test token needs, pinned by
+// (name, version) — the pair Canton reports in ListDars.
 //
 // Verified against the daml/dars/ tree at the 0.6.12 commit. The wallet
 // DAR ships three versions; pin 1.1.0, which carries BatchingUtilityV2
 // with the full V2 allocation action set.
-var tokenBundleDARs = []struct{ pkg, file string }{
-	{"splice-api-token-burn-mint-v1", "splice-api-token-burn-mint-v1-1.0.0.dar"},
-	{"splice-test-token-v2", "splice-test-token-v2-1.0.0.dar"},
+var tokenBundleDARs = []darops.DARRef{
+	{Name: "splice-api-token-burn-mint-v1", Version: "1.0.0"},
+	{Name: "splice-test-token-v2", Version: "1.0.0"},
 
 	// V2 foundation packages for EventLog history, allocations/DvP and the
 	// BatchingUtilityV2 wallet.
-	{"splice-api-token-transfer-instruction-v2", "splice-api-token-transfer-instruction-v2-1.0.0.dar"},
-	{"splice-api-token-allocation-v2", "splice-api-token-allocation-v2-1.0.0.dar"},
-	{"splice-api-token-allocation-instruction-v2", "splice-api-token-allocation-instruction-v2-1.0.0.dar"},
-	{"splice-api-token-allocation-request-v2", "splice-api-token-allocation-request-v2-1.0.0.dar"},
-	{"splice-util-token-standard-wallet", "splice-util-token-standard-wallet-1.1.0.dar"},
+	{Name: "splice-api-token-transfer-instruction-v2", Version: "1.0.0"},
+	{Name: "splice-api-token-allocation-v2", Version: "1.0.0"},
+	{Name: "splice-api-token-allocation-instruction-v2", Version: "1.0.0"},
+	{Name: "splice-api-token-allocation-request-v2", Version: "1.0.0"},
+	{Name: "splice-util-token-standard-wallet", Version: "1.1.0"},
 }
 
 const darFetchMaxBytes = 64 << 20 // 64 MiB — these DARs are well under 1 MiB
 
 // Leading dot keeps the cache dir out of ValidateName's instance namespace.
 const darCacheDirName = ".dar-cache"
+
+// darUploadDescription is recorded on each uploaded DAR so `dar list`
+// attributes it to token create rather than a manual upload.
+const darUploadDescription = "canton-devkit token create"
 
 // darBundleBaseURL is the raw.githubusercontent.com base for the upstream
 // splice repo's prebuilt DARs. A package var so tests can point it at a
@@ -61,154 +63,78 @@ var errDARNotPublished = errors.New("DAR not published at this commit")
 // is more useful than surfacing a raw GitHub 404.
 var ErrTokenDARUnavailable = errors.New("test-token DAR not available for this Splice version")
 
-// darClient is the package-management slice ensureTokenDARs needs; narrow
-// so tests inject per-role fakes without widening LedgerClient.
-type darClient interface {
-	ListKnownPackages(ctx context.Context) (*adminv2.ListKnownPackagesResponse, error)
-	UploadDarFile(ctx context.Context, req *adminv2.UploadDarFileRequest) (*adminv2.UploadDarFileResponse, error)
-}
-
 // Package var so tests swap in per-role fakes.
-var dialDARClient = func(ctx context.Context, conn LedgerConn) (darClient, func(), error) {
-	return dialLedger(ctx, conn)
-}
+var dialTokenDARAdmin darops.AdminDialer = darops.DialPackageAdmin
 
-// Must match `dar upload --all-participants` so create and manual upload
-// target the same topology.
-func tokenDARRoles() []string {
-	roles := splice.AllRoles()
-	out := make([]string, len(roles))
-	for i, r := range roles {
-		out[i] = string(r)
+// darFileName maps a pinned ref to its filename in the upstream
+// daml/dars/ tree.
+func darFileName(d darops.DARRef) string { return d.String() + ".dar" }
+
+func tokenDARRoles() []string { return splice.AllRoleNames() }
+
+// ensureTokenDARs vets the test-token bundle on every LocalNet
+// participant and returns the roles it vetted. Any unreachable
+// participant or upload failure fails create — skipping a role leaves
+// counterparty participants without the package, which only surfaces
+// later as an opaque mint/transfer error.
+func ensureTokenDARs(ctx context.Context, opts CreateOptions, out io.Writer) ([]string, error) {
+	state, err := registry.Read(opts.Instance)
+	if err != nil {
+		return nil, fmt.Errorf("read instance state: %w", err)
 	}
-	return out
-}
-
-// ensureTokenDARs uploads missing test-token DARs on sv, app-provider, and
-// app-user. Reuses createClient for the create role so TokenRules does not
-// dial twice. Any missing port or upload/vet failure fails create — skipping
-// a role leaves counterparty participants unvetted.
-func ensureTokenDARs(ctx context.Context, createClient darClient, opts CreateOptions, out io.Writer) ([]string, error) {
-	roles := tokenDARRoles()
-	createRole := roleOrDefault(opts.Role)
-	targets := make([]struct {
-		role     string
-		endpoint string
-	}, 0, len(roles))
-	for _, role := range roles {
-		endpoint := ResolveLedgerEndpoint(opts.Instance, role)
-		if endpoint == "" {
-			return nil, fmt.Errorf("no live ledger endpoint for role %q on instance %q — "+
-				"start the instance so participant_ledger_%s is captured; "+
-				"the test-token DAR must be vetted on every participant",
-				role, opts.Instance, role)
-		}
-		targets = append(targets, struct {
-			role     string
-			endpoint string
-		}{role: role, endpoint: endpoint})
-	}
-
-	commit, err := tokenBundleCommit(opts.Instance)
+	commit, err := tokenBundleCommit(state)
 	if err != nil {
 		return nil, err
 	}
+	short := commit
+	if len(short) > 12 {
+		short = commit[:12]
+	}
 
 	fetched := map[string][]byte{}
-	load := func(file string) ([]byte, error) {
+	load := func(d darops.DARRef) ([]byte, error) {
+		file := darFileName(d)
 		if b, ok := fetched[file]; ok {
 			return b, nil
 		}
+		emit(out, "dar bundle: fetching", map[string]any{
+			"package": d.Name, "version": d.Version, "commit": short,
+		})
 		b, err := loadDAR(ctx, commit, file)
 		if err != nil {
-			return nil, err
+			if errors.Is(err, errDARNotPublished) {
+				return nil, darUnavailableError(d.Name, state.SpliceVersion)
+			}
+			return nil, fmt.Errorf("fetch %s: %w", file, err)
 		}
 		fetched[file] = b
 		return b, nil
 	}
 
-	vetted := make([]string, 0, len(targets))
-	for _, t := range targets {
-		client := createClient
-		cleanup := func() {}
-		reuse := createClient != nil && t.role == createRole && t.endpoint == opts.Endpoint
-		if !reuse {
-			var err error
-			client, cleanup, err = dialDARClient(ctx, LedgerConn{
-				Endpoint: t.endpoint,
-				Insecure: opts.Insecure,
-				Instance: opts.Instance,
-				Role:     t.role,
+	vetted, err := darops.EnsureVetted(ctx, dialTokenDARAdmin, darops.VetRequest{
+		State:       state,
+		Roles:       tokenDARRoles(),
+		DARs:        tokenBundleDARs,
+		Load:        load,
+		Description: darUploadDescription,
+		OnEvent: func(ev darops.VetEvent) {
+			emit(out, "dar bundle: "+string(ev.Stage), map[string]any{
+				"package": ev.DAR.Name, "version": ev.DAR.Version,
+				"role": ev.Role, "endpoint": ev.Host,
 			})
-			if err != nil {
-				return nil, fmt.Errorf("dial %s (%s): %w", t.role, t.endpoint, err)
-			}
-		}
-		err := vetTokenDARsOn(ctx, client, t.role, t.endpoint, opts.Instance, commit, load, out)
-		cleanup()
-		if err != nil {
-			return nil, err
-		}
-		vetted = append(vetted, t.role)
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("vet test-token DARs on instance %q: %w", opts.Instance, err)
 	}
 	return vetted, nil
 }
 
-// Post-upload package list confirms vet succeeded.
-func vetTokenDARsOn(
-	ctx context.Context,
-	client darClient,
-	role, endpoint, instance, commit string,
-	load func(string) ([]byte, error),
-	out io.Writer,
-) error {
-	for _, d := range tokenBundleDARs {
-		if packageKnown(ctx, client, d.pkg) {
-			continue
-		}
-		short := commit
-		if len(short) > 12 {
-			short = commit[:12]
-		}
-		emit(out, "dar bundle: fetching", map[string]any{
-			"package": d.pkg, "commit": short, "role": role, "endpoint": endpoint,
-		})
-		dar, err := load(d.file)
-		if err != nil {
-			if errors.Is(err, errDARNotPublished) {
-				return darUnavailableError(d.pkg, instanceSpliceVersion(instance))
-			}
-			return fmt.Errorf("fetch %s: %w", d.file, err)
-		}
-		if _, err := client.UploadDarFile(ctx, &adminv2.UploadDarFileRequest{DarFile: dar}); err != nil {
-			return fmt.Errorf("upload %s on %s (%s): %w", d.file, role, endpoint, err)
-		}
-		if !packageKnown(ctx, client, d.pkg) {
-			return fmt.Errorf("vet %s on %s (%s): package %q still not known after upload",
-				d.file, role, endpoint, d.pkg)
-		}
-		emit(out, "dar bundle: vetted", map[string]any{
-			"package": d.pkg, "role": role, "endpoint": endpoint,
-		})
-	}
-	return nil
-}
-
-// Treat list errors as absent so upload still runs.
-func packageKnown(ctx context.Context, client darClient, name string) bool {
-	resp, err := client.ListKnownPackages(ctx)
-	if err != nil {
-		return false
-	}
-	for _, p := range resp.GetPackageDetails() {
-		if p.GetName() == name {
-			return true
-		}
-	}
-	return false
-}
-
-// Cache write failures are ignored; in-memory bytes suffice for this upload.
+// loadDAR returns the DAR bytes, populating a content cache under the
+// registry root. The cache is written via a temp file and renamed so a
+// process killed mid-write cannot leave a truncated DAR that every
+// later run would read back as valid. Cache write failures are ignored;
+// the in-memory bytes suffice for this upload.
 func loadDAR(ctx context.Context, commit, file string) ([]byte, error) {
 	path := darCachePath(commit, file)
 	if b, err := os.ReadFile(path); err == nil && len(b) > 0 {
@@ -218,10 +144,31 @@ func loadDAR(ctx context.Context, commit, file string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err == nil {
-		_ = os.WriteFile(path, b, 0o644)
-	}
+	writeDARCache(path, b)
 	return b, nil
+}
+
+func writeDARCache(path string, b []byte) {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	// Same directory as the target so the rename stays within one
+	// filesystem and is therefore atomic.
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return
+	}
+	name := tmp.Name()
+	_, werr := tmp.Write(b)
+	cerr := tmp.Close()
+	if werr != nil || cerr != nil {
+		_ = os.Remove(name)
+		return
+	}
+	if err := os.Rename(name, path); err != nil {
+		_ = os.Remove(name)
+	}
 }
 
 func darCachePath(commit, file string) string {
@@ -231,11 +178,7 @@ func darCachePath(commit, file string) string {
 // tokenBundleCommit resolves the instance's Splice version to the git
 // commit the prebuilt DARs are pinned to (curated catalogue first, then
 // the resolved-uncurated cache for ad-hoc tags).
-func tokenBundleCommit(instance string) (string, error) {
-	state, err := registry.Read(instance)
-	if err != nil {
-		return "", fmt.Errorf("read instance state: %w", err)
-	}
+func tokenBundleCommit(state *registry.State) (string, error) {
 	tag := state.SpliceVersion
 	if v, ok := splice.SupportedVersions[tag]; ok && v.Commit != "" {
 		return v.Commit, nil
@@ -256,15 +199,6 @@ func darUnavailableError(pkg, version string) error {
 		"need Splice 0.6.11 or newer (`dpm localnet up --version 0.6.12`), "+
 		"or upload the DAR manually with `dpm localnet dar upload`",
 		ErrTokenDARUnavailable, pkg, version)
-}
-
-// instanceSpliceVersion returns the instance's recorded Splice version
-// tag for an error message; best-effort ("" on a read failure).
-func instanceSpliceVersion(instance string) string {
-	if st, err := registry.Read(instance); err == nil {
-		return st.SpliceVersion
-	}
-	return ""
 }
 
 // fetchDAR downloads a prebuilt DAR from the upstream repo at a pinned
@@ -293,6 +227,3 @@ func fetchDAR(ctx context.Context, commit, file string) ([]byte, error) {
 	}
 	return io.ReadAll(io.LimitReader(resp.Body, darFetchMaxBytes))
 }
-
-// Compile-time check that the production ledger client satisfies darClient.
-var _ darClient = (*ledger.Client)(nil)

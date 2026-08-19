@@ -367,26 +367,27 @@ func (g Generation) String() string {
 }
 
 // Surfaces is the set of token-standard generations whose Holding
-// interface package is vetted on a participant. A participant can carry
+// interface package is known to a participant. A participant can carry
 // both at once during the V1→V2 transition.
 type Surfaces struct {
 	HasV1 bool
 	HasV2 bool
 
 	// HasEventLog is set when splice-api-token-transfer-events-v2 (the
-	// EventLog interface) is vetted. When present, the activity feed can
+	// EventLog interface) is known. When present, the activity feed can
 	// read the admin's authoritative change history instead of netting
 	// HoldingV2 create/archive deltas itself.
 	HasEventLog bool
 }
 
-// Any reports whether any token-standard holding package is vetted.
+// Any reports whether any token-standard holding package is known.
 func (s Surfaces) Any() bool { return s.HasV1 || s.HasV2 }
 
 // discoverTokenSurfaces checks which Holding interface packages the
-// participant has vetted — the basis for per-instrument generation
-// routing. A generation is available only when its package is present (no
-// implicit fallback).
+// participant knows — the basis for per-instrument generation routing. A
+// generation is available only when its package is present (no implicit
+// fallback). ListKnownPackages proves upload, not synchronizer vetting;
+// use darops.EnsureVetted when the vetting state itself matters.
 func discoverTokenSurfaces(ctx context.Context, client LedgerClient) (Surfaces, error) {
 	resp, err := client.ListKnownPackages(ctx)
 	if err != nil {

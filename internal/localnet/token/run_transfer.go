@@ -272,7 +272,7 @@ func instructionGeneration(ctx context.Context, client *ledger.Client, instructi
 		return 0, err
 	}
 	if !surfaces.Any() {
-		return 0, fmt.Errorf("no token-standard package vetted on this participant")
+		return 0, fmt.Errorf("no token-standard package known to this participant")
 	}
 	end, err := client.LedgerEnd(ctx)
 	if err != nil {
@@ -328,7 +328,7 @@ func listSenderHoldings(ctx context.Context, client *ledger.Client, sender, inst
 		return nil, err
 	}
 	if !surfaces.Any() {
-		return nil, fmt.Errorf("no token-standard Holding package vetted on this participant")
+		return nil, fmt.Errorf("no token-standard Holding package known to this participant")
 	}
 	end, err := client.LedgerEnd(ctx)
 	if err != nil {

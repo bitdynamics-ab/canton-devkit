@@ -10,12 +10,16 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 
-	adminv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2/admin"
+	"google.golang.org/grpc"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/canton/admin"
+	adminproto "github.com/bitdynamics-ab/canton-devkit/internal/canton/admin/proto"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/darops"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
@@ -23,12 +27,7 @@ import (
 func TestTokenBundleCommit_FromCuratedCatalogue(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	s := registry.NewState("demo", "token-standard-v2")
-	s.ProjectDir = t.TempDir()
-	s.DataDir = t.TempDir()
-	if err := registry.Write(s); err != nil {
-		t.Fatal(err)
-	}
-	commit, err := tokenBundleCommit("demo")
+	commit, err := tokenBundleCommit(s)
 	if err != nil {
 		t.Fatalf("resolve commit: %v", err)
 	}
@@ -40,12 +39,7 @@ func TestTokenBundleCommit_FromCuratedCatalogue(t *testing.T) {
 func TestTokenBundleCommit_UnknownVersionErrors(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	s := registry.NewState("demo", "does-not-exist-9.9.9")
-	s.ProjectDir = t.TempDir()
-	s.DataDir = t.TempDir()
-	if err := registry.Write(s); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tokenBundleCommit("demo"); err == nil {
+	if _, err := tokenBundleCommit(s); err == nil {
 		t.Error("want error for an unknown Splice version")
 	}
 }
@@ -63,48 +57,37 @@ func TestTokenDARRoles_MatchesAllRoles(t *testing.T) {
 	}
 }
 
-// Create uploads the bundle on sv, app-provider, and app-user, not only the create client.
+// Create uploads the bundle on sv, app-provider, and app-user, not only
+// the participant it dialed to create TokenRules.
 func TestEnsureTokenDARs_FansOutToAllRoles(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
-	seedBundleInstance(t, "demo", allLedgerPorts())
+	seedBundleInstance(t, "demo", allAdminPorts())
 	srv, hits := startDARServer(t)
 	swapDARBase(t, srv.URL)
 
-	create := newFakeDAR()
-	sv := newFakeDAR()
-	user := newFakeDAR()
-	var dialed []string
-	withDARDial(t, func(_ context.Context, conn LedgerConn) (darClient, func(), error) {
-		dialed = append(dialed, conn.Role)
-		switch conn.Role {
-		case "sv":
-			return sv, func() {}, nil
-		case "app-user":
-			return user, func() {}, nil
-		default:
-			return nil, func() {}, errors.New("should reuse create client for " + conn.Role)
-		}
-	})
+	fakes := withDARDial(t, nil)
 
 	var out bytes.Buffer
-	opts := bundleCreateOpts("demo")
-	roles, err := ensureTokenDARs(context.Background(), create, opts, &out)
+	roles, err := ensureTokenDARs(context.Background(), bundleCreateOpts("demo"), &out)
 	if err != nil {
 		t.Fatalf("ensureTokenDARs: %v", err)
 	}
-	if want := []string{"sv", "app-provider", "app-user"}; strings.Join(roles, ",") != strings.Join(want, ",") {
+	if want := "sv,app-provider,app-user"; strings.Join(roles, ",") != want {
 		t.Errorf("vetted roles=%v, want %v", roles, want)
 	}
 	wantUploads := len(tokenBundleDARs)
-	if create.uploads != wantUploads || sv.uploads != wantUploads || user.uploads != wantUploads {
-		t.Errorf("uploads create=%d sv=%d user=%d, want %d each",
-			create.uploads, sv.uploads, user.uploads, wantUploads)
+	for _, role := range roles {
+		f := fakes.byRole(t, role)
+		if f.uploads != wantUploads {
+			t.Errorf("uploads on %s=%d, want %d", role, f.uploads, wantUploads)
+		}
+		// One ListDars before the uploads and one after, never per DAR.
+		if f.lists != 2 {
+			t.Errorf("ListDars calls on %s=%d, want 2", role, f.lists)
+		}
 	}
 	if hits.Load() != int32(wantUploads) {
 		t.Errorf("HTTP fetches=%d, want %d (one per file, shared across roles)", hits.Load(), wantUploads)
-	}
-	if strings.Join(dialed, ",") != "sv,app-user" {
-		t.Errorf("dialed=%v, want sv then app-user (app-provider reused)", dialed)
 	}
 	for _, role := range []string{"sv", "app-provider", "app-user"} {
 		if !strings.Contains(out.String(), `"role":"`+role+`"`) {
@@ -113,31 +96,125 @@ func TestEnsureTokenDARs_FansOutToAllRoles(t *testing.T) {
 	}
 }
 
+// A DAR already present under the pinned version is not re-uploaded.
+func TestEnsureTokenDARs_SkipsAlreadyVetted(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedBundleInstance(t, "demo", allAdminPorts())
+	srv, hits := startDARServer(t)
+	swapDARBase(t, srv.URL)
+
+	fakes := withDARDial(t, func(f *fakeAdmin) {
+		for _, d := range tokenBundleDARs {
+			f.dars[d] = true
+		}
+	})
+	if _, err := ensureTokenDARs(context.Background(), bundleCreateOpts("demo"), io.Discard); err != nil {
+		t.Fatalf("ensureTokenDARs: %v", err)
+	}
+	for _, role := range tokenDARRoles() {
+		if f := fakes.byRole(t, role); f.uploads != 0 {
+			t.Errorf("uploads on %s=%d, want 0 (already vetted)", role, f.uploads)
+		}
+	}
+	if hits.Load() != 0 {
+		t.Errorf("HTTP fetches=%d, want 0 (nothing missing, nothing fetched)", hits.Load())
+	}
+}
+
+// A pinned version must not be satisfied by a different version of the
+// same package: the wallet DAR ships 1.0.0 and 1.1.0, and only 1.1.0
+// carries BatchingUtilityV2.
+func TestEnsureTokenDARs_WrongVersionIsNotVetted(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedBundleInstance(t, "demo", allAdminPorts())
+	srv, _ := startDARServer(t)
+	swapDARBase(t, srv.URL)
+
+	wallet := darops.DARRef{Name: "splice-util-token-standard-wallet", Version: "1.1.0"}
+	fakes := withDARDial(t, func(f *fakeAdmin) {
+		for _, d := range tokenBundleDARs {
+			f.dars[d] = true
+		}
+		delete(f.dars, wallet)
+		f.dars[darops.DARRef{Name: wallet.Name, Version: "1.0.0"}] = true
+	})
+	if _, err := ensureTokenDARs(context.Background(), bundleCreateOpts("demo"), io.Discard); err != nil {
+		t.Fatalf("ensureTokenDARs: %v", err)
+	}
+	for _, role := range tokenDARRoles() {
+		if f := fakes.byRole(t, role); f.uploads != 1 {
+			t.Errorf("uploads on %s=%d, want 1 (pinned wallet version missing)", role, f.uploads)
+		}
+	}
+}
+
 func TestEnsureTokenDARs_MissingPortFails(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedBundleInstance(t, "demo", map[string]int{
-		"participant_ledger_app-provider": 3901,
+		"participant_admin_app-provider": 3902,
 	})
-	_, err := ensureTokenDARs(context.Background(), newFakeDAR(), bundleCreateOpts("demo"), io.Discard)
+	withDARDial(t, nil)
+	_, err := ensureTokenDARs(context.Background(), bundleCreateOpts("demo"), io.Discard)
 	if err == nil {
-		t.Fatal("want error when a role has no ledger port")
+		t.Fatal("want error when a role has no admin port")
 	}
-	if !strings.Contains(err.Error(), "sv") || !strings.Contains(err.Error(), "participant_ledger_sv") {
+	if !strings.Contains(err.Error(), "sv") || !strings.Contains(err.Error(), "participant_admin") {
 		t.Errorf("want missing-port error naming sv, got: %v", err)
+	}
+}
+
+// A failing ListDars must surface as a list error, not be folded into
+// "absent" and reported later as a bogus post-upload vetting failure.
+func TestEnsureTokenDARs_ListErrorSurfaces(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedBundleInstance(t, "demo", allAdminPorts())
+	srv, _ := startDARServer(t)
+	swapDARBase(t, srv.URL)
+
+	withDARDial(t, func(f *fakeAdmin) {
+		if f.role == "app-user" {
+			f.listErr = errors.New("unavailable")
+		}
+	})
+	_, err := ensureTokenDARs(context.Background(), bundleCreateOpts("demo"), io.Discard)
+	if err == nil {
+		t.Fatal("want error when ListDars fails")
+	}
+	if !strings.Contains(err.Error(), "list DARs") || !strings.Contains(err.Error(), "unavailable") {
+		t.Errorf("want a list error, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "after upload") {
+		t.Errorf("list failure must not be reported as a post-upload vetting failure: %v", err)
+	}
+}
+
+// An upload that does not land must fail create rather than report the
+// role as vetted.
+func TestEnsureTokenDARs_UploadNotReflectedFails(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	seedBundleInstance(t, "demo", allAdminPorts())
+	srv, _ := startDARServer(t)
+	swapDARBase(t, srv.URL)
+
+	withDARDial(t, func(f *fakeAdmin) { f.silentUpload = true })
+	_, err := ensureTokenDARs(context.Background(), bundleCreateOpts("demo"), io.Discard)
+	if err == nil {
+		t.Fatal("want error when an upload does not land")
+	}
+	if !strings.Contains(err.Error(), "not vetted") || !strings.Contains(err.Error(), "after upload") {
+		t.Errorf("want a post-upload vetting error, got: %v", err)
 	}
 }
 
 func TestEnsureTokenDARs_CachesDAROnDisk(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
-	seedBundleInstance(t, "demo", allLedgerPorts())
+	seedBundleInstance(t, "demo", allAdminPorts())
 	srv, hits := startDARServer(t)
 	swapDARBase(t, srv.URL)
 
-	withDARDial(t, func(_ context.Context, conn LedgerConn) (darClient, func(), error) {
-		return newFakeDAR(), func() {}, nil
-	})
+	withDARDial(t, nil)
 	opts := bundleCreateOpts("demo")
-	if _, err := ensureTokenDARs(context.Background(), newFakeDAR(), opts, io.Discard); err != nil {
+	if _, err := ensureTokenDARs(context.Background(), opts, io.Discard); err != nil {
 		t.Fatalf("first ensureTokenDARs: %v", err)
 	}
 	firstHits := hits.Load()
@@ -145,18 +222,25 @@ func TestEnsureTokenDARs_CachesDAROnDisk(t *testing.T) {
 		t.Fatalf("first pass HTTP fetches=%d, want %d", firstHits, len(tokenBundleDARs))
 	}
 
-	commit, err := tokenBundleCommit("demo")
+	state, err := registry.Read("demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commit, err := tokenBundleCommit(state)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, d := range tokenBundleDARs {
-		p := darCachePath(commit, d.file)
+		p := darCachePath(commit, darFileName(d))
 		if _, err := os.Stat(p); err != nil {
 			t.Errorf("cache miss %s: %v", p, err)
 		}
 	}
 
-	if _, err := ensureTokenDARs(context.Background(), newFakeDAR(), opts, io.Discard); err != nil {
+	// Fresh participants (nothing vetted) so the second pass would refetch
+	// were the disk cache not consulted.
+	withDARDial(t, nil)
+	if _, err := ensureTokenDARs(context.Background(), opts, io.Discard); err != nil {
 		t.Fatalf("second ensureTokenDARs: %v", err)
 	}
 	if hits.Load() != firstHits {
@@ -164,21 +248,45 @@ func TestEnsureTokenDARs_CachesDAROnDisk(t *testing.T) {
 	}
 }
 
+// The cache is written via rename, so a killed process leaves either no
+// file or a complete one — never a truncated DAR a later run trusts.
+func TestWriteDARCache_LeavesNoPartialFile(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	p := darCachePath("abc123", "splice-test-token-v2-1.0.0.dar")
+	writeDARCache(p, []byte("dar-bytes"))
+
+	got, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read cache: %v", err)
+	}
+	if string(got) != "dar-bytes" {
+		t.Errorf("cache content=%q, want %q", got, "dar-bytes")
+	}
+	entries, err := os.ReadDir(filepath.Dir(p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		names := make([]string, len(entries))
+		for i, e := range entries {
+			names[i] = e.Name()
+		}
+		t.Errorf("cache dir holds %v, want only the final file", names)
+	}
+}
+
 func TestEnsureTokenDARs_SecondaryRoleUploadFails(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
-	seedBundleInstance(t, "demo", allLedgerPorts())
+	seedBundleInstance(t, "demo", allAdminPorts())
 	srv, _ := startDARServer(t)
 	swapDARBase(t, srv.URL)
 
-	user := newFakeDAR()
-	user.uploadErr = errors.New("boom")
-	withDARDial(t, func(_ context.Context, conn LedgerConn) (darClient, func(), error) {
-		if conn.Role == "app-user" {
-			return user, func() {}, nil
+	withDARDial(t, func(f *fakeAdmin) {
+		if f.role == "app-user" {
+			f.uploadErr = errors.New("boom")
 		}
-		return newFakeDAR(), func() {}, nil
 	})
-	_, err := ensureTokenDARs(context.Background(), newFakeDAR(), bundleCreateOpts("demo"), io.Discard)
+	_, err := ensureTokenDARs(context.Background(), bundleCreateOpts("demo"), io.Discard)
 	if err == nil {
 		t.Fatal("want error when app-user upload fails")
 	}
@@ -189,18 +297,25 @@ func TestEnsureTokenDARs_SecondaryRoleUploadFails(t *testing.T) {
 
 func TestEnsureTokenDARs_404IsUnavailable(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
-	seedBundleInstance(t, "demo", allLedgerPorts())
+	seedBundleInstance(t, "demo", allAdminPorts())
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	t.Cleanup(srv.Close)
 	swapDARBase(t, srv.URL)
-	withDARDial(t, func(context.Context, LedgerConn) (darClient, func(), error) {
-		return newFakeDAR(), func() {}, nil
-	})
-	_, err := ensureTokenDARs(context.Background(), newFakeDAR(), bundleCreateOpts("demo"), io.Discard)
+	withDARDial(t, nil)
+	_, err := ensureTokenDARs(context.Background(), bundleCreateOpts("demo"), io.Discard)
 	if !errors.Is(err, ErrTokenDARUnavailable) {
 		t.Fatalf("want ErrTokenDARUnavailable, got %v", err)
+	}
+}
+
+func TestDarCachePath_UnderRegistryRoot(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	p := darCachePath("abc123", "splice-test-token-v2-1.0.0.dar")
+	root := registry.Root()
+	if !strings.HasPrefix(p, filepath.Join(root, darCacheDirName)) {
+		t.Errorf("cache path %q not under %s/%s", p, root, darCacheDirName)
 	}
 }
 
@@ -211,16 +326,19 @@ func seedBundleInstance(t *testing.T, name string, ports map[string]int) {
 	s.DataDir = t.TempDir()
 	s.Status = registry.StatusRunning
 	s.Ports = ports
+	for _, role := range tokenDARRoles() {
+		s.Credentials[role] = registry.Credential{Role: role, JWT: "jwt-" + role}
+	}
 	if err := registry.Write(s); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func allLedgerPorts() map[string]int {
+func allAdminPorts() map[string]int {
 	return map[string]int{
-		"participant_ledger_sv":           4901,
-		"participant_ledger_app-provider": 3901,
-		"participant_ledger_app-user":     2901,
+		"participant_admin_sv":           4902,
+		"participant_admin_app-provider": 3902,
+		"participant_admin_app-user":     2902,
 	}
 }
 
@@ -251,50 +369,100 @@ func swapDARBase(t *testing.T, url string) {
 	t.Cleanup(func() { darBundleBaseURL = prev })
 }
 
-func withDARDial(t *testing.T, fn func(context.Context, LedgerConn) (darClient, func(), error)) {
-	t.Helper()
-	prev := dialDARClient
-	dialDARClient = fn
-	t.Cleanup(func() { dialDARClient = prev })
-}
-
-type fakeDAR struct {
-	packages  map[string]struct{}
-	uploads   int
-	uploadErr error
-}
-
-func newFakeDAR() *fakeDAR {
-	return &fakeDAR{packages: map[string]struct{}{}}
-}
-
-func (f *fakeDAR) ListKnownPackages(context.Context) (*adminv2.ListKnownPackagesResponse, error) {
-	details := make([]*adminv2.PackageDetails, 0, len(f.packages))
-	for name := range f.packages {
-		details = append(details, &adminv2.PackageDetails{Name: name, PackageId: name})
+// adminPortRole inverts allAdminPorts so the dialer, which only sees a
+// host:port, can label each fake with the role it stands in for.
+func adminPortRole(host string) string {
+	for role, port := range allAdminPorts() {
+		if strings.HasSuffix(host, ":"+strconv.Itoa(port)) {
+			return strings.TrimPrefix(role, "participant_admin_")
+		}
 	}
-	return &adminv2.ListKnownPackagesResponse{PackageDetails: details}, nil
+	return ""
 }
 
-func (f *fakeDAR) UploadDarFile(_ context.Context, req *adminv2.UploadDarFileRequest) (*adminv2.UploadDarFileResponse, error) {
+// darFakes collects the per-role fakes a test run dialed.
+type darFakes struct {
+	byHost map[string]*fakeAdmin
+}
+
+func (d *darFakes) byRole(t *testing.T, role string) *fakeAdmin {
+	t.Helper()
+	for _, f := range d.byHost {
+		if f.role == role {
+			return f
+		}
+	}
+	t.Fatalf("no participant dialed for role %q", role)
+	return nil
+}
+
+// withDARDial swaps the admin dialer for per-role fakes. customise, when
+// non-nil, seeds each fake before it serves any call.
+func withDARDial(t *testing.T, customise func(*fakeAdmin)) *darFakes {
+	t.Helper()
+	fakes := &darFakes{byHost: map[string]*fakeAdmin{}}
+	prev := dialTokenDARAdmin
+	dialTokenDARAdmin = func(_ context.Context, cfg admin.Config) (darops.PackageAdmin, func() error, error) {
+		f, ok := fakes.byHost[cfg.Host]
+		if !ok {
+			f = newFakeAdmin(adminPortRole(cfg.Host))
+			if customise != nil {
+				customise(f)
+			}
+			fakes.byHost[cfg.Host] = f
+		}
+		return f, func() error { return nil }, nil
+	}
+	t.Cleanup(func() { dialTokenDARAdmin = prev })
+	return fakes
+}
+
+type fakeAdmin struct {
+	role    string
+	dars    map[darops.DARRef]bool
+	uploads int
+	lists   int
+
+	uploadErr error
+	listErr   error
+	// silentUpload accepts an upload without recording the DAR, standing
+	// in for a vetting transaction that never lands.
+	silentUpload bool
+}
+
+func newFakeAdmin(role string) *fakeAdmin {
+	return &fakeAdmin{role: role, dars: map[darops.DARRef]bool{}}
+}
+
+func (f *fakeAdmin) ListDars(context.Context, *adminproto.ListDarsRequest, ...grpc.CallOption) (*adminproto.ListDarsResponse, error) {
+	f.lists++
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	dars := make([]*adminproto.DarDescription, 0, len(f.dars))
+	for d := range f.dars {
+		dars = append(dars, &adminproto.DarDescription{
+			Main: d.String(), Name: d.Name, Version: d.Version,
+		})
+	}
+	return &adminproto.ListDarsResponse{Dars: dars}, nil
+}
+
+func (f *fakeAdmin) UploadDar(_ context.Context, req *adminproto.UploadDarRequest, _ ...grpc.CallOption) (*adminproto.UploadDarResponse, error) {
 	if f.uploadErr != nil {
 		return nil, f.uploadErr
 	}
 	f.uploads++
-	file := strings.TrimPrefix(string(req.GetDarFile()), "dar:")
-	for _, d := range tokenBundleDARs {
-		if d.file == file {
-			f.packages[d.pkg] = struct{}{}
+	if f.silentUpload {
+		return &adminproto.UploadDarResponse{}, nil
+	}
+	for _, up := range req.GetDars() {
+		file := strings.TrimPrefix(string(up.GetBytes()), "dar:")
+		for _, d := range tokenBundleDARs {
+			if darFileName(d) == file {
+				f.dars[d] = true
+			}
 		}
 	}
-	return &adminv2.UploadDarFileResponse{}, nil
-}
-
-func TestDarCachePath_UnderRegistryRoot(t *testing.T) {
-	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
-	p := darCachePath("abc123", "splice-test-token-v2-1.0.0.dar")
-	root := registry.Root()
-	if !strings.HasPrefix(p, filepath.Join(root, darCacheDirName)) {
-		t.Errorf("cache path %q not under %s/%s", p, root, darCacheDirName)
-	}
+	return &adminproto.UploadDarResponse{}, nil
 }

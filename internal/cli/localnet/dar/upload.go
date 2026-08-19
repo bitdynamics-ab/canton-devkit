@@ -9,6 +9,7 @@ import (
 	adminproto "github.com/bitdynamics-ab/canton-devkit/internal/canton/admin/proto"
 	cdkdar "github.com/bitdynamics-ab/canton-devkit/internal/dar"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
+	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	"github.com/spf13/cobra"
 )
 
@@ -167,7 +168,7 @@ func targetRoles(conn *connectFlags, allPpt bool) ([]string, error) {
 	if conn.Instance == "" {
 		return nil, fmt.Errorf("--all-participants requires --instance")
 	}
-	return []string{"sv", "app-provider", "app-user"}, nil
+	return splice.AllRoleNames(), nil
 }
 
 // optString returns a *string for proto3 `optional string` fields.

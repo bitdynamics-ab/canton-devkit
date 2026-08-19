@@ -78,6 +78,18 @@ const (
 // AllRoles returns the roles a single LocalNet bring-up issues tokens for.
 func AllRoles() []Role { return []Role{RoleSV, RoleAppProvider, RoleAppUser} }
 
+// AllRoleNames exists so the participant fan-out paths (`dar upload
+// --all-participants`, `token create`) cannot drift in which roles they
+// target, or in what order.
+func AllRoleNames() []string {
+	roles := AllRoles()
+	out := make([]string, len(roles))
+	for i, r := range roles {
+		out[i] = string(r)
+	}
+	return out
+}
+
 // CredentialInputs is the per-role data needed to construct a JWT:
 // the subject (`AUTH_<ROLE>_VALIDATOR_USER_NAME`) and the audience
 // (`AUTH_<ROLE>_AUDIENCE`). Both come from `env/<role>-auth-on.env`.
