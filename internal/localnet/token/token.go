@@ -171,6 +171,7 @@ func RunCreate(out io.Writer, opts CreateOptions) (*CreateResult, error) {
 	// opaque id.
 	instrumentID := opts.Symbol
 	status := "on-ledger"
+	var vettedRoles []string
 	if opts.Endpoint == "" {
 		var err error
 		if instrumentID, err = newInstrumentID(); err != nil {
@@ -181,7 +182,9 @@ func RunCreate(out io.Writer, opts CreateOptions) (*CreateResult, error) {
 		// Ensure the issuer's TokenRules contract exists on-ledger.
 		// Idempotent: one TokenRules per admin anchors every instrument
 		// that admin issues.
-		if err := ensureTokenRules(opts); err != nil {
+		var err error
+		vettedRoles, err = ensureTokenRules(out, opts)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -211,6 +214,9 @@ func RunCreate(out io.Writer, opts CreateOptions) (*CreateResult, error) {
 			_, _ = fmt.Fprintln(out,
 				"Created on-ledger: a TokenRules contract anchors this instrument "+
 					"for the issuer. `token mint --endpoint ...` can now mint supply.")
+			if len(vettedRoles) > 0 {
+				_, _ = fmt.Fprintf(out, "Vetted test-token DARs on %s.\n", strings.Join(vettedRoles, ", "))
+			}
 		} else {
 			_, _ = fmt.Fprintln(out,
 				"Note: instrument is recorded LOCALLY only — pass --endpoint to "+

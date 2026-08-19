@@ -21,10 +21,15 @@ import (
 // choice context. We control the admin party, so we can mint freely
 // (TokenRules_OfferMint is `controller admin`).
 
-// ensureTokenRules creates the issuer's TokenRules contract if it doesn't
-// already exist. The issuer party (opts.Issuer) is the admin/signatory;
-// the auto-grant on dial covers the rights.
-func ensureTokenRules(opts CreateOptions) error {
+// findTokenRulesDisclosedFn and mintViaOfferMintFn are test seams so that
+// unit tests can stub the ledger-query steps in runMintLive and assert on
+// which participant the accept step dials without a live gRPC server.
+var findTokenRulesDisclosedFn = findTokenRulesDisclosed
+var mintViaOfferMintFn = mintViaOfferMint
+
+// ensureTokenRules creates the issuer's TokenRules contract if missing.
+// Returns the roles DARs were vetted on.
+func ensureTokenRules(out io.Writer, opts CreateOptions) ([]string, error) {
 	ctx := context.Background()
 	conn := LedgerConn{
 		Endpoint: opts.Endpoint,
@@ -34,7 +39,7 @@ func ensureTokenRules(opts CreateOptions) error {
 	}
 	client, cleanup, err := dialLedger(ctx, conn)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer cleanup()
 
@@ -47,30 +52,29 @@ func ensureTokenRules(opts CreateOptions) error {
 		_ = client.GrantUserActAndReadAs(ctx, exerciseUserID, []string{admin})
 	}
 
-	// Bundle the test-token DARs before any package-name-scoped query:
-	// findTokenRules filters by the #splice-test-token-v2 package name,
-	// which the participant rejects with PACKAGE_NAMES_NOT_FOUND until the
-	// package is vetted. No-op when already vetted.
-	if err := ensureTokenDARs(ctx, client, opts.Instance, nil); err != nil {
-		return err
+	// Vet on every participant before findTokenRules; package-name filters
+	// fail with PACKAGE_NAMES_NOT_FOUND until the DAR is vetted.
+	vetted, err := ensureTokenDARs(ctx, client, opts, out)
+	if err != nil {
+		return nil, err
 	}
 
 	existing, err := findTokenRules(ctx, client, admin)
 	if err != nil {
-		return fmt.Errorf("look up existing TokenRules: %w", err)
+		return vetted, fmt.Errorf("look up existing TokenRules: %w", err)
 	}
 	if existing != "" {
-		return nil
+		return vetted, nil
 	}
 	_, err = createTokenRules(ctx, client, admin)
-	return err
+	return vetted, err
 }
 
 // runMintLive performs an asset-specific mint: find the issuer's
 // TokenRules, exercise TokenRules_OfferMint (controller = admin), then
 // accept the resulting TokenTransferOffer so the holding lands in the
-// receiver's account. The auto-grant covers acting as both admin and
-// receiver (LocalNet hosts them on the same participant).
+// receiver's account. Receiver is often on app-user; create must vet
+// the DAR there before mint can land.
 //
 // Not batched (unlike transfer+accept): TokenRules_OfferMint is an
 // asset-specific choice and BatchingUtilityV2's TokenStandardAction set
@@ -96,14 +100,14 @@ func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regst
 		Instance: opts.Instance,
 		Role:     opts.Role,
 	}
-	client, cleanup, err := dialLedger(ctx, conn)
+	client, cleanup, err := dialSenderFn(ctx, conn)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 
 	admin := ref.IssuerParty
-	tokenRulesCID, tokenRulesDisc, err := findTokenRulesDisclosed(ctx, client, admin)
+	tokenRulesCID, tokenRulesDisc, err := findTokenRulesDisclosedFn(ctx, client, admin)
 	if err != nil {
 		return fmt.Errorf("look up TokenRules: %w", err)
 	}
@@ -112,7 +116,7 @@ func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regst
 			"run `localnet token create --endpoint ...` first", admin)
 	}
 
-	offerCID, err := mintViaOfferMint(ctx, client, admin, tokenRulesCID, opts.To, opts.Amount, ref.InstrumentID)
+	offerCID, err := mintViaOfferMintFn(ctx, client, admin, tokenRulesCID, opts.To, opts.Amount, ref.InstrumentID)
 	if err != nil {
 		return err
 	}
@@ -120,10 +124,19 @@ func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regst
 		"offer_cid": offerCID, "to": opts.To, "amount": opts.Amount,
 	})
 
-	// Settle by accepting as the receiver. The self-custodial receiver
-	// (provider=None) needs no AccountConfig; the accept context carries
-	// only the TokenRules entry.
-	if err := acceptMintOffer(ctx, client, opts.To, offerCID, tokenRulesCID, tokenRulesDisc); err != nil {
+	// Accept on the receiver's own participant; the sender's node cannot
+	// act as a party it doesn't host.
+	acceptClient := client
+	acceptConn := resolveAcceptConn(conn, opts.Instance, opts.To)
+	if acceptConn.Role != conn.Role {
+		var acceptCleanup func()
+		acceptClient, acceptCleanup, err = dialLedgerConcreteFn(ctx, acceptConn)
+		if err != nil {
+			return fmt.Errorf("dial receiver participant for mint accept: %w", err)
+		}
+		defer acceptCleanup()
+	}
+	if err := acceptMintOffer(ctx, acceptClient, opts.To, offerCID, tokenRulesCID, tokenRulesDisc); err != nil {
 		return fmt.Errorf("accept mint offer: %w", err)
 	}
 	emit(out, "mint: accepted", map[string]any{

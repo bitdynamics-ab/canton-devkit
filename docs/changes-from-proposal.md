@@ -49,6 +49,7 @@ Every deviation listed here is **intentional**, not an oversight or implementati
   - [Ledger endpoint auto-resolves on every token verb](#ledger-endpoint-auto-resolves-on-every-token-verb)
   - [`--role` defaults to `app-provider`](#--role-defaults-to-app-provider)
   - [`token create` issuer defaults to the acting role's party](#token-create-issuer-defaults-to-the-acting-roles-party)
+  - [`token create` vets the test-token DARs on every participant](#token-create-vets-the-test-token-dars-on-every-participant)
   - [phantom `token settle` reference removed](#phantom-token-settle-reference-removed)
 - [`telemetry` (root-level, new)](#telemetry-root-level-new)
 
@@ -443,6 +444,22 @@ The embedded skill docs are the same artifacts that back the Web UI's Agent Skil
 **Shipped:** on the on-ledger path, an **empty** `--issuer` defaults to the acting `--role`'s own on-ledger party, and a matching **role name** (`app-user` / `app-provider` / `sv`) resolves to that role's party — the CLI parallel of the Web UI's issuer picker, which offers the acting role's party. A role-name issuer must match `--role`; cross-role combinations are rejected so discovery and TokenRules creation cannot target different participants. A party id (`::`) or a registered alias is used as-is. An **unknown** issuer (neither a role, a registered alias, nor a party id — e.g. a typo) is **rejected**, not silently minted under the role's party.
 
 **Why:** The Web UI resolves the issuer from a party picker, so the CLI needs the same default to be usable without pasting a party id. Rejecting an unrecognised issuer prevents a mistyped `--issuer` from creating the token under the wrong party.
+
+---
+
+### `token create` vets the test-token DARs on every participant
+
+**Proposal said:** `token create` was described as a creation wizard; how the underlying token packages reach the participants was not specified.
+
+**Shipped:** on the on-ledger path, `token create` uploads and vets the bundled Splice test-token DARs on **all three** LocalNet participants (`sv`, `app-provider`, `app-user`), not only the acting role's participant. Three user-visible consequences:
+
+- On success the command prints `Vetted test-token DARs on sv, app-provider, app-user`.
+- The DARs are cached under `~/.canton-devkit/localnet/.dar-cache/<splice-commit>/`, so repeat runs (and offline runs after the first) do not re-download them.
+- `token create` now fails with an actionable error when any role's participant ledger port is missing from the instance state, instead of silently vetting a subset.
+
+`token mint` and `token transfer --auto-accept` also dial the **receiver's** participant for the accept leg rather than the sender's.
+
+**Why:** Canton only routes a transaction to a participant that has vetted the package. Vetting on the creating participant alone made minting or transferring to a party hosted on another participant fail with an opaque routing error ([#318](https://github.com/bitdynamics-ab/canton-devkit/issues/318)). Cross-participant flows are the normal case on LocalNet, since `app-provider` and `app-user` are separate nodes.
 
 ---
 
