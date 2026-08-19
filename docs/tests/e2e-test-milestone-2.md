@@ -15,7 +15,7 @@ This test plan validates the Web UI, observability/monitoring stack, DAR package
 - `$CLI` = `dpm localnet` or `canton-devkit localnet` (run full suite twice — once per mode).
 - The test DAR is built from the `daml-intro-contracts` project (`Token` template, Daml SDK 3.5.1).
 - `$DAR_PATH` = path to the built `.dar` file from `daml-intro-contracts`.
-- `$WEB_UI_URL` = URL of the Web UI. Obtain it from `$CLI status --name e2e-m2-test` — the URL is printed in the output.
+- `$WEB_UI_URL` = URL of the Web UI. Extract it from status output with shell parsing.
 - Web UI tests use `curl` for HTTP-level validation. Visual/interactive tests note what to verify manually or via browser automation.
 - Default step timeout: 30 seconds unless noted.
 
@@ -34,7 +34,10 @@ This test plan validates the Web UI, observability/monitoring stack, DAR package
    $CLI clean --name e2e-m2-test --force 2>/dev/null || true
    $CLI up --name e2e-m2-test
    ```
-4. Note the Web UI URL from the `$CLI status --name e2e-m2-test` output and set it as `$WEB_UI_URL` for the steps below.
+4. Capture the Web UI URL for later steps:
+   ```bash
+   export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^ ]*ui[^ ]*" | head -1)
+   ```
 
 ---
 

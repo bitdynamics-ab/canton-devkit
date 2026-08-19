@@ -15,7 +15,7 @@ This test plan validates the CIP-0112 token standard tooling delivered in Milest
 - `$CLI` = `dpm localnet` or `canton-devkit localnet` (run full suite twice — once per mode).
 - Token commands target the CIP-0112 (V2) path as the default.
 - Non-interactive flags are used for wizard-style commands to enable unattended execution.
-- `$WEB_UI_URL` = URL of the Web UI. Obtain it from `$CLI status --name e2e-m3-test` — the URL is printed in the output.
+- `$WEB_UI_URL` = URL of the Web UI. Extract it from status output with shell parsing.
 - Default step timeout: 30 seconds unless noted.
 
 ### Environment Setup
@@ -26,7 +26,10 @@ This test plan validates the CIP-0112 token standard tooling delivered in Milest
    $CLI clean --name e2e-m3-test --force 2>/dev/null || true
    $CLI up --name e2e-m3-test
    ```
-3. Note the Web UI URL from the `$CLI status --name e2e-m3-test` output and set it as `$WEB_UI_URL` for the steps below.
+3. Capture the Web UI URL for later steps:
+   ```bash
+   export WEB_UI_URL=$($CLI status --name e2e-m3-test 2>&1 | grep -oiE "https?://[^ ]*ui[^ ]*" | head -1)
+   ```
 
 ### Teardown
 
