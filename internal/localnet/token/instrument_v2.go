@@ -21,10 +21,8 @@ import (
 // choice context. We control the admin party, so we can mint freely
 // (TokenRules_OfferMint is `controller admin`).
 
-// ensureTokenRules creates the issuer's TokenRules contract if it doesn't
-// already exist. The issuer party (opts.Issuer) is the admin/signatory;
-// the auto-grant on dial covers the rights. Returns the roles the
-// test-token DARs were vetted on (sv, app-provider, app-user).
+// ensureTokenRules creates the issuer's TokenRules contract if missing.
+// Returns the roles DARs were vetted on.
 func ensureTokenRules(out io.Writer, opts CreateOptions) ([]string, error) {
 	ctx := context.Background()
 	conn := LedgerConn{
@@ -48,11 +46,8 @@ func ensureTokenRules(out io.Writer, opts CreateOptions) ([]string, error) {
 		_ = client.GrantUserActAndReadAs(ctx, exerciseUserID, []string{admin})
 	}
 
-	// Bundle the test-token DARs on every LocalNet participant before
-	// any package-name-scoped query: findTokenRules filters by the
-	// #splice-test-token-v2 package name, which the participant rejects
-	// with PACKAGE_NAMES_NOT_FOUND until the package is vetted. No-op
-	// when already vetted on all three roles.
+	// Vet on every participant before findTokenRules; package-name filters
+	// fail with PACKAGE_NAMES_NOT_FOUND until the DAR is vetted.
 	vetted, err := ensureTokenDARs(ctx, client, opts, out)
 	if err != nil {
 		return nil, err
@@ -72,10 +67,8 @@ func ensureTokenRules(out io.Writer, opts CreateOptions) ([]string, error) {
 // runMintLive performs an asset-specific mint: find the issuer's
 // TokenRules, exercise TokenRules_OfferMint (controller = admin), then
 // accept the resulting TokenTransferOffer so the holding lands in the
-// receiver's account. The auto-grant covers acting as admin on the
-// create participant; the receiver is often hosted on another
-// LocalNet participant (app-user), which is why token create vets the
-// test-token DARs on every participant.
+// receiver's account. Receiver is often on app-user; create must vet
+// the DAR there before mint can land.
 //
 // Not batched (unlike transfer+accept): TokenRules_OfferMint is an
 // asset-specific choice and BatchingUtilityV2's TokenStandardAction set

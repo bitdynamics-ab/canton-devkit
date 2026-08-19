@@ -63,8 +63,7 @@ func TestTokenDARRoles_MatchesAllRoles(t *testing.T) {
 	}
 }
 
-// TestEnsureTokenDARs_FansOutToAllRoles pins #318: create vets the
-// bundle on sv, app-provider, and app-user — not only the create client.
+// Create uploads the bundle on sv, app-provider, and app-user, not only the create client.
 func TestEnsureTokenDARs_FansOutToAllRoles(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedBundleInstance(t, "demo", allLedgerPorts())

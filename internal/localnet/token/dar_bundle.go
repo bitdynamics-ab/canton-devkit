@@ -17,14 +17,10 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
 
-// DAR auto-bundling. The splice-test-token-v2 instrument needs its
-// upstream DARs vetted on every LocalNet participant before `token
-// create` can anchor a TokenRules contract — mint/transfer to a party
-// on app-user fails if only app-provider has the package. Rather than
-// make the developer run `dar upload --all-participants` by hand,
-// `token create` fetches the prebuilt DARs pinned to the instance's
-// Splice commit and uploads any not already vetted on sv, app-provider,
-// and app-user.
+// DAR auto-bundling for splice-test-token-v2. Mint/transfer to a party on
+// another participant fails unless every LocalNet participant has the
+// package; token create fetches and uploads the bundle instead of
+// `dar upload --all-participants`.
 
 // tokenBundleDARs are the prebuilt DARs the test token needs, keyed by
 // package name (what resolvePackageID checks) → the DAR filename.
@@ -47,8 +43,7 @@ var tokenBundleDARs = []struct{ pkg, file string }{
 
 const darFetchMaxBytes = 64 << 20 // 64 MiB — these DARs are well under 1 MiB
 
-// darCacheDirName is a registry-root sibling of instance dirs. A leading
-// dot cannot collide with an instance name (ValidateName rejects it).
+// Leading dot keeps the cache dir out of ValidateName's instance namespace.
 const darCacheDirName = ".dar-cache"
 
 // darBundleBaseURL is the raw.githubusercontent.com base for the upstream
@@ -66,21 +61,20 @@ var errDARNotPublished = errors.New("DAR not published at this commit")
 // is more useful than surfacing a raw GitHub 404.
 var ErrTokenDARUnavailable = errors.New("test-token DAR not available for this Splice version")
 
-// darClient is the narrow package-management slice ensureTokenDARs
-// needs. *ledger.Client satisfies it; tests inject a fake per role.
+// darClient is the package-management slice ensureTokenDARs needs; narrow
+// so tests inject per-role fakes without widening LedgerClient.
 type darClient interface {
 	ListKnownPackages(ctx context.Context) (*adminv2.ListKnownPackagesResponse, error)
 	UploadDarFile(ctx context.Context, req *adminv2.UploadDarFileRequest) (*adminv2.UploadDarFileResponse, error)
 }
 
-// dialDARClient opens a darClient for a LedgerConn. Production dials
-// the participant ledger; tests reassign this to return per-role fakes.
+// Package var so tests swap in per-role fakes.
 var dialDARClient = func(ctx context.Context, conn LedgerConn) (darClient, func(), error) {
 	return dialLedger(ctx, conn)
 }
 
-// tokenDARRoles is the LocalNet participant topology ensureTokenDARs
-// always uploads and vets on — the same set as `dar upload --all-participants`.
+// Must match `dar upload --all-participants` so create and manual upload
+// target the same topology.
 func tokenDARRoles() []string {
 	roles := splice.AllRoles()
 	out := make([]string, len(roles))
@@ -90,16 +84,10 @@ func tokenDARRoles() []string {
 	return out
 }
 
-// ensureTokenDARs uploads any test-token DAR not already vetted on every
-// LocalNet participant (sv, app-provider, app-user), fetching each file
-// once from the upstream repo pinned to the instance's Splice commit
-// (or from the shared on-disk cache). Idempotent: a fully-vetted
-// topology is a no-op (no network).
-//
-// createClient is the already-open create connection; it is reused for
-// the matching role so TokenRules create does not dial twice. A missing
-// ledger port, dial failure, or upload/vet failure on any role fails
-// the whole call — silent skip is how app-user was left unvetted.
+// ensureTokenDARs uploads missing test-token DARs on sv, app-provider, and
+// app-user. Reuses createClient for the create role so TokenRules does not
+// dial twice. Any missing port or upload/vet failure fails create — skipping
+// a role leaves counterparty participants unvetted.
 func ensureTokenDARs(ctx context.Context, createClient darClient, opts CreateOptions, out io.Writer) ([]string, error) {
 	roles := tokenDARRoles()
 	createRole := roleOrDefault(opts.Role)
@@ -166,8 +154,7 @@ func ensureTokenDARs(ctx context.Context, createClient darClient, opts CreateOpt
 	return vetted, nil
 }
 
-// vetTokenDARsOn uploads any missing bundle DAR on one participant and
-// confirms each package is known afterward.
+// Post-upload package list confirms vet succeeded.
 func vetTokenDARsOn(
 	ctx context.Context,
 	client darClient,
@@ -207,9 +194,7 @@ func vetTokenDARsOn(
 	return nil
 }
 
-// packageKnown reports whether the named package is already on the
-// participant. List errors are treated as "not known" so the caller
-// still attempts upload; a subsequent list after upload is the confirm.
+// Treat list errors as absent so upload still runs.
 func packageKnown(ctx context.Context, client darClient, name string) bool {
 	resp, err := client.ListKnownPackages(ctx)
 	if err != nil {
@@ -223,9 +208,7 @@ func packageKnown(ctx context.Context, client darClient, name string) bool {
 	return false
 }
 
-// loadDAR returns DAR bytes from the shared on-disk cache, or fetches
-// from GitHub and writes the cache. Cache write failures are ignored:
-// the in-memory bytes are enough to upload.
+// Cache write failures are ignored; in-memory bytes suffice for this upload.
 func loadDAR(ctx context.Context, commit, file string) ([]byte, error) {
 	path := darCachePath(commit, file)
 	if b, err := os.ReadFile(path); err == nil && len(b) > 0 {
