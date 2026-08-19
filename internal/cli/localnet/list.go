@@ -11,6 +11,7 @@ func buildList() *cobra.Command {
 	opts := &localnet.ListOptions{Format: "text"}
 	cmd := &cobra.Command{
 		Use:           "list",
+		Aliases:       []string{"ls"},
 		Short:         "List every Canton LocalNet instance known to this DevKit",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
