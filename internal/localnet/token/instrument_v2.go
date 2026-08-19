@@ -569,8 +569,8 @@ func boolValue(b bool) *lapiv2.Value {
 	return &lapiv2.Value{Sum: &lapiv2.Value_Bool{Bool: b}}
 }
 
-// resolvePackageID returns the concrete package id of the vetted package
-// with the given package-name. Creates and template-filtered ACS queries
+// resolvePackageID returns the concrete package id for the given
+// package-name. Creates and template-filtered ACS queries
 // need the concrete id (the `#name` form resolves only for
 // interface-choice exercises); resolving at runtime stays robust across
 // the V2 alpha's weekly snapshot rotation.
@@ -584,7 +584,7 @@ func resolvePackageID(ctx context.Context, client *ledger.Client, name string) (
 			return p.GetPackageId(), nil
 		}
 	}
-	return "", fmt.Errorf("package %q not vetted on this participant — "+
+	return "", fmt.Errorf("package %q not known to this participant — "+
 		"upload it first (`localnet dar upload <%s.dar>`)", name, name)
 }
 

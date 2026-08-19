@@ -106,7 +106,7 @@ func scanWorkspace(ctx context.Context, opts BalanceOptions) (*Workspace, error)
 		return nil, err
 	}
 	if !surfaces.Any() {
-		return nil, fmt.Errorf("instance %q has no token-standard Holding package vetted (neither V1 nor V2) — token operations are unavailable", opts.Instance)
+		return nil, fmt.Errorf("instance %q has no token-standard Holding package (neither V1 nor V2) — token operations are unavailable", opts.Instance)
 	}
 
 	end, err := client.LedgerEnd(ctx)
