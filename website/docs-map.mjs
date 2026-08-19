@@ -24,7 +24,7 @@ export const docsMap = [
   { src: 'homebrew.md', dest: 'guides/homebrew', description: 'Install canton-devkit via the Homebrew tap or direct formula, and how the formula is kept in sync on every release.' },
   { src: 'faq.md', dest: 'reference/faq', description: 'Common questions about canton-devkit: what it is, how the CLI and Web UI relate, versions, and day-to-day usage.' },
   { src: 'versions.md', dest: 'reference/versions', description: 'How DevKit pins tested Splice LocalNet versions by commit SHA and content hash, discovers upstream tags, and resolves uncurated versions on opt-in.' },
-  { src: 'packaging.md', dest: 'reference/packaging', description: 'How canton-devkit ships — standalone binaries, the DPM component, the Debian/APT package — and the current supply-chain integrity story.' },
+  { src: 'packaging.md', dest: 'reference/packaging', description: 'How canton-devkit ships — standalone binaries, the DPM component, and the Homebrew tap — and the current supply-chain integrity story.' },
   { src: 'telemetry.md', dest: 'reference/telemetry', description: "The complete reference for canton-devkit's anonymous, aggregate usage counters — what is collected, what is never collected, and how to inspect or disable it." },
   { src: 'limitations.md', dest: 'reference/limitations', description: 'Things DevKit does not (yet) do well, with the rationale and workarounds where applicable.' },
   { src: 'troubleshooting.md', dest: 'reference/troubleshooting', description: 'Failure modes and fixes for LocalNet bring-up, ports, V2 token instances, credentials, and snapshots.' },

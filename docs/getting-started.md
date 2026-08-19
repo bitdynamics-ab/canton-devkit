@@ -7,8 +7,7 @@ LocalNet Docker stack. It ships two ways:
    Manager and invoke as `dpm localnet <command>`.
 2. **Standalone binary** (`canton-devkit`) — a self-contained
    executable for users who don't run DPM (CI, DevOps, workshop
-   facilitators), shipped as release archives plus APT convenience
-   packages for Debian/Ubuntu hosts. Invoke as
+   facilitators), shipped as release archives. Invoke as
    `canton-devkit localnet <command>`.
 
 Both paths ship the **same binary** and expose the **same command
@@ -142,56 +141,10 @@ the tap only hosts the Homebrew formula.
 > See the [Homebrew guide](homebrew.md) for the tap layout and how the
 > formula is kept in sync on each release.
 
-### APT — Debian / Ubuntu (amd64)
-
-Tagged releases update a static APT repository under `apt/` on this
-repository's `main` branch. Add it once, then install or upgrade with
-normal APT:
-
-```bash
-echo "deb [trusted=yes arch=amd64] https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/apt stable main" \
-  | sudo tee /etc/apt/sources.list.d/canton-devkit.list
-sudo apt update
-sudo apt install canton-devkit
-canton-devkit version
-```
-
-List available versions:
-
-```bash
-apt list -a canton-devkit
-apt policy canton-devkit
-```
-
-Install a specific version:
-
-```bash
-sudo apt install canton-devkit=0.12.2   # pick a version from `apt list -a canton-devkit`
-```
-
-The APT repo is currently unsigned and therefore uses `trusted=yes`;
-the release still publishes SHA-256 metadata. Repository signing has
-not been added yet. Package installation records a best-effort anonymous `apt`
-install-surface telemetry ping — see [Telemetry](telemetry.md)
-for what is sent and how to opt out before installing.
-
-Direct `.deb` install also works:
-
-```bash
-VERSION=v0.12.2   # replace with the latest release tag
-DEB_VERSION="${VERSION#v}"
-ASSET="canton-devkit_${DEB_VERSION}_amd64.deb"
-base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}"
-curl -fLO "${base}/${ASSET}"
-curl -fLO "${base}/SHA256SUMS"
-grep " ${ASSET}\$" SHA256SUMS | sha256sum -c - || { echo "checksum mismatch"; exit 1; }
-sudo apt install "./${ASSET}"
-canton-devkit version
-```
-
-The Debian package installs `/usr/bin/canton-devkit`. It does not install
-Docker; run `canton-devkit localnet doctor` after installation to verify
-Docker CLI, Compose v2, ports, disk, memory, and host prerequisites.
+> **Note:** the hosted APT repository and `.deb` packages are no longer
+> maintained. If you previously added
+> `/etc/apt/sources.list.d/canton-devkit.list`, remove that file and use
+> the quick-install script, a release tarball, or Homebrew instead.
 
 ### Manual download — macOS (Apple Silicon)
 

@@ -4,12 +4,12 @@
 
 1. **DPM component** (primary) — installed via `dpm install package`.
 2. **Standalone Go binary** (additional) — direct download / install.
-3. **Package-manager convenience** — a hosted APT repo wraps the same
-   standalone Linux binary for Debian/Ubuntu workflows.
+3. **Package-manager convenience** — a Homebrew tap wraps the same
+   standalone binary for macOS and Linux workflows.
 
 All release artifacts are produced by the same release workflow
 ([`.github/workflows/release.yml`](../.github/workflows/release.yml))
-from the same Go source. The DPM component and Debian package both wrap
+from the same Go source. The DPM component and Homebrew formula both wrap
 the standalone binary for their respective ecosystems.
 
 ## Standalone binary
@@ -22,12 +22,10 @@ GitHub Releases:
 | `canton-devkit_<version>_linux_amd64.tar.gz` | Linux x86_64 |
 | `canton-devkit_<version>_darwin_arm64.tar.gz` | macOS Apple Silicon |
 | `canton-devkit_<version>_windows_amd64.zip` | Windows x86_64 |
-| `canton-devkit_<version-without-v>_amd64.deb` | Debian/Ubuntu x86_64 |
 | `SHA256SUMS` | GNU `sha256sum --check`-compatible manifest |
 
-Each tarball/zip contains the binary, `LICENSE`, and `README.md`; the
-Debian package installs the same binary plus docs under standard Linux
-paths. Verify before unpacking/installing:
+Each tarball/zip contains the binary, `LICENSE`, and `README.md`. Verify
+before unpacking:
 
 ```sh
 sha256sum --check SHA256SUMS
@@ -142,64 +140,6 @@ dpm publish component oci://localhost:5000/canton-devkit:0.0.1-dryrun \
 release workflow runs the same `--dry-run` validation on every run
 (tag pushes and manual dispatches); the real publish happens only on
 `v*` tags.
-
-## Debian / APT package
-
-The release workflow builds a Debian package from the exact same
-`linux/amd64` binary used in the standalone tarball and DPM component.
-It publishes the `.deb` as a release asset and updates a static APT repo
-under `apt/` on this repository's `main` branch:
-
-```sh
-echo "deb [trusted=yes arch=amd64] https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/apt stable main" \
-  | sudo tee /etc/apt/sources.list.d/canton-devkit.list
-sudo apt update
-sudo apt install canton-devkit
-```
-
-Available versions can be inspected with:
-
-```sh
-apt list -a canton-devkit
-apt policy canton-devkit
-```
-
-Direct artifact install remains available:
-
-```sh
-sudo apt install ./canton-devkit_0.7.0_amd64.deb
-canton-devkit version
-```
-
-The package installs:
-
-```text
-/usr/bin/canton-devkit
-/usr/share/doc/canton-devkit/LICENSE
-/usr/share/doc/canton-devkit/README.md
-```
-
-It deliberately does **not** depend on or install Docker. DevKit's
-runtime preflight remains `canton-devkit localnet doctor`, which checks
-Docker CLI availability, daemon connectivity, Compose v2, ports, disk,
-memory, and host-specific prerequisites.
-
-The Debian `postinst` script calls
-`canton-devkit telemetry _record-install-surface apt` as a best-effort
-hook. The binary owns opt-out precedence, local spooling, and uploader
-timeouts, so package installation never fails if telemetry is disabled or
-the collector is unreachable.
-
-The hosted repo is generated on every release by preserving all existing
-`apt/pool/main/c/canton-devkit/*.deb` files in this repository, adding
-the new version, and rewriting `Packages` and `Packages.gz` under
-`apt/dists/stable/main/binary-amd64/` and the `Release` file at
-`apt/dists/stable/`.
-
-**Known limitation:** the APT repo is unsigned and documented with
-`trusted=yes`. The repository is backed by HTTPS and release checksums,
-but a GPG-signed `InRelease` file and install instructions using
-`signed-by=` are planned hardening steps.
 
 ## Supply-chain integrity
 

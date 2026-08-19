@@ -9,8 +9,8 @@ following the standard Homebrew tap layout. Release tarballs (and their
 the formula's `url` fields point here.
 
 This source repository does not keep a `Formula/` directory. The tap
-holds only the Homebrew formula; APT metadata lives under `apt/` in this
-repository, and the canonical `install.sh` lives at the repo root.
+holds only the Homebrew formula; the canonical `install.sh` lives at the
+repo root.
 
 ## Install
 

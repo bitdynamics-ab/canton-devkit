@@ -81,8 +81,8 @@ curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/i
 
 Release archives (macOS arm64, Linux amd64, Windows amd64),
 `SHA256SUMS`, Homebrew
-(`brew install bitdynamics-ab/canton-devkit/canton-devkit`), APT for
-Debian/Ubuntu, and `go install` are documented in the same guide.
+(`brew install bitdynamics-ab/canton-devkit/canton-devkit`), and
+`go install` are documented in the same guide.
 
 ## Documentation
 
