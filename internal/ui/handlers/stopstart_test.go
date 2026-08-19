@@ -1,10 +1,16 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 )
@@ -21,6 +27,29 @@ func stopStartMux(t *testing.T) *httptest.Server {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+// Without stubbing, the bring-up branch really boots Canton, and the
+// containers it leaves behind push every later run down the fast-start
+// branch instead.
+func stubStartPath(t *testing.T, existing []containers.Info) chan *localnet.UpOptions {
+	t.Helper()
+	upOpts := make(chan *localnet.UpOptions, 1)
+	origList, origUp, origStart := listContainers, runUp, runStart
+	t.Cleanup(func() { listContainers, runUp, runStart = origList, origUp, origStart })
+
+	listContainers = func(context.Context, string) ([]containers.Info, error) {
+		return existing, nil
+	}
+	runUp = func(_ context.Context, _ localnet.Progress, opts *localnet.UpOptions) int {
+		upOpts <- opts
+		return localnet.ExitSuccess
+	}
+	runStart = func(context.Context, localnet.Progress, io.Writer, io.Writer, *localnet.StartOptions) int {
+		t.Error("fast-start ran; with no containers the handler must bring up instead")
+		return localnet.ExitSuccess
+	}
+	return upOpts
 }
 
 func TestStop_InvalidName400(t *testing.T) {
@@ -109,6 +138,7 @@ func TestStart_StoppedNoContainers202(t *testing.T) {
 	if err := registry.Write(state); err != nil {
 		t.Fatalf("write seeded profiles: %v", err)
 	}
+	upOpts := stubStartPath(t, nil)
 	srv := stopStartMux(t)
 	resp, err := http.Post(srv.URL+"/api/instances/pebble/start", "application/json", nil)
 	if err != nil {
@@ -120,6 +150,28 @@ func TestStart_StoppedNoContainers202(t *testing.T) {
 	}
 	if h := resp.Header.Get("Content-Type"); h != "application/json" {
 		t.Errorf("Content-Type = %q, want application/json", h)
+	}
+	var body struct {
+		Instance  string `json:"instance"`
+		EventsURL string `json:"events_url"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.EventsURL != "/api/instances/pebble/events" {
+		t.Errorf("events_url = %q", body.EventsURL)
+	}
+
+	select {
+	case opts := <-upOpts:
+		if opts.Name != "pebble" || opts.Version != "0.6.4" {
+			t.Errorf("bring-up opts = %q/%q, want pebble/0.6.4", opts.Name, opts.Version)
+		}
+		if len(opts.Profiles) != 5 {
+			t.Errorf("bring-up profiles = %v, want the 5 seeded", opts.Profiles)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("bring-up never ran")
 	}
 }
 

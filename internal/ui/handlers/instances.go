@@ -173,6 +173,14 @@ func handleStopInstance() http.HandlerFunc {
 //
 // The 204-vs-202 split lets the frontend branch: 204 → just refetch;
 // 202 → open the existing create-progress modal.
+// Indirected so tests can drive the start path without booting a real
+// Canton stack, which outlives the request and skews every later run.
+var (
+	listContainers = containers.List
+	runStart       = localnet.RunStart
+	runUp          = localnet.RunUp
+)
+
 func handleStartInstance(hub *stream.Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
@@ -206,7 +214,7 @@ func handleStartInstance(hub *stream.Hub) http.HandlerFunc {
 
 		// stopped / failed / partial: fast-start iff the containers
 		// still exist; otherwise fall back to a full bring-up.
-		existing, listErr := containers.List(r.Context(), state.ComposeProject)
+		existing, listErr := listContainers(r.Context(), state.ComposeProject)
 		if listErr == nil && len(existing) > 0 {
 			ctx, cancel := context.WithTimeout(r.Context(), downTimeout)
 			defer cancel()
@@ -216,7 +224,7 @@ func handleStartInstance(hub *stream.Hub) http.HandlerFunc {
 			// The Progress sink is only used on RunStart's up-fallback
 			// path, which the containers-present branch can't reach, so
 			// a discard sink is safe here.
-			exit := localnet.RunStart(ctx,
+			exit := runStart(ctx,
 				localnet.NewTextProgress(io.Discard, io.Discard),
 				&outBuf, &errBuf,
 				&localnet.StartOptions{Name: name, SkipWait: true})
@@ -268,7 +276,7 @@ func startBringUp(w http.ResponseWriter, name, version string, profiles []string
 		defer hub.ClearBuffer(topic)
 		defer jobs.Unregister(name)
 		prog := progress.New(hub, name)
-		exitCode := localnet.RunUp(jobCtx, prog, opts)
+		exitCode := runUp(jobCtx, prog, opts)
 		log.Printf("start (bring-up) instance %q: exit_code=%d", name, exitCode)
 	}()
 
