@@ -1,10 +1,8 @@
 # E2E Test Plan — Milestone 2: Web UI, Observability, DAR & Contract Tooling
 
-> **Proposal Reference:** `original-devkit-proposal.md`, Milestone 2 (Lines 249–266)
-> **Estimated Delivery:** Month 6
-> **Total Tests:** 26
-> **Platforms:** macOS (Apple Silicon), Linux (amd64), Windows (amd64)
-> **Prerequisite:** All Milestone 1 tests passing.
+**Total Tests:** 26
+**Platforms:** macOS (Apple Silicon), Linux (amd64), Windows (amd64)
+**Prerequisite:** All Milestone 1 tests passing.
 
 ---
 
@@ -17,31 +15,26 @@ This test plan validates the Web UI, observability/monitoring stack, DAR package
 - `$CLI` = `dpm localnet` or `canton-devkit localnet` (run full suite twice — once per mode).
 - The test DAR is built from the `daml-intro-contracts` project (`Token` template, Daml SDK 3.5.1).
 - `$DAR_PATH` = path to the built `.dar` file from `daml-intro-contracts`.
-- `$WEB_UI_URL` = URL of the Web UI (printed by `$CLI up` or `$CLI status`).
+- `$WEB_UI_URL` = URL of the Web UI. Obtain it from `$CLI status --name e2e-m2-test` — the URL is printed in the output.
 - Web UI tests use `curl` for HTTP-level validation. Visual/interactive tests note what to verify manually or via browser automation.
 - Default step timeout: 30 seconds unless noted.
 
 ### Environment Setup
 
-```bash
-# Set CLI mode
-export CLI="dpm localnet"       # or "canton-devkit localnet"
-
-# Build the test DAR
-cd daml-intro-contracts
-daml build
-export DAR_PATH="$(pwd)/.daml/dist/daml-intro-contracts-1.0.0.dar"
-cd ..
-
-# Ensure clean state
-$CLI clean --name e2e-m2-test --force 2>/dev/null || true
-
-# Start LocalNet for Milestone 2 tests
-$CLI up --name e2e-m2-test
-
-# Capture Web UI URL from status output
-export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^ ]*ui[^ ]*" | head -1)
-```
+1. Set the CLI mode (`dpm localnet` or `canton-devkit localnet`).
+2. Build the test DAR:
+   ```bash
+   cd daml-intro-contracts
+   daml build
+   # DAR is at .daml/dist/daml-intro-contracts-1.0.0.dar
+   cd ..
+   ```
+3. Clean any prior state and start the LocalNet:
+   ```bash
+   $CLI clean --name e2e-m2-test --force 2>/dev/null || true
+   $CLI up --name e2e-m2-test
+   ```
+4. Note the Web UI URL from the `$CLI status --name e2e-m2-test` output and set it as `$WEB_UI_URL` for the steps below.
 
 ---
 
@@ -60,11 +53,11 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
 
 **Steps:**
 
-1. Verify the Web UI URL is printed during startup:
+1. Verify the Web UI URL is printed in status output:
    ```bash
-   $CLI status --name e2e-m2-test 2>&1 | grep -qiE "(web.ui|dashboard|http.*ui)"
+   $CLI status --name e2e-m2-test
    ```
-   - **Expected:** URL found in output.
+   - **Expected:** Output contains a URL referencing the Web UI or dashboard.
 
 2. Verify the Web UI is reachable via HTTP:
    ```bash
@@ -74,9 +67,9 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
 
 3. Verify the Web UI serves HTML:
    ```bash
-   curl -sf "$WEB_UI_URL" | grep -qiE "<html|<!DOCTYPE"
+   curl -sf "$WEB_UI_URL"
    ```
-   - **Expected:** Valid HTML response.
+   - **Expected:** Response body contains `<html` or `<!DOCTYPE`.
 
 **Cleanup:** None (LocalNet stays running for subsequent tests).
 
@@ -89,20 +82,19 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
 
 **Steps:**
 
-1. Verify the Web UI exposes lifecycle action endpoints or renders action buttons:
+1. Verify the Web UI exposes lifecycle action elements:
    ```bash
-   curl -sf "$WEB_UI_URL" | grep -qiE "(start|stop|restart|status|clean)"
+   curl -sf "$WEB_UI_URL"
    ```
-   - **Expected:** Lifecycle actions are present in the UI HTML.
+   - **Expected:** HTML contains references to `start`, `stop`, `restart`, `status`, or `clean`.
 
-2. Test the status view via Web UI (API endpoint if available):
+2. Test the status view via Web UI:
    ```bash
-   curl -sf "$WEB_UI_URL/api/status" 2>/dev/null || \
-   curl -sf "$WEB_UI_URL/status" 2>/dev/null
+   curl -sf "$WEB_UI_URL/api/status" 2>/dev/null || curl -sf "$WEB_UI_URL/status" 2>/dev/null
    ```
    - **Expected:** JSON or HTML response showing LocalNet health.
 
-**Note:** Full interactive testing of start/stop/restart via the Web UI requires browser automation (e.g., Playwright, Puppeteer). The above steps validate endpoint availability. An AI agent should verify that clicking "Restart" in the UI triggers `$CLI restart` behavior and the UI updates to reflect the new state.
+**Note:** Full interactive testing of start/stop/restart via the Web UI requires browser automation. The above steps validate endpoint availability. Verify that clicking "Restart" in the UI triggers restart behavior and the UI updates to reflect the new state.
 
 **Cleanup:** None.
 
@@ -115,30 +107,16 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
 
 **Steps:**
 
-1. Verify dashboard shows named instances:
+1. Fetch the dashboard:
    ```bash
-   curl -sf "$WEB_UI_URL" | grep -qiE "e2e-m2-test"
+   curl -sf "$WEB_UI_URL"
    ```
-
-2. Verify dashboard shows service health indicators:
-   ```bash
-   curl -sf "$WEB_UI_URL" | grep -qiE "(healthy|running|ready|status)"
-   ```
-
-3. Verify dashboard shows endpoints and ports:
-   ```bash
-   curl -sf "$WEB_UI_URL" | grep -qiE "(endpoint|port|localhost|[0-9]{4,5})"
-   ```
-
-4. Verify dashboard shows participant information:
-   ```bash
-   curl -sf "$WEB_UI_URL" | grep -qiE "(participant|party)"
-   ```
-
-5. Verify dashboard shows Splice version:
-   ```bash
-   curl -sf "$WEB_UI_URL" | grep -qiE "(version|splice)"
-   ```
+   Verify the response contains each of the following:
+   - The instance name `e2e-m2-test`.
+   - Service health indicators: `healthy`, `running`, or `ready`.
+   - Endpoint or port information: `endpoint`, `port`, or a 4–5 digit number.
+   - Participant information: `participant` or `party`.
+   - Splice version information: `version` or `splice`.
 
 **Cleanup:** None.
 
@@ -159,16 +137,13 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
    ```bash
    $CLI dar upload "$DAR_PATH" --participant participant1 --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify upload confirmation:**
-     ```bash
-     $CLI dar upload "$DAR_PATH" --participant participant1 --name e2e-m2-test 2>&1 | grep -qiE "(uploaded|success|package)"
-     ```
+   - **Expected:** Exit code `0`. Output contains `uploaded`, `success`, or `package`.
 
 2. Verify the package appears in the list:
    ```bash
-   $CLI dar list --participant participant1 --name e2e-m2-test 2>&1 | grep -qiE "daml-intro-contracts"
+   $CLI dar list --participant participant1 --name e2e-m2-test
    ```
+   - **Expected:** Output contains `daml-intro-contracts`.
 
 **Cleanup:** None (package remains for subsequent tests).
 
@@ -189,9 +164,9 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
 
 2. Verify package is listed on multiple participants:
    ```bash
-   $CLI dar list --name e2e-m2-test 2>&1 | grep -ciE "daml-intro-contracts"
+   $CLI dar list --name e2e-m2-test
    ```
-   - **Expected:** Count >= 2 (one entry per participant).
+   - **Expected:** `daml-intro-contracts` appears at least twice — once per participant.
 
 **Cleanup:** None.
 
@@ -208,21 +183,13 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
    ```bash
    $CLI dar upload "$DAR_PATH" --all-participants --dry-run --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`, output shows what would happen without executing.
-   - **Verify:**
-     ```bash
-     $CLI dar upload "$DAR_PATH" --all-participants --dry-run --name e2e-m2-test 2>&1 | grep -qiE "(dry.run|would|simulate)"
-     ```
+   - **Expected:** Exit code `0`. Output indicates what would happen without executing (e.g., contains `dry-run`, `would`, or `simulate`).
 
 2. Upload with vetting for SCU:
    ```bash
    $CLI dar upload "$DAR_PATH" --all-participants --vet --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify vetting status:**
-     ```bash
-     $CLI dar list --name e2e-m2-test 2>&1 | grep -iE "daml-intro-contracts" | grep -qiE "(vetted|vet)"
-     ```
+   - **Expected:** Exit code `0`. The `daml-intro-contracts` entry in `$CLI dar list` shows `vetted` or `vet`.
 
 **Cleanup:** None.
 
@@ -239,20 +206,16 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
    ```bash
    $CLI dar list --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify output includes required fields:**
-     ```bash
-     OUTPUT=$($CLI dar list --name e2e-m2-test 2>&1)
-     echo "$OUTPUT" | grep -qiE "(package.id|name|version)"  # identifiers
-     echo "$OUTPUT" | grep -qiE "(daml.lf|module)"            # metadata
-     echo "$OUTPUT" | grep -qiE "daml-intro-contracts"        # our package
-     ```
+   - **Expected:** Exit code `0`. Output contains:
+     - Package identifiers: `package-id`, `name`, or `version`.
+     - Metadata: `daml-lf` or `module`.
+     - The uploaded package: `daml-intro-contracts`.
 
 2. List packages filtered by participant:
    ```bash
    $CLI dar list --participant participant1 --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`, list is scoped to that participant.
+   - **Expected:** Exit code `0`. List is scoped to that participant.
 
 **Cleanup:** None.
 
@@ -269,22 +232,13 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
    ```bash
    $CLI dar info daml-intro-contracts --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify output includes structural details:**
-     ```bash
-     OUTPUT=$($CLI dar info daml-intro-contracts --name e2e-m2-test 2>&1)
-     echo "$OUTPUT" | grep -qiE "Token"           # template name
-     echo "$OUTPUT" | grep -qiE "owner"            # field name
-     echo "$OUTPUT" | grep -qiE "(module|Token)"   # module listing
-     echo "$OUTPUT" | grep -qiE "(dependency|hash)" # metadata
-     ```
+   - **Expected:** Exit code `0`. Output contains the template name `Token`, the field name `owner`, module listing, and dependency or hash metadata.
 
-2. Get package info by package ID:
+2. Get package info by package ID — obtain the package ID from `$CLI dar list`, then run:
    ```bash
-   PKG_ID=$($CLI dar list --name e2e-m2-test 2>&1 | grep -i "daml-intro-contracts" | grep -oE "[a-f0-9]{64}" | head -1)
-   $CLI dar info "$PKG_ID" --name e2e-m2-test
+   $CLI dar info "<package-id>" --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`, same info as by name.
+   - **Expected:** Exit code `0`. Same information as by name.
 
 **Cleanup:** None.
 
@@ -297,21 +251,19 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
 
 **Steps:**
 
-1. Download a DAR by package ID:
-   ```bash
-   PKG_ID=$($CLI dar list --name e2e-m2-test 2>&1 | grep -i "daml-intro-contracts" | grep -oE "[a-f0-9]{64}" | head -1)
-   $CLI dar download "$PKG_ID" --out /tmp/downloaded.dar --name e2e-m2-test
-   ```
-   - **Expected:** Exit code `0`.
-   - **Verify file exists and is non-empty:**
-     ```bash
-     [ -s /tmp/downloaded.dar ] && echo "PASS" || echo "FAIL: downloaded DAR is empty or missing"
-     ```
+1. Obtain the package ID from `$CLI dar list --name e2e-m2-test` (64-character hex string next to `daml-intro-contracts`).
 
-2. Verify downloaded DAR is a valid archive:
+2. Download the DAR:
    ```bash
-   file /tmp/downloaded.dar | grep -qiE "(zip|archive|data)"
+   $CLI dar download "<package-id>" --out /tmp/downloaded.dar --name e2e-m2-test
    ```
+   - **Expected:** Exit code `0`. File `/tmp/downloaded.dar` exists and is non-empty.
+
+3. Verify the downloaded file is a valid archive:
+   ```bash
+   file /tmp/downloaded.dar
+   ```
+   - **Expected:** Output contains `zip`, `archive`, or `data`.
 
 **Cleanup:** `rm -f /tmp/downloaded.dar`
 
@@ -324,30 +276,18 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
 
 **Steps:**
 
-1. Build a second version of the DAR (modify version in daml.yaml):
+1. Build a second version of the DAR by editing `version: 1.0.0` to `version: 2.0.0` in `daml-intro-contracts/daml.yaml`, rebuilding with `daml build`, then uploading the new DAR:
    ```bash
-   cd daml-intro-contracts
-   cp daml.yaml daml.yaml.bak
-   sed -i.tmp 's/version: 1.0.0/version: 2.0.0/' daml.yaml
-   daml build
-   export DAR_PATH_V2="$(pwd)/.daml/dist/daml-intro-contracts-2.0.0.dar"
-   mv daml.yaml.bak daml.yaml
-   rm -f daml.yaml.tmp
-   cd ..
-   $CLI dar upload "$DAR_PATH_V2" --all-participants --name e2e-m2-test
+   $CLI dar upload .daml/dist/daml-intro-contracts-2.0.0.dar --all-participants --name e2e-m2-test
    ```
 
 2. Diff the two versions:
    ```bash
    $CLI dar diff daml-intro-contracts:1.0.0 daml-intro-contracts:2.0.0 --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify output shows diff information:**
-     ```bash
-     $CLI dar diff daml-intro-contracts:1.0.0 daml-intro-contracts:2.0.0 --name e2e-m2-test 2>&1 | grep -qiE "(template|choice|field|change|diff|identical|scu|compatible)"
-     ```
+   - **Expected:** Exit code `0`. Output describes changes or confirms identical content — contains one of `template`, `choice`, `field`, `change`, `diff`, `identical`, `scu`, or `compatible`.
 
-**Cleanup:** `rm -f "$DAR_PATH_V2"`
+**Cleanup:** Remove the v2 DAR file built in step 1.
 
 ---
 
@@ -358,21 +298,13 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
 
 **Steps:**
 
-1. Get the package ID to remove:
-   ```bash
-   PKG_ID=$($CLI dar list --name e2e-m2-test 2>&1 | grep -i "daml-intro-contracts" | grep -oE "[a-f0-9]{64}" | head -1)
-   ```
+1. Obtain the package ID from `$CLI dar list --name e2e-m2-test`.
 
 2. Remove / unvet the package:
    ```bash
-   $CLI dar remove "$PKG_ID" --name e2e-m2-test
+   $CLI dar remove "<package-id>" --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify package is no longer listed (or marked as unvetted):**
-     ```bash
-     $CLI dar list --name e2e-m2-test 2>&1 | grep -i "$PKG_ID" | grep -qiE "(unvetted|removed)" || \
-     ! $CLI dar list --name e2e-m2-test 2>&1 | grep -qiE "$PKG_ID"
-     ```
+   - **Expected:** Exit code `0`. Running `$CLI dar list` afterward shows the package is either absent or marked `unvetted` or `removed`.
 
 3. Re-upload for subsequent tests:
    ```bash
@@ -394,21 +326,13 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
    ```bash
    $CLI dar build-upload --project ./daml-intro-contracts --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify both build and upload occurred:**
-     ```bash
-     $CLI dar build-upload --project ./daml-intro-contracts --name e2e-m2-test 2>&1 | grep -qiE "(build|compil)" 
-     $CLI dar build-upload --project ./daml-intro-contracts --name e2e-m2-test 2>&1 | grep -qiE "(upload|deploy)"
-     ```
+   - **Expected:** Exit code `0`. Output mentions both build/compile and upload/deploy steps.
 
 2. If `dpm` is not available (standalone mode), verify graceful skip:
    ```bash
-   # Only if dpm is not on PATH:
-   which dpm > /dev/null 2>&1 || {
-     $CLI dar build-upload --project ./daml-intro-contracts --name e2e-m2-test 2>&1 | grep -qiE "(skip|not available|dpm not found)"
-     echo "PASS: graceful skip when dpm unavailable"
-   }
+   which dpm > /dev/null 2>&1 || $CLI dar build-upload --project ./daml-intro-contracts --name e2e-m2-test
    ```
+   - **Expected:** Output indicates the command was skipped or that `dpm` is not available.
 
 **Cleanup:** None.
 
@@ -426,20 +350,20 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
    ```bash
    $CLI dar watch ./daml-intro-contracts --name e2e-m2-test &
    WATCH_PID=$!
-   sleep 5  # let watch mode initialize
+   sleep 5
    ```
 
 2. Trigger a rebuild by touching a source file:
    ```bash
    touch daml-intro-contracts/daml/Token.daml
-   sleep 15  # wait for watch to detect change, rebuild, and re-upload
+   sleep 15
    ```
 
 3. Verify re-upload occurred:
    ```bash
-   $CLI dar list --name e2e-m2-test 2>&1 | grep -qiE "daml-intro-contracts"
+   $CLI dar list --name e2e-m2-test
    ```
-   - **Expected:** Package is listed (re-uploaded).
+   - **Expected:** `daml-intro-contracts` is listed (re-uploaded after file change).
 
 4. Stop watch mode:
    ```bash
@@ -458,20 +382,10 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
 
 **Steps:**
 
-1. Verify DAR upload UI is present in the Web UI:
-   ```bash
-   curl -sf "$WEB_UI_URL" | grep -qiE "(upload|drag.*drop|dar)"
-   ```
-
-2. Verify package explorer tree is present:
-   ```bash
-   curl -sf "$WEB_UI_URL" | grep -qiE "(package|module|template|explorer)"
-   ```
-
-3. Verify uploaded packages appear in the Web UI:
-   ```bash
-   curl -sf "$WEB_UI_URL" 2>&1 | grep -qiE "(daml-intro-contracts|Token)"
-   ```
+1. Fetch the Web UI and confirm it contains:
+   - A DAR upload section: `upload`, `drag`, `drop`, or `dar`.
+   - A package explorer tree: `package`, `module`, `template`, or `explorer`.
+   - The uploaded package: `daml-intro-contracts` or `Token`.
 
 **Note:** Drag-and-drop upload and package tree navigation require browser automation for full interactive testing. The above steps validate that the UI elements are rendered.
 
@@ -491,28 +405,22 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
 
 **Steps:**
 
-1. Start contracts watch in the background:
+1. Start contracts watch in the background, redirecting output to a file:
    ```bash
    timeout 30 $CLI contracts watch --name e2e-m2-test > /tmp/watch-output.txt 2>&1 &
    WATCH_PID=$!
    sleep 3
    ```
 
-2. Create a contract via the Ledger API or Daml Script to trigger a create event:
-   ```bash
-   # Use daml script or ledger API to create a Token contract
-   # This step depends on the available parties from the LocalNet
-   PARTY=$($CLI env --name e2e-m2-test 2>&1 | grep -iE "PARTY|ALICE" | head -1 | cut -d= -f2)
-   # Trigger contract creation via available means (daml script, JSON API, etc.)
-   ```
+2. Create a contract via the Ledger API or Daml Script to trigger a create event. The party to use is available from `$CLI env --name e2e-m2-test` — look for a `PARTY` or `ALICE` variable.
 
 3. Wait and check watch output:
    ```bash
    sleep 10
    kill $WATCH_PID 2>/dev/null || true
    wait $WATCH_PID 2>/dev/null || true
-   cat /tmp/watch-output.txt | grep -qiE "(create|archive|contract|event)" && echo "PASS" || echo "FAIL: no events in watch output"
    ```
+   - **Expected:** `/tmp/watch-output.txt` contains `create`, `archive`, `contract`, or `event`.
 
 **Cleanup:** `rm -f /tmp/watch-output.txt`
 
@@ -529,36 +437,31 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
    ```bash
    $CLI tx ls --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify output has transaction entries:**
-     ```bash
-     $CLI tx ls --name e2e-m2-test 2>&1 | grep -qiE "(transaction|tx|offset)"
-     ```
+   - **Expected:** Exit code `0`. Output contains `transaction`, `tx`, or `offset`.
 
-2. Filter by party:
+2. Filter by party — obtain a party ID from `$CLI env --name e2e-m2-test`:
    ```bash
-   PARTY=$($CLI env --name e2e-m2-test 2>&1 | grep -iE "PARTY|ALICE" | head -1 | cut -d= -f2)
-   $CLI tx ls --party "$PARTY" --name e2e-m2-test
+   $CLI tx ls --party "<party-id>" --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`, only transactions visible to that party.
+   - **Expected:** Exit code `0`. Only transactions visible to that party.
 
 3. Filter by template:
    ```bash
    $CLI tx ls --template "Token:Token" --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`, only Token-related transactions.
+   - **Expected:** Exit code `0`. Only Token-related transactions.
 
 4. Filter by offset range:
    ```bash
    $CLI tx ls --from 0 --to 100 --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`, transactions within offset range.
+   - **Expected:** Exit code `0`. Transactions within the offset range.
 
 5. Combined multi-dimensional filter:
    ```bash
-   $CLI tx ls --party "$PARTY" --template "Token:Token" --from 0 --name e2e-m2-test
+   $CLI tx ls --party "<party-id>" --template "Token:Token" --from 0 --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`, results satisfy all filters.
+   - **Expected:** Exit code `0`. Results satisfy all filters simultaneously.
 
 **Cleanup:** None.
 
@@ -571,31 +474,20 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
 
 **Steps:**
 
-1. Get a transaction ID from the listing:
-   ```bash
-   TX_ID=$($CLI tx ls --name e2e-m2-test 2>&1 | grep -oE "[a-f0-9-]{36,}" | head -1)
-   ```
+1. Obtain a transaction ID from `$CLI tx ls --name e2e-m2-test` (UUID-style string).
 
-2. Replay the transaction showing per-party visibility:
+2. Replay the transaction:
    ```bash
-   $CLI tx replay "$TX_ID" --name e2e-m2-test
+   $CLI tx replay "<tx-id>" --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify output shows party visibility projection:**
-     ```bash
-     $CLI tx replay "$TX_ID" --name e2e-m2-test 2>&1 | grep -qiE "(party|visible|projection|signatory|observer)"
-     ```
+   - **Expected:** Exit code `0`. Output contains `party`, `visible`, `projection`, `signatory`, or `observer`.
 
-3. Verify different parties see different projections:
+3. Obtain two party IDs from `$CLI env --name e2e-m2-test`. Replay with each party explicitly:
    ```bash
-   PARTY_A=$($CLI env --name e2e-m2-test 2>&1 | grep -iE "PARTY" | sed -n '1p' | cut -d= -f2)
-   PARTY_B=$($CLI env --name e2e-m2-test 2>&1 | grep -iE "PARTY" | sed -n '2p' | cut -d= -f2)
-   OUTPUT_A=$($CLI tx replay "$TX_ID" --party "$PARTY_A" --name e2e-m2-test 2>&1)
-   OUTPUT_B=$($CLI tx replay "$TX_ID" --party "$PARTY_B" --name e2e-m2-test 2>&1)
-   # At minimum, both should return successfully
-   echo "$OUTPUT_A" | grep -qiE "(party|visible|projection)" && echo "PASS: Party A projection" || echo "WARN"
-   echo "$OUTPUT_B" | grep -qiE "(party|visible|projection)" && echo "PASS: Party B projection" || echo "WARN"
+   $CLI tx replay "<tx-id>" --party "<party-a>" --name e2e-m2-test
+   $CLI tx replay "<tx-id>" --party "<party-b>" --name e2e-m2-test
    ```
+   - **Expected:** Both commands exit `0`. Each output shows the party's visibility projection.
 
 **Cleanup:** None.
 
@@ -608,20 +500,10 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
 
 **Steps:**
 
-1. Verify explorer section exists in Web UI:
-   ```bash
-   curl -sf "$WEB_UI_URL" | grep -qiE "(explorer|active.contract|acs)"
-   ```
-
-2. Verify ACS data is rendered (contracts visible):
-   ```bash
-   curl -sf "$WEB_UI_URL" 2>&1 | grep -qiE "(contract|template|Token|signatory|observer)"
-   ```
-
-3. Verify party/template filter controls exist:
-   ```bash
-   curl -sf "$WEB_UI_URL" | grep -qiE "(filter|party|template|participant)"
-   ```
+1. Fetch the Web UI and confirm it contains:
+   - An explorer section: `explorer`, `active contract`, or `acs`.
+   - Contract data: `contract`, `template`, `Token`, `signatory`, or `observer`.
+   - Filter controls: `filter`, `party`, `template`, or `participant`.
 
 **Note:** Full interactive filtering requires browser automation. The above validates the UI structure is present.
 
@@ -636,20 +518,10 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
 
 **Steps:**
 
-1. Verify transaction timeline section exists:
-   ```bash
-   curl -sf "$WEB_UI_URL" | grep -qiE "(transaction|timeline|history|tx)"
-   ```
-
-2. Verify transaction entries are rendered:
-   ```bash
-   curl -sf "$WEB_UI_URL" | grep -qiE "(create|exercise|archive|offset)"
-   ```
-
-3. Verify party visibility badges are present:
-   ```bash
-   curl -sf "$WEB_UI_URL" | grep -qiE "(party|visibility|badge)"
-   ```
+1. Fetch the Web UI and confirm it contains:
+   - A transaction timeline section: `transaction`, `timeline`, `history`, or `tx`.
+   - Transaction entries: `create`, `exercise`, `archive`, or `offset`.
+   - Party visibility badges: `party`, `visibility`, or `badge`.
 
 **Cleanup:** None.
 
@@ -662,15 +534,9 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
 
 **Steps:**
 
-1. Verify contract detail view/drawer is accessible:
-   ```bash
-   curl -sf "$WEB_UI_URL" | grep -qiE "(detail|drawer|payload|lifecycle)"
-   ```
-
-2. Verify the detail view includes payload, lifecycle, and interface information:
-   ```bash
-   curl -sf "$WEB_UI_URL" | grep -qiE "(payload|json|lifecycle|created|signatory|observer)"
-   ```
+1. Fetch the Web UI and confirm it contains:
+   - A detail view or drawer: `detail`, `drawer`, `payload`, or `lifecycle`.
+   - Payload and lifecycle information: `payload`, `json`, `lifecycle`, `created`, `signatory`, or `observer`.
 
 **Cleanup:** None.
 
@@ -687,35 +553,32 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
 
 **Steps:**
 
-1. Verify observability components can be enabled:
+1. Restart LocalNet with observability enabled:
    ```bash
-   # If observability is not already running, restart with it enabled
    $CLI down --name e2e-m2-test
    $CLI up --name e2e-m2-test --enable prometheus --enable grafana
    ```
    - **Expected:** Exit code `0`.
 
-2. Verify Prometheus is running:
+2. Obtain the Prometheus URL from `$CLI status --name e2e-m2-test` (or use the default `http://localhost:9090`). Verify Prometheus responds:
    ```bash
-   PROM_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^ ]*prometheus[^ ]*" | head -1)
-   # Or use default port
-   PROM_URL="${PROM_URL:-http://localhost:9090}"
-   curl -sf "$PROM_URL/-/healthy" > /dev/null && echo "PASS: Prometheus healthy" || echo "FAIL"
+   curl -sf "<prometheus-url>/-/healthy"
    ```
+   - **Expected:** HTTP `200`.
 
-3. Verify Grafana is running:
+3. Obtain the Grafana URL from `$CLI status --name e2e-m2-test` (or use the default `http://localhost:3000`). Verify Grafana responds:
    ```bash
-   GRAFANA_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^ ]*grafana[^ ]*" | head -1)
-   GRAFANA_URL="${GRAFANA_URL:-http://localhost:3000}"
-   curl -sf "$GRAFANA_URL/api/health" > /dev/null && echo "PASS: Grafana healthy" || echo "FAIL"
+   curl -sf "<grafana-url>/api/health"
    ```
+   - **Expected:** HTTP `200`.
 
-4. Verify selective disable works:
+4. Verify selective disable:
    ```bash
    $CLI down --name e2e-m2-test
    $CLI up --name e2e-m2-test --disable prometheus
-   $CLI status --name e2e-m2-test 2>&1 | grep -qiE "prometheus" && echo "WARN: Prometheus should be disabled" || echo "PASS"
+   $CLI status --name e2e-m2-test
    ```
+   - **Expected:** Status output does not reference Prometheus as running.
 
 **Cleanup:** `$CLI down --name e2e-m2-test && $CLI up --name e2e-m2-test`
 
@@ -728,24 +591,23 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
 
 **Steps:**
 
-1. Verify Grafana is accessible:
+1. Verify Grafana is accessible (use the URL from `$CLI status`):
    ```bash
-   GRAFANA_URL="${GRAFANA_URL:-http://localhost:3000}"
-   curl -sf "$GRAFANA_URL/api/health" | grep -qiE "ok" && echo "PASS" || echo "FAIL"
+   curl -sf "<grafana-url>/api/health"
    ```
+   - **Expected:** Response body contains `ok`.
 
 2. Verify Canton-specific dashboard presets exist:
    ```bash
-   curl -sf "$GRAFANA_URL/api/search?type=dash-db" | grep -qiE "(canton|transaction|latency|throughput|contract)"
+   curl -sf "<grafana-url>/api/search?type=dash-db"
    ```
-   - **Expected:** At least one Canton-specific dashboard preset is found.
+   - **Expected:** Response contains at least one dashboard name related to `canton`, `transaction`, `latency`, `throughput`, or `contract`.
 
-3. Verify dashboards contain expected panels:
+3. Inspect a dashboard — obtain the `uid` from the search response and fetch the dashboard definition:
    ```bash
-   DASHBOARD_UID=$(curl -sf "$GRAFANA_URL/api/search?type=dash-db" | grep -oE '"uid":"[^"]*"' | head -1 | cut -d'"' -f4)
-   curl -sf "$GRAFANA_URL/api/dashboards/uid/$DASHBOARD_UID" | grep -qiE "(transactions.sec|latency|active.contract|throughput)"
+   curl -sf "<grafana-url>/api/dashboards/uid/<dashboard-uid>"
    ```
-   - **Expected:** Dashboard includes DApp developer-focused panels.
+   - **Expected:** Response contains developer-focused panels: `transactions/sec`, `latency`, `active contract`, or `throughput`.
 
 **Cleanup:** None.
 
@@ -762,20 +624,11 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
    ```bash
    $CLI metrics --name e2e-m2-test
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify output includes key metrics:**
-     ```bash
-     OUTPUT=$($CLI metrics --name e2e-m2-test 2>&1)
-     echo "$OUTPUT" | grep -qiE "(throughput|transactions)"
-     echo "$OUTPUT" | grep -qiE "(latency|p50|p99)"
-     echo "$OUTPUT" | grep -qiE "(resource|cpu|memory)"
-     ```
-
-2. Verify Grafana dashboard URLs are printed:
-   ```bash
-   $CLI metrics --name e2e-m2-test 2>&1 | grep -qiE "https?://.*grafana"
-   ```
-   - **Expected:** At least one Grafana URL in output.
+   - **Expected:** Exit code `0`. Output contains:
+     - Throughput information: `throughput` or `transactions`.
+     - Latency information: `latency`, `p50`, or `p99`.
+     - Resource usage: `resource`, `cpu`, or `memory`.
+     - At least one Grafana URL.
 
 **Cleanup:** None.
 
@@ -796,27 +649,19 @@ export WEB_UI_URL=$($CLI status --name e2e-m2-test 2>&1 | grep -oiE "https?://[^
    ```bash
    $CLI status --name e2e-m2-test --json
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify valid JSON:**
-     ```bash
-     $CLI status --name e2e-m2-test --json 2>&1 | python3 -m json.tool > /dev/null
-     ```
-   - **Verify JSON contains expected keys:**
-     ```bash
-     $CLI status --name e2e-m2-test --json 2>&1 | python3 -c "import json,sys; d=json.load(sys.stdin); assert 'name' in d or 'status' in d or 'services' in d, 'Missing expected keys'"
-     ```
+   - **Expected:** Exit code `0`. Output is valid JSON containing at least one of `name`, `status`, or `services` as top-level keys.
 
 2. DAR list with JSON output:
    ```bash
-   $CLI dar list --name e2e-m2-test --json 2>&1 | python3 -m json.tool > /dev/null
+   $CLI dar list --name e2e-m2-test --json
    ```
-   - **Expected:** Valid JSON.
+   - **Expected:** Valid JSON output.
 
 3. List with JSON output:
    ```bash
-   $CLI list --json 2>&1 | python3 -m json.tool > /dev/null
+   $CLI list --json
    ```
-   - **Expected:** Valid JSON.
+   - **Expected:** Valid JSON output.
 
 **Cleanup:** None.
 
@@ -835,43 +680,37 @@ This test simulates a complete CI pipeline.
 1. Start LocalNet:
    ```bash
    $CLI up --name e2e-ci-test
-   EXIT_CODE=$?
-   [ "$EXIT_CODE" -eq 0 ] && echo "PASS: up" || { echo "FAIL: up exited $EXIT_CODE"; exit 1; }
    ```
+   - **Expected:** Exit code `0`.
 
-2. Wait for readiness (already handled by `up`, but verify):
+2. Verify readiness:
    ```bash
-   $CLI status --name e2e-ci-test 2>&1 | grep -qiE "(healthy|ready|running)"
-   [ $? -eq 0 ] && echo "PASS: ready" || { echo "FAIL: not ready"; exit 1; }
+   $CLI status --name e2e-ci-test
    ```
+   - **Expected:** Output contains `healthy`, `ready`, or `running`.
 
 3. Upload DAR:
    ```bash
    $CLI dar upload "$DAR_PATH" --all-participants --name e2e-ci-test
-   [ $? -eq 0 ] && echo "PASS: dar upload" || { echo "FAIL: dar upload"; exit 1; }
    ```
+   - **Expected:** Exit code `0`.
 
-4. Run application tests (simulate with a health check):
+4. Run application tests (simulate with a DAR list check):
    ```bash
-   # In a real CI pipeline, this would be: daml test, or integration tests
-   $CLI dar list --name e2e-ci-test 2>&1 | grep -qiE "daml-intro-contracts"
-   [ $? -eq 0 ] && echo "PASS: test verification" || { echo "FAIL: test verification"; exit 1; }
+   $CLI dar list --name e2e-ci-test
    ```
+   - **Expected:** `daml-intro-contracts` is listed.
 
 5. Teardown:
    ```bash
    $CLI down --name e2e-ci-test
-   [ $? -eq 0 ] && echo "PASS: down" || { echo "FAIL: down"; exit 1; }
    $CLI clean --name e2e-ci-test --force
-   [ $? -eq 0 ] && echo "PASS: clean" || { echo "FAIL: clean"; exit 1; }
    ```
+   - **Expected:** Both commands exit `0`.
 
-6. Verify full cleanup:
-   ```bash
-   docker ps --filter "label=canton-devkit" --format '{{.Names}}' | grep -qE "e2e-ci-test" && echo "FAIL: containers remain" || echo "PASS: full cleanup"
-   ```
+6. Verify full cleanup — `docker ps --filter "label=canton-devkit"` should show no containers named `e2e-ci-test`.
 
-**Cleanup:** Handled in step 5-6.
+**Cleanup:** Handled in step 5.
 
 ---
 
@@ -886,44 +725,22 @@ This test simulates a complete CI pipeline.
 
 **Steps:**
 
-1. Verify skill documents are included in the distribution:
-   ```bash
-   # Check for skill docs in the installed package or binary directory
-   find $(dirname $(which canton-devkit 2>/dev/null || echo ".")) -name "*.md" -path "*skill*" -o -name "*.md" -path "*agent*" 2>/dev/null | head -5
-   # Or check a known documentation path
-   ls -la docs/skills/ 2>/dev/null || ls -la skills/ 2>/dev/null || echo "Check skill document location"
-   ```
+1. Verify skill documents are included in the distribution. Look for `.md` files under paths containing `skill` or `agent` in the installed package directory or alongside the binary.
 
-2. Verify a skill document contains executable workflow steps:
-   ```bash
-   # Read a skill document and verify it contains dpm localnet commands
-   SKILL_DOC=$(find . -name "*.md" -path "*skill*" -o -name "*.md" -path "*agent*" 2>/dev/null | head -1)
-   if [ -n "$SKILL_DOC" ]; then
-     grep -qiE "dpm localnet|canton-devkit localnet" "$SKILL_DOC" && echo "PASS: contains CLI commands" || echo "FAIL: no CLI commands found"
-     grep -qiE "(up|down|status|dar upload|logs)" "$SKILL_DOC" && echo "PASS: contains lifecycle commands" || echo "FAIL: no lifecycle commands"
-   else
-     echo "WARN: Skill document not found — check distribution packaging"
-   fi
-   ```
+2. Open a skill document and verify it contains:
+   - At least one `dpm localnet` or `canton-devkit localnet` command.
+   - Lifecycle commands: `up`, `down`, `status`, `dar upload`, or `logs`.
 
 3. Execute the basic workflow described in a skill document:
    ```bash
-   # The skill document should describe a workflow like:
-   # 1. Start LocalNet
-   # 2. Check status
-   # 3. Upload a DAR
-   # 4. List packages
-   # 5. Check logs
-   # 6. Stop LocalNet
-   # Execute each step and verify:
    $CLI up --name e2e-skill-test
    $CLI status --name e2e-skill-test
    $CLI dar upload "$DAR_PATH" --all-participants --name e2e-skill-test
    $CLI dar list --name e2e-skill-test
-   timeout 5 $CLI logs --name e2e-skill-test 2>&1 | head -10
+   timeout 5 $CLI logs --name e2e-skill-test
    $CLI down --name e2e-skill-test
-   echo "PASS: skill workflow executed successfully"
    ```
+   - **Expected:** All commands exit `0`.
 
 **Cleanup:** `$CLI clean --name e2e-skill-test --force 2>/dev/null || true`
 

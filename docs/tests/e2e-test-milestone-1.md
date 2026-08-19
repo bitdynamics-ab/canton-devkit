@@ -1,37 +1,29 @@
 # E2E Test Plan — Milestone 1: LocalNet Management CLI
 
-> **Proposal Reference:** `original-devkit-proposal.md`, Milestone 1 (Lines 230–247)
-> **Estimated Delivery:** Month 3
-> **Total Tests:** 19
-> **Platforms:** macOS (Apple Silicon), Linux (amd64), Windows (amd64)
+**Total Tests:** 19
+**Platforms:** macOS (Apple Silicon), Linux (amd64), Windows (amd64)
 
 ---
 
 ## Overview
 
-This test plan validates the core LocalNet lifecycle management CLI delivered in Milestone 1. Every test is designed for mechanical execution by an AI agent or CI pipeline.
+This test plan validates the core LocalNet lifecycle management CLI delivered in Milestone 1.
 
 ### Conventions
 
 - Commands are shown in both forms: `dpm localnet ...` (DPM component) and `canton-devkit localnet ...` (standalone). Both must be tested.
 - `$CLI` is used as a placeholder — set it to either `dpm localnet` or `canton-devkit localnet` before running.
 - Exit code `0` = success. Non-zero = failure (specific codes noted where relevant).
-- Output verification uses `grep -qE` patterns. A test step passes if the grep matches.
 - `$PLATFORM` is one of `macos`, `linux`, `windows`.
 - Timeouts are specified per-step where relevant. Default step timeout: 30 seconds unless noted.
 
 ### Environment Setup
 
+Run the full suite twice — once with `CLI="dpm localnet"` and once with `CLI="canton-devkit localnet"`.
+
+Before starting, verify Docker is running (`docker info` should succeed), then clean up any leftover instances from prior runs:
+
 ```bash
-# Set CLI mode (run full suite twice — once per mode)
-export CLI="dpm localnet"       # DPM component mode
-# OR
-export CLI="canton-devkit localnet"  # standalone mode
-
-# Ensure Docker is running
-docker info > /dev/null 2>&1 || { echo "FAIL: Docker not running"; exit 1; }
-
-# Ensure clean state before test suite
 $CLI clean --name e2e-test-default --force 2>/dev/null || true
 $CLI clean --name e2e-test-a --force 2>/dev/null || true
 $CLI clean --name e2e-test-b --force 2>/dev/null || true
@@ -55,16 +47,13 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
    dpm install package canton-devkit
    ```
    - **Expected:** Exit code `0`.
-   - **Verify:** `dpm localnet --help` exits `0` and output matches:
-     ```bash
-     dpm localnet --help 2>&1 | grep -qE "(up|down|restart|clean|status|logs|snapshot|restore)"
-     ```
+   - **Verify:** Run `dpm localnet --help` — it should exit `0` and the output should contain the subcommands `up`, `down`, `restart`, `clean`, `status`, `logs`, `snapshot`, and `restore`.
 
 2. Confirm the `localnet` top-level command is registered:
    ```bash
-   dpm --help 2>&1 | grep -qE "localnet"
+   dpm --help
    ```
-   - **Expected:** Match found (exit `0`).
+   - **Expected:** The word `localnet` appears in the output.
 
 **Cleanup:** None.
 
@@ -96,17 +85,14 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
    ```bash
    ./canton-devkit localnet --help
    ```
-   - **Expected:** Exit code `0`, output matches:
-     ```bash
-     ./canton-devkit localnet --help 2>&1 | grep -qE "(up|down|restart|clean|status|logs|snapshot|restore)"
-     ```
+   - **Expected:** Exit code `0`. Output includes `up`, `down`, `restart`, `clean`, `status`, `logs`, `snapshot`, and `restore`.
 
 3. Verify checksum (if published):
    ```bash
    curl -L -o checksums.txt https://github.com/<org>/canton-devkit/releases/latest/download/checksums.txt
-   sha256sum -c checksums.txt 2>&1 | grep -qE "canton-devkit.*OK"
+   sha256sum -c checksums.txt
    ```
-   - **Expected:** Checksum matches.
+   - **Expected:** The `canton-devkit` entry is reported as `OK`.
 
 **Cleanup:** `rm -f canton-devkit checksums.txt`
 
@@ -123,33 +109,17 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
    ```bash
    $CLI --version
    ```
-   - **Expected:** Exit code `0`, output matches a semver pattern:
-     ```bash
-     $CLI --version 2>&1 | grep -qE "[0-9]+\.[0-9]+\.[0-9]+"
-     ```
+   - **Expected:** Exit code `0`. Output contains a semver-style version string such as `0.1.0` or `dev`.
 
 2. Check help output includes all Milestone 1 commands:
    ```bash
-   $CLI --help 2>&1 | grep -qE "up"
-   $CLI --help 2>&1 | grep -qE "start"
-   $CLI --help 2>&1 | grep -qE "stop"
-   $CLI --help 2>&1 | grep -qE "down"
-   $CLI --help 2>&1 | grep -qE "restart"
-   $CLI --help 2>&1 | grep -qE "pause"
-   $CLI --help 2>&1 | grep -qE "resume"
-   $CLI --help 2>&1 | grep -qE "clean"
-   $CLI --help 2>&1 | grep -qE "status"
-   $CLI --help 2>&1 | grep -qE "logs"
-   $CLI --help 2>&1 | grep -qE "snapshot"
-   $CLI --help 2>&1 | grep -qE "restore"
-   $CLI --help 2>&1 | grep -qE "doctor"
+   $CLI --help
    ```
-   - **Expected:** All grep commands exit `0`. (`start`/`stop` are first-class lifecycle commands — no longer aliases of `up`/`down` — and `pause`/`resume` are listed too.)
+   - **Expected:** All of the following appear in the output: `up`, `start`, `stop`, `down`, `restart`, `pause`, `resume`, `clean`, `status`, `logs`, `snapshot`, `restore`, `doctor`. (`start`/`stop` are first-class lifecycle commands — no longer aliases of `up`/`down` — and `pause`/`resume` are listed too.)
 
 3. Verify no runtime dependencies required (no Go, Node, Python, Rust):
    ```bash
-   # Binary should be statically linked / self-contained
-   file $(which canton-devkit) 2>/dev/null || file $(which dpm) 2>/dev/null
+   file $(which canton-devkit 2>/dev/null || which dpm 2>/dev/null)
    ```
    - **Expected:** Output indicates a compiled binary (e.g., "Mach-O", "ELF", "PE32").
 
@@ -168,15 +138,7 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
    ```bash
    $CLI doctor
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify output includes pass indicators for all checks:**
-     ```bash
-     $CLI doctor 2>&1 | grep -qiE "(docker cli|docker daemon|compose v2|ports|disk|memory)"
-     ```
-   - **Verify no failures reported:**
-     ```bash
-     $CLI doctor 2>&1 | grep -qiE "(fail|error|missing)" && echo "FAIL: doctor reports issues" || echo "PASS"
-     ```
+   - **Expected:** Exit code `0`. Output includes pass indicators for checks covering Docker CLI, Docker daemon, Compose v2, ports, disk, and memory. No lines containing `fail`, `error`, or `missing` should appear.
 
 **Cleanup:** None.
 
@@ -199,11 +161,7 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
    ```bash
    $CLI doctor
    ```
-   - **Expected:** Non-zero exit code.
-   - **Verify remediation instructions in output:**
-     ```bash
-     $CLI doctor 2>&1 | grep -qiE "(install docker|docker not found|docker desktop)"
-     ```
+   - **Expected:** Non-zero exit code. Output includes remediation instructions mentioning Docker installation (e.g., "Install Docker Desktop" or "docker not found").
 
 3. Restore PATH:
    ```bash
@@ -225,11 +183,7 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
    ```bash
    $CLI doctor
    ```
-   - **Expected:** Non-zero exit code OR exit `0` with warnings.
-   - **Verify resource warnings in output:**
-     ```bash
-     $CLI doctor 2>&1 | grep -qiE "(memory|disk|insufficient|warning)"
-     ```
+   - **Expected:** Non-zero exit code OR exit `0` with warnings. Output mentions memory, disk, or resource constraints.
 
 **Note:** This test may require manual Docker Desktop resource configuration. On Linux with native Docker, simulate by setting `--memory` limits on the daemon. If the environment has sufficient resources, verify that doctor reports adequate resources instead.
 
@@ -249,27 +203,25 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
    ```bash
    $CLI up --name e2e-test-default
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify endpoints printed:**
-     ```bash
-     $CLI up --name e2e-test-default 2>&1 | grep -qiE "(endpoint|port|url|ledger|json.api)"
-     ```
-   - **Verify readiness wait completed (command did not return until services ready):**
-     ```bash
-     $CLI status --name e2e-test-default 2>&1 | grep -qiE "(healthy|ready|running)"
-     ```
+   - **Expected:** Exit code `0`. Output includes endpoint, port, or URL information (ledger, JSON API, or similar).
 
-2. Verify Docker resources are labeled correctly:
+2. Verify readiness — the command should not return until services are ready:
    ```bash
-   docker ps --filter "label=canton-devkit" --format '{{.Names}}' | grep -qE "e2e-test-default"
+   $CLI status --name e2e-test-default
    ```
-   - **Expected:** At least one container matches.
+   - **Expected:** Output contains `healthy`, `ready`, or `running`.
 
-3. Verify deterministic Docker Compose project name:
+3. Verify Docker resources are labeled correctly:
    ```bash
-   docker compose ls --format json 2>/dev/null | grep -qE "e2e-test-default"
+   docker ps --filter "label=canton-devkit" --format '{{.Names}}'
    ```
-   - **Expected:** Project listed.
+   - **Expected:** At least one container name contains `e2e-test-default`.
+
+4. Verify deterministic Docker Compose project name:
+   ```bash
+   docker compose ls --format json
+   ```
+   - **Expected:** The project `e2e-test-default` (or `canton-e2e-test-default`) is listed.
 
 **Cleanup:** `$CLI down --name e2e-test-default`
 
@@ -291,15 +243,15 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
 
 2. Verify the instance uses the specified name:
    ```bash
-   docker ps --filter "label=canton-devkit" --format '{{.Names}}' | grep -qE "e2e-named-test"
+   docker ps --filter "label=canton-devkit" --format '{{.Names}}'
    ```
-   - **Expected:** Match found.
+   - **Expected:** At least one container name contains `e2e-named-test`.
 
 3. Verify status references the correct name:
    ```bash
-   $CLI status --name e2e-named-test 2>&1 | grep -qiE "e2e-named-test"
+   $CLI status --name e2e-named-test
    ```
-   - **Expected:** Exit code `0`, name appears in output.
+   - **Expected:** Exit code `0`. Output contains the string `e2e-named-test`.
 
 **Cleanup:** `$CLI down --name e2e-named-test && $CLI clean --name e2e-named-test --force`
 
@@ -322,15 +274,15 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
 
 2. Verify the selected version is reflected in status:
    ```bash
-   $CLI status --name e2e-version-test 2>&1 | grep -qE "$SPLICE_VERSION"
+   $CLI status --name e2e-version-test
    ```
-   - **Expected:** Version string appears in output.
+   - **Expected:** Output contains the version string `$SPLICE_VERSION`.
 
 3. Test with invalid version:
    ```bash
    $CLI up --name e2e-bad-version --version "0.0.0-nonexistent"
    ```
-   - **Expected:** Non-zero exit code, error message about invalid/unavailable version.
+   - **Expected:** Non-zero exit code. Output contains an error message about an invalid or unavailable version.
 
 **Cleanup:** `$CLI down --name e2e-version-test && $CLI clean --name e2e-version-test --force`
 
@@ -352,21 +304,17 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
    ```bash
    $CLI status --name e2e-test-default
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify output includes required information:**
-     ```bash
-     OUTPUT=$($CLI status --name e2e-test-default 2>&1)
-     echo "$OUTPUT" | grep -qiE "(healthy|running|ready)"          # service health
-     echo "$OUTPUT" | grep -qiE "(port|endpoint)"                   # ports/endpoints
-     echo "$OUTPUT" | grep -qiE "(participant)"                     # participant readiness
-     echo "$OUTPUT" | grep -qiE "(version|splice)"                  # selected version
-     ```
+   - **Expected:** Exit code `0`. Output covers:
+     - Service health: contains `healthy`, `running`, or `ready`.
+     - Ports or endpoints: contains `port` or `endpoint`.
+     - Participant readiness: contains `participant`.
+     - Selected version: contains `version` or `splice`.
 
 3. Check status for non-existent LocalNet:
    ```bash
    $CLI status --name nonexistent-localnet-xyz
    ```
-   - **Expected:** Non-zero exit code, clear error message.
+   - **Expected:** Non-zero exit code. Clear error message.
 
 **Cleanup:** `$CLI down --name e2e-test-default`
 
@@ -386,23 +334,19 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
 
 2. Tail full logs (non-blocking with timeout):
    ```bash
-   timeout 10 $CLI logs --name e2e-test-default 2>&1 | head -50
+   timeout 10 $CLI logs --name e2e-test-default
    ```
-   - **Expected:** Output is non-empty (logs are streaming).
-   - **Verify:**
-     ```bash
-     timeout 10 $CLI logs --name e2e-test-default 2>&1 | head -5 | wc -l | grep -qE "[1-9]"
-     ```
+   - **Expected:** Output is non-empty — logs are streaming.
 
 3. Tail logs for a specific service:
    ```bash
-   timeout 10 $CLI logs participant --name e2e-test-default 2>&1 | head -20
+   timeout 10 $CLI logs --service participant --name e2e-test-default
    ```
-   - **Expected:** Output is non-empty, logs come from the specified service only.
+   - **Expected:** Output is non-empty. Logs originate from the specified service.
 
 4. Tail logs for non-existent service:
    ```bash
-   $CLI logs nonexistent-service --name e2e-test-default
+   $CLI logs --service nonexistent-service --name e2e-test-default
    ```
    - **Expected:** Non-zero exit code or clear error message about unknown service.
 
@@ -427,21 +371,13 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
    ```bash
    $CLI restart --name e2e-test-default
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify readiness after restart:**
-     ```bash
-     $CLI status --name e2e-test-default 2>&1 | grep -qiE "(healthy|ready|running)"
-     ```
+   - **Expected:** Exit code `0`. Follow up with `$CLI status --name e2e-test-default` — output should contain `healthy`, `ready`, or `running`.
 
 3. Restart a single service:
    ```bash
-   $CLI restart participant --name e2e-test-default
+   $CLI restart --service participant --name e2e-test-default
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify the restarted service is healthy:**
-     ```bash
-     $CLI status --name e2e-test-default 2>&1 | grep -qiE "(healthy|ready|running)"
-     ```
+   - **Expected:** Exit code `0`. Status check again shows all services healthy.
 
 **Cleanup:** `$CLI down --name e2e-test-default`
 
@@ -475,22 +411,15 @@ recreating the stack. When the containers have already been removed
 
 3. Verify containers are stopped but **not** removed:
    ```bash
-   # Containers still exist (stopped state)
-   docker ps -a --filter "label=com.docker.compose.project=canton-e2e-test-default" --format '{{.Names}}' | grep -qE "e2e-test-default"
-   # ...but none are running
-   docker ps --filter "label=com.docker.compose.project=canton-e2e-test-default" --format '{{.Names}}' | grep -qE "e2e-test-default" && echo "FAIL: containers still running" || echo "PASS"
+   docker ps -a --filter "label=com.docker.compose.project=canton-e2e-test-default" --format '{{.Names}}'
    ```
-   - **Expected:** Containers present in `docker ps -a`, absent from `docker ps`.
+   - **Expected:** Container names appear in `docker ps -a` (stopped state). Run `docker ps` with the same filter — no containers should appear there (none are running).
 
 4. Start the instance again:
    ```bash
    $CLI start --name e2e-test-default
    ```
-   - **Expected:** Exit code `0`, no image pull / stack recreate (fast compose-start path).
-   - **Verify readiness after start:**
-     ```bash
-     $CLI status --name e2e-test-default 2>&1 | grep -qiE "(healthy|ready|running)"
-     ```
+   - **Expected:** Exit code `0`. No image pull or stack recreate (fast compose-start path). Status check shows services healthy.
 
 **Cleanup:** `$CLI clean --name e2e-test-default --force 2>/dev/null || true`
 
@@ -508,10 +437,7 @@ recreating the stack. When the containers have already been removed
    $CLI up --name e2e-test-default
    ```
 
-2. Verify it is running:
-   ```bash
-   docker ps --filter "label=canton-devkit" --format '{{.Names}}' | grep -qE "e2e-test-default"
-   ```
+2. Verify it is running — `docker ps --filter "label=canton-devkit"` should show containers named `e2e-test-default`.
 
 3. Stop it:
    ```bash
@@ -519,17 +445,9 @@ recreating the stack. When the containers have already been removed
    ```
    - **Expected:** Exit code `0`.
 
-4. Verify containers stopped:
-   ```bash
-   docker ps --filter "label=canton-devkit" --format '{{.Names}}' | grep -qE "e2e-test-default" && echo "FAIL: containers still running" || echo "PASS"
-   ```
+4. Verify containers stopped — `docker ps --filter "label=canton-devkit"` should show no containers named `e2e-test-default`.
 
-5. Verify unrelated Docker resources are not affected:
-   ```bash
-   # If other non-DevKit containers were running before, they should still be running
-   docker ps --format '{{.Names}}' | grep -v "canton-devkit" | wc -l
-   ```
-   - **Expected:** Count unchanged from before test.
+5. Verify unrelated Docker resources are not affected — any non-DevKit containers that were running before should still be running.
 
 **Cleanup:** `$CLI clean --name e2e-test-default --force 2>/dev/null || true`
 
@@ -548,30 +466,18 @@ recreating the stack. When the containers have already been removed
    $CLI down --name e2e-test-default
    ```
 
-2. Verify resources exist (volumes, networks):
-   ```bash
-   docker volume ls --format '{{.Name}}' | grep -qE "e2e-test-default"
-   ```
-   - **Expected:** Volumes exist from the stopped instance.
+2. Verify resources exist — `docker volume ls` should show volumes whose name contains `e2e-test-default`.
 
 3. Clean the instance:
    ```bash
-   $CLI clean --name e2e-test-default
+   $CLI clean --name e2e-test-default --force
    ```
-   - **Expected:** Exit code `0`. May prompt for confirmation (use `--force` if non-interactive).
-   - If confirmation is required:
-     ```bash
-     echo "y" | $CLI clean --name e2e-test-default
-     # OR
-     $CLI clean --name e2e-test-default --force
-     ```
+   - **Expected:** Exit code `0`.
 
 4. Verify all DevKit-managed resources removed:
-   ```bash
-   docker volume ls --format '{{.Name}}' | grep -qE "e2e-test-default" && echo "FAIL: volumes remain" || echo "PASS"
-   docker network ls --format '{{.Name}}' | grep -qE "e2e-test-default" && echo "FAIL: networks remain" || echo "PASS"
-   docker ps -a --filter "label=canton-devkit" --format '{{.Names}}' | grep -qE "e2e-test-default" && echo "FAIL: containers remain" || echo "PASS"
-   ```
+   - `docker volume ls` — no volume names contain `e2e-test-default`.
+   - `docker network ls` — no network names contain `e2e-test-default`.
+   - `docker ps -a --filter "label=canton-devkit"` — no container names contain `e2e-test-default`.
 
 **Cleanup:** None (test is self-cleaning).
 
@@ -592,13 +498,9 @@ recreating the stack. When the containers have already been removed
 
 2. Create a snapshot:
    ```bash
-   $CLI snapshot --name e2e-test-default
+   $CLI snapshot --name e2e-test-default --to /tmp/e2e-snapshot.tgz
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify snapshot reference is output:**
-     ```bash
-     $CLI snapshot --name e2e-test-default 2>&1 | grep -qiE "(snapshot|saved|created)"
-     ```
+   - **Expected:** Exit code `0`. Output contains `snapshot`, `saved`, or `created`.
 
 3. Stop and clean the LocalNet:
    ```bash
@@ -608,13 +510,9 @@ recreating the stack. When the containers have already been removed
 
 4. Restore from snapshot:
    ```bash
-   $CLI restore --name e2e-test-default
+   $CLI restore --name e2e-test-default --from /tmp/e2e-snapshot.tgz
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify LocalNet is running and healthy after restore:**
-     ```bash
-     $CLI status --name e2e-test-default 2>&1 | grep -qiE "(healthy|ready|running)"
-     ```
+   - **Expected:** Exit code `0`. Status check shows LocalNet running and healthy.
 
 **Cleanup:** `$CLI down --name e2e-test-default && $CLI clean --name e2e-test-default --force`
 
@@ -628,42 +526,28 @@ recreating the stack. When the containers have already been removed
 
 **Steps:**
 
-1. Start first instance with explicit ports:
+1. Start first instance:
    ```bash
    $CLI up --name e2e-test-a
    ```
    - **Expected:** Exit code `0`.
 
-2. Start second instance with non-conflicting ports:
+2. Start second instance:
    ```bash
    $CLI up --name e2e-test-b
    ```
    - **Expected:** Exit code `0`.
 
-3. Verify both instances are running and isolated:
-   ```bash
-   $CLI status --name e2e-test-a 2>&1 | grep -qiE "(healthy|ready|running)"
-   $CLI status --name e2e-test-b 2>&1 | grep -qiE "(healthy|ready|running)"
-   ```
+3. Verify both instances are running and healthy — `$CLI status` on each should show `healthy`, `ready`, or `running`.
 
-4. Verify port isolation (no port conflicts):
-   ```bash
-   PORTS_A=$($CLI status --name e2e-test-a 2>&1 | grep -oE "[0-9]{4,5}" | sort)
-   PORTS_B=$($CLI status --name e2e-test-b 2>&1 | grep -oE "[0-9]{4,5}" | sort)
-   OVERLAP=$(comm -12 <(echo "$PORTS_A") <(echo "$PORTS_B"))
-   [ -z "$OVERLAP" ] && echo "PASS: no port overlap" || echo "FAIL: overlapping ports: $OVERLAP"
-   ```
+4. Verify port isolation — compare the port numbers listed in `$CLI status --name e2e-test-a` against those in `$CLI status --name e2e-test-b`. No port should appear in both outputs.
 
-5. Verify Docker resource isolation (separate project names):
-   ```bash
-   docker compose ls --format json 2>/dev/null | grep -qE "e2e-test-a"
-   docker compose ls --format json 2>/dev/null | grep -qE "e2e-test-b"
-   ```
+5. Verify Docker resource isolation — `docker compose ls` should show both `e2e-test-a` and `e2e-test-b` as separate projects.
 
 6. Stop one instance and verify the other is unaffected:
    ```bash
    $CLI down --name e2e-test-a
-   $CLI status --name e2e-test-b 2>&1 | grep -qiE "(healthy|ready|running)"
+   $CLI status --name e2e-test-b
    ```
    - **Expected:** Instance B still healthy.
 
@@ -693,22 +577,9 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
    ```bash
    $CLI env --name e2e-test-default
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify `.env`-style output:**
-     ```bash
-     OUTPUT=$($CLI env --name e2e-test-default 2>&1)
-     echo "$OUTPUT" | grep -qE "^[A-Z_]+=.+"                        # KEY=value format
-     echo "$OUTPUT" | grep -qiE "(LEDGER|JSON.API|ADMIN|PARTICIPANT)" # expected keys
-     ```
+   - **Expected:** Exit code `0`. Output uses `KEY=value` format and contains keys related to LEDGER, JSON API, ADMIN, or PARTICIPANT endpoints.
 
-3. Verify exported values are usable (source and test a variable):
-   ```bash
-   eval "$($CLI env --name e2e-test-default)"
-   # Verify at least one URL/port is reachable
-   curl -sf "http://${LEDGER_API_HOST:-localhost}:${LEDGER_API_PORT:-6865}/health" > /dev/null 2>&1 || \
-   curl -sf "http://${JSON_API_HOST:-localhost}:${JSON_API_PORT:-7575}/health" > /dev/null 2>&1 || \
-   echo "WARN: Could not reach exported endpoints (may require different health check path)"
-   ```
+3. Verify exported values are usable — source the output and confirm at least one listed endpoint responds to an HTTP health check.
 
 **Cleanup:** `$CLI down --name e2e-test-default`
 
@@ -731,26 +602,16 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
    ```bash
    $CLI list
    ```
-   - **Expected:** Exit code `0`.
-   - **Verify both instances appear:**
-     ```bash
-     OUTPUT=$($CLI list 2>&1)
-     echo "$OUTPUT" | grep -qE "e2e-test-a"
-     echo "$OUTPUT" | grep -qE "e2e-test-b"
-     ```
+   - **Expected:** Exit code `0`. Both `e2e-test-a` and `e2e-test-b` appear in the output.
 
 3. Stop one instance and re-list:
    ```bash
    $CLI down --name e2e-test-a
-   OUTPUT=$($CLI list 2>&1)
-   echo "$OUTPUT" | grep -qE "e2e-test-b"
+   $CLI list
    ```
-   - **Expected:** Instance B still listed, instance A either removed or shown as stopped.
+   - **Expected:** Instance B is still listed. Instance A is either absent or shown as stopped.
 
-4. Verify no non-DevKit containers appear in the list:
-   ```bash
-   $CLI list 2>&1 | grep -qiE "(canton-devkit|localnet|e2e-test)" || echo "WARN: list output format unclear"
-   ```
+4. Verify no non-DevKit containers appear in the list — all entries should be Canton DevKit instances.
 
 **Cleanup:**
 ```bash
@@ -772,7 +633,7 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
 | `3` | LocalNet instance not found |
 | `4` | Port conflict |
 | `5` | Resource insufficient (memory/disk) |
-| Non-zero | Any failure (agent should capture stderr for diagnostics) |
+| Non-zero | Any failure (capture stderr for diagnostics) |
 
 *Note: Exact exit codes are subject to implementation. The key contract is: `0` = success, non-zero = failure with diagnostic output on stderr.*
 
@@ -822,7 +683,6 @@ $CLI clean --name e2e-test-b --force 2>/dev/null || true
 **Binary version:** dev
 **Splice version (default/latest):** 0.6.4
 **Splice version (explicit):** 0.6.3
-**Script:** `scripts/e2e/run-all.sh` (full suite) or `scripts/e2e/m1-*.sh` (individual tests)
 
 ### CLI Syntax Adaptations
 
