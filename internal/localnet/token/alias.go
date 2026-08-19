@@ -96,6 +96,18 @@ func aliasMapForInstance(instance string) map[string]registry.PartyRef {
 	return state.Parties
 }
 
+// receiverRole returns the role that hosts partyID so the accept step
+// can dial the correct participant when receiver and sender are on
+// different nodes.
+func receiverRole(instance, partyID string) string {
+	for _, ref := range aliasMapForInstance(instance) {
+		if ref.PartyID == partyID {
+			return ref.Role
+		}
+	}
+	return ""
+}
+
 // PartyAliasMap returns partyID → alias for an instance's registered
 // parties, matching the Web UI handler's alias-map shape so CLI JSON and
 // HTTP responses carry the same aliases. Empty when the instance is

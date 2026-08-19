@@ -37,6 +37,11 @@ decimal precision, initial supply, and issuer party. The instrument is
 recorded in the instance's registry under its symbol so subsequent
 ` + "`token mint/transfer/burn/balance`" + ` commands can resolve it.
 
+On-ledger create uploads and vets the bundled test-token DARs on every
+LocalNet participant (sv, app-provider, app-user), not only --role, so
+mint and transfer to a party on another participant work without a
+manual ` + "`dar upload --all-participants`" + `.
+
 Use --non-interactive (with all the per-field flags) to run from CI
 or from a script. The Web UI uses the same orchestration via
 POST /api/tokens.`,
