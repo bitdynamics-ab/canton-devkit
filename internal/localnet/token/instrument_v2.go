@@ -54,7 +54,7 @@ func ensureTokenRules(out io.Writer, opts CreateOptions) ([]string, error) {
 
 	// Vet on every participant before findTokenRules; package-name filters
 	// fail with PACKAGE_NAMES_NOT_FOUND until the DAR is vetted.
-	vetted, err := ensureTokenDARs(ctx, client, opts, out)
+	vetted, err := ensureTokenDARs(ctx, opts, out)
 	if err != nil {
 		return nil, err
 	}
