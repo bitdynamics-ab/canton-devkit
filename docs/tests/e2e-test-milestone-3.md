@@ -36,6 +36,19 @@ $CLI up --name e2e-m3-test
 export WEB_UI_URL=$($CLI status --name e2e-m3-test 2>&1 | grep -oiE "https?://[^ ]*ui[^ ]*" | head -1)
 ```
 
+### Teardown
+
+```bash
+$CLI down --name e2e-m3-test 2>/dev/null || true
+$CLI clean --name e2e-m3-test --force 2>/dev/null || true
+```
+
+Teardown is not a test case and is not owned by one. An automated run must
+place these commands in a step that runs whether the suite passed or failed —
+`if: always()` in GitHub Actions, or a shell `trap ... EXIT` — otherwise a
+failing test leaks the instance, its containers, and its volumes onto the
+runner. A manual run ends with M3-TOK-999, whose cleanup step points back here.
+
 ---
 
 ## Test Cases
@@ -565,10 +578,13 @@ Verifies fix for [#318](https://github.com/bitdynamics-ab/canton-devkit/issues/3
 
 ---
 
-### M3-TOK-010: Cross-platform regression (macOS/Linux/Windows)
+### M3-TOK-999: Cross-platform regression (macOS/Linux/Windows)
 
-**Preconditions:** This test is a meta-test — run the full M3-TOK-001 through M3-TOK-009 suite on each platform.
+**Preconditions:** This test is a meta-test — run M3-TOK-001 through M3-TOK-009 and M3-TOK-011 on each platform first.
 **Platforms:** All (run once per platform)
+
+Numbered `999` so it always sorts last: its cleanup destroys the `e2e-m3-test`
+instance, so any case that runs after it has no LocalNet left to talk to.
 
 **Steps:**
 
@@ -635,11 +651,8 @@ Verifies fix for [#318](https://github.com/bitdynamics-ab/canton-devkit/issues/3
    echo "===================="
    ```
 
-**Cleanup:**
-```bash
-$CLI down --name e2e-m3-test 2>/dev/null || true
-$CLI clean --name e2e-m3-test --force 2>/dev/null || true
-```
+**Cleanup:** run the [Teardown](#teardown) commands. In an automated run they
+belong in an always-run step instead, not in this test.
 
 ---
 
@@ -666,8 +679,8 @@ $CLI clean --name e2e-m3-test --force 2>/dev/null || true
 | M3-TOK-007 | Token balance after partial burn | Token Edge | M3-TOK-001 |
 | M3-TOK-008 | Web UI token toolkit: create + mint | Token Web UI | M2-WEB-001 |
 | M3-TOK-009 | Web UI token transfer + activity feed | Token Web UI | M2-WEB-001 |
-| M3-TOK-010 | Cross-platform regression | Regression | All M3 tests |
 | M3-TOK-011 | Cross-participant DAR vetting and mint | Token E2E | M1 + M2 suites |
+| M3-TOK-999 | Cross-platform regression (runs last) | Regression | All M3 tests |
 
 ---
 
