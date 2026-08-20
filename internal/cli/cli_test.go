@@ -2,8 +2,11 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 )
 
 func TestRunShowsRootHelpWithoutArgs(t *testing.T) {
@@ -90,6 +93,27 @@ func TestRunLocalnetRemove_RequiresTarget(t *testing.T) {
 				t.Fatalf("%s should hint at --name/--all; stderr=%q", verb, errb.String())
 			}
 		})
+	}
+}
+
+func TestRunLocalnetListAlias(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+
+	var out, errb bytes.Buffer
+	code := New(&out, &errb, "test", "").Run([]string{"localnet", "ls", "--format=json"})
+	if code != 0 {
+		t.Fatalf("localnet ls returned %d; stderr=%q", code, errb.String())
+	}
+
+	var got types.ListResponse
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("localnet ls output is not list JSON: %v\noutput=%q", err, out.String())
+	}
+	if got.SchemaVersion != types.SchemaVersion {
+		t.Errorf("schema version = %d, want %d", got.SchemaVersion, types.SchemaVersion)
+	}
+	if len(got.Instances) != 0 {
+		t.Errorf("instances = %+v, want empty registry", got.Instances)
 	}
 }
 
