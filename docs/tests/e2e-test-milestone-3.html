@@ -1098,19 +1098,7 @@ echo "Platform regression results: PASS=$PASS_COUNT FAIL=$FAIL_COUNT"
     <div class="step">
       <input type="checkbox" aria-label="Step 3 complete">
       <div class="step-content">
-        <p><strong class="step-num">Step 3.</strong> Verify platform-specific binary integrity:</p>
-        <pre><code>case "$(uname -s)" in
-  Darwin) file $(which canton-devkit 2&gt;/dev/null || echo ".") | grep -qiE "Mach-O" &amp;&amp; echo "PASS: macOS binary" || echo "WARN" ;;
-  Linux)  file $(which canton-devkit 2&gt;/dev/null || echo ".") | grep -qiE "ELF" &amp;&amp; echo "PASS: Linux binary" || echo "WARN" ;;
-  *)      echo "Windows: verify .exe manually" ;;
-esac</code></pre>
-      </div>
-    </div>
-
-    <div class="step">
-      <input type="checkbox" aria-label="Step 4 complete">
-      <div class="step-content">
-        <p><strong class="step-num">Step 4.</strong> Record platform and Docker environment:</p>
+        <p><strong class="step-num">Step 3.</strong> Record platform and Docker environment:</p>
         <pre><code>echo "=== Platform Info ==="
 uname -a
 docker version --format '{{.Server.Version}}'

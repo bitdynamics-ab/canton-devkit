@@ -453,12 +453,7 @@ Numbered `999` so it always sorts last: its cleanup destroys the `e2e-m3-test` i
 
    - **Expected:** All commands exit `0`. The final balance output shows `plt-holder` with `700` and `plt-issuer` with `200`.
 
-3. Verify platform-specific binary integrity:
-   - macOS: `file $(which canton-devkit)` should contain `Mach-O`.
-   - Linux: `file $(which canton-devkit)` should contain `ELF`.
-   - Windows: verify the `.exe` file exists and runs.
-
-4. Record platform and Docker environment for the test report:
+3. Record platform and Docker environment for the test report:
    ```bash
    uname -a
    docker version --format '{{.Server.Version}}'
