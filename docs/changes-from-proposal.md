@@ -95,7 +95,6 @@ The following aliases are not in the proposal but are shipped:
 | `localnet token party ls` | `list` | Consistency within party subcommand |
 | `localnet token party rm` | `remove` | Consistency within party subcommand |
 
-`localnet list` also accepts `ls` as a short form for listing registered instances.
 
 **Behaviour change (removed aliases):** earlier builds shipped `start` as an alias for `up` and `stop` as an alias for `down`. These aliases have been **removed** — `start` and `stop` are now standalone commands with distinct behaviour (see [`localnet stop` / `start`](#localnet-stop--start-new)). `localnet stop` no longer removes containers (use `down` for that), and `localnet start` no longer unconditionally recreates the stack (though it converges to a running instance, falling back to `up` when containers are gone).
 
