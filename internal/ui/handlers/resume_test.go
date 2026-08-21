@@ -1,10 +1,13 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 )
@@ -26,14 +29,21 @@ func resumeMux(t *testing.T) (*httptest.Server, *stream.Hub) {
 
 // TestResume_StoppedInstance202 — the happy path the user-reported
 // bug needs: instance is stopped (registry says so, containers are
-// gone), and POST /up brings it back up. We can't easily assert the
-// goroutine reaches RunUp (it talks to docker), but we CAN assert
-// the handler accepts the request, returns 202, and points the
-// caller at the events stream.
+// gone), and POST /up brings it back up. The recording stub also pins
+// the no-silent-upgrade rule: resume reuses the recorded version.
 func TestResume_StoppedInstance202(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	seedInstance(t, "pebble", "0.6.4",
 		map[string]int{"app_user_ui": 44440}, registry.StatusStopped)
+
+	upOpts := make(chan *localnet.UpOptions, 1)
+	origUp := runUp
+	t.Cleanup(func() { runUp = origUp })
+	runUp = func(_ context.Context, _ localnet.Progress, opts *localnet.UpOptions) int {
+		upOpts <- opts
+		return localnet.ExitSuccess
+	}
+
 	srv, _ := resumeMux(t)
 
 	resp, err := http.Post(srv.URL+"/api/instances/pebble/up",
@@ -47,6 +57,18 @@ func TestResume_StoppedInstance202(t *testing.T) {
 	}
 	if h := resp.Header.Get("Content-Type"); h != "application/json" {
 		t.Errorf("Content-Type = %q, want application/json", h)
+	}
+
+	select {
+	case opts := <-upOpts:
+		if opts.Name != "pebble" {
+			t.Errorf("bring-up name = %q, want pebble", opts.Name)
+		}
+		if opts.Version != "0.6.4" {
+			t.Errorf("bring-up version = %q, want 0.6.4", opts.Version)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("resume never reached bring-up")
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/progress"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
@@ -178,6 +179,14 @@ func TestCreate_DuplicateNameReturns409(t *testing.T) {
 	hub := stream.New()
 	defer hub.Close()
 	handler := handleCreate(hub)
+
+	// Must block so the first job is still in-flight for the second POST.
+	origUp := runUp
+	t.Cleanup(func() { runUp = origUp })
+	runUp = func(ctx context.Context, _ localnet.Progress, _ *localnet.UpOptions) int {
+		<-ctx.Done()
+		return localnet.ExitUserError
+	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/instances",
 		strings.NewReader(`{"name":"dupcreate"}`))

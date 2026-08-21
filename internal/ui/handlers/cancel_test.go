@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/progress"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/stream"
 )
@@ -90,6 +92,14 @@ func TestCancelUp_HappyPath_204AndCancelledEventEmitted(t *testing.T) {
 
 	mux := http.NewServeMux()
 	MountInstances(mux, hub)
+
+	// Must block so the job is still in-flight when the DELETE lands.
+	origUp := runUp
+	t.Cleanup(func() { runUp = origUp })
+	runUp = func(ctx context.Context, _ localnet.Progress, _ *localnet.UpOptions) int {
+		<-ctx.Done()
+		return localnet.ExitUserError
+	}
 
 	// Subscribe BEFORE the POST so we don't depend on the
 	// replay buffer for this test (cleaner ordering check).
