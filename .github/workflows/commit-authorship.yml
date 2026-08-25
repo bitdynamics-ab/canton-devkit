@@ -1,0 +1,26 @@
+name: Commit Authorship
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  no-ai-authorship:
+    name: No AI tool author or co-author
+    runs-on: [self-hosted, Linux]
+
+    steps:
+      - name: Check out repository
+        # actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          # Full history so the base..head range is resolvable.
+          fetch-depth: 0
+
+      - name: Check commit author, committer, and co-author fields
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/ci/check-ai-authorship.sh "$BASE_SHA" "$HEAD_SHA"
