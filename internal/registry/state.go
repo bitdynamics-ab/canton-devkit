@@ -5,10 +5,14 @@
 // On-disk layout under ~/.canton-devkit/localnet/:
 //
 //	index.json                    — directory of every instance (for `list`)
+//	.locks/<name>.lock            — flock/LockFileEx advisory lock for concurrent ops
 //	<name>/state.json             — full per-instance metadata
-//	<name>/state.json.lock        — flock advisory lock for concurrent ops
 //	<name>/overlay.env            — generated env-file overlay (written by up)
 //	<name>/containers.yaml        — generated container-rename overlay
+//
+// The lock lives outside the instance data dir so `Delete` can
+// `RemoveAll` the data dir while the lock is still held — required on
+// Windows, which cannot unlink an open file.
 //
 // All writes are atomic (tmp + rename), state.json is mode 0600 (it
 // holds captured JWTs), and concurrent up/down on the same instance is
@@ -181,7 +185,7 @@ var validInstanceName = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])
 
 // ValidateName rejects instance names that could escape the registry
 // root or break tooling. Called from every public entry point that
-// accepts a name (PathFor, DataDirFor, Read, Write, Delete, Lock).
+// accepts a name (PathFor, DataDirFor, LockPathFor, Read, Write, Delete, Lock).
 // The check is deliberately conservative — it's far easier to widen
 // later than to narrow after users depend on quirky names.
 //
@@ -246,6 +250,18 @@ func DataDirFor(name string) string {
 		panic(fmt.Sprintf("registry.DataDirFor called with invalid name: %v", err))
 	}
 	return filepath.Join(Root(), name)
+}
+
+// LockPathFor returns the per-instance advisory lock path
+// (.locks/<name>.lock under the registry root). Kept outside the data
+// dir so Delete can RemoveAll the instance directory while Lock still
+// holds the file open (Windows cannot unlink an open handle).
+// Same panic-on-invalid semantics as PathFor.
+func LockPathFor(name string) string {
+	if err := ValidateName(name); err != nil {
+		panic(fmt.Sprintf("registry.LockPathFor called with invalid name: %v", err))
+	}
+	return filepath.Join(Root(), ".locks", name+".lock")
 }
 
 // NewState builds a fresh State with defaults applied. Callers fill in the

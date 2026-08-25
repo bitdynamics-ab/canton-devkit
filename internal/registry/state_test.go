@@ -327,6 +327,41 @@ func TestLockExcludesConcurrentOps(t *testing.T) {
 	rel2()
 }
 
+// TestDeleteWhileLockedSucceeds is the regression for Windows remove:
+// Delete must RemoveAll the instance data dir while Lock still holds
+// the open handle. That only works because the lock lives outside the
+// data dir (.locks/<name>.lock). Runs on all platforms — do not skip
+// on Windows.
+func TestDeleteWhileLockedSucceeds(t *testing.T) {
+	useTmpRoot(t)
+
+	if err := Write(NewState("alice", "0.6.4")); err != nil {
+		t.Fatal(err)
+	}
+
+	release, err := Lock("alice")
+	if err != nil {
+		t.Fatalf("lock: %v", err)
+	}
+
+	if err := Delete("alice"); err != nil {
+		release()
+		t.Fatalf("Delete while holding lock: %v", err)
+	}
+	if _, err := Read("alice"); err != ErrNotFound {
+		release()
+		t.Fatalf("after Delete: want ErrNotFound, got %v", err)
+	}
+
+	release()
+
+	release2, err := Lock("alice")
+	if err != nil {
+		t.Fatalf("re-lock after Delete+release: %v", err)
+	}
+	release2()
+}
+
 func TestConcurrentWritesDifferentInstancesAllSucceed(t *testing.T) {
 	useTmpRoot(t)
 

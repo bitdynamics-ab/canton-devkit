@@ -21,15 +21,18 @@ import (
 // LOCK_EX|LOCK_NB behaviour on Unix. The OS releases the lock byte-range
 // automatically when the handle is closed or the process exits, so there
 // is no stale-lock file to recover after a crash.
+//
+// The lock file lives at .locks/<name>.lock under the registry root
+// (outside the instance data dir) so Delete can RemoveAll the data dir
+// while this lock is still held — Windows cannot unlink an open file.
 func Lock(name string) (release func(), err error) {
 	if err := ValidateName(name); err != nil {
 		return nil, err
 	}
-	dir := DataDirFor(name)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	path := LockPathFor(name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("mkdir for lock: %w", err)
 	}
-	path := filepath.Join(dir, "state.json.lock")
 
 	h, err := openLockHandle(path)
 	if err != nil {
