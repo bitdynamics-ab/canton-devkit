@@ -104,7 +104,7 @@ Options (pass as environment variables):
 
 ```bash
 # Pin a specific version
-curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/install.sh | VERSION=0.12.2 sh
+curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/install.sh | VERSION=0.17.4 sh
 
 # Custom install directory
 curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/install.sh | INSTALL_DIR=/usr/local/bin sh
@@ -166,7 +166,7 @@ apt policy canton-devkit
 Install a specific version:
 
 ```bash
-sudo apt install canton-devkit=0.12.2   # pick a version from `apt list -a canton-devkit`
+sudo apt install canton-devkit=0.17.4   # pick a version from `apt list -a canton-devkit`
 ```
 
 The APT repo is currently unsigned and therefore uses `trusted=yes`;
@@ -178,7 +178,7 @@ for what is sent and how to opt out before installing.
 Direct `.deb` install also works:
 
 ```bash
-VERSION=v0.12.2   # replace with the latest release tag
+VERSION=v0.17.4   # replace with the latest release tag
 DEB_VERSION="${VERSION#v}"
 ASSET="canton-devkit_${DEB_VERSION}_amd64.deb"
 base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}"
@@ -200,7 +200,7 @@ Download the binary for your platform from the
 verify its checksum, mark it executable, and put it on your `PATH`:
 
 ```bash
-VERSION=v0.12.2   # replace with the latest release tag
+VERSION=v0.17.4   # replace with the latest release tag
 ASSET="canton-devkit_${VERSION}_darwin_arm64.tar.gz"
 base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}"
 curl -fLO "${base}/${ASSET}"
@@ -218,7 +218,7 @@ canton-devkit version
 ### Manual download — Linux (amd64)
 
 ```bash
-VERSION=v0.12.2   # replace with the latest release tag
+VERSION=v0.17.4   # replace with the latest release tag
 ASSET="canton-devkit_${VERSION}_linux_amd64.tar.gz"
 base="https://github.com/bitdynamics-ab/canton-devkit/releases/download/${VERSION}"
 curl -fLO "${base}/${ASSET}"
@@ -233,7 +233,7 @@ canton-devkit version
 ### Windows (amd64, PowerShell)
 
 ```powershell
-$Version = "v0.17.2"   # replace with the latest release tag
+$Version = "v0.17.4"   # replace with the latest release tag
 $Asset = "canton-devkit_${Version}_windows_amd64.zip"
 $base = "https://github.com/bitdynamics-ab/canton-devkit/releases/download/$Version"
 Invoke-WebRequest -Uri "$base/$Asset" -OutFile $Asset
