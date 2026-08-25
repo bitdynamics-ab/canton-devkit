@@ -233,7 +233,7 @@ canton-devkit version
 ### Windows (amd64, PowerShell)
 
 ```powershell
-$Version = "v0.12.2"   # replace with the latest release tag
+$Version = "v0.17.2"   # replace with the latest release tag
 $Asset = "canton-devkit_${Version}_windows_amd64.zip"
 $base = "https://github.com/bitdynamics-ab/canton-devkit/releases/download/$Version"
 Invoke-WebRequest -Uri "$base/$Asset" -OutFile $Asset
@@ -243,10 +243,24 @@ $expected = ((Get-Content SHA256SUMS | Select-String -SimpleMatch $Asset) -split
 $actual = (Get-FileHash $Asset -Algorithm SHA256).Hash.ToLower()
 if ($expected -ne $actual) { throw "checksum mismatch" }
 Expand-Archive -Path $Asset -DestinationPath canton-devkit-dist -Force
-# put it somewhere on PATH, e.g. a tools dir you've added to PATH
-Move-Item canton-devkit-dist\canton-devkit.exe "$env:USERPROFILE\bin\canton-devkit.exe"
+
+# install into a per-user tools dir, creating it if it doesn't exist yet
+$Dest = "$env:USERPROFILE\bin"
+New-Item -ItemType Directory -Force -Path $Dest | Out-Null
+Move-Item -Force canton-devkit-dist\canton-devkit.exe "$Dest\canton-devkit.exe"
+
+# add it to PATH for this session, and persist it for future terminals
+if (";$env:Path;" -notlike "*;$Dest;*") {
+  $env:Path = "$Dest;$env:Path"
+  [Environment]::SetEnvironmentVariable("Path", "$Dest;" + [Environment]::GetEnvironmentVariable("Path", "User"), "User")
+}
 canton-devkit version
 ```
+
+`%USERPROFILE%\bin` is created if it doesn't exist and added to your `PATH` —
+the current session works right away, and new terminals pick it up
+automatically. The `localnet` commands additionally require Docker Desktop with
+the WSL 2 backend.
 
 ### From source (Go toolchain)
 
