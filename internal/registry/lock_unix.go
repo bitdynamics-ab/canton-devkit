@@ -13,15 +13,18 @@ import (
 // blocking concurrent `localnet up`/`down` against the same instance from
 // the same host. The returned release function must be called via defer.
 // The Windows counterpart (LockFileEx) lives in lock_windows.go.
+//
+// The lock file lives at .locks/<name>.lock under the registry root
+// (outside the instance data dir) so Delete can RemoveAll the data dir
+// while this lock is still held.
 func Lock(name string) (release func(), err error) {
 	if err := ValidateName(name); err != nil {
 		return nil, err
 	}
-	dir := DataDirFor(name)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	path := LockPathFor(name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("mkdir for lock: %w", err)
 	}
-	path := filepath.Join(dir, "state.json.lock")
 
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {

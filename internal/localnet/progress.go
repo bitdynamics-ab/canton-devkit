@@ -27,7 +27,7 @@ const (
 	// catalogue lookup, upstream fallback if AllowUncurated.
 	StepResolveVersion Step = "resolve_version"
 	// StepAcquireLock: 2 · "Acquire instance lock" — flock on
-	// ~/.canton-devkit/localnet/<name>/.lock.
+	// ~/.canton-devkit/localnet/.locks/<name>.lock.
 	StepAcquireLock Step = "acquire_lock"
 	// StepPreflight: 3 · "Run preflight checks" — docker daemon /
 	// compose v2 / disk / memory thresholds.
