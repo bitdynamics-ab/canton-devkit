@@ -17,15 +17,8 @@ canton-devkit telemetry preview
 ## On by default (opt-out)
 
 Telemetry is **on by default**. The first time you run an operational
-command in an interactive terminal, a one-time notice explains this. The
-Debian package also records a one-time `apt` install-surface ping during
-package installation; because that path is non-interactive, opt out
-**before** install if you do not want it. The package hook runs in the
-root environment, and `sudo` strips exported shell variables by default,
-so set the variable on the `sudo` command line itself:
-`sudo DO_NOT_TRACK=1 apt install canton-devkit` (or
-`sudo DPM_TELEMETRY=off apt install canton-devkit`). Turn telemetry off
-any time — your choice persists:
+command in an interactive terminal, a one-time notice explains this.
+Turn telemetry off any time — your choice persists:
 
 ```bash
 canton-devkit telemetry off      # disable (persists)
@@ -48,7 +41,7 @@ bucket and nothing else:
 | Counter | Buckets |
 |---|---|
 | `dpm/install` | `linux` `darwin` `windows` — **once per machine** on the first non-CI run (a device-count proxy; no identifier) |
-| `dpm/install_surface` | `apt` — **once per machine** when Debian/Ubuntu package installation finishes |
+| `dpm/install_surface` | `apt` — **once per machine** when a package-manager install hook records the distribution surface |
 | `dpm/command` | the localnet verb (`up`, `down`, `dar`, `token`, …) |
 | `dpm/command_exit` | `<verb>/ok` or `<verb>/fail` |
 | `dpm/token_action` | the token subcommand (`create` `mint` `transfer` `burn` `balance` …) — CIP-0112 flow visibility |
@@ -119,10 +112,11 @@ correlates only to itself (an install count) — never to your usage.
 - Counters accumulate in memory during a run and merge into the current
   day's local file (`<config dir>/canton-devkit/telemetry/<period>.json`)
   on exit. Recording never blocks or fails a command.
-- The Debian package install hook uses the same spool/uploader path: it
-  records the install-surface counter locally first, then does a
-  best-effort flush so the install path is visible even if the user never
-  runs an operational command later.
+- Package-manager install hooks can call the hidden
+  `telemetry _record-install-surface <surface>` command. That path uses
+  the same spool/uploader: it records the install-surface counter
+  locally first, then does a best-effort flush so the install path is
+  visible even if the user never runs an operational command later.
 - A **completed** past period is uploaded once (a single POST), then its
   file is deleted. On the first upload failure the period is marked deferred
   and retried at the next window; after a second miss it is dropped.

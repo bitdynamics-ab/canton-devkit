@@ -486,6 +486,16 @@ The embedded skill docs are the same artifacts that back the Web UI's Agent Skil
 - `telemetry flush` — send any buffered events immediately.
 - `telemetry reset-id` — generate a new anonymous ID.
 
-Telemetry is **on by default** with opt-out via `DPM_TELEMETRY=off` or `DO_NOT_TRACK=1`. An internal hidden subcommand `_record-install-surface <surface>` is used by install scripts to record the distribution channel.
+Telemetry is **on by default** with opt-out via `DPM_TELEMETRY=off` or `DO_NOT_TRACK=1`. An internal hidden subcommand `_record-install-surface <surface>` is available for install scripts / package-manager hooks to record the distribution channel.
 
 **Why:** Provides the adoption signals described in Milestone 4 (install counts, usage trends) in a privacy-preserving, opt-out model without requiring manual tracking. The opt-out via standard `DO_NOT_TRACK` honours widely adopted ecosystem conventions. Placing it at the root level (not under `localnet`) reflects that it is a tool-wide concern, not a LocalNet-specific one.
+
+---
+
+## Packaging — Debian/APT removed
+
+**Proposal said:** not mentioned.
+
+**Shipped (historically):** tagged releases built a `.deb` package, published it as a GitHub Release asset, and maintained a static APT repository under `apt/` on this repository's `main` branch.
+
+**Current:** Debian/APT is no longer a supported install path. Linux users install via the release tarball, `install.sh`, or Homebrew. Historical `.deb` assets on past GitHub Releases remain available but are not produced for new releases.
