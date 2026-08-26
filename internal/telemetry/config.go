@@ -30,6 +30,9 @@ type consent struct {
 	// one-per-install increment to dpm/install. A boolean, never an
 	// identifier.
 	InstallCounted bool `json:"install_counted,omitempty"`
+	// InstallSurfaceCounted marks which install surfaces (e.g. a
+	// package-manager postinst hook) already sent their once-per-host ping.
+	InstallSurfaceCounted map[string]bool `json:"install_surface_counted,omitempty"`
 	// InstallID is the anonymous install-dedup token (see installid.go).
 	// Empty until first minted.
 	InstallID string `json:"install_id,omitempty"`

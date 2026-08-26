@@ -55,8 +55,36 @@ and which rule decided it.`,
 		buildTelemetryPreview(),
 		buildTelemetryFlush(),
 		buildTelemetryResetID(),
+		buildTelemetryRecordInstallSurface(),
 	)
 	return cmd
+}
+
+func buildTelemetryRecordInstallSurface() *cobra.Command {
+	return &cobra.Command{
+		Use:           "_record-install-surface <surface>",
+		Short:         "Internal: record a once-per-install-surface ping",
+		Args:          cobra.ExactArgs(1),
+		Hidden:        true,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(_ *cobra.Command, args []string) error {
+			if !telemetry.IsEnabled() {
+				return nil
+			}
+			if !telemetry.RecordInstallSurfaceOnce(args[0]) {
+				return nil
+			}
+			// Persist immediately so a package-manager-triggered ping
+			// survives even if the install process exits before a normal
+			// runtime command.
+			telemetry.Persist()
+			// Best-effort ship; errors are swallowed so package
+			// installation never fails on telemetry transport.
+			_, _ = telemetry.FlushNow()
+			return nil
+		},
+	}
 }
 
 func buildTelemetryResetID() *cobra.Command {

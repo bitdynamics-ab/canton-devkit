@@ -34,13 +34,14 @@ Precedence (highest first): `DO_NOT_TRACK` → `DPM_TELEMETRY` → config file
 
 ## What is collected — counters only
 
-A closed, compile-time-enforced allow-list of thirteen counters. Each is a
+A closed, compile-time-enforced allow-list of fourteen counters. Each is a
 `chart` with a small set of `buckets`; we keep daily **counts** per
 bucket and nothing else:
 
 | Counter | Buckets |
 |---|---|
 | `dpm/install` | `linux` `darwin` `windows` — **once per machine** on the first non-CI run (a device-count proxy; no identifier) |
+| `dpm/install_surface` | `apt` — **once per machine** when a package-manager install hook records the distribution surface |
 | `dpm/command` | the localnet verb (`up`, `down`, `dar`, `token`, …) |
 | `dpm/command_exit` | `<verb>/ok` or `<verb>/fail` |
 | `dpm/token_action` | the token subcommand (`create` `mint` `transfer` `burn` `balance` …) — CIP-0112 flow visibility |
@@ -111,6 +112,11 @@ correlates only to itself (an install count) — never to your usage.
 - Counters accumulate in memory during a run and merge into the current
   day's local file (`<config dir>/canton-devkit/telemetry/<period>.json`)
   on exit. Recording never blocks or fails a command.
+- Package-manager install hooks can call the hidden
+  `telemetry _record-install-surface <surface>` command. That path uses
+  the same spool/uploader: it records the install-surface counter
+  locally first, then does a best-effort flush so the install path is
+  visible even if the user never runs an operational command later.
 - A **completed** past period is uploaded once (a single POST), then its
   file is deleted. On the first upload failure the period is marked deferred
   and retried at the next window; after a second miss it is dropped.

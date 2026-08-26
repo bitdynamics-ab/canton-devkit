@@ -486,7 +486,7 @@ The embedded skill docs are the same artifacts that back the Web UI's Agent Skil
 - `telemetry flush` — send any buffered events immediately.
 - `telemetry reset-id` — generate a new anonymous ID.
 
-Telemetry is **on by default** with opt-out via `DPM_TELEMETRY=off` or `DO_NOT_TRACK=1`.
+Telemetry is **on by default** with opt-out via `DPM_TELEMETRY=off` or `DO_NOT_TRACK=1`. An internal hidden subcommand `_record-install-surface <surface>` is available for install scripts / package-manager hooks to record the distribution channel.
 
 **Why:** Provides the adoption signals described in Milestone 4 (install counts, usage trends) in a privacy-preserving, opt-out model without requiring manual tracking. The opt-out via standard `DO_NOT_TRACK` honours widely adopted ecosystem conventions. Placing it at the root level (not under `localnet`) reflects that it is a tool-wide concern, not a LocalNet-specific one.
 
