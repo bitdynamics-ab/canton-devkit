@@ -3,11 +3,11 @@
 <text x="16" y="26" font-size="16" font-weight="600" fill="#111827">All-time downloads per platform</text>
 <text x="130" y="67" font-size="12" fill="#374151" text-anchor="end">macOS (arm64)</text>
 <rect x="140" y="48" width="440.0" height="30" rx="3" fill="#2563eb"/>
-<text x="586.0" y="67" font-size="12" font-weight="600" fill="#374151">39</text>
+<text x="586.0" y="67" font-size="12" font-weight="600" fill="#374151">41</text>
 <text x="130" y="107" font-size="12" fill="#374151" text-anchor="end">Linux (amd64)</text>
-<rect x="140" y="88" width="383.6" height="30" rx="3" fill="#16a34a"/>
-<text x="529.6" y="107" font-size="12" font-weight="600" fill="#374151">34</text>
+<rect x="140" y="88" width="364.9" height="30" rx="3" fill="#16a34a"/>
+<text x="510.9" y="107" font-size="12" font-weight="600" fill="#374151">34</text>
 <text x="130" y="147" font-size="12" fill="#374151" text-anchor="end">Windows (amd64)</text>
-<rect x="140" y="128" width="90.3" height="30" rx="3" fill="#ea580c"/>
-<text x="236.3" y="147" font-size="12" font-weight="600" fill="#374151">8</text>
+<rect x="140" y="128" width="85.9" height="30" rx="3" fill="#ea580c"/>
+<text x="231.9" y="147" font-size="12" font-weight="600" fill="#374151">8</text>
 </svg>
