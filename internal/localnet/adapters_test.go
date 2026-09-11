@@ -40,4 +40,10 @@ func TestCoreServicesFor_VersionsAgree(t *testing.T) {
 	if !reflect.DeepEqual(v05, v06) {
 		t.Fatalf("core services drifted between majors: 0.5.18=%v 0.6.4=%v", v05, v06)
 	}
+	// 0.7.x and 0.8.x reuse the 0.6.x adapter (identical compose interface),
+	// so their core-services list must match too.
+	v08 := CoreServicesFor("0.8.0")
+	if !reflect.DeepEqual(v06, v08) {
+		t.Fatalf("core services drifted between majors: 0.6.4=%v 0.8.0=%v", v06, v08)
+	}
 }
