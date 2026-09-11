@@ -1,7 +1,7 @@
 {
   "$schema": "Splice version catalogue. See versions.go for field semantics.",
   "_comment": "Maintainer flow: scripts/add-splice-version.sh <tag> resolves the tag → commit, downloads the archive, computes ContentSHA, and appends an entry here. Reviewer checks the diff before merging.",
-  "latest_alias": "0.6.12",
+  "latest_alias": "0.8.1",
   "versions": [
     {
       "tag": "0.5.18",
@@ -63,6 +63,96 @@
       "content_sha": "3fdb3d0667923febd80cf0a2ff225ba29acff14276459c195914057b6eee5528",
       "size": 184815106,
       "major": "0.6",
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
+    },
+    {
+      "tag": "0.6.13",
+      "commit": "52ccdd6841f3eda11fe86313e8cdf9540efedfb7",
+      "content_sha": "3fdb3d0667923febd80cf0a2ff225ba29acff14276459c195914057b6eee5528",
+      "size": 184831583,
+      "major": "0.6",
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
+    },
+    {
+      "tag": "0.6.14",
+      "commit": "398919a5b13479877fd61587003ba7a4ba00091b",
+      "content_sha": "3fdb3d0667923febd80cf0a2ff225ba29acff14276459c195914057b6eee5528",
+      "size": 184835854,
+      "major": "0.6",
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
+    },
+    {
+      "tag": "0.7.0",
+      "commit": "a9076eb91f87a9bd9315d2f9e122d6350bdc9d4c",
+      "content_sha": "3fdb3d0667923febd80cf0a2ff225ba29acff14276459c195914057b6eee5528",
+      "size": 184005518,
+      "major": "0.7",
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
+    },
+    {
+      "tag": "0.7.1",
+      "commit": "c95e1ef5c939cef13cc344d7678f9d2ce2474c6a",
+      "content_sha": "7391d45fbc7134dd798639c53560282130e342a018bf55d612242b89e4971ec7",
+      "size": 184037338,
+      "major": "0.7",
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
+    },
+    {
+      "tag": "0.7.2",
+      "commit": "b1c3896fb9420d8de48537211a5c7046359c6d4e",
+      "content_sha": "7391d45fbc7134dd798639c53560282130e342a018bf55d612242b89e4971ec7",
+      "size": 184045327,
+      "major": "0.7",
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
+    },
+    {
+      "tag": "0.7.3",
+      "commit": "0dd6b9263510007e831bcc3ca3a44a41aa862a75",
+      "content_sha": "7391d45fbc7134dd798639c53560282130e342a018bf55d612242b89e4971ec7",
+      "size": 184041527,
+      "major": "0.7",
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
+    },
+    {
+      "tag": "0.7.4",
+      "commit": "e5c3661e7257a024b9f964617fa3f02dcf56d332",
+      "content_sha": "1cbd1a502f362d284a689af388910ff84d0bbef349beebdd722726b4da7801f6",
+      "size": 184092361,
+      "major": "0.7",
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
+    },
+    {
+      "tag": "0.7.5",
+      "commit": "858a7347aaeb958657b76b0957186102b74e3bd6",
+      "content_sha": "1cbd1a502f362d284a689af388910ff84d0bbef349beebdd722726b4da7801f6",
+      "size": 184129682,
+      "major": "0.7",
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
+    },
+    {
+      "tag": "0.8.0",
+      "commit": "9330dba9e31b8893bec09ece2f5dbb496fcf17b5",
+      "content_sha": "899706c4dc722667a998329e0910717544f5c88bcba2b7aed25269275c4c4016",
+      "size": 199850135,
+      "major": "0.8",
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
+    },
+    {
+      "tag": "0.8.1",
+      "commit": "fb3c8c8a9259e98cdeb1cffc0cc77eaa7cc69e52",
+      "content_sha": "899706c4dc722667a998329e0910717544f5c88bcba2b7aed25269275c4c4016",
+      "size": 199860530,
+      "major": "0.8",
       "min_memory_bytes": 8000000000,
       "recommended_memory_bytes": 12000000000
     },
