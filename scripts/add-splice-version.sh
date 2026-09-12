@@ -8,13 +8,17 @@
 #   scripts/add-splice-version.sh 0.6.5
 #
 # What it does:
-#   1. Resolves <tag> → commit SHA via the GitHub REST API.
+#   1. Resolves <tag> → commit SHA via the GitHub REST API (peels
+#      annotated tags the same way internal/splice/resolver.go does).
 #   2. Downloads the source archive at that commit.
 #   3. Extracts the cluster/compose/localnet/ subtree to a scratch dir.
 #   4. Computes the deterministic ContentSHA via scripts/compute-tree-sha.sh.
 #   5. Inserts a new entry into internal/splice/versions.json.
 #   6. Prints the diff. Does NOT git-add or git-commit — that's deliberate
 #      so a maintainer reviews the change before it lands.
+#
+# Auth: set GITHUB_TOKEN or GH_TOKEN to raise the GitHub API rate limit
+# (required in CI; optional locally).
 #
 # Output: the suggested commit message line and a reminder to bump
 # `latest_alias` if the new tag is the newest.
@@ -29,6 +33,18 @@ tag="$1"
 
 repo="canton-network/splice"
 versions_json="internal/splice/versions.json"
+api="https://api.github.com"
+
+token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+curl_auth=()
+if [[ -n "$token" ]]; then
+  curl_auth=(-H "Authorization: Bearer ${token}")
+fi
+# Same Accept/User-Agent on every API call so rate-limit and auth failures
+# surface consistently whether or not a token is set.
+curl_api=(curl -sSf "${curl_auth[@]}"
+  -H "Accept: application/vnd.github+json"
+  -H "User-Agent: canton-devkit-add-splice-version")
 
 if [[ ! -f "$versions_json" ]]; then
   echo "error: $versions_json not found (run from repo root)" >&2
@@ -43,11 +59,38 @@ if python3 -c "import json,sys;[sys.exit(0) for v in json.load(open('$versions_j
 fi
 
 echo "Resolving $tag → commit SHA via api.github.com..."
-commit=$(curl -sSf "https://api.github.com/repos/$repo/git/refs/tags/$tag" \
-  | python3 -c 'import json,sys;d=json.load(sys.stdin);t=d.get("object",{}).get("type","");sha=d.get("object",{}).get("sha","");
-if t!="commit":
-  sys.exit("expected ref type commit, got "+t)
-print(sha)')
+# Lightweight tags have object.type=commit; annotated tags need a
+# second hop via object.url so we pin the peeled commit, not the tag object.
+ref_json=$("${curl_api[@]}" "$api/repos/$repo/git/refs/tags/$tag")
+commit=$(printf '%s' "$ref_json" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+obj=d.get("object",{})
+t=obj.get("type","")
+sha=obj.get("sha","")
+url=obj.get("url","")
+if t=="commit":
+  print(sha)
+elif t=="tag":
+  if not url:
+    sys.exit("annotated tag missing object.url")
+  print("ANNOTATED|"+url)
+else:
+  sys.exit("expected ref type commit or tag, got "+repr(t))
+')
+
+if [[ "$commit" == ANNOTATED\|* ]]; then
+  ann_url="${commit#ANNOTATED|}"
+  echo "  annotated tag — peeling via $ann_url"
+  commit=$("${curl_api[@]}" "$ann_url" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+sha=d.get("object",{}).get("sha","")
+if not sha:
+  sys.exit("empty SHA in annotated-tag object")
+print(sha)
+')
+fi
 
 if [[ -z "$commit" ]]; then
   echo "error: failed to resolve commit SHA for $tag" >&2
@@ -72,9 +115,23 @@ size=$(stat -f%z "$scratch/source.tar.gz" 2>/dev/null || stat -c%s "$scratch/sou
 echo "  size   = $size bytes"
 
 echo "Extracting cluster/compose/localnet/ subtree..."
-mkdir "$scratch/tree"
-tar -xzf "$scratch/source.tar.gz" -C "$scratch/tree" --strip-components=4 \
-  "*/cluster/compose/localnet" 2>/dev/null
+mkdir "$scratch/tree" "$scratch/full"
+# Full extract then copy the subtree — avoids GNU-tar wildcard /
+# directory-member edge cases that left compose.yaml missing in CI.
+tar -xzf "$scratch/source.tar.gz" -C "$scratch/full"
+top=$(python3 -c "
+import os
+ents=os.listdir(r'$scratch/full')
+if len(ents)!=1:
+    raise SystemExit(f'expected one top-level dir, got {ents!r}')
+print(ents[0])
+")
+src="$scratch/full/$top/cluster/compose/localnet"
+if [[ ! -d "$src" ]]; then
+  echo "error: archive missing cluster/compose/localnet/ — is this tag valid?" >&2
+  exit 1
+fi
+cp -a "$src"/. "$scratch/tree/"
 
 if [[ ! -f "$scratch/tree/compose.yaml" ]]; then
   echo "error: extracted tree missing compose.yaml — is this tag valid?" >&2

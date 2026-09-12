@@ -1,15 +1,18 @@
 name: Refresh Splice versions
 
 # Weekly cron that asks GitHub "what Splice tags exist?" and, for each
-# uncatalogued tag, runs scripts/add-splice-version.sh to compute its
-# commit + ContentSHA + size, then opens a PR with the diff. Humans
-# vet and merge.
+# uncatalogued forward-compatible tag, runs scripts/add-splice-version.sh
+# to compute its commit + ContentSHA + size, then opens a PR with the
+# diff. Humans vet and merge.
 #
-# This eliminates the manual "edit versions.json by hand" step for
-# routine version bumps. The script refuses to overwrite existing
-# entries, so a force-pushed upstream tag is never silently swallowed
-# (the dpm localnet versions command surfaces "drifted" status for
-# those instead).
+# Candidates are limited to semver tags newer than the highest already-
+# catalogued semver whose major has a DevKit adapter (0.5 / 0.6) — see
+# internal/localnet/adapters.go. Historical gaps and unsupported majors
+# are left for a deliberate maintainer add.
+#
+# The script refuses to overwrite existing entries, so a force-pushed
+# upstream tag is never silently swallowed (the dpm localnet versions
+# command surfaces "drifted" status for those instead).
 
 on:
   schedule:
@@ -22,44 +25,78 @@ permissions:
 
 jobs:
   refresh:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 30
     steps:
       - name: Check out repository
         # actions/checkout@v5
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
-      - name: Set up Go
-        # actions/setup-go@v6
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
-        with:
-          go-version-file: go.mod
-          cache: false
-
       - name: Enumerate new upstream tags
         id: enum
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          # Hit the same endpoint the runtime does. Compare against the
-          # catalogue to find tags worth adding.
+          # Adapter majors from internal/localnet/adapters.go — cataloguing
+          # a tag whose major has no adapter makes Resolve succeed then
+          # adapterFor fail at up time.
+          supported_majors="0.5 0.6"
+
           catalogued=$(python3 -c "import json;print(' '.join(v['tag'] for v in json.load(open('internal/splice/versions.json'))['versions']))")
           echo "Catalogued: $catalogued"
-          all=$(curl -sSf "https://api.github.com/repos/canton-network/splice/tags?per_page=100" \
+
+          # Highest catalogued N.N.N (ignore non-semver entries like
+          # token-standard-v2) so we only pull forward, not historical gaps.
+          max_catalogued=$(python3 -c "
+          import json,re
+          tags=[v['tag'] for v in json.load(open('internal/splice/versions.json'))['versions']
+                if re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', v['tag'])]
+          print(max(tags, key=lambda t: tuple(int(p) for p in t.split('.'))) if tags else '0.0.0')
+          ")
+          echo "Max catalogued semver: $max_catalogued"
+
+          auth_args=()
+          if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+            auth_args=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+          fi
+          all=$(curl -sSf "${auth_args[@]}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "User-Agent: canton-devkit-refresh-versions" \
+            "https://api.github.com/repos/canton-network/splice/tags?per_page=100" \
             | python3 -c "import json,sys;[print(t['name']) for t in json.load(sys.stdin)]")
+
           missing=()
           for t in $all; do
-            # Skip pre-release / non-semver tags (e.g. next-cilr); the
-            # maintainer script auto-detects N.N.N for the `major`
-            # field and tags that don't match would land with major="".
-            if [[ ! "$t" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then continue; fi
+            if [[ ! "$t" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then continue; fi
+            major="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+            if [[ " $supported_majors " != *" $major "* ]]; then continue; fi
             if [[ " $catalogued " == *" $t "* ]]; then continue; fi
+            # Semver tuple compare: skip tags <= max already catalogued.
+            newer=$(python3 -c "
+          a=tuple(int(p) for p in '$t'.split('.'))
+          b=tuple(int(p) for p in '$max_catalogued'.split('.'))
+          print('yes' if a > b else 'no')
+          ")
+            if [[ "$newer" != "yes" ]]; then continue; fi
             missing+=("$t")
           done
+
           if [[ ${#missing[@]} -eq 0 ]]; then
-            echo "Nothing new upstream."
+            echo "Nothing new upstream for adapter-supported majors."
             echo "any=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # Newest first so reviewers see the tip of the line first.
+          IFS=$'\n' sorted=($(printf '%s\n' "${missing[@]}" | python3 -c "
+          import sys
+          tags=[l.strip() for l in sys.stdin if l.strip()]
+          tags.sort(key=lambda t: tuple(int(p) for p in t.split('.')), reverse=True)
+          print('\n'.join(tags))
+          "))
+          unset IFS
+          missing=("${sorted[@]}")
+
           printf 'New tags to consider: %s\n' "${missing[*]}"
           {
             echo "any=true"
@@ -69,18 +106,48 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Add new tags via maintainer script
+        id: add
         if: steps.enum.outputs.any == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          added=()
+          failed=()
           while IFS= read -r tag; do
             [[ -z "$tag" ]] && continue
             echo "::group::Adding $tag"
-            scripts/add-splice-version.sh "$tag" || echo "warning: failed to add $tag (continuing)"
+            if scripts/add-splice-version.sh "$tag"; then
+              added+=("$tag")
+            else
+              echo "warning: failed to add $tag (continuing)"
+              failed+=("$tag")
+            fi
             echo "::endgroup::"
           done <<< "${{ steps.enum.outputs.tags }}"
 
+          {
+            echo "added<<EOF"
+            printf '%s\n' "${added[@]+"${added[@]}"}"
+            echo "EOF"
+            echo "failed<<EOF"
+            printf '%s\n' "${failed[@]+"${failed[@]}"}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          if ! git diff --quiet -- internal/splice/versions.json; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "error: candidates existed but versions.json is unchanged" >&2
+            if [[ ${#failed[@]} -gt 0 ]]; then
+              printf 'Failed tags: %s\n' "${failed[*]}" >&2
+            fi
+            exit 1
+          fi
+
       - name: Open PR with catalogue updates
-        if: steps.enum.outputs.any == 'true'
+        if: steps.add.outputs.changed == 'true'
         # peter-evans/create-pull-request@v6
         uses: peter-evans/create-pull-request@5b4a9f6a9e2af26e5f02351490b90d01eb8ec1e5
         with:
@@ -90,15 +157,15 @@ jobs:
           body: |
             Auto-generated by `.github/workflows/refresh-versions.yml`.
 
-            New Splice tags discovered upstream and added to
-            `internal/splice/versions.json`:
+            New Splice tags added to `internal/splice/versions.json`:
 
             ```
-            ${{ steps.enum.outputs.tags }}
+            ${{ steps.add.outputs.added }}
             ```
 
             Each entry was added by `scripts/add-splice-version.sh`, which:
-            1. Resolves the tag → commit SHA via the GitHub REST API.
+            1. Resolves the tag → commit SHA via the GitHub REST API
+               (peeling annotated tags).
             2. Downloads the source archive at that commit.
             3. Computes the deterministic ContentSHA of the extracted
                `cluster/compose/localnet/` subtree.
