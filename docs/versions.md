@@ -96,7 +96,9 @@ scripts/add-splice-version.sh 0.6.5
 ```
 
 The script:
-1. Resolves `0.6.5` → commit SHA via the GitHub REST API.
+1. Resolves `0.6.5` → commit SHA via the GitHub REST API
+   (peeling annotated tags). Set `GITHUB_TOKEN` or `GH_TOKEN` to
+   raise the anonymous API rate limit when adding several tags.
 2. Downloads the archive at that commit.
 3. Extracts the `cluster/compose/localnet/` subtree.
 4. Computes `ContentSHA` via `scripts/compute-tree-sha.sh`.
@@ -110,6 +112,12 @@ A maintainer then:
 - Optionally runs the integration test against the new entry before
   merging.
 - Commits + pushes.
+
+The weekly `.github/workflows/refresh-versions.yml` workflow discovers
+upstream semver tags that are newer than the highest already-catalogued
+semver and whose major has a DevKit adapter (`0.5` / `0.6`), runs the
+same script with `GITHUB_TOKEN`, and opens a PR on
+`chore/refresh-splice-versions` for review.
 
 ## Two-layer resolution
 
