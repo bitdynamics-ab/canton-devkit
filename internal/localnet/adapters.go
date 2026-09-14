@@ -6,6 +6,8 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	v05 "github.com/bitdynamics-ab/canton-devkit/internal/splice/v05"
 	v06 "github.com/bitdynamics-ab/canton-devkit/internal/splice/v06"
+	v07 "github.com/bitdynamics-ab/canton-devkit/internal/splice/v07"
+	v08 "github.com/bitdynamics-ab/canton-devkit/internal/splice/v08"
 )
 
 // adapterFor returns the splice.Adapter implementation for a Version.
@@ -21,6 +23,10 @@ func adapterFor(v splice.Version) (splice.Adapter, error) {
 		return v05.New(), nil
 	case "0.6":
 		return v06.New(), nil
+	case "0.7":
+		return v07.New(), nil
+	case "0.8":
+		return v08.New(), nil
 	default:
 		return nil, fmt.Errorf("no adapter registered for Splice major %q (tag %s) — this is a canton-devkit bug",
 			v.Major, v.Tag)

@@ -115,8 +115,8 @@ A maintainer then:
 
 The weekly `.github/workflows/refresh-versions.yml` workflow discovers
 upstream semver tags that are newer than the highest already-catalogued
-semver and whose major has a DevKit adapter (`0.5` / `0.6`), runs the
-same script with `GITHUB_TOKEN`, and opens a PR on
+semver and whose major has a DevKit adapter (`0.5` / `0.6` / `0.7` /
+`0.8`), runs the same script with `GITHUB_TOKEN`, and opens a PR on
 `chore/refresh-splice-versions` for review.
 
 ## Two-layer resolution
@@ -131,7 +131,7 @@ opt-in unlocks arbitrary upstream tags for prerelease testing.
 | 2 — Upstream | `--version <tag> --allow-uncurated` for any tag not in the catalogue | `api.github.com/repos/canton-network/splice/git/refs/tags/<tag>` | Computed on first extract, recorded for future runs | Requires explicit opt-in. Network on first call. Cached at `~/.canton-devkit/cache/resolved-versions.json`. |
 
 Layer 2 trades audit for flexibility: it lets a user spin up a
-`0.7.0-alpha.4` LocalNet without waiting for a catalogue PR, but
+`0.9.0-alpha.1` LocalNet without waiting for a catalogue PR, but
 DevKit can't promise the bits were tested against this release.
 Orchestrators print a one-line "Using uncurated Splice tag" warning
 on the layer-2 path so the user is never surprised.
@@ -155,7 +155,7 @@ Three reasons the catalogue is curated:
    commit that happens to land in the repo.
 
 3. **Adapter routing.** DevKit ships per-major adapters for each Splice
-   major version. A new major version (e.g. `0.7.x`)
+   major version (`0.5`–`0.8` today). A new major version (e.g. `0.9.x`)
    needs a corresponding adapter before it can be added — the script
    leaves `major` blank for non-N.N.N tags so a maintainer notices.
 

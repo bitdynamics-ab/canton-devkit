@@ -71,6 +71,8 @@ func TestSupportsTokenStandardV2(t *testing.T) {
 		{"0.6.11", true},
 		{"0.6.12", true},
 		{"0.7.0", true},
+		{"0.8.0", true},
+		{"0.8.1", true},
 		{"1.0.0", true},
 		{"token-standard-v2", true},
 		{"latest", false},

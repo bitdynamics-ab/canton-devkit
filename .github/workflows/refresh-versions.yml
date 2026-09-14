@@ -6,9 +6,9 @@ name: Refresh Splice versions
 # diff. Humans vet and merge.
 #
 # Candidates are limited to semver tags newer than the highest already-
-# catalogued semver whose major has a DevKit adapter (0.5 / 0.6) — see
-# internal/localnet/adapters.go. Historical gaps and unsupported majors
-# are left for a deliberate maintainer add.
+# catalogued semver whose major has a DevKit adapter (0.5 / 0.6 / 0.7 /
+# 0.8) — see internal/localnet/adapters.go. Historical gaps and
+# unsupported majors are left for a deliberate maintainer add.
 #
 # The script refuses to overwrite existing entries, so a force-pushed
 # upstream tag is never silently swallowed (the dpm localnet versions
@@ -41,7 +41,7 @@ jobs:
           # Adapter majors from internal/localnet/adapters.go — cataloguing
           # a tag whose major has no adapter makes Resolve succeed then
           # adapterFor fail at up time.
-          supported_majors="0.5 0.6"
+          supported_majors="0.5 0.6 0.7 0.8"
 
           catalogued=$(python3 -c "import json;print(' '.join(v['tag'] for v in json.load(open('internal/splice/versions.json'))['versions']))")
           echo "Catalogued: $catalogued"
