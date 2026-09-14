@@ -43,7 +43,10 @@ export default defineConfig({
 			sidebar: [
 				{
 					label: 'Getting Started',
-					items: [{ slug: 'getting-started' }],
+					items: [
+						{ slug: 'getting-started' },
+						{ slug: 'hackcanton-s3', label: 'HackCanton Season 3' },
+					],
 				},
 				{
 					label: 'Case studies',

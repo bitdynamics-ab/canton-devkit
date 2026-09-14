@@ -266,6 +266,8 @@ it includes OS/arch, Docker/Compose versions, and the check results.
 
 ## 6. Next steps
 
+- [HackCanton Season 3 starter](hackcanton-s3.md) — install, one
+  working example, and the breaks that eat day-one time.
 - [LocalNet lifecycle](localnet-lifecycle.md) — zero to a running
   LocalNet, multiple instances, deterministic ports, and clean-up.
 - [Tokens](tokens.md) — CIP-0112 token flows on LocalNet.

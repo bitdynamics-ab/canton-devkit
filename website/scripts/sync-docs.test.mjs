@@ -11,6 +11,7 @@ import {
   escapeYaml,
   renderPage,
 } from './sync-docs.mjs';
+import { docsMap as liveDocsMap } from '../docs-map.mjs';
 
 const MAP = [
   { src: 'getting-started.md', dest: 'getting-started', description: 'Install and verify.' },
@@ -115,4 +116,10 @@ test('renderPage falls back to filename-derived title when no H1', () => {
     editBase: 'https://github.com/o/r/edit/main/docs/',
   });
   assert.match(out, /title: "tokens"/);
+});
+
+test('HackCanton S3 starter is published at a stable deep-link path', () => {
+  const entry = liveDocsMap.find(e => e.src === 'hackcanton-s3.md');
+  assert.ok(entry, 'docs/hackcanton-s3.md must be in docs-map.mjs');
+  assert.equal(entry.dest, 'hackcanton-s3');
 });

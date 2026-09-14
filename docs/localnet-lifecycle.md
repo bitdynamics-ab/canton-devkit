@@ -9,7 +9,9 @@ embedded Web UI for the same operations.
 This guide walks the full lifecycle: bring an instance up, inspect it,
 run several at once, and clean up. See
 [Installation & Getting Started](getting-started.md) first if you
-haven't installed DevKit yet.
+haven't installed DevKit yet. Hackathon teams: the
+[HackCanton Season 3 starter](hackcanton-s3.md) is install, one working
+example, and common breaks.
 
 ## Zero to running LocalNet
 

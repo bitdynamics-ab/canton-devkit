@@ -16,6 +16,9 @@ Web UI.
 
 **Website:** [https://bitdynamics-ab.github.io/canton-devkit/](https://bitdynamics-ab.github.io/canton-devkit/)
 
+**HackCanton Season 3 starter:**
+[install → one working example → common breaks](https://bitdynamics-ab.github.io/canton-devkit/hackcanton-s3/).
+
 Requires Docker and Compose v2, about 8 GB of free RAM for Docker, and
 about 20 GB of free disk. See the
 [installation guide](https://bitdynamics-ab.github.io/canton-devkit/getting-started/)
@@ -93,6 +96,7 @@ Source Markdown also lives under [`docs/`](docs/) for browsing in the
 repository:
 
 - Guides: [getting started](docs/getting-started.md) ·
+  [HackCanton Season 3 starter](docs/hackcanton-s3.md) ·
   [explorer](docs/explorer.md) ·
   [observability](docs/observability.md) ·
   [dashboard customization](docs/dashboard-customization.md) ·
