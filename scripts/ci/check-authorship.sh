@@ -3,8 +3,8 @@
 # Fail if any commit in a range is authored, committed, or co-authored by an AI
 # coding tool (Claude / Anthropic / Cursor).
 #
-# Usage: check-ai-authorship.sh <base-ref> [head-ref]
-#        check-ai-authorship.sh <revision-range>
+# Usage: check-authorship.sh <base-ref> [head-ref]
+#        check-authorship.sh <revision-range>
 
 set -euo pipefail
 

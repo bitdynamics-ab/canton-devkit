@@ -7,8 +7,8 @@ permissions:
   contents: read
 
 jobs:
-  no-ai-authorship:
-    name: No AI tool author or co-author
+  check-authorship:
+    name: Check commit authorship
     runs-on: [self-hosted, Linux]
 
     steps:
