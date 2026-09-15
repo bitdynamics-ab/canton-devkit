@@ -1,5 +1,8 @@
 # Troubleshooting
 
+Day-one setup (install, one working example, common breaks):
+[HackCanton Season 3 starter](hackcanton-s3.md).
+
 Failure modes and fixes. Start with `canton-devkit localnet doctor` —
 it runs the same host preflight as `localnet up` (Docker CLI, daemon,
 Compose v2, disk + memory headroom, platform, port availability; pass

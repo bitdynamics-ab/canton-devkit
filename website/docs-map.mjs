@@ -15,6 +15,7 @@
 
 export const docsMap = [
   { src: 'getting-started.md', dest: 'getting-started', description: 'Install Canton DevKit as a DPM component or standalone binary on macOS, Linux, and Windows, and verify your host is ready for LocalNet.' },
+  { src: 'hackcanton-s3.md', dest: 'hackcanton-s3', description: 'HackCanton Season 3 starter: install Canton DevKit, run one working LocalNet example, and fix the breaks that eat day-one time.' },
   { src: 'case-study-canton-devkit.md', dest: 'case-studies/running-canton-locally', description: 'A walkthrough of standing up a local Canton + Splice network with Canton DevKit — from booting LocalNet to working through Token Standard flows (CIP-0056 and CIP-0112) — across both the CLI and the Web UI.' },
   { src: 'localnet-lifecycle.md', dest: 'guides/localnet-lifecycle', description: 'Zero to a running Canton LocalNet — start, inspect, run multiple instances, pin ports, tear down, and answers to common questions.' },
   { src: 'explorer.md', dest: 'guides/explorer', description: 'Browse the Active Contract Set, recent transactions, and a ledger timeline of a running LocalNet from the Web UI — with CLI equivalents for scripting.' },

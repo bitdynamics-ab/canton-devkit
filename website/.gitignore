@@ -18,6 +18,7 @@ node_modules/
 # Edit the repo docs, not these pages. Hand-authored pages (index.mdx,
 # 404.md, operations/) stay tracked.
 src/content/docs/getting-started.md
+src/content/docs/hackcanton-s3.md
 src/content/docs/case-studies/
 src/content/docs/guides/
 src/content/docs/reference/
