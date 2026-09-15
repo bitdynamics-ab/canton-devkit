@@ -1,21 +1,14 @@
 # HackCanton Season 3 starter
 
-Day-one LocalNet for teams who have never run Canton. Install, one
-working example, then the breaks that eat hackathon hours. Deeper
-guides are linked at the bottom.
+canton-devkit helps you to run and test your Daml application in a LocalNet environment. Both `dpm localnet <cmd>` and `canton-devkit localnet <cmd>` follow the same command tree.
 
-`dpm localnet <cmd>` and `canton-devkit localnet <cmd>` are the same
-command tree — use whichever binary you installed.
+Telegram support channel: https://t.me/+ysKrAz_QALk5NTM0
 
 ## 1. Install
-
-You need Docker. DevKit never installs Docker, never edits the daemon,
-and never changes host permissions.
 
 | Requirement | Why | Check |
 |---|---|---|
 | Docker Engine / Desktop | LocalNet runs as containers | `docker version` |
-| Docker Compose **v2** | LocalNet is a compose project | `docker compose version` |
 | ~8 GB free RAM for Docker | Splice is memory-hungry (12 GB recommended) | Docker Desktop → Settings → Resources |
 | ~20 GB free disk | Images + volumes | `df -h` |
 
