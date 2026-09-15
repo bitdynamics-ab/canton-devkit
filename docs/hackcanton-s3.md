@@ -59,7 +59,6 @@ Start a named LocalNet, then start a transferable demo token.
 You do not need a DAR file for this.
 
 ```bash
-canton-devkit localnet doctor
 canton-devkit localnet up demo
 canton-devkit localnet status demo
 canton-devkit localnet token demo --instance demo
@@ -98,7 +97,7 @@ canton-devkit localnet token balances --instance demo
 ### Dashboard and app wiring
 
 ```bash
-canton-devkit localnet ui          # default http://127.0.0.1:7777/ (loopback only)
+canton-devkit localnet ui  
 eval "$(canton-devkit localnet env demo)"
 ```
 
@@ -122,7 +121,7 @@ canton-devkit localnet down demo
 Remove the instance fully (volumes and registry state):
 `canton-devkit localnet remove demo`.
 
-## 3. Things that commonly break
+## 3. Troubleshooting
 
 Run `canton-devkit localnet doctor` before other commands.
 Full write-ups are in [troubleshooting](troubleshooting.md).
