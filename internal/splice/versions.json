@@ -1,6 +1,6 @@
 {
   "$schema": "Splice version catalogue. See versions.go for field semantics.",
-  "_comment": "Maintainer flow: scripts/add-splice-version.sh <tag> resolves the tag \u2192 commit, downloads the archive, computes ContentSHA, and appends an entry here. Reviewer checks the diff before merging.",
+  "_comment": "Maintainer flow: scripts/add-splice-version.sh <tag> resolves the tag → commit, downloads the archive, computes ContentSHA, and appends an entry here. Reviewer checks the diff before merging.",
   "latest_alias": "0.8.1",
   "versions": [
     {
@@ -151,6 +151,20 @@
       "major": "0.8",
       "min_memory_bytes": 8000000000,
       "recommended_memory_bytes": 12000000000
+    },
+    {
+      "tag": "0.8.2",
+      "commit": "5aa19e762495ff6040101abb21c4eac6f5142b2a",
+      "content_sha": "899706c4dc722667a998329e0910717544f5c88bcba2b7aed25269275c4c4016",
+      "size": 199864419,
+      "major": "0.8"
+    },
+    {
+      "tag": "0.8.3",
+      "commit": "8460154135f39019b8bb370c9c1321ff13c9bb10",
+      "content_sha": "899706c4dc722667a998329e0910717544f5c88bcba2b7aed25269275c4c4016",
+      "size": 199864457,
+      "major": "0.8"
     },
     {
       "tag": "token-standard-v2",
