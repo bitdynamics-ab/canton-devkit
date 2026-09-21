@@ -126,11 +126,11 @@ brew tap bitdynamics-ab/canton-devkit
 brew install bitdynamics-ab/canton-devkit/canton-devkit
 ```
 
-To upgrade after a new release is published:
+To upgrade after a new release is published, refresh the tap and then
+upgrade the formula (`brew update` does not take a package name):
 
 ```bash
-brew update
-brew upgrade canton-devkit
+brew update && brew upgrade canton-devkit
 ```
 
 The formula downloads platform-specific release tarballs from this

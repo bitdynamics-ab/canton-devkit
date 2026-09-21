@@ -22,7 +22,7 @@ export const docsMap = [
   { src: 'observability.md', dest: 'guides/observability', description: 'Enable the observability profile for Prometheus + Grafana, understand the live Splice metric naming convention, and toggle the sidecars at runtime.' },
   { src: 'dashboard-customization.md', dest: 'guides/dashboard-customization', description: 'Extend, replace, or restore the bundled Grafana dashboard for a running LocalNet — panels, template variables, and persistence across down/up cycles.' },
   { src: 'tokens.md', dest: 'guides/tokens', description: 'Work with Canton Token Standard instruments on a live LocalNet — CIP-0056 assets and Token Standard V2 (CIP-0112) — from the CLI or the Web UI.' },
-  { src: 'homebrew.md', dest: 'guides/homebrew', description: 'Install canton-devkit via the Homebrew tap or direct formula, and how the formula is kept in sync on every release.' },
+  { src: 'homebrew.md', dest: 'guides/homebrew', description: 'Install and upgrade canton-devkit via the Homebrew tap, and how the formula is kept in sync on every release.' },
   { src: 'faq.md', dest: 'reference/faq', description: 'Common questions about canton-devkit: what it is, how the CLI and Web UI relate, versions, and day-to-day usage.' },
   { src: 'versions.md', dest: 'reference/versions', description: 'How DevKit pins tested Splice LocalNet versions by commit SHA and content hash, discovers upstream tags, and resolves uncurated versions on opt-in.' },
   { src: 'packaging.md', dest: 'reference/packaging', description: 'How canton-devkit ships — standalone binaries, the DPM component, and the Homebrew tap — and the current supply-chain integrity story.' },
