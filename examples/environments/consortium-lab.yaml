@@ -1,0 +1,35 @@
+# Flagship target topology (plan §14) for the DevKit environment compiler.
+#
+# NOTE: the devkit.yaml parser is NOT built yet. This documents the schema the
+# internal/environment spike is working toward; see
+# docs/design/env-topology-spike.md for what is proven so far.
+#
+#                        Base / Shared
+#                        /     |     \
+#                       A      B      C
+#                       │      │      │
+#                  A-private B-private C-private
+#                       \      |      /
+#                        └──── ABC ───┘
+version: v1
+
+environment:
+  name: consortium-lab
+
+runtime:
+  spliceVersion: 0.8.1
+
+validators:
+  project-a:
+    synchronizers: [shared, a-private, abc]
+  project-b:
+    synchronizers: [shared, b-private, abc]
+  project-c:
+    synchronizers: [shared, c-private, abc]
+
+synchronizers:
+  shared: { type: base } # the LocalNet's existing global synchronizer; do not re-bootstrap
+  a-private: { type: local }
+  b-private: { type: local }
+  c-private: { type: local }
+  abc: { type: local }
