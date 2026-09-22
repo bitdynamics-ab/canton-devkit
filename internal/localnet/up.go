@@ -612,7 +612,9 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	}
 	prog.FinishStep(StepStartServices, "")
 
-	// 7. Wait for services to become healthy.
+	// 7. Wait for services to become healthy, then probe the
+	// app-provider Ledger API via go-daml. Docker health alone is not
+	// enough — token / explorer paths need a live participant gRPC.
 	prog.StartStep(StepWaitHealthy, "")
 	if err := runner.WaitForHealthy(ctx); err != nil {
 		markFailed(state, prog.Err())
@@ -638,13 +640,38 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			WithCode(err, code))
 		return ExitRuntimeFailure
 	}
+
+	prog.UpdateStep(StepWaitHealthy, "Capturing participant ports", -1)
+	for key, port := range CaptureCantonPorts(ctx, state.ComposeProject) {
+		state.Ports[key] = port
+	}
+	for key, port := range CaptureMetricsPorts(ctx, state.ComposeProject) {
+		state.Ports[key] = port
+	}
+
+	prog.UpdateStep(StepWaitHealthy, "Probing Ledger API (app-provider)", -1)
+	if creds := captureCredentials(projectDir, prog.Err()); creds != nil {
+		state.Credentials = creds
+	}
+	ledgerRes, err := ensureLedgerReadyFn(ctx, projectDir, state.Ports, state.Credentials)
+	if err != nil {
+		markFailed(state, prog.Err())
+		if ctx.Err() != nil {
+			prog.FailStep(StepWaitHealthy, "Timed out waiting for Ledger API", nil)
+			return ExitTimeout
+		}
+		prog.FailStep(StepWaitHealthy, "Ledger API not reachable",
+			WithCode(err, ErrCodeLedgerUnreachable))
+		return ExitRuntimeFailure
+	}
+	prog.UpdateStep(StepWaitHealthy,
+		fmt.Sprintf("Ledger API ready at %s (role app-provider, offset %d)",
+			ledgerRes.Endpoint, ledgerRes.Offset), -1)
 	prog.FinishStep(StepWaitHealthy, "")
 
-	// 8. Capture Canton participant ports. The Canton container
-	// exposes Ledger/Admin/JSON APIs per party role on Docker-ephemeral
-	// host ports — ask docker what they ended up as and persist them so
-	// consumers (Web UI Explorer, DAR Manager, token tooling) can dial
-	// without a manual `--admin-host=localhost:<port>` flag.
+	// 8. Capture Canton participant ports. Ports were already
+	// queried for the ledger probe above; re-query is idempotent and
+	// picks up any late-published bindings.
 	// Best-effort: any port that fails to query is silently omitted,
 	// not stamped as 0.
 	for key, port := range CaptureCantonPorts(ctx, state.ComposeProject) {
@@ -673,12 +700,13 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		state.ImageDigests = digests
 	}
 
-	// 9. Capture JWTs and persist running state. (UI ports were
-	// pre-allocated in step 5; Canton participant gRPC/JSON API
-	// ports were just captured in step 8.)
+	// 9. Persist running state. JWTs were captured during the ledger
+	// probe step above; refresh only if that path left Credentials empty.
 	prog.StartStep(StepCaptureJWTs, "")
-	if creds := captureCredentials(projectDir, prog.Err()); creds != nil {
-		state.Credentials = creds
+	if len(state.Credentials) == 0 {
+		if creds := captureCredentials(projectDir, prog.Err()); creds != nil {
+			state.Credentials = creds
+		}
 	}
 	state.Status = registry.StatusRunning
 	if err := registry.Write(state); err != nil {

@@ -41,7 +41,7 @@ func TestTextProgress_StartStepOutput(t *testing.T) {
 			name:   "wait_healthy, no detail",
 			step:   StepWaitHealthy,
 			detail: "",
-			want:   "Waiting for services to become healthy...\n",
+			want:   "Waiting for services and Ledger API to become healthy...\n",
 		},
 		{
 			name:   "preflight with detail (hypothetical future use)",

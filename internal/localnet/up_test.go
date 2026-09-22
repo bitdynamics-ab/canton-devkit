@@ -3,6 +3,7 @@ package localnet
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/poc/godamlprobe"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
@@ -125,6 +127,7 @@ func TestRunUp_RejectsConcurrentSameNameOp(t *testing.T) {
 //     would deadlock under real docker)
 func TestRunUp_HappyPath_FakeDriven(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	stubEnsureLedgerReadyOK(t)
 
 	// Build a fake project dir containing the env/ files
 	// LoadCredentialInputs expects. Three roles, each with VALIDATOR_USER
@@ -266,6 +269,7 @@ func (d *doneRecorder) Done(string) { d.doneCalls++ }
 // on "running" forever, never refreshing the dashboard.
 func TestRunUp_EmitsDoneOnSuccess(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	stubEnsureLedgerReadyOK(t)
 
 	projectDir := t.TempDir()
 	envDir := filepath.Join(projectDir, "env")
@@ -304,6 +308,7 @@ func TestRunUp_EmitsDoneOnSuccess(t *testing.T) {
 
 func TestRunUp_AlphaVersionWarns(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	stubEnsureLedgerReadyOK(t)
 
 	projectDir := t.TempDir()
 	envDir := filepath.Join(projectDir, "env")
@@ -389,6 +394,59 @@ func (s *composeRunnerStub) WaitForHealthy(context.Context) error {
 	return nil
 }
 
+// TestRunUp_LedgerUnreachableFails pins that a failed go-daml Ledger
+// API probe after Docker health marks the instance failed and returns
+// ExitRuntimeFailure — containers-up-but-ledger-down must not look like
+// a successful bring-up.
+func TestRunUp_LedgerUnreachableFails(t *testing.T) {
+	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	prev := ensureLedgerReadyFn
+	ensureLedgerReadyFn = func(context.Context, string, map[string]int, map[string]registry.Credential) (godamlprobe.Result, error) {
+		return godamlprobe.Result{}, errors.New("connection refused")
+	}
+	t.Cleanup(func() { ensureLedgerReadyFn = prev })
+
+	projectDir := t.TempDir()
+	envDir := filepath.Join(projectDir, "env")
+	if err := os.MkdirAll(envDir, 0o755); err != nil {
+		t.Fatalf("mkdir env: %v", err)
+	}
+	for name, body := range map[string]string{
+		"sv-auth-on.env":           "AUTH_SV_VALIDATOR_USER_NAME=sv-user\nAUTH_SV_AUDIENCE=sv-aud\n",
+		"app-provider-auth-on.env": "AUTH_APP_PROVIDER_VALIDATOR_USER_NAME=ap-user\nAUTH_APP_PROVIDER_AUDIENCE=ap-aud\n",
+		"app-user-auth-on.env":     "AUTH_APP_USER_VALIDATOR_USER_NAME=au-user\nAUTH_APP_USER_AUDIENCE=au-aud\n",
+	} {
+		if err := os.WriteFile(filepath.Join(envDir, name), []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	var out, errBuf bytes.Buffer
+	code := RunUp(context.Background(),
+		&TextProgress{OutW: &out, ErrW: &errBuf},
+		&UpOptions{
+			Name:          "ledger-down",
+			Version:       splice.LatestAlias,
+			SkipPreflight: true,
+			FetchFn: func(_ context.Context, _ splice.Version, _ string, _ io.Writer) (string, error) {
+				return projectDir, nil
+			},
+			NewRunner: func(string, []string, []string, []string, string, io.Writer) composeOps {
+				return &composeRunnerStub{}
+			},
+		})
+	if code != ExitRuntimeFailure {
+		t.Fatalf("RunUp = %d, want ExitRuntimeFailure; stderr=%q", code, errBuf.String())
+	}
+	st, err := registry.Read("ledger-down")
+	if err != nil {
+		t.Fatalf("registry.Read: %v", err)
+	}
+	if st.Status != registry.StatusFailed {
+		t.Errorf("status = %q, want failed", st.Status)
+	}
+}
+
 // TestRunUp_CLIByteEquivalence pins the CLI output contract: the
 // TextProgress-backed RunUp must emit the same set of header lines
 // today's users see, AND must NOT emit new lines for the five
@@ -402,6 +460,7 @@ func (s *composeRunnerStub) WaitForHealthy(context.Context) error {
 // is "these phases are visible / those phases are silent."
 func TestRunUp_CLIByteEquivalence(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	stubEnsureLedgerReadyOK(t)
 
 	projectDir := t.TempDir()
 	envDir := filepath.Join(projectDir, "env")
@@ -441,9 +500,9 @@ func TestRunUp_CLIByteEquivalence(t *testing.T) {
 
 	// VISIBLE step lines — must be present.
 	mustContain := []string{
-		"Starting Canton LocalNet",                  // the verbatim header preserved via prog.Out()
-		"Starting services...",                      // StepStartServices via TextProgress.StartStep
-		"Waiting for services to become healthy...", // StepWaitHealthy
+		"Starting Canton LocalNet",                                 // the verbatim header preserved via prog.Out()
+		"Starting services...",                                     // StepStartServices via TextProgress.StartStep
+		"Waiting for services and Ledger API to become healthy...", // StepWaitHealthy
 		"is ready", // Done() success marker (welcome line: `"x" is ready · Splice …`)
 	}
 	// SkipPreflight is true in this test, so "Running preflight checks..."
