@@ -61,13 +61,25 @@ and the canton container mounting our generated `app.conf`. The upstream cache i
 never touched. (Reproduce with `DEVKIT_ENV_SPIKE_DOCKER=1 go test
 ./internal/environment/...`.)
 
+### Gate 1 — passed
+
+A real boot of the pinned upstream LocalNet with two generated participants
+(`project-a`/`project-b`) added: `canton` and `splice` reach **healthy** — so the
+generated HOCON parsed and all five participants instantiated (Canton is
+all-or-nothing on config) — the generated `participant-project-a` /
+`participant-project-b` databases exist, and each participant's gRPC health
+reports SERVING. Codified in `TestGate1_Boot` (gated behind
+`DEVKIT_ENV_SPIKE_BOOT=1`). Generated participants start in
+`identity.type=manual`, awaiting the onboarding proven by later gates — Gate 1
+proves only that arbitrary generated participants load without breaking Canton.
+
 ## Not yet validated (the real risk, per plan §36)
 
-`docker compose config` validates the *compose* layer only. Still unproven:
+Gate 1 (above) proves generated participants load. Still unproven:
 
-- **HOCON parses and Canton boots** with generated participants (needs the
-  canton image + a real `up`).
-- **Synchronizer generation**: a generated `abc-sequencer`/`abc-mediator` and
+- **Validator onboarding** (Gate 2): a generated participant reaches a usable
+  Ledger API / operator party via a generated Splice Validator App.
+- **Synchronizer generation** (Gate 3): a generated `abc-sequencer`/`abc-mediator` and
   bootstrap. The plan's §11–12 generalization of `app-synchronizer.sc` is the
   next hard part.
 - **Connect + enable multi-sync** across arbitrary participants, and resolving
@@ -87,8 +99,8 @@ to *generated config + a small override* (plan §18–19).
 ## Next (Milestone A)
 
 1. Generated participant HOCON — **done (spike)**.
-2. Boot the 2-participant env for real (`up`), confirm Ledger/Admin APIs.
-3. Generated Validator App HOCON + onboarding (secret, party hint, DB, JWT).
+2. Boot the 2-participant env for real — **done (Gate 1)**.
+3. Generated Validator App HOCON + onboarding (secret, party hint, DB, JWT) — **Gate 2, next**.
 4. Deterministic port blocks + generated DBs + local auth.
 5. Generated sequencer/mediator for one `type: local` synchronizer.
 6. Generalize the `app-synchronizer.sc` bootstrap (connect + enable multi-sync)

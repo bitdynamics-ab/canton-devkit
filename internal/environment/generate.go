@@ -52,7 +52,10 @@ func dbEnvKey(database string) string {
 func (t Topology) ComposeOverride() string {
 	var ports, dbs strings.Builder
 	for _, p := range t.Participants {
-		for _, port := range []int{p.LedgerAPIPort(), p.AdminAPIPort(), p.JSONAPIPort()} {
+		// Publish ledger/admin/JSON plus the gRPC health port — the canton
+		// image ships grpc-health-probe, so exposing it lets a boot check
+		// probe each generated participant directly.
+		for _, port := range []int{p.LedgerAPIPort(), p.AdminAPIPort(), p.JSONAPIPort(), p.GRPCHealthPort()} {
 			fmt.Fprintf(&ports, "      - \"%d:%d\"\n", port, port)
 		}
 		fmt.Fprintf(&dbs, "      %s: \"%s\"\n", dbEnvKey(p.Database()), p.Database())

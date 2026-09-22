@@ -36,7 +36,7 @@ func TestParticipantHOCON(t *testing.T) {
 func TestComposeOverride(t *testing.T) {
 	got := spikeTopology().ComposeOverride()
 	for _, want := range []string{
-		`"21001:21001"`, `"22001:22001"`,
+		`"21001:21001"`, `"21006:21006"`, `"22001:22001"`, `"22006:22006"`,
 		"CREATE_DATABASE_participant_project_a: \"participant-project-a\"",
 		"CREATE_DATABASE_participant_project_b: \"participant-project-b\"",
 	} {
