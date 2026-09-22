@@ -42,8 +42,10 @@ const (
 	// StepStartServices: 6 · "Starting services" — `docker compose
 	// up -d --wait`. The longest single phase.
 	StepStartServices Step = "start_services"
-	// StepWaitHealthy: 7 · "Wait for services to become healthy" —
-	// container --wait + adapter-specific readiness probes.
+	// StepWaitHealthy: 7 · "Wait for services and Ledger API to become
+	// healthy" — Docker compose health polling, then a Ledger API
+	// connectivity probe (go-daml GetLedgerApiVersion + GetLedgerEnd on
+	// app-provider).
 	StepWaitHealthy Step = "wait_healthy"
 	// StepCaptureJWTs: 8 · "Capture JWTs · register endpoints" —
 	// sign dev-secret tokens for sv/app-provider/app-user, write
@@ -132,7 +134,7 @@ var stepLabel = map[Step]string{
 	StepFetchSplice:    "Fetching Splice LocalNet",
 	StepPersistState:   "Persisting state + writing overlay",
 	StepStartServices:  "Starting services",
-	StepWaitHealthy:    "Waiting for services to become healthy",
+	StepWaitHealthy:    "Waiting for services and Ledger API to become healthy",
 	StepCaptureJWTs:    "Capturing JWTs · registering endpoints",
 }
 

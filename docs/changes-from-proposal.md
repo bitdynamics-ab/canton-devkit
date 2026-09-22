@@ -22,6 +22,7 @@ Every deviation listed here is **intentional**, not an oversight or implementati
   - [`--allow-uncurated` flag (new)](#--allow-uncurated-flag-new)
   - [`--profile` flag (new)](#--profile-flag-new)
   - [`--port-base` flag (new)](#--port-base-flag-new)
+  - [Ledger API readiness probe (new)](#ledger-api-readiness-probe-new)
 - [`localnet pause` / `resume` (new)](#localnet-pause--resume-new)
 - [`localnet stop` / `start` (new)](#localnet-stop--start-new)
 - [`localnet creds` (new)](#localnet-creds-new)
@@ -159,6 +160,16 @@ The following aliases are not in the proposal but are shipped:
 **Shipped:** `--port-base <n>` pins host ports deterministically starting from `n` (each service gets `base+N`). With `--port-base 0` (default), ports are auto-allocated with stable reuse across restarts. Every derived port must be free or `up` fails immediately with no silent fallback.
 
 **Why:** Auto-allocation works for single-developer use; `--port-base` is needed for CI layouts and reproducible multi-instance setups where port assignments must be predictable and documented.
+
+---
+
+### Ledger API readiness probe (new)
+
+**Proposal said:** `up` waits until LocalNet services are healthy before reporting success. The proposal did not specify a Ledger API gRPC connectivity check beyond container healthchecks.
+
+**Shipped:** after Docker compose health succeeds, `localnet up` / `start` / `restart` (unless `--no-wait`) capture the `app-provider` participant ledger port, obtain a JWT, and poll the Ledger API with [go-daml](https://github.com/noders-team/go-daml) (`GetLedgerApiVersion` + `GetLedgerEnd`) for up to five minutes. Failure stamps `LEDGER_UNREACHABLE` and marks the instance failed (or `partial` on start/restart). The CLI and Web UI share the same `RunUp` / start / restart paths; progress copy says "Waiting for services and Ledger API to become healthy". Transaction dials still use `dazl-client` via `internal/canton/ledger`; go-daml is the readiness probe only.
+
+**Why:** Container healthchecks can report green before the participant Ledger API accepts authenticated gRPC. Probing the operator node (`app-provider`) prevents "up succeeded" from being followed immediately by token/explorer dial failures.
 
 ---
 
