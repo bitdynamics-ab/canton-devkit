@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://bitdynamics-ab.github.io/canton-devkit/sitemap-index.xml
