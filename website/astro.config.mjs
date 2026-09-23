@@ -55,7 +55,7 @@ export default defineConfig({
 				{
 					label: 'Guides',
 					items: [
-						{ slug: 'guides/localnet-lifecycle' },
+						{ slug: 'guides/localnet-lifecycle', label: 'Canton LocalNet lifecycle' },
 						{ slug: 'guides/explorer' },
 						{ slug: 'guides/observability' },
 						{ slug: 'guides/dashboard-customization' },

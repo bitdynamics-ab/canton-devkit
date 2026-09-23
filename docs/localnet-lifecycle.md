@@ -1,17 +1,22 @@
-# LocalNet Lifecycle
+# Canton LocalNet lifecycle
 
-Canton DevKit is a single-binary developer tool for running and operating a
-Canton **LocalNet** — a full local Canton Network (sequencers, mediators,
-participants, Splice apps) in Docker. It gives you a CLI
-(`canton-devkit localnet <command>`, or `dpm localnet <command>` under DPM) and an
-embedded Web UI for the same operations.
+**Canton LocalNet** is a multi-validator local Canton Network for
+development and integration testing (sequencers, mediators, participants,
+and Splice apps in Docker). It is not a production deployment path.
+
+**Canton DevKit** is a single-binary tool that runs and operates that
+upstream Splice LocalNet stack. It gives you a CLI
+(`canton-devkit localnet <command>`, or `dpm localnet <command>` under DPM)
+and an embedded Web UI for the same operations — without hand-assembling
+Compose files.
 
 This guide walks the full lifecycle: bring an instance up, inspect it,
 run several at once, and clean up. See
 [Installation & Getting Started](getting-started.md) first if you
 haven't installed DevKit yet. Hackathon teams: the
 [HackCanton Season 3 starter](hackcanton-s3.md) is install, one working
-example, and common breaks.
+example, and common breaks. For short answers (definition, start steps,
+DevKit vs cn-quickstart), see the [FAQ](faq.md).
 
 ## Zero to running LocalNet
 
@@ -139,4 +144,10 @@ Answer `y` to stop and remove it in one step; anything else leaves the
 instance alone. Pass `--force` to skip the prompt — required when stdin
 is not a terminal, such as in CI. Use `--dry-run` to preview.
 
-For common questions, see the [FAQ](faq.md).
+## Related questions
+
+- [What is Canton LocalNet?](faq.md#what-is-canton-localnet)
+- [How do I start a Canton LocalNet with DevKit?](faq.md#how-do-i-start-a-canton-localnet-with-devkit)
+- [How does DevKit relate to cn-quickstart / official LocalNet?](faq.md#how-does-devkit-relate-to-cn-quickstart--official-localnet)
+
+See the full [FAQ](faq.md) and [troubleshooting](troubleshooting.md).
