@@ -30,7 +30,6 @@ embedded Web UI for the same operations.
 Install DevKit ([Installation & Getting Started](getting-started.md)), then:
 
 ```bash
-canton-devkit localnet doctor
 canton-devkit localnet up --name demo
 canton-devkit localnet status --name demo
 eval "$(canton-devkit localnet env --name demo)"
