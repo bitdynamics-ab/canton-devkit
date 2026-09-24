@@ -174,14 +174,36 @@ func RunRestart(ctx context.Context, out io.Writer, errw io.Writer, opts *Restar
 			_ = registry.Write(state)
 			return ExitTimeout
 		}
+
+		// Re-capture Canton's ephemeral gRPC ports (see godoc). Best-
+		// effort: an empty result (docker unavailable in tests) is a
+		// no-op merge that leaves the cached ports untouched.
+		for key, port := range CaptureCantonPorts(ctx, state.ComposeProject) {
+			state.Ports[key] = port
+		}
+		if len(state.Credentials) == 0 && state.ProjectDir != "" {
+			if creds := captureCredentials(state.ProjectDir, errw); creds != nil {
+				state.Credentials = creds
+			}
+		}
+		ledgerRes, err := ensureLedgerReadyFn(ctx, state.ProjectDir, state.Ports, state.Credentials)
+		if err != nil {
+			if ctx.Err() != nil {
+				_, _ = fmt.Fprintln(errw, "Interrupted while waiting for Ledger API")
+				return ExitTimeout
+			}
+			_, _ = fmt.Fprintf(errw, "Ledger API did not become ready after restart: %s\n", err)
+			state.Status = registry.StatusPartial
+			_ = registry.Write(state)
+			return ExitTimeout
+		}
+		_, _ = fmt.Fprintf(out, "Ledger API ready at %s (role app-provider)\n", ledgerRes.Endpoint)
+	} else {
+		for key, port := range CaptureCantonPorts(ctx, state.ComposeProject) {
+			state.Ports[key] = port
+		}
 	}
 
-	// Re-capture Canton's ephemeral gRPC ports (see godoc). Best-
-	// effort: an empty result (docker unavailable in tests) is a
-	// no-op merge that leaves the cached ports untouched.
-	for key, port := range CaptureCantonPorts(ctx, state.ComposeProject) {
-		state.Ports[key] = port
-	}
 	state.Status = registry.StatusRunning
 	if err := registry.Write(state); err != nil {
 		_, _ = fmt.Fprintf(errw, "Warning: could not persist post-restart state: %s\n", err)

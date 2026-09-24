@@ -280,13 +280,37 @@ func fastStart(ctx context.Context, out, errw io.Writer, opts *StartOptions, sta
 			_ = registry.Write(state)
 			return ExitTimeout
 		}
+
+		// Re-capture Canton's ephemeral gRPC ports — Docker may re-assign
+		// them on start. Best-effort merge (empty result is a no-op).
+		for key, port := range CaptureCantonPorts(ctx, state.ComposeProject) {
+			state.Ports[key] = port
+		}
+		if len(state.Credentials) == 0 && state.ProjectDir != "" {
+			if creds := captureCredentials(state.ProjectDir, errw); creds != nil {
+				state.Credentials = creds
+			}
+		}
+		ledgerRes, err := ensureLedgerReadyFn(ctx, state.ProjectDir, state.Ports, state.Credentials)
+		if err != nil {
+			if ctx.Err() != nil {
+				_, _ = fmt.Fprintln(errw, "Interrupted while waiting for Ledger API")
+				return ExitTimeout
+			}
+			_, _ = fmt.Fprintf(errw, "Ledger API did not become ready after start: %s\n", err)
+			state.Status = registry.StatusPartial
+			_ = registry.Write(state)
+			return ExitTimeout
+		}
+		_, _ = fmt.Fprintf(out, "Ledger API ready at %s (role app-provider)\n", ledgerRes.Endpoint)
+	} else {
+		// --no-wait: still refresh ports when possible so consumers
+		// are not left with stale bindings, but skip the ledger probe.
+		for key, port := range CaptureCantonPorts(ctx, state.ComposeProject) {
+			state.Ports[key] = port
+		}
 	}
 
-	// Re-capture Canton's ephemeral gRPC ports — Docker may re-assign
-	// them on start. Best-effort merge (empty result is a no-op).
-	for key, port := range CaptureCantonPorts(ctx, state.ComposeProject) {
-		state.Ports[key] = port
-	}
 	state.Status = registry.StatusRunning
 	if err := registry.Write(state); err != nil {
 		_, _ = fmt.Fprintf(errw, "Warning: could not persist post-start state: %s\n", err)

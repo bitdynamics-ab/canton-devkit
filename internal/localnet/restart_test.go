@@ -60,6 +60,7 @@ func okRestarter(restartCalled *bool, gotServices *[]string) func(string, []stri
 
 func TestRunRestart_HappyPath(t *testing.T) {
 	seedRunningInstance(t, "rs-happy")
+	stubEnsureLedgerReadyOK(t)
 
 	called := false
 	var out, errBuf bytes.Buffer
@@ -85,6 +86,7 @@ func TestRunRestart_HappyPath(t *testing.T) {
 
 func TestRunRestart_ServiceScoped(t *testing.T) {
 	seedRunningInstance(t, "rs-svc")
+	stubEnsureLedgerReadyOK(t)
 
 	var got []string
 	var out, errBuf bytes.Buffer
@@ -191,6 +193,7 @@ func TestRunRestart_UnknownServiceRejected(t *testing.T) {
 
 func TestRunRestart_KnownServiceAccepted(t *testing.T) {
 	seedRunningInstance(t, "rs-known")
+	stubEnsureLedgerReadyOK(t)
 	stubProjectContainers(t, "canton", "splice")
 
 	var got []string
@@ -210,6 +213,7 @@ func TestRunRestart_KnownServiceAccepted(t *testing.T) {
 
 func TestRunRestart_PortRecapturePersisted(t *testing.T) {
 	seedRunningInstance(t, "rs-ports")
+	stubEnsureLedgerReadyOK(t)
 
 	// Seed stale ports into the registry.
 	st, _ := registry.Read("rs-ports")
