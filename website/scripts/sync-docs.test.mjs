@@ -34,11 +34,11 @@ test('buildEntries keeps mapped sources and auto-publishes unmapped ones', () =>
 
 test('buildEntries skips do-not-publish (internal/process) docs', () => {
   const { bySrc, warnings } = buildEntries(
-    ['faq.md', 'changes-from-proposal.md'],
+    ['faq.md', 'original-devkit-proposal.md'],
     MAP,
-    ['changes-from-proposal.md'],
+    ['original-devkit-proposal.md'],
   );
-  assert.ok(!bySrc.has('changes-from-proposal.md'));
+  assert.ok(!bySrc.has('original-devkit-proposal.md'));
   assert.equal(warnings.length, 0);
 });
 

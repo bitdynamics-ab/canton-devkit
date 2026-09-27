@@ -446,7 +446,7 @@ func runAllocationAction(ctx context.Context, out io.Writer, opts AllocationActi
 // FinalizedAllocation batch + transferLegs must be reconstructed from live
 // allocation state, which needs a running V2 instance to validate against.
 // The CLI `token settle` verb and the settle HTTP route/UI action were
-// removed until this is functional — see docs/changes-from-proposal.md.
+// removed until this is functional.
 
 // --- helpers -------------------------------------------------------
 
