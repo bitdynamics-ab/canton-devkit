@@ -39,7 +39,7 @@ export const handAuthored = ['index.mdx', '404.md', 'operations/telemetry-collec
 // the grant-facing site (see AGENTS.md "Grant-facing documentation" —
 // out-of-scope files). Listed by docs/ filename; the sync skips them
 // instead of auto-publishing them under reference/.
-export const doNotPublish = ['changes-from-proposal.md', 'original-devkit-proposal.md'];
+export const doNotPublish = ['original-devkit-proposal.md'];
 
 // Repo root on GitHub, for links that point outside docs/ (e.g. the
 // telemetry collector runbook) so they resolve from the published site.
