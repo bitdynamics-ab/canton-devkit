@@ -167,6 +167,13 @@
       "major": "0.8"
     },
     {
+      "tag": "0.8.4",
+      "commit": "fa6b029f2563423f3f612302cfdc84986366479d",
+      "content_sha": "899706c4dc722667a998329e0910717544f5c88bcba2b7aed25269275c4c4016",
+      "size": 199872061,
+      "major": "0.8"
+    },
+    {
       "tag": "token-standard-v2",
       "commit": "de911e38af78ec79b6f0e6a9515e104b1e4c3d62",
       "content_sha": "4fae533b28de046360524c0e4b9d56a5799865bfff6007b5372959bf150165c7",
