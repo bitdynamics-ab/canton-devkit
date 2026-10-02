@@ -1,0 +1,34 @@
+name: Close inactive needs-investigation issues
+
+# Closes issues labeled "needs investigation" after 30 days with no activity.
+# The label is applied by humans; this workflow does not add it.
+
+on:
+  schedule:
+    - cron: "30 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  stale:
+    name: Close inactive needs-investigation issues
+    runs-on: [self-hosted, Linux]
+    timeout-minutes: 10
+    steps:
+      - name: Process stale issues
+        # actions/stale@v11.0.0
+        uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93
+        with:
+          days-before-issue-stale: -1
+          days-before-issue-close: 30
+          stale-issue-label: "needs investigation"
+          only-issue-labels: "needs investigation"
+          remove-issue-stale-when-updated: true
+          close-issue-message: >-
+            Closing this issue because it was labeled "needs investigation"
+            and had no activity for 30 days. Reopen if it is still relevant.
+          close-issue-reason: not_planned
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
