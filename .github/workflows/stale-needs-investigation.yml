@@ -14,7 +14,9 @@ permissions:
 jobs:
   stale:
     name: Close inactive needs-investigation issues
-    runs-on: [self-hosted, Linux]
+    # GitHub-hosted: this job only calls the GitHub API via actions/stale;
+    # it does not need the self-hosted Docker/LocalNet environment.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Process stale issues
