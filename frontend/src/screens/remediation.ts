@@ -89,6 +89,15 @@ export function remediationForCode(code?: ErrorCode): Remediation | null {
           "Common causes: postgres connection limit, splice waiting on canton, ledger API not ready.",
         ],
       };
+    case "LEDGER_UNREACHABLE":
+      return {
+        title: "Ledger API did not become ready",
+        steps: [
+          "Docker reported containers healthy, but the app-provider participant Ledger API did not accept a gRPC probe.",
+          "Check canton logs: `dpm localnet container logs <inst> canton`.",
+          "Confirm the instance captured `participant_ledger_app-provider` (`dpm localnet status <inst>`), then retry start or up.",
+        ],
+      };
     case "PREFLIGHT_FAILED":
     case undefined:
       return null;

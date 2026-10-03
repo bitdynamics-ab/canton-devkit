@@ -104,4 +104,12 @@ const (
 	// from a bare wait_healthy timeout — the frontend can offer a
 	// generic "see logs" affordance instead of suggesting nothing.
 	ErrCodeContainerUnhealthy = "CONTAINER_UNHEALTHY"
+
+	// ErrCodeLedgerUnreachable: Docker containers reported healthy
+	// but the app-provider Ledger API gRPC probe (go-daml
+	// GetLedgerApiVersion + GetLedgerEnd) never succeeded within
+	// the ledger readiness budget. Remediation: check participant
+	// logs / `localnet logs`, confirm participant_ledger_app-provider
+	// was captured, retry start/up.
+	ErrCodeLedgerUnreachable = "LEDGER_UNREACHABLE"
 )

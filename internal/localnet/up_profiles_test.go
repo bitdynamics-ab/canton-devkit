@@ -135,6 +135,7 @@ func TestRunUp_RejectsUnknownProfile(t *testing.T) {
 // full set, with no double-counting.
 func TestRunUp_InheritsOptInProfilesOnReup(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	stubEnsureLedgerReadyOK(t)
 	projectDir := fakeSpliceProjectDir(t)
 	base := adapterBaseProfiles(t)
 
@@ -195,6 +196,7 @@ func TestRunUp_InheritsOptInProfilesOnReup(t *testing.T) {
 // deliberately change or drop the opt-ins.
 func TestRunUp_ExplicitProfilesOverrideStoredOnReup(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	stubEnsureLedgerReadyOK(t)
 	projectDir := fakeSpliceProjectDir(t)
 	base := adapterBaseProfiles(t)
 
