@@ -106,7 +106,7 @@ describe("AgentSkillsScreen", () => {
     });
     // Success indicator shows the returned dir.
     await waitFor(() => {
-      expect(screen.getByText(/installed/i)).toBeTruthy();
+      expect(screen.getByText(/2 installed → \/home\/u\/\.claude\/skills/)).toBeTruthy();
     });
   });
 
