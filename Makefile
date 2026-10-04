@@ -28,7 +28,12 @@ build:
 	go build -ldflags "$(LDFLAGS)" -o bin/$(BINARY_NAME) ./cmd/canton-devkit
 
 skills:
-	go run ./cmd/canton-devkit localnet skills install --dir skills --force
+	@set -eu; for source in internal/skills/docs/*.md; do \
+		name=$$(basename "$$source" .md); \
+		dest="skills/canton-devkit-$$name"; \
+		mkdir -p "$$dest"; \
+		cp "$$source" "$$dest/SKILL.md"; \
+	done
 
 # ui: build the Vite bundle then the Go binary so the embedded assets
 # reflect current frontend source. Plain `make build` stays node-free
