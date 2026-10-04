@@ -60,6 +60,32 @@ func TestListIsSortedByFilename(t *testing.T) {
 	}
 }
 
+func TestPublishedSkillsMatchEmbeddedCatalogue(t *testing.T) {
+	list, err := List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join("..", "..", "skills")
+	paths, err := filepath.Glob(filepath.Join(root, "*", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != len(list) {
+		t.Fatalf("published %d skills, embedded %d; run make skills", len(paths), len(list))
+	}
+	for _, skill := range list {
+		path := filepath.Join(root, strings.TrimSuffix(skill.Filename, ".md"), "SKILL.md")
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("read published skill %s: %v", path, err)
+			continue
+		}
+		if string(body) != skill.Body {
+			t.Errorf("%s differs from embedded skill; run make skills", path)
+		}
+	}
+}
+
 func TestInstallWritesOneSkillDirPerDoc(t *testing.T) {
 	dir := t.TempDir()
 	res, err := Install(dir, false)
