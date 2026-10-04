@@ -14,6 +14,7 @@
 // properly.
 
 export const docsMap = [
+  { src: 'agent-skills.md', dest: 'guides/agent-skills', description: 'Install Canton DevKit agent skills for Codex and Claude Code with npx skills, the bundled CLI, or the Web UI; choose the workflow you need.' },
   { src: 'getting-started.md', dest: 'getting-started', description: 'Install Canton DevKit as a DPM component or standalone binary on macOS, Linux, and Windows, and verify your host is ready for LocalNet.' },
   { src: 'hackcanton-s3.md', dest: 'hackcanton-s3', description: 'HackCanton Season 3 starter: install Canton DevKit, run one working LocalNet example, and fix the breaks that eat day-one time.' },
   { src: 'case-study-canton-devkit.md', dest: 'case-studies/running-canton-locally', description: 'A walkthrough of standing up a local Canton + Splice network with Canton DevKit — from booting LocalNet to working through Token Standard flows (CIP-0056 and CIP-0112) — across both the CLI and the Web UI.' },

@@ -3,7 +3,7 @@ VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)
 
-.PHONY: build clean docker-build lint test frontend frontend-install frontend-test ui e2e-dpm
+.PHONY: build clean docker-build lint test frontend frontend-install frontend-test ui e2e-dpm skills
 
 # frontend-install: sync frontend/node_modules with the lockfile.
 # Separate target so CI runners with pre-cached deps can build only.
@@ -26,6 +26,14 @@ frontend-test: frontend-install
 build:
 	mkdir -p bin
 	go build -ldflags "$(LDFLAGS)" -o bin/$(BINARY_NAME) ./cmd/canton-devkit
+
+skills:
+	@set -eu; for source in internal/skills/docs/*.md; do \
+		name=$$(basename "$$source" .md); \
+		dest="skills/canton-devkit-$$name"; \
+		mkdir -p "$$dest"; \
+		cp "$$source" "$$dest/SKILL.md"; \
+	done
 
 # ui: build the Vite bundle then the Go binary so the embedded assets
 # reflect current frontend source. Plain `make build` stays node-free
