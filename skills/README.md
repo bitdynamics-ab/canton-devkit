@@ -45,12 +45,12 @@ The built-in installer defaults to Claude and preserves differing local files un
 
 | Skill name (`--skill`) | Folder | Workflow |
 | --- | --- | --- |
-| `canton-localnet-lifecycle` | `localnet-lifecycle/` | Host checks, start, health, pause, stop, teardown |
-| `canton-dar-upload` | `dar-upload/` | Upload, list, inspect, download, compare DARs |
-| `canton-hot-deploy` | `hot-deploy/` | Build-upload and continuous redeployment |
-| `canton-inspect-contracts` | `inspect-contracts/` | Contract and transaction inspection |
-| `canton-token-flow` | `token-flow/` | Local token creation, minting, transfer, burning, balance |
-| `canton-ci-localnet` | `ci-localnet/` | Disposable CI networks and guaranteed cleanup |
+| `canton-localnet-lifecycle` | `canton-devkit-localnet-lifecycle/` | Host checks, start, health, pause, stop, teardown |
+| `canton-dar-upload` | `canton-devkit-dar-upload/` | Upload, list, inspect, download, compare DARs |
+| `canton-hot-deploy` | `canton-devkit-hot-deploy/` | Build-upload and continuous redeployment |
+| `canton-inspect-contracts` | `canton-devkit-inspect-contracts/` | Contract and transaction inspection |
+| `canton-token-flow` | `canton-devkit-token-flow/` | Local token creation, minting, transfer, burning, balance |
+| `canton-ci-localnet` | `canton-devkit-ci-localnet/` | Disposable CI networks and guaranteed cleanup |
 
 Keep these as separate skills. They have distinct activation triggers and operational constraints: a ledger inspection request should load party-visibility guidance, while CI needs version pinning and always-run teardown. DAR upload and hot-deploy share deployment commands, but package inspection and a persistent watch loop remain different tasks. Small amounts of shared instance setup do not justify loading every workflow for every request. Install all six when you need the full development loop; there is no required load order.
 
@@ -65,4 +65,4 @@ make skills
 go test ./internal/skills ./internal/cli/localnet ./internal/ui/handlers
 ```
 
-`make skills` runs the existing installer with `--dir skills --force`, overwriting exported copies. Commit source changes and their regenerated exports together. When removing or renaming a source document, also remove its obsolete export: the installer does not prune directories. The parity test catches missing, extra, and changed exports; the existing CLI lint checks skill command examples against the actual Cobra commands and flags.
+`make skills` copies the source documents into `skills/canton-devkit-<filename-without-extension>/SKILL.md`, overwriting exported copies. Folder prefixes do not change the frontmatter skill names used by `--skill` or the built-in installer's folder names. Commit source changes and their regenerated exports together. When removing or renaming a source document, also remove its obsolete export: regeneration does not prune directories. The parity test catches missing, extra, and changed exports; the existing CLI lint checks skill command examples against the actual Cobra commands and flags.
