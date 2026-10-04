@@ -74,7 +74,7 @@ func TestPublishedSkillsMatchEmbeddedCatalogue(t *testing.T) {
 		t.Fatalf("published %d skills, embedded %d; run make skills", len(paths), len(list))
 	}
 	for _, skill := range list {
-		path := filepath.Join(root, strings.TrimSuffix(skill.Filename, ".md"), "SKILL.md")
+		path := filepath.Join(root, "canton-devkit-"+strings.TrimSuffix(skill.Filename, ".md"), "SKILL.md")
 		body, err := os.ReadFile(path)
 		if err != nil {
 			t.Errorf("read published skill %s: %v", path, err)
