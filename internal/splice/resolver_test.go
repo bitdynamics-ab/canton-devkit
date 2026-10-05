@@ -256,9 +256,9 @@ func TestResolveForOperation_ThreeTiers(t *testing.T) {
 
 	// Tier 3: an uncurated tag NOT in the cache still yields a Version
 	// carrying the Major inferred from the tag, so the adapter resolves.
-	v, err = ResolveForOperation("0.8.1-rc.2")
-	if err != nil || v.Major != "0.8" {
-		t.Errorf("inferred: got (%+v, %v), want Major 0.8", v, err)
+	v, err = ResolveForOperation("0.9.0-rc.1")
+	if err != nil || v.Major != "0.9" {
+		t.Errorf("inferred: got (%+v, %v), want Major 0.9", v, err)
 	}
 
 	// A genuinely unparseable tag is the only error case.
