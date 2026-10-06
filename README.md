@@ -124,13 +124,13 @@ Release download counts aggregated from
 [`bitdynamics-ab/canton-devkit`](https://github.com/bitdynamics-ab/canton-devkit/releases)
 and
 [`bitdynamics-ab/homebrew-canton-devkit`](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases)
-(merged by tag). The weekly chart is derived from daily cumulative
+(merged by tag). The monthly chart is derived from daily cumulative
 snapshots (GitHub exposes only current totals). Charts refresh daily via
 [`release-stats.yml`](.github/workflows/release-stats.yml); checksum
 files are excluded from the counts. Exact numbers:
 [release-downloads.md](https://github.com/bitdynamics-ab/canton-devkit/blob/release-stats-data/docs/assets/release-downloads.md).
 
-<img src="https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-weekly.svg" alt="Weekly release downloads" width="720" />
+<img src="https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-monthly.svg" alt="Monthly release downloads" width="720" />
 
 <img src="https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-by-platform.svg" alt="All-time downloads per platform" width="720" />
 

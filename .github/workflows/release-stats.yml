@@ -57,7 +57,7 @@ jobs:
           set -euo pipefail
           files=(
             docs/assets/release-downloads-by-platform.svg
-            docs/assets/release-downloads-weekly.svg
+            docs/assets/release-downloads-monthly.svg
             docs/assets/release-downloads.md
             docs/assets/release-downloads-history.jsonl
           )
@@ -92,11 +92,14 @@ jobs:
           done
 
           git add "${files[@]}"
-          # Drop the old per-release chart so the data branch does not keep a
-          # stale SVG after the switch to weekly counts.
-          if [ -f docs/assets/release-downloads-by-version.svg ]; then
-            git rm -f docs/assets/release-downloads-by-version.svg
-          fi
+          # Drop superseded charts so the data branch does not keep stale SVGs.
+          for stale in \
+              docs/assets/release-downloads-by-version.svg \
+              docs/assets/release-downloads-weekly.svg; do
+            if [ -f "${stale}" ]; then
+              git rm -f "${stale}"
+            fi
+          done
           if git diff --cached --quiet; then
             echo "Release stats already up to date."
             exit 0

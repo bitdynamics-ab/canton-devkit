@@ -19,9 +19,9 @@
 # direct downloads of mirrored assets are counted too.
 #
 # Outputs (into docs/assets/):
-#   release-downloads-weekly.svg       — new downloads per ISO week (line; last 6 weeks)
+#   release-downloads-monthly.svg      — new downloads per calendar month (line; last 6 months)
 #   release-downloads-by-platform.svg  — all-time total downloads per platform (bars, no .deb)
-#   release-downloads.md               — weekly + per-platform summary tables
+#   release-downloads.md               — monthly + per-platform summary tables
 #   release-downloads-history.jsonl    — appended daily snapshot (total + per platform + per version)
 #
 # Environment:
@@ -304,7 +304,7 @@ render_bar_chart() {
 # --- Append today's snapshot to the history file --------------------------
 # One row per UTC day: { date, total, byPlatform, byVersion }. Re-running on
 # the same day replaces that day's row (idempotent), so the file stays clean
-# and ordered. Must run before the weekly chart so today's totals are included.
+# and ordered. Must run before the monthly chart so today's totals are included.
 # This accumulates the time series the GitHub API can't provide.
 HISTORY_FILE="${OUT_DIR}/release-downloads-history.jsonl"
 snapshot_date="${SNAPSHOT_DATE:-$(date -u +%Y-%m-%d)}"
@@ -323,24 +323,24 @@ touch "${HISTORY_FILE}"
 mv "${HISTORY_FILE}.tmp" "${HISTORY_FILE}"
 echo "updated ${HISTORY_FILE} (snapshot ${snapshot_date})"
 
-# --- Weekly download counts from history deltas ---------------------------
+# --- Monthly download counts from history deltas --------------------------
 # GitHub only exposes cumulative asset.download_count. Diff consecutive
 # snapshots, clamp negatives (recount / methodology changes), then sum by
-# ISO week. The first snapshot is baseline only — it contributes no delta.
-weekly_rows="$(jq -s -f "${script_dir}/release-stats-weekly.jq" "${HISTORY_FILE}")"
+# calendar month. The first snapshot is baseline only — it contributes no delta.
+monthly_rows="$(jq -s -f "${script_dir}/release-stats-monthly.jq" "${HISTORY_FILE}")"
 
 # Chart shows only the trailing window so x-axis labels stay readable as
 # the history file grows; the markdown table below keeps the full series.
-by_week_data="$(printf '%s' "${weekly_rows}" | jq '
-  .[-6:] as $weeks
-  | { labels: [ $weeks[].week ],
+by_month_data="$(printf '%s' "${monthly_rows}" | jq '
+  .[-6:] as $months
+  | { labels: [ $months[].month ],
       series: [ { name: "Downloads",
                   color: "#2563eb",
-                  values: [ $weeks[].downloads ] } ]
+                  values: [ $months[].downloads ] } ]
   }
 ')"
-render_line_chart "${OUT_DIR}/release-downloads-weekly.svg" \
-  "Weekly downloads (last 6 weeks)" "ISO week (oldest -> newest)" "${by_week_data}"
+render_line_chart "${OUT_DIR}/release-downloads-monthly.svg" \
+  "Monthly downloads (last 6 months)" "Month (oldest -> newest)" "${by_month_data}"
 
 # --- View 2: all-time total downloads per platform (bars, no .deb) -------
 platform_bars="$(printf '%s' "${model}" | jq '
@@ -358,14 +358,14 @@ render_bar_chart "${OUT_DIR}/release-downloads-by-platform.svg" \
     "$(printf '%s' "${model}" | jq -r '.grandTotal')" \
     "$(printf '%s' "${model}" | jq -r '.releases | length')"
 
-  echo "### Weekly downloads"
+  echo "### Monthly downloads"
   echo
-  echo "| Week | Downloads |"
+  echo "| Month | Downloads |"
   echo "|---|---|"
-  if [ "$(printf '%s' "${weekly_rows}" | jq 'length')" -eq 0 ]; then
+  if [ "$(printf '%s' "${monthly_rows}" | jq 'length')" -eq 0 ]; then
     echo "| — | 0 (need at least two daily snapshots) |"
   else
-    printf '%s' "${weekly_rows}" | jq -r 'reverse[] | "| \(.week) | \(.downloads) |"'
+    printf '%s' "${monthly_rows}" | jq -r 'reverse[] | "| \(.month) | \(.downloads) |"'
   fi
   echo
   echo "### Downloads per platform"

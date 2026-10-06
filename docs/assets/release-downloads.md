@@ -3,24 +3,14 @@
 
 **Total downloads:** 134 across 39 releases.
 
-### Weekly downloads
+### Monthly downloads
 
-| Week | Downloads |
+| Month | Downloads |
 |---|---|
-| 2026-W41 | 4 |
-| 2026-W40 | 20 |
-| 2026-W39 | 9 |
-| 2026-W38 | 16 |
-| 2026-W37 | 1 |
-| 2026-W36 | 2 |
-| 2026-W35 | 5 |
-| 2026-W34 | 6 |
-| 2026-W33 | 4 |
-| 2026-W32 | 4 |
-| 2026-W31 | 33 |
-| 2026-W30 | 0 |
-| 2026-W29 | 0 |
-| 2026-W28 | 4 |
+| 2026-10 | 23 |
+| 2026-09 | 29 |
+| 2026-08 | 19 |
+| 2026-07 | 37 |
 
 ### Downloads per platform
 
