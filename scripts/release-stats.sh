@@ -19,9 +19,9 @@
 # direct downloads of mirrored assets are counted too.
 #
 # Outputs (into docs/assets/):
-#   release-downloads-by-version.svg   — per-version total downloads over time (line)
+#   release-downloads-weekly.svg       — new downloads per ISO week (line; last 6 weeks)
 #   release-downloads-by-platform.svg  — all-time total downloads per platform (bars, no .deb)
-#   release-downloads.md               — per-version + per-platform summary tables
+#   release-downloads.md               — weekly + per-platform summary tables
 #   release-downloads-history.jsonl    — appended daily snapshot (total + per platform + per version)
 #
 # Environment:
@@ -156,10 +156,11 @@ nice_max() {
 # Line chart renderer.
 #   $1 = output file
 #   $2 = chart title
-#   $3 = JSON: { labels: [..], series: [ {name, color, values:[..]} ] }
+#   $3 = x-axis caption
+#   $4 = JSON: { labels: [..], series: [ {name, color, values:[..]} ] }
 # ------------------------------------------------------------------------
 render_line_chart() {
-  local out="$1" title="$2" data="$3"
+  local out="$1" title="$2" xlabel="$3" data="$4"
 
   local W=760 H=380
   local ml=56 mr=180 mt=48 mb=64        # margins (mr wide for legend)
@@ -167,10 +168,12 @@ render_line_chart() {
   pw=$(( W - ml - mr ))
   ph=$(( H - mt - mb ))
 
-  local labels n maxv
+  local n maxv step
   n="$(printf '%s' "${data}" | jq '.labels | length')"
   maxv="$(printf '%s' "${data}" | jq '[.series[].values[]] | max // 0')"
   maxv="$(nice_max "${maxv}")"
+  # Thin x labels when the series is long so tick text stays readable.
+  step=$(awk -v n="$n" 'BEGIN{ if (n <= 12) print 1; else print int((n + 11) / 12) }')
 
   {
     printf '<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-label="%s">\n' \
@@ -195,7 +198,7 @@ render_line_chart() {
     printf '<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#9ca3af" stroke-width="1"/>\n' \
       "$ml" $(( mt + ph )) $(( ml + pw )) $(( mt + ph ))
 
-    # X labels
+    # X labels (every `step`-th tick, always including the last)
     local idx=0 lbl xx
     while IFS= read -r lbl; do
       if [ "$n" -gt 1 ]; then
@@ -203,12 +206,14 @@ render_line_chart() {
       else
         xx=$(awk -v ml="$ml" -v pw="$pw" 'BEGIN{printf "%.1f", ml + pw/2}')
       fi
-      printf '<text x="%s" y="%d" font-size="11" fill="#6b7280" text-anchor="middle">%s</text>\n' \
-        "$xx" $(( mt + ph + 20 )) "$(svg_escape "${lbl}")"
+      if [ $(( idx % step )) -eq 0 ] || [ "$idx" -eq $(( n - 1 )) ]; then
+        printf '<text x="%s" y="%d" font-size="11" fill="#6b7280" text-anchor="middle">%s</text>\n' \
+          "$xx" $(( mt + ph + 20 )) "$(svg_escape "${lbl}")"
+      fi
       idx=$(( idx + 1 ))
     done < <(printf '%s' "${data}" | jq -r '.labels[]')
-    printf '<text x="%d" y="%d" font-size="12" fill="#374151" text-anchor="middle">Release tag (oldest -> newest)</text>\n' \
-      $(( ml + pw/2 )) $(( H - 12 ))
+    printf '<text x="%d" y="%d" font-size="12" fill="#374151" text-anchor="middle">%s</text>\n' \
+      $(( ml + pw/2 )) $(( H - 12 )) "$(svg_escape "${xlabel}")"
 
     # Series: polylines + points
     local si=0 sname scolor
@@ -296,17 +301,46 @@ render_bar_chart() {
   echo "wrote ${out}"
 }
 
-# --- View 1: per-version total downloads over time ------------------------
-by_version_data="$(printf '%s' "${model}" | jq '
-  (.releases | map(select(.total > 0))) as $releases
-  | { labels: [ $releases[].tag ],
-      series: [ { name: "Total downloads",
+# --- Append today's snapshot to the history file --------------------------
+# One row per UTC day: { date, total, byPlatform, byVersion }. Re-running on
+# the same day replaces that day's row (idempotent), so the file stays clean
+# and ordered. Must run before the weekly chart so today's totals are included.
+# This accumulates the time series the GitHub API can't provide.
+HISTORY_FILE="${OUT_DIR}/release-downloads-history.jsonl"
+snapshot_date="${SNAPSHOT_DATE:-$(date -u +%Y-%m-%d)}"
+
+today_row="$(printf '%s' "${model}" | jq -c --arg d "${snapshot_date}" '
+  { date: $d,
+    total: .grandTotal,
+    byPlatform: .totalsByPlatform,
+    byVersion: ( [ .totalsByVersion[] | { (.tag): .total } ] | add // {} ) }')"
+
+touch "${HISTORY_FILE}"
+{
+  jq -c --arg d "${snapshot_date}" 'select(.date != $d)' "${HISTORY_FILE}" 2>/dev/null || true
+  printf '%s\n' "${today_row}"
+} | jq -s -c 'sort_by(.date) | .[]' > "${HISTORY_FILE}.tmp"
+mv "${HISTORY_FILE}.tmp" "${HISTORY_FILE}"
+echo "updated ${HISTORY_FILE} (snapshot ${snapshot_date})"
+
+# --- Weekly download counts from history deltas ---------------------------
+# GitHub only exposes cumulative asset.download_count. Diff consecutive
+# snapshots, clamp negatives (recount / methodology changes), then sum by
+# ISO week. The first snapshot is baseline only — it contributes no delta.
+weekly_rows="$(jq -s -f "${script_dir}/release-stats-weekly.jq" "${HISTORY_FILE}")"
+
+# Chart shows only the trailing window so x-axis labels stay readable as
+# the history file grows; the markdown table below keeps the full series.
+by_week_data="$(printf '%s' "${weekly_rows}" | jq '
+  .[-6:] as $weeks
+  | { labels: [ $weeks[].week ],
+      series: [ { name: "Downloads",
                   color: "#2563eb",
-                  values: [ $releases[].total ] } ]
-    }
+                  values: [ $weeks[].downloads ] } ]
+  }
 ')"
-render_line_chart "${OUT_DIR}/release-downloads-by-version.svg" \
-  "Total downloads, by release" "${by_version_data}"
+render_line_chart "${OUT_DIR}/release-downloads-weekly.svg" \
+  "Weekly downloads (last 6 weeks)" "ISO week (oldest -> newest)" "${by_week_data}"
 
 # --- View 2: all-time total downloads per platform (bars, no .deb) -------
 platform_bars="$(printf '%s' "${model}" | jq '
@@ -324,12 +358,15 @@ render_bar_chart "${OUT_DIR}/release-downloads-by-platform.svg" \
     "$(printf '%s' "${model}" | jq -r '.grandTotal')" \
     "$(printf '%s' "${model}" | jq -r '.releases | length')"
 
-  echo "### Downloads per version"
+  echo "### Weekly downloads"
   echo
-  echo "| Version | Downloads |"
+  echo "| Week | Downloads |"
   echo "|---|---|"
-  printf '%s' "${model}" | jq -r '
-    (.totalsByVersion | reverse)[] | "| \(.tag) | \(.total) |"'
+  if [ "$(printf '%s' "${weekly_rows}" | jq 'length')" -eq 0 ]; then
+    echo "| — | 0 (need at least two daily snapshots) |"
+  else
+    printf '%s' "${weekly_rows}" | jq -r 'reverse[] | "| \(.week) | \(.downloads) |"'
+  fi
   echo
   echo "### Downloads per platform"
   echo
@@ -340,24 +377,3 @@ render_bar_chart "${OUT_DIR}/release-downloads-by-platform.svg" \
   echo
 } > "${OUT_DIR}/release-downloads.md"
 echo "wrote ${OUT_DIR}/release-downloads.md"
-
-# --- Append today's snapshot to the history file --------------------------
-# One row per UTC day: { date, total, byPlatform, byVersion }. Re-running on
-# the same day replaces that day's row (idempotent), so the file stays clean
-# and ordered. This accumulates the time series the GitHub API can't provide.
-HISTORY_FILE="${OUT_DIR}/release-downloads-history.jsonl"
-snapshot_date="${SNAPSHOT_DATE:-$(date -u +%Y-%m-%d)}"
-
-today_row="$(printf '%s' "${model}" | jq -c --arg d "${snapshot_date}" '
-  { date: $d,
-    total: .grandTotal,
-    byPlatform: .totalsByPlatform,
-    byVersion: ( [ .totalsByVersion[] | { (.tag): .total } ] | add // {} ) }')"
-
-touch "${HISTORY_FILE}"
-{
-  jq -c --arg d "${snapshot_date}" 'select(.date != $d)' "${HISTORY_FILE}" 2>/dev/null || true
-  printf '%s\n' "${today_row}"
-} | jq -s -c 'sort_by(.date) | .[]' > "${HISTORY_FILE}.tmp"
-mv "${HISTORY_FILE}.tmp" "${HISTORY_FILE}"
-echo "updated ${HISTORY_FILE} (snapshot ${snapshot_date})"
