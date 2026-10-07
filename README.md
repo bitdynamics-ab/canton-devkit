@@ -1,12 +1,12 @@
 # canton-devkit
 
-[![CI](https://github.com/bitdynamics-ab/canton-devkit/actions/workflows/ci.yml/badge.svg)](https://github.com/bitdynamics-ab/canton-devkit/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/bitdynamics-ab/canton-devkit?display_name=tag&sort=semver)](https://github.com/bitdynamics-ab/canton-devkit/releases/latest)
-[![Docs](https://img.shields.io/badge/docs-current-brightgreen.svg)](https://bitdynamics-ab.github.io/canton-devkit/)
-[![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
+![CI](https://github.com/bitdynamics-ab/canton-devkit/actions/workflows/ci.yml/badge.svg)
+![Release](https://img.shields.io/github/v/release/bitdynamics-ab/canton-devkit?display_name=tag&sort=semver)
+![Docs](https://img.shields.io/badge/docs-current-brightgreen.svg)
+![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)
 
-[![Homebrew Downloads](https://img.shields.io/github/downloads/bitdynamics-ab/homebrew-canton-devkit/total.svg?label=homebrew%20downloads)](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases)
-[![Other Downloads](https://img.shields.io/github/downloads/bitdynamics-ab/canton-devkit/total.svg?label=other%20downloads)](https://github.com/bitdynamics-ab/canton-devkit/releases)
+![Homebrew Downloads](https://img.shields.io/github/downloads/bitdynamics-ab/homebrew-canton-devkit/total.svg?label=homebrew%20downloads)
+![Other Downloads](https://img.shields.io/github/downloads/bitdynamics-ab/canton-devkit/total.svg?label=other%20downloads)
 
 canton-devkit runs a complete local [Canton](https://canton.network/)
 network on your machine. You get two participant/validator nodes and a
@@ -41,6 +41,7 @@ interchangeable.
 
 The command surface covers the full development loop:
 
+
 | Area              | Commands                                                                             |
 | ----------------- | ------------------------------------------------------------------------------------ |
 | Lifecycle         | `up` `down` `stop` `start` `restart` `pause` `resume` `clean` `list` `status` `logs` |
@@ -52,6 +53,9 @@ The command surface covers the full development loop:
 | State             | `snapshot` / `restore` — a portable `.tgz` of a network's full state                 |
 | Versions          | `versions` — pinned Splice releases, keyed by commit SHA                             |
 
+
+
+
 ## Features
 
 - Instance lifecycle management
@@ -60,14 +64,16 @@ The command surface covers the full development loop:
 - DAR upload, inspect, diff, and hot redeploy
 - Live ledger inspection (contracts and transactions)
 - Token flows for CIP-0056 and Token Standard V2 — see the
-  [tokens guide](https://bitdynamics-ab.github.io/canton-devkit/guides/tokens/)
+[tokens guide](https://bitdynamics-ab.github.io/canton-devkit/guides/tokens/)
 - Snapshot and restore of a network's full state
 - Both CLI and Web UI are available
 - Prometheus and Grafana
 - Stable exit codes and `--format json` for CI; example workflow in
-  [`examples/ci/`](examples/ci/github-actions.yml)
+`[examples/ci/](examples/ci/github-actions.yml)`
 - Multiple named instances with auto-allocated or pinned ports
-  (`--port-base`)
+(`--port-base`)
+
+
 
 ## Install
 
@@ -87,37 +93,27 @@ Release archives (macOS arm64, Linux amd64, Windows amd64),
 (`brew install bitdynamics-ab/canton-devkit/canton-devkit`), and
 `go install` are documented in the same guide.
 
-## Agent skills
-
-Install the six LocalNet workflow skills for your coding agent with the [Skills CLI](https://github.com/vercel-labs/skills#readme) (`npx skills`, plural):
-
-```sh
-npx skills add bitdynamics-ab/canton-devkit --skill '*' --agent codex claude-code
-```
-
-See [`skills/`](skills/README.md) for individual skills, local and global installation, the scope assessment, and regeneration instructions. DevKit also ships the same catalogue through `canton-devkit localnet skills install` and the Web UI.
-
 ## Documentation
 
 Canonical docs live on the website:
 [https://bitdynamics-ab.github.io/canton-devkit/](https://bitdynamics-ab.github.io/canton-devkit/).
 
-Source Markdown also lives under [`docs/`](docs/) for browsing in the
+Source Markdown also lives under `[docs/](docs/)` for browsing in the
 repository:
 
 - Guides: [getting started](docs/getting-started.md) ·
-  [HackCanton Season 3 starter](docs/hackcanton-s3.md) ·
-  [explorer](docs/explorer.md) ·
-  [observability](docs/observability.md) ·
-  [dashboard customization](docs/dashboard-customization.md) ·
-  [tokens](docs/tokens.md) ·
-  [homebrew](docs/homebrew.md)
+[HackCanton Season 3 starter](docs/hackcanton-s3.md) ·
+[explorer](docs/explorer.md) ·
+[observability](docs/observability.md) ·
+[dashboard customization](docs/dashboard-customization.md) ·
+[tokens](docs/tokens.md) ·
+[homebrew](docs/homebrew.md)
 - Reference: [versions](docs/versions.md) ·
-  [packaging](docs/packaging.md) ·
-  [telemetry](docs/telemetry.md) ·
-  [FAQ](docs/faq.md) ·
-  [troubleshooting](docs/troubleshooting.md) ·
-  [limitations](docs/limitations.md)
+[packaging](docs/packaging.md) ·
+[telemetry](docs/telemetry.md) ·
+[FAQ](docs/faq.md) ·
+[troubleshooting](docs/troubleshooting.md) ·
+[limitations](docs/limitations.md)
 
 This is a developer tool, not a production deployment path. For
 production Canton, see the official
@@ -130,22 +126,11 @@ For general Canton and Daml questions, use the
 
 ## Download statistics
 
-Standalone install counts only (GitHub Release assets and Homebrew).
-DPM installs via `dpm install package` are not included.
+(Standalone install counts only,  DPM installs via `dpm install package` are not included)
 
-Sources:
-[`bitdynamics-ab/canton-devkit`](https://github.com/bitdynamics-ab/canton-devkit/releases)
-and
-[`bitdynamics-ab/homebrew-canton-devkit`](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases),
-merged by tag. Checksum assets are excluded. The monthly series is built
-from daily cumulative snapshots (the GitHub API exposes only current
-totals) and refreshes via
-[`release-stats.yml`](.github/workflows/release-stats.yml). Exact numbers:
-[release-downloads.md](https://github.com/bitdynamics-ab/canton-devkit/blob/release-stats-data/docs/assets/release-downloads.md).
+![Monthly release downloads](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-monthly.svg)
 
-<img src="https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-monthly.svg" alt="Monthly release downloads" width="720" />
-
-<img src="https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-by-platform.svg" alt="All-time downloads per platform" width="720" />
+![All-time downloads per platform](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-by-platform.svg)
 
 ## Contributing
 
