@@ -130,22 +130,11 @@ For general Canton and Daml questions, use the
 
 ## Download statistics
 
-Standalone install counts only (GitHub Release assets and Homebrew).
-DPM installs via `dpm install package` are not included.
+(Standalone install downloads only, DPM installs via `dpm install` are not included.)
 
-Sources:
-[`bitdynamics-ab/canton-devkit`](https://github.com/bitdynamics-ab/canton-devkit/releases)
-and
-[`bitdynamics-ab/homebrew-canton-devkit`](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases),
-merged by tag. Checksum assets are excluded. The monthly series is built
-from daily cumulative snapshots (the GitHub API exposes only current
-totals) and refreshes via
-[`release-stats.yml`](.github/workflows/release-stats.yml). Exact numbers:
-[release-downloads.md](https://github.com/bitdynamics-ab/canton-devkit/blob/release-stats-data/docs/assets/release-downloads.md).
+![Monthly release downloads](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-monthly.svg)
 
-<img src="https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-monthly.svg" alt="Monthly release downloads" width="720" />
-
-<img src="https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-by-platform.svg" alt="All-time downloads per platform" width="720" />
+![All-time downloads per platform](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-by-platform.svg)
 
 ## Contributing
 
