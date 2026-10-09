@@ -106,7 +106,7 @@ const (
 	ErrCodeContainerUnhealthy = "CONTAINER_UNHEALTHY"
 
 	// ErrCodeLedgerUnreachable: Docker containers reported healthy
-	// but the app-provider Ledger API gRPC probe (go-daml
+	// but the app-provider Ledger API gRPC probe (dazl-client
 	// GetLedgerApiVersion + GetLedgerEnd) never succeeded within
 	// the ledger readiness budget. Remediation: check participant
 	// logs / `localnet logs`, confirm participant_ledger_app-provider

@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bitdynamics-ab/canton-devkit/internal/poc/godamlprobe"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
@@ -394,15 +393,15 @@ func (s *composeRunnerStub) WaitForHealthy(context.Context) error {
 	return nil
 }
 
-// TestRunUp_LedgerUnreachableFails pins that a failed go-daml Ledger
-// API probe after Docker health marks the instance failed and returns
+// TestRunUp_LedgerUnreachableFails pins that a failed Ledger API probe
+// after Docker health marks the instance failed and returns
 // ExitRuntimeFailure — containers-up-but-ledger-down must not look like
 // a successful bring-up.
 func TestRunUp_LedgerUnreachableFails(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	prev := ensureLedgerReadyFn
-	ensureLedgerReadyFn = func(context.Context, string, map[string]int, map[string]registry.Credential) (godamlprobe.Result, error) {
-		return godamlprobe.Result{}, errors.New("connection refused")
+	ensureLedgerReadyFn = func(context.Context, string, map[string]int, map[string]registry.Credential) (LedgerReadyResult, error) {
+		return LedgerReadyResult{}, errors.New("connection refused")
 	}
 	t.Cleanup(func() { ensureLedgerReadyFn = prev })
 

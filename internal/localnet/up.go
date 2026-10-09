@@ -613,7 +613,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 	prog.FinishStep(StepStartServices, "")
 
 	// 7. Wait for services to become healthy, then probe the
-	// app-provider Ledger API via go-daml. Docker health alone is not
+	// app-provider Ledger API (dazl-client). Docker health alone is not
 	// enough — token / explorer paths need a live participant gRPC.
 	prog.StartStep(StepWaitHealthy, "")
 	if err := runner.WaitForHealthy(ctx); err != nil {

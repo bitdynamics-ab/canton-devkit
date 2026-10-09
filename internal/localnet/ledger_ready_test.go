@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bitdynamics-ab/canton-devkit/internal/poc/godamlprobe"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
@@ -15,8 +14,8 @@ import (
 func stubEnsureLedgerReadyOK(t *testing.T) {
 	t.Helper()
 	prev := ensureLedgerReadyFn
-	ensureLedgerReadyFn = func(context.Context, string, map[string]int, map[string]registry.Credential) (godamlprobe.Result, error) {
-		return godamlprobe.Result{
+	ensureLedgerReadyFn = func(context.Context, string, map[string]int, map[string]registry.Credential) (LedgerReadyResult, error) {
+		return LedgerReadyResult{
 			Endpoint:         "localhost:9",
 			LedgerAPIVersion: "test",
 			Offset:           0,
@@ -51,7 +50,7 @@ func TestEnsureLedgerReady_Success(t *testing.T) {
 	t.Cleanup(func() { probeLedgerFn = oldProbe })
 
 	var calls int
-	probeLedgerFn = func(_ context.Context, opts godamlprobe.Options) (godamlprobe.Result, error) {
+	probeLedgerFn = func(_ context.Context, opts ledgerProbeOptions) (LedgerReadyResult, error) {
 		calls++
 		if opts.Endpoint != "localhost:5001" {
 			t.Fatalf("endpoint = %q, want localhost:5001", opts.Endpoint)
@@ -59,7 +58,7 @@ func TestEnsureLedgerReady_Success(t *testing.T) {
 		if opts.Token != "tok" {
 			t.Fatalf("token = %q, want tok", opts.Token)
 		}
-		return godamlprobe.Result{
+		return LedgerReadyResult{
 			Endpoint:         opts.Endpoint,
 			LedgerAPIVersion: "3.3.0",
 			Offset:           42,
@@ -92,12 +91,12 @@ func TestEnsureLedgerReady_RetriesThenSucceeds(t *testing.T) {
 	ledgerReadyPollWait = 5 * time.Millisecond
 
 	var calls int
-	probeLedgerFn = func(context.Context, godamlprobe.Options) (godamlprobe.Result, error) {
+	probeLedgerFn = func(context.Context, ledgerProbeOptions) (LedgerReadyResult, error) {
 		calls++
 		if calls < 3 {
-			return godamlprobe.Result{}, errors.New("connection refused")
+			return LedgerReadyResult{}, errors.New("connection refused")
 		}
-		return godamlprobe.Result{Endpoint: "localhost:5001", Offset: 1}, nil
+		return LedgerReadyResult{Endpoint: "localhost:5001", Offset: 1}, nil
 	}
 
 	res, err := ensureLedgerReady(context.Background(), "", map[string]int{
@@ -128,8 +127,8 @@ func TestEnsureLedgerReady_Timeout(t *testing.T) {
 	ledgerReadyPollWait = 5 * time.Millisecond
 	ledgerReadyTimeout = 40 * time.Millisecond
 
-	probeLedgerFn = func(context.Context, godamlprobe.Options) (godamlprobe.Result, error) {
-		return godamlprobe.Result{}, errors.New("Unavailable")
+	probeLedgerFn = func(context.Context, ledgerProbeOptions) (LedgerReadyResult, error) {
+		return LedgerReadyResult{}, errors.New("Unavailable")
 	}
 
 	_, err := ensureLedgerReady(context.Background(), "", map[string]int{
@@ -145,5 +144,19 @@ func TestEnsureLedgerReady_Timeout(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "app-provider") {
 		t.Fatalf("error should name role, got %q", err.Error())
+	}
+}
+
+func TestProbeLedger_RequiresEndpoint(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, err := probeLedger(ctx, ledgerProbeOptions{Token: "unused"})
+	if err == nil {
+		t.Fatal("empty endpoint: want error")
+	}
+	if !strings.Contains(err.Error(), "endpoint is required") {
+		t.Fatalf("error = %q", err.Error())
 	}
 }

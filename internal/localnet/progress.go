@@ -44,8 +44,8 @@ const (
 	StepStartServices Step = "start_services"
 	// StepWaitHealthy: 7 · "Wait for services and Ledger API to become
 	// healthy" — Docker compose health polling, then a Ledger API
-	// connectivity probe (go-daml GetLedgerApiVersion + GetLedgerEnd on
-	// app-provider).
+	// connectivity probe (GetLedgerApiVersion + GetLedgerEnd on
+	// app-provider via dazl-client).
 	StepWaitHealthy Step = "wait_healthy"
 	// StepCaptureJWTs: 8 · "Capture JWTs · register endpoints" —
 	// sign dev-secret tokens for sv/app-provider/app-user, write

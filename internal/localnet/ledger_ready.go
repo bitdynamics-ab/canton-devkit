@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bitdynamics-ab/canton-devkit/internal/poc/godamlprobe"
+	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 )
@@ -20,9 +20,24 @@ var ledgerReadyTimeout = 5 * time.Minute
 
 var ledgerReadyPollWait = 2 * time.Second
 
-// probeLedgerFn is the go-daml dial seam. Production uses
-// godamlprobe.Probe; unit tests replace it to avoid a live participant.
-var probeLedgerFn = godamlprobe.Probe
+// LedgerReadyResult is what a successful readiness probe observed.
+type LedgerReadyResult struct {
+	Endpoint         string
+	LedgerAPIVersion string
+	Offset           int64
+}
+
+// ledgerProbeOptions configures a single dial attempt against a participant.
+type ledgerProbeOptions struct {
+	Endpoint string
+	Token    string
+}
+
+// probeLedgerFn is the dial seam. Production uses probeLedger (dazl-client
+// via internal/canton/ledger). Unit tests replace it to avoid a live
+// participant. go-daml cannot be used here: its generated protos collide
+// with dazl-client in the same process (protobuf registry panic).
+var probeLedgerFn = probeLedger
 
 // ensureLedgerReadyFn is the seam up/start/restart call after Docker
 // WaitForHealthy succeeds. Tests replace it with a no-op so hermetic
@@ -30,8 +45,8 @@ var probeLedgerFn = godamlprobe.Probe
 var ensureLedgerReadyFn = ensureLedgerReady
 
 // ensureLedgerReady resolves the app-provider Ledger API endpoint and a
-// bearer JWT, then polls go-daml GetLedgerApiVersion + GetLedgerEnd until
-// success or ctx expires. Role defaults to app-provider (operator node).
+// bearer JWT, then polls GetLedgerApiVersion + GetLedgerEnd until success
+// or ctx expires. Role defaults to app-provider (operator node).
 //
 // ports should already include participant_ledger_app-provider from
 // CaptureCantonPorts. creds may be empty — when so, a JWT is signed from
@@ -41,14 +56,14 @@ func ensureLedgerReady(
 	projectDir string,
 	ports map[string]int,
 	creds map[string]registry.Credential,
-) (godamlprobe.Result, error) {
+) (LedgerReadyResult, error) {
 	endpoint, err := ledgerEndpointFromPorts(ports, string(splice.RoleAppProvider))
 	if err != nil {
-		return godamlprobe.Result{}, err
+		return LedgerReadyResult{}, err
 	}
 	token, err := ledgerTokenForRole(projectDir, creds, splice.RoleAppProvider)
 	if err != nil {
-		return godamlprobe.Result{}, err
+		return LedgerReadyResult{}, err
 	}
 
 	deadlineCtx, cancel := context.WithTimeout(ctx, ledgerReadyTimeout)
@@ -56,7 +71,7 @@ func ensureLedgerReady(
 
 	var lastErr error
 	for {
-		res, err := probeLedgerFn(deadlineCtx, godamlprobe.Options{
+		res, err := probeLedgerFn(deadlineCtx, ledgerProbeOptions{
 			Endpoint: endpoint,
 			Token:    token,
 		})
@@ -69,12 +84,52 @@ func ensureLedgerReady(
 			if lastErr == nil {
 				lastErr = deadlineCtx.Err()
 			}
-			return godamlprobe.Result{}, fmt.Errorf(
+			return LedgerReadyResult{}, fmt.Errorf(
 				"ledger API at %s (role %s) did not become ready: %w",
 				endpoint, splice.RoleAppProvider, lastErr)
 		case <-time.After(ledgerReadyPollWait):
 		}
 	}
+}
+
+// probeLedger dials the participant with dazl-client and runs the two
+// cheap unaries that prove connectivity + auth.
+func probeLedger(ctx context.Context, opts ledgerProbeOptions) (LedgerReadyResult, error) {
+	endpoint := strings.TrimSpace(opts.Endpoint)
+	if endpoint == "" {
+		return LedgerReadyResult{}, fmt.Errorf("ledger probe: endpoint is required")
+	}
+
+	client, err := ledger.Dial(ctx, ledger.DialOptions{
+		Endpoint:  endpoint,
+		Token:     ledger.StaticToken(opts.Token),
+		PlainText: true,
+	})
+	if err != nil {
+		return LedgerReadyResult{}, fmt.Errorf("ledger probe: dial %s: %w", endpoint, err)
+	}
+	defer func() { _ = client.Close() }()
+
+	ver, err := client.LedgerApiVersion(ctx)
+	if err != nil {
+		return LedgerReadyResult{}, fmt.Errorf("ledger probe: GetLedgerApiVersion %s: %w", endpoint, err)
+	}
+
+	end, err := client.LedgerEnd(ctx)
+	if err != nil {
+		return LedgerReadyResult{}, fmt.Errorf("ledger probe: GetLedgerEnd %s: %w", endpoint, err)
+	}
+
+	version := ""
+	if ver != nil {
+		version = ver.GetVersion()
+	}
+
+	return LedgerReadyResult{
+		Endpoint:         endpoint,
+		LedgerAPIVersion: version,
+		Offset:           end.Offset,
+	}, nil
 }
 
 func ledgerEndpointFromPorts(ports map[string]int, role string) (string, error) {
