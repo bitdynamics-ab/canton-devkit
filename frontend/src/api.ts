@@ -414,7 +414,8 @@ export type ErrorCode =
   | "DISK_LOW"
   | "PREFLIGHT_FAILED"
   | "CANTON_OOM"
-  | "CONTAINER_UNHEALTHY";
+  | "CONTAINER_UNHEALTHY"
+  | "LEDGER_UNREACHABLE";
 
 export interface PreflightSection {
   title: string;
@@ -1485,7 +1486,7 @@ export const STEP_LABELS: Record<StepName, string> = {
   fetch_splice: "Fetch Splice LocalNet",
   persist_state: "Persist state + write overlay",
   start_services: "Starting services",
-  wait_healthy: "Wait for services to become healthy",
+  wait_healthy: "Wait for services and Ledger API to become healthy",
   capture_jwts: "Capture JWTs · register endpoints",
 };
 

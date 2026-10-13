@@ -29,11 +29,12 @@ describe("remediationForCode", () => {
     "PREFLIGHT_FAILED",
     "CANTON_OOM",
     "CONTAINER_UNHEALTHY",
+    "LEDGER_UNREACHABLE",
   ];
 
-  // 7 codes that MUST render a panel — the remaining 2
-  // (PREFLIGHT_FAILED, undefined) intentionally return null
-  // because they're too generic to be actionable on their own.
+  // Codes that MUST render a panel — PREFLIGHT_FAILED and undefined
+  // intentionally return null because they're too generic to be
+  // actionable on their own.
   const codesWithPanel: ErrorCode[] = [
     "PORTS_IN_USE",
     "DOCKER_DOWN",
@@ -43,6 +44,7 @@ describe("remediationForCode", () => {
     "DISK_LOW",
     "CANTON_OOM",
     "CONTAINER_UNHEALTHY",
+    "LEDGER_UNREACHABLE",
   ];
 
   it("undefined code returns null (no panel rendered)", () => {
