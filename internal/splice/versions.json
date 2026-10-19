@@ -181,6 +181,20 @@
       "major": "0.9"
     },
     {
+      "tag": "0.9.1",
+      "commit": "ec6ec6f618d1a9d75a74954f30458240109ba275",
+      "content_sha": "7eb3397d27e2e78143260e6d56df0cb4fb84c8ec1a3e6ef67690dd2bf1f964d9",
+      "size": 206903357,
+      "major": "0.9"
+    },
+    {
+      "tag": "0.9.2",
+      "commit": "60882e4de07a1f146a7d615e44c52a17fe40419f",
+      "content_sha": "7eb3397d27e2e78143260e6d56df0cb4fb84c8ec1a3e6ef67690dd2bf1f964d9",
+      "size": 206904498,
+      "major": "0.9"
+    },
+    {
       "tag": "token-standard-v2",
       "commit": "de911e38af78ec79b6f0e6a9515e104b1e4c3d62",
       "content_sha": "4fae533b28de046360524c0e4b9d56a5799865bfff6007b5372959bf150165c7",
