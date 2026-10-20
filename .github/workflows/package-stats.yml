@@ -1,0 +1,92 @@
+name: Package stats
+
+# Regenerate GHCR package download-statistics charts for DPM installs.
+# Scrapes the public Packages page (no read:packages token required).
+# Separate from release-stats.yml — never writes release-downloads-* files.
+#
+# Generated files are published to the `release-stats-data` branch (not
+# `main`) under the package-downloads-* prefix. The README embeds them via
+# raw.githubusercontent.com URLs because the `main` branch ruleset requires
+# all changes to go through a pull request and this bot commit can't satisfy
+# that.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Daily at 06:47 UTC (offset from release-stats at 06:17).
+    - cron: "47 6 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: package-stats
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    name: Regenerate package download-stats charts
+    runs-on: self-hosted
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        # actions/checkout@v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - name: Seed history from release-stats-data branch
+        run: |
+          set -euo pipefail
+          history_file="docs/assets/package-downloads-history.jsonl"
+          mkdir -p docs/assets
+          if git fetch origin release-stats-data:refs/remotes/origin/release-stats-data 2>/dev/null; then
+            git show origin/release-stats-data:"${history_file}" > "${history_file}" 2>/dev/null || true
+          fi
+
+      - name: Generate charts + append daily snapshot
+        run: bash scripts/package-stats.sh
+
+      - name: Publish package-downloads-* to release-stats-data branch
+        run: |
+          set -euo pipefail
+          files=(
+            docs/assets/package-downloads-monthly.svg
+            docs/assets/package-downloads.md
+            docs/assets/package-downloads-history.jsonl
+          )
+
+          # Stash generated files before switching branches —
+          # release-stats-data's tree is unrelated to main's.
+          tmp="$(mktemp -d)"
+          for f in "${files[@]}"; do
+            mkdir -p "${tmp}/$(dirname "${f}")"
+            cp "${f}" "${tmp}/${f}"
+          done
+          for f in "${files[@]}"; do
+            if git ls-files --error-unmatch "${f}" >/dev/null 2>&1; then
+              git checkout -- "${f}"
+            else
+              rm -f "${f}"
+            fi
+          done
+
+          if git fetch origin release-stats-data:refs/remotes/origin/release-stats-data; then
+            git checkout -B release-stats-data refs/remotes/origin/release-stats-data
+          else
+            git checkout --orphan release-stats-data
+            git reset --hard
+          fi
+
+          for f in "${files[@]}"; do
+            mkdir -p "$(dirname "${f}")"
+            cp "${tmp}/${f}" "${f}"
+          done
+
+          git add "${files[@]}"
+          if git diff --cached --quiet; then
+            echo "Package stats already up to date."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+              -c user.email="github-actions[bot]@users.noreply.github.com" \
+              commit -m "chore: refresh package download stats"
+          git push origin release-stats-data

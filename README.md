@@ -120,18 +120,26 @@ For general Canton and Daml questions, use the
 
 ## Download statistics
 
-Release download counts aggregated from
-[`bitdynamics-ab/canton-devkit`](https://github.com/bitdynamics-ab/canton-devkit/releases)
-and
-[`bitdynamics-ab/homebrew-canton-devkit`](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases)
-(merged by tag). Charts refresh daily via
-[`release-stats.yml`](.github/workflows/release-stats.yml); checksum
-files are excluded from the counts. Exact numbers:
+### Standalone installs
+
+Release asset downloads only (Homebrew formula tarballs and direct GitHub
+Release downloads). DPM installs via `dpm install` are counted separately
+below. Charts refresh daily via
+[`release-stats.yml`](.github/workflows/release-stats.yml). Exact numbers:
 [release-downloads.md](https://github.com/bitdynamics-ab/canton-devkit/blob/release-stats-data/docs/assets/release-downloads.md).
 
-<img src="https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-by-version.svg" alt="Total downloads per release over time" width="720" />
+![Monthly release downloads](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-monthly.svg)
 
-<img src="https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-by-platform.svg" alt="All-time downloads per platform" width="720" />
+![All-time downloads per platform](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-by-platform.svg)
+
+### DPM package downloads
+
+GHCR package pulls for `canton-devkit` (the `dpm install` path). Tracked
+separately from standalone release downloads. Charts refresh daily via
+[`package-stats.yml`](.github/workflows/package-stats.yml). Exact numbers:
+[package-downloads.md](https://github.com/bitdynamics-ab/canton-devkit/blob/release-stats-data/docs/assets/package-downloads.md).
+
+![Monthly DPM package downloads](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/package-downloads-monthly.svg)
 
 ## Contributing
 
