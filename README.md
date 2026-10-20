@@ -130,11 +130,26 @@ For general Canton and Daml questions, use the
 
 ## Download statistics
 
-(Standalone install downloads only, DPM installs via `dpm install` are not included.)
+### Standalone installs
+
+Release asset downloads only (Homebrew formula tarballs and direct GitHub
+Release downloads). DPM installs via `dpm install` are counted separately
+below. Charts refresh daily via
+[`release-stats.yml`](.github/workflows/release-stats.yml). Exact numbers:
+[release-downloads.md](https://github.com/bitdynamics-ab/canton-devkit/blob/release-stats-data/docs/assets/release-downloads.md).
 
 ![Monthly release downloads](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-monthly.svg)
 
 ![All-time downloads per platform](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-by-platform.svg)
+
+### DPM package downloads
+
+GHCR package pulls for `canton-devkit` (the `dpm install` path). Tracked
+separately from standalone release downloads. Charts refresh daily via
+[`package-stats.yml`](.github/workflows/package-stats.yml). Exact numbers:
+[package-downloads.md](https://github.com/bitdynamics-ab/canton-devkit/blob/release-stats-data/docs/assets/package-downloads.md).
+
+![Monthly DPM package downloads](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/package-downloads-monthly.svg)
 
 ## Contributing
 
