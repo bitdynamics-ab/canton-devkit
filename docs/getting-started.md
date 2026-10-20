@@ -4,9 +4,9 @@ Canton DevKit is a single Go binary that orchestrates the Splice
 LocalNet Docker stack. It ships two ways:
 
 1. **DPM component** (primary) — install through the Daml Package
-   Manager and invoke as `dpm localnet <command>`.
+  Manager and invoke as `dpm localnet <command>`.
 2. **Standalone binary** (`canton-devkit`) — a self-contained
-   executable for users who don't run DPM (CI, DevOps, workshop
+  executable for users who don't run DPM (CI, DevOps, workshop
    facilitators), shipped as release archives. Invoke as
    `canton-devkit localnet <command>`.
 
@@ -19,14 +19,18 @@ tree**. Throughout the docs, `dpm localnet <cmd>` and
 > never changes host permissions. It orchestrates the existing Splice
 > LocalNet container stack.
 
+
+
 ## 1. Prerequisites
 
-| Requirement | Why | Check |
-|---|---|---|
-| Docker Engine / Desktop | DevKit runs LocalNet as containers | `docker version` |
-| Docker Compose **v2** | LocalNet is a compose project | `docker compose version` |
-| ~8 GB free RAM for Docker | Splice stack is memory-hungry | Docker Desktop → Settings → Resources |
-| ~20 GB free disk | Splice images + volumes | `df -h` |
+
+| Requirement               | Why                                | Check                                 |
+| ------------------------- | ---------------------------------- | ------------------------------------- |
+| Docker Engine / Desktop   | DevKit runs LocalNet as containers | `docker version`                      |
+| Docker Compose **v2**     | LocalNet is a compose project      | `docker compose version`              |
+| ~8 GB free RAM for Docker | Splice stack is memory-hungry      | Docker Desktop → Settings → Resources |
+| ~20 GB free disk          | Splice images + volumes            | `df -h`                               |
+
 
 Run the built-in host check at any time — it never modifies anything:
 
@@ -89,6 +93,7 @@ contains the `canton-devkit` binary plus `LICENSE` and `README.md`. Every
 release also publishes a single `SHA256SUMS` file covering all archives.
 
 ### Quick install (macOS arm64 / Linux amd64)
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/main/install.sh | sh
 ```
@@ -119,6 +124,8 @@ Supported platforms:
 - macOS Apple Silicon (`darwin/arm64`)
 - Linux x86_64 (`linux/amd64`)
 
+
+
 ### Homebrew (macOS arm64 / Linux amd64)
 
 ```bash
@@ -126,11 +133,11 @@ brew tap bitdynamics-ab/canton-devkit
 brew install bitdynamics-ab/canton-devkit/canton-devkit
 ```
 
-To upgrade after a new release is published:
+To upgrade after a new release is published, refresh the tap and then
+upgrade the formula:
 
 ```bash
-brew update
-brew upgrade canton-devkit
+brew update && brew upgrade canton-devkit
 ```
 
 The formula downloads platform-specific release tarballs from this
@@ -145,6 +152,8 @@ the tap only hosts the Homebrew formula.
 > maintained. If you previously added
 > `/etc/apt/sources.list.d/canton-devkit.list`, remove that file and use
 > the quick-install script, a release tarball, or Homebrew instead.
+
+
 
 ### Manual download — macOS (Apple Silicon)
 
@@ -168,6 +177,8 @@ xattr -d com.apple.quarantine /usr/local/bin/canton-devkit 2>/dev/null || true
 canton-devkit version
 ```
 
+
+
 ### Manual download — Linux (amd64)
 
 ```bash
@@ -182,6 +193,8 @@ chmod +x canton-devkit
 sudo mv canton-devkit /usr/local/bin/
 canton-devkit version
 ```
+
+
 
 ### Windows (amd64, PowerShell)
 
@@ -221,15 +234,21 @@ the WSL 2 backend.
 go install github.com/bitdynamics-ab/canton-devkit/cmd/canton-devkit@latest
 ```
 
+
+
 ## 4. Compatibility matrix
+
+
 
 ### Platforms (released, tested)
 
-| OS | Arch | Status |
-|---|---|---|
-| macOS | arm64 (Apple Silicon) | ✅ Supported |
-| Linux | amd64 | ✅ Supported |
-| Windows | amd64 | ✅ Supported |
+
+| OS      | Arch                  | Status      |
+| ------- | --------------------- | ----------- |
+| macOS   | arm64 (Apple Silicon) | ✅ Supported |
+| Linux   | amd64                 | ✅ Supported |
+| Windows | amd64                 | ✅ Supported |
+
 
 Other OS/arch combinations may work (DevKit only orchestrates Docker)
 but are untested — `localnet doctor` prints a warning on unsupported
@@ -237,8 +256,7 @@ platforms.
 
 ### Splice LocalNet versions
 
-DevKit pins a catalogue of tested Splice versions; `localnet up
---version <tag>` selects one. List them at runtime:
+DevKit pins a catalogue of tested Splice versions; `localnet up --version <tag>` selects one. List them at runtime:
 
 ```bash
 canton-devkit localnet versions
@@ -250,15 +268,17 @@ at your own risk via `up --version <tag> --allow-uncurated`.
 
 ## 5. Troubleshooting the install
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `doctor` says **Docker daemon** ✗ | Docker not running | Start Docker Desktop / `sudo systemctl start docker` |
-| `doctor` says **Compose v2** ✗ | Only Compose v1 present | Upgrade to Docker Compose v2 (`docker compose`, not `docker-compose`) |
-| `up` fails **PORTS_IN_USE** | Another process holds a port | Stop the conflicting process, or use a different `--name` |
-| `up` hangs at "waiting for healthy" | Insufficient Docker memory | Raise Docker memory to ≥ 8 GB; see [Known limitations](limitations.md) |
-| Linux: `permission denied` on the Docker socket | User not in `docker` group | `sudo usermod -aG docker $USER` then re-login |
-| macOS: "cannot be opened because the developer cannot be verified" | Gatekeeper quarantine | `xattr -d com.apple.quarantine $(which canton-devkit)` |
-| Web UI / Explorer shows stale ports after a restart | Docker re-assigned ephemeral ports | DevKit re-captures them within ~15 s; or run `localnet restart --name <n>` |
+
+| Symptom                                                            | Cause                              | Fix                                                                        |
+| ------------------------------------------------------------------ | ---------------------------------- | -------------------------------------------------------------------------- |
+| `doctor` says **Docker daemon** ✗                                  | Docker not running                 | Start Docker Desktop / `sudo systemctl start docker`                       |
+| `doctor` says **Compose v2** ✗                                     | Only Compose v1 present            | Upgrade to Docker Compose v2 (`docker compose`, not `docker-compose`)      |
+| `up` fails **PORTS_IN_USE**                                        | Another process holds a port       | Stop the conflicting process, or use a different `--name`                  |
+| `up` hangs at "waiting for healthy"                                | Insufficient Docker memory         | Raise Docker memory to ≥ 8 GB; see [Known limitations](limitations.md)     |
+| Linux: `permission denied` on the Docker socket                    | User not in `docker` group         | `sudo usermod -aG docker $USER` then re-login                              |
+| macOS: "cannot be opened because the developer cannot be verified" | Gatekeeper quarantine              | `xattr -d com.apple.quarantine $(which canton-devkit)`                     |
+| Web UI / Explorer shows stale ports after a restart                | Docker re-assigned ephemeral ports | DevKit re-captures them within ~15 s; or run `localnet restart --name <n>` |
+
 
 For anything else, attach the full `localnet doctor` output to a
 [GitHub issue](https://github.com/bitdynamics-ab/canton-devkit/issues) —
@@ -267,9 +287,10 @@ it includes OS/arch, Docker/Compose versions, and the check results.
 ## 6. Next steps
 
 - [HackCanton Season 3 starter](hackcanton-s3.md) — install, one
-  working example, and the breaks that eat day-one time.
+working example, and the breaks that eat day-one time.
 - [LocalNet lifecycle](localnet-lifecycle.md) — zero to a running
-  LocalNet, multiple instances, deterministic ports, and clean-up.
+LocalNet, multiple instances, deterministic ports, and clean-up.
 - [Tokens](tokens.md) — CIP-0112 token flows on LocalNet.
 - [Explorer](explorer.md) — browse the Active Contract Set and
-  recent transactions from the Web UI.
+recent transactions from the Web UI.
+

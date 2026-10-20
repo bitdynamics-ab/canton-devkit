@@ -31,11 +31,41 @@ brew install bitdynamics-ab/canton-devkit/canton-devkit
 
 ## Upgrade
 
-After a new release is published and the formula is updated:
+Homebrew separates refreshing formula metadata from installing a newer
+binary:
+
+- `brew update` — pulls the latest formula from this tap (and other taps)
+- `brew upgrade canton-devkit` — installs a newer release when the
+  formula version is ahead of what you have installed
+
+`brew update` does not take a formula name. Passing one (for example
+`brew update canton-devkit`) does not upgrade the package; Homebrew may
+remap that to `brew upgrade`, but only against whatever formula version
+your local tap already has.
+
+After a new release is published:
 
 ```sh
 brew update
 brew upgrade canton-devkit
+```
+
+Or as one line:
+
+```sh
+brew update && brew upgrade canton-devkit
+```
+
+`brew upgrade canton-devkit` alone is often enough, because Homebrew may
+auto-refresh taps before upgrading. If it reports the installed version
+is already current right after a new release, run `brew update` first,
+then `brew upgrade canton-devkit` again.
+
+Confirm the installed version:
+
+```sh
+canton-devkit version
+brew info canton-devkit
 ```
 
 ## How the formula stays in sync

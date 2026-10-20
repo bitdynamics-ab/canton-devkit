@@ -9,8 +9,6 @@ import { W, wMono, tint, FAST, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { IcAlert, IcCheck, IcX } from "../components/icons";
 
-// Browses the bundled agent skill docs and installs them into
-// ~/.claude/skills or ~/.codex/skills.
 export function AgentSkillsScreen() {
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -114,7 +112,7 @@ export function AgentSkillsScreen() {
         }}
       >
         <span style={{ color: W.text2, fontSize: fs.meta }}>
-          Install all {state.skills.length} skills into:
+          Install all {state.skills.length} bundled skills on this machine into:
         </span>
         <InstallButton
           label="~/.claude/skills"
@@ -273,10 +271,40 @@ function Header() {
         </span>
       </div>
       <div style={{ color: W.dim, fontSize: fs.lead, marginTop: 3 }}>
-        Safe `dpm localnet` workflows for AI agents. Same docs as the CLI
-        `localnet skills` command. Install into your agent and let it drive
-        DevKit.
+        LocalNet workflows for coding agents: lifecycle, DAR deployment,
+        hot redeployment, ledger inspection, token testing, and CI. Preview a
+        skill below or install the catalogue bundled with this DevKit version.
       </div>
+      <details style={{ color: W.text2, fontSize: fs.meta, marginTop: 10 }}>
+        <summary style={{ cursor: "pointer" }}>Install with npx skills</summary>
+        <p>
+          With Node.js and npm installed, run this in your project to install
+          the latest repository catalogue for Codex and Claude Code:
+        </p>
+        <pre style={{ fontFamily: wMono, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+          {"npx skills add bitdynamics-ab/canton-devkit --skill '*' --agent codex claude-code"}
+        </pre>
+        <p>
+          Add <code>--global</code> for installation across projects, or use
+          <code> --skill canton-dar-upload</code> to select one workflow.
+          Use <code>--list</code> to browse without installing. The command is
+          <code> npx skills</code> (plural).
+        </p>
+        <p>
+          The buttons below install this DevKit version&apos;s bundled catalogue
+          on the machine running DevKit and preserve differing local files.
+          Choose one installation method per agent to avoid duplicates. Skills
+          provide instructions; install DevKit, Docker, and Daml tooling separately.
+        </p>
+        <a
+          href="https://bitdynamics-ab.github.io/canton-devkit/guides/agent-skills/"
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: W.text }}
+        >
+          Agent skills installation guide
+        </a>
+      </details>
     </header>
   );
 }

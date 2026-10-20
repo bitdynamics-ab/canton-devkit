@@ -87,6 +87,16 @@ Release archives (macOS arm64, Linux amd64, Windows amd64),
 (`brew install bitdynamics-ab/canton-devkit/canton-devkit`), and
 `go install` are documented in the same guide.
 
+## Agent skills
+
+Install the six LocalNet workflow skills for your coding agent with the [Skills CLI](https://github.com/vercel-labs/skills#readme) (`npx skills`, plural):
+
+```sh
+npx skills add bitdynamics-ab/canton-devkit --skill '*' --agent codex claude-code
+```
+
+See [`skills/`](skills/README.md) for individual skills, local and global installation, the scope assessment, and regeneration instructions. DevKit also ships the same catalogue through `canton-devkit localnet skills install` and the Web UI.
+
 ## Documentation
 
 Canonical docs live on the website:

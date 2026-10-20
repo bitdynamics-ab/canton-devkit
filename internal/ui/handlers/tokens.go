@@ -54,8 +54,7 @@ func MountTokens(mux *http.ServeMux, _ *stream.Hub) {
 	mux.HandleFunc("GET /api/tokens/allocations", handleAllocationsList)
 	mux.HandleFunc("POST /api/tokens/{symbol}/allocate", idem.wrap(handleTokenAllocate))
 	// Settlement (SettlementFactory_SettleBatch) is not yet functional on
-	// LocalNet, so the settle action is intentionally not exposed. See
-	// docs/changes-from-proposal.md.
+	// LocalNet, so the settle action is intentionally not exposed.
 	mux.HandleFunc("POST /api/tokens/allocations/{id}/withdraw", idem.wrap(handleAllocationWithdraw))
 	mux.HandleFunc("POST /api/tokens/allocations/{id}/cancel", idem.wrap(handleAllocationCancel))
 	// Party alias registry. Same RunPartyX functions the `token party` CLI calls.

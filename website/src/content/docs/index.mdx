@@ -1,14 +1,14 @@
 ---
-title: Canton DevKit
-description: Run a complete local Canton network on your machine — 2 regular validator/participant nodes + 1 super-validator node, 3 parties and their respective JWTs with one CLI command
+title: Run a Canton LocalNet
+description: Canton DevKit runs a complete Canton LocalNet on your machine — two validator/participant nodes plus a super-validator, three parties and JWTs, via one CLI (or dpm localnet).
 ---
 
-canton-devkit helps you to run a complete local [Canton](https://canton.network/)
-network on your machine. You get two participant/validator nodes and
-a super-validator node, each with their own party
-(app-user, app-provider, super-validator) and JWT token. All done through
-a single command line interface with zero knowledge required for
-infrastructure, DevOps or Docker.
+canton-devkit helps you run a complete **Canton LocalNet** — a local
+[Canton](https://canton.network/) network on your machine. You get two
+participant/validator nodes and a super-validator node, each with their
+own party (app-user, app-provider, super-validator) and JWT token. All
+done through a single command line interface with zero knowledge required
+for infrastructure, DevOps or Docker.
 
 The only prerequisite is Docker and at least 8 GB of available memory (12 GB
 recommended) and 10 GB of free disk — see the
@@ -51,8 +51,8 @@ canton-devkit localnet up demo   # bring up a network named "demo"
 ## Guides
 
 - [HackCanton Season 3 starter](hackcanton-s3/) — install, one working example, common breaks
-- [LocalNet lifecycle](guides/localnet-lifecycle/) — zero to running,
-  multiple instances, deterministic ports, teardown
+- [Canton LocalNet lifecycle](guides/localnet-lifecycle/) — what LocalNet
+  is, zero to running, multiple instances, teardown
 - [Contract explorer](guides/explorer/) — ACS, transactions, per-party views
 - [Observability](guides/observability/) — Prometheus + Grafana profile
 - [Dashboard customization](guides/dashboard-customization/)

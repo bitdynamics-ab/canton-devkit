@@ -29,7 +29,7 @@ func TestCoreServicesFor_Unknown(t *testing.T) {
 	}
 }
 
-// TestCoreServicesFor_VersionsAgree pins the hoist: 0.5.x through 0.8.x
+// TestCoreServicesFor_VersionsAgree pins the hoist: 0.5.x through 0.9.x
 // adapters all delegate to splice.CoreServices, so any drift between
 // majors is impossible by construction. If a future major needs a
 // different list, this test should be updated together with that
@@ -40,14 +40,18 @@ func TestCoreServicesFor_VersionsAgree(t *testing.T) {
 	if !reflect.DeepEqual(v05, v06) {
 		t.Fatalf("core services drifted between majors: 0.5.18=%v 0.6.4=%v", v05, v06)
 	}
-	// 0.7.x and 0.8.x reuse the 0.6.x adapter (identical compose interface),
+	// 0.7.x–0.9.x reuse the 0.6.x adapter (identical compose interface),
 	// so their core-services list must match too.
 	v07 := CoreServicesFor("0.7.5")
 	v08 := CoreServicesFor("0.8.1")
+	v09 := CoreServicesFor("0.9.0")
 	if !reflect.DeepEqual(v06, v07) {
 		t.Fatalf("core services drifted between majors: 0.6.4=%v 0.7.5=%v", v06, v07)
 	}
 	if !reflect.DeepEqual(v06, v08) {
 		t.Fatalf("core services drifted between majors: 0.6.4=%v 0.8.1=%v", v06, v08)
+	}
+	if !reflect.DeepEqual(v06, v09) {
+		t.Fatalf("core services drifted between majors: 0.6.4=%v 0.9.0=%v", v06, v09)
 	}
 }
