@@ -98,13 +98,15 @@ render_line_chart() {
   local out="$1" title="$2" xlabel="$3" data="$4"
 
   local W=760 H=380
-  local ml=56 mr=180 mt=48 mb=64
+  # Narrow right margin: single-series chart has no legend.
+  local ml=56 mr=24 mt=48 mb=64
   local pw ph
   pw=$(( W - ml - mr ))
   ph=$(( H - mt - mb ))
 
-  local n maxv step
+  local n maxv step nseries
   n="$(printf '%s' "${data}" | jq '.labels | length')"
+  nseries="$(printf '%s' "${data}" | jq '.series | length')"
   maxv="$(printf '%s' "${data}" | jq '[.series[].values[]] | max // 0')"
   maxv="$(nice_max "${maxv}")"
   step=$(awk -v n="$n" 'BEGIN{ if (n <= 12) print 1; else print int((n + 11) / 12) }')
@@ -146,8 +148,8 @@ render_line_chart() {
     printf '<text x="%d" y="%d" font-size="12" fill="#374151" text-anchor="middle">%s</text>\n' \
       $(( ml + pw/2 )) $(( H - 12 )) "$(svg_escape "${xlabel}")"
 
-    local si=0 sname scolor
-    while IFS= read -r sname; do
+    local si=0 scolor
+    while [ "$si" -lt "$nseries" ]; do
       scolor="$(printf '%s' "${data}" | jq -r --argjson i "$si" '.series[$i].color')"
       local pts=""
       local vi=0 v px py
@@ -167,14 +169,8 @@ render_line_chart() {
         printf '<circle cx="%s" cy="%s" r="3.5" fill="%s"/>\n' "${p%,*}" "${p#*,}" "${scolor}"
       done
 
-      local ly=$(( mt + si*22 ))
-      printf '<rect x="%d" y="%d" width="14" height="14" rx="2" fill="%s"/>\n' \
-        $(( ml + pw + 16 )) "$ly" "${scolor}"
-      printf '<text x="%d" y="%d" font-size="12" fill="#374151">%s</text>\n' \
-        $(( ml + pw + 36 )) $(( ly + 12 )) "$(svg_escape "${sname}")"
-
       si=$(( si + 1 ))
-    done < <(printf '%s' "${data}" | jq -r '.series[].name')
+    done
 
     printf '</svg>\n'
   } > "${out}"
