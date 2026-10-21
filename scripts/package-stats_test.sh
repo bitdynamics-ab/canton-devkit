@@ -91,6 +91,14 @@ assert_eq "first seeded row" \
 assert_file_contains "md total" "${md}" "**Total downloads:** 100"
 assert_file_contains "md day" "${md}" "| 2026-10-20 | 20 |"
 assert_file_contains "svg title" "${svg}" "Daily DPM package downloads"
+if grep -Fq 'width="14" height="14"' "${svg}"; then
+  echo "FAIL: svg still contains a legend swatch" >&2
+  exit 1
+fi
+if grep -Fq '>Downloads</text>' "${svg}"; then
+  echo "FAIL: svg still contains a Downloads legend label" >&2
+  exit 1
+fi
 
 # Idempotent same-day re-run must not duplicate rows.
 OUT_DIR="${out}" \
