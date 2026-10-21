@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="380" viewBox="0 0 760 380" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-label="Daily DPM package downloads (last 30 days)">
+<rect width="760" height="380" fill="#ffffff"/>
+<text x="56" y="26" font-size="16" font-weight="600" fill="#111827">Daily DPM package downloads (last 30 days)</text>
+<line x1="56" y1="316.0" x2="580" y2="316.0" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="320.0" font-size="11" fill="#6b7280" text-anchor="end">0</text>
+<line x1="56" y1="262.4" x2="580" y2="262.4" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="266.4" font-size="11" fill="#6b7280" text-anchor="end">29</text>
+<line x1="56" y1="208.8" x2="580" y2="208.8" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="212.8" font-size="11" fill="#6b7280" text-anchor="end">58</text>
+<line x1="56" y1="155.2" x2="580" y2="155.2" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="159.2" font-size="11" fill="#6b7280" text-anchor="end">87</text>
+<line x1="56" y1="101.6" x2="580" y2="101.6" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="105.6" font-size="11" fill="#6b7280" text-anchor="end">116</text>
+<line x1="56" y1="48.0" x2="580" y2="48.0" stroke="#e5e7eb" stroke-width="1"/>
+<text x="48" y="52.0" font-size="11" fill="#6b7280" text-anchor="end">146</text>
+<line x1="56" y1="48" x2="56" y2="316" stroke="#9ca3af" stroke-width="1"/>
+<line x1="56" y1="316" x2="580" y2="316" stroke="#9ca3af" stroke-width="1"/>
+<text x="56.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">09-23</text>
+<text x="112.1" y="336" font-size="11" fill="#6b7280" text-anchor="middle">09-26</text>
+<text x="168.3" y="336" font-size="11" fill="#6b7280" text-anchor="middle">09-29</text>
+<text x="224.4" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-02</text>
+<text x="280.6" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-05</text>
+<text x="336.7" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-08</text>
+<text x="392.9" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-11</text>
+<text x="449.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-14</text>
+<text x="505.1" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-17</text>
+<text x="561.3" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-20</text>
+<text x="580.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-21</text>
+<text x="318" y="368" font-size="12" fill="#374151" text-anchor="middle">Day (oldest -&gt; newest)</text>
+<polyline points="56.0,314.2 74.7,314.2 93.4,314.2 112.1,286.6 130.9,103.1 149.6,64.5 168.3,73.7 187.0,48.0 205.7,198.5 224.4,286.6 243.1,294.0 261.9,314.2 280.6,306.8 299.3,297.6 318.0,314.2 336.7,314.2 355.4,314.2 374.1,314.2 392.9,314.2 411.6,312.3 430.3,314.2 449.0,314.2 467.7,314.2 486.4,314.2 505.1,314.2 523.9,314.2 542.6,306.8 561.3,314.2 580.0,314.2" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+<circle cx="56.0" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="74.7" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="93.4" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="112.1" cy="286.6" r="3.5" fill="#2563eb"/>
+<circle cx="130.9" cy="103.1" r="3.5" fill="#2563eb"/>
+<circle cx="149.6" cy="64.5" r="3.5" fill="#2563eb"/>
+<circle cx="168.3" cy="73.7" r="3.5" fill="#2563eb"/>
+<circle cx="187.0" cy="48.0" r="3.5" fill="#2563eb"/>
+<circle cx="205.7" cy="198.5" r="3.5" fill="#2563eb"/>
+<circle cx="224.4" cy="286.6" r="3.5" fill="#2563eb"/>
+<circle cx="243.1" cy="294.0" r="3.5" fill="#2563eb"/>
+<circle cx="261.9" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="280.6" cy="306.8" r="3.5" fill="#2563eb"/>
+<circle cx="299.3" cy="297.6" r="3.5" fill="#2563eb"/>
+<circle cx="318.0" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="336.7" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="355.4" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="374.1" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="392.9" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="411.6" cy="312.3" r="3.5" fill="#2563eb"/>
+<circle cx="430.3" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="449.0" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="467.7" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="486.4" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="505.1" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="523.9" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="542.6" cy="306.8" r="3.5" fill="#2563eb"/>
+<circle cx="561.3" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="580.0" cy="314.2" r="3.5" fill="#2563eb"/>
+<rect x="596" y="48" width="14" height="14" rx="2" fill="#2563eb"/>
+<text x="616" y="60" font-size="12" fill="#374151">Downloads</text>
+</svg>
