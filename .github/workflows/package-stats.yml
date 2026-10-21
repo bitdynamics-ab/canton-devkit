@@ -49,7 +49,7 @@ jobs:
         run: |
           set -euo pipefail
           files=(
-            docs/assets/package-downloads-monthly.svg
+            docs/assets/package-downloads-daily.svg
             docs/assets/package-downloads.md
             docs/assets/package-downloads-history.jsonl
           )
@@ -82,6 +82,10 @@ jobs:
           done
 
           git add "${files[@]}"
+          # Drop superseded monthly chart so the data branch does not keep a stale SVG.
+          if [ -f docs/assets/package-downloads-monthly.svg ]; then
+            git rm -f docs/assets/package-downloads-monthly.svg
+          fi
           if git diff --cached --quiet; then
             echo "Package stats already up to date."
             exit 0

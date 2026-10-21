@@ -149,7 +149,7 @@ separately from standalone release downloads. Charts refresh daily via
 [`package-stats.yml`](.github/workflows/package-stats.yml). Exact numbers:
 [package-downloads.md](https://github.com/bitdynamics-ab/canton-devkit/blob/release-stats-data/docs/assets/package-downloads.md).
 
-![Monthly DPM package downloads](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/package-downloads-monthly.svg)
+![Daily DPM package downloads](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/package-downloads-daily.svg)
 
 ## Contributing
 

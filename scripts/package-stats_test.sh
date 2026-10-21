@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Regression checks for scripts/package-stats.sh and package-stats-monthly.jq.
+# Regression checks for scripts/package-stats.sh and package-stats-daily.jq.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-jq_filter="${script_dir}/package-stats-monthly.jq"
+jq_filter="${script_dir}/package-stats-daily.jq"
 fixture="${script_dir}/testdata/package-stats-page.html"
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
@@ -28,25 +28,16 @@ assert_file_contains() {
   fi
 }
 
-# --- Monthly jq (same contract as release-stats-monthly.jq) ----------------
+# --- Daily jq -------------------------------------------------------------
 cat > "${tmp}/history.jsonl" <<'EOF'
 {"date":"2026-07-06","total":10}
-{"date":"2026-07-20","total":12}
-{"date":"2026-07-28","total":15}
-{"date":"2026-08-05","total":18}
+{"date":"2026-07-07","total":12}
+{"date":"2026-07-08","total":15}
+{"date":"2026-07-09","total":18}
 EOF
-assert_eq "monthly aggregation" \
+assert_eq "daily aggregation" \
   "$(jq -s -f "${jq_filter}" "${tmp}/history.jsonl")" \
-  '[{"month":"2026-07","downloads":5},{"month":"2026-08","downloads":3}]'
-
-cat > "${tmp}/history-gap.jsonl" <<'EOF'
-{"date":"2026-07-06","total":10}
-{"date":"2026-07-10","total":14}
-{"date":"2026-09-02","total":20}
-EOF
-assert_eq "gap fill" \
-  "$(jq -s -f "${jq_filter}" "${tmp}/history-gap.jsonl")" \
-  '[{"month":"2026-07","downloads":4},{"month":"2026-08","downloads":0},{"month":"2026-09","downloads":6}]'
+  '[{"date":"2026-07-07","downloads":2},{"date":"2026-07-08","downloads":3},{"date":"2026-07-09","downloads":3}]'
 
 cat > "${tmp}/history-clamp.jsonl" <<'EOF'
 {"date":"2026-08-03","total":20}
@@ -55,12 +46,18 @@ cat > "${tmp}/history-clamp.jsonl" <<'EOF'
 EOF
 assert_eq "negative delta clamp" \
   "$(jq -s -f "${jq_filter}" "${tmp}/history-clamp.jsonl")" \
-  '[{"month":"2026-08","downloads":2}]'
+  '[{"date":"2026-08-04","downloads":0},{"date":"2026-08-05","downloads":2}]'
 
 printf '%s\n' '{"date":"2026-08-03","total":20}' > "${tmp}/history-one.jsonl"
 assert_eq "single snapshot" \
   "$(jq -s -f "${jq_filter}" "${tmp}/history-one.jsonl")" \
   '[]'
+
+# Chart window: last 30 days only (full series may be longer).
+window="$(printf '%s' "$(jq -n '[range(1;41) | {date: ("2026-01-" + (if . < 10 then "0\(.)" else "\(.)" end)), downloads: .}]')" | jq -c '.[-30:] | { labels: [.[].date[5:]], values: [.[].downloads] }')"
+assert_eq "chart last-30 window length" \
+  "$(printf '%s' "${window}" | jq '.labels | length')" \
+  '30'
 
 # --- End-to-end against HTML fixture --------------------------------------
 out="${tmp}/out"
@@ -72,7 +69,7 @@ OUT_DIR="${out}" \
 
 history="${out}/package-downloads-history.jsonl"
 md="${out}/package-downloads.md"
-svg="${out}/package-downloads-monthly.svg"
+svg="${out}/package-downloads-daily.svg"
 
 [ -f "${history}" ] || { echo "FAIL: missing history" >&2; exit 1; }
 [ -f "${md}" ] || { echo "FAIL: missing markdown" >&2; exit 1; }
@@ -92,8 +89,8 @@ assert_eq "first seeded row" \
   '{"date":"2026-08-01","total":10,"last30Days":null}'
 
 assert_file_contains "md total" "${md}" "**Total downloads:** 100"
-assert_file_contains "md month" "${md}" "| 2026-10 | 50 |"
-assert_file_contains "svg title" "${svg}" "Monthly DPM package downloads"
+assert_file_contains "md day" "${md}" "| 2026-10-20 | 20 |"
+assert_file_contains "svg title" "${svg}" "Daily DPM package downloads"
 
 # Idempotent same-day re-run must not duplicate rows.
 OUT_DIR="${out}" \
