@@ -15,8 +15,8 @@
 #   https://github.com/bitdynamics-ab/canton-devkit/pkgs/container/canton-devkit
 #
 # Outputs (into docs/assets/):
-#   package-downloads-monthly.svg   — new downloads per calendar month (line; last 6 months)
-#   package-downloads.md            — total + monthly summary table
+#   package-downloads-daily.svg     — new downloads per day (line; last 30 days)
+#   package-downloads.md            — total + daily summary table (last 30 days)
 #   package-downloads-history.jsonl — appended daily snapshot (total + last30Days)
 #
 # Environment:
@@ -188,7 +188,7 @@ snapshot_date="${SNAPSHOT_DATE:-$(date -u +%Y-%m-%d)}"
 touch "${HISTORY_FILE}"
 history_len="$(jq -s 'length' "${HISTORY_FILE}" 2>/dev/null || echo 0)"
 
-# Backfill when history has fewer than 2 rows so monthly deltas are possible
+# Backfill when history has fewer than 2 rows so daily deltas are possible
 # immediately from the page sparkline.
 if [ "${history_len}" -lt 2 ]; then
   echo "seeding history from sparkline (history_len=${history_len})" >&2
@@ -221,19 +221,21 @@ today_row="$(jq -nc --arg d "${snapshot_date}" --argjson total "${total}" --argj
 mv "${HISTORY_FILE}.tmp" "${HISTORY_FILE}"
 echo "updated ${HISTORY_FILE} (snapshot ${snapshot_date})"
 
-# --- Monthly chart from history deltas ------------------------------------
-monthly_rows="$(jq -s -f "${script_dir}/package-stats-monthly.jq" "${HISTORY_FILE}")"
+# --- Daily chart from history deltas --------------------------------------
+# GitHub only exposes a cumulative total. Diff consecutive snapshots, clamp
+# negatives, then chart the trailing window so x-axis labels stay readable.
+daily_rows="$(jq -s -f "${script_dir}/package-stats-daily.jq" "${HISTORY_FILE}")"
 
-by_month_data="$(printf '%s' "${monthly_rows}" | jq '
-  .[-6:] as $months
-  | { labels: [ $months[].month ],
+by_day_data="$(printf '%s' "${daily_rows}" | jq '
+  .[-30:] as $days
+  | { labels: [ $days[].date[5:] ],
       series: [ { name: "Downloads",
                   color: "#2563eb",
-                  values: [ $months[].downloads ] } ]
+                  values: [ $days[].downloads ] } ]
   }
 ')"
-render_line_chart "${OUT_DIR}/package-downloads-monthly.svg" \
-  "Monthly DPM package downloads (last 6 months)" "Month (oldest -> newest)" "${by_month_data}"
+render_line_chart "${OUT_DIR}/package-downloads-daily.svg" \
+  "Daily DPM package downloads (last 30 days)" "Day (oldest -> newest)" "${by_day_data}"
 
 # --- Markdown summary -----------------------------------------------------
 {
@@ -244,14 +246,14 @@ render_line_chart "${OUT_DIR}/package-downloads-monthly.svg" \
   printf '**Last 30 days (page sparkline):** %s.\n\n' "${last30}"
   echo "Source: [GitHub Packages](${PACKAGE_URL})."
   echo
-  echo "### Monthly downloads"
+  echo "### Daily downloads (last 30 days)"
   echo
-  echo "| Month | Downloads |"
+  echo "| Date | Downloads |"
   echo "|---|---|"
-  if [ "$(printf '%s' "${monthly_rows}" | jq 'length')" -eq 0 ]; then
+  if [ "$(printf '%s' "${daily_rows}" | jq 'length')" -eq 0 ]; then
     echo "| — | 0 (need at least two daily snapshots) |"
   else
-    printf '%s' "${monthly_rows}" | jq -r 'reverse[] | "| \(.month) | \(.downloads) |"'
+    printf '%s' "${daily_rows}" | jq -r '.[-30:] | reverse[] | "| \(.date) | \(.downloads) |"'
   fi
   echo
 } > "${OUT_DIR}/package-downloads.md"
