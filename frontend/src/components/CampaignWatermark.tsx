@@ -1,18 +1,9 @@
-// Corner watermark for the campaign build: this install's code on every screen,
-// plus a Share that captures a page-only PNG, copies it to the clipboard, and
-// shows a "Post on X" button with a paste prompt. The intent can't attach media
-// (no OAuth) and we can't instruct the user once they're on x.com, so the prompt
-// rides with the button. Rendered only when the backend sends a campaign_code.
-
-import { useCallback, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { useLocation } from "react-router-dom";
 import { W, wMono, fs } from "../tokens";
 
-// Handles + hashtag seeded into every share (hashtag via the intent param).
 const MENTIONS = "@CantonNetwork @bitdynamics_cc";
 
-// Screen-aware share copy — the post reflects what the participant was actually
-// doing. First matching route prefix wins; "/" (Overview) falls to DEFAULT.
 const SCREEN_MESSAGES: Array<[RegExp, string]> = [
   [/^\/tokens/, "I just minted a token on a live Canton network with the Canton DevKit \u{1FA99}"],
   [/^\/wallet/, "Running Canton wallets on a local network with the Canton DevKit \u{1F45B}"],
@@ -34,10 +25,6 @@ function messageForPath(pathname: string): string {
 
 type ShareState = null | "capturing" | "copied" | "saved" | "error";
 
-// Captures the app (not the whole screen) to a PNG, excluding the interactive
-// bits of the watermark (marked data-nocapture) so the shot is clean but still
-// carries the code. Uses modern-screenshot (foreignObject) so the app's modern
-// CSS — color-mix(), CSS vars, the inline SVG chart — renders faithfully.
 async function capturePagePng(): Promise<Blob | null> {
   const { domToBlob } = await import("modern-screenshot");
   const root = document.getElementById("root") ?? document.body;
@@ -45,10 +32,38 @@ async function capturePagePng(): Promise<Blob | null> {
     scale: Math.min(2, window.devicePixelRatio || 1),
     backgroundColor: getComputedStyle(document.body).backgroundColor || "#ffffff",
     filter: (node) => (node as HTMLElement).dataset?.nocapture !== "1",
+    onCloneNode: replaceOpaqueIframes,
   });
 }
 
-function downloadBlob(blob: Blob, name: string) {
+export function replaceOpaqueIframes(cloned: Node) {
+  if (!(cloned instanceof Element)) return;
+  const frames = cloned.tagName === "IFRAME" ? [cloned] : Array.from(cloned.querySelectorAll("iframe"));
+  if (frames.length === 0) return;
+  const live = getComputedStyle(document.body);
+  const resolve = (v: string) => {
+    const m = /^var\((--[\w-]+)\)$/.exec(v);
+    return (m && live.getPropertyValue(m[1]).trim()) || v;
+  };
+  for (const frame of frames) {
+    const card = frame.ownerDocument.createElement("div");
+    card.setAttribute("style", frame.getAttribute("style") ?? "");
+    card.dataset.iframePlaceholder = "1";
+    Object.assign(card.style, {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: resolve(W.surface),
+      color: resolve(W.dim),
+      fontFamily: wMono,
+      fontSize: fs.label,
+    });
+    card.textContent = frame.getAttribute("title") || "Embedded page";
+    frame.replaceWith(card);
+  }
+}
+
+export function downloadBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -56,12 +71,20 @@ function downloadBlob(blob: Blob, name: string) {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
 export function CampaignWatermark({ code }: { code: string }) {
   const { pathname } = useLocation();
   const [state, setState] = useState<ShareState>(null);
+  const busy = useRef(false);
+  const timer = useRef<number | undefined>(undefined);
+
+  const later = useCallback((ms: number, next: () => void) => {
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(next, ms);
+  }, []);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
 
   const text = `${messageForPath(pathname)}\n\n${MENTIONS}\nMy run: ${code}`;
   const shareUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&hashtags=CCTools`;
@@ -69,15 +92,15 @@ export function CampaignWatermark({ code }: { code: string }) {
   const onShare = useCallback(
     async (e: MouseEvent<HTMLAnchorElement>) => {
       e.preventDefault();
+      if (busy.current) return;
+      busy.current = true;
+      window.clearTimeout(timer.current);
       setState("capturing");
 
       const blob = await capturePagePng().catch(() => null);
       let outcome: Exclude<ShareState, null | "capturing"> = "error";
 
       if (blob) {
-        // Copy while THIS tab is focused (image clipboard needs a focused,
-        // user-activated tab). Falls back to a download where the browser has
-        // no image clipboard (e.g. Firefox).
         try {
           if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
             await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
@@ -86,25 +109,24 @@ export function CampaignWatermark({ code }: { code: string }) {
             throw new Error("no image clipboard");
           }
         } catch {
-          downloadBlob(blob, `canton-devkit-${code}.png`);
-          outcome = "saved";
+          try {
+            downloadBlob(blob, `canton-devkit-${code}.png`);
+            outcome = "saved";
+          } catch {
+            outcome = "error";
+          }
         }
       }
 
-      // Deliberately do NOT auto-open X: once the user is on x.com we can't tell
-      // them to paste. Instead we show the paste instruction next to a "Post on
-      // X" button they click themselves — so the prompt is read before they
-      // leave (and a user-gesture open is never popup-blocked).
+      busy.current = false;
       setState(outcome);
-      window.setTimeout(() => setState((s) => (s === outcome ? null : s)), 30000);
+      later(30000, () => setState(null));
     },
-    [code],
+    [code, later],
   );
 
-  const dismissSoon = () => window.setTimeout(() => setState(null), 800);
+  const dismissSoon = () => later(800, () => setState(null));
 
-  // Defense-in-depth: render nothing without a code, so a normal build (or a
-  // dropped parent guard) never shows an empty pill or a code-less share link.
   if (!code) return null;
 
   const lead =
@@ -130,9 +152,6 @@ export function CampaignWatermark({ code }: { code: string }) {
         position: "fixed",
         right: 14,
         bottom: "calc(14px + env(safe-area-inset-bottom, 0px))",
-        // Sit below the overlay band (drawers/modals are z 40–200) so any
-        // dialog paints over it, and never intercept clicks — pointer-events is
-        // re-enabled only on the Share link below.
         zIndex: 30,
         pointerEvents: "none",
         display: "flex",
@@ -155,8 +174,6 @@ export function CampaignWatermark({ code }: { code: string }) {
           data-nocapture="1"
           role="status"
           style={{
-            // The pill container is pointer-events:none; re-enable it here so
-            // the "Post on X" link inside the prompt is actually clickable.
             pointerEvents: "auto",
             position: "absolute",
             right: 0,
@@ -231,7 +248,7 @@ export function CampaignWatermark({ code }: { code: string }) {
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Share your run on X (captures the page and copies it to your clipboard)"
-        title="Capture this page, copy it to your clipboard, and open a pre-filled X post"
+        title="Capture this page and get a pre-filled X post"
         data-nocapture="1"
         aria-busy={state === "capturing"}
         style={{
