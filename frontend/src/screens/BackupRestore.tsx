@@ -11,8 +11,7 @@ import { IcCheck, IcDownload } from "../components/icons";
 
 interface Props {
   instanceName: string;
-  /** Flips true while a snapshot capture is in flight so the parent header
-   *  can show "Snapshotting…" instead of the paused-container "partial". */
+  snapshotting?: boolean;
   onSnapshotting?: (active: boolean) => void;
 }
 
@@ -22,7 +21,7 @@ type RestoreState =
   | { kind: "success"; response: RestoreResponse }
   | { kind: "error"; message: string };
 
-export function BackupRestore({ instanceName, onSnapshotting }: Props) {
+export function BackupRestore({ instanceName, snapshotting = false, onSnapshotting }: Props) {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [restore, setRestore] = useState<RestoreState>({ kind: "idle" });
@@ -46,12 +45,12 @@ export function BackupRestore({ instanceName, onSnapshotting }: Props) {
     try {
       await downloadSnapshot(instanceName);
     } catch (e) {
+      onSnapshotting?.(false);
       setDownloadError(
         e instanceof ApiError ? e.message : "snapshot download failed",
       );
     } finally {
       setDownloading(false);
-      onSnapshotting?.(false);
     }
   }
 
@@ -109,8 +108,8 @@ export function BackupRestore({ instanceName, onSnapshotting }: Props) {
         </div>
         <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
           <div>
-            <Button variant="secondary" icon={<IcDownload />} onClick={onDownload} disabled={downloading}>
-              {downloading ? "Preparing…" : "Download snapshot"}
+            <Button variant="secondary" icon={<IcDownload />} onClick={onDownload} disabled={downloading || snapshotting}>
+              {downloading ? "Preparing…" : snapshotting ? "Snapshotting…" : "Download snapshot"}
             </Button>
           </div>
           <div style={{ fontSize: fs.label, color: W.dim }}>

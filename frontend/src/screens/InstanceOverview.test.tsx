@@ -12,6 +12,7 @@ function setupFetch(
     summary?: "off" | { tps: number };
     tx?: { status: number; body: unknown };
     instanceStatus?: string;
+    paused?: () => boolean;
   } = {},
 ) {
   const calls: { url: string; method: string }[] = [];
@@ -39,7 +40,7 @@ function setupFetch(
           {
             name: "cdk-demo-canton-1",
             service: "canton",
-            state: "running",
+            state: cfg.paused?.() ? "paused" : "running",
             health: "healthy",
             status: "Up 9 minutes (healthy)",
           },
@@ -496,6 +497,10 @@ describe("InstanceOverview — tabs", () => {
   });
 });
 
+function headerOf(name: string) {
+  return within(screen.getByRole("heading", { name }).parentElement!);
+}
+
 const realSetImmediate = globalThis.setImmediate;
 
 async function advance(ms: number) {
@@ -506,6 +511,60 @@ async function advance(ms: number) {
     });
   }
 }
+
+describe("InstanceOverview — snapshot status", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  async function startSnapshot(paused: () => boolean) {
+    vi.useFakeTimers();
+    setupFetch({ paused });
+    vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
+    const view = render(<InstanceOverview name="demo" statusHint="running" />);
+    await vi.waitFor(() => expect(screen.getByText("1 of 2 healthy")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Snapshots" }));
+    fireEvent.click(screen.getByRole("button", { name: /download snapshot/i }));
+    expect(headerOf("demo").getByText("Snapshotting…")).toBeInTheDocument();
+    return view;
+  }
+
+  it("keeps Snapshotting… up while node containers stay paused, then clears when they resume", async () => {
+    let paused = true;
+    await startSnapshot(() => paused);
+    await advance(4_000);
+    expect(headerOf("demo").getByText("Snapshotting…")).toBeInTheDocument();
+    expect(screen.getByText("writers paused · capturing snapshot")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /snapshotting/i })).toBeDisabled();
+    await advance(60_000);
+    expect(headerOf("demo").getByText("Snapshotting…")).toBeInTheDocument();
+    paused = false;
+    await advance(4_000);
+    expect(headerOf("demo").queryByText("Snapshotting…")).not.toBeInTheDocument();
+    expect(headerOf("demo").getByText("Running")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /download snapshot/i })).toBeEnabled();
+  });
+
+  it("holds through the no-pause window when the poll never catches the pause", async () => {
+    await startSnapshot(() => false);
+    await advance(6_000);
+    expect(headerOf("demo").getByText("Snapshotting…")).toBeInTheDocument();
+    await advance(6_000);
+    expect(headerOf("demo").queryByText("Snapshotting…")).not.toBeInTheDocument();
+    expect(headerOf("demo").getByText("Running")).toBeInTheDocument();
+  });
+
+  it("drops the snapshot state when the selected instance changes", async () => {
+    const { rerender } = await startSnapshot(() => true);
+    await advance(4_000);
+    expect(headerOf("demo").getByText("Snapshotting…")).toBeInTheDocument();
+    rerender(<InstanceOverview name="hubble" statusHint="running" />);
+    expect(headerOf("hubble").queryByText("Snapshotting…")).not.toBeInTheDocument();
+    expect(headerOf("hubble").getByText("Running")).toBeInTheDocument();
+  });
+});
 
 describe("InstanceOverview — vitals rail", () => {
   afterEach(() => {

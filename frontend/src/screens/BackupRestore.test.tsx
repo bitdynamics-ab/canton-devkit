@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BackupRestore } from "./BackupRestore";
 
@@ -43,24 +43,42 @@ describe("BackupRestore card", () => {
     ).toBeTruthy();
   });
 
-  it("signals onSnapshotting around a capture so the header can show 'Snapshotting…'", async () => {
-    // No-op the submit so the download promise stays pending (the iframe
-    // never fires `load`) — the capture is "in flight" after the click.
-    vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
-    const onSnapshotting = vi.fn();
-    render(
-      <BackupRestore instanceName="pebble" onSnapshotting={onSnapshotting} />,
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: /download snapshot/i }),
-    );
-    // true the instant the capture starts (drives the header's
-    // "Snapshotting…" pill instead of the paused-container "partial")…
-    expect(onSnapshotting).toHaveBeenNthCalledWith(1, true);
-    // …and false once the download settles, so the pill clears.
-    await waitFor(() => expect(onSnapshotting).toHaveBeenCalledWith(false), {
-      timeout: 3000,
+  it("raises onSnapshotting on start and leaves clearing to the parent once the download settles", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
+      const onSnapshotting = vi.fn();
+      render(
+        <BackupRestore instanceName="pebble" onSnapshotting={onSnapshotting} />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /download snapshot/i }));
+      expect(onSnapshotting).toHaveBeenNthCalledWith(1, true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+      expect(screen.getByRole("button", { name: /download snapshot/i })).toBeEnabled();
+      expect(onSnapshotting).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears onSnapshotting when the server answers with an error instead of a file", async () => {
+    vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {
+      const frame = document.querySelector('iframe[name="_dpm_dl"]') as HTMLIFrameElement;
+      frame.dispatchEvent(new Event("load"));
     });
+    const onSnapshotting = vi.fn();
+    render(<BackupRestore instanceName="ghost" onSnapshotting={onSnapshotting} />);
+    await userEvent.click(screen.getByRole("button", { name: /download snapshot/i }));
+    await waitFor(() => expect(onSnapshotting).toHaveBeenLastCalledWith(false));
+    expect(onSnapshotting.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it("disables the download button while the parent reports a capture in progress", () => {
+    render(<BackupRestore instanceName="pebble" snapshotting />);
+    const btn = screen.getByRole("button", { name: /snapshotting/i });
+    expect(btn).toBeDisabled();
   });
 
   it("dispatches a POST form to /api/instances/:name/snapshot on download", async () => {

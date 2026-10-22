@@ -8,9 +8,6 @@ type Tone = "ok" | "warn" | "danger" | "muted" | "busy";
 
 const MAP: Record<string, { label: string; tone: Tone }> = {
   running: { label: "Running", tone: "ok" },
-  // Deliberate transient operations (brand-toned so they read as "in
-  // progress", not a fault). `snapshotting` overrides the paused-container
-  // "partial" the reconciler would otherwise show mid-backup.
   snapshotting: { label: "Snapshotting…", tone: "busy" },
   healthy: { label: "Healthy", tone: "ok" },
   ready: { label: "Ready", tone: "ok" },

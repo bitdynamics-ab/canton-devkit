@@ -50,6 +50,13 @@ import { decodePrometheusRange, type Series } from "../components/charts/types";
 import { Q, scopeQ, deltaFromSeries } from "./MetricsScreen";
 import { ContainerLogsModal } from "./ContainerLogsModal";
 import { BackupRestore } from "./BackupRestore";
+import {
+  anyContainerPaused,
+  observeSnapshot,
+  snapshotHoldExpiresAt,
+  startSnapshotHold,
+  type SnapshotHold,
+} from "./snapshotHold";
 import { formatUptime } from "./uptime";
 
 // The per-instance Overview. One tabbed surface a developer can wire an
@@ -81,10 +88,25 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
   const [refetchTick, setRefetchTick] = useState(0);
   const [busy, setBusy] = useState(false);
   const [actionErr, setActionErr] = useState<string | null>(null);
-  // A snapshot pauses the node containers for a consistent capture, which
-  // the reconciler would otherwise surface as "partial". BackupRestore flips
-  // this while a capture is in flight so the header reads "Snapshotting…".
-  const [snapshotting, setSnapshotting] = useState(false);
+  const [snapshotHold, setSnapshotHold] = useState<SnapshotHold | null>(null);
+  const snapshotting = snapshotHold !== null;
+
+  useEffect(() => {
+    setSnapshotHold(null);
+  }, [name]);
+
+  useEffect(() => {
+    if (!snapshotHold) return;
+    const t = setTimeout(
+      () => setSnapshotHold(null),
+      Math.max(0, snapshotHoldExpiresAt(snapshotHold) - Date.now()),
+    );
+    return () => clearTimeout(t);
+  }, [snapshotHold]);
+
+  function onSnapshotting(active: boolean) {
+    setSnapshotHold(active ? startSnapshotHold(Date.now()) : null);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -118,12 +140,16 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     async function poll() {
+      const sampledAt = Date.now();
       try {
         const r = await fetchContainers(name);
         if (!cancelled) {
           setContainers(r);
           setContainersAbsent(false);
           setContainersAt(Date.now());
+          setSnapshotHold((h) =>
+            h ? observeSnapshot(h, anyContainerPaused(r), sampledAt) : h,
+          );
         }
       } catch (e) {
         if (cancelled) return;
@@ -462,7 +488,11 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
         ))}
 
       {tab === "snapshots" && (
-        <BackupRestore instanceName={name} onSnapshotting={setSnapshotting} />
+        <BackupRestore
+          instanceName={name}
+          snapshotting={snapshotting}
+          onSnapshotting={onSnapshotting}
+        />
       )}
     </section>
   );
