@@ -136,6 +136,7 @@ export function CampaignWatermark({ code }: { code: string }) {
   const { pathname } = useLocation();
   const [state, setState] = useState<ShareState>(null);
   const busy = useRef(false);
+  const route = useRef(0);
   const timer = useRef<number | undefined>(undefined);
   const shareRef = useRef<HTMLButtonElement>(null);
   const promptRef = useRef<HTMLDivElement>(null);
@@ -155,6 +156,7 @@ export function CampaignWatermark({ code }: { code: string }) {
     busy.current = true;
     window.clearTimeout(timer.current);
     setState("capturing");
+    const startedOn = route.current;
 
     const png = capturePagePng().then((blob) => {
       if (!blob) throw new Error("capture failed");
@@ -163,7 +165,7 @@ export function CampaignWatermark({ code }: { code: string }) {
     const copy = startImageCopy(png);
     void settleShare(copy, png, `canton-devkit-${code}.png`).then((outcome) => {
       busy.current = false;
-      setState(outcome);
+      setState(route.current === startedOn ? outcome : null);
     });
   }, [code]);
 
@@ -172,6 +174,11 @@ export function CampaignWatermark({ code }: { code: string }) {
     if (promptRef.current?.contains(document.activeElement)) shareRef.current?.focus();
     setState(null);
   }, []);
+
+  useEffect(() => {
+    route.current += 1;
+    if (promptRef.current) close();
+  }, [pathname, close]);
 
   const prompt = state && state !== "capturing" ? PROMPT[state] : null;
 

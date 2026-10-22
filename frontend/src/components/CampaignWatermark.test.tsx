@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import type { ReactNode } from "react";
+import { Link, MemoryRouter } from "react-router-dom";
 import { CampaignWatermark, downloadBlob, replaceOpaqueIframes } from "./CampaignWatermark";
 
 const { domToBlob } = vi.hoisted(() => ({ domToBlob: vi.fn() }));
@@ -34,10 +35,11 @@ const consumeItems = async (items: StubItem[]) => {
   await items[0].items["image/png"];
 };
 
-function renderAt(code: string, path = "/") {
+function renderAt(code: string, path = "/", extra?: ReactNode) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <CampaignWatermark code={code} />
+      {extra}
     </MemoryRouter>,
   );
 }
@@ -46,9 +48,9 @@ function shareButton() {
   return screen.getByRole("button", { name: /share your run/i });
 }
 
-async function openPrompt(code: string, path = "/") {
+async function openPrompt(code: string, path = "/", extra?: ReactNode) {
   domToBlob.mockRejectedValue(new Error("capture failed"));
-  renderAt(code, path);
+  renderAt(code, path, extra);
   fireEvent.click(shareButton());
   return screen.findByRole("link", { name: /post on x/i });
 }
@@ -277,6 +279,42 @@ describe("CampaignWatermark share", () => {
       vi.useRealTimers();
     }
   });
+
+  it("closes the prompt when the route changes, so one screen's capture never gets another screen's copy", async () => {
+    const post = await openPrompt("CCT-A7Q2M9XK", "/tokens", <Link to="/doctor">Doctor</Link>);
+    expect(decodedHref(post)).toMatch(/minted a token/i);
+    expect(post).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("link", { name: "Doctor" }));
+
+    expect(screen.queryByRole("link", { name: /post on x/i })).toBeNull();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    expect(shareButton()).toHaveFocus();
+  });
+
+  it("doesn't open the prompt for a capture that finishes after the route changed", async () => {
+    let finish: (b: Blob) => void = () => {};
+    domToBlob.mockReturnValue(new Promise<Blob>((r) => (finish = r)));
+    const write = stubImageClipboard(consumeItems);
+
+    renderAt("CCT-A7Q2M9XK", "/tokens", <Link to="/doctor">Doctor</Link>);
+    fireEvent.click(shareButton());
+    await vi.waitFor(() => expect(domToBlob).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("link", { name: "Doctor" }));
+    expect(shareButton()).toHaveTextContent("Capturing…");
+
+    finish(new Blob(["png"], { type: "image/png" }));
+    await vi.waitFor(() => expect(shareButton()).toHaveTextContent(/^Share/));
+    expect(screen.queryByRole("link", { name: /post on x/i })).toBeNull();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    expect(write).toHaveBeenCalledTimes(1);
+
+    domToBlob.mockRejectedValue(new Error("capture failed"));
+    fireEvent.click(shareButton());
+    expect(decodedHref(await screen.findByRole("link", { name: /post on x/i }))).toMatch(/health-checked/i);
+  });
+
 });
 
 describe("replaceOpaqueIframes", () => {
