@@ -42,7 +42,7 @@ import (
 // the old flag — and the agent then teaches the user the broken flag.
 // The test fails CI on the next push.
 func TestSkillsLint_AgainstLiveCobraSurface(t *testing.T) {
-	root := Build(false, ui.BuildInfo{}) // `canton-devkit localnet` root (direct mode)
+	root := Build(false, ui.BuildInfo{})
 
 	docs, err := skills.List()
 	if err != nil {
