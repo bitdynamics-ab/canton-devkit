@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -183,6 +186,22 @@ describe("Shell — sidebar nav preserves ?instance=", () => {
     expect(container.querySelector(".app-topbar")).not.toBeNull();
     expect(container.querySelector(".app-sidebar")).not.toBeNull();
     expect(container.querySelector(".app-main")).not.toBeNull();
+  });
+});
+
+describe("Shell — narrow topbar", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("hides Report issue with Docs below 720px so the topbar fits a phone", async () => {
+    renderShell("/?instance=demo");
+    await waitFor(() => expect(screen.getByText("demo")).toBeInTheDocument());
+    expect(screen.getByRole("link", { name: /report issue/i })).toHaveClass("app-report-link");
+
+    const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../index.css"), "utf8");
+    const narrow = css.slice(css.indexOf("@media (max-width: 720px)"));
+    const hideRule = /([^{}]+)\{\s*display:\s*none\s*!important;\s*\}/.exec(narrow);
+    const hidden = (hideRule?.[1] ?? "").split(",").map((sel) => sel.trim());
+    expect(hidden).toEqual(expect.arrayContaining([".app-docs-link", ".app-report-link"]));
   });
 });
 

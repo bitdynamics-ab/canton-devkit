@@ -143,6 +143,7 @@ function TopBar() {
       <HealthPill conn={conn} />
       <ThemeToggle />
       <a
+        className="app-report-link"
         href={ISSUES_URL}
         target="_blank"
         rel="noopener noreferrer"

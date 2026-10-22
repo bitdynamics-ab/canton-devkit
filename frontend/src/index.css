@@ -277,7 +277,8 @@ a {
   .app-route-title,
   .app-palette-hint,
   .app-health-pill,
-  .app-docs-link {
+  .app-docs-link,
+  .app-report-link {
     display: none !important;
   }
 
