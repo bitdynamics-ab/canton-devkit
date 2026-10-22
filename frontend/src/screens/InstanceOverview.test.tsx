@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { InstanceOverview } from "./InstanceOverview";
 import { ConfirmHost } from "../components/ConfirmDialog";
@@ -496,10 +496,33 @@ describe("InstanceOverview — tabs", () => {
   });
 });
 
+const realSetImmediate = globalThis.setImmediate;
+
+async function advance(ms: number) {
+  for (let done = 0; done < ms; done += 500) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(Math.min(500, ms - done));
+      await new Promise((resolve) => realSetImmediate(resolve));
+    });
+  }
+}
+
 describe("InstanceOverview — vitals rail", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it("ticks Uptime from created_at without refetching the instance", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-27T09:00:00Z"));
+    const { calls } = setupFetch();
+    render(<InstanceOverview name="demo" statusHint="running" />);
+    const tile = () => within(screen.getByText("Uptime").parentElement!);
+    await vi.waitFor(() => expect(tile().getByText("14m")).toBeInTheDocument());
+    await advance(2 * 60_000);
+    expect(tile().getByText("16m")).toBeInTheDocument();
+    expect(calls.filter((c) => c.url.endsWith("/api/instances/demo"))).toHaveLength(1);
   });
 
   it("does not repeat CPU / Memory in the KPI rail when monitoring is on", async () => {

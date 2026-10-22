@@ -50,6 +50,7 @@ import { decodePrometheusRange, type Series } from "../components/charts/types";
 import { Q, scopeQ, deltaFromSeries } from "./MetricsScreen";
 import { ContainerLogsModal } from "./ContainerLogsModal";
 import { BackupRestore } from "./BackupRestore";
+import { formatUptime } from "./uptime";
 
 // The per-instance Overview. One tabbed surface a developer can wire an
 // app against without leaving: throughput (only when monitoring is on),
@@ -999,6 +1000,8 @@ function VitalsRail({
   const cpu = containers?.cpu_percent;
   const memUsed = containers?.mem_used_bytes;
   const memLimit = containers?.mem_limit_bytes;
+  const now = useNow(UPTIME_TICK_MS);
+  const uptimeText = formatUptime(createdAt, now) || uptime || "—";
 
   // Wallet UIs = the HTTP-probed wallet endpoints; "serving" = probe OK.
   const walletUIs = endpoints.filter(
@@ -1038,7 +1041,7 @@ function VitalsRail({
         {sep}
         <VitalTile
           caption="Uptime"
-          value={uptime ?? "—"}
+          value={uptimeText}
           sub={createdAt ? `since ${createdAt.slice(11, 19)}Z` : undefined}
         />
         {sep}
@@ -1141,6 +1144,17 @@ function VitalTile({
       )}
     </div>
   );
+}
+
+const UPTIME_TICK_MS = 10_000;
+
+function useNow(intervalMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
 }
 
 // Self-ticking relative timestamp so only this label re-renders each second,
