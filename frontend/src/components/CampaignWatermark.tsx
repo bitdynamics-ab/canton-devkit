@@ -183,7 +183,7 @@ export function CampaignWatermark({ code }: { code: string }) {
   const prompt = state && state !== "capturing" ? PROMPT[state] : null;
 
   useEffect(() => {
-    if (!prompt) return;
+    if (!prompt || document.querySelector('[aria-modal="true"]')) return;
     const active = document.activeElement;
     if (active === shareRef.current || active === document.body || active === null) {
       postRef.current?.focus();

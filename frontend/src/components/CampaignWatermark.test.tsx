@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { Link, MemoryRouter } from "react-router-dom";
 import { CampaignWatermark, downloadBlob, replaceOpaqueIframes } from "./CampaignWatermark";
+import { ConfirmHost, confirmDialog } from "./ConfirmDialog";
 
 const { domToBlob } = vi.hoisted(() => ({ domToBlob: vi.fn() }));
 vi.mock("modern-screenshot", () => ({ domToBlob }));
@@ -315,6 +316,32 @@ describe("CampaignWatermark share", () => {
     expect(decodedHref(await screen.findByRole("link", { name: /post on x/i }))).toMatch(/health-checked/i);
   });
 
+  it.each([
+    ["the page", () => (document.activeElement as HTMLElement | null)?.blur()],
+    ["Share", () => shareButton().focus()],
+  ])("leaves focus behind an open modal dialog alone when it is on %s", async (_, placeFocus) => {
+    let finish: (b: Blob) => void = () => {};
+    domToBlob.mockReturnValue(new Promise<Blob>((r) => (finish = r)));
+    stubImageClipboard(consumeItems);
+
+    renderAt("CCT-A7Q2M9XK", "/", <ConfirmHost />);
+    const share = shareButton();
+    share.focus();
+    fireEvent.click(share);
+    await vi.waitFor(() => expect(domToBlob).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      void confirmDialog({ title: "Remove instance?", body: "This deletes it." });
+    });
+    expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
+    placeFocus();
+    const before = document.activeElement;
+
+    finish(new Blob(["png"], { type: "image/png" }));
+    const post = await screen.findByRole("link", { name: /post on x/i });
+    expect(post).not.toHaveFocus();
+    expect(document.activeElement).toBe(before);
+  });
 });
 
 describe("replaceOpaqueIframes", () => {
