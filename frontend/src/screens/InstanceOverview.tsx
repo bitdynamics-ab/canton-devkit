@@ -392,13 +392,11 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
           {running && monitoring === "on" && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 14, alignItems: "start" }}>
               <ThroughputPanel name={name} tps={tps} />
-              <KpiRail latencyMs={tps.latencyMs} acs={acs} containers={containers} />
+              <KpiRail latencyMs={tps.latencyMs} acs={acs} />
             </div>
           )}
           {running && monitoring === "off" && (
             <MonitoringOffStrip
-              containers={containers}
-              uptime={instance?.uptime}
               busy={busy}
               onEnable={() =>
                 act(
@@ -789,9 +787,6 @@ function ThroughputPanel({
   name: string;
   tps: { value?: number; series?: Series; delta?: number; err?: string };
 }) {
-  // The KPI rail (Latency avg / Active contracts / CPU / Memory) renders
-  // beside this panel — see KpiRail. p99 is NaN on Splice 0.6.x (+Inf-only
-  // histogram) so latency shows the real mediator avg instead.
   const delta = tps.delta;
   const deltaColor = delta === undefined ? W.dim : delta > 0 ? W.ok : delta < 0 ? W.dim : W.dim;
   const deltaText =
@@ -871,24 +866,13 @@ function gib(bytes: number): string {
   return (bytes / (1 << 30)).toFixed(1);
 }
 
-// KpiRail is the read-out card beside the throughput chart. Every tile has a
-// real source: avg mediator latency (Prometheus; p99 is nil on 0.6.x so we
-// show avg), active contracts (ledger ACS snapshot, sv view, capped → "N+"),
-// and CPU/Memory (docker stats, summed across the project). Each value falls
-// back to an em-dash (never a fabricated 0) when unsampled.
 function KpiRail({
   latencyMs,
   acs,
-  containers,
 }: {
   latencyMs?: number;
   acs?: { count: number; capped: boolean };
-  containers: ContainersResponse | null;
 }) {
-  const cpu = containers?.cpu_percent;
-  const memUsed = containers?.mem_used_bytes;
-  const memLimit = containers?.mem_limit_bytes;
-  const n = containers?.containers.length ?? 0;
   const rows: Array<{ label: string; sub: string; value: string; unit: string; tip?: string }> = [
     {
       label: "Latency avg",
@@ -903,20 +887,6 @@ function KpiRail({
       value: acs ? (acs.capped ? "1000" : String(acs.count)) : "—",
       unit: acs?.capped ? "+" : "",
       tip: acs == null ? "ledger ACS snapshot unavailable" : acs.capped ? "capped at 1000 — more exist" : undefined,
-    },
-    {
-      label: "CPU",
-      sub: `${n} container${n === 1 ? "" : "s"}`,
-      value: cpu != null ? cpu.toFixed(0) : "—",
-      unit: cpu != null ? "%" : "",
-      tip: cpu == null ? "docker stats unavailable" : undefined,
-    },
-    {
-      label: "Memory",
-      sub: memLimit ? "of granted" : "in use",
-      value: memUsed != null ? gib(memUsed) : "—",
-      unit: memUsed != null ? (memLimit ? `/ ${gib(memLimit)} GB` : "GB") : "",
-      tip: memUsed == null ? "docker stats unavailable" : undefined,
     },
   ];
   return (
@@ -945,36 +915,25 @@ function KpiRail({
         </div>
       ))}
       <div style={{ marginTop: "auto", padding: "9px 14px", background: W.sunken, borderTop: `1px solid ${W.border}`, fontFamily: wMono, fontSize: fs.label, color: W.faint }}>
-        docker stats · ledger ACS · metrics
+        ledger ACS · metrics
       </div>
     </div>
   );
 }
 
 function MonitoringOffStrip({
-  containers,
-  uptime,
   busy,
   onEnable,
 }: {
-  containers: ContainersResponse | null;
-  uptime?: string;
   busy: boolean;
   onEnable: () => void;
 }) {
-  // Docker-answerable facts ride here even with monitoring off: live
-  // CPU/Memory (from `docker stats`), container count + healthy, and uptime.
-  // Only the ledger metrics (throughput, latency) need Prometheus.
-  const total = containers?.containers.length ?? 0;
-  const healthy = containers?.healthy_count ?? 0;
-  const cpu = containers?.cpu_percent;
-  const memUsed = containers?.mem_used_bytes;
-  const memLimit = containers?.mem_limit_bytes;
   return (
     <div
       style={{
         display: "flex",
         alignItems: "center",
+        justifyContent: "space-between",
         gap: 16,
         padding: "10px 14px",
         background: W.surface,
@@ -982,79 +941,29 @@ function MonitoringOffStrip({
         borderRadius: R.card,
       }}
     >
-      <Stat label="cpu" value={cpu != null ? `${cpu.toFixed(0)}%` : "—"} />
-      <Divider />
-      <Stat
-        label="memory"
-        value={memUsed != null ? (memLimit ? `${gib(memUsed)} / ${gib(memLimit)} GB` : `${gib(memUsed)} GB`) : "—"}
-      />
-      <Divider />
-      <Stat label="containers" value={String(total)} suffix={`${healthy} healthy`} />
-      <Divider />
-      <Stat label="uptime" value={uptime ?? "—"} />
-      <span
+      <span style={{ fontSize: fs.meta, color: W.faint }}>
+        Throughput and latency metrics not collected
+      </span>
+      <button
+        type="button"
+        onClick={onEnable}
+        disabled={busy}
         style={{
-          marginLeft: "auto",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 10,
+          appearance: "none",
+          background: "transparent",
+          border: "none",
+          cursor: busy ? "default" : "pointer",
+          padding: 0,
+          fontFamily: "inherit",
+          fontSize: fs.meta,
+          fontWeight: 500,
+          color: W.brandText,
         }}
       >
-        <span style={{ fontSize: fs.meta, color: W.faint }}>metrics not collected</span>
-        <button
-          type="button"
-          onClick={onEnable}
-          disabled={busy}
-          style={{
-            appearance: "none",
-            background: "transparent",
-            border: "none",
-            cursor: busy ? "default" : "pointer",
-            padding: 0,
-            fontFamily: "inherit",
-            fontSize: fs.meta,
-            fontWeight: 500,
-            color: W.brandText,
-          }}
-        >
-          {busy ? "Enabling…" : "Enable monitoring"}
-        </button>
-      </span>
+        {busy ? "Enabling…" : "Enable monitoring"}
+      </button>
     </div>
   );
-}
-
-function Stat({
-  label,
-  value,
-  suffix,
-}: {
-  label: string;
-  value: string;
-  suffix?: string;
-}) {
-  return (
-    <span style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
-      <span style={{ ...wideCaps, fontSize: fs.micro, color: W.dim } as CSSProperties}>
-        {label}
-      </span>
-      <span
-        style={{
-          fontFamily: wMono,
-          fontSize: fs.body,
-          color: W.text,
-          fontVariantNumeric: "tabular-nums",
-        }}
-      >
-        {value}
-      </span>
-      {suffix && <span style={{ fontSize: fs.label, color: W.faint }}>{suffix}</span>}
-    </span>
-  );
-}
-
-function Divider() {
-  return <span style={{ width: 1, height: 18, background: W.border }} />;
 }
 
 // ── Instance vitals rail ────────────────────────────────────

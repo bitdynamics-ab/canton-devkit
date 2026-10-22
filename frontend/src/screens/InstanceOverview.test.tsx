@@ -495,3 +495,32 @@ describe("InstanceOverview — tabs", () => {
     expect(await screen.findByRole("button", { name: /download snapshot/i })).toBeInTheDocument();
   });
 });
+
+describe("InstanceOverview — vitals rail", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("does not repeat CPU / Memory in the KPI rail when monitoring is on", async () => {
+    setupFetch({ summary: { tps: 12.9 } });
+    render(<InstanceOverview name="demo" statusHint="running" />);
+    await waitFor(() => expect(screen.getByText("12.9")).toBeInTheDocument());
+    expect(screen.getByText("Latency avg")).toBeInTheDocument();
+    expect(screen.getByText("Active contracts")).toBeInTheDocument();
+    expect(screen.getAllByText(/^cpu$/i)).toHaveLength(1);
+    expect(screen.getAllByText(/^memory$/i)).toHaveLength(1);
+  });
+
+  it("keeps only the enable-monitoring call to action in the metrics-off strip", async () => {
+    setupFetch({ summary: "off" });
+    render(<InstanceOverview name="demo" statusHint="running" />);
+    const strip = (await screen.findByText(/metrics not collected/i)).parentElement!;
+    expect(within(strip).getByRole("button", { name: /enable monitoring/i })).toBeInTheDocument();
+    expect(within(strip).queryByText(/cpu|memory|uptime|containers/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/^cpu$/i)).toHaveLength(1);
+    expect(screen.getAllByText(/^memory$/i)).toHaveLength(1);
+    expect(screen.getAllByText(/^uptime$/i)).toHaveLength(1);
+    expect(screen.getAllByText(/^containers$/i)).toHaveLength(2);
+  });
+});
