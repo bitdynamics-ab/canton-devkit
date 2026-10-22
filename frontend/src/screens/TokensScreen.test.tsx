@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
 import { TokensScreen, createErrorText } from "./TokensScreen";
 import { ApiError } from "../api";
+import { STANDALONE_CLI, expectNoDpmHint, setStandaloneCLI } from "../test/cliPrefix";
 
 // TokensScreen tests — smoke that the screen mounts under the shared
 // providers and the list/empty/modal paths render.
@@ -20,7 +21,7 @@ function stubFetch(
     source: "ledger" | "registry";
     rows: Array<{ party: string; amount: string }>;
   },
-  opts?: { previewFails?: boolean; summaryFails?: boolean },
+  opts?: { previewFails?: boolean; summaryFails?: boolean; demoErrorCode?: string },
 ) {
   vi.stubGlobal(
     "fetch",
@@ -149,6 +150,9 @@ function stubFetch(
         return json({ schema_version: 1, source: src, holdings: rows });
       }
       if (url.includes("/api/tokens/demo")) {
+        if (opts?.demoErrorCode) {
+          return json({ code: opts.demoErrorCode, error: "precondition failed" }, 412);
+        }
         return json(
           {
             token: {
@@ -606,6 +610,58 @@ describe("TokensScreen", () => {
   });
 });
 
+describe("TokensScreen CLI hints", () => {
+  it("prints runnable token ls and token balance footers for the selected instance", async () => {
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    expect(
+      await screen.findByText("dpm localnet token balance --instance demo --instrument RTK", undefined, { timeout: 4000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("dpm localnet token ls --instance demo")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("--symbol RTK");
+  });
+
+  it("names the standalone binary in the footers when the server reports it", async () => {
+    setStandaloneCLI();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    expect(
+      await screen.findByText(`${STANDALONE_CLI} token balance --instance demo --instrument RTK`, undefined, { timeout: 4000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(`${STANDALONE_CLI} token ls --instance demo`)).toBeInTheDocument();
+    expectNoDpmHint();
+  });
+
+  it("names the standalone binary in the empty-state demo hint", async () => {
+    setStandaloneCLI();
+    stubFetch([]);
+    renderTokens();
+    expect(
+      await screen.findByText(`${STANDALONE_CLI} token demo --instance demo`, undefined, { timeout: 4000 }),
+    ).toBeInTheDocument();
+    expectNoDpmHint();
+  });
+
+  it.each([
+    ["NEEDS_V2_LOCALNET", "dpm localnet"],
+    ["TEST_TOKEN_DAR_UNAVAILABLE", "dpm localnet"],
+    ["NEEDS_V2_LOCALNET", STANDALONE_CLI],
+    ["TEST_TOKEN_DAR_UNAVAILABLE", STANDALONE_CLI],
+  ])("turns a %s demo launch into a runnable %s up hint", async (code, cli) => {
+    const user = userEvent.setup();
+    if (cli === STANDALONE_CLI) setStandaloneCLI();
+    stubFetch([], undefined, { demoErrorCode: code });
+    renderTokens();
+    await user.click(await screen.findByRole("button", { name: /Launch demo token/i }, { timeout: 4000 }));
+    const status = await screen.findByRole("status", {}, { timeout: 4000 });
+    await waitFor(() =>
+      expect(status.textContent).toContain(`(${cli} up <name> --version 0.6.12)`),
+    );
+    expect(status.textContent).not.toContain("(localnet up");
+    if (cli === STANDALONE_CLI) expectNoDpmHint();
+  });
+});
+
 // createErrorText: the on-ledger create 412 (TEST_TOKEN_DAR_UNAVAILABLE)
 // must surface the actionable stable-version remedy in the create
 // modal, not the raw backend message — matching the NEEDS_V2_LOCALNET
@@ -617,6 +673,16 @@ describe("createErrorText", () => {
       error: "test-token DAR not available for this Splice version",
     });
     expect(createErrorText(e)).toMatch(/0\.6\.11 or newer/);
+    expect(createErrorText(e)).toContain("(dpm localnet up <name> --version 0.6.12)");
+  });
+  it("names the standalone binary in the DAR remedy when the server reports it", () => {
+    setStandaloneCLI();
+    const e = new ApiError(412, {
+      code: "TEST_TOKEN_DAR_UNAVAILABLE",
+      error: "test-token DAR not available for this Splice version",
+    });
+    expect(createErrorText(e)).toContain(`(${STANDALONE_CLI} up <name> --version 0.6.12)`);
+    expect(createErrorText(e)).not.toContain("dpm localnet");
   });
   it("passes the raw server message through for other API errors", () => {
     const e = new ApiError(409, { code: "SYMBOL_IN_USE", error: "symbol RTK already in use" });

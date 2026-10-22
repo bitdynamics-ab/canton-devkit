@@ -42,7 +42,7 @@ import {
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { useIdentityRole } from "../shell/useIdentityRole";
-import { useCLIPrefix } from "../buildInfo";
+import { cliPrefix, useCLIPrefix } from "../buildInfo";
 import { W, wMono, tableCaps, wideCaps, tint, R, FAST, fs, ROLE_COLOR } from "../tokens";
 import { Button } from "../components/Button";
 import { MonoId } from "../components/MonoId";
@@ -92,15 +92,22 @@ const BURN_DISABLED_REASON =
   "Burn is only available on a native CIP-0112 v2 token created on this " +
   "instance. Amulet has no burn surface.";
 
+function v2UpCommand(cli: string): string {
+  return `${cli} up <name> --version 0.6.12`;
+}
+
 // Remediation for the on-ledger create 412 (TEST_TOKEN_DAR_UNAVAILABLE).
-const TOKEN_DAR_UNAVAILABLE_HINT =
-  "The test-token DAR isn't published for this instance's Splice version, so on-ledger " +
-  "V2 tokens can't be created here. Bring up Splice 0.6.11 or newer " +
-  "(localnet up --version 0.6.12) and re-run.";
+function tokenDarUnavailableHint(cli: string): string {
+  return (
+    "The test-token DAR isn't published for this instance's Splice version, so on-ledger " +
+    "V2 tokens can't be created here. Bring up Splice 0.6.11 or newer " +
+    `(${v2UpCommand(cli)}) and re-run.`
+  );
+}
 
 export function createErrorText(e: unknown): string {
   if (e instanceof ApiError && e.code === "TEST_TOKEN_DAR_UNAVAILABLE") {
-    return TOKEN_DAR_UNAVAILABLE_HINT;
+    return tokenDarUnavailableHint(cliPrefix());
   }
   return e instanceof ApiError ? e.message : "create failed";
 }
@@ -489,11 +496,11 @@ export function TokensScreen() {
         tone: "warn",
         text:
           "This action needs a running Splice 0.6.11 or newer LocalNet " +
-          "(localnet up --version 0.6.12).",
+          `(${v2UpCommand(cli)}).`,
       };
     }
     if (e instanceof ApiError && e.code === "TEST_TOKEN_DAR_UNAVAILABLE") {
-      return { tone: "warn", text: TOKEN_DAR_UNAVAILABLE_HINT };
+      return { tone: "warn", text: tokenDarUnavailableHint(cli) };
     }
     return { tone: "err", text: e instanceof ApiError ? e.message : fallback };
   }
@@ -688,7 +695,7 @@ export function TokensScreen() {
               );
             })}
             <div style={{ padding: "10px 14px", background: W.sunken, borderTop: `1px solid ${W.border}`, fontFamily: wMono, fontSize: fs.label, color: W.faint }}>
-              {cli} token list
+              {cli} token ls --instance {instance}
             </div>
           </div>
 
@@ -1607,7 +1614,7 @@ function HoldersCard({
         </tbody>
       </table>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "9px 14px", background: W.sunken, borderTop: `1px solid ${W.border}`, fontFamily: wMono, fontSize: fs.label, color: W.faint }}>
-        <span>{cli} token balance --symbol {sym}</span>
+        <span>{cli} token balance --instance {instance} --instrument {sym}</span>
         <span>{source === "registry" ? "registry balances" : "ledger balances"}{scannedAt && ` · scanned ${scannedAt}`}</span>
       </div>
     </div>
