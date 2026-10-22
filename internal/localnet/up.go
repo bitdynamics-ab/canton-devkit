@@ -792,7 +792,7 @@ func renderWelcome(out io.Writer, name, spliceVersion string, state *registry.St
 
 	tryNext := []term.NextStep{
 		{Label: "Status", Command: cliprefix.Cmd("status " + name)},
-		{Label: "Env", Command: fmt.Sprintf("eval $(%s)", cliprefix.Cmd("env "+name))},
+		{Label: "Env", Command: fmt.Sprintf(`eval "$(%s)"`, cliprefix.Cmd("env "+name))},
 		{Label: "Live ACS", Command: cliprefix.Cmd("contracts watch --name " + name)},
 		{Label: "Upload DAR", Command: cliprefix.Cmd("dar upload <path> --name " + name)},
 		{Label: "Stop", Command: cliprefix.Cmd("down " + name)},

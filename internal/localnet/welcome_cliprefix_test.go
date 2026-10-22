@@ -32,7 +32,7 @@ func TestRenderWelcome_NamesTheLaunchCommand(t *testing.T) {
 			for _, w := range []string{
 				"(" + tc.want + " ui)",
 				tc.want + " status demo",
-				"eval $(" + tc.want + " env demo)",
+				`eval "$(` + tc.want + ` env demo)"`,
 				tc.want + " contracts watch --name demo",
 				tc.want + " dar upload <path> --name demo",
 				tc.want + " down demo",
