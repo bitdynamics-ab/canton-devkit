@@ -815,7 +815,6 @@ export function TokensScreen() {
                         contracts={contracts}
                         onToggle={toggleExpand}
                         source={holdingsSource}
-                        sym={sym}
                         scannedAt={scannedAt}
                         instance={instance}
                       />
@@ -1507,7 +1506,7 @@ function statAmount(raw: string): string {
 // tables — "holder distribution" appeared twice; now once, with the UTXO
 // breakdown nested under the holder it belongs to.
 function HoldersCard({
-  s, aliases, adminParty, expanded, contracts, onToggle, source, sym, scannedAt, instance,
+  s, aliases, adminParty, expanded, contracts, onToggle, source, scannedAt, instance,
 }: {
   s: InstrumentSummary;
   aliases: AliasMap;
@@ -1516,7 +1515,6 @@ function HoldersCard({
   contracts: HoldingContract[];
   onToggle: (party: string) => void;
   source: HoldingSource;
-  sym: string;
   scannedAt: string;
   instance: string;
 }) {
@@ -1614,7 +1612,7 @@ function HoldersCard({
         </tbody>
       </table>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "9px 14px", background: W.sunken, borderTop: `1px solid ${W.border}`, fontFamily: wMono, fontSize: fs.label, color: W.faint }}>
-        <span>{cli} token balance --instance {instance} --instrument {sym}</span>
+        <span>{cli} token balances --instance {instance}</span>
         <span>{source === "registry" ? "registry balances" : "ledger balances"}{scannedAt && ` · scanned ${scannedAt}`}</span>
       </div>
     </div>

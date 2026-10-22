@@ -630,7 +630,7 @@ describe("TokensScreen CLI hints", () => {
     stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
     renderTokens();
     expect(
-      await screen.findByText("dpm localnet token balance --instance demo --instrument RTK", undefined, { timeout: 4000 }),
+      await screen.findByText("dpm localnet token balances --instance demo", undefined, { timeout: 4000 }),
     ).toBeInTheDocument();
     expect(screen.getByText("dpm localnet token ls --instance demo")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("--symbol RTK");
@@ -641,7 +641,7 @@ describe("TokensScreen CLI hints", () => {
     stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
     renderTokens();
     expect(
-      await screen.findByText(`${STANDALONE_CLI} token balance --instance demo --instrument RTK`, undefined, { timeout: 4000 }),
+      await screen.findByText(`${STANDALONE_CLI} token balances --instance demo`, undefined, { timeout: 4000 }),
     ).toBeInTheDocument();
     expect(screen.getByText(`${STANDALONE_CLI} token ls --instance demo`)).toBeInTheDocument();
     expectNoDpmHint();
