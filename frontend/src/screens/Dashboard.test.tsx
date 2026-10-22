@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { Dashboard } from "./Dashboard";
 import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
 import { CreateInstanceProvider } from "../shell/useCreateInstance";
+import { STANDALONE_CLI, expectNoDpmHint, setStandaloneCLI } from "../test/cliPrefix";
 
 // The Overview ("/") is detail-only: it renders exactly one instance —
 // the selected one — or an empty/error state. Fleet-level table behavior
@@ -180,5 +181,17 @@ describe("Dashboard (detail-only Overview)", () => {
     await waitFor(() => {
       expect(screen.getByText(/failed to load instances/i)).toBeInTheDocument();
     });
+  });
+});
+
+describe("Dashboard CLI prefix", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("names the standalone binary in the empty-state up hint", async () => {
+    setStandaloneCLI();
+    mockListResponse([]);
+    renderDashboard();
+    expect(await screen.findByText(`${STANDALONE_CLI} up --name demo`)).toBeInTheDocument();
+    expectNoDpmHint();
   });
 });

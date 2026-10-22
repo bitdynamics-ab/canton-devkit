@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { CreateLocalNetModal } from "./CreateLocalNetModal";
+import { STANDALONE_CLI, expectNoDpmHint, setStandaloneCLI } from "../test/cliPrefix";
 
 function Providers({ children }: { children: React.ReactNode }) {
   return <MemoryRouter>{children}</MemoryRouter>;
@@ -156,5 +157,26 @@ describe("CreateLocalNetModal observability toggles", () => {
     await waitFor(() => expect(captured.lastPostBody).toBeDefined());
     const body = captured.lastPostBody as { profiles?: string[] };
     expect(body.profiles ?? []).not.toContain("tokens-v2");
+  });
+});
+
+describe("CreateLocalNetModal CLI equivalent", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("names the standalone binary when the server reports it", async () => {
+    setStandaloneCLI();
+    stubFetch({});
+    render(
+      <Providers>
+        <CreateLocalNetModal open onClose={() => {}} onCreated={() => {}} />
+      </Providers>,
+    );
+    const nameInput = await screen.findByPlaceholderText(/demo, pr-841/);
+    fireEvent.change(nameInput, { target: { value: "demo" } });
+    const hint = screen.getByText(/CLI equivalent:/);
+    await waitFor(() =>
+      expect(hint.textContent).toContain(`${STANDALONE_CLI} up --name demo --version`),
+    );
+    expectNoDpmHint();
   });
 });

@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { PreflightReport } from "../api";
 import { DoctorScreen } from "./DoctorScreen";
+import { STANDALONE_CLI, expectNoDpmHint, setStandaloneCLI } from "../test/cliPrefix";
 
 // DoctorScreen tests — the Web UI surface for `dpm localnet doctor`.
 //
@@ -186,5 +187,22 @@ describe("DoctorScreen", () => {
         calls.some((c) => c.url.includes("/api/doctor?version=0.5.9")),
       ).toBe(true);
     });
+  });
+});
+
+describe("DoctorScreen CLI prefix", () => {
+  it("names the standalone binary in the doctor hint when the server reports it", async () => {
+    setStandaloneCLI();
+    recordingFetch(({ url }) => {
+      if (url.startsWith("/api/doctor")) return json(PASS_REPORT);
+      if (url.startsWith("/api/splice/versions")) return json(VERSIONS_RESP);
+      return new Response("not found", { status: 404 });
+    });
+
+    render(<DoctorScreen />);
+
+    expect(await screen.findByText("Docker daemon")).toBeTruthy();
+    expect(screen.getByText(`${STANDALONE_CLI} doctor`)).toBeTruthy();
+    expectNoDpmHint();
   });
 });

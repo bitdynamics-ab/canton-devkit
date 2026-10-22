@@ -8,6 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
 import { DARScreen } from "./DARScreen";
+import { STANDALONE_CLI, expectNoDpmHint, setStandaloneCLI } from "../test/cliPrefix";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -449,5 +450,27 @@ describe("DARScreen", () => {
     const switches = screen.getAllByRole("switch");
     // Three vetting switches + three "vet on upload" switches = 6 minimum.
     expect(switches.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("DARScreen CLI prefix", () => {
+  it("names the standalone binary in the dar watch hint", async () => {
+    setStandaloneCLI();
+    vi.stubGlobal("EventSource", FakeEventSource as unknown as typeof EventSource);
+    stubFetch({
+      "/api/version": { name: "canton-devkit", schema_version: 1 },
+      "/api/instances": {
+        schema_version: 1,
+        instances: [{ name: "demo", status: "running" }],
+      },
+      "/api/instances/demo/dar": fakeDAR,
+    });
+
+    render(withProviders(<DARScreen />));
+
+    expect(
+      await screen.findByText(`${STANDALONE_CLI} dar watch --instance demo`),
+    ).toBeInTheDocument();
+    expectNoDpmHint();
   });
 });

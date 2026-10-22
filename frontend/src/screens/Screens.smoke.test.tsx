@@ -14,6 +14,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
+import { STANDALONE_CLI, expectNoDpmHint, setStandaloneCLI } from "../test/cliPrefix";
 
 // InstanceSelectionProvider uses useSearchParams, which only works
 // inside a <Router>; the existing tests (Dashboard.test.tsx) wrap
@@ -267,6 +268,43 @@ describe("WalletScreen smoke", () => {
       expect(alert.textContent).toContain("dpm localnet up --name demo");
     });
     expect(document.querySelector("iframe")).toBeNull();
+  });
+
+  it("names the standalone binary in the unreachable-wallet remedy", async () => {
+    setStandaloneCLI();
+    stubFetch({
+      name: "demo",
+      endpoints: [
+        {
+          key: "app_provider_ui",
+          label: "Wallet · app-provider",
+          url: "http://localhost:4485",
+          port: 4485,
+          scheme: "http",
+          reachability: "unreachable",
+        },
+      ],
+    });
+    render(
+      <Providers>
+        <WalletScreen />
+      </Providers>,
+    );
+    expect(await screen.findByText(`${STANDALONE_CLI} up --name demo`)).toBeInTheDocument();
+    expectNoDpmHint();
+  });
+
+  it("names the standalone binary when no wallet endpoint is recorded", async () => {
+    setStandaloneCLI();
+    stubFetch({ name: "demo", endpoints: [] });
+    render(
+      <Providers>
+        <WalletScreen />
+      </Providers>,
+    );
+    expect(await screen.findByText(/No wallet endpoint recorded/)).toBeInTheDocument();
+    expect(screen.getByText(`${STANDALONE_CLI} up --name demo`)).toBeInTheDocument();
+    expectNoDpmHint();
   });
 
   // The fixture label is deliberately not "Wallet · <role>" — wallet

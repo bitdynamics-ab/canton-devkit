@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useSearchParams } from "react-router-dom";
 import { AllInstances } from "./AllInstances";
 import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
 import { CreateInstanceProvider } from "../shell/useCreateInstance";
+import { STANDALONE_CLI, expectNoDpmHint, setStandaloneCLI } from "../test/cliPrefix";
 
 // Fleet-management surface (route /instances): the census + table + New
 // instance + row-to-Overview navigation that used to live on the Dashboard.
@@ -135,5 +136,29 @@ describe("AllInstances", () => {
     await waitFor(() => {
       expect(screen.getByText(/no localnet instances/i)).toBeInTheDocument();
     });
+  });
+});
+
+describe("AllInstances CLI prefix", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("names the standalone binary in the doctor and list hints", async () => {
+    setStandaloneCLI();
+    mockListResponse([
+      { name: "demo", status: "running" },
+      { name: "broken", status: "failed" },
+    ]);
+    renderAll();
+    expect(await screen.findByText(`${STANDALONE_CLI} doctor`)).toBeInTheDocument();
+    expect(screen.getByText(`${STANDALONE_CLI} list`)).toBeInTheDocument();
+    expectNoDpmHint();
+  });
+
+  it("names the standalone binary in the empty-state up hint", async () => {
+    setStandaloneCLI();
+    mockListResponse([]);
+    renderAll();
+    expect(await screen.findByText(`${STANDALONE_CLI} up --name demo`)).toBeInTheDocument();
+    expectNoDpmHint();
   });
 });
