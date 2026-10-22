@@ -99,7 +99,7 @@ func handleDoctor(w http.ResponseWriter, r *http.Request) {
 // is the actionable line operators act on.
 func asDoctorReport(report types.PreflightReport) types.PreflightReport {
 	if report.OK && !hasWarnings(report) {
-		report.Summary = "All checks passed — host is ready for `localnet up`"
+		report.Summary = localnet.PreflightReadySummary()
 	}
 	return report
 }

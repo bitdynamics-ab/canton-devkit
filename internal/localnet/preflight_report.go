@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
 )
 
@@ -68,9 +69,13 @@ func PreflightReportFromDocker(dockerRep *docker.Report) types.PreflightReport {
 		rep.Summary = fmt.Sprintf("0 issues · %d warning%s — host is ready (advisories above)",
 			warned, preflightPluralS(warned))
 	default:
-		rep.Summary = "All checks passed — host is ready for `localnet up`"
+		rep.Summary = PreflightReadySummary()
 	}
 	return rep
+}
+
+func PreflightReadySummary() string {
+	return "All checks passed — host is ready for `" + cliprefix.Cmd("up <name>") + "`"
 }
 
 // preflightPluralS returns "s" when n != 1.

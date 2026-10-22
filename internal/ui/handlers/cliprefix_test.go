@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
+	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
@@ -78,6 +81,44 @@ func TestContracts_MissingPortHintFollowsPrefix(t *testing.T) {
 			}
 			if strings.Contains(hint, tc.other) {
 				t.Errorf("remediation %q must not mention %q", hint, tc.other)
+			}
+		})
+	}
+}
+
+func TestHandleDoctor_AllPassSummaryFollowsPrefix(t *testing.T) {
+	for _, tc := range []struct{ set, prefix, other string }{
+		{"", "dpm localnet", "canton-devkit localnet"},
+		{"canton-devkit localnet", "canton-devkit localnet", "dpm localnet"},
+	} {
+		t.Run(tc.prefix, func(t *testing.T) {
+			if tc.set != "" {
+				t.Cleanup(cliprefix.Set(tc.set))
+			}
+			stubCollectDoctor(t, func(context.Context, localnet.DoctorOptions) (types.PreflightReport, error) {
+				return types.PreflightReport{
+					SchemaVersion: types.SchemaVersion,
+					OK:            true,
+					Sections: []types.PreflightSection{{Title: "System", Checks: []types.PreflightCheck{
+						{Label: "Docker daemon", Result: "pass"},
+					}}},
+				}, nil
+			})
+			resp, err := http.Get(doctorMux(t).URL + "/api/doctor")
+			if err != nil {
+				t.Fatalf("GET /api/doctor: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			var rep types.PreflightReport
+			if err := json.NewDecoder(resp.Body).Decode(&rep); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			want := "All checks passed — host is ready for `" + tc.prefix + " up <name>`"
+			if rep.Summary != want {
+				t.Errorf("summary = %q, want %q", rep.Summary, want)
+			}
+			if strings.Contains(rep.Summary, tc.other) {
+				t.Errorf("summary %q must not mention %q", rep.Summary, tc.other)
 			}
 		})
 	}

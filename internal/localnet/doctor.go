@@ -7,6 +7,7 @@ import (
 	"runtime"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
@@ -118,7 +119,7 @@ func fixedPortAvailabilityCheck(listen func(string, string) (net.Listener, error
 			Name:        "Fixed ports (--port-base)",
 			Status:      docker.StatusFail,
 			Detail:      fmt.Sprintf("ports already in use for base %d: %v", base, busy),
-			Remediation: fmt.Sprintf("Free these ports (lsof -i :<port>) or pick a different --port-base; `up --port-base %d` would fail until they're free.", base),
+			Remediation: fmt.Sprintf("Free these ports (lsof -i :<port>) or pick a different --port-base; `%s` would fail until they're free.", cliprefix.Cmd(fmt.Sprintf("up <name> --port-base %d", base))),
 		}
 	}
 	return docker.CheckResult{
@@ -149,7 +150,7 @@ func platformSupportCheck(goos, goarch string) docker.CheckResult {
 		Name:        "Platform support",
 		Status:      docker.StatusWarn,
 		Detail:      key + " is not in DevKit's tested release matrix",
-		Remediation: "DevKit only orchestrates Docker, so this platform may still work. Report issues with `localnet doctor` output.",
+		Remediation: "DevKit only orchestrates Docker, so this platform may still work. Report issues with `" + cliprefix.Cmd("doctor") + "` output.",
 	}
 }
 
@@ -169,7 +170,7 @@ func ephemeralPortAvailabilityCheck(listen func(string, string) (net.Listener, e
 				Name:        "Ephemeral loopback ports",
 				Status:      docker.StatusWarn,
 				Detail:      "could not allocate a free loopback port: " + err.Error(),
-				Remediation: "DevKit binds ephemeral 127.0.0.1 ports for services; free ports or loosen sandbox restrictions before running `localnet up`.",
+				Remediation: "DevKit binds ephemeral 127.0.0.1 ports for services; free ports or loosen sandbox restrictions before running `" + cliprefix.Cmd("up <name>") + "`.",
 			}
 		}
 		held = append(held, ln)

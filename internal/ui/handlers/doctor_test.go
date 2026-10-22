@@ -147,7 +147,7 @@ func TestHandleDoctor_FailingHostStillReturns200(t *testing.T) {
 	}
 	// The handler must NOT overwrite the failing summary with the
 	// all-pass line.
-	if rep.Summary == "All checks passed — host is ready for `localnet up`" {
+	if rep.Summary == localnet.PreflightReadySummary() {
 		t.Error("failing summary overwritten with all-pass line")
 	}
 }

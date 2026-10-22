@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/telemetry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
@@ -32,7 +33,7 @@ func buildDoctor() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check host readiness for LocalNet (docker, resources, network)",
-		Long: `Runs the same preflight checks ` + "`localnet up`" + ` runs before
+		Long: `Runs the same preflight checks ` + "`" + cliprefix.Cmd("up") + "`" + ` runs before
 bringing up a new instance — Docker CLI, daemon reachability,
 Compose v2, disk + memory headroom — but reports them in a
 diagnostic format with remediation hints for the failures.
