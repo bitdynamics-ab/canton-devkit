@@ -135,8 +135,6 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
     if (snapshotHold && status && status !== "running") setSnapshotHold(null);
   }, [status, snapshotHold]);
 
-  // Shared container poll — the header pill, the metrics-off strip, and
-  // the Containers panel all read one poll instead of three.
   const [containers, setContainers] = useState<ContainersResponse | null>(null);
   const [containersAbsent, setContainersAbsent] = useState(false);
   const [containersAt, setContainersAt] = useState<number | null>(null);
