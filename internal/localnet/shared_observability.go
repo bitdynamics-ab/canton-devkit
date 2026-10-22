@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"testing"
 
 	"github.com/bitdynamics-ab/canton-devkit/assets"
 	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
@@ -61,9 +62,24 @@ type sharedComposeOps interface {
 	DiscoverPort(ctx context.Context, service string, containerPort int) (int, error)
 }
 
+// allowSharedStackInTestsEnv opts a `go test` binary into the real shared
+// stack (e.g. an integration test). Unset, newSharedRunner refuses Docker.
+const allowSharedStackInTestsEnv = "CANTON_DEVKIT_TEST_ALLOW_SHARED_STACK"
+
+// errSharedStackRefusedInTest is what the refused runner returns under
+// `go test`: callers then behave as on a host without Docker.
+var errSharedStackRefusedInTest = errors.New("shared observability stack refused under go test: " +
+	"stub newSharedRunner, or set " + allowSharedStackInTestsEnv + "=1")
+
 // newSharedRunner builds the production runner for the shared stack. A
-// test seam (package var) so unit tests inject a stub.
+// test seam (package var) so unit tests inject a stub. Under `go test` it
+// refuses Docker unless allowSharedStackInTestsEnv=1: the project name is
+// fixed, so an unstubbed test would boot real containers from its TempDir
+// or tear down the developer's own shared stack (Stop is `-p`-only).
 var newSharedRunner = func(composeFile string, env []string, workDir string, logw io.Writer) sharedComposeOps {
+	if testing.Testing() && os.Getenv(allowSharedStackInTestsEnv) != "1" {
+		return refusedSharedRunner{}
+	}
 	return &docker.ComposeRunner{
 		ProjectName:  SharedObservabilityProject,
 		ComposeFiles: []string{composeFile},
@@ -71,6 +87,15 @@ var newSharedRunner = func(composeFile string, env []string, workDir string, log
 		WorkDir:      workDir,
 		LogWriter:    logw,
 	}
+}
+
+// refusedSharedRunner is newSharedRunner's stand-in under `go test`.
+type refusedSharedRunner struct{}
+
+func (refusedSharedRunner) Up(context.Context) error         { return errSharedStackRefusedInTest }
+func (refusedSharedRunner) Stop(context.Context, bool) error { return errSharedStackRefusedInTest }
+func (refusedSharedRunner) DiscoverPort(context.Context, string, int) (int, error) {
+	return 0, errSharedStackRefusedInTest
 }
 
 // SharedObservabilityRoot is the on-disk home of the shared stack:
