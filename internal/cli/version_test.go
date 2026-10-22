@@ -89,6 +89,85 @@ func TestVersion_PrintsCampaignCodeWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestRootVersionFlag_OutputUnchangedWhenCampaignDisabled(t *testing.T) {
+	for _, env := range []string{"", "0", "off"} {
+		for _, args := range [][]string{{"--version"}, {"-v"}, {"--via-dpm", "--version"}} {
+			file := campaignFile(t, env, "")
+			var out, errOut bytes.Buffer
+			if code := New(&out, &errOut, "1.2.3", "abc1234").Run(args); code != 0 {
+				t.Fatalf("DEVKIT_CAMPAIGN=%q %v: exit %d", env, args, code)
+			}
+			if got := out.String(); got != "canton-devkit version 1.2.3 (abc1234)\n" {
+				t.Errorf("DEVKIT_CAMPAIGN=%q %v: stdout = %q, want cobra's plain version line", env, args, got)
+			}
+			if errOut.Len() != 0 {
+				t.Errorf("DEVKIT_CAMPAIGN=%q %v: unexpected stderr %q", env, args, errOut.String())
+			}
+			if _, err := os.Stat(file); !errors.Is(err, fs.ErrNotExist) {
+				t.Errorf("DEVKIT_CAMPAIGN=%q %v: a disabled build must not mint a code file", env, args)
+			}
+		}
+	}
+}
+
+func TestRootVersionFlag_PrintsCampaignCodeLikeVersionCommand(t *testing.T) {
+	campaignFile(t, "1", "CCT-ABCD2345\n")
+	for _, args := range [][]string{{"--version"}, {"-v"}, {"--via-dpm", "--version"}} {
+		var out, errOut bytes.Buffer
+		if code := New(&out, &errOut, "v0.18.1-cctools.1", "f78650e").Run(args); code != 0 {
+			t.Fatalf("%v: exit %d", args, code)
+		}
+		want := "canton-devkit version v0.18.1-cctools.1 (f78650e)\ncampaign code: CCT-ABCD2345\n"
+		if got := out.String(); got != want {
+			t.Errorf("%v: stdout = %q, want %q", args, got, want)
+		}
+		if errOut.Len() != 0 {
+			t.Errorf("%v: unexpected stderr %q", args, errOut.String())
+		}
+	}
+
+	var vout bytes.Buffer
+	if code := New(&vout, &bytes.Buffer{}, "v0.18.1-cctools.1", "f78650e").Run([]string{"version"}); code != 0 {
+		t.Fatalf("version exit %d", code)
+	}
+	var fout bytes.Buffer
+	if code := New(&fout, &bytes.Buffer{}, "v0.18.1-cctools.1", "f78650e").Run([]string{"--version"}); code != 0 {
+		t.Fatalf("--version exit %d", code)
+	}
+	vLines := strings.SplitN(vout.String(), "\n", 2)
+	fLines := strings.SplitN(fout.String(), "\n", 2)
+	if len(vLines) != 2 || len(fLines) != 2 || vLines[1] != fLines[1] {
+		t.Errorf("--version and version must print the same campaign line: %q vs %q", fout.String(), vout.String())
+	}
+}
+
+func TestRootVersionFlag_HelpWinsWithoutCampaignLine(t *testing.T) {
+	campaignFile(t, "1", "CCT-ABCD2345\n")
+	var out, errOut bytes.Buffer
+	if code := New(&out, &errOut, "1.2.3", "").Run([]string{"--version", "--help"}); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if strings.Contains(out.String(), "campaign code:") {
+		t.Errorf("help output must not carry the campaign line, got %q", out.String())
+	}
+}
+
+func TestRootVersionFlag_PersistFailureWarnsOnStderr(t *testing.T) {
+	t.Setenv("DEVKIT_CAMPAIGN", "1")
+	t.Setenv("DEVKIT_CAMPAIGN_FILE", blockedByFile(t))
+	var out, errOut bytes.Buffer
+	if code := New(&out, &errOut, "1.2.3", "").Run([]string{"--version"}); code != 0 {
+		t.Fatalf("persist failure must not fail --version, exit %d", code)
+	}
+	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+	if len(lines) != 2 || lines[0] != "canton-devkit version 1.2.3" || !strings.HasPrefix(lines[1], "campaign code: CCT-") {
+		t.Errorf("stdout = %q, want version line plus campaign code line", out.String())
+	}
+	if n := strings.Count(errOut.String(), "change on restart"); n != 1 {
+		t.Errorf("stderr should warn exactly once about the unsaved code, got %q", errOut.String())
+	}
+}
+
 func blockedByFile(t *testing.T) string {
 	t.Helper()
 	blocker := filepath.Join(t.TempDir(), "blocker")

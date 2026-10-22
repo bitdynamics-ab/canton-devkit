@@ -68,6 +68,9 @@ func (a *App) Run(args []string) int {
 	root := a.buildRoot()
 	root.SetArgs(args)
 	cmd, err := root.ExecuteC()
+	if err == nil && printedVersionFlag(cmd) {
+		printCampaignCode(cmd.OutOrStdout(), cmd.ErrOrStderr())
+	}
 
 	code := 0
 	if err != nil {
