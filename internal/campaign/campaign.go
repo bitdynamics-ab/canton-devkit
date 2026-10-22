@@ -69,28 +69,36 @@ var errUnsettled = errors.New("code file kept changing")
 func loadOrCreate(path string) (string, error) {
 	for range maxAttempts {
 		b, err := os.ReadFile(path)
-		if err == nil {
+		switch {
+		case err == nil:
 			if code := sanitize(string(b)); code != "" {
 				return code, nil
 			}
-			code, err := takeInvalid(path)
-			if err != nil {
-				return newCode(), err
+		case !errors.Is(err, fs.ErrNotExist):
+			return newCode(), err
+		default:
+			code := newCode()
+			if err := createExclusive(path, code); !errors.Is(err, fs.ErrExist) {
+				return code, err
 			}
-			if code != "" {
-				return code, nil
+			if !isSymlink(path) {
+				continue
 			}
-			continue
 		}
-		if !errors.Is(err, fs.ErrNotExist) {
+		code, err := takeInvalid(path)
+		if err != nil {
 			return newCode(), err
 		}
-		code := newCode()
-		if err := createExclusive(path, code); !errors.Is(err, fs.ErrExist) {
-			return code, err
+		if code != "" {
+			return code, nil
 		}
 	}
 	return newCode(), errUnsettled
+}
+
+func isSymlink(path string) bool {
+	fi, err := os.Lstat(path)
+	return err == nil && fi.Mode()&fs.ModeSymlink != 0
 }
 
 func takeInvalid(path string) (string, error) {

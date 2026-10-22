@@ -340,3 +340,68 @@ func TestTakeInvalid_MissingFileIsNotAnError(t *testing.T) {
 		t.Errorf("takeInvalid on a missing file = (%q, %v), want (\"\", nil)", code, err)
 	}
 }
+
+func danglingSymlink(t *testing.T) (dir, file string) {
+	t.Helper()
+	dir = t.TempDir()
+	file = filepath.Join(dir, "campaign-id")
+	if err := os.Symlink(filepath.Join(dir, "missing-target"), file); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	return dir, file
+}
+
+func TestLookup_DanglingSymlinkEndsWithAPersistedStableCode(t *testing.T) {
+	resetCache(t)
+	dir, file := danglingSymlink(t)
+	t.Setenv("DEVKIT_CAMPAIGN", "on")
+	t.Setenv("DEVKIT_CAMPAIGN_FILE", file)
+
+	code, err := Lookup()
+	if err != nil {
+		t.Fatalf("Lookup over a dangling symlink: %v", err)
+	}
+	if !codeRe.MatchString(code) {
+		t.Fatalf("code %q is not well formed", code)
+	}
+	if got := readFile(t, file); got != code+"\n" {
+		t.Errorf("code not persisted over the dangling symlink: file = %q, want %q", got, code+"\n")
+	}
+	fi, err := os.Lstat(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fi.Mode().IsRegular() {
+		t.Errorf("dangling symlink must be replaced by a regular code file, mode = %v", fi.Mode())
+	}
+	onlyEntry(t, dir, "campaign-id")
+
+	resetCache(t)
+	again, err := Lookup()
+	if err != nil || again != code {
+		t.Errorf("restart must keep the persisted code: got (%q, %v), want %q", again, err, code)
+	}
+}
+
+func TestLoadOrCreate_LiveSymlinkIsReadThroughAndKept(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "real-id")
+	if err := os.WriteFile(target, []byte("CCT-ABCD2345\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(dir, "campaign-id")
+	if err := os.Symlink(target, file); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	code, err := loadOrCreate(file)
+	if err != nil || code != "CCT-ABCD2345" {
+		t.Fatalf("loadOrCreate = (%q, %v), want the linked code", code, err)
+	}
+	fi, err := os.Lstat(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode()&fs.ModeSymlink == 0 {
+		t.Errorf("a symlink to a valid code must be left in place, mode = %v", fi.Mode())
+	}
+}
