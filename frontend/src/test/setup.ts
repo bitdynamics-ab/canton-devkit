@@ -12,6 +12,7 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
+import { resetBuildInfo } from "../buildInfo";
 
 // jsdom doesn't implement matchMedia; the HealthPill animation
 // rule reads prefers-reduced-motion via the same mechanism in
@@ -91,4 +92,5 @@ if (!globalThis.EventSource) {
 // and never tears down automatically).
 afterEach(() => {
   cleanup();
+  resetBuildInfo();
 });

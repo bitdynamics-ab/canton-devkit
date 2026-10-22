@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { InstanceOverview } from "./InstanceOverview";
 import { ConfirmHost } from "../components/ConfirmDialog";
+import { setBuildInfo } from "../buildInfo";
 
 // Routes every fetch InstanceOverview fires. `cfg` tweaks the branches
 // individual tests care about; everything else returns a sane running-
@@ -641,5 +642,54 @@ describe("InstanceOverview — vitals rail", () => {
     expect(screen.getAllByText(/^memory$/i)).toHaveLength(1);
     expect(screen.getAllByText(/^uptime$/i)).toHaveLength(1);
     expect(screen.getAllByText(/^containers$/i)).toHaveLength(2);
+  });
+});
+
+describe("InstanceOverview — CLI prefix", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("names dpm localnet in confirm details and footers by default", async () => {
+    setupFetch({ summary: { tps: 12.9 } });
+    render(
+      <>
+        <InstanceOverview name="demo" statusHint="running" />
+        <ConfirmHost />
+      </>,
+    );
+    expect(await screen.findByText("dpm localnet metrics demo")).toBeInTheDocument();
+    expect(screen.getByText(`eval "$(dpm localnet env demo)"`)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /recreate/i }));
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText("dpm localnet down demo && dpm localnet up demo"),
+    ).toBeInTheDocument();
+  });
+
+  it("names canton-devkit localnet everywhere when the server reports it", async () => {
+    setBuildInfo({ cli_prefix: "canton-devkit localnet" });
+    setupFetch({ summary: { tps: 12.9 } });
+    render(
+      <>
+        <InstanceOverview name="demo" statusHint="running" />
+        <ConfirmHost />
+      </>,
+    );
+    expect(await screen.findByText("canton-devkit localnet metrics demo")).toBeInTheDocument();
+    expect(screen.getByText(`eval "$(canton-devkit localnet env demo)"`)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /recreate/i }));
+    let dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText("canton-devkit localnet down demo && canton-devkit localnet up demo"),
+    ).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    fireEvent.click(await screen.findByRole("button", { name: /^Remove instance$/ }));
+    dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText("canton-devkit localnet remove --name demo --force"),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("dpm localnet");
   });
 });

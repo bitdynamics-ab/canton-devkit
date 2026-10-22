@@ -8,6 +8,7 @@ import {
   type PrometheusRangeResponse,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
+import { cliPrefix, useCLIPrefix } from "../buildInfo";
 import { W, wMono, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { IcX } from "../components/icons";
@@ -140,7 +141,7 @@ export function MetricsScreen() {
         ) {
           setObservabilityOff(
             e.remediation?.[0] ??
-              `dpm localnet up --profile observability --name ${name}`,
+              `${cliPrefix()} up --profile observability --name ${name}`,
           );
           return;
         }
@@ -577,6 +578,7 @@ function ObservabilityOffPanel({
   name: string;
   onEnabled: () => void;
 }) {
+  const cli = useCLIPrefix();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -643,7 +645,7 @@ function ObservabilityOffPanel({
             borderRadius: 2,
           }}
         >
-          {`dpm localnet observability enable --name ${name}`}
+          {`${cli} observability enable --name ${name}`}
         </code>
       </p>
     </div>

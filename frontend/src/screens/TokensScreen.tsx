@@ -42,6 +42,7 @@ import {
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { useIdentityRole } from "../shell/useIdentityRole";
+import { useCLIPrefix } from "../buildInfo";
 import { W, wMono, tableCaps, wideCaps, tint, R, FAST, fs, ROLE_COLOR } from "../tokens";
 import { Button } from "../components/Button";
 import { MonoId } from "../components/MonoId";
@@ -155,6 +156,7 @@ function summaryFromHoldings(holdings: TokenHolding[] | null): InstrumentSummary
 
 export function TokensScreen() {
   const sel = useInstanceSelection();
+  const cli = useCLIPrefix();
   const instance = sel.selected;
   // Top-level act-as identity, threaded through every token API call so
   // the whole screen reads/writes as this role; persisted per instance.
@@ -651,7 +653,7 @@ export function TokensScreen() {
           </div>
           <div style={{ color: W.faint, fontSize: fs.label, marginTop: 14 }}>
             One click provisions an issuer party, a DEMO instrument with supply, and a funded holder.
-            Or run <code>dpm localnet token demo --instance {instance}</code>.
+            Or run <code>{cli} token demo --instance {instance}</code>.
           </div>
         </div>
       ) : (
@@ -686,7 +688,7 @@ export function TokensScreen() {
               );
             })}
             <div style={{ padding: "10px 14px", background: W.sunken, borderTop: `1px solid ${W.border}`, fontFamily: wMono, fontSize: fs.label, color: W.faint }}>
-              dpm localnet token list
+              {cli} token list
             </div>
           </div>
 
@@ -1511,6 +1513,7 @@ function HoldersCard({
   scannedAt: string;
   instance: string;
 }) {
+  const cli = useCLIPrefix();
   return (
     <div style={{ background: W.surface, border: `1px solid ${W.border}`, borderRadius: R.card, overflow: "hidden", marginTop: 14 }}>
       <div style={{ padding: "12px 14px", borderBottom: `1px solid ${W.border}`, display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
@@ -1604,7 +1607,7 @@ function HoldersCard({
         </tbody>
       </table>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "9px 14px", background: W.sunken, borderTop: `1px solid ${W.border}`, fontFamily: wMono, fontSize: fs.label, color: W.faint }}>
-        <span>dpm localnet token balance --symbol {sym}</span>
+        <span>{cli} token balance --symbol {sym}</span>
         <span>{source === "registry" ? "registry balances" : "ledger balances"}{scannedAt && ` · scanned ${scannedAt}`}</span>
       </div>
     </div>

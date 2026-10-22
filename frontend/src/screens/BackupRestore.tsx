@@ -8,6 +8,7 @@ import {
 import { W, wMono, tint, R, FAST, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { IcCheck, IcDownload } from "../components/icons";
+import { useCLIPrefix } from "../buildInfo";
 
 interface Props {
   instanceName: string;
@@ -22,6 +23,7 @@ type RestoreState =
   | { kind: "error"; message: string };
 
 export function BackupRestore({ instanceName, snapshotting = false, onSnapshotting }: Props) {
+  const cli = useCLIPrefix();
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [restore, setRestore] = useState<RestoreState>({ kind: "idle" });
@@ -62,7 +64,7 @@ export function BackupRestore({ instanceName, snapshotting = false, onSnapshotti
     if (file.size > MAX_TARBALL_BYTES) {
       setRestore({
         kind: "error",
-        message: `${file.name} is ${(file.size / 1024 / 1024 / 1024).toFixed(2)} GiB; per-file cap is 4 GiB. Restore directly from the CLI: dpm localnet restore --name ${targetName} --from ${file.name}`,
+        message: `${file.name} is ${(file.size / 1024 / 1024 / 1024).toFixed(2)} GiB; per-file cap is 4 GiB. Restore directly from the CLI: ${cli} restore --name ${targetName} --from ${file.name}`,
       });
       return;
     }
@@ -117,7 +119,7 @@ export function BackupRestore({ instanceName, snapshotting = false, onSnapshotti
             capture (the instance shows <b>Snapshotting…</b> and resumes automatically)
           </div>
           <div style={cliBox}>
-            dpm localnet snapshot --name {instanceName} --to ./{instanceName}.tgz
+            {cli} snapshot --name {instanceName} --to ./{instanceName}.tgz
           </div>
           {downloadError && (
             <div role="alert" style={{ background: W.errBg, border: `1px solid ${W.errBorder}`, borderRadius: R.control, padding: "8px 12px", fontSize: fs.meta, color: W.err }}>
@@ -213,7 +215,7 @@ export function BackupRestore({ instanceName, snapshotting = false, onSnapshotti
                 <IcCheck size={12} /> Restored
               </span>{" "}
               <code style={{ fontFamily: wMono, color: W.text }}>{restore.response.name}</code>. Bring it up via{" "}
-              <code style={{ fontFamily: wMono, color: W.text }}>dpm localnet up --name {restore.response.name}</code>.
+              <code style={{ fontFamily: wMono, color: W.text }}>{cli} up --name {restore.response.name}</code>.
             </div>
           )}
           {restore.kind === "error" && (

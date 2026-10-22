@@ -7,6 +7,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { SkeletonTable, useLoadingDelay } from "../components/Skeleton";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { useCreateInstance } from "../shell/useCreateInstance";
+import { useCLIPrefix } from "../buildInfo";
 
 // All-instances view: the multi-instance management surface, reached
 // from the topbar switcher's "All instances" link. The Overview ("/")
@@ -133,6 +134,7 @@ function CensusBar({
   loading: boolean;
   onRefresh: () => void;
 }) {
+  const cli = useCLIPrefix();
   const c = census(instances);
   const parts = [
     `${c.registered} registered`,
@@ -154,7 +156,7 @@ function CensusBar({
       </span>
       {c.failed > 0 && (
         <span style={{ color: W.err, fontSize: fs.meta }}>
-          — run <code style={{ fontFamily: wMono }}>dpm localnet doctor &lt;name&gt;</code>
+          — run <code style={{ fontFamily: wMono }}>{cli} doctor &lt;name&gt;</code>
         </span>
       )}
       <Button
@@ -178,6 +180,7 @@ interface InstanceTableProps {
 }
 
 function InstanceTable({ instances, selected, onOpen }: InstanceTableProps) {
+  const cli = useCLIPrefix();
   return (
     <div
       style={{
@@ -262,7 +265,7 @@ function InstanceTable({ instances, selected, onOpen }: InstanceTableProps) {
         }}
       >
         <code style={{ fontFamily: wMono, fontSize: fs.label, color: W.faint }}>
-          dpm localnet list
+          {cli} list
         </code>
         <span style={{ color: W.faint, fontSize: fs.label, fontVariantNumeric: "tabular-nums" }}>
           {instances.length} {instances.length === 1 ? "instance" : "instances"}
@@ -305,6 +308,7 @@ const numCell: React.CSSProperties = {
 };
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
+  const cli = useCLIPrefix();
   return (
     <div
       style={{
@@ -330,7 +334,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       <p style={{ marginBottom: 0, fontSize: fs.label }}>
         Or run{" "}
         <code style={{ fontFamily: wMono, color: W.text2 }}>
-          dpm localnet up --name demo
+          {cli} up --name demo
         </code>{" "}
         in your terminal.
       </p>

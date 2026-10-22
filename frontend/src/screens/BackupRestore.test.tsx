@@ -1,7 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BackupRestore } from "./BackupRestore";
+import { setBuildInfo } from "../buildInfo";
 
 // BackupRestore — UI parity for `localnet snapshot` /
 // `localnet restore`. These tests pin three contracts:
@@ -266,5 +267,59 @@ describe("BackupRestore card", () => {
     ) as HTMLInputElement;
     await userEvent.upload(fileInput, file);
     expect(fd[0].get("name")).toBe("pebble-clone");
+  });
+});
+
+describe("BackupRestore CLI prefix", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("names the standalone binary in every CLI hint when the server reports it", async () => {
+    setBuildInfo({ cli_prefix: "canton-devkit localnet" });
+    vi.spyOn(XMLHttpRequest.prototype, "send").mockImplementation(
+      function (this: XMLHttpRequest) {
+        Object.defineProperty(this, "status", { value: 200 });
+        Object.defineProperty(this, "responseText", {
+          value: JSON.stringify({ name: "pebble", restored: true }),
+        });
+        this.dispatchEvent(new ProgressEvent("load"));
+      },
+    );
+    render(<BackupRestore instanceName="pebble" />);
+    expect(
+      screen.getByText("canton-devkit localnet snapshot --name pebble --to ./pebble.tgz"),
+    ).toBeInTheDocument();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(input, new File([new Uint8Array([0x1f, 0x8b])], "pebble.tgz"));
+    const status = await screen.findByRole("status");
+    expect(within(status).getByText("canton-devkit localnet up --name pebble")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("dpm localnet");
+  });
+
+  it("points an oversized restore at the reported CLI", async () => {
+    setBuildInfo({ cli_prefix: "canton-devkit localnet" });
+    render(<BackupRestore instanceName="pebble" />);
+    const big = new File([new Uint8Array([0])], "huge.tgz");
+    Object.defineProperty(big, "size", { value: 5 * 1024 * 1024 * 1024 });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(input, big);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain(
+      "Restore directly from the CLI: canton-devkit localnet restore --name pebble --from huge.tgz",
+    );
+  });
+
+  it("keeps dpm localnet in the hints by default", async () => {
+    render(<BackupRestore instanceName="pebble" />);
+    expect(
+      screen.getByText("dpm localnet snapshot --name pebble --to ./pebble.tgz"),
+    ).toBeInTheDocument();
+    const big = new File([new Uint8Array([0])], "huge.tgz");
+    Object.defineProperty(big, "size", { value: 5 * 1024 * 1024 * 1024 });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(input, big);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("dpm localnet restore --name pebble --from huge.tgz");
   });
 });

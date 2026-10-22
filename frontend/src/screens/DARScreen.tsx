@@ -14,6 +14,7 @@ import {
   type Role,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
+import { useCLIPrefix } from "../buildInfo";
 import { W, wMono, tableCaps, wideCaps, R, tint, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { MonoId } from "../components/MonoId";
@@ -706,6 +707,7 @@ function VetCheckbox({
 // the watcher is a CLI process, so this is a status indicator, not a
 // control). Shows the command to start one.
 function WatchFooter({ instance }: { instance: string }) {
+  const cli = useCLIPrefix();
   const [last, setLast] = useState<DARWatchEvent | null>(null);
   const [active, setActive] = useState(false);
   const [, setNow] = useState(Date.now());
@@ -800,7 +802,7 @@ function WatchFooter({ instance }: { instance: string }) {
           color: W.faint,
         }}
       >
-        dpm localnet dar watch --instance {instance}
+        {cli} dar watch --instance {instance}
       </span>
     </div>
   );

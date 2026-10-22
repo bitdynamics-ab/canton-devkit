@@ -58,6 +58,7 @@ import {
   type SnapshotHold,
 } from "./snapshotHold";
 import { formatUptime } from "./uptime";
+import { useCLIPrefix } from "../buildInfo";
 
 // The per-instance Overview. One tabbed surface a developer can wire an
 // app against without leaving: throughput (only when monitoring is on),
@@ -79,6 +80,7 @@ interface Props {
 const THROUGHPUT_COLOR = W.brand;
 
 export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) {
+  const cli = useCLIPrefix();
   const [tab, setTab] = useState<Tab>("overview");
   const [instState, setInstState] = useState<
     | { kind: "loading" }
@@ -346,7 +348,7 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
             confirm: {
               title: "Recreate instance?",
               body: `Brings ${name} down then back up. The recorded Splice version and profiles are preserved. Data volumes are not touched.`,
-              detail: `dpm localnet down ${name} && dpm localnet up ${name}`,
+              detail: `${cli} down ${name} && ${cli} up ${name}`,
               confirmLabel: "Recreate",
             },
           })
@@ -356,7 +358,7 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
             confirm: {
               title: "Tear down instance?",
               body: `Removes ${name}'s containers and networks. Data volumes are preserved, so Start recreates it.`,
-              detail: `dpm localnet down ${name}`,
+              detail: `${cli} down ${name}`,
               confirmLabel: "Down",
               danger: true,
             },
@@ -370,8 +372,8 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
                 ? `Stops ${name}, then deletes its containers, Docker volumes, ledger data, and registry state. This cannot be undone.`
                 : `Deletes ${name}'s containers, Docker volumes, ledger data, and registry state. This cannot be undone.`,
               detail: running
-                ? `dpm localnet remove --name ${name} --force`
-                : `dpm localnet remove --name ${name}`,
+                ? `${cli} remove --name ${name} --force`
+                : `${cli} remove --name ${name}`,
               confirmLabel: running ? "Stop and remove" : "Remove permanently",
               danger: true,
             },
@@ -820,6 +822,7 @@ function ThroughputPanel({
   name: string;
   tps: { value?: number; series?: Series; delta?: number; err?: string };
 }) {
+  const cli = useCLIPrefix();
   const delta = tps.delta;
   const deltaColor = delta === undefined ? W.dim : delta > 0 ? W.ok : delta < 0 ? W.dim : W.dim;
   const deltaText =
@@ -887,7 +890,7 @@ function ThroughputPanel({
           />
         )}
       </div>
-      <PanelFooter left={`dpm localnet metrics ${name}`} />
+      <PanelFooter left={`${cli} metrics ${name}`} />
     </div>
   );
 }
@@ -1657,6 +1660,7 @@ function JwtToken({ token, revealed }: { token: string; revealed: boolean }) {
 // ── App config panel ────────────────────────────────────────
 
 function AppConfigPanel({ name }: { name: string }) {
+  const cli = useCLIPrefix();
   const [format, setFormat] = useState<AppConfigFormat>("env");
   const [body, setBody] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -1782,7 +1786,7 @@ function AppConfigPanel({ name }: { name: string }) {
           {busy ? "…" : body || "—"}
         </pre>
         <span style={{ fontFamily: wMono, fontSize: fs.label, color: W.faint }}>
-          eval "$(dpm localnet env {name})"
+          eval "$({cli} env {name})"
         </span>
         {err && <div style={{ color: W.err, fontSize: fs.meta }}>{err}</div>}
       </div>

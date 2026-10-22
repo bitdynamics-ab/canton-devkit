@@ -14,6 +14,7 @@ import {
   type TransactionsListResponse,
 } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
+import { useCLIPrefix } from "../buildInfo";
 import { Button } from "../components/Button";
 import { Dot, IcRefresh } from "../components/icons";
 import { MonoId } from "../components/MonoId";
@@ -43,6 +44,7 @@ const prefersReducedMotion =
 
 export function ExplorerScreen() {
   const sel = useInstanceSelection();
+  const cli = useCLIPrefix();
   const name = sel.selected;
   const [role, setRole] = useState<Role>("app-provider");
   const [view, setView] = useState<View>("contracts");
@@ -578,7 +580,7 @@ export function ExplorerScreen() {
                             color: W.text2,
                           }}
                         >
-                          dpm localnet tx submit
+                          {cli} tx submit
                         </code>
                       </>
                     )}
@@ -944,6 +946,7 @@ function previewPayloadValue(value: unknown): string {
 // Filters are applied server-side over the offset window, so narrowing
 // the query can surface rows beyond the row cap.
 function TransactionsView({ name, role }: { name: string; role: Role }) {
+  const cli = useCLIPrefix();
   const [state, setState] = useState<
     | { kind: "loading" }
     | { kind: "ok"; data: TransactionsListResponse }
@@ -1143,7 +1146,7 @@ function TransactionsView({ name, role }: { name: string; role: Role }) {
                 <code
                   style={{ fontFamily: wMono, fontSize: fs.label, color: W.text2 }}
                 >
-                  dpm localnet tx ls
+                  {cli} tx ls
                 </code>
               </>
             )}

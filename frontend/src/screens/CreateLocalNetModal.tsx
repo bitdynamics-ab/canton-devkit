@@ -17,6 +17,7 @@ import { W, wMono, wSans, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcAlert, IcCheck, IcStop, IcX } from "../components/icons";
 import { remediationForCode } from "./remediation";
+import { useCLIPrefix } from "../buildInfo";
 import {
   type ProgressState,
   type StepState,
@@ -446,6 +447,7 @@ function FormBody({
   preflight,
   onSubmit,
 }: FormBodyProps) {
+  const cli = useCLIPrefix();
   return (
     <form onSubmit={onSubmit} style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
       <Field
@@ -735,7 +737,7 @@ function FormBody({
       >
         CLI equivalent:{" "}
         <span style={{ color: W.brand }}>
-          dpm localnet up --name {name || "<name>"} --version{" "}
+          {cli} up --name {name || "<name>"} --version{" "}
           {version || "latest"}
           {prometheus ? " --profile prometheus" : ""}
           {grafana ? " --profile grafana" : ""}

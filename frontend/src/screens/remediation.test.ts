@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import type { ErrorCode } from "../api";
+import { setBuildInfo } from "../buildInfo";
 import { remediationForCode } from "./remediation";
 
 // Pins the silent-default regression risk: a new code added on the Go
@@ -119,6 +120,31 @@ describe("remediationForCode", () => {
       const r = remediationForCode(code);
       // Either a real remediation OR explicit null — never undefined.
       expect(r === null || (r.title.length > 0 && r.steps.length > 0)).toBe(true);
+    }
+  });
+});
+
+describe("remediationForCode CLI prefix", () => {
+  it("names dpm localnet by default", () => {
+    expect(remediationForCode("PORTS_IN_USE")!.steps.join(" ")).toContain(
+      "`dpm localnet down --name <other-instance>`",
+    );
+    expect(remediationForCode("CONTAINER_UNHEALTHY")!.steps.join(" ")).toContain(
+      "`dpm localnet container logs <inst> <service>`",
+    );
+  });
+
+  it("names the standalone binary when the server reports canton-devkit localnet", () => {
+    setBuildInfo({ cli_prefix: "canton-devkit localnet" });
+    expect(remediationForCode("PORTS_IN_USE")!.steps.join(" ")).toContain(
+      "`canton-devkit localnet down --name <other-instance>`",
+    );
+    expect(remediationForCode("CONTAINER_UNHEALTHY")!.steps.join(" ")).toContain(
+      "`canton-devkit localnet container logs <inst> <service>`",
+    );
+    const codes: ErrorCode[] = ["PORTS_IN_USE", "CONTAINER_UNHEALTHY"];
+    for (const code of codes) {
+      expect(remediationForCode(code)!.steps.join(" ")).not.toContain("dpm localnet");
     }
   });
 });

@@ -11,6 +11,7 @@ import { W, wMono, wideCaps, tint, R, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { SkeletonTable, useLoadingDelay } from "../components/Skeleton";
 import { Dot, IcAlert, IcCheck, IcRefresh, IcX } from "../components/icons";
+import { useCLIPrefix } from "../buildInfo";
 
 // Web UI surface for `dpm localnet doctor`: GET /api/doctor runs the
 // same shared CollectDoctor collector as the CLI. Host-scoped, not per-instance.
@@ -151,6 +152,7 @@ function Header({
   onRerun: () => void;
   loading: boolean;
 }) {
+  const cli = useCLIPrefix();
   return (
     <header
       style={{
@@ -168,7 +170,7 @@ function Header({
           Host readiness for Canton LocalNet — Docker, resources, network,
           platform support. Same checks as{" "}
           <code style={{ color: W.text2, fontFamily: wMono }}>
-            dpm localnet doctor
+            {cli} doctor
           </code>
           .
         </p>

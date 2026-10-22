@@ -4,6 +4,7 @@ import { IcPlus } from "../components/icons";
 import { useLoadingDelay, SkeletonBar } from "../components/Skeleton";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
 import { useCreateInstance } from "../shell/useCreateInstance";
+import { useCLIPrefix } from "../buildInfo";
 import { CreatingPanel } from "./CreatingPanel";
 import { InstanceOverview } from "./InstanceOverview";
 
@@ -65,6 +66,7 @@ function DetailLoading() {
 }
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
+  const cli = useCLIPrefix();
   return (
     <div
       style={{
@@ -90,7 +92,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       <p style={{ marginBottom: 0, fontSize: fs.label }}>
         Or run{" "}
         <code style={{ fontFamily: wMono, color: W.text2 }}>
-          dpm localnet up --name demo
+          {cli} up --name demo
         </code>{" "}
         in your terminal.
       </p>

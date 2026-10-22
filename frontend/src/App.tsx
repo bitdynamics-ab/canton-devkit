@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { SCHEMA_VERSION, fetchVersion } from "./api";
+import { setBuildInfo } from "./buildInfo";
 import { Shell } from "./shell/Shell";
 import { InstanceSelectionProvider } from "./shell/useInstanceSelection";
 import { CreateInstanceProvider } from "./shell/useCreateInstance";
@@ -33,6 +34,7 @@ export function App() {
     fetchVersion()
       .then((v) => {
         if (cancelled) return;
+        setBuildInfo(v);
         setServerVersion(v.schema_version);
         setCampaignCode(v.campaign_code ?? null);
         setStatus(v.schema_version === SCHEMA_VERSION ? "ready" : "mismatch");
@@ -142,7 +144,8 @@ function BootGate({ status, serverVersion }: BootGateProps) {
           <code style={{ color: W.text }}>/api/version</code>.
         </p>
         <p style={{ color: W.dim, marginBottom: 0 }}>
-          Make sure <code>dpm localnet ui</code> is running. The Web UI is
+          Make sure <code>canton-devkit localnet ui</code> (or{" "}
+          <code>dpm localnet ui</code> under DPM) is running. The Web UI is
           loopback-only; remote access requires an SSH tunnel.
         </p>
       </>

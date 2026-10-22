@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, fetchInstance, type Instance, type Role } from "../api";
 import { useInstanceSelection } from "../shell/useInstanceSelection";
+import { useCLIPrefix } from "../buildInfo";
 import { ROLE_COLOR, W, wMono, tint, R, FAST, fs } from "../tokens";
 import { Button } from "../components/Button";
 import { Dot, IcAlert, IcRefresh } from "../components/icons";
@@ -34,6 +35,7 @@ function walletEndpointFor(role: Role, endpoints: Instance["endpoints"]) {
 
 export function WalletScreen() {
   const sel = useInstanceSelection();
+  const cli = useCLIPrefix();
   const name = sel.selected;
   const [role, setRole] = useState<Role>("app-provider");
   const [state, setState] = useState<
@@ -278,7 +280,7 @@ export function WalletScreen() {
             <p style={{ margin: "0 0 14px", color: W.dim }}>
               Use <strong>Recreate</strong> on the dashboard, or re-run{" "}
               <code style={{ fontFamily: wMono, color: W.text2 }}>
-                dpm localnet up --name {name}
+                {cli} up --name {name}
               </code>{" "}
               to regenerate the instance's overlays.
             </p>
@@ -310,7 +312,7 @@ export function WalletScreen() {
             on this instance. Splice publishes a per-role wallet UI on a host
             port. Re-run{" "}
             <code style={{ fontFamily: wMono, color: W.text2 }}>
-              dpm localnet up --name {name}
+              {cli} up --name {name}
             </code>{" "}
             to capture it.
           </div>

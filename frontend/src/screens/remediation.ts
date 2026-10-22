@@ -8,6 +8,7 @@
 // code individually.
 
 import type { ErrorCode } from "../api";
+import { cliPrefix } from "../buildInfo";
 
 export interface Remediation {
   title: string;
@@ -15,13 +16,14 @@ export interface Remediation {
 }
 
 export function remediationForCode(code?: ErrorCode): Remediation | null {
+  const cli = cliPrefix();
   switch (code) {
     case "PORTS_IN_USE":
       return {
         title: "A previously allocated host port is in use",
         steps: [
           "Find what's using the port: `lsof -i :<port>` (macOS/Linux) or `Get-NetTCPConnection -LocalPort <port>` (Windows).",
-          "Either stop the conflicting process, or run `dpm localnet down --name <other-instance>` to free its ports.",
+          `Either stop the conflicting process, or run \`${cli} down --name <other-instance>\` to free its ports.`,
           "Then click Create again — the instance will reuse the same ports.",
         ],
       };
@@ -85,7 +87,7 @@ export function remediationForCode(code?: ErrorCode): Remediation | null {
         title: "One or more containers reported unhealthy",
         steps: [
           "Inspect the container health panel (it shows live state per container).",
-          "Tail the failing container's logs: `dpm localnet container logs <inst> <service>`.",
+          `Tail the failing container's logs: \`${cli} container logs <inst> <service>\`.`,
           "Common causes: postgres connection limit, splice waiting on canton, ledger API not ready.",
         ],
       };
