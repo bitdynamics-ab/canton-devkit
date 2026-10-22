@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
@@ -85,8 +86,8 @@ func RunStop(ctx context.Context, out, errw io.Writer, opts *StopOptions) int {
 	state, err := registry.Read(opts.Name)
 	if err == registry.ErrNotFound {
 		_, _ = fmt.Fprintf(errw,
-			"No instance named %q is registered. Run `localnet up %s` first.\n",
-			opts.Name, opts.Name)
+			"No instance named %q is registered. Run `%s` first.\n",
+			opts.Name, cliprefix.Cmd("up "+opts.Name))
 		return ExitUserError
 	}
 	if err != nil {
@@ -99,8 +100,8 @@ func RunStop(ctx context.Context, out, errw io.Writer, opts *StopOptions) int {
 	}
 	if state.Status != registry.StatusRunning && state.Status != registry.StatusPaused {
 		_, _ = fmt.Fprintf(errw,
-			"Instance %q is %s, not running — cannot stop it. Use `localnet down %s` to tear it down.\n",
-			state.Name, state.Status, state.Name)
+			"Instance %q is %s, not running — cannot stop it. Use `%s` to tear it down.\n",
+			state.Name, state.Status, cliprefix.Cmd("down "+state.Name))
 		return ExitUserError
 	}
 
@@ -144,8 +145,8 @@ func RunStop(ctx context.Context, out, errw io.Writer, opts *StopOptions) int {
 		_, _ = fmt.Fprintf(errw, "Warning: services stopped but registry write failed: %s\n", werr)
 	}
 	_, _ = fmt.Fprintf(out,
-		"Canton LocalNet %q stopped (containers preserved). Run `localnet start %s` to resume.\n",
-		state.Name, state.Name)
+		"Canton LocalNet %q stopped (containers preserved). Run `%s` to resume.\n",
+		state.Name, cliprefix.Cmd("start "+state.Name))
 	return ExitSuccess
 }
 
@@ -195,8 +196,8 @@ func RunStart(ctx context.Context, prog Progress, out, errw io.Writer, opts *Sta
 	}
 	if state.Status == registry.StatusPaused {
 		_, _ = fmt.Fprintf(errw,
-			"Instance %q is paused, not stopped. Run `localnet resume %s` (or `unpause`) to continue it.\n",
-			state.Name, state.Name)
+			"Instance %q is paused, not stopped. Run `%s` (or `%s`) to continue it.\n",
+			state.Name, cliprefix.Cmd("resume "+state.Name), cliprefix.Cmd("unpause "+state.Name))
 		return ExitUserError
 	}
 
@@ -261,8 +262,8 @@ func fastStart(ctx context.Context, out, errw io.Writer, opts *StartOptions, sta
 			return ExitTimeout
 		}
 		_, _ = fmt.Fprintf(errw,
-			"%s\nIf containers were removed, run `localnet up %s` instead.\n",
-			err, state.Name)
+			"%s\nIf containers were removed, run `%s` instead.\n",
+			err, cliprefix.Cmd("up "+state.Name))
 		return ExitRuntimeFailure
 	}
 

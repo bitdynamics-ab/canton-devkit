@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // resolveName extracts the instance name from either a positional
@@ -32,6 +34,19 @@ func resolveName(cmd *cobra.Command, args []string) (string, error) {
 		name, _ := cmd.Flags().GetString("name")
 		return name, nil
 	default:
-		return "", fmt.Errorf("instance name required: `localnet %s <name>` or `localnet %s --name <name>`", cmd.Name(), cmd.Name())
+		required := requiredFlagsHint(cmd)
+		return "", fmt.Errorf("instance name required: `%s` or `%s`",
+			cliprefix.Cmd(cmd.Name()+" <name>"+required),
+			cliprefix.Cmd(cmd.Name()+" --name <name>"+required))
 	}
+}
+
+func requiredFlagsHint(cmd *cobra.Command) string {
+	var b strings.Builder
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if _, ok := f.Annotations[cobra.BashCompOneRequiredFlag]; ok {
+			fmt.Fprintf(&b, " --%s <%s>", f.Name, f.Name)
+		}
+	})
+	return b.String()
 }

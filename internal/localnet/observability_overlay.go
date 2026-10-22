@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/bitdynamics-ab/canton-devkit/assets"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 )
 
 // MaterializeObservabilityOverlay writes the embedded compose +
@@ -146,8 +147,8 @@ func writePreservingEdits(dest string, data []byte, warnw io.Writer) error {
 		if warnw != nil {
 			_, _ = fmt.Fprintf(warnw,
 				"preserving local edits to %s (differs from the bundled default; "+
-					"delete it to restore the default on the next `localnet up`)\n",
-				dest)
+					"delete it to restore the default on the next `%s`)\n",
+				dest, cliprefix.Cmd("up"))
 		}
 		return nil
 	default:

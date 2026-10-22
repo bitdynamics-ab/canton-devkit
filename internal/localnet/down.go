@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
@@ -134,8 +135,8 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts *DownOptio
 		}
 		_, _ = fmt.Fprintf(errw,
 			"docker compose down failed: %s\nRegistry state preserved at %s. "+
-				"Re-run `localnet down %s` once the host is healthy.\n",
-			err, state.DataDir, state.Name)
+				"Re-run `%s` once the host is healthy.\n",
+			err, state.DataDir, cliprefix.Cmd("down "+state.Name))
 		state.Status = registry.StatusFailed
 		if werr := registry.Write(state); werr != nil {
 			_, _ = fmt.Fprintf(errw, "Warning: could not persist failed state: %s\n", werr)

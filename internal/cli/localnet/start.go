@@ -3,6 +3,7 @@ package localnet
 import (
 	"fmt"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/spf13/cobra"
 )
@@ -12,16 +13,16 @@ func buildStart() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "start [name]",
 		Short: "Start a LocalNet instance, creating it if it doesn't exist yet",
-		Long: `Bring a LocalNet instance to a running state based on its
+		Long: fmt.Sprintf(`Bring a LocalNet instance to a running state based on its
 current status:
 
   - stopped with runtime state present: start existing services
   - stopped with runtime state removed: recreate services
   - not registered yet: create and start the LocalNet
   - already running: no action
-  - paused: use 'localnet resume' instead
+  - paused: use '%[1]s resume' instead
 
-Use 'localnet up' directly when you need to choose a version or profiles.`,
+Use '%[1]s up' directly when you need to choose a version or profiles.`, cliprefix.Get()),
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,

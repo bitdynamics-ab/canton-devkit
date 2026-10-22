@@ -454,8 +454,8 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 		if prior.Status == registry.StatusRunning {
 			prog.FailStep(StepPersistState, fmt.Sprintf(
 				"instance %q is already running — stop it first with "+
-					"`localnet down %s`, or bounce it with `localnet restart %s`",
-				opts.Name, opts.Name, opts.Name), nil)
+					"`%s`, or bounce it with `%s`",
+				opts.Name, cliprefix.Cmd("down "+opts.Name), cliprefix.Cmd("restart "+opts.Name)), nil)
 			return ExitUserError
 		}
 		priorPorts = prior.Ports
@@ -529,7 +529,7 @@ func RunUp(ctx context.Context, prog Progress, opts *UpOptions) int {
 			// instead of the generic failure dialog.
 			prog.FailStep(StepPersistState,
 				fmt.Sprintf("%s\nFree the conflicting process (lsof -i :<port>), pick a different --port-base, or tear down the "+
-					"other instance and re-run `localnet up %s`.", err, opts.Name),
+					"other instance and re-run `%s`.", err, cliprefix.Cmd("up "+opts.Name)),
 				WithCode(err, ErrCodePortsInUse))
 			return ExitPreflightFail
 		}

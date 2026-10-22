@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 	"github.com/spf13/cobra"
@@ -42,7 +43,7 @@ would be removed.`,
 				// name stays empty; RunRemove walks every instance.
 			case !hasPos && !hasFlag:
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-					"instance name required: `localnet %s <name>` (or --name), or --all for every instance\n", cmd.Name())
+					"instance name required: `%s` (or --name), or --all for every instance\n", cliprefix.Cmd(cmd.Name()+" <name>"))
 				return localnet.AsExitError(localnet.ExitUserError)
 			default:
 				name, err := resolveName(cmd, args)
@@ -95,6 +96,6 @@ func confirmStopPrompt(in io.Reader, errw io.Writer) func(string) (bool, error) 
 func runningNonInteractiveMessage(name string) string {
 	return fmt.Sprintf(
 		"%s is running and stdin is not a terminal — cannot ask for confirmation. "+
-			"Run `localnet down %s` first, or pass --force to tear it down and remove in one step.",
-		name, name)
+			"Run `%s` first, or pass --force to tear it down and remove in one step.",
+		name, cliprefix.Cmd("down "+name))
 }

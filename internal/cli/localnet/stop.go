@@ -3,6 +3,7 @@ package localnet
 import (
 	"fmt"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/spf13/cobra"
 )
@@ -12,15 +13,15 @@ func buildStop() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stop [name]",
 		Short: "Gracefully stop a running LocalNet instance (docker compose stop)",
-		Long: `Gracefully stop a running instance with 'docker compose stop'
+		Long: fmt.Sprintf(`Gracefully stop a running instance with 'docker compose stop'
 (SIGTERM → SIGKILL): the container processes exit and free their CPU
 and memory, but the containers, networks, and volumes stay in place.
-Restart cheaply with 'localnet start' — no image pull or container
+Restart cheaply with '%[1]s start' — no image pull or container
 re-create. Ledger state is preserved.
 
 For a full teardown that removes containers and networks, use
-'localnet down'. To only freeze processes without releasing memory
-(and resume instantly), use 'localnet pause'.`,
+'%[1]s down'. To only freeze processes without releasing memory
+(and resume instantly), use '%[1]s pause'.`, cliprefix.Get()),
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,

@@ -216,9 +216,9 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 		_, _ = fmt.Fprintf(errw, "%s\n",
 			term.Step(term.StepCross, "Compose down failed", err.Error(), ""))
 		_, _ = fmt.Fprintln(errw, term.Dimc(fmt.Sprintf(
-			"Registry state preserved at %s. Re-run `localnet down %s` "+
+			"Registry state preserved at %s. Re-run `%s` "+
 				"once the host is healthy.",
-			state.DataDir, opts.Name)))
+			state.DataDir, cliprefix.Cmd("down "+opts.Name))))
 		markStatus(state, registry.StatusFailed, errw)
 		return localnet.ExitRuntimeFailure
 	}
@@ -249,8 +249,8 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 			term.Bold("\""+opts.Name+"\""),
 			term.Dimc("· state preserved."),
 			term.Dimc(fmt.Sprintf("Run %s to resume, or %s to remove volumes.",
-				term.Textc(fmt.Sprintf("localnet up %s", opts.Name)),
-				term.Textc(fmt.Sprintf("localnet remove %s", opts.Name)))))))
+				term.Textc(cliprefix.Cmd("up "+opts.Name)),
+				term.Textc(cliprefix.Cmd("remove "+opts.Name)))))))
 
 	return localnet.ExitSuccess
 }

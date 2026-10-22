@@ -8,6 +8,7 @@ import (
 	"sort"
 	"syscall"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
@@ -276,9 +277,9 @@ func removeOne(ctx context.Context, out io.Writer, errw io.Writer, opts *RemoveO
 
 func runningRefusedMessage(name string) string {
 	return fmt.Sprintf(
-		"%s is running — refusing to remove. Run `localnet down %s` first, "+
+		"%s is running — refusing to remove. Run `%s` first, "+
 			"or pass --force to tear it down and remove in one step.",
-		name, name)
+		name, cliprefix.Cmd("down "+name))
 }
 
 func removeIndexHasEntry(name string) (bool, error) {
