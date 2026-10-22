@@ -3,13 +3,14 @@
 // link time:
 //
 //	-ldflags "-X github.com/bitdynamics-ab/canton-devkit/internal/campaign.enabled=on"
-//
-// DEVKIT_CAMPAIGN forces it on locally.
 package campaign
 
 import (
 	"crypto/rand"
 	"encoding/base32"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,48 +21,118 @@ import (
 // enabled is set to "on" at link time for the campaign build.
 var enabled = ""
 
-// Enabled reports whether this is a campaign build, or a truthy DEVKIT_CAMPAIGN
-// (1/true/on/yes) forces it on. Off by default.
 func Enabled() bool {
-	return enabled == "on" || envTruthy(os.Getenv("DEVKIT_CAMPAIGN"))
-}
-
-func envTruthy(v string) bool {
-	switch strings.ToLower(strings.TrimSpace(v)) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("DEVKIT_CAMPAIGN"))) {
 	case "1", "true", "on", "yes", "y":
 		return true
-	default:
+	case "0", "false", "off", "no", "n":
 		return false
 	}
+	return enabled == "on"
 }
 
 var (
-	mu     sync.Mutex
-	cached string
+	mu         sync.Mutex
+	cachedPath string
+	cached     string
+	cachedErr  error
 )
 
 // Code returns this install's stable code, minting and persisting one on first
 // use. "" when the campaign build is not enabled.
 func Code() string {
+	code, _ := Lookup()
+	return code
+}
+
+func Lookup() (string, error) {
 	if !Enabled() {
-		return ""
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if cached != "" {
-		return cached
+		return "", nil
 	}
 	path := codePath()
-	if b, err := os.ReadFile(path); err == nil {
-		if c := sanitize(string(b)); c != "" {
-			cached = c
-			return cached
+	mu.Lock()
+	defer mu.Unlock()
+	if cached == "" || cachedPath != path {
+		cached, cachedErr = loadOrCreate(path)
+		cachedPath = path
+		if cachedErr != nil {
+			cachedErr = fmt.Errorf("campaign code not saved to %s, it will change on restart: %w", path, cachedErr)
 		}
 	}
-	cached = newCode()
-	// Best-effort: an un-writable home still yields a code for this process.
-	_ = writeAtomic(path, cached)
-	return cached
+	return cached, cachedErr
+}
+
+const maxAttempts = 4
+
+var errUnsettled = errors.New("code file kept changing")
+
+func loadOrCreate(path string) (string, error) {
+	for range maxAttempts {
+		b, err := os.ReadFile(path)
+		if err == nil {
+			if code := sanitize(string(b)); code != "" {
+				return code, nil
+			}
+			code, err := takeInvalid(path)
+			if err != nil {
+				return newCode(), err
+			}
+			if code != "" {
+				return code, nil
+			}
+			continue
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return newCode(), err
+		}
+		code := newCode()
+		if err := createExclusive(path, code); !errors.Is(err, fs.ErrExist) {
+			return code, err
+		}
+	}
+	return newCode(), errUnsettled
+}
+
+func takeInvalid(path string) (string, error) {
+	aside := path + ".invalid-" + strings.TrimPrefix(newCode(), "CCT-")
+	if err := os.Rename(path, aside); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", nil
+		}
+		return "", err
+	}
+	defer func() { _ = os.Remove(aside) }()
+	b, err := os.ReadFile(aside)
+	if err != nil {
+		return "", nil
+	}
+	code := sanitize(string(b))
+	if code == "" || os.Link(aside, path) != nil {
+		return "", nil
+	}
+	return code, nil
+}
+
+func createExclusive(path, code string) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".campaign-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+	_, werr := tmp.WriteString(code + "\n")
+	if err := errors.Join(werr, tmp.Close()); err != nil {
+		return err
+	}
+	err = os.Link(tmpName, path)
+	if err == nil || errors.Is(err, fs.ErrExist) {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 // newCode is "CCT-" + 40 bits of crypto-random base32 (8 chars, A–Z2–7).
@@ -102,31 +173,4 @@ func codePath() string {
 		return filepath.Join(".", ".canton-devkit", "campaign-id")
 	}
 	return filepath.Join(home, ".canton-devkit", "campaign-id")
-}
-
-// writeAtomic writes via a temp file + rename so a crash mid-write never leaves
-// a half-written code file.
-func writeAtomic(path, data string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".campaign-*")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	if _, err := tmp.WriteString(data + "\n"); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
-		return err
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
-		return err
-	}
-	return nil
 }

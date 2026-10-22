@@ -11,7 +11,7 @@ import (
 func resetCache(t *testing.T) {
 	t.Helper()
 	mu.Lock()
-	cached = ""
+	cached, cachedPath, cachedErr = "", "", nil
 	mu.Unlock()
 }
 
