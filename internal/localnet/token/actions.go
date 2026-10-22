@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
@@ -18,9 +19,14 @@ import (
 // Splice LocalNet to be up with the splice-test-token-v2 DAR vetted.
 // CLI maps to ExitUserError; HTTP handler maps to 412 Precondition
 // Failed so the Web UI can render a meaningful remediation.
-var ErrNeedsV2LocalNet = errors.New(
-	"V2 ledger action needs a running Splice 0.6.11 or newer LocalNet; " +
-		"bring one up with `localnet up --version 0.6.12`, then re-run")
+var ErrNeedsV2LocalNet error = needsV2LocalNetError{}
+
+type needsV2LocalNetError struct{}
+
+func (needsV2LocalNetError) Error() string {
+	return "V2 ledger action needs a running Splice 0.6.11 or newer LocalNet; " +
+		"bring one up with `" + cliprefix.Cmd("up <name> --version 0.6.12") + "`, then re-run"
+}
 
 // ErrUnsupportedOnInstrument signals that the asset implementing the
 // instrument doesn't expose a standard mint or burn choice. Amulet is
@@ -52,9 +58,9 @@ var ErrUnresolvedLedgerEndpoint = errors.New("unresolved ledger endpoint")
 func unresolvedLedgerEndpoint(instance, role string) error {
 	return fmt.Errorf(
 		"%w: instance %q role %q has no recorded participant ledger port — "+
-			"restart it (`localnet down %s` then `localnet up %s`) so ports are captured, "+
+			"restart it (`%s` then `%s`) so ports are captured, "+
 			"or pass --endpoint host:port",
-		ErrUnresolvedLedgerEndpoint, instance, role, instance, instance)
+		ErrUnresolvedLedgerEndpoint, instance, role, cliprefix.Cmd("down "+instance), cliprefix.Cmd("up "+instance))
 }
 
 // MintOptions / TransferOptions / BurnOptions / BalanceOptions are the

@@ -1,7 +1,13 @@
 package token
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,14 +23,20 @@ func TestDARUnavailableError_NamesTheLaunchCommand(t *testing.T) {
 		want    []string
 		notWant string
 	}{
-		{"", []string{"`dpm localnet up --version 0.6.12`", "`dpm localnet dar upload`"}, "canton-devkit localnet"},
-		{"canton-devkit localnet", []string{"`canton-devkit localnet up --version 0.6.12`", "`canton-devkit localnet dar upload`"}, "dpm localnet"},
+		{"", []string{
+			"`dpm localnet up <name> --version 0.6.12`",
+			"`dpm localnet dar upload <dar-path> --instance demo --all-participants`",
+		}, "canton-devkit localnet"},
+		{"canton-devkit localnet", []string{
+			"`canton-devkit localnet up <name> --version 0.6.12`",
+			"`canton-devkit localnet dar upload <dar-path> --instance demo --all-participants`",
+		}, "dpm localnet"},
 	} {
 		t.Run("prefix="+tc.prefix, func(t *testing.T) {
 			if tc.prefix != "" {
 				t.Cleanup(cliprefix.Set(tc.prefix))
 			}
-			msg := darUnavailableError("splice-test-token-v2", "0.6.4").Error()
+			msg := darUnavailableError("splice-test-token-v2", "0.6.4", "demo").Error()
 			for _, w := range tc.want {
 				if !strings.Contains(msg, w) {
 					t.Errorf("message missing %q: %s", w, msg)
@@ -101,5 +113,90 @@ func writeAuthEnvFiles(t *testing.T, name string) {
 		if err := os.WriteFile(filepath.Join(envDir, file), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestTokenHints_FollowCLIPrefix(t *testing.T) {
+	for _, tc := range []struct{ set, prefix, other string }{
+		{"", "dpm localnet", "canton-devkit localnet"},
+		{"canton-devkit localnet", "canton-devkit localnet", "dpm localnet"},
+	} {
+		t.Run(tc.prefix, func(t *testing.T) {
+			if tc.set != "" {
+				t.Cleanup(cliprefix.Set(tc.set))
+			}
+			check := func(label, got string, want ...string) {
+				t.Helper()
+				for _, w := range want {
+					if !strings.Contains(got, w) {
+						t.Errorf("%s: missing %q in %q", label, w, got)
+					}
+				}
+				if strings.Contains(got, tc.other) {
+					t.Errorf("%s: must not mention %q: %q", label, tc.other, got)
+				}
+				if strings.Contains(got, "`localnet ") || strings.Contains(got, "`token ") {
+					t.Errorf("%s: prefix-less hint in %q", label, got)
+				}
+			}
+			t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+			upV2 := "`" + tc.prefix + " up <name> --version 0.6.12`"
+			manualDAR := "`" + tc.prefix + " dar upload <dar-path> --instance demo --all-participants`"
+
+			_, err := RunDemo(context.Background(), nil, DemoOptions{Instance: "demo"})
+			if !errors.Is(err, ErrNeedsV2LocalNet) {
+				t.Fatalf("demo without an endpoint: want ErrNeedsV2LocalNet, got %v", err)
+			}
+			check("needs V2", err.Error(), "bring one up with "+upV2+", then re-run")
+			if wrapped := fmt.Errorf("transfer: %w", ErrNeedsV2LocalNet); !errors.Is(wrapped, ErrNeedsV2LocalNet) {
+				t.Errorf("wrapped ErrNeedsV2LocalNet must still match errors.Is")
+			}
+
+			seedInstance(t, "demo")
+			seedOnLedgerToken(t, "demo", "XYZ", "issuer::abc")
+			err = RunMint(context.Background(), nil, MintOptions{
+				Instance: "demo", Instrument: "XYZ", To: "bob::xyz", Amount: "100",
+			})
+			if !errors.Is(err, ErrUnresolvedLedgerEndpoint) {
+				t.Fatalf("mint without a captured port: want ErrUnresolvedLedgerEndpoint, got %v", err)
+			}
+			check("unresolved endpoint", err.Error(), "restart it (`"+tc.prefix+" down demo` then `"+tc.prefix+" up demo`)")
+
+			_, err = tokenBundleCommit(registry.NewState("demo", "does-not-exist-9.9.9"))
+			if err == nil {
+				t.Fatal("unknown Splice version must fail")
+			}
+			check("bundle commit", err.Error(), "upload the test-token DARs manually with "+manualDAR)
+
+			seedBundleInstance(t, "demo", allAdminPorts())
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+			}))
+			t.Cleanup(srv.Close)
+			swapDARBase(t, srv.URL)
+			withDARDial(t, nil)
+			_, err = ensureTokenDARs(context.Background(), bundleCreateOpts("demo"), io.Discard)
+			if !errors.Is(err, ErrTokenDARUnavailable) {
+				t.Fatalf("want ErrTokenDARUnavailable, got %v", err)
+			}
+			check("DAR unavailable", err.Error(), upV2, manualDAR)
+
+			err = ensureLocalPartyRights(context.Background(), &fakeLedger{}, "demo", "app-user")
+			if err == nil {
+				t.Fatal("no local parties must fail")
+			}
+			check("onboarding", err.Error(), "check `"+tc.prefix+" status demo`")
+			err = ensureLocalPartyRights(context.Background(), &fakeLedger{}, "", "app-user")
+			if err == nil {
+				t.Fatal("no local parties must fail")
+			}
+			check("onboarding without instance", err.Error(), "check `"+tc.prefix+" status <name>`")
+
+			var out bytes.Buffer
+			writeCreateSummary(&out, CreateOptions{Instance: "demo", Endpoint: "localhost:3901"},
+				registry.TokenRef{Name: "Demo Token", Symbol: "DEMO", InstrumentID: "DEMO"}, nil)
+			check("create summary", out.String(),
+				"`"+tc.prefix+" token mint --instance demo --instrument DEMO --to <party> --amount <amount>` can now mint supply.")
+		})
 	}
 }

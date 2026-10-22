@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
@@ -218,26 +219,31 @@ func RunCreate(out io.Writer, opts CreateOptions) (*CreateResult, error) {
 	}
 
 	if out != nil {
-		_, _ = fmt.Fprintf(out,
-			"Recorded V2 instrument %q (symbol=%s, instrument_id=%s, issuer=%s).\n"+
-				"Initial supply %s with %d decimals.\n",
-			ref.Name, ref.Symbol, ref.InstrumentID, ref.IssuerParty,
-			ref.InitialSupply, ref.Decimals)
-		if opts.Endpoint != "" {
-			_, _ = fmt.Fprintln(out,
-				"Created on-ledger: a TokenRules contract anchors this instrument "+
-					"for the issuer. `token mint --endpoint ...` can now mint supply.")
-			if len(vettedRoles) > 0 {
-				_, _ = fmt.Fprintf(out, "Vetted test-token DARs on %s.\n", strings.Join(vettedRoles, ", "))
-			}
-		} else {
-			_, _ = fmt.Fprintln(out,
-				"Note: instrument is recorded LOCALLY only — pass --endpoint to "+
-					"create it on-ledger (requires the splice-test-token-v2 DAR "+
-					"uploaded). Subsequent commands can resolve --instrument by symbol.")
-		}
+		writeCreateSummary(out, opts, ref, vettedRoles)
 	}
 	return &CreateResult{TokenRef: ref, VettedRoles: vettedRoles}, nil
+}
+
+func writeCreateSummary(out io.Writer, opts CreateOptions, ref registry.TokenRef, vettedRoles []string) {
+	_, _ = fmt.Fprintf(out,
+		"Recorded V2 instrument %q (symbol=%s, instrument_id=%s, issuer=%s).\n"+
+			"Initial supply %s with %d decimals.\n",
+		ref.Name, ref.Symbol, ref.InstrumentID, ref.IssuerParty,
+		ref.InitialSupply, ref.Decimals)
+	if opts.Endpoint != "" {
+		_, _ = fmt.Fprintf(out,
+			"Created on-ledger: a TokenRules contract anchors this instrument "+
+				"for the issuer. `%s` can now mint supply.\n",
+			cliprefix.Cmd(fmt.Sprintf("token mint --instance %s --instrument %s --to <party> --amount <amount>", opts.Instance, ref.Symbol)))
+		if len(vettedRoles) > 0 {
+			_, _ = fmt.Fprintf(out, "Vetted test-token DARs on %s.\n", strings.Join(vettedRoles, ", "))
+		}
+	} else {
+		_, _ = fmt.Fprintln(out,
+			"Note: instrument is recorded LOCALLY only — pass --endpoint to "+
+				"create it on-ledger (requires the splice-test-token-v2 DAR "+
+				"uploaded). Subsequent commands can resolve --instrument by symbol.")
+	}
 }
 
 // ListTokens reads the per-instance Tokens registry. Returns an empty

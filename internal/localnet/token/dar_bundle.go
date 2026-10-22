@@ -104,7 +104,7 @@ func ensureTokenDARs(ctx context.Context, opts CreateOptions, out io.Writer) ([]
 		b, err := loadDAR(ctx, commit, file)
 		if err != nil {
 			if errors.Is(err, errDARNotPublished) {
-				return nil, darUnavailableError(d.Name, state.SpliceVersion)
+				return nil, darUnavailableError(d.Name, state.SpliceVersion, state.Name)
 			}
 			return nil, fmt.Errorf("fetch %s: %w", file, err)
 		}
@@ -190,16 +190,20 @@ func tokenBundleCommit(state *registry.State) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("cannot resolve a git commit for Splice version %q — "+
-		"upload the test-token DARs manually with `localnet dar upload`", tag)
+		"upload the test-token DARs manually with `%s`", tag, manualDARUploadCmd(state.Name))
+}
+
+func manualDARUploadCmd(instance string) string {
+	return cliprefix.Cmd("dar upload <dar-path> --instance " + instance + " --all-participants")
 }
 
 // darUnavailableError wraps ErrTokenDARUnavailable with an actionable
 // message: the test-token DAR is published in stable Splice 0.6.11 and newer.
-func darUnavailableError(pkg, version string) error {
+func darUnavailableError(pkg, version, instance string) error {
 	return fmt.Errorf("%w: %q is not published for Splice %q — on-ledger V2 tokens "+
 		"need Splice 0.6.11 or newer (`%s`), "+
 		"or upload the DAR manually with `%s`",
-		ErrTokenDARUnavailable, pkg, version, cliprefix.Cmd("up --version 0.6.12"), cliprefix.Cmd("dar upload"))
+		ErrTokenDARUnavailable, pkg, version, cliprefix.Cmd("up <name> --version 0.6.12"), manualDARUploadCmd(instance))
 }
 
 // fetchDAR downloads a prebuilt DAR from the upstream repo at a pinned

@@ -146,7 +146,7 @@ func dialLedger(ctx context.Context, conn LedgerConn) (*ledger.Client, func(), e
 	// CanActAs/CanReadAs on the local party (stable 0.6.4 does), so every
 	// ACS / submit returns PermissionDenied even with an accepted JWT.
 	// Grant the local party set on first dial; idempotent afterwards.
-	if err := ensureLocalPartyRights(ctx, client, conn.Role); err != nil {
+	if err := ensureLocalPartyRights(ctx, client, conn.Instance, conn.Role); err != nil {
 		_ = client.Close()
 		return nil, func() {}, err
 	}
@@ -176,7 +176,7 @@ func redactJWTs(err error) error {
 // ensureLocalPartyRights grants per-party Act/Read rights for the
 // role-matched local parties when the JWT carries none. A no-op when the
 // user already has Act/Read rights.
-func ensureLocalPartyRights(ctx context.Context, c LedgerClient, role string) error {
+func ensureLocalPartyRights(ctx context.Context, c LedgerClient, instance, role string) error {
 	// Wildcard read: interface-filtered ACS queries must read contracts
 	// owned by parties we don't host (the DSO, instrument admins, other
 	// holders), which per-party CanReadAs can't cover. Best-effort +
@@ -195,8 +195,11 @@ func ensureLocalPartyRights(ctx context.Context, c LedgerClient, role string) er
 		return fmt.Errorf("discover local parties for role %q: %w", role, err)
 	}
 	if len(parties) == 0 {
+		if instance == "" {
+			instance = "<name>"
+		}
 		return fmt.Errorf("no local parties found for role %q on this participant — "+
-			"V2 onboarding may not have completed; check `localnet status`", role)
+			"V2 onboarding may not have completed; check `%s`", role, cliprefix.Cmd("status "+instance))
 	}
 	if err := c.GrantUserActAndReadAs(ctx, exerciseUserID, parties); err != nil {
 		return fmt.Errorf("grant Act/Read rights for parties %v: %w", parties, err)

@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/token"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 	"github.com/spf13/cobra"
@@ -62,7 +63,7 @@ Web UI instrument list.
 			if resp.Tokens == nil {
 				return fmt.Errorf("instrument list returned neither live nor recorded results")
 			}
-			return renderRecorded(out, *resp.Tokens)
+			return renderRecorded(out, opts.Instance, *resp.Tokens)
 		},
 	}
 	cmd.Flags().StringVar(&opts.Instance, "instance", "", "Instance name. Required.")
@@ -95,9 +96,9 @@ func renderInstruments(out io.Writer, insts []types.InstrumentRef) error {
 }
 
 // renderRecorded prints the offline fallback (registry-recorded refs) as a text table.
-func renderRecorded(out io.Writer, refs []types.TokenRef) error {
+func renderRecorded(out io.Writer, instance string, refs []types.TokenRef) error {
 	if len(refs) == 0 {
-		_, _ = fmt.Fprintln(out, "No instruments. Create one with `token create`.")
+		_, _ = fmt.Fprintf(out, "No instruments. Create one with `%s`.\n", cliprefix.Cmd("token create --instance "+instance))
 		return nil
 	}
 	cols := []term.Column{{Label: "SYMBOL"}, {Label: "NAME"}, {Label: "STATUS"}, {Label: "DECLARED"}}

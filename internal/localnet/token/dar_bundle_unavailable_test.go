@@ -51,7 +51,7 @@ func TestFetchDAR_200ReturnsBytes(t *testing.T) {
 // ErrTokenDARUnavailable and names the version + stable-version remedy +
 // the manual-upload escape hatch.
 func TestDARUnavailableError(t *testing.T) {
-	err := darUnavailableError("splice-test-token-v2", "0.6.4")
+	err := darUnavailableError("splice-test-token-v2", "0.6.4", "demo")
 	if !errors.Is(err, ErrTokenDARUnavailable) {
 		t.Fatalf("should wrap ErrTokenDARUnavailable, got %v", err)
 	}
