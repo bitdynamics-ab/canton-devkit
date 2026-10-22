@@ -10,6 +10,7 @@ import (
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/registry"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	regstate "github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
@@ -66,7 +67,7 @@ func ensureTokenRules(out io.Writer, opts CreateOptions) ([]string, error) {
 	if existing != "" {
 		return vetted, nil
 	}
-	_, err = createTokenRules(ctx, client, admin)
+	_, err = createTokenRules(ctx, client, opts.Instance, admin)
 	return vetted, err
 }
 
@@ -112,8 +113,7 @@ func runMintLive(ctx context.Context, out io.Writer, opts MintOptions, ref regst
 		return fmt.Errorf("look up TokenRules: %w", err)
 	}
 	if tokenRulesCID == "" {
-		return fmt.Errorf("no on-ledger TokenRules for issuer %s — "+
-			"run `localnet token create --endpoint ...` first", admin)
+		return missingTokenRulesError(opts.Instance, admin)
 	}
 
 	offerCID, err := mintViaOfferMintFn(ctx, client, admin, tokenRulesCID, opts.To, opts.Amount, ref.InstrumentID)
@@ -183,7 +183,7 @@ func runBurnLive(ctx context.Context, out io.Writer, opts BurnOptions, ref regst
 		admin = ref.IssuerParty
 	}
 
-	pkgID, err := resolvePackageID(ctx, client, "splice-test-token-v2")
+	pkgID, err := resolvePackageID(ctx, client, opts.Instance, "splice-test-token-v2")
 	if err != nil {
 		return err
 	}
@@ -337,12 +337,12 @@ const (
 //
 // Single-signer create: the admin (our acting party) is the only
 // signatory, so a plain submit-and-wait suffices.
-func createTokenRules(ctx context.Context, client *ledger.Client, admin string) (string, error) {
+func createTokenRules(ctx context.Context, client *ledger.Client, instance, admin string) (string, error) {
 	// CreateCommand needs a concrete package id — Canton resolves the
 	// `#package-name` reference only for interface-choice exercises, not
 	// creates. Resolving at runtime stays robust across the alpha's weekly
 	// snapshot rotation.
-	pkgID, err := resolvePackageID(ctx, client, "splice-test-token-v2")
+	pkgID, err := resolvePackageID(ctx, client, instance, "splice-test-token-v2")
 	if err != nil {
 		return "", err
 	}
@@ -574,7 +574,7 @@ func boolValue(b bool) *lapiv2.Value {
 // need the concrete id (the `#name` form resolves only for
 // interface-choice exercises); resolving at runtime stays robust across
 // the V2 alpha's weekly snapshot rotation.
-func resolvePackageID(ctx context.Context, client *ledger.Client, name string) (string, error) {
+func resolvePackageID(ctx context.Context, client *ledger.Client, instance, name string) (string, error) {
 	resp, err := client.ListKnownPackages(ctx)
 	if err != nil {
 		return "", fmt.Errorf("list known packages: %w", err)
@@ -585,7 +585,12 @@ func resolvePackageID(ctx context.Context, client *ledger.Client, name string) (
 		}
 	}
 	return "", fmt.Errorf("package %q not known to this participant — "+
-		"upload it first (`localnet dar upload <%s.dar>`)", name, name)
+		"upload it first (`%s`)", name, manualDARUploadCmd(instance))
+}
+
+func missingTokenRulesError(instance, admin string) error {
+	return fmt.Errorf("no on-ledger TokenRules for issuer %s — run `%s` with that issuer first",
+		admin, cliprefix.Cmd("token create --instance "+instance))
 }
 
 // submitForTransaction is the instrument-lifecycle submit (create /
@@ -642,8 +647,8 @@ const accountConfigTemplateID = "#splice-test-token-v2:Splice.Testing.Tokens.Tes
 // account.owner AND account.provider, so the submit acts as both. Config
 // flags: owner can initiate AND approves, provider neither — so the owner
 // alone settles, satisfying isValidAccountConfig.
-func createAccountConfig(ctx context.Context, client *ledger.Client, admin, owner, provider string) (string, error) {
-	pkgID, err := resolvePackageID(ctx, client, "splice-test-token-v2")
+func createAccountConfig(ctx context.Context, client *ledger.Client, instance, admin, owner, provider string) (string, error) {
+	pkgID, err := resolvePackageID(ctx, client, instance, "splice-test-token-v2")
 	if err != nil {
 		return "", err
 	}

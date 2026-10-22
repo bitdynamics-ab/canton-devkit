@@ -83,8 +83,7 @@ func runTransferLiveOnLedger(ctx context.Context, out io.Writer, opts TransferOp
 		return "", fmt.Errorf("look up TokenRules: %w", err)
 	}
 	if tokenRulesCID == "" {
-		return "", fmt.Errorf("no on-ledger TokenRules for issuer %s — "+
-			"run `localnet token create --endpoint ...` first", admin)
+		return "", missingTokenRulesError(opts.Instance, admin)
 	}
 
 	// Pick the sender's input holdings within a single account (the
@@ -116,7 +115,7 @@ func runTransferLiveOnLedger(ctx context.Context, out io.Writer, opts TransferOp
 	// config the choice synthesizes, so no contract is supplied.
 	var accountConfigCIDs []string
 	if senderAcct.Provider != "" {
-		cid, err := findOrCreateAccountConfig(ctx, client, admin, senderAcct.Owner, senderAcct.Provider)
+		cid, err := findOrCreateAccountConfig(ctx, client, opts.Instance, admin, senderAcct.Owner, senderAcct.Provider)
 		if err != nil {
 			return "", fmt.Errorf("ensure sender account config: %w", err)
 		}
@@ -245,7 +244,7 @@ func runAcceptOnLedgerIfTestToken(ctx context.Context, out io.Writer, opts Accep
 		if a.Provider == "" {
 			continue
 		}
-		cid, cerr := findOrCreateAccountConfig(ctx, client, admin, a.Owner, a.Provider)
+		cid, cerr := findOrCreateAccountConfig(ctx, client, opts.Instance, admin, a.Owner, a.Provider)
 		if cerr != nil {
 			return true, fmt.Errorf("ensure account config: %w", cerr)
 		}
@@ -498,7 +497,7 @@ func runTransferOnLedgerBatched(
 		HoldingCIDs: transferArgs.InputHoldingCids,
 	}}
 
-	res, err := executeBatch(ctx, client, batchUser, actAs, inputHoldings, actions, false)
+	res, err := executeBatch(ctx, client, opts.Instance, batchUser, actAs, inputHoldings, actions, false)
 	if err != nil {
 		// TODO: atomic transfer+accept is experimental and not yet supported
 		// on this Splice version. The batch's wire shape is correct, but
@@ -568,7 +567,7 @@ func selectSenderAccountAndInputs(holdings []holdingRef, amount string) (tokenAc
 // (owner, provider) under `admin`, creating one if none exists.
 // Idempotent: transfers from minted holdings reuse the receiver
 // AccountConfig the mint flow created (one config per account).
-func findOrCreateAccountConfig(ctx context.Context, client *ledger.Client, admin, owner, provider string) (string, error) {
+func findOrCreateAccountConfig(ctx context.Context, client *ledger.Client, instance, admin, owner, provider string) (string, error) {
 	cid, err := findAccountConfigCID(ctx, client, admin, owner, provider)
 	if err != nil {
 		return "", err
@@ -576,7 +575,7 @@ func findOrCreateAccountConfig(ctx context.Context, client *ledger.Client, admin
 	if cid != "" {
 		return cid, nil
 	}
-	return createAccountConfig(ctx, client, admin, owner, provider)
+	return createAccountConfig(ctx, client, instance, admin, owner, provider)
 }
 
 // findAccountConfigCID returns the contract id of the admin's

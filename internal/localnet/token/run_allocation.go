@@ -201,8 +201,7 @@ func RunAllocate(ctx context.Context, out io.Writer, opts AllocationOptions) (st
 		return "", fmt.Errorf("look up TokenRules: %w", err)
 	}
 	if tokenRulesCID == "" {
-		return "", fmt.Errorf("no on-ledger TokenRules for issuer %s — "+
-			"run `localnet token create --endpoint ...` first", admin)
+		return "", missingTokenRulesError(opts.Instance, admin)
 	}
 
 	// Provider-scoped authorizer accounts need an AccountConfig in the
@@ -210,7 +209,7 @@ func RunAllocate(ctx context.Context, out io.Writer, opts AllocationOptions) (st
 	// config the choice synthesizes, so none is supplied.
 	var accountConfigCIDs []string
 	if p := authorizerProvider(picked); p != "" {
-		cid, cerr := findOrCreateAccountConfig(ctx, client, admin, opts.From, p)
+		cid, cerr := findOrCreateAccountConfig(ctx, client, opts.Instance, admin, opts.From, p)
 		if cerr != nil {
 			return "", fmt.Errorf("ensure authorizer account config: %w", cerr)
 		}
@@ -389,8 +388,7 @@ func runAllocationAction(ctx context.Context, out io.Writer, opts AllocationActi
 		return fmt.Errorf("look up TokenRules: %w", err)
 	}
 	if tokenRulesCID == "" {
-		return fmt.Errorf("no on-ledger TokenRules for issuer %s — "+
-			"run `localnet token create --endpoint ...` first", admin)
+		return missingTokenRulesError(opts.Instance, admin)
 	}
 
 	// Provider-scoped authorizer accounts need an AccountConfig in the
@@ -398,7 +396,7 @@ func runAllocationAction(ctx context.Context, out io.Writer, opts AllocationActi
 	// basic config, so none is supplied.
 	var accountConfigCIDs []string
 	if av.AuthorizerProvider != "" {
-		cid, cerr := findOrCreateAccountConfig(ctx, client, admin, av.Authorizer, av.AuthorizerProvider)
+		cid, cerr := findOrCreateAccountConfig(ctx, client, opts.Instance, admin, av.Authorizer, av.AuthorizerProvider)
 		if cerr != nil {
 			return fmt.Errorf("ensure authorizer account config: %w", cerr)
 		}

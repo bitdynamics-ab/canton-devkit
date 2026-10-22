@@ -74,7 +74,7 @@ type scopedHoldings struct {
 // ensureBatchingUtility returns the user's BatchingUtility contract id,
 // creating one if none exists. Idempotent: a re-run reuses the existing
 // utility. The user is the sole signatory, so one utility per user suffices.
-func ensureBatchingUtility(ctx context.Context, client *ledger.Client, user string) (string, error) {
+func ensureBatchingUtility(ctx context.Context, client *ledger.Client, instance, user string) (string, error) {
 	cid, err := findBatchingUtility(ctx, client, user)
 	if err != nil {
 		return "", fmt.Errorf("look up BatchingUtility: %w", err)
@@ -82,7 +82,7 @@ func ensureBatchingUtility(ctx context.Context, client *ledger.Client, user stri
 	if cid != "" {
 		return cid, nil
 	}
-	return createBatchingUtility(ctx, client, user)
+	return createBatchingUtility(ctx, client, instance, user)
 }
 
 // findBatchingUtility returns the user's existing BatchingUtility contract
@@ -132,8 +132,8 @@ func findBatchingUtility(ctx context.Context, client *ledger.Client, user string
 // returns its contract id. CreateCommand does not resolve the #package-name
 // reference, so the package id is resolved at runtime to survive the alpha's
 // snapshot rotation.
-func createBatchingUtility(ctx context.Context, client *ledger.Client, user string) (string, error) {
-	pkgID, err := resolvePackageID(ctx, client, "splice-util-token-standard-wallet")
+func createBatchingUtility(ctx context.Context, client *ledger.Client, instance, user string) (string, error) {
+	pkgID, err := resolvePackageID(ctx, client, instance, "splice-util-token-standard-wallet")
 	if err != nil {
 		return "", err
 	}
@@ -170,13 +170,14 @@ func createBatchingUtility(ctx context.Context, client *ledger.Client, user stri
 func executeBatch(
 	ctx context.Context,
 	client *ledger.Client,
+	instance string,
 	user string,
 	actAs []string,
 	inputHoldings []scopedHoldings,
 	actions []batchAction,
 	archiveAfterExecution bool,
 ) (batchResult, error) {
-	utilCID, err := ensureBatchingUtility(ctx, client, user)
+	utilCID, err := ensureBatchingUtility(ctx, client, instance, user)
 	if err != nil {
 		return batchResult{}, err
 	}

@@ -5,16 +5,27 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	gotoken "go/token"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
 	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
+	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
+	adminv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2/admin"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/test/bufconn"
 )
 
 func TestDARUnavailableError_NamesTheLaunchCommand(t *testing.T) {
@@ -197,6 +208,132 @@ func TestTokenHints_FollowCLIPrefix(t *testing.T) {
 				registry.TokenRef{Name: "Demo Token", Symbol: "DEMO", InstrumentID: "DEMO"}, nil)
 			check("create summary", out.String(),
 				"`"+tc.prefix+" token mint --instance demo --instrument DEMO --to <party> --amount <amount>` can now mint supply.")
+
+			client := newHintLedgerClient(t)
+			prevDial := dialSenderFn
+			dialSenderFn = func(context.Context, LedgerConn) (*ledger.Client, func(), error) {
+				return client, func() {}, nil
+			}
+			t.Cleanup(func() { dialSenderFn = prevDial })
+			issued := registry.TokenRef{IssuerParty: "issuer::abc", Symbol: "XYZ", InstrumentID: "XYZ"}
+			createRules := "no on-ledger TokenRules for issuer issuer::abc — run `" + tc.prefix + " token create --instance demo` with that issuer first"
+
+			err = runMintLive(context.Background(), nil, MintOptions{
+				Instance: "demo", To: "bob::xyz", Amount: "100",
+			}, issued)
+			if err == nil {
+				t.Fatal("mint without TokenRules must fail")
+			}
+			check("mint without TokenRules", err.Error(), createRules)
+
+			_, err = runTransferLiveOnLedger(context.Background(), nil, TransferOptions{
+				Instance: "demo", From: "alice::abc", To: "bob::xyz", Amount: "1",
+			}, issued)
+			if err == nil {
+				t.Fatal("transfer without TokenRules must fail")
+			}
+			check("transfer without TokenRules", err.Error(), createRules)
+
+			check("allocation without TokenRules", missingTokenRulesError("demo", "issuer::abc").Error(), createRules)
+
+			_, err = createTokenRules(context.Background(), client, "demo", "issuer::abc")
+			if err == nil {
+				t.Fatal("create with an unknown package must fail")
+			}
+			check("unknown package", err.Error(),
+				`package "splice-test-token-v2" not known to this participant — upload it first (`+manualDAR+")")
+
+			_, err = ResolveBySymbol("demo", "GHOST")
+			if err == nil {
+				t.Fatal("unknown symbol must fail")
+			}
+			check("unknown symbol", err.Error(), "use `"+tc.prefix+" token create --instance demo` first")
+			_, err = resolveInstrument("demo", "GHOST")
+			if err == nil {
+				t.Fatal("unknown instrument must fail")
+			}
+			check("unknown instrument", err.Error(), "run `"+tc.prefix+" token create --instance demo` first")
+
+			check("unsupported instrument", ErrUnsupportedOnInstrument.Error(),
+				"via `"+tc.prefix+" token create --instance <name>` for a token")
+			if wrapped := fmt.Errorf("mint: %w", ErrUnsupportedOnInstrument); !errors.Is(wrapped, ErrUnsupportedOnInstrument) {
+				t.Errorf("wrapped ErrUnsupportedOnInstrument must still match errors.Is")
+			}
 		})
 	}
+}
+
+func TestTokenPackage_CommandHintsCarryCLIPrefix(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := gotoken.NewFileSet()
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != gotoken.STRING {
+				return true
+			}
+			v, err := strconv.Unquote(lit.Value)
+			if err != nil {
+				v = lit.Value
+			}
+			for _, bare := range []string{"`localnet ", "`token "} {
+				if strings.Contains(v, bare) {
+					t.Errorf("%s: command hint without the CLI prefix: %q", fset.Position(lit.Pos()), v)
+				}
+			}
+			return true
+		})
+	}
+}
+
+type hintStateServer struct {
+	lapiv2.UnimplementedStateServiceServer
+}
+
+func (hintStateServer) GetLedgerEnd(context.Context, *lapiv2.GetLedgerEndRequest) (*lapiv2.GetLedgerEndResponse, error) {
+	return &lapiv2.GetLedgerEndResponse{Offset: 1}, nil
+}
+
+func (hintStateServer) GetActiveContracts(*lapiv2.GetActiveContractsRequest, grpc.ServerStreamingServer[lapiv2.GetActiveContractsResponse]) error {
+	return nil
+}
+
+type hintPackageServer struct {
+	adminv2.UnimplementedPackageManagementServiceServer
+}
+
+func (hintPackageServer) ListKnownPackages(context.Context, *adminv2.ListKnownPackagesRequest) (*adminv2.ListKnownPackagesResponse, error) {
+	return &adminv2.ListKnownPackagesResponse{}, nil
+}
+
+func newHintLedgerClient(t *testing.T) *ledger.Client {
+	t.Helper()
+	lis := bufconn.Listen(1 << 20)
+	srv := grpc.NewServer()
+	lapiv2.RegisterStateServiceServer(srv, hintStateServer{})
+	adminv2.RegisterPackageManagementServiceServer(srv, hintPackageServer{})
+	go func() { _ = srv.Serve(lis) }()
+	t.Cleanup(srv.Stop)
+	client, err := ledger.Dial(context.Background(), ledger.DialOptions{
+		Endpoint: "passthrough:///bufnet",
+		ExtraDialOptions: []grpc.DialOption{
+			grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+	return client
 }

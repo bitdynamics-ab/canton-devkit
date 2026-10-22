@@ -274,8 +274,8 @@ func ResolveBySymbol(instance, symbol string) (registry.TokenRef, error) {
 	}
 	return registry.TokenRef{},
 		fmt.Errorf("no instrument with symbol %q on instance %q "+
-			"(use `localnet token create` first, or pass --instrument by full id)",
-			symbol, instance)
+			"(use `%s` first, or pass --instrument by full id)",
+			symbol, instance, cliprefix.Cmd("token create --instance "+instance))
 }
 
 // validateCreate centralises shape checks shared between the

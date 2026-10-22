@@ -37,12 +37,17 @@ func (needsV2LocalNetError) Error() string {
 // CLI maps to ExitUserError; HTTP handler maps to 422 Unprocessable
 // Entity so the UI can render "this instrument doesn't support that
 // operation — use the asset's wallet UI" instead of a wiring error.
-var ErrUnsupportedOnInstrument = errors.New(
-	"this instrument doesn't implement the V2 standard's mint/burn surface " +
+var ErrUnsupportedOnInstrument error = unsupportedOnInstrumentError{}
+
+type unsupportedOnInstrumentError struct{}
+
+func (unsupportedOnInstrumentError) Error() string {
+	return "this instrument doesn't implement the V2 standard's mint/burn surface " +
 		"(Amulet has no BurnMintFactoryV1, and V2 defines no generic mint/burn). " +
 		"Use the asset's own wallet UI for issuance changes, or create a " +
-		"splice-test-token-v2 instrument via `localnet token create` for a token " +
-		"that implements asset-specific mint via TokenRules_OfferMint")
+		"splice-test-token-v2 instrument via `" + cliprefix.Cmd("token create --instance <name>") + "` for a token " +
+		"that implements asset-specific mint via TokenRules_OfferMint"
+}
 
 // ErrUnresolvedLedgerEndpoint signals that a live on-ledger action could
 // not resolve a participant host:port for the instance+role. Distinct
@@ -786,8 +791,8 @@ func resolveInstrument(instance, ident string) (registry.TokenRef, error) {
 		}
 	}
 	return registry.TokenRef{}, fmt.Errorf(
-		"no instrument %q on instance %q (run `localnet token create` first)",
-		ident, instance)
+		"no instrument %q on instance %q (run `%s` first)",
+		ident, instance, cliprefix.Cmd("token create --instance "+instance))
 }
 
 // requireFields surfaces the same "field X is required" wording as
