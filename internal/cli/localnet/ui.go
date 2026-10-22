@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/campaign"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/handlers"
@@ -76,6 +77,9 @@ identifiers and is not designed for LAN-wide exposure.`,
 			if insecureSkipOriginCheck {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), term.Warnc(
 					"warning: --insecure-skip-origin-check disables CSRF Origin checks; use only for local frontend development"))
+			}
+			if _, err := campaign.Lookup(); err != nil {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), term.Warnc("warning: "+err.Error()))
 			}
 			hub := stream.New()
 			// Host-header allowlist (DNS-rebinding defence) is
