@@ -556,6 +556,43 @@ describe("InstanceOverview — snapshot status", () => {
     expect(headerOf("demo").getByText("Running")).toBeInTheDocument();
   });
 
+  it("shows Paused once the user pauses the instance during the hold", async () => {
+    let paused = false;
+    const { rerender } = await startSnapshot(() => paused);
+    await advance(4_000);
+    fireEvent.click(screen.getByRole("button", { name: /^Pause$/ }));
+    paused = true;
+    await advance(4_000);
+    rerender(<InstanceOverview name="demo" statusHint="paused" />);
+    await advance(5 * 60_000);
+    expect(headerOf("demo").queryByText("Snapshotting…")).not.toBeInTheDocument();
+    expect(headerOf("demo").getByText("Paused")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /download snapshot/i })).toBeEnabled();
+  });
+
+  it("drops the hold when the instance is torn down before a poll ends it", async () => {
+    const { rerender } = await startSnapshot(() => false);
+    const base = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, init?: RequestInit) =>
+        url.endsWith("/containers")
+          ? Promise.resolve(
+              new Response(JSON.stringify({ code: "NO_CONTAINERS", error: "gone" }), {
+                status: 503,
+                headers: { "Content-Type": "application/json" },
+              }),
+            )
+          : base(url, init),
+      ),
+    );
+    await advance(4_000);
+    rerender(<InstanceOverview name="demo" statusHint="stopped" />);
+    await advance(30_000);
+    expect(headerOf("demo").queryByText("Snapshotting…")).not.toBeInTheDocument();
+    expect(headerOf("demo").getByText("Stopped")).toBeInTheDocument();
+  });
+
   it("drops the snapshot state when the selected instance changes", async () => {
     const { rerender } = await startSnapshot(() => true);
     await advance(4_000);

@@ -131,6 +131,10 @@ export function InstanceOverview({ name, statusHint, ports, onChanged }: Props) 
   const status = statusHint ?? instance?.status ?? "";
   const running = (instance?.status ?? statusHint) === "running";
 
+  useEffect(() => {
+    if (snapshotHold && status && status !== "running") setSnapshotHold(null);
+  }, [status, snapshotHold]);
+
   // Shared container poll — the header pill, the metrics-off strip, and
   // the Containers panel all read one poll instead of three.
   const [containers, setContainers] = useState<ContainersResponse | null>(null);
