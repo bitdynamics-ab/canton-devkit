@@ -156,7 +156,7 @@ function CensusBar({
       </span>
       {c.failed > 0 && (
         <span style={{ color: W.err, fontSize: fs.meta }}>
-          — run <code style={{ fontFamily: wMono }}>{cli} doctor &lt;name&gt;</code>
+          — run <code style={{ fontFamily: wMono }}>{cli} doctor</code>
         </span>
       )}
       <Button

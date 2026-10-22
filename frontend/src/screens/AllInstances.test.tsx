@@ -93,6 +93,16 @@ describe("AllInstances", () => {
     expect(screen.getByText(/2 registered · 1 running · 1 stopped/)).toBeInTheDocument();
   });
 
+  it("suggests a doctor command that takes no instance name when one has failed", async () => {
+    mockListResponse([
+      { name: "demo", status: "running" },
+      { name: "broken", status: "failed" },
+    ]);
+    renderAll();
+    expect(await screen.findByText("dpm localnet doctor")).toBeInTheDocument();
+    expect(screen.queryByText(/doctor <name>/)).not.toBeInTheDocument();
+  });
+
   it("renders the warning strip when ListResponse.warning is set", async () => {
     mockListResponse(
       [{ name: "demo", status: "running" }],

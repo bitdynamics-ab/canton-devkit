@@ -70,6 +70,14 @@ describe("App build info from /api/version", () => {
     );
   });
 
+  it("names the running binary on a schema mismatch", async () => {
+    stubServer({ schema_version: 999, cli_prefix: "canton-devkit localnet" });
+    renderApp();
+    expect(await screen.findByText("Schema-version mismatch")).toBeInTheDocument();
+    expect(screen.getByText("canton-devkit", { selector: "code" })).toBeInTheDocument();
+    expect(screen.queryByText("dpm", { selector: "code" })).not.toBeInTheDocument();
+  });
+
   it("names both launch commands when the server is unreachable", async () => {
     stubServer("down");
     renderApp();

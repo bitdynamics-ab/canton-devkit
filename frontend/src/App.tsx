@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { SCHEMA_VERSION, fetchVersion } from "./api";
-import { setBuildInfo } from "./buildInfo";
+import { setBuildInfo, useCLIPrefix } from "./buildInfo";
 import { Shell } from "./shell/Shell";
 import { InstanceSelectionProvider } from "./shell/useInstanceSelection";
 import { CreateInstanceProvider } from "./shell/useCreateInstance";
@@ -96,6 +96,7 @@ interface BootGateProps {
 }
 
 function BootGate({ status, serverVersion }: BootGateProps) {
+  const bin = useCLIPrefix().split(" ")[0];
   const containerStyle: React.CSSProperties = {
     minHeight: "100vh",
     display: "flex",
@@ -129,7 +130,7 @@ function BootGate({ status, serverVersion }: BootGateProps) {
           <strong style={{ color: W.warn }}>{serverVersion}</strong>.
         </p>
         <p style={{ color: W.dim, marginBottom: 0 }}>
-          Restart with the matching <code>dpm</code> binary, or rebuild the
+          Restart with the matching <code>{bin}</code> binary, or rebuild the
           frontend (<code>make frontend</code>) against the running server.
         </p>
       </>

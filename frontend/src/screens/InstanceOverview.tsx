@@ -890,7 +890,7 @@ function ThroughputPanel({
           />
         )}
       </div>
-      <PanelFooter left={`${cli} metrics ${name}`} />
+      <PanelFooter left={`${cli} metrics --name ${name}`} />
     </div>
   );
 }

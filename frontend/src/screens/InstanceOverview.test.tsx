@@ -656,7 +656,7 @@ describe("InstanceOverview — CLI prefix", () => {
         <ConfirmHost />
       </>,
     );
-    expect(await screen.findByText("dpm localnet metrics demo")).toBeInTheDocument();
+    expect(await screen.findByText("dpm localnet metrics --name demo")).toBeInTheDocument();
     expect(screen.getByText(`eval "$(dpm localnet env demo)"`)).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: /recreate/i }));
     const dialog = await screen.findByRole("dialog");
@@ -674,7 +674,7 @@ describe("InstanceOverview — CLI prefix", () => {
         <ConfirmHost />
       </>,
     );
-    expect(await screen.findByText("canton-devkit localnet metrics demo")).toBeInTheDocument();
+    expect(await screen.findByText("canton-devkit localnet metrics --name demo")).toBeInTheDocument();
     expect(screen.getByText(`eval "$(canton-devkit localnet env demo)"`)).toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole("button", { name: /recreate/i }));
