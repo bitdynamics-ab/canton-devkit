@@ -610,6 +610,21 @@ describe("TokensScreen", () => {
   });
 });
 
+describe("TokensScreen modals", () => {
+  it.each([
+    ["Transfer", "Transfer RTK"],
+    ["New instrument", "Create V2 instrument"],
+    ["Parties", "Parties"],
+  ])("marks the %s dialog as modal", async (button, title) => {
+    const user = userEvent.setup();
+    stubFetch([{ symbol: "RTK", name: "Retail Token" }]);
+    renderTokens();
+    await user.click(await screen.findByRole("button", { name: new RegExp(`^${button}`) }, { timeout: 4000 }));
+    const dialog = await screen.findByRole("dialog", { name: title });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+  });
+});
+
 describe("TokensScreen CLI hints", () => {
   it("prints runnable token ls and token balance footers for the selected instance", async () => {
     stubFetch([{ symbol: "RTK", name: "Retail Token" }]);

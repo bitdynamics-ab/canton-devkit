@@ -2323,7 +2323,7 @@ function PartyPicker({
 
 function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div role="dialog" aria-label={title} style={{
+    <div role="dialog" aria-modal="true" aria-label={title} style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
       display: "grid", placeItems: "center", zIndex: 50, padding: 16,
     }}>
