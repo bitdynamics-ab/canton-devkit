@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
@@ -790,11 +791,11 @@ func renderWelcome(out io.Writer, name, spliceVersion string, state *registry.St
 	}
 
 	tryNext := []term.NextStep{
-		{Label: "Status", Command: fmt.Sprintf("canton-devkit localnet status %s", name)},
-		{Label: "Env", Command: fmt.Sprintf("eval $(canton-devkit localnet env %s)", name)},
-		{Label: "Live ACS", Command: fmt.Sprintf("canton-devkit localnet contracts watch --name %s", name)},
-		{Label: "Upload DAR", Command: fmt.Sprintf("canton-devkit localnet dar upload <path> --name %s", name)},
-		{Label: "Stop", Command: fmt.Sprintf("canton-devkit localnet down %s", name)},
+		{Label: "Status", Command: cliprefix.Cmd("status " + name)},
+		{Label: "Env", Command: fmt.Sprintf("eval $(%s)", cliprefix.Cmd("env "+name))},
+		{Label: "Live ACS", Command: cliprefix.Cmd("contracts watch --name " + name)},
+		{Label: "Upload DAR", Command: cliprefix.Cmd("dar upload <path> --name " + name)},
+		{Label: "Stop", Command: cliprefix.Cmd("down " + name)},
 	}
 
 	term.WelcomeScreen{

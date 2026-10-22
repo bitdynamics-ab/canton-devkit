@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 )
 
 // WelcomeScreen renders the post-`localnet up` "ready" surface — a brand
@@ -103,7 +105,7 @@ func (s WelcomeScreen) renderRich(w io.Writer) {
 	_, _ = fmt.Fprintln(w,
 		"  "+Brandc("→")+"  "+Bold("Open dashboard")+
 			"      "+osc8("http://localhost:7777", "http://localhost:7777"))
-	_, _ = fmt.Fprintln(w, "     "+Dimc("(canton-devkit localnet ui)"))
+	_, _ = fmt.Fprintln(w, "     "+Dimc("("+cliprefix.Cmd("ui")+")"))
 	_, _ = fmt.Fprintln(w)
 
 	// 4. Endpoint cards (grouped by Category transitions).
@@ -180,7 +182,7 @@ func (s WelcomeScreen) renderPlain(w io.Writer) {
 	_, _ = fmt.Fprintln(w, summary)
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintln(w, "Open dashboard: http://localhost:7777")
-	_, _ = fmt.Fprintln(w, "                (canton-devkit localnet ui)")
+	_, _ = fmt.Fprintln(w, "                ("+cliprefix.Cmd("ui")+")")
 	_, _ = fmt.Fprintln(w)
 	if len(s.Endpoints) > 0 {
 		currentCat := ""

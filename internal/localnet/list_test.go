@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
@@ -51,19 +52,36 @@ func TestRunListEmptyJSONShape(t *testing.T) {
 }
 
 func TestRunListEmptyTextHintUsesPositionalName(t *testing.T) {
-	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	for _, tc := range []struct {
+		prefix  string
+		want    string
+		notWant string
+	}{
+		{"", "Start one with: dpm localnet up <name>", "canton-devkit localnet"},
+		{"canton-devkit localnet", "Start one with: canton-devkit localnet up <name>", "dpm localnet"},
+	} {
+		t.Run("prefix="+tc.prefix, func(t *testing.T) {
+			t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+			if tc.prefix != "" {
+				t.Cleanup(cliprefix.Set(tc.prefix))
+			}
 
-	var out, errw bytes.Buffer
-	code := RunList(context.Background(), &out, &errw, &ListOptions{Format: "text"})
-	if code != ExitSuccess {
-		t.Fatalf("RunList exit = %d, want %d; stderr=%s", code, ExitSuccess, errw.String())
-	}
-	body := out.String()
-	if !strings.Contains(body, "Start one with: canton-devkit localnet up <name>") {
-		t.Fatalf("hint = %q, want positional up syntax", body)
-	}
-	if strings.Contains(body, "--name") {
-		t.Fatalf("hint should not mention --name:\n%s", body)
+			var out, errw bytes.Buffer
+			code := RunList(context.Background(), &out, &errw, &ListOptions{Format: "text"})
+			if code != ExitSuccess {
+				t.Fatalf("RunList exit = %d, want %d; stderr=%s", code, ExitSuccess, errw.String())
+			}
+			body := out.String()
+			if !strings.Contains(body, tc.want) {
+				t.Fatalf("hint = %q, want %q", body, tc.want)
+			}
+			if strings.Contains(body, tc.notWant) {
+				t.Fatalf("hint must not mention %q:\n%s", tc.notWant, body)
+			}
+			if strings.Contains(body, "--name") {
+				t.Fatalf("hint should not mention --name:\n%s", body)
+			}
+		})
 	}
 }
 

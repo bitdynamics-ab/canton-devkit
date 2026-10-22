@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 )
@@ -53,7 +54,7 @@ func RunList(ctx context.Context, out io.Writer, errw io.Writer, opts *ListOptio
 			return ExitSuccess
 		}
 		_, _ = fmt.Fprintln(out, "No LocalNet instances registered.")
-		_, _ = fmt.Fprintln(out, "Start one with: canton-devkit localnet up <name>")
+		_, _ = fmt.Fprintln(out, "Start one with: "+cliprefix.Cmd("up <name>"))
 		return ExitSuccess
 	}
 

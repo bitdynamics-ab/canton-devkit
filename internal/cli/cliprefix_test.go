@@ -39,6 +39,32 @@ func TestRun_CLIMessagesFollowInvocationMode(t *testing.T) {
 	}
 }
 
+func TestRun_ListEmptyHintFollowsInvocationMode(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		args    []string
+		want    string
+		notWant string
+	}{
+		{"direct", []string{"localnet", "list"}, "Start one with: canton-devkit localnet up <name>", "dpm localnet"},
+		{"via-dpm", []string{"--via-dpm", "localnet", "list"}, "Start one with: dpm localnet up <name>", "canton-devkit localnet"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+			var out, errOut bytes.Buffer
+			if code := New(&out, &errOut, "test", "").Run(tc.args); code != 0 {
+				t.Fatalf("list on an empty registry must succeed, exit %d, stderr=%q", code, errOut.String())
+			}
+			if !strings.Contains(out.String(), tc.want) {
+				t.Errorf("stdout = %q, want %q", out.String(), tc.want)
+			}
+			if strings.Contains(out.String(), tc.notWant) {
+				t.Errorf("stdout = %q must not mention %q", out.String(), tc.notWant)
+			}
+		})
+	}
+}
+
 func TestRun_SubcommandHelpFollowsInvocationMode(t *testing.T) {
 	for _, tc := range []struct {
 		name    string

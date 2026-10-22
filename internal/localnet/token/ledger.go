@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
@@ -327,9 +328,8 @@ func resolveLedgerTokenRaw(conn LedgerConn) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf(
 			"no captured credentials for role %q and could not load env files (%w); "+
-				"run `canton-devkit localnet creds %s --role %s --format raw` "+
-				"to confirm token issuance, or pass --token explicitly",
-			role, err, conn.Instance, role)
+				"run `%s` to confirm token issuance, or pass --token explicitly",
+			role, err, credsHint(conn.Instance, role))
 	}
 	for _, in := range inputs {
 		if string(in.Role) == role {
@@ -342,9 +342,12 @@ func resolveLedgerTokenRaw(conn LedgerConn) (string, error) {
 	}
 	return "", fmt.Errorf(
 		"no captured credentials AND no env entry for role %q on instance %q; "+
-			"run `canton-devkit localnet creds %s --role %s --format raw` "+
-			"to confirm what's available, or pass --token explicitly",
-		role, conn.Instance, conn.Instance, role)
+			"run `%s` to confirm what's available, or pass --token explicitly",
+		role, conn.Instance, credsHint(conn.Instance, role))
+}
+
+func credsHint(instance, role string) string {
+	return cliprefix.Cmd(fmt.Sprintf("creds %s --role %s --format raw", instance, role))
 }
 
 // Generation identifies a token-standard interface generation.
