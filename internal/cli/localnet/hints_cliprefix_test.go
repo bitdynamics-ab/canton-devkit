@@ -128,6 +128,7 @@ func TestCLIHints_HelpTextFollowsPrefix(t *testing.T) {
 			{buildStart(), []string{"use '" + prefix + " resume' instead", "Use '" + prefix + " up' directly"}},
 			{buildStop(), []string{"'" + prefix + " start'", "'" + prefix + " down'", "'" + prefix + " pause'"}},
 			{buildDoctor(), []string{"Runs the same preflight checks `" + prefix + " up` runs before"}},
+			{buildSkills(), []string{"describing safe `" + prefix + "` workflows"}},
 			{buildRestore(), []string{"run '" + prefix + " down X' first", "run '" + prefix + " up X' to start"}},
 		} {
 			for _, w := range tc.want {

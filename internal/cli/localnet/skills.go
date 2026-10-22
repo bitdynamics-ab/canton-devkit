@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	api "github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/skills"
 	"github.com/spf13/cobra"
@@ -19,7 +20,7 @@ func buildSkills() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "skills",
 		Short:         "Browse and install AI-agent skill docs for DevKit workflows",
-		Long:          "Editor-agnostic skill documents describing safe `dpm localnet` workflows (lifecycle, DAR upload, hot-deploy, contract inspection, token flows, CI). Install them into ~/.claude/skills or ~/.codex/skills.",
+		Long:          "Editor-agnostic skill documents describing safe `" + cliprefix.Get() + "` workflows (lifecycle, DAR upload, hot-deploy, contract inspection, token flows, CI). Install them into ~/.claude/skills or ~/.codex/skills.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
