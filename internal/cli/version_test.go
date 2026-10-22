@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -88,24 +89,52 @@ func TestVersion_PrintsCampaignCodeWhenEnabled(t *testing.T) {
 	}
 }
 
-func TestVersion_CampaignPersistFailureWarnsOnStderr(t *testing.T) {
+func blockedByFile(t *testing.T) string {
+	t.Helper()
 	blocker := filepath.Join(t.TempDir(), "blocker")
 	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("DEVKIT_CAMPAIGN", "1")
-	t.Setenv("DEVKIT_CAMPAIGN_FILE", filepath.Join(blocker, "campaign-id"))
+	return filepath.Join(blocker, "campaign-id")
+}
 
-	var out, errOut bytes.Buffer
-	if code := New(&out, &errOut, "1.2.3", "").Run([]string{"version"}); code != 0 {
-		t.Fatalf("persist failure must not fail the command, exit %d", code)
+func blockedByReadOnlyDir(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permission bits do not block writes on Windows")
 	}
-	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
-	if len(lines) != 2 || lines[0] != "canton-devkit 1.2.3" || !strings.HasPrefix(lines[1], "campaign code: CCT-") {
-		t.Errorf("stdout = %q, want version line plus campaign code line", out.String())
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permission bits")
 	}
-	if n := strings.Count(errOut.String(), "change on restart"); n != 1 {
-		t.Errorf("stderr should warn exactly once about the unsaved code, got %q", errOut.String())
+	dir := filepath.Join(t.TempDir(), "home")
+	if err := os.Mkdir(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	return filepath.Join(dir, ".canton-devkit", "campaign-id")
+}
+
+func TestVersion_CampaignPersistFailureWarnsOnStderr(t *testing.T) {
+	for name, blocked := range map[string]func(*testing.T) string{
+		"path under a regular file": blockedByFile,
+		"read-only home":            blockedByReadOnlyDir,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("DEVKIT_CAMPAIGN", "1")
+			t.Setenv("DEVKIT_CAMPAIGN_FILE", blocked(t))
+
+			var out, errOut bytes.Buffer
+			if code := New(&out, &errOut, "1.2.3", "").Run([]string{"version"}); code != 0 {
+				t.Fatalf("persist failure must not fail the command, exit %d", code)
+			}
+			lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+			if len(lines) != 2 || lines[0] != "canton-devkit 1.2.3" || !strings.HasPrefix(lines[1], "campaign code: CCT-") {
+				t.Errorf("stdout = %q, want version line plus campaign code line", out.String())
+			}
+			if n := strings.Count(errOut.String(), "change on restart"); n != 1 {
+				t.Errorf("stderr should warn exactly once about the unsaved code, got %q", errOut.String())
+			}
+		})
 	}
 }
 

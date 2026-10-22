@@ -246,6 +246,58 @@ func TestLookup_PersistFailureIsReportedAndCodeStaysStable(t *testing.T) {
 	}
 }
 
+func readOnlyDir(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permission bits do not block writes on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permission bits")
+	}
+	dir := filepath.Join(t.TempDir(), "home")
+	if err := os.Mkdir(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	return dir
+}
+
+func TestLookup_UnwritableDirIsReportedAndCodeStaysStable(t *testing.T) {
+	for name, rel := range map[string]string{
+		"temp file cannot be created": "campaign-id",
+		"code dir cannot be created":  filepath.Join(".canton-devkit", "campaign-id"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			resetCache(t)
+			dir := readOnlyDir(t)
+			file := filepath.Join(dir, rel)
+			t.Setenv("DEVKIT_CAMPAIGN", "on")
+			t.Setenv("DEVKIT_CAMPAIGN_FILE", file)
+
+			code, err := Lookup()
+			if !codeRe.MatchString(code) {
+				t.Fatalf("an unwritable home must still yield a code, got %q", code)
+			}
+			if err == nil || !strings.Contains(err.Error(), "change on restart") {
+				t.Fatalf("persist failure must be reported, got %v", err)
+			}
+			if !errors.Is(err, fs.ErrPermission) {
+				t.Errorf("err = %v, want the write-side permission error", err)
+			}
+			again, err2 := Lookup()
+			if again != code {
+				t.Errorf("code must not be re-minted within a process: %q then %q", code, again)
+			}
+			if err2 == nil || err2.Error() != err.Error() {
+				t.Errorf("second Lookup err = %v, want the cached %v", err2, err)
+			}
+			if entries, rerr := os.ReadDir(dir); rerr != nil || len(entries) != 0 {
+				t.Errorf("read-only dir must stay empty, entries = %v, err = %v", entries, rerr)
+			}
+		})
+	}
+}
+
 func TestLookup_CacheFollowsTheCodeFile(t *testing.T) {
 	resetCache(t)
 	t.Setenv("DEVKIT_CAMPAIGN", "on")

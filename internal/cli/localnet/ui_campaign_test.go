@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -68,24 +69,52 @@ func TestUI_ServesInjectedBuildInfo(t *testing.T) {
 	}
 }
 
-func TestUI_WarnsOnceWhenCampaignCodeCannotBeSaved(t *testing.T) {
+func unsavableUnderFile(t *testing.T) string {
+	t.Helper()
 	blocker := filepath.Join(t.TempDir(), "blocker")
 	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("DEVKIT_CAMPAIGN", "1")
-	t.Setenv("DEVKIT_CAMPAIGN_FILE", filepath.Join(blocker, "campaign-id"))
+	return filepath.Join(blocker, "campaign-id")
+}
 
-	url, errBuf := runUI(t, ui.BuildInfo{})
-	first, _ := versionPayload(t, url)["campaign_code"].(string)
-	second, _ := versionPayload(t, url)["campaign_code"].(string)
-	if !regexp.MustCompile(`^CCT-[A-Z2-7]{8}$`).MatchString(first) {
-		t.Fatalf("campaign_code = %q, want a well-formed code even when it cannot be saved", first)
+func unsavableInReadOnlyDir(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permission bits do not block writes on Windows")
 	}
-	if second != first {
-		t.Errorf("unsaved code must stay stable for the server's lifetime: %q then %q", first, second)
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permission bits")
 	}
-	if n := strings.Count(errBuf.String(), "campaign code not saved"); n != 1 {
-		t.Errorf("want exactly one persist warning on stderr, got %d in %q", n, errBuf.String())
+	dir := filepath.Join(t.TempDir(), "home")
+	if err := os.Mkdir(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	return filepath.Join(dir, "campaign-id")
+}
+
+func TestUI_WarnsOnceWhenCampaignCodeCannotBeSaved(t *testing.T) {
+	for name, unsavable := range map[string]func(*testing.T) string{
+		"path under a regular file": unsavableUnderFile,
+		"read-only home":            unsavableInReadOnlyDir,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("DEVKIT_CAMPAIGN", "1")
+			t.Setenv("DEVKIT_CAMPAIGN_FILE", unsavable(t))
+
+			url, errBuf := runUI(t, ui.BuildInfo{})
+			first, _ := versionPayload(t, url)["campaign_code"].(string)
+			second, _ := versionPayload(t, url)["campaign_code"].(string)
+			if !regexp.MustCompile(`^CCT-[A-Z2-7]{8}$`).MatchString(first) {
+				t.Fatalf("campaign_code = %q, want a well-formed code even when it cannot be saved", first)
+			}
+			if second != first {
+				t.Errorf("unsaved code must stay stable for the server's lifetime: %q then %q", first, second)
+			}
+			if n := strings.Count(errBuf.String(), "campaign code not saved"); n != 1 {
+				t.Errorf("want exactly one persist warning on stderr, got %d in %q", n, errBuf.String())
+			}
+		})
 	}
 }
