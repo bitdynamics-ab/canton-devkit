@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui"
 )
 
 // safeBuffer wraps bytes.Buffer with a mutex so the test goroutine
@@ -50,7 +51,7 @@ func (s *safeBuffer) String() string {
 // or the URL print, leaving users staring at a blank terminal
 // wondering whether the UI is up.
 func TestUI_BindsAndShutdownsCleanly(t *testing.T) {
-	cmd := buildUI()
+	cmd := buildUI(ui.BuildInfo{})
 	var out, errBuf safeBuffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&errBuf)
@@ -116,7 +117,7 @@ func TestUI_BindsAndShutdownsCleanly(t *testing.T) {
 // CLI binding NOT being widened from loopback is the security
 // posture; the help text is where users learn it.
 func TestUI_LoopbackHostInUsageDoc(t *testing.T) {
-	cmd := buildUI()
+	cmd := buildUI(ui.BuildInfo{})
 	if !strings.Contains(cmd.Long, "loopback") {
 		t.Error("Long help missing 'loopback' — users won't know the bind policy")
 	}
@@ -154,7 +155,7 @@ func extractURL(stdout string) string {
 // to stderr. Catches the regression class where someone widens the
 // gate by accident.
 func TestUI_LoopbackFlagRejectsNonLoopback(t *testing.T) {
-	cmd := buildUI()
+	cmd := buildUI(ui.BuildInfo{})
 	var out, errBuf safeBuffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&errBuf)
@@ -181,7 +182,7 @@ func TestUI_LoopbackFlagRejectsNonLoopback(t *testing.T) {
 // 1 (user error) vs 4 (runtime failure). Without this, the CLI
 // loses the distinction users branch on (`dpm ui || ...`).
 func TestUI_NonLoopbackHostReturnsUserExitCode(t *testing.T) {
-	cmd := buildUI()
+	cmd := buildUI(ui.BuildInfo{})
 	var out, errBuf safeBuffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&errBuf)

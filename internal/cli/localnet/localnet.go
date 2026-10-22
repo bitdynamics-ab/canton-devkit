@@ -5,6 +5,7 @@ import (
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/cli/localnet/dar"
 	"github.com/bitdynamics-ab/canton-devkit/internal/cli/localnet/token"
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -12,7 +13,7 @@ import (
 // was launched by DPM (`dpm localnet …`); it lets subcommands hide flags
 // that don't apply under DPM (e.g. `dar build-upload --project`, since
 // `dpm localnet` only runs inside a Daml project).
-func Build(viaDPM bool) *cobra.Command {
+func Build(viaDPM bool, info ui.BuildInfo) *cobra.Command {
 	localnet := &cobra.Command{
 		Use:   "localnet",
 		Short: "Manage Canton LocalNet instances",
@@ -49,7 +50,7 @@ func Build(viaDPM bool) *cobra.Command {
 	localnet.AddCommand(buildRestore())
 
 	localnet.AddCommand(buildVersions())
-	localnet.AddCommand(buildUI())
+	localnet.AddCommand(buildUI(info))
 
 	// AI-agent skill docs. The same embedded docs back the
 	// Web UI Agent Skills screen.

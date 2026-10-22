@@ -10,13 +10,13 @@ import (
 	"testing"
 )
 
-func fetchVersionPayload(t *testing.T) map[string]any {
+func fetchVersionPayload(t *testing.T, opts ...RouterOption) map[string]any {
 	t.Helper()
 	assets, err := AssetsHandler()
 	if err != nil {
 		t.Fatalf("AssetsHandler: %v", err)
 	}
-	srv := New(Config{Port: 0, Router: NewRouter(assets, nil)})
+	srv := New(Config{Port: 0, Router: NewRouter(assets, nil, opts...)})
 	addr, err := srv.Listen()
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
@@ -82,5 +82,42 @@ func TestVersion_CampaignCodeWhenEnabled(t *testing.T) {
 	}
 	if again := fetchVersionPayload(t)["campaign_code"]; again != code {
 		t.Errorf("campaign_code must be stable across requests: %q then %v", code, again)
+	}
+}
+
+func TestVersion_BuildInfoFields(t *testing.T) {
+	campaignEnv(t, "")
+	for _, tc := range []struct {
+		name string
+		info BuildInfo
+	}{
+		{"direct", BuildInfo{Version: "dev (abc1234)", CLIPrefix: "canton-devkit localnet"}},
+		{"via-dpm", BuildInfo{Version: "v0.18.1-cctools.1 (f78650e)", CLIPrefix: "dpm localnet"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := fetchVersionPayload(t, WithBuildInfo(tc.info))
+			if got["version"] != tc.info.Version {
+				t.Errorf("version = %v, want %q", got["version"], tc.info.Version)
+			}
+			if got["cli_prefix"] != tc.info.CLIPrefix {
+				t.Errorf("cli_prefix = %v, want %q", got["cli_prefix"], tc.info.CLIPrefix)
+			}
+			if got["name"] != "canton-devkit" {
+				t.Errorf("name = %v, want canton-devkit", got["name"])
+			}
+		})
+	}
+}
+
+func TestVersion_BuildInfoOmittedWhenUnset(t *testing.T) {
+	campaignEnv(t, "")
+	got := fetchVersionPayload(t)
+	for _, k := range []string{"version", "cli_prefix", "campaign_code"} {
+		if v, ok := got[k]; ok {
+			t.Errorf("%s must be omitted when unset, got %v", k, v)
+		}
+	}
+	if len(got) != 2 {
+		t.Errorf("payload keys = %v, want only name and schema_version", got)
 	}
 }

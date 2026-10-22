@@ -10,11 +10,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui"
 )
 
-func runUI(t *testing.T) (string, *safeBuffer) {
+func runUI(t *testing.T, info ui.BuildInfo) (string, *safeBuffer) {
 	t.Helper()
-	cmd := buildUI()
+	cmd := buildUI(info)
 	var out, errBuf safeBuffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&errBuf)
@@ -56,6 +58,16 @@ func versionPayload(t *testing.T, base string) map[string]any {
 	return got
 }
 
+func TestUI_ServesInjectedBuildInfo(t *testing.T) {
+	t.Setenv("DEVKIT_CAMPAIGN", "0")
+	info := ui.BuildInfo{Version: "v0.18.1-cctools.1 (f78650e)", CLIPrefix: "dpm localnet"}
+	url, _ := runUI(t, info)
+	got := versionPayload(t, url)
+	if got["version"] != info.Version || got["cli_prefix"] != info.CLIPrefix {
+		t.Errorf("payload = %v, want version %q and cli_prefix %q", got, info.Version, info.CLIPrefix)
+	}
+}
+
 func TestUI_WarnsOnceWhenCampaignCodeCannotBeSaved(t *testing.T) {
 	blocker := filepath.Join(t.TempDir(), "blocker")
 	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
@@ -64,7 +76,7 @@ func TestUI_WarnsOnceWhenCampaignCodeCannotBeSaved(t *testing.T) {
 	t.Setenv("DEVKIT_CAMPAIGN", "1")
 	t.Setenv("DEVKIT_CAMPAIGN_FILE", filepath.Join(blocker, "campaign-id"))
 
-	url, errBuf := runUI(t)
+	url, errBuf := runUI(t, ui.BuildInfo{})
 	first, _ := versionPayload(t, url)["campaign_code"].(string)
 	second, _ := versionPayload(t, url)["campaign_code"].(string)
 	if !regexp.MustCompile(`^CCT-[A-Z2-7]{8}$`).MatchString(first) {

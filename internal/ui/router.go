@@ -39,7 +39,7 @@ func NewRouter(assets http.Handler, hub *stream.Hub, opts ...RouterOption) http.
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealthz)
-	mux.HandleFunc("GET /api/version", handleVersion)
+	mux.HandleFunc("GET /api/version", handleVersion(cfg.build))
 	// REST handlers under /api/*; each handler package owns one resource.
 	handlers.MountInstances(mux, hub)
 	handlers.MountAuth(mux)
@@ -103,6 +103,7 @@ type routerConfig struct {
 	// path for Vite (or other) frontend-dev setups that cannot keep
 	// Origin aligned with Host.
 	skipOriginCheck bool
+	build           BuildInfo
 }
 
 // RouterOption configures NewRouter without breaking its two-arg
@@ -131,6 +132,17 @@ func WithAllowedHosts(hosts ...string) RouterOption {
 func WithSkipOriginCheck(skip bool) RouterOption {
 	return func(c *routerConfig) {
 		c.skipOriginCheck = skip
+	}
+}
+
+type BuildInfo struct {
+	Version   string
+	CLIPrefix string
+}
+
+func WithBuildInfo(info BuildInfo) RouterOption {
+	return func(c *routerConfig) {
+		c.build = info
 	}
 }
 
@@ -308,21 +320,27 @@ type versionPayload struct {
 	// on a campaign build (empty/omitted otherwise). The Web UI stamps it on
 	// every screen as a screenshot watermark. See internal/campaign.
 	CampaignCode string `json:"campaign_code,omitempty"`
+	Version      string `json:"version,omitempty"`
+	CLIPrefix    string `json:"cli_prefix,omitempty"`
 }
 
 // handleVersion is the schema-handshake endpoint. Returns the server's
 // API SchemaVersion as a plain JSON document; the frontend reads this
 // on bootstrap and refuses to render if it doesn't match its compiled
 // expectation.
-func handleVersion(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	_ = enc.Encode(versionPayload{
-		Name:          "canton-devkit",
-		SchemaVersion: schemaVersion,
-		CampaignCode:  campaign.Code(),
-	})
+func handleVersion(info BuildInfo) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(versionPayload{
+			Name:          "canton-devkit",
+			SchemaVersion: schemaVersion,
+			CampaignCode:  campaign.Code(),
+			Version:       info.Version,
+			CLIPrefix:     info.CLIPrefix,
+		})
+	}
 }
 
 // schemaVersion mirrors types.SchemaVersion, inlined rather than

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/cli/localnet"
+	"github.com/bitdynamics-ab/canton-devkit/internal/ui"
 )
 
 // TestLocalnetHelp_RendersMockupShape verifies the help body contains
@@ -81,7 +82,7 @@ func TestLocalnetHelp_AvoidsImplementationDetails(t *testing.T) {
 // exempt — they're not part of the curated surface.
 func TestLocalnetHelp_MatchesWiredCommandSet(t *testing.T) {
 	wired := make(map[string]bool)
-	for _, cmd := range localnet.Build(false).Commands() {
+	for _, cmd := range localnet.Build(false, ui.BuildInfo{}).Commands() {
 		if cmd.Hidden || cmd.Name() == "help" || cmd.Name() == "completion" {
 			continue
 		}

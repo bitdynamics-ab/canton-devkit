@@ -156,6 +156,47 @@ func getVersionPayload(t *testing.T, base string) map[string]any {
 	return got
 }
 
+func TestLocalnetUI_VersionPayloadCarriesCLIIdentity(t *testing.T) {
+	campaignFile(t, "0", "")
+	for _, tc := range []struct {
+		name       string
+		version    string
+		commit     string
+		mode       InvocationMode
+		wantVer    string
+		wantPrefix string
+	}{
+		{"direct", "dev", "abc1234", Direct, "dev (abc1234)", "canton-devkit localnet"},
+		{"via-dpm", "v0.18.1-cctools.1", "f78650e", ViaDPM, "v0.18.1-cctools.1 (f78650e)", "dpm localnet"},
+		{"no-commit", "1.2.3", "", Direct, "1.2.3", "canton-devkit localnet"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := New(nil, nil, tc.version, tc.commit)
+			a.mode = tc.mode
+			got := getVersionPayload(t, startUI(t, a))
+			if got["version"] != tc.wantVer {
+				t.Errorf("version = %v, want %q", got["version"], tc.wantVer)
+			}
+			if got["cli_prefix"] != tc.wantPrefix {
+				t.Errorf("cli_prefix = %v, want %q", got["cli_prefix"], tc.wantPrefix)
+			}
+			if _, ok := got["campaign_code"]; ok {
+				t.Errorf("campaign_code must be absent when DEVKIT_CAMPAIGN=0, got %v", got["campaign_code"])
+			}
+
+			var vout, verr bytes.Buffer
+			vapp := New(&vout, &verr, tc.version, tc.commit)
+			vapp.mode = tc.mode
+			if code := vapp.Run([]string{"version"}); code != 0 {
+				t.Fatalf("version exit %d", code)
+			}
+			if want := appName + " " + tc.wantVer + "\n"; vout.String() != want {
+				t.Errorf("version printed %q, payload version %q must match its suffix", vout.String(), tc.wantVer)
+			}
+		})
+	}
+}
+
 func TestLocalnetUI_CampaignCodeMatchesVersionCommand(t *testing.T) {
 	campaignFile(t, "1", "CCT-ABCD2345\n")
 	var out, errOut bytes.Buffer

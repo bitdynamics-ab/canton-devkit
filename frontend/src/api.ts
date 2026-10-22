@@ -69,6 +69,8 @@ export interface VersionResponse {
   /** Present only on a campaign build — this install's stable code, stamped as
    *  a screenshot watermark on every screen. See internal/campaign. */
   campaign_code?: string;
+  version?: string;
+  cli_prefix?: string;
 }
 
 // InstanceSummary mirrors internal/api/types.InstanceSummary.

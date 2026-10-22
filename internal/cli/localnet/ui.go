@@ -33,7 +33,7 @@ import (
 // We always print the ACTUAL bound port (resolved from net.Listen) so
 // "Open http://127.0.0.1:7777" never misleads the user when 7777 is
 // already in use and we fell back to a free port via `--port 0`.
-func buildUI() *cobra.Command {
+func buildUI(info ui.BuildInfo) *cobra.Command {
 	var (
 		port                    int
 		host                    string
@@ -88,7 +88,7 @@ identifiers and is not designed for LAN-wide exposure.`,
 			// Host value, so add it to the allowlist; otherwise a LAN
 			// client reaching the UI by its real IP would be 403'd by
 			// our own rebinding guard.
-			var routerOpts []ui.RouterOption
+			routerOpts := []ui.RouterOption{ui.WithBuildInfo(info)}
 			if allowNonLoopback {
 				routerOpts = append(routerOpts, ui.WithAllowedHosts(host))
 			}
