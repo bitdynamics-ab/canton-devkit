@@ -12,6 +12,7 @@ package localnet
 import (
 	"fmt"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	corelocalnet "github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/snapshot"
 	"github.com/spf13/cobra"
@@ -73,7 +74,7 @@ func buildRestore() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "restore [name]",
 		Short: "Restore a LocalNet's database + registry state from a snapshot tarball",
-		Long: `Loads the database dump from the named snapshot archive back
+		Long: fmt.Sprintf(`Loads the database dump from the named snapshot archive back
 into the instance's Postgres AND re-registers the instance via the
 state.json embedded in the archive. The header is validated before
 anything is touched. The load runs against a throwaway Postgres on the
@@ -83,10 +84,10 @@ If the snapshot's Splice version differs from an existing local
 instance's, restore refuses unless --force is set.
 
 The instance must NOT be running (a restore drops and recreates every
-database) — run 'localnet down X' first. If the instance does
+database) — run '%[1]s down X' first. If the instance does
 not exist locally, it is registered from the embedded state.json. Either
-way the restore leaves it stopped; run 'localnet up X' to start
-it on the restored database.`,
+way the restore leaves it stopped; run '%[1]s up X' to start
+it on the restored database.`, cliprefix.Get()),
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,

@@ -233,7 +233,7 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 	if state.Status != registry.StatusRunning {
 		_, _ = fmt.Fprintf(errw,
 			"instance %q is not running — a database snapshot reads from a live Postgres. "+
-				"Run `localnet up %s` first.\n", name, name)
+				"Run `%s` first.\n", name, cliprefix.Cmd("up "+name))
 		return localnet.ExitUserError
 	}
 
@@ -365,7 +365,7 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 			term.Bold(dest),
 			term.Dimc(fmt.Sprintf("%s · run %s to restore.",
 				header.CreatedAt,
-				term.Textc(fmt.Sprintf("localnet restore %s --from %s", name, dest)))))))
+				term.Textc(cliprefix.Cmd(fmt.Sprintf("restore %s --from %s", name, dest))))))))
 	return localnet.ExitSuccess
 }
 
@@ -485,12 +485,12 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 	if existing == nil {
 		_, _ = fmt.Fprintf(errw,
 			"instance %q not found — restore loads into an existing instance's "+
-				"data volume. Run `localnet up %s` first, then restore.\n", name, name)
+				"data volume. Run `%s` first, then restore.\n", name, cliprefix.Cmd("up "+name))
 		return localnet.ExitUserError
 	}
 	if existing.Status == registry.StatusRunning {
 		_, _ = fmt.Fprintf(errw,
-			"instance %q is running — run `localnet down %s` first\n", name, name)
+			"instance %q is running — run `%s` first\n", name, cliprefix.Cmd("down "+name))
 		return localnet.ExitUserError
 	}
 	if existing.SpliceVersion != meta.SpliceVersion && !force {
@@ -521,8 +521,8 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 	// target project is still up (a stale/half-down instance), refuse.
 	if running, _ := archiverFn.AnyContainerRunning(ctx, toWrite.ComposeProject); running {
 		_, _ = fmt.Fprintf(errw,
-			"instance %q still has running containers — run `localnet down %s` first\n",
-			name, name)
+			"instance %q still has running containers — run `%s` first\n",
+			name, cliprefix.Cmd("down "+name))
 		return localnet.ExitUserError
 	}
 
@@ -596,7 +596,7 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 			term.Bold(src),
 			meta.Database.DatabaseCount,
 			term.Dimc(fmt.Sprintf("Run %s to bring it up.",
-				term.Textc(fmt.Sprintf("localnet up %s", name)))))))
+				term.Textc(cliprefix.Cmd("up "+name)))))))
 	return localnet.ExitSuccess
 }
 
