@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { Shell } from "./Shell";
+import { Shell, reportIssueURL } from "./Shell";
+import { setBuildInfo } from "../buildInfo";
 import { InstanceSelectionProvider } from "./useInstanceSelection";
 import { CreateInstanceProvider } from "./useCreateInstance";
 
@@ -202,6 +203,43 @@ describe("Shell — narrow topbar", () => {
     const hideRule = /([^{}]+)\{\s*display:\s*none\s*!important;\s*\}/.exec(narrow);
     const hidden = (hideRule?.[1] ?? "").split(",").map((sel) => sel.trim());
     expect(hidden).toEqual(expect.arrayContaining([".app-docs-link", ".app-report-link"]));
+  });
+});
+
+describe("Shell — Report issue link", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const ISSUES = "https://github.com/bitdynamics-ab/canton-devkit/issues/new";
+
+  it("opens the bug report form without a version when none is known", async () => {
+    renderShell("/?instance=demo");
+    await waitFor(() => expect(screen.getByText("demo")).toBeInTheDocument());
+    expect(screen.getByRole("link", { name: /report issue/i })).toHaveAttribute(
+      "href",
+      `${ISSUES}?template=bug_report.yml`,
+    );
+  });
+
+  it("pre-fills the version field with the running build", async () => {
+    setBuildInfo({ version: "v0.18.1-cctools.1 (f78650e)" });
+    renderShell("/?instance=demo");
+    await waitFor(() => expect(screen.getByText("demo")).toBeInTheDocument());
+    const link = screen.getByRole("link", { name: /report issue/i });
+    expect(link).toHaveAttribute(
+      "href",
+      `${ISSUES}?template=bug_report.yml&version=v0.18.1-cctools.1%20(f78650e)`,
+    );
+    expect(link).toHaveClass("app-report-link");
+    const url = new URL(link.getAttribute("href")!);
+    expect(url.searchParams.get("template")).toBe("bug_report.yml");
+    expect(url.searchParams.get("version")).toBe("v0.18.1-cctools.1 (f78650e)");
+  });
+
+  it("encodes characters that would break the query string", () => {
+    const url = new URL(reportIssueURL("v1&x=y #z"));
+    expect(url.searchParams.get("version")).toBe("v1&x=y #z");
+    expect(url.searchParams.get("x")).toBeNull();
+    expect(reportIssueURL(null)).toBe(`${ISSUES}?template=bug_report.yml`);
   });
 });
 

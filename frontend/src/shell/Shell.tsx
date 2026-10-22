@@ -26,6 +26,7 @@ import { useCreateInstance } from "./useCreateInstance";
 import { CommandPalette, openPalette } from "./CommandPalette";
 import { NAV, linkTo } from "./routes";
 import { ApiError, fetchMetricsSummary } from "../api";
+import { useBuildVersion } from "../buildInfo";
 
 const NAV_ICON: Record<string, (p: { size?: number }) => JSX.Element> = {
   "/": IcOverview,
@@ -40,6 +41,11 @@ const NAV_ICON: Record<string, (p: { size?: number }) => JSX.Element> = {
 
 const DOCS_URL = "https://bitdynamics-ab.github.io/canton-devkit/";
 const ISSUES_URL = "https://github.com/bitdynamics-ab/canton-devkit/issues/new";
+
+export function reportIssueURL(version: string | null): string {
+  const base = `${ISSUES_URL}?template=bug_report.yml`;
+  return version ? `${base}&version=${encodeURIComponent(version)}` : base;
+}
 
 interface ShellProps {
   children: React.ReactNode;
@@ -111,6 +117,7 @@ function currentRouteLabel(pathname: string): string {
 function TopBar() {
   const conn = useConnectionHealth();
   const sel = useInstanceSelection();
+  const version = useBuildVersion();
   const { pathname } = useLocation();
   const title = currentRouteLabel(pathname);
   return (
@@ -144,7 +151,7 @@ function TopBar() {
       <ThemeToggle />
       <a
         className="app-report-link"
-        href={ISSUES_URL}
+        href={reportIssueURL(version)}
         target="_blank"
         rel="noopener noreferrer"
         title="Report an issue on GitHub"
