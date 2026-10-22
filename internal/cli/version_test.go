@@ -14,6 +14,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 )
 
 type lockedBuffer struct {
@@ -219,6 +221,7 @@ func TestVersion_CampaignPersistFailureWarnsOnStderr(t *testing.T) {
 
 func startUI(t *testing.T, a *App) string {
 	t.Helper()
+	t.Cleanup(cliprefix.Set(a.mode.cliPrefix()))
 	var out, errOut lockedBuffer
 	a.out, a.err = &out, &errOut
 	root := a.buildRoot()

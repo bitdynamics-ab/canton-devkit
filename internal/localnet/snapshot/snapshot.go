@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
@@ -243,8 +244,8 @@ func RunSnapshot(ctx context.Context, out io.Writer, errw io.Writer, name, dest 
 	}
 
 	_, _ = fmt.Fprintln(out, term.Prompt("", "", "", fmt.Sprintf(
-		"dpm localnet snapshot %s %s %s",
-		name, term.Amberc("--to"), dest)))
+		"%s %s %s",
+		cliprefix.Cmd("snapshot "+name), term.Amberc("--to"), dest)))
 	_, _ = fmt.Fprintln(out, term.Step(term.StepCheck, "Reading registry state", state.ComposeProject, ""))
 
 	// Warn before the pause so an operator isn't surprised by the brief
@@ -458,8 +459,8 @@ func RunRestore(ctx context.Context, out io.Writer, errw io.Writer, name, src st
 	}
 
 	_, _ = fmt.Fprintln(out, term.Prompt("", "", "", fmt.Sprintf(
-		"dpm localnet restore %s %s %s",
-		name, term.Amberc("--from"), src)))
+		"%s %s %s",
+		cliprefix.Cmd("restore "+name), term.Amberc("--from"), src)))
 	_, _ = fmt.Fprintln(out, term.Step(term.StepCheck, "Validated header",
 		fmt.Sprintf("schema %d · %d database(s) · captured %s",
 			meta.SchemaVersion, meta.Database.DatabaseCount, meta.CreatedAt), ""))

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
@@ -201,8 +202,8 @@ func runObservabilityToggleResolved(cmd *cobra.Command, state *registry.State, f
 	if state.Status != registry.StatusRunning {
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 			"instance %q is not running (status=%s) — bring it up first with "+
-				"`dpm localnet up %s` (the observability profile is re-enabled automatically once it has been set once)\n",
-			state.Name, state.Status, state.Name)
+				"`%s` (the observability profile is re-enabled automatically once it has been set once)\n",
+			state.Name, state.Status, cliprefix.Cmd("up "+state.Name))
 		return localnet.AsExitError(localnet.ExitUserError)
 	}
 
@@ -303,7 +304,7 @@ func renderObservabilityStatus(ctx context.Context, out io.Writer, state *regist
 	}
 	if !cur.Prometheus && !cur.Grafana && !cur.Shared {
 		rows = append(rows, "",
-			term.Dimc("enable with `dpm localnet observability enable --name "+state.Name+"`"))
+			term.Dimc("enable with `"+cliprefix.Cmd("observability enable --name "+state.Name)+"`"))
 	}
 	body := strings.Join(rows, "\n")
 	_, _ = fmt.Fprintln(out, term.Section("observability · "+state.Name, "status", body, 0))

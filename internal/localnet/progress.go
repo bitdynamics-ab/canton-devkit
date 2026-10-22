@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui/term"
 )
 
@@ -217,8 +218,8 @@ func (t *TextProgress) Done(detail string) {
 		return
 	}
 	body := term.Brandc("✦ ") + term.Textc(detail) + "\n" +
-		term.Dimc("Run ") + term.Textc("dpm localnet env") +
-		term.Dimc(" to export config, or ") + term.Textc("dpm localnet ui") +
+		term.Dimc("Run ") + term.Textc(cliprefix.Cmd("env")) +
+		term.Dimc(" to export config, or ") + term.Textc(cliprefix.Cmd("ui")) +
 		term.Dimc(" to open the dashboard.")
 	_, _ = fmt.Fprintln(t.OutW)
 	_, _ = fmt.Fprintln(t.OutW, term.Box(term.BoxBrand, body))

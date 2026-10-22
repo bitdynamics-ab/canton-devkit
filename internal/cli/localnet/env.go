@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	apitypes "github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/spf13/cobra"
@@ -38,25 +39,25 @@ func buildEnv() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "env [name]",
 		Short: "Export LocalNet endpoints and credentials as env vars",
-		Long: `Prints an exported KEY=value block summarising the named LocalNet
+		Long: fmt.Sprintf(`Prints an exported KEY=value block summarising the named LocalNet
 instance -- every host port from the Ports map (Ledger / JSON /
 admin APIs per role, wallet UIs, scan UI, postgres) plus the
 user/audience for each captured credential and the real on-ledger
 party ids. Use with:
 
-  eval "$(dpm localnet env hubble)"
+  eval "$(%[1]s env hubble)"
 
 Formats:
 
   shell       POSIX single-quoted export KEY='value'  (default; eval-safe)
   dotenv      double-quoted KEY="value" with $/\/" escapes (dotenv spec)
   github-env  bare KEY=value lines for the GitHub Actions environment file:
-                dpm localnet env ci --format github-env >> "$GITHUB_ENV"
+                %[1]s env ci --format github-env >> "$GITHUB_ENV"
               (shell/dotenv carry comments + quotes that $GITHUB_ENV rejects)
   json        machine-readable shape; matches the Web UI handler
 
 JWT variables contain the captured LocalNet credentials. LocalNet uses
-dev-only credentials and is intended for loopback development.`,
+dev-only credentials and is intended for loopback development.`, cliprefix.Get()),
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -138,7 +139,7 @@ func writeEnvShell(w io.Writer, ex apitypes.EnvExport) error {
 	if _, err := fmt.Fprintln(w, "# Source these in your app or CI step:"); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "#   eval \"$(dpm localnet env %s)\"\n", shellQuote(ex.Instance)); err != nil {
+	if _, err := fmt.Fprintf(w, "#   eval \"$(%s %s)\"\n", cliprefix.Cmd("env"), shellQuote(ex.Instance)); err != nil {
 		return err
 	}
 	for _, k := range sortedKeys(ex.Vars) {

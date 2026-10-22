@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/metricsq"
@@ -93,7 +94,7 @@ func resolveMetricsInstance(name string) (*registry.State, error) {
 	}
 	switch len(idx.Entries) {
 	case 0:
-		return nil, fmt.Errorf("no registered instances — run `dpm localnet up <name> --profile observability` first")
+		return nil, fmt.Errorf("no registered instances — run `%s` first", cliprefix.Cmd("up <name> --profile observability"))
 	case 1:
 		return registry.Read(idx.Entries[0].Name)
 	default:
@@ -132,13 +133,13 @@ func resolvePrometheusEndpoint(ctx context.Context, state *registry.State, host 
 			continue
 		}
 		return "", 0, "", fmt.Errorf("prometheus is running for instance %q but its host port was not recorded — "+
-			"restart the instance with `dpm localnet restart %s` or pass --prometheus-port explicitly",
-			state.Name, state.Name)
+			"restart the instance with `%s` or pass --prometheus-port explicitly",
+			state.Name, cliprefix.Cmd("restart "+state.Name))
 	}
 	return "", 0, "", fmt.Errorf("no Prometheus for instance %q — "+
-		"enable observability (`dpm localnet observability enable --name %s`, or bring it up with "+
+		"enable observability (`%s`, or bring it up with "+
 		"`--profile observability`) so the shared stack scrapes it, or pass --prometheus-port to point at a remote target",
-		state.Name, state.Name)
+		state.Name, cliprefix.Cmd("observability enable --name "+state.Name))
 }
 
 // MetricsReport is the stable JSON shape `--format json` emits. Missing data

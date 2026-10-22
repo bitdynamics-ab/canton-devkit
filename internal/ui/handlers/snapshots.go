@@ -46,6 +46,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/snapshot"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
@@ -105,7 +106,7 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request) {
 			writeErrorWithCode(w, http.StatusNotFound,
 				"INSTANCE_NOT_FOUND",
 				"instance not registered",
-				"Run `dpm localnet list` to see available instances.",
+				"Run `"+cliprefix.Cmd("list")+"` to see available instances.",
 			)
 			return
 		}

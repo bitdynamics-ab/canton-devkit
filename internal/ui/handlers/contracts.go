@@ -43,6 +43,7 @@ import (
 
 	apitypes "github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/ledger"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 	"google.golang.org/grpc/codes"
@@ -299,8 +300,8 @@ func resolveLedgerForRole(w http.ResponseWriter, name, role string) (endpoint st
 		writeErrorWithCode(w, http.StatusServiceUnavailable,
 			"PARTICIPANT_PORT_NOT_RECORDED",
 			"instance "+name+" was started before participant ports were recorded",
-			"restart the instance with `dpm localnet down "+name+
-				"` followed by `dpm localnet up "+name+
+			"restart the instance with `"+cliprefix.Cmd("down "+name)+
+				"` followed by `"+cliprefix.Cmd("up "+name)+
 				"` — the new up flow captures all Canton API ports")
 		return "", nil, false
 	}

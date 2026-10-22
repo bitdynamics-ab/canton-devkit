@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
@@ -649,7 +650,7 @@ func handleCreate(hub *stream.Hub) http.HandlerFunc {
 			writeErrorWithCode(w, http.StatusConflict,
 				"INSTANCE_EXISTS",
 				"instance "+req.Name+" already exists",
-				"pick a different name, or stop the existing one first via `dpm localnet down "+req.Name+"`")
+				"pick a different name, or stop the existing one first via `"+cliprefix.Cmd("down "+req.Name)+"`")
 			return
 		}
 		if jobs.Active(req.Name) {
@@ -1164,7 +1165,7 @@ func handleDownInstance() http.HandlerFunc {
 			"DOWN_FAILED",
 			"failed to stop "+name+": "+firstNonWarningLine(cause),
 			"the docker compose down output is in the server log; "+
-				"try `dpm localnet down "+name+"` from a terminal for full output")
+				"try `"+cliprefix.Cmd("down "+name)+"` from a terminal for full output")
 	}
 }
 
@@ -1756,7 +1757,7 @@ func handleRemoveInstanceWithRunner(hub *stream.Hub, runRemove runRemoveFunc) ht
 				"INSTANCE_RUNNING",
 				"instance "+name+" is running — stop it first",
 				"retry with ?force=true to stop and remove it, "+
-					"or run `dpm localnet down "+name+"` from a terminal")
+					"or run `"+cliprefix.Cmd("down "+name)+"` from a terminal")
 			return
 		}
 
@@ -1787,7 +1788,7 @@ func handleRemoveInstanceWithRunner(hub *stream.Hub, runRemove runRemoveFunc) ht
 		writeErrorWithCode(w, status,
 			"REMOVE_FAILED",
 			"failed to remove "+name+": "+firstNonWarningLine(cause),
-			"retry with `dpm localnet remove "+name+"` from a terminal for full output")
+			"retry with `"+cliprefix.Cmd("remove "+name)+"` from a terminal for full output")
 	}
 }
 

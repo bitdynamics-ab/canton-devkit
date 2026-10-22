@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/metricsq"
@@ -94,7 +95,7 @@ func handleMetricsQuery() http.HandlerFunc {
 				writeErrorWithCode(w, http.StatusServiceUnavailable,
 					"OBSERVABILITY_PROFILE_OFF",
 					"observability profile not running for instance "+name,
-					"enable it without a restart: `dpm localnet observability enable --name "+name+"` "+
+					"enable it without a restart: `"+cliprefix.Cmd("observability enable --name "+name)+"` "+
 						"(or the Web UI Metrics screen's \"Enable observability now\" button)")
 				return
 			}
@@ -195,7 +196,7 @@ func handleMetricsRange() http.HandlerFunc {
 				writeErrorWithCode(w, http.StatusServiceUnavailable,
 					"OBSERVABILITY_PROFILE_OFF",
 					"observability profile not running for instance "+name,
-					"enable it without a restart: `dpm localnet observability enable --name "+name+"` "+
+					"enable it without a restart: `"+cliprefix.Cmd("observability enable --name "+name)+"` "+
 						"(or the Web UI Metrics screen's \"Enable observability now\" button)")
 				return
 			}
@@ -266,7 +267,7 @@ func handleMetricsSummary() http.HandlerFunc {
 				writeErrorWithCode(w, http.StatusServiceUnavailable,
 					"OBSERVABILITY_PROFILE_OFF",
 					"observability profile not running for instance "+name,
-					"enable it without a restart: `dpm localnet observability enable --name "+name+"` "+
+					"enable it without a restart: `"+cliprefix.Cmd("observability enable --name "+name)+"` "+
 						"(or the Web UI Metrics screen's \"Enable observability now\" button)")
 				return
 			}

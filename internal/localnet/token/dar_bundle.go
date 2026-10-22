@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/darops"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 	"github.com/bitdynamics-ab/canton-devkit/internal/splice"
@@ -196,9 +197,9 @@ func tokenBundleCommit(state *registry.State) (string, error) {
 // message: the test-token DAR is published in stable Splice 0.6.11 and newer.
 func darUnavailableError(pkg, version string) error {
 	return fmt.Errorf("%w: %q is not published for Splice %q — on-ledger V2 tokens "+
-		"need Splice 0.6.11 or newer (`dpm localnet up --version 0.6.12`), "+
-		"or upload the DAR manually with `dpm localnet dar upload`",
-		ErrTokenDARUnavailable, pkg, version)
+		"need Splice 0.6.11 or newer (`%s`), "+
+		"or upload the DAR manually with `%s`",
+		ErrTokenDARUnavailable, pkg, version, cliprefix.Cmd("up --version 0.6.12"), cliprefix.Cmd("dar upload"))
 }
 
 // fetchDAR downloads a prebuilt DAR from the upstream repo at a pinned

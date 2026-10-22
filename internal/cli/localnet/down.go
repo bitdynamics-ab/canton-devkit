@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
@@ -37,25 +38,25 @@ func buildDown() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "down [name]",
 		Short: "Tear down a Canton LocalNet instance — remove containers (preserves volumes)",
-		Long: `Stops the named LocalNet instance gracefully, removes its
+		Long: fmt.Sprintf(`Stops the named LocalNet instance gracefully, removes its
 containers, and detaches its Docker networks. Volumes and the
 registry entry are preserved so a follow-up
 
-  dpm localnet up <name>
+  %[1]s up <name>
 
 resumes from the same on-disk state.
 
 For a lighter-weight halt that keeps the containers around for a
-fast restart, use ` + "`dpm localnet stop <name>`" + ` instead.
+fast restart, use `+"`%[1]s stop <name>`"+` instead.
 
 To remove docker volumes (destructive — drops all ledger state),
-use ` + "`dpm localnet remove <name>`" + ` after down.
+use `+"`%[1]s remove <name>`"+` after down.
 
 If a normal down fails (e.g. a container is unhealthy or
 restart-looping after an out-of-memory kill, or the cached compose
 env is broken), pass --force: it tears the instance down by Docker
 project label only — bypassing the compose files/env that the
-normal path needs — and SIGKILLs containers that won't stop.`,
+normal path needs — and SIGKILLs containers that won't stop.`, cliprefix.Get()),
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -176,8 +177,7 @@ func RunDown(ctx context.Context, out io.Writer, errw io.Writer, opts DownOption
 		return localnet.ExitSuccess
 	}
 
-	_, _ = fmt.Fprintln(out, term.Prompt("", "", "", fmt.Sprintf(
-		"dpm localnet down %s", opts.Name)))
+	_, _ = fmt.Fprintln(out, term.Prompt("", "", "", cliprefix.Cmd("down "+opts.Name)))
 	_, _ = fmt.Fprintln(out)
 
 	// Persist transitional state BEFORE compose. If we crash or

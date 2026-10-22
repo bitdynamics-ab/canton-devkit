@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/cli/localnet"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/ui"
 	"github.com/spf13/cobra"
 )
@@ -38,7 +39,7 @@ func (a *App) buildRoot() *cobra.Command {
 	root.AddCommand(buildTelemetryCmd()) // root-level: telemetry is tool-wide, not a LocalNet concern
 	ln := localnet.Build(a.mode == ViaDPM, ui.BuildInfo{
 		Version:   a.versionString(),
-		CLIPrefix: a.mode.displayName() + " localnet",
+		CLIPrefix: cliprefix.Get(),
 	})
 	applyHelp(ln, a.mode.displayName()) // custom boxed/sectioned template for `localnet --help`
 	root.AddCommand(ln)

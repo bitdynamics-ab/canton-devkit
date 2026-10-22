@@ -31,6 +31,10 @@ func (m InvocationMode) displayName() string {
 	return appName
 }
 
+func (m InvocationMode) cliPrefix() string {
+	return m.displayName() + " localnet"
+}
+
 // detectMode inspects args for the leading viaDPMMarker, returning the
 // resolved mode and the args with the marker removed. Only a leading marker
 // counts: DPM always prepends it (exec-args come before user args), and

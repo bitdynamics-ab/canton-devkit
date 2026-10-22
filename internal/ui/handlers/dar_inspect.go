@@ -54,6 +54,7 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/internal/api/types"
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/admin"
 	adminproto "github.com/bitdynamics-ab/canton-devkit/internal/canton/admin/proto"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	cdkdar "github.com/bitdynamics-ab/canton-devkit/internal/dar"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/darops"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
@@ -169,7 +170,7 @@ func handleDARInspect(w http.ResponseWriter, r *http.Request) {
 			ErrCodeRequestTooLarge,
 			fmt.Sprintf("inspect payload %d bytes exceeds %d cap",
 				len(body), maxInspectBytes),
-			"DAR has too many modules/templates to inspect via the Web UI; use `dpm localnet dar info` from the CLI")
+			"DAR has too many modules/templates to inspect via the Web UI; use `"+cliprefix.Cmd("dar info")+"` from the CLI")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -262,8 +263,8 @@ func requireParticipantAccess(w http.ResponseWriter, state *registry.State, name
 		writeErrorWithCode(w, http.StatusServiceUnavailable,
 			"PARTICIPANT_PORT_NOT_RECORDED",
 			"instance "+name+" was started before participant ports were recorded",
-			"restart the instance with `dpm localnet down "+name+
-				"` followed by `dpm localnet up "+name+
+			"restart the instance with `"+cliprefix.Cmd("down "+name)+
+				"` followed by `"+cliprefix.Cmd("up "+name)+
 				"` — the new up flow captures all Canton API ports")
 		return admin.Config{}, false
 	}

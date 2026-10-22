@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet/containers"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
@@ -55,7 +56,7 @@ func resolveInstance(name string) (*registry.State, error) {
 	state, err := registry.Read(name)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
-			return nil, fmt.Errorf("instance %q is not registered; run `dpm localnet list` to see known names", name)
+			return nil, fmt.Errorf("instance %q is not registered; run `%s` to see known names", name, cliprefix.Cmd("list"))
 		}
 		return nil, fmt.Errorf("read state for %q: %w", name, err)
 	}

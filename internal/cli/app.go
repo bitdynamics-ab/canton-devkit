@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/bitdynamics-ab/canton-devkit/internal/telemetry"
 )
@@ -54,6 +55,8 @@ func (a *App) Run(args []string) int {
 	// component manifest, then strip it so Cobra only sees real args. Done
 	// first so help/examples and flag visibility reflect the mode.
 	a.mode, args = detectMode(args)
+	restorePrefix := cliprefix.Set(a.mode.cliPrefix())
+	defer restorePrefix()
 
 	// Install the real sink only when telemetry is on AND effectively
 	// enabled; otherwise the package's no-op sink stays installed, so even

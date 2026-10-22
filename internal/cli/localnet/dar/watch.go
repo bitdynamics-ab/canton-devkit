@@ -17,6 +17,7 @@ import (
 
 	"github.com/bitdynamics-ab/canton-devkit/internal/canton/admin"
 	adminproto "github.com/bitdynamics-ab/canton-devkit/internal/canton/admin/proto"
+	"github.com/bitdynamics-ab/canton-devkit/internal/cliprefix"
 	cdkdar "github.com/bitdynamics-ab/canton-devkit/internal/dar"
 	"github.com/bitdynamics-ab/canton-devkit/internal/localnet"
 	"github.com/spf13/cobra"
@@ -133,7 +134,7 @@ Exit codes:
 	cmd.Flags().StringVar(&builder, "builder", "auto", "Build tool: auto, dpm, or daml.")
 	cmd.Flags().DurationVar(&interval, "interval", time.Second, "Polling interval for source changes.")
 	cmd.Flags().BoolVar(&vet, "vet", true, "Vet packages on each upload.")
-	cmd.Flags().StringVar(&publishTo, "publish-to", "", "Base URL of a running `dpm localnet ui` for hot-deploy events, for example http://127.0.0.1:7777.")
+	cmd.Flags().StringVar(&publishTo, "publish-to", "", "Base URL of a running `"+cliprefix.Cmd("ui")+"` for hot-deploy events, for example http://127.0.0.1:7777.")
 	return cmd
 }
 
