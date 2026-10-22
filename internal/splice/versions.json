@@ -178,7 +178,9 @@
       "commit": "4957155938c910d0f498d2abbec5ca404e9a4b92",
       "content_sha": "7eb3397d27e2e78143260e6d56df0cb4fb84c8ec1a3e6ef67690dd2bf1f964d9",
       "size": 206905054,
-      "major": "0.9"
+      "major": "0.9",
+      "min_memory_bytes": 8000000000,
+      "recommended_memory_bytes": 12000000000
     },
     {
       "tag": "token-standard-v2",
