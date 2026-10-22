@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 import { InstanceSelectionProvider } from "../shell/useInstanceSelection";
 import { ExplorerScreen } from "./ExplorerScreen";
+import { STANDALONE_CLI, expectNoDpmHint, setStandaloneCLI } from "../test/cliPrefix";
 
 // ExplorerScreen — transaction filters + tx replay.
 //
@@ -220,5 +221,32 @@ describe("ExplorerScreen — transactions filters + replay", () => {
 
     expect(await screen.findByText("4790.1600000000")).toBeInTheDocument();
     expect(screen.queryByText("[object Object]")).toBeNull();
+  });
+});
+
+describe("ExplorerScreen empty-ACS hint", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("suggests a real command that creates contracts on the selected instance", async () => {
+    stubFetch();
+    render(
+      <Providers>
+        <ExplorerScreen />
+      </Providers>,
+    );
+    expect(await screen.findByText("dpm localnet token demo --instance demo")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("tx submit");
+  });
+
+  it("names the standalone binary when the server reports it", async () => {
+    setStandaloneCLI();
+    stubFetch();
+    render(
+      <Providers>
+        <ExplorerScreen />
+      </Providers>,
+    );
+    expect(await screen.findByText(`${STANDALONE_CLI} token demo --instance demo`)).toBeInTheDocument();
+    expectNoDpmHint();
   });
 });

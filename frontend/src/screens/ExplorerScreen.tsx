@@ -580,7 +580,7 @@ export function ExplorerScreen() {
                             color: W.text2,
                           }}
                         >
-                          {cli} tx submit
+                          {cli} token demo --instance {name}
                         </code>
                       </>
                     )}
