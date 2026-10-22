@@ -243,6 +243,24 @@ describe("CampaignWatermark share", () => {
     expect(shareButton()).toHaveFocus();
   });
 
+  it("keeps the Escape that closes the prompt from reaching window-level Escape handlers", async () => {
+    const user = userEvent.setup();
+    const onWindowKey = vi.fn();
+    window.addEventListener("keydown", onWindowKey);
+    try {
+      const post = await openPrompt("CCT-A7Q2M9XK");
+      expect(post).toHaveFocus();
+      await user.keyboard("{Escape}");
+      expect(screen.queryByRole("link", { name: /post on x/i })).toBeNull();
+      expect(onWindowKey).not.toHaveBeenCalled();
+
+      await user.keyboard("{Escape}");
+      expect(onWindowKey).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener("keydown", onWindowKey);
+    }
+  });
+
   it("stays open until dismissed, then closes shortly after Post on X is used", async () => {
     const post = await openPrompt("CCT-A7Q2M9XK");
     post.addEventListener("click", (e) => e.preventDefault());

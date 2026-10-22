@@ -184,7 +184,10 @@ export function CampaignWatermark({ code }: { code: string }) {
   }, [prompt]);
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Escape" && prompt) close();
+    if (e.key !== "Escape" || !prompt) return;
+    e.stopPropagation();
+    e.preventDefault();
+    close();
   };
 
   if (!code) return null;
