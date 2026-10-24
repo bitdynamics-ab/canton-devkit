@@ -15,47 +15,47 @@
 <text x="48" y="52.0" font-size="11" fill="#6b7280" text-anchor="end">146</text>
 <line x1="56" y1="48" x2="56" y2="316" stroke="#9ca3af" stroke-width="1"/>
 <line x1="56" y1="316" x2="736" y2="316" stroke="#9ca3af" stroke-width="1"/>
-<text x="56.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">09-24</text>
-<text x="126.3" y="336" font-size="11" fill="#6b7280" text-anchor="middle">09-27</text>
-<text x="196.7" y="336" font-size="11" fill="#6b7280" text-anchor="middle">09-30</text>
-<text x="267.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-03</text>
-<text x="337.4" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-06</text>
-<text x="407.7" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-09</text>
-<text x="478.1" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-12</text>
-<text x="548.4" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-15</text>
-<text x="618.8" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-18</text>
-<text x="689.1" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-21</text>
-<text x="736.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-23</text>
+<text x="56.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">09-25</text>
+<text x="126.3" y="336" font-size="11" fill="#6b7280" text-anchor="middle">09-28</text>
+<text x="196.7" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-01</text>
+<text x="267.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-04</text>
+<text x="337.4" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-07</text>
+<text x="407.7" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-10</text>
+<text x="478.1" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-13</text>
+<text x="548.4" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-16</text>
+<text x="618.8" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-19</text>
+<text x="689.1" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-22</text>
+<text x="736.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">10-24</text>
 <text x="396" y="368" font-size="12" fill="#374151" text-anchor="middle">Day (oldest -&gt; newest)</text>
-<polyline points="56.0,314.2 79.4,314.2 102.9,286.6 126.3,103.1 149.8,64.5 173.2,73.7 196.7,48.0 220.1,198.5 243.6,286.6 267.0,294.0 290.5,314.2 313.9,306.8 337.4,297.6 360.8,314.2 384.3,314.2 407.7,314.2 431.2,314.2 454.6,314.2 478.1,312.3 501.5,314.2 525.0,314.2 548.4,314.2 571.9,314.2 595.3,314.2 618.8,314.2 642.2,306.8 665.7,314.2 689.1,314.2 712.6,314.2 736.0,294.0" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+<polyline points="56.0,314.2 79.4,286.6 102.9,103.1 126.3,64.5 149.8,73.7 173.2,48.0 196.7,198.5 220.1,286.6 243.6,294.0 267.0,314.2 290.5,306.8 313.9,297.6 337.4,314.2 360.8,314.2 384.3,314.2 407.7,314.2 431.2,314.2 454.6,312.3 478.1,314.2 501.5,314.2 525.0,314.2 548.4,314.2 571.9,314.2 595.3,314.2 618.8,306.8 642.2,314.2 665.7,314.2 689.1,314.2 712.6,294.0 736.0,312.3" fill="none" stroke="#2563eb" stroke-width="2.5"/>
 <circle cx="56.0" cy="314.2" r="3.5" fill="#2563eb"/>
-<circle cx="79.4" cy="314.2" r="3.5" fill="#2563eb"/>
-<circle cx="102.9" cy="286.6" r="3.5" fill="#2563eb"/>
-<circle cx="126.3" cy="103.1" r="3.5" fill="#2563eb"/>
-<circle cx="149.8" cy="64.5" r="3.5" fill="#2563eb"/>
-<circle cx="173.2" cy="73.7" r="3.5" fill="#2563eb"/>
-<circle cx="196.7" cy="48.0" r="3.5" fill="#2563eb"/>
-<circle cx="220.1" cy="198.5" r="3.5" fill="#2563eb"/>
-<circle cx="243.6" cy="286.6" r="3.5" fill="#2563eb"/>
-<circle cx="267.0" cy="294.0" r="3.5" fill="#2563eb"/>
-<circle cx="290.5" cy="314.2" r="3.5" fill="#2563eb"/>
-<circle cx="313.9" cy="306.8" r="3.5" fill="#2563eb"/>
-<circle cx="337.4" cy="297.6" r="3.5" fill="#2563eb"/>
+<circle cx="79.4" cy="286.6" r="3.5" fill="#2563eb"/>
+<circle cx="102.9" cy="103.1" r="3.5" fill="#2563eb"/>
+<circle cx="126.3" cy="64.5" r="3.5" fill="#2563eb"/>
+<circle cx="149.8" cy="73.7" r="3.5" fill="#2563eb"/>
+<circle cx="173.2" cy="48.0" r="3.5" fill="#2563eb"/>
+<circle cx="196.7" cy="198.5" r="3.5" fill="#2563eb"/>
+<circle cx="220.1" cy="286.6" r="3.5" fill="#2563eb"/>
+<circle cx="243.6" cy="294.0" r="3.5" fill="#2563eb"/>
+<circle cx="267.0" cy="314.2" r="3.5" fill="#2563eb"/>
+<circle cx="290.5" cy="306.8" r="3.5" fill="#2563eb"/>
+<circle cx="313.9" cy="297.6" r="3.5" fill="#2563eb"/>
+<circle cx="337.4" cy="314.2" r="3.5" fill="#2563eb"/>
 <circle cx="360.8" cy="314.2" r="3.5" fill="#2563eb"/>
 <circle cx="384.3" cy="314.2" r="3.5" fill="#2563eb"/>
 <circle cx="407.7" cy="314.2" r="3.5" fill="#2563eb"/>
 <circle cx="431.2" cy="314.2" r="3.5" fill="#2563eb"/>
-<circle cx="454.6" cy="314.2" r="3.5" fill="#2563eb"/>
-<circle cx="478.1" cy="312.3" r="3.5" fill="#2563eb"/>
+<circle cx="454.6" cy="312.3" r="3.5" fill="#2563eb"/>
+<circle cx="478.1" cy="314.2" r="3.5" fill="#2563eb"/>
 <circle cx="501.5" cy="314.2" r="3.5" fill="#2563eb"/>
 <circle cx="525.0" cy="314.2" r="3.5" fill="#2563eb"/>
 <circle cx="548.4" cy="314.2" r="3.5" fill="#2563eb"/>
 <circle cx="571.9" cy="314.2" r="3.5" fill="#2563eb"/>
 <circle cx="595.3" cy="314.2" r="3.5" fill="#2563eb"/>
-<circle cx="618.8" cy="314.2" r="3.5" fill="#2563eb"/>
-<circle cx="642.2" cy="306.8" r="3.5" fill="#2563eb"/>
+<circle cx="618.8" cy="306.8" r="3.5" fill="#2563eb"/>
+<circle cx="642.2" cy="314.2" r="3.5" fill="#2563eb"/>
 <circle cx="665.7" cy="314.2" r="3.5" fill="#2563eb"/>
 <circle cx="689.1" cy="314.2" r="3.5" fill="#2563eb"/>
-<circle cx="712.6" cy="314.2" r="3.5" fill="#2563eb"/>
-<circle cx="736.0" cy="294.0" r="3.5" fill="#2563eb"/>
+<circle cx="712.6" cy="294.0" r="3.5" fill="#2563eb"/>
+<circle cx="736.0" cy="312.3" r="3.5" fill="#2563eb"/>
 </svg>
