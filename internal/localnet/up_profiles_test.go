@@ -3,6 +3,7 @@ package localnet
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -135,6 +136,9 @@ func TestRunUp_RejectsUnknownProfile(t *testing.T) {
 // full set, with no double-counting.
 func TestRunUp_InheritsOptInProfilesOnReup(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	// The inherited observability profile probes the shared stack; report it
+	// unreachable so RunUp falls back to the (stubbed) per-instance overlay.
+	stubSharedRunner(t, &recordingSharedRunner{upErr: errors.New("shared stack stubbed out")})
 	projectDir := fakeSpliceProjectDir(t)
 	base := adapterBaseProfiles(t)
 
