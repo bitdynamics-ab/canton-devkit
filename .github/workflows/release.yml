@@ -77,43 +77,22 @@ jobs:
           set -euo pipefail
           cd frontend
           npm ci
+          npm test
           npm run build
           test -d ../internal/ui/dist/assets   # fail loudly if the bundle is missing
+
+      - name: Test Go packages
+        run: make test
+
+      - name: Lint Go packages
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20
+        with:
+          version: v2.12.2
 
       - name: Set release metadata
         id: meta
         run: |
-          short_sha="${GITHUB_SHA::7}"
-          # Three distinct versions flow through this workflow:
-          #   devkit_version    — the DevKit release, v-prefixed (v0.7.1).
-          #                       Used for GitHub Releases, tarball names,
-          #                       and the Homebrew formula.
-          #   component_version — the SAME DevKit version in bare semver
-          #                       (0.7.1) for the DPM component's OCI tag.
-          #   DPM_VERSION (env) — the pinned DPM *CLI* version (unrelated).
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            # Reject a non-semver tag (e.g. v0.7) up front, before any
-            # release or asset is created. DPM's `publish component`
-            # requires a full MAJOR.MINOR.PATCH OCI tag, so a 2-part tag
-            # like v0.7 (which stripped to 0.7) is exactly what broke the
-            # v0.7 release. Fail FAST here with an actionable message.
-            devkit_version="${GITHUB_REF_NAME}"
-            component_version="${GITHUB_REF_NAME#v}"
-            semver_re='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
-            if [[ ! "${component_version}" =~ $semver_re ]]; then
-              echo "::error::Release tag '${devkit_version}' is not full semver. Tag a MAJOR.MINOR.PATCH release, e.g. v0.7.1 (not v0.7)." >&2
-              exit 1
-            fi
-            push="true"
-          else
-            devkit_version="main-${short_sha}"
-            # DPM needs a valid semver even for the dry-run on main.
-            component_version="0.0.0-${short_sha}"
-            push="false"
-          fi
-          echo "devkit_version=${devkit_version}" >> "${GITHUB_OUTPUT}"
-          echo "component_version=${component_version}" >> "${GITHUB_OUTPUT}"
-          echo "push=${push}" >> "${GITHUB_OUTPUT}"
+          bash scripts/release-metadata.sh "$GITHUB_REF" "$GITHUB_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Build release binaries + tarballs + checksums
         env:
@@ -127,57 +106,13 @@ jobs:
           # repo variable TELEMETRY_ENDPOINT to enable sending; when unset
           # it stays empty and events are spooled locally only.
           TELEMETRY_ENDPOINT: ${{ vars.TELEMETRY_ENDPOINT }}
-        run: |
-          set -euo pipefail
-          mkdir -p dist component-bin
-          short_commit="${COMMIT::7}"
-          tel_pkg="github.com/bitdynamics-ab/canton-devkit/internal/telemetry"
-          # Tag builds are the stable release channel.
-          # Iterate the target matrix as a real array so each element is
-          # quoted (tidier than relying on unquoted word-splitting).
-          read -ra targets <<< "${RELEASE_TARGETS}"
-          for target in "${targets[@]}"; do
-            os="${target%/*}"
-            arch="${target#*/}"
+        run: bash scripts/build-release.sh
 
-            binary_name="canton-devkit"
-            [ "$os" = "windows" ] && binary_name="canton-devkit.exe"
-
-            # Build ONCE into component-bin/<os>_<arch>/. The DPM-component
-            # steps later in this job package this exact binary, so GitHub
-            # Releases and the GHCR OCI artifact ship byte-identical bits
-            # (no rebuild skew). -trimpath strips the runner's local paths
-            # from the binary; -s -w shrink it ~30%.
-            bindir="component-bin/${os}_${arch}"
-            mkdir -p "${bindir}"
-            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build \
-              -trimpath \
-              -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${short_commit} -X main.channel=stable -X ${tel_pkg}.endpoint=${TELEMETRY_ENDPOINT}" \
-              -o "${bindir}/${binary_name}" ./cmd/canton-devkit
-
-            # Stage the standalone archive: binary + LICENSE + README for
-            # end-user discoverability.
-            stage="dist/stage_${os}_${arch}"
-            mkdir -p "${stage}"
-            cp "${bindir}/${binary_name}" "${stage}/${binary_name}"
-            cp LICENSE "${stage}/LICENSE"
-            cp README.md "${stage}/README.md"
-
-            archive_base="canton-devkit_${VERSION}_${os}_${arch}"
-            if [ "$os" = "windows" ]; then
-              (cd "${stage}" && zip -q -r "../${archive_base}.zip" .)
-            else
-              tar -C "${stage}" -czf "dist/${archive_base}.tar.gz" .
-            fi
-            rm -rf "${stage}"
-          done
-
-          # Single SHA256SUMS file covers every published archive (dist/
-          # now holds only release artifacts). Format is GNU sha256sum
-          # compatible so users can verify via:
-          #   sha256sum --check SHA256SUMS
-          (cd dist && sha256sum * > SHA256SUMS)
-          cat dist/SHA256SUMS
+      - name: Verify packaged campaign identity
+        if: steps.meta.outputs.campaign == 'on'
+        env:
+          VERSION: ${{ steps.meta.outputs.devkit_version }}
+        run: bash scripts/smoke-campaign.sh component-bin/linux_amd64/canton-devkit "$VERSION" "${GITHUB_SHA::7}"
 
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/')
@@ -185,6 +120,8 @@ jobs:
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
         with:
           files: dist/*
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          make_latest: ${{ steps.meta.outputs.prerelease == 'true' && 'false' || 'legacy' }}
 
       - name: Install GitHub CLI (sha256-verified)
         if: startsWith(github.ref, 'refs/tags/')
@@ -203,7 +140,7 @@ jobs:
           "$bindir/gh" --version
 
       - name: Update Homebrew formula in public builds repo
-        if: startsWith(github.ref, 'refs/tags/')
+        if: steps.meta.outputs.push == 'true' && steps.meta.outputs.prerelease == 'false'
         env:
           GH_TOKEN: ${{ secrets.BUILDS_REPO_TOKEN }}
           VERSION: ${{ steps.meta.outputs.devkit_version }}
