@@ -3,7 +3,7 @@
 
 **Total downloads:** 1341 (GHCR package `canton-devkit`).
 
-**Last 30 days (page sparkline):** 448.
+**Last 30 days (page sparkline):** 316.
 
 Source: [GitHub Packages](https://github.com/bitdynamics-ab/canton-devkit/pkgs/container/canton-devkit).
 
@@ -11,6 +11,7 @@ Source: [GitHub Packages](https://github.com/bitdynamics-ab/canton-devkit/pkgs/c
 
 | Date | Downloads |
 |---|---|
+| 2026-10-29 | 0 |
 | 2026-10-28 | 10 |
 | 2026-10-27 | 11 |
 | 2026-10-26 | 5 |
@@ -40,5 +41,4 @@ Source: [GitHub Packages](https://github.com/bitdynamics-ab/canton-devkit/pkgs/c
 | 2026-10-02 | 16 |
 | 2026-10-01 | 64 |
 | 2026-09-30 | 146 |
-| 2026-09-29 | 132 |
 
