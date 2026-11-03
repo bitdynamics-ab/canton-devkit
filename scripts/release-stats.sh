@@ -89,7 +89,8 @@ fi
 # --- Classify assets into platforms + merge by tag across repos -----------
 # Platform classification is regex-based (not literal filenames) because the
 # asset naming drifted across historical releases. Checksum files
-# (SHA256SUMS / checksums.txt) are excluded from platform totals.
+# (SHA256SUMS / checksums.txt) count toward grandTotal (and the downloads
+# badge) but are omitted from the per-platform chart/table, same as .deb.
 #
 # Releases with the same tag from multiple repos have their per-platform
 # download counts summed. The earliest published_at date is kept for ordering.
@@ -99,7 +100,7 @@ model="$(printf '%s' "${all_releases}" | jq '
     elif ($name | test("_linux_amd64\\."))         then "Linux (amd64)"
     elif ($name | test("_windows_amd64\\.(zip|exe)$")) then "Windows (amd64)"
     elif ($name | test("_amd64\\.deb$"))           then "Debian (.deb)"
-    elif ($name | test("(?i)^(SHA256SUMS|checksums\\.txt)$")) then null
+    elif ($name | test("(?i)^(SHA256SUMS|checksums\\.txt)$")) then "Checksums"
     else null
     end;
 
@@ -115,7 +116,7 @@ model="$(printf '%s' "${all_releases}" | jq '
     };
 
   # Fixed platform order for stable legends / stable diffs.
-  ["macOS (arm64)", "Linux (amd64)", "Windows (amd64)", "Debian (.deb)"] as $platforms
+  ["macOS (arm64)", "Linux (amd64)", "Windows (amd64)", "Debian (.deb)", "Checksums"] as $platforms
 
   | [ .[] | normalize ]
   | group_by(.tag)
@@ -343,9 +344,11 @@ by_month_data="$(printf '%s' "${monthly_rows}" | jq '
 render_line_chart "${OUT_DIR}/release-downloads-monthly.svg" \
   "Monthly downloads (last 6 months)" "Month (oldest -> newest)" "${by_month_data}"
 
-# --- View 2: all-time total downloads per platform (bars, no .deb) -------
+# --- View 2: all-time total downloads per platform (bars; no .deb / checksums)
 platform_bars="$(printf '%s' "${model}" | jq '
-  { bars: [ .platforms[] as $p | select($p != "Debian (.deb)") | { label: $p, value: (.totalsByPlatform[$p] // 0) } ] }
+  { bars: [ .platforms[] as $p
+            | select($p != "Debian (.deb)" and $p != "Checksums")
+            | { label: $p, value: (.totalsByPlatform[$p] // 0) } ] }
 ')"
 render_bar_chart "${OUT_DIR}/release-downloads-by-platform.svg" \
   "All-time downloads per platform" "${platform_bars}"
@@ -374,7 +377,9 @@ render_bar_chart "${OUT_DIR}/release-downloads-by-platform.svg" \
   echo "| Platform | Downloads |"
   echo "|---|---|"
   printf '%s' "${model}" | jq -r '
-    .platforms[] as $p | select($p != "Debian (.deb)") | "| \($p) | \(.totalsByPlatform[$p] // 0) |"'
+    .platforms[] as $p
+    | select($p != "Debian (.deb)" and $p != "Checksums")
+    | "| \($p) | \(.totalsByPlatform[$p] // 0) |"'
   echo
 } > "${OUT_DIR}/release-downloads.md"
 echo "wrote ${OUT_DIR}/release-downloads.md"
