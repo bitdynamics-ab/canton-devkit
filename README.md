@@ -4,7 +4,6 @@
 [![Release](https://img.shields.io/github/v/release/bitdynamics-ab/canton-devkit?display_name=tag&sort=semver)](https://github.com/bitdynamics-ab/canton-devkit/releases/latest)
 [![Docs](https://img.shields.io/badge/docs-current-brightgreen.svg)](https://bitdynamics-ab.github.io/canton-devkit/)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
-
 [![Downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fbitdynamics-ab%2Fcanton-devkit%2Frelease-stats-data%2Fdocs%2Fassets%2Frelease-downloads-badge.json&query=%24.message&label=downloads)](https://github.com/bitdynamics-ab/canton-devkit/releases)
 
 canton-devkit runs a complete local [Canton](https://canton.network/)
@@ -129,17 +128,13 @@ For general Canton and Daml questions, use the
 
 ## Download statistics
 
-### Standalone installs
-
-Homebrew install, installer script, and GitHub Release direct download:
+### Standalone downloads
 
 ![Monthly release downloads](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-monthly.svg)
 
 ![All-time downloads per platform](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-by-platform.svg)
 
 ### DPM package downloads
-
-The `dpm install` path:
 
 ![Daily DPM package downloads](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/package-downloads-daily.svg)
 
