@@ -23,6 +23,7 @@
 #   release-downloads-by-platform.svg  — all-time total downloads per platform (bars, no .deb)
 #   release-downloads.md               — monthly + per-platform summary tables
 #   release-downloads-history.jsonl    — appended daily snapshot (total + per platform + per version)
+#   release-downloads-badge.json       — Shields.io endpoint/dynamic JSON for the combined total badge
 #
 # Environment:
 #   STATS_REPOS   space-separated repos (default: bitdynamics-ab/canton-devkit
@@ -377,3 +378,16 @@ render_bar_chart "${OUT_DIR}/release-downloads-by-platform.svg" \
   echo
 } > "${OUT_DIR}/release-downloads.md"
 echo "wrote ${OUT_DIR}/release-downloads.md"
+
+# --- Shields.io badge JSON (combined total across STATS_REPOS) ------------
+# Consumed by the README via shields.io's dynamic JSON / endpoint badge so
+# one badge shows Homebrew tap + canton-devkit release downloads together.
+# schemaVersion:1 is the Shields endpoint schema; dynamic/json can also
+# read $.message from the same file.
+printf '%s' "${model}" | jq '{
+  schemaVersion: 1,
+  label: "downloads",
+  message: (.grandTotal | tostring),
+  color: "blue"
+}' > "${OUT_DIR}/release-downloads-badge.json"
+echo "wrote ${OUT_DIR}/release-downloads-badge.json"

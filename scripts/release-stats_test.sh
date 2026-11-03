@@ -64,4 +64,19 @@ assert_eq "chart last-6 window" \
 
 bash -n "${script_dir}/release-stats.sh"
 
+# Combined-total badge JSON shape (Shields endpoint / dynamic JSON).
+assert_eq "badge json shape" \
+  "$(jq -n --argjson total 201 '{schemaVersion:1,label:"downloads",message:($total|tostring),color:"blue"}')" \
+  '{"schemaVersion":1,"label":"downloads","message":"201","color":"blue"}'
+
+if ! grep -Fq 'release-downloads-badge.json' "${script_dir}/release-stats.sh"; then
+  echo "FAIL: release-stats.sh does not write release-downloads-badge.json" >&2
+  exit 1
+fi
+workflow="${script_dir}/../.github/workflows/release-stats.yml"
+if ! grep -Fq 'release-downloads-badge.json' "${workflow}"; then
+  echo "FAIL: release-stats.yml does not publish release-downloads-badge.json" >&2
+  exit 1
+fi
+
 echo "OK: release-stats monthly aggregation"

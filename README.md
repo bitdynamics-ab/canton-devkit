@@ -5,8 +5,7 @@
 [![Docs](https://img.shields.io/badge/docs-current-brightgreen.svg)](https://bitdynamics-ab.github.io/canton-devkit/)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
-[![Homebrew Downloads](https://img.shields.io/github/downloads/bitdynamics-ab/homebrew-canton-devkit/total.svg?label=homebrew%20downloads)](https://github.com/bitdynamics-ab/homebrew-canton-devkit/releases)
-[![Other Downloads](https://img.shields.io/github/downloads/bitdynamics-ab/canton-devkit/total.svg?label=other%20downloads)](https://github.com/bitdynamics-ab/canton-devkit/releases)
+[![Downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fbitdynamics-ab%2Fcanton-devkit%2Frelease-stats-data%2Fdocs%2Fassets%2Frelease-downloads-badge.json&query=%24.message&label=downloads)](https://github.com/bitdynamics-ab/canton-devkit/releases)
 
 canton-devkit runs a complete local [Canton](https://canton.network/)
 network on your machine. You get two participant/validator nodes and a
