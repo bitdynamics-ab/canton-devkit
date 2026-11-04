@@ -31,6 +31,10 @@ jobs:
       - name: Check out repository
         # actions/checkout@v5
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          # Full history so create-pull-request can rebuild the catalogue
+          # branch without a shallow --force-with-lease push.
+          fetch-depth: 0
 
       - name: Enumerate new upstream tags
         id: enum
@@ -146,10 +150,41 @@ jobs:
             exit 1
           fi
 
+      - name: Drop catalogue branch if it lagged main
+        if: steps.add.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: chore/refresh-splice-versions
+        run: |
+          set -euo pipefail
+          # When the bot branch lags main, create-pull-request rewrites it and
+          # pushes with --force-with-lease. GitHub has rejected that push with
+          # "fatal error in commit_refs" (run 41819610460). Drop the stale tip
+          # so the next step creates a clean branch from current main instead.
+          if ! git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "No existing $BRANCH on origin."
+            exit 0
+          fi
+          git fetch --no-tags origin "$BRANCH"
+          behind=$(git rev-list --count "origin/$BRANCH..origin/main")
+          if [[ "$behind" -eq 0 ]]; then
+            echo "$BRANCH is not behind main; leaving it for create-pull-request."
+            exit 0
+          fi
+          echo "$BRANCH is $behind commit(s) behind main; recreating."
+          pr=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number // empty')
+          if [[ -n "$pr" ]]; then
+            gh pr close "$pr" \
+              --comment "Superseded: catalogue branch lagged main; recreating a clean tip." \
+              --delete-branch
+          else
+            git push origin ":refs/heads/$BRANCH"
+          fi
+
       - name: Open PR with catalogue updates
         if: steps.add.outputs.changed == 'true'
         # peter-evans/create-pull-request@v8.1.1 — >=v6.0.1 so a re-run can
-        # update the existing chore/refresh-splice-versions PR.
+        # update an existing chore/refresh-splice-versions PR.
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1
         with:
           commit-message: "chore: catalogue new Splice versions"
