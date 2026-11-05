@@ -8,11 +8,11 @@
 <line x1="56" y1="208.8" x2="580" y2="208.8" stroke="#e5e7eb" stroke-width="1"/>
 <text x="48" y="212.8" font-size="11" fill="#6b7280" text-anchor="end">97</text>
 <line x1="56" y1="155.2" x2="580" y2="155.2" stroke="#e5e7eb" stroke-width="1"/>
-<text x="48" y="159.2" font-size="11" fill="#6b7280" text-anchor="end">145</text>
+<text x="48" y="159.2" font-size="11" fill="#6b7280" text-anchor="end">146</text>
 <line x1="56" y1="101.6" x2="580" y2="101.6" stroke="#e5e7eb" stroke-width="1"/>
-<text x="48" y="105.6" font-size="11" fill="#6b7280" text-anchor="end">194</text>
+<text x="48" y="105.6" font-size="11" fill="#6b7280" text-anchor="end">195</text>
 <line x1="56" y1="48.0" x2="580" y2="48.0" stroke="#e5e7eb" stroke-width="1"/>
-<text x="48" y="52.0" font-size="11" fill="#6b7280" text-anchor="end">243</text>
+<text x="48" y="52.0" font-size="11" fill="#6b7280" text-anchor="end">244</text>
 <line x1="56" y1="48" x2="56" y2="316" stroke="#9ca3af" stroke-width="1"/>
 <line x1="56" y1="316" x2="580" y2="316" stroke="#9ca3af" stroke-width="1"/>
 <text x="56.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">2026-07</text>
@@ -21,11 +21,11 @@
 <text x="449.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">2026-10</text>
 <text x="580.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">2026-11</text>
 <text x="318" y="368" font-size="12" fill="#374151" text-anchor="middle">Month (oldest -&gt; newest)</text>
-<polyline points="56.0,275.2 187.0,295.0 318.0,284.0 449.0,281.8 580.0,48.0" fill="none" stroke="#2563eb" stroke-width="2.5"/>
-<circle cx="56.0" cy="275.2" r="3.5" fill="#2563eb"/>
-<circle cx="187.0" cy="295.0" r="3.5" fill="#2563eb"/>
-<circle cx="318.0" cy="284.0" r="3.5" fill="#2563eb"/>
-<circle cx="449.0" cy="281.8" r="3.5" fill="#2563eb"/>
+<polyline points="56.0,275.4 187.0,295.1 318.0,284.1 449.0,282.0 580.0,48.0" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+<circle cx="56.0" cy="275.4" r="3.5" fill="#2563eb"/>
+<circle cx="187.0" cy="295.1" r="3.5" fill="#2563eb"/>
+<circle cx="318.0" cy="284.1" r="3.5" fill="#2563eb"/>
+<circle cx="449.0" cy="282.0" r="3.5" fill="#2563eb"/>
 <circle cx="580.0" cy="48.0" r="3.5" fill="#2563eb"/>
 <rect x="596" y="48" width="14" height="14" rx="2" fill="#2563eb"/>
 <text x="616" y="60" font-size="12" fill="#374151">Downloads</text>
