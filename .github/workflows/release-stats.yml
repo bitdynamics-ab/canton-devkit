@@ -60,6 +60,7 @@ jobs:
             docs/assets/release-downloads-monthly.svg
             docs/assets/release-downloads.md
             docs/assets/release-downloads-history.jsonl
+            docs/assets/release-downloads-badge.json
           )
 
           # Stash the freshly generated files before switching branches —

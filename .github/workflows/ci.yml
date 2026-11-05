@@ -19,6 +19,9 @@ on:
       - "internal/skills/docs/**"
       - "packaging/**"
       - "examples/**"
+      - "internal/splice/versions.json"
+      - "assets/**"
+      - "internal/ui/dist/**"
   push:
     branches:
       - main
@@ -37,6 +40,9 @@ on:
       - "internal/skills/docs/**"
       - "packaging/**"
       - "examples/**"
+      - "internal/splice/versions.json"
+      - "assets/**"
+      - "internal/ui/dist/**"
 
 permissions:
   contents: read

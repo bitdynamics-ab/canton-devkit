@@ -109,6 +109,11 @@ A maintainer then:
 - Reviews the diff.
 - Bumps `latest_alias` if the new tag should become the default
   `--version latest`.
+- Sets `min_memory_bytes` and `recommended_memory_bytes` on the first
+  entry of a new major line (from that release's
+  `cluster/compose/localnet/resource-constraints.yaml`). Later tags in
+  the line inherit them; `go test ./internal/splice/` fails until a
+  new major has them.
 - Optionally runs the integration test against the new entry before
   merging.
 - Commits + pushes.

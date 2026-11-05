@@ -64,4 +64,33 @@ assert_eq "chart last-6 window" \
 
 bash -n "${script_dir}/release-stats.sh"
 
+# Checksums count toward totals (badge / grandTotal), not toward null.
+assert_eq "checksum classification" \
+  "$(jq -n '
+    def platform_of($name):
+      if   ($name | test("_darwin_arm64\\.")) then "macOS (arm64)"
+      elif ($name | test("_linux_amd64\\.")) then "Linux (amd64)"
+      elif ($name | test("_windows_amd64\\.(zip|exe)$")) then "Windows (amd64)"
+      elif ($name | test("_amd64\\.deb$")) then "Debian (.deb)"
+      elif ($name | test("(?i)^(SHA256SUMS|checksums\\.txt)$")) then "Checksums"
+      else null end;
+    [platform_of("SHA256SUMS"), platform_of("checksums.txt"), platform_of("BUILD-INFO.txt")]
+  ')" \
+  '["Checksums","Checksums",null]'
+
+# Combined-total badge JSON shape (Shields endpoint / dynamic JSON).
+assert_eq "badge json shape" \
+  "$(jq -n --argjson total 201 '{schemaVersion:1,label:"downloads",message:($total|tostring),color:"blue"}')" \
+  '{"schemaVersion":1,"label":"downloads","message":"201","color":"blue"}'
+
+if ! grep -Fq 'release-downloads-badge.json' "${script_dir}/release-stats.sh"; then
+  echo "FAIL: release-stats.sh does not write release-downloads-badge.json" >&2
+  exit 1
+fi
+workflow="${script_dir}/../.github/workflows/release-stats.yml"
+if ! grep -Fq 'release-downloads-badge.json' "${workflow}"; then
+  echo "FAIL: release-stats.yml does not publish release-downloads-badge.json" >&2
+  exit 1
+fi
+
 echo "OK: release-stats monthly aggregation"

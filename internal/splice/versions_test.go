@@ -230,6 +230,23 @@ func TestMinMemoryFor_ExplicitOverrideWins(t *testing.T) {
 	}
 }
 
+func TestEveryCataloguedMajorHasCuratedFloor(t *testing.T) {
+	curated := map[string]bool{}
+	for _, v := range SupportedVersions {
+		if _, ok := curated[v.Major]; !ok {
+			curated[v.Major] = false
+		}
+		if v.MinMemoryBytes > 0 && v.RecommendedMemoryBytes > 0 {
+			curated[v.Major] = true
+		}
+	}
+	for major, ok := range curated {
+		if !ok {
+			t.Errorf("Splice major %q has no entry with min_memory_bytes and recommended_memory_bytes set", major)
+		}
+	}
+}
+
 func TestSupportedIsSorted(t *testing.T) {
 	got := Supported()
 	for i := 1; i < len(got); i++ {
