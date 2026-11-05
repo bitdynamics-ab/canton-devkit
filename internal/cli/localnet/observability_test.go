@@ -2,6 +2,7 @@ package localnet
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -56,6 +57,9 @@ func seedObsInstance(t *testing.T, name string, status registry.Status, ports ma
 // sidecars shows both off and the enable hint.
 func TestObservabilityStatus_TextOff(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
+	old := sharedGrafanaURL
+	sharedGrafanaURL = func(context.Context, string) string { return "" }
+	t.Cleanup(func() { sharedGrafanaURL = old })
 	seedObsInstance(t, "demo", registry.StatusRunning, map[string]int{})
 
 	cmd := buildObservability()

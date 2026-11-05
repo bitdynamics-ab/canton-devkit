@@ -3,12 +3,14 @@ package localnet
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/bitdynamics-ab/canton-devkit/internal/docker"
 	"github.com/bitdynamics-ab/canton-devkit/internal/registry"
 )
 
@@ -157,12 +159,14 @@ func TestDeregisterInstanceTargets_Idempotent(t *testing.T) {
 }
 
 // recordingSharedRunner is a sharedComposeOps stub that records whether
-// Up/Stop were called, for the refcount decision tests.
+// Up/Stop were called, for the refcount decision tests. upErr makes Up
+// fail, i.e. the shared stack is unreachable.
 type recordingSharedRunner struct {
 	upCalled, stopCalled bool
+	upErr                error
 }
 
-func (r *recordingSharedRunner) Up(context.Context) error { r.upCalled = true; return nil }
+func (r *recordingSharedRunner) Up(context.Context) error { r.upCalled = true; return r.upErr }
 func (r *recordingSharedRunner) Stop(context.Context, bool) error {
 	r.stopCalled = true
 	return nil
@@ -171,15 +175,50 @@ func (r *recordingSharedRunner) DiscoverPort(context.Context, string, int) (int,
 	return 39090, nil
 }
 
+// stubSharedRunner swaps newSharedRunner for rec until the test ends.
+func stubSharedRunner(t *testing.T, rec sharedComposeOps) {
+	t.Helper()
+	orig := newSharedRunner
+	newSharedRunner = func(string, []string, string, io.Writer) sharedComposeOps { return rec }
+	t.Cleanup(func() { newSharedRunner = orig })
+}
+
+// TestNewSharedRunner_RefusesDockerUnderGoTest: the default runner must
+// not reach Docker from a test binary unless explicitly allowed, so an
+// unstubbed test can't boot (or tear down) the fixed-name shared project.
+func TestNewSharedRunner_RefusesDockerUnderGoTest(t *testing.T) {
+	t.Setenv(allowSharedStackInTestsEnv, "")
+	// Type-check before calling anything: on a regression, Stop would run
+	// the real `-p` teardown against the developer's shared stack.
+	got := newSharedRunner("compose.yaml", nil, t.TempDir(), io.Discard)
+	r, ok := got.(refusedSharedRunner)
+	if !ok {
+		t.Fatalf("newSharedRunner under go test = %T, want refusedSharedRunner", got)
+	}
+	ctx := context.Background()
+	if err := r.Up(ctx); !errors.Is(err, errSharedStackRefusedInTest) {
+		t.Errorf("Up = %v, want errSharedStackRefusedInTest", err)
+	}
+	if err := r.Stop(ctx, true); !errors.Is(err, errSharedStackRefusedInTest) {
+		t.Errorf("Stop = %v, want errSharedStackRefusedInTest", err)
+	}
+	if port, err := r.DiscoverPort(ctx, "prometheus", 9090); port != 0 || !errors.Is(err, errSharedStackRefusedInTest) {
+		t.Errorf("DiscoverPort = (%d, %v), want (0, errSharedStackRefusedInTest)", port, err)
+	}
+
+	t.Setenv(allowSharedStackInTestsEnv, "1")
+	if _, ok := newSharedRunner("compose.yaml", nil, t.TempDir(), io.Discard).(*docker.ComposeRunner); !ok {
+		t.Errorf("with %s=1 newSharedRunner should build the real *docker.ComposeRunner", allowSharedStackInTestsEnv)
+	}
+}
+
 // TestTeardownSharedStackIfIdle_RefcountGate: the shared stack is torn
 // down ONLY when no instance still references it (no target files). This
 // is the refcount that keeps the stack alive while any instance uses it.
 func TestTeardownSharedStackIfIdle_RefcountGate(t *testing.T) {
 	t.Setenv("CANTON_DEVKIT_REGISTRY", t.TempDir())
 	rec := &recordingSharedRunner{}
-	orig := newSharedRunner
-	newSharedRunner = func(string, []string, string, io.Writer) sharedComposeOps { return rec }
-	defer func() { newSharedRunner = orig }()
+	stubSharedRunner(t, rec)
 
 	// Materialise so the compose file exists (teardown short-circuits if not).
 	if err := materializeSharedAssets(); err != nil {
