@@ -24,6 +24,7 @@ func TestMajorFromTag(t *testing.T) {
 		{"0.6.5", "0.6"},
 		{"v0.6.5", "0.6"},
 		{"0.7.0-alpha.4", "0.7"},
+		{"0.10.1", "0.10"},
 		{"v1.0.0-rc.1", "1.0"},
 		{"main", ""},
 		{"", ""},
@@ -256,9 +257,9 @@ func TestResolveForOperation_ThreeTiers(t *testing.T) {
 
 	// Tier 3: an uncurated tag NOT in the cache still yields a Version
 	// carrying the Major inferred from the tag, so the adapter resolves.
-	v, err = ResolveForOperation("0.9.0-rc.1")
-	if err != nil || v.Major != "0.9" {
-		t.Errorf("inferred: got (%+v, %v), want Major 0.9", v, err)
+	v, err = ResolveForOperation("0.10.0-rc.1")
+	if err != nil || v.Major != "0.10" {
+		t.Errorf("inferred: got (%+v, %v), want Major 0.10", v, err)
 	}
 
 	// A genuinely unparseable tag is the only error case.
