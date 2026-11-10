@@ -50,24 +50,17 @@ type Version struct {
 	Size       int64  `json:"size"`        // informational; used only to print a hint before download
 	Major      string `json:"major"`       // routes to internal/splice/v0X adapter
 
-	// MinMemoryBytes is the minimum Docker daemon memory the version
-	// needs to start cleanly. Empirically derived: Splice 0.6.x boots
-	// a single canton container hosting 2 sequencers + 2 mediators +
-	// 3 participants each at -Xmx 2.5 GiB, so the container OOM-loops
-	// on a stock Docker Desktop install (4 GB default). 0.5.x is
-	// lighter. 0 means "use docker.DefaultMinMemoryBytes" — the
-	// historical 4 GB floor.
-	//
-	// Values use decimal GB (1 GB = 10^9 bytes) to match Docker
-	// Desktop on macOS, which is the primary platform where users
-	// must manually set a memory limit. Using decimal GB ensures
-	// that "8 GB" in Docker Desktop satisfies a min_memory_bytes
-	// of 8_000_000_000.
+	// MinMemoryBytes overrides the code default min for this entry.
+	// Omit (0) when the release line matches defaultMinMemoryBytesFallback;
+	// set only when a line needs a different floor (e.g. 8 GB for 0.6+).
+	// Values use decimal GB (1 GB = 10^9 bytes) so "8 GB" in Docker
+	// Desktop satisfies min_memory_bytes of 8_000_000_000.
 	MinMemoryBytes uint64 `json:"min_memory_bytes,omitempty"`
-	// RecommendedMemoryBytes is the value at which the version
-	// runs without resource warnings. UI surfaces this as the
-	// "raise Docker memory to ≥ N" remediation hint when Min*
-	// passes but the recommended threshold is not met.
+	// RecommendedMemoryBytes overrides the code default recommended
+	// memory for this entry. Omit (0) when the line matches
+	// defaultRecommendedMemoryBytesFallback; set only when different.
+	// Surfaces as the "raise Docker memory to ≥ N" remediation hint
+	// when Min* passes but this threshold is not met.
 	RecommendedMemoryBytes uint64 `json:"recommended_memory_bytes,omitempty"`
 
 	// Channel labels the maturity of a catalogue entry. Empty (the
@@ -186,32 +179,17 @@ func Resolve(req string) (Version, error) {
 	return v, nil
 }
 
-// MinMemoryFor returns the version-specific Docker daemon memory
-// floor for v. Called from both `dpm localnet up` (CLI gate) and the
-// Web UI's GET /api/preflight handler so the two surfaces enforce
-// identical numbers (see CONTRIBUTING.md "CLI ↔ Web UI parity"). The
-// fallback constant is duplicated below to avoid an import cycle with
-// internal/docker.
+// MinMemoryFor returns the Docker daemon memory floor for v. Called
+// from both `dpm localnet up` (CLI gate) and the Web UI's GET
+// /api/preflight handler so the two surfaces enforce identical numbers
+// (see CONTRIBUTING.md "CLI ↔ Web UI parity"). The fallback constant
+// is duplicated below to avoid an import cycle with internal/docker.
 //
 // Resolution order:
-//  1. v.MinMemoryBytes when the entry sets it (curated entries).
-//  2. The STRICTEST (largest) MinMemoryFor across every catalogued
-//     entry that shares v.Major — this is the uncurated path. An
-//     uncurated 0.6.x tag has no memory fields of its own, but its
-//     resource profile is governed by the Splice major, not by
-//     whether DevKit reviewed the tag; reusing the catalogued floor
-//     for the same major means the escape hatch TIGHTENS the gate to
-//     match curated 0.6.x (8 GiB) instead of silently loosening it to
-//     the global 4 GiB default, which is exactly backwards for the
-//     least-tested versions.
-//  3. The global defaultMinMemoryBytesFallback when neither applies
-//     (e.g. a major with no catalogued entry at all).
-//
-// Invariant pinned by TestThresholdParity_VersionMinAtLeastDefault:
-// every catalogued MinMemoryBytes is >= the global default, so the
-// derived floor for a known major is also >= the default. A user on a
-// 4 GiB host always sees a refusal regardless of which version they
-// pick, curated or not.
+//  1. v.MinMemoryBytes when the entry sets an override.
+//  2. The largest MinMemoryBytes among catalogued entries that share
+//     v.Major — one override covers the whole major line.
+//  3. defaultMinMemoryBytesFallback (4 GB).
 func MinMemoryFor(v Version) uint64 {
 	if v.MinMemoryBytes > 0 {
 		return v.MinMemoryBytes
@@ -223,25 +201,30 @@ func MinMemoryFor(v Version) uint64 {
 }
 
 // RecommendedMemoryFor returns the version's recommended memory
-// (above which there are no resource warnings). For uncurated entries
-// (no recommendation of their own) it falls back to the strictest
-// catalogued recommendation for the same major, so the WARN tier is
-// not silently disabled for the least-tested versions. Returns 0 only
-// when neither the entry nor any same-major catalogue entry sets a
-// recommendation; 0 disables the WARN tier in docker.checkDockerMemory
-// — see internal/docker/checks.go.
+// (above which there are no resource warnings). Resolution order:
+//  1. v.RecommendedMemoryBytes when the entry sets an override.
+//  2. The largest RecommendedMemoryBytes among catalogued entries
+//     that share v.Major.
+//  3. defaultRecommendedMemoryBytesFallback (6 GB), raised to at
+//     least MinMemoryFor(v) so the WARN tier never undercuts the
+//     hard gate and never returns 0.
 func RecommendedMemoryFor(v Version) uint64 {
 	if v.RecommendedMemoryBytes > 0 {
 		return v.RecommendedMemoryBytes
 	}
-	return strictestRecommendedForMajor(v.Major)
+	if m := strictestRecommendedForMajor(v.Major); m > 0 {
+		return m
+	}
+	rec := defaultRecommendedMemoryBytesFallback
+	if min := MinMemoryFor(v); rec < min {
+		return min
+	}
+	return rec
 }
 
 // strictestMinForMajor returns the largest MinMemoryBytes among
 // catalogued entries whose Major matches, or 0 when major is empty or
-// no catalogued entry shares it. "Strictest" (max) is deliberate: the
-// gate must refuse a host that any same-major curated entry would
-// refuse.
+// no catalogued entry shares an override.
 func strictestMinForMajor(major string) uint64 {
 	if major == "" {
 		return 0
@@ -277,6 +260,11 @@ func strictestRecommendedForMajor(major string) uint64 {
 // asserts equality with docker.DefaultMinMemoryBytes so this never
 // drifts.
 const defaultMinMemoryBytesFallback uint64 = 4_000_000_000
+
+// defaultRecommendedMemoryBytesFallback is the WARN-tier default when
+// neither the entry nor any same-major catalogue entry sets an
+// override. Matches the historical 0.5.x recommendation.
+const defaultRecommendedMemoryBytesFallback uint64 = 6_000_000_000
 
 // Supported returns the supported tags in ascending version order.
 // Ordering is numeric (0.6.9 before 0.6.10), not lexical, so the CLI's

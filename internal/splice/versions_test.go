@@ -158,15 +158,10 @@ func TestLatestAliasIsInSupported(t *testing.T) {
 	}
 }
 
-// TestMinMemoryFor_UncuratedInheritsMajorFloor is the regression:
-// an uncurated Version (no MinMemoryBytes of its own) must inherit the
-// STRICTEST catalogued floor for its Major rather than the global 4 GiB
-// default. Splice 0.6.x's resource profile doesn't change just because
-// the tag wasn't reviewed, so the gate must TIGHTEN, not loosen, on the
-// escape hatch.
+// TestMinMemoryFor_UncuratedInheritsMajorFloor checks that a Version
+// with no memory fields of its own still picks up a same-major
+// catalogue override (one floored entry covers the whole major line).
 func TestMinMemoryFor_UncuratedInheritsMajorFloor(t *testing.T) {
-	// Compute the expected strictest 0.6 floor straight from the
-	// catalogue so this test tracks versions.json without hardcoding.
 	var want06 uint64
 	for _, v := range SupportedVersions {
 		if v.Major == "0.6" && v.MinMemoryBytes > want06 {
@@ -174,21 +169,14 @@ func TestMinMemoryFor_UncuratedInheritsMajorFloor(t *testing.T) {
 		}
 	}
 	if want06 == 0 {
-		t.Skip("no 0.6 catalogue entry with a memory floor — nothing to inherit")
+		t.Skip("no 0.6 catalogue entry with a memory override — nothing to inherit")
 	}
 
-	// Uncurated 0.6.x: no memory fields, Major inferred from the tag.
 	uncurated := Version{Tag: "0.6.99-rc.1", Commit: "deadbeef", Major: "0.6"}
 	if got := MinMemoryFor(uncurated); got != want06 {
-		t.Errorf("MinMemoryFor(uncurated 0.6) = %d, want strictest-0.6 floor %d (not the 4 GiB default)",
-			got, want06)
-	}
-	if got := MinMemoryFor(uncurated); got <= defaultMinMemoryBytesFallback {
-		t.Errorf("uncurated 0.6 floor %d must exceed the global default %d — the escape hatch must not loosen the gate",
-			got, defaultMinMemoryBytesFallback)
+		t.Errorf("MinMemoryFor(uncurated 0.6) = %d, want same-major override %d", got, want06)
 	}
 
-	// Recommended (WARN tier) must also inherit, not silently disable.
 	var wantRec06 uint64
 	for _, v := range SupportedVersions {
 		if v.Major == "0.6" && v.RecommendedMemoryBytes > wantRec06 {
@@ -200,20 +188,20 @@ func TestMinMemoryFor_UncuratedInheritsMajorFloor(t *testing.T) {
 	}
 }
 
-// TestMinMemoryFor_UnknownMajorFallsBackToDefault covers the safety
-// net: a tag whose Major has no catalogue entry at all (or an empty
-// Major) still gets the global default floor — never 0, which would
-// silently disable the gate.
+// TestMinMemoryFor_UnknownMajorFallsBackToDefault covers the code
+// defaults: a tag with no same-major override gets min 4 GB and
+// recommended 6 GB — never 0.
 func TestMinMemoryFor_UnknownMajorFallsBackToDefault(t *testing.T) {
 	for _, v := range []Version{
 		{Tag: "9.9.9", Major: "9.9"}, // no catalogued 9.9 entry
 		{Tag: "weird", Major: ""},    // unparseable tag → empty major
+		{},                           // empty Version
 	} {
 		if got := MinMemoryFor(v); got != defaultMinMemoryBytesFallback {
 			t.Errorf("MinMemoryFor(%+v) = %d, want default %d", v, got, defaultMinMemoryBytesFallback)
 		}
-		if got := RecommendedMemoryFor(v); got != 0 {
-			t.Errorf("RecommendedMemoryFor(%+v) = %d, want 0 (no same-major recommendation)", v, got)
+		if got := RecommendedMemoryFor(v); got != defaultRecommendedMemoryBytesFallback {
+			t.Errorf("RecommendedMemoryFor(%+v) = %d, want default %d", v, got, defaultRecommendedMemoryBytesFallback)
 		}
 	}
 }
@@ -230,20 +218,12 @@ func TestMinMemoryFor_ExplicitOverrideWins(t *testing.T) {
 	}
 }
 
-func TestEveryCataloguedMajorHasCuratedFloor(t *testing.T) {
-	curated := map[string]bool{}
-	for _, v := range SupportedVersions {
-		if _, ok := curated[v.Major]; !ok {
-			curated[v.Major] = false
-		}
-		if v.MinMemoryBytes > 0 && v.RecommendedMemoryBytes > 0 {
-			curated[v.Major] = true
-		}
-	}
-	for major, ok := range curated {
-		if !ok {
-			t.Errorf("Splice major %q has no entry with min_memory_bytes and recommended_memory_bytes set", major)
-		}
+// TestRecommendedMemoryFor_NeverBelowMin pins the clamp when a major
+// has a min override but no recommended override.
+func TestRecommendedMemoryFor_NeverBelowMin(t *testing.T) {
+	v := Version{Tag: "custom", Major: "orphan-major", MinMemoryBytes: 10_000_000_000}
+	if got := RecommendedMemoryFor(v); got != 10_000_000_000 {
+		t.Errorf("RecommendedMemoryFor(min-only) = %d, want raised to MinMemoryFor %d", got, 10_000_000_000)
 	}
 }
 

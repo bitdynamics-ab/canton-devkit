@@ -24,9 +24,7 @@
       "commit": "b162650cd18df5b96dddeffd9bd48be5b2ff37d7",
       "content_sha": "1a9d0b329cd7c9f76c04085674b9e8dc98169064b0404d007d7e2b22cb582150",
       "size": 124198413,
-      "major": "0.5",
-      "min_memory_bytes": 4000000000,
-      "recommended_memory_bytes": 6000000000
+      "major": "0.5"
     },
     {
       "tag": "0.6.10",

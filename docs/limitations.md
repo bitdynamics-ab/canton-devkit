@@ -83,12 +83,12 @@ resolved.
     16 GB Mac). Bump via Settings → Resources before running
     multi-instance scenarios.
 
-  The preflight check enforces a per-version hard floor: 8 GB for the
-  0.6, 0.7, and 0.8 lines (and any uncurated tag on those majors, which
-  inherits the strictest catalogued floor for its major), 4 GB for
-  0.5.18 and only for tags whose major has no catalogued entry. The 12 GB figure is the coded recommendation
-  threshold (`recommended_memory_bytes`) — below it preflight WARNs
-  but does not refuse.
+  The preflight check uses code defaults of 4 GB minimum and 6 GB
+  recommended. Catalogue entries may override those per release line
+  (today 8 GB min / 12 GB recommended for the 0.6+ lines); tags with
+  no override of their own inherit the largest same-major override,
+  otherwise the code defaults. Below the recommended threshold
+  preflight WARNs but does not refuse.
 
   On timeout, `WaitForHealthy` now dumps the last `docker compose ps`
   snapshot in its error so the stuck service + state are visible
