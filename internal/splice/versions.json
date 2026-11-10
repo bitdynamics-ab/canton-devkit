@@ -4,6 +4,20 @@
   "latest_alias": "0.8.1",
   "versions": [
     {
+      "tag": "0.10.0",
+      "commit": "4dc85cc2eb9b3451f5c38d992fa30ada958e80e8",
+      "content_sha": "d1e8c0a709c8f5d9254d08c56ccd073ee3a163dc807529138ba1a4fac3ccfdbb",
+      "size": 228432553,
+      "major": "0.10"
+    },
+    {
+      "tag": "0.10.1",
+      "commit": "69260d05fafe4adca45b87b3fd49878b94328f8f",
+      "content_sha": "d1e8c0a709c8f5d9254d08c56ccd073ee3a163dc807529138ba1a4fac3ccfdbb",
+      "size": 228487041,
+      "major": "0.10"
+    },
+    {
       "tag": "0.5.18",
       "commit": "b162650cd18df5b96dddeffd9bd48be5b2ff37d7",
       "content_sha": "1a9d0b329cd7c9f76c04085674b9e8dc98169064b0404d007d7e2b22cb582150",
