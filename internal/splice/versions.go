@@ -37,15 +37,15 @@ type Version struct {
 	Tag        string `json:"tag"`
 	Commit     string `json:"commit"`      // immutable git commit SHA the tag pointed to
 	ContentSHA string `json:"content_sha"` // sha-256 of the extracted localnet subtree (sorted, path+content)
-	Size       int64  `json:"size"`        // informational; used only to print a hint before download
-	Major      string `json:"major"`       // routes to internal/splice/v0X adapter
+	Size       int64  `json:"size"`
+	Major      string `json:"major"` // routes to internal/splice/v0X adapter
 
 	// MinMemoryBytes overrides the code default min for this entry;
-	// 0 defers to MinMemoryFor. Values use decimal GB (1 GB = 10^9 bytes) so "8 GB" in Docker
-	// Desktop satisfies min_memory_bytes of 8_000_000_000.
+	// 0 means no override. Values use decimal GB (1 GB = 10^9 bytes) so
+	// "8 GB" in Docker Desktop satisfies min_memory_bytes of 8_000_000_000.
 	MinMemoryBytes uint64 `json:"min_memory_bytes,omitempty"`
 	// RecommendedMemoryBytes overrides the code default recommended
-	// memory for this entry; 0 defers to RecommendedMemoryFor.
+	// memory for this entry; 0 means no override.
 	RecommendedMemoryBytes uint64 `json:"recommended_memory_bytes,omitempty"`
 
 	// Channel labels the maturity of a catalogue entry. Empty (the
@@ -76,7 +76,7 @@ func SupportsTokenStandardV2(tag string) bool {
 	if tag == "token-standard-v2" {
 		return true
 	}
-	v, ok := parseSemver(tag)
+	v, ok := parseLeadingSemver(tag)
 	if !ok {
 		return false
 	}
@@ -149,7 +149,7 @@ func MinMemoryFor(v Version) uint64 {
 	if v.MinMemoryBytes > 0 {
 		return v.MinMemoryBytes
 	}
-	if m := strictestMinForMajor(v.Major); m > 0 {
+	if m := strictestForMajor(v.Major, func(v Version) uint64 { return v.MinMemoryBytes }); m > 0 {
 		return m
 	}
 	return defaultMinMemoryBytesFallback
@@ -167,7 +167,7 @@ func RecommendedMemoryFor(v Version) uint64 {
 	if v.RecommendedMemoryBytes > 0 {
 		return v.RecommendedMemoryBytes
 	}
-	if m := strictestRecommendedForMajor(v.Major); m > 0 {
+	if m := strictestForMajor(v.Major, func(v Version) uint64 { return v.RecommendedMemoryBytes }); m > 0 {
 		return m
 	}
 	rec := defaultRecommendedMemoryBytesFallback
@@ -177,27 +177,16 @@ func RecommendedMemoryFor(v Version) uint64 {
 	return rec
 }
 
-func strictestMinForMajor(major string) uint64 {
+func strictestForMajor(major string, field func(Version) uint64) uint64 {
 	if major == "" {
 		return 0
 	}
 	var max uint64
 	for _, v := range SupportedVersions {
-		if v.Major == major && v.MinMemoryBytes > max {
-			max = v.MinMemoryBytes
-		}
-	}
-	return max
-}
-
-func strictestRecommendedForMajor(major string) uint64 {
-	if major == "" {
-		return 0
-	}
-	var max uint64
-	for _, v := range SupportedVersions {
-		if v.Major == major && v.RecommendedMemoryBytes > max {
-			max = v.RecommendedMemoryBytes
+		if v.Major == major {
+			if n := field(v); n > max {
+				max = n
+			}
 		}
 	}
 	return max
@@ -221,8 +210,8 @@ func Supported() []string {
 }
 
 func compareTags(a, b string) int {
-	va, oka := parseSemver(a)
-	vb, okb := parseSemver(b)
+	va, oka := parseLeadingSemver(a)
+	vb, okb := parseLeadingSemver(b)
 	if oka && okb {
 		for k := 0; k < 3; k++ {
 			if va[k] != vb[k] {
@@ -243,7 +232,7 @@ func compareTags(a, b string) int {
 	return strings.Compare(a, b)
 }
 
-func parseSemver(tag string) ([3]int, bool) {
+func parseLeadingSemver(tag string) ([3]int, bool) {
 	var v [3]int
 	base := tag
 	if i := strings.IndexAny(base, "-+"); i >= 0 {

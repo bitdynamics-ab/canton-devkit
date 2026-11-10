@@ -233,8 +233,8 @@ func TestSupportedOrderIsNumeric(t *testing.T) {
 
 func TestCompareTags(t *testing.T) {
 	cases := []struct {
-		a, b string
-		want int
+		a, b     string
+		wantSign int
 	}{
 		{"0.6.9", "0.6.10", -1},
 		{"0.6.10", "0.6.9", 1},
@@ -245,8 +245,8 @@ func TestCompareTags(t *testing.T) {
 	}
 	for _, c := range cases {
 		got := compareTags(c.a, c.b)
-		if (got < 0) != (c.want < 0) || (got > 0) != (c.want > 0) {
-			t.Errorf("compareTags(%q, %q) = %d, want sign %d", c.a, c.b, got, c.want)
+		if (got < 0) != (c.wantSign < 0) || (got > 0) != (c.wantSign > 0) {
+			t.Errorf("compareTags(%q, %q) = %d, want sign %d", c.a, c.b, got, c.wantSign)
 		}
 	}
 }
