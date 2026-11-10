@@ -6,11 +6,6 @@ import (
 	"testing"
 )
 
-// TestAlphaChannelEntryShape pins that the catalogue carries at least
-// one alpha entry with a non-empty ImageRepo override — the Token
-// Standard V2 snapshot — and that the IsAlpha helper agrees.
-// Contract: alpha catalogue entries opt into a separate image repo via
-// these fields, and the CLI/up paths key off `Channel == "alpha"`.
 func TestAlphaChannelEntryShape(t *testing.T) {
 	var sawAlpha bool
 	for tag, v := range SupportedVersions {
@@ -107,10 +102,6 @@ func TestResolveSupportedTag(t *testing.T) {
 	}
 }
 
-// TestVersionsJSONIsValid sanity-checks the embedded catalogue: every
-// commit SHA looks like a hex git SHA (40 chars), every ContentSHA is
-// SHA-256 hex (64 chars). Catches typos that init() would also catch
-// but with a clearer error.
 func TestVersionsJSONIsValid(t *testing.T) {
 	for tag, v := range SupportedVersions {
 		if len(v.Commit) != 40 {
@@ -139,11 +130,6 @@ func TestResolveUnsupported(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unsupported version")
 	}
-	// Resolve returns ErrUncuratedTag (rather than a generic
-	// "unsupported" error) so orchestrators can distinguish
-	// "tag exists nowhere" from "tag is upstream but not curated."
-	// The list of curated tags is still embedded so users see what
-	// the safe options are.
 	if !errors.Is(err, ErrUncuratedTag) {
 		t.Errorf("expected ErrUncuratedTag, got %v", err)
 	}
@@ -158,9 +144,6 @@ func TestLatestAliasIsInSupported(t *testing.T) {
 	}
 }
 
-// TestMinMemoryFor_UncuratedInheritsMajorFloor checks that a Version
-// with no memory fields of its own still picks up a same-major
-// catalogue override (one floored entry covers the whole major line).
 func TestMinMemoryFor_UncuratedInheritsMajorFloor(t *testing.T) {
 	var want06 uint64
 	for _, v := range SupportedVersions {
@@ -188,14 +171,11 @@ func TestMinMemoryFor_UncuratedInheritsMajorFloor(t *testing.T) {
 	}
 }
 
-// TestMinMemoryFor_UnknownMajorFallsBackToDefault covers the code
-// defaults: a tag with no same-major override gets min 4 GB and
-// recommended 6 GB — never 0.
 func TestMinMemoryFor_UnknownMajorFallsBackToDefault(t *testing.T) {
 	for _, v := range []Version{
-		{Tag: "9.9.9", Major: "9.9"}, // no catalogued 9.9 entry
-		{Tag: "weird", Major: ""},    // unparseable tag → empty major
-		{},                           // empty Version
+		{Tag: "9.9.9", Major: "9.9"},
+		{Tag: "weird", Major: ""},
+		{},
 	} {
 		if got := MinMemoryFor(v); got != defaultMinMemoryBytesFallback {
 			t.Errorf("MinMemoryFor(%+v) = %d, want default %d", v, got, defaultMinMemoryBytesFallback)
@@ -206,8 +186,6 @@ func TestMinMemoryFor_UnknownMajorFallsBackToDefault(t *testing.T) {
 	}
 }
 
-// TestMinMemoryFor_ExplicitOverrideWins confirms a curated entry's own
-// MinMemoryBytes still takes precedence over the Major-derived floor.
 func TestMinMemoryFor_ExplicitOverrideWins(t *testing.T) {
 	v := Version{Tag: "custom", Major: "0.6", MinMemoryBytes: 16_000_000_000, RecommendedMemoryBytes: 20_000_000_000}
 	if got := MinMemoryFor(v); got != 16_000_000_000 {
@@ -218,8 +196,6 @@ func TestMinMemoryFor_ExplicitOverrideWins(t *testing.T) {
 	}
 }
 
-// TestRecommendedMemoryFor_NeverBelowMin pins the clamp when a major
-// has a min override but no recommended override.
 func TestRecommendedMemoryFor_NeverBelowMin(t *testing.T) {
 	v := Version{Tag: "custom", Major: "orphan-major", MinMemoryBytes: 10_000_000_000}
 	if got := RecommendedMemoryFor(v); got != 10_000_000_000 {
@@ -237,15 +213,12 @@ func TestSupportedIsSorted(t *testing.T) {
 	}
 }
 
-// TestSupportedOrderIsNumeric guards the double-digit-patch regression:
-// with lexical sorting "0.6.10" sorts before "0.6.3", which is wrong.
 func TestSupportedOrderIsNumeric(t *testing.T) {
 	got := Supported()
 	pos := map[string]int{}
 	for i, tag := range got {
 		pos[tag] = i
 	}
-	// 0.6.9 must precede 0.6.10, which must precede 0.6.11.
 	for _, pair := range [][2]string{{"0.6.9", "0.6.10"}, {"0.6.10", "0.6.11"}, {"0.6.4", "0.6.9"}} {
 		lo, okLo := pos[pair[0]]
 		hi, okHi := pos[pair[1]]
@@ -253,7 +226,6 @@ func TestSupportedOrderIsNumeric(t *testing.T) {
 			t.Errorf("Supported() ordered %q after %q: %v", pair[0], pair[1], got)
 		}
 	}
-	// token-standard-v2 (non-semver) sorts last.
 	if p, ok := pos["token-standard-v2"]; ok && p != len(got)-1 {
 		t.Errorf("token-standard-v2 should sort last, got position %d in %v", p, got)
 	}
@@ -262,13 +234,13 @@ func TestSupportedOrderIsNumeric(t *testing.T) {
 func TestCompareTags(t *testing.T) {
 	cases := []struct {
 		a, b string
-		want int // sign of the expected result
+		want int
 	}{
 		{"0.6.9", "0.6.10", -1},
 		{"0.6.10", "0.6.9", 1},
 		{"0.6.4", "0.6.4", 0},
 		{"0.5.18", "0.6.3", -1},
-		{"0.6.11", "token-standard-v2", -1}, // semver before non-semver
+		{"0.6.11", "token-standard-v2", -1},
 		{"token-standard-v2", "0.6.3", 1},
 	}
 	for _, c := range cases {
