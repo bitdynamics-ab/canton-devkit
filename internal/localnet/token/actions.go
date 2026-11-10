@@ -14,23 +14,10 @@ import (
 	lapiv2 "github.com/digital-asset/dazl-client/v8/go/api/com/daml/ledger/api/v2"
 )
 
-// ErrNeedsV2LocalNet signals that the requested action needs the V2
-// Splice LocalNet to be up with the splice-test-token-v2 DAR vetted.
-// CLI maps to ExitUserError; HTTP handler maps to 412 Precondition
-// Failed so the Web UI can render a meaningful remediation.
 var ErrNeedsV2LocalNet = errors.New(
 	"V2 ledger action needs a running Splice 0.6.11 or newer LocalNet; " +
 		"bring one up with `localnet up --version 0.6.12`, then re-run")
 
-// ErrUnsupportedOnInstrument signals that the asset implementing the
-// instrument doesn't expose a standard mint or burn choice. Amulet is
-// the most common case — it doesn't implement BurnMintFactoryV1, and
-// the V2 Token Standard has no generic mint/burn interface. Real
-// tokens that want these operations either implement BurnMintFactoryV1
-// or expose asset-specific choices on the issuer's TokenRules contract.
-// CLI maps to ExitUserError; HTTP handler maps to 422 Unprocessable
-// Entity so the UI can render "this instrument doesn't support that
-// operation — use the asset's wallet UI" instead of a wiring error.
 var ErrUnsupportedOnInstrument = errors.New(
 	"this instrument doesn't implement the V2 standard's mint/burn surface " +
 		"(Amulet has no BurnMintFactoryV1, and V2 defines no generic mint/burn). " +
@@ -38,17 +25,8 @@ var ErrUnsupportedOnInstrument = errors.New(
 		"splice-test-token-v2 instrument via `localnet token create` for a token " +
 		"that implements asset-specific mint via TokenRules_OfferMint")
 
-// ErrUnresolvedLedgerEndpoint signals that a live on-ledger action could
-// not resolve a participant host:port for the instance+role. Distinct
-// from ErrUnsupportedOnInstrument so a missing captured port is never
-// misreported as "this instrument doesn't support mint/burn". HTTP
-// maps to 503 PARTICIPANT_PORT_NOT_RECORDED; CLI prints the wrapped
-// remediation (instance, role, restart, --endpoint).
 var ErrUnresolvedLedgerEndpoint = errors.New("unresolved ledger endpoint")
 
-// unresolvedLedgerEndpoint builds the actionable missing-port error
-// required by the endpoint contract: instance, role, restart remedy,
-// and the --endpoint override.
 func unresolvedLedgerEndpoint(instance, role string) error {
 	return fmt.Errorf(
 		"%w: instance %q role %q has no recorded participant ledger port — "+
@@ -57,21 +35,12 @@ func unresolvedLedgerEndpoint(instance, role string) error {
 		ErrUnresolvedLedgerEndpoint, instance, role, instance, instance)
 }
 
-// MintOptions / TransferOptions / BurnOptions / BalanceOptions are the
-// input shapes for each action. In the orchestration layer (not the CLI
-// package) so the HTTP handler can populate them from a JSON body.
 type MintOptions struct {
-	Instance   string // required
-	Instrument string // symbol OR raw instrument id; symbol resolves via ResolveBySymbol
-	To         string // recipient party
-	Amount     string // decimal string
+	Instance   string
+	Instrument string
+	To         string
+	Amount     string
 
-	// Endpoint, when set (or auto-resolved from Instance+Role), runs the
-	// live asset-specific mint (TokenRules_OfferMint) for a
-	// splice-test-token-v2 instrument the issuer created on-ledger. An
-	// unresolvable endpoint yields ErrUnresolvedLedgerEndpoint; an
-	// instrument with no asset-specific mint path (e.g. Amulet) yields
-	// ErrUnsupportedOnInstrument.
 	Endpoint string
 	Role     string
 	Insecure bool
@@ -82,55 +51,27 @@ type TransferOptions struct {
 	From       string
 	To         string
 	Amount     string
-	NoWait     bool // if true, return the TransferInstruction id without waiting for accept
+	NoWait     bool
 	Reason     string
 
-	// AutoAccept chains the receiver-side accept onto the
-	// transfer when the receiver is locally controlled — the common
-	// LocalNet case where you own both parties. The transfer produces a
-	// pending TransferInstruction; with AutoAccept the same flow then
-	// exercises Accept as the receiver, so a transfer lands in one step.
-	// Ignored when NoWait is set (the two are contradictory).
 	AutoAccept bool
 
-	// Atomic routes an AutoAccept on-ledger transfer through the wallet's
-	// BatchingUtilityV2 so the transfer + receiver-accept commit in ONE
-	// all-or-nothing transaction (see batch.go). Default (false) keeps the
-	// sequential offer→accept path, which preserves partial-recovery: a
-	// committed offer whose accept later fails is retryable, whereas a
-	// failed batch rolls back entirely. Only takes effect for on-ledger
-	// instruments with AutoAccept set and NoWait clear.
 	Atomic bool
 
-	// Live-submit fields. When Endpoint is set, RunTransfer performs
-	// the full V2 flow: ACS query → POST /transfer-factory → ledger
-	// exercise. Empty Endpoint surfaces the legacy ErrNeedsV2LocalNet
-	// stub for callers that haven't been updated to provide one.
 	Endpoint    string
 	Token       string
 	Role        string
 	Insecure    bool
-	RegistryURL string // off-ledger token registry base URL (asset-specific)
+	RegistryURL string
 }
 type AcceptOptions struct {
 	Instance              string
 	TransferInstructionID string
 
-	// Party is the receiver acting on the instruction. Optional —
-	// empty falls back to the first Act-As party granted to the JWT
-	// (correct for single-party participants). Set explicitly when the
-	// participant hosts several parties and the receiver isn't the
-	// alphabetically-first one.
 	Party string
 
-	// Gen is the instruction's token-standard generation when the caller
-	// already knows it (e.g. the in-process auto-accept after a transfer).
-	// Zero means "derive it" — runAcceptLive inspects the instruction
-	// contract rather than guessing from the vetted surfaces, which would
-	// misroute a V1 instruction on a participant that also vets V2.
 	Gen Generation
 
-	// Same live-submit envelope as TransferOptions.
 	Endpoint    string
 	Token       string
 	Role        string
@@ -140,13 +81,9 @@ type AcceptOptions struct {
 type BurnOptions struct {
 	Instance   string
 	Instrument string
-	From       string // party whose holding is burned
+	From       string
 	Amount     string
 
-	// Endpoint, when set, runs the live burn for an on-ledger
-	// test-token instrument: a transfer of the holder's tokens to the
-	// instrument's special burn account. Amulet / registry-only
-	// instruments yield ErrUnsupportedOnInstrument.
 	Endpoint string
 	Token    string
 	Role     string
@@ -154,76 +91,34 @@ type BurnOptions struct {
 }
 type BalanceOptions struct {
 	Instance   string
-	Party      string // optional; empty = every party visible on the participant
-	Instrument string // optional; empty = every instrument
+	Party      string
+	Instrument string
 
-	// Endpoint, Token, Role, Insecure are the live-ACS path. When
-	// Endpoint is set, RunBalance ACS-queries the participant for
-	// every HoldingInterfaceV2 contract and sums the views per
-	// (party, instrument). Empty Endpoint falls back to the
-	// registry-derived pseudo-balances.
-	//
-	// Token is optional: empty triggers per-role JWT auto-issuance
-	// via registry.State.Credentials → splice.SignToken (see
-	// dialLedger's token resolution chain). Role defaults to
-	// "app-provider" — pass "sv" or "app-user" to dial a different
-	// participant.
 	Endpoint string
 	Token    string
 	Role     string
 	Insecure bool
 
-	// Limit caps result counts on paged read paths (e.g. the activity
-	// feed). Zero means the caller's default applies.
 	Limit int
 }
 
-// maxHoldingsScan caps how many ACS contracts runBalanceLive consumes
-// before declaring the result truncated — a guard against a runaway
-// ledger OOM-ing us via the unbounded gRPC stream. On overflow the caller
-// gets truncated=true so the UI can show "showing N of many".
 const maxHoldingsScan = 10_000
 
-// BalanceRow is one row of the balance response — instrument + party +
-// summed amount across the participant's visible ACS holdings.
-//
-// MIRRORS internal/api/types.TokenHolding byte-for-byte (same JSON tags);
-// a local copy so this package doesn't depend on api/types. Adding a
-// field requires updating both.
 type BalanceRow struct {
-	InstrumentSymbol string `json:"instrument_symbol,omitempty"`
-	InstrumentID     string `json:"instrument_id"`
-	Party            string `json:"party"`
-	Amount           string `json:"amount"`
-	// Source records whether this row was summed from the live ACS
-	// ("ledger") or synthesized from the registry pseudo-balance
-	// ("registry"). Every row carries its provenance so neither surface
-	// can present the fallback as a real holding.
-	Source HoldingSource `json:"source"`
+	InstrumentSymbol string        `json:"instrument_symbol,omitempty"`
+	InstrumentID     string        `json:"instrument_id"`
+	Party            string        `json:"party"`
+	Amount           string        `json:"amount"`
+	Source           HoldingSource `json:"source"`
 }
 
-// HoldingSource is the provenance of a BalanceRow. Mirrors
-// api/types.HoldingSource — the wire values ("ledger"/"registry") must
-// match. Defined here too so this package stays free of an api/types
-// import (which would create a cycle as shared types grow).
 type HoldingSource string
 
 const (
-	// SourceLedger — summed from the participant's live ACS.
-	SourceLedger HoldingSource = "ledger"
-	// SourceRegistry — the registry-derived pseudo-balance fallback
-	// (issuer holds InitialSupply, everyone else 0). NOT on-ledger
-	// truth; surfaced only when no live participant endpoint is
-	// reachable.
+	SourceLedger   HoldingSource = "ledger"
 	SourceRegistry HoldingSource = "registry"
 )
 
-// RunMint mints supply of an on-ledger test-token instrument via its
-// asset-specific TokenRules_OfferMint choice (requires Endpoint and a
-// TokenRef with status "on-ledger"). Amulet and registry-only
-// instruments return ErrUnsupportedOnInstrument. A missing captured
-// ledger port returns ErrUnresolvedLedgerEndpoint before any instrument
-// capability check — never mislabeled as unsupported.
 func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	if err := requireFields("mint", "instance", opts.Instance, "instrument", opts.Instrument,
 		"recipient party", opts.To, "amount", opts.Amount); err != nil {
@@ -239,9 +134,6 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	if opts.Role == "" {
 		opts.Role = DefaultRole
 	}
-	// Auto-discover the endpoint from the instance's captured ledger port
-	// when none was passed, so a live mint (and its self-mint guard) works
-	// flag-free on a running LocalNet. Explicit --endpoint wins.
 	if opts.Endpoint == "" {
 		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
 	}
@@ -253,8 +145,6 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 		return unresolvedLedgerEndpoint(opts.Instance, opts.Role)
 	}
 	ref := instrumentRefOrRaw(opts.Instance, opts.Instrument)
-	// Live mint only for on-ledger test-token instruments. Amulet and
-	// registry-only instruments have no asset-specific mint.
 	if ref.Status == "on-ledger" {
 		if err := enforceSupplyCap(ctx, opts, ref); err != nil {
 			return err
@@ -268,10 +158,6 @@ func RunMint(ctx context.Context, out io.Writer, opts MintOptions) error {
 	return ErrUnsupportedOnInstrument
 }
 
-// RunTransfer dispatches: if opts.Endpoint is set, run the live V2
-// transfer flow (ACS → registry → exercise). Otherwise surface
-// ErrNeedsV2LocalNet so callers that haven't been updated to thread
-// through the endpoint get a clear remediation.
 func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error {
 	if err := requireFields("transfer", "instance", opts.Instance, "instrument", opts.Instrument,
 		"sender party", opts.From, "recipient party", opts.To, "amount", opts.Amount); err != nil {
@@ -292,9 +178,6 @@ func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error
 	if opts.Role == "" {
 		opts.Role = DefaultRole
 	}
-	// Auto-discover the endpoint from the instance's captured ledger port
-	// when none was passed. Explicit --endpoint wins; if still empty (no
-	// live participant) fall through to the ErrNeedsV2LocalNet remediation.
 	if opts.Endpoint == "" {
 		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
 	}
@@ -324,11 +207,6 @@ func RunTransfer(ctx context.Context, out io.Writer, opts TransferOptions) error
 	return runTransferOffLedgerFn(ctx, out, opts)
 }
 
-// runTransferOffLedger is the off-ledger (Amulet / external-registry)
-// transfer flow: POST to the asset's scan registry for a factory + choice
-// context, exercise it on-ledger, then optionally chain the receiver-side
-// accept. Split out so tests can pin it via the runTransferOffLedgerFn
-// seam.
 func runTransferOffLedger(ctx context.Context, out io.Writer, opts TransferOptions) error {
 	instructionID, gen, err := runTransferLive(ctx, out, opts)
 	if err != nil {
@@ -338,23 +216,17 @@ func runTransferOffLedger(ctx context.Context, out io.Writer, opts TransferOptio
 		"transfer_instruction_id": instructionID,
 	})
 
-	// Auto-accept chains the receiver-side accept (on LocalNet you own the
-	// receiver). NoWait opts out; an empty instructionID means the
-	// transfer already settled — nothing to accept.
 	if opts.AutoAccept && !opts.NoWait && instructionID != "" {
 		acc := AcceptOptions{
 			Instance:              opts.Instance,
 			TransferInstructionID: instructionID,
 			Party:                 opts.To,
-			// Thread the transfer's generation so the accept routes the
-			// same way — never re-derived from surfaces, which would
-			// misroute a V1 instruction on a dual-surface participant.
-			Gen:         gen,
-			Endpoint:    opts.Endpoint,
-			Token:       opts.Token,
-			Role:        opts.Role,
-			Insecure:    opts.Insecure,
-			RegistryURL: opts.RegistryURL,
+			Gen:                   gen,
+			Endpoint:              opts.Endpoint,
+			Token:                 opts.Token,
+			Role:                  opts.Role,
+			Insecure:              opts.Insecure,
+			RegistryURL:           opts.RegistryURL,
 		}
 		if err := RunAccept(ctx, out, acc); err != nil {
 			return fmt.Errorf("auto-accept transfer %s: %w", instructionID, err)
@@ -372,16 +244,10 @@ func RunAccept(ctx context.Context, out io.Writer, opts AcceptOptions) error {
 		"transfer instruction id", opts.TransferInstructionID); err != nil {
 		return err
 	}
-	// Resolve a --party alias to its full party id: both the on-ledger
-	// detection (which puts the receiver in an ACS party filter) and the
-	// off-ledger path need a real party id, not an alias.
 	opts.Party = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Party)
 	if opts.Role == "" {
 		opts.Role = DefaultRole
 	}
-	// Auto-discover the endpoint from the instance's captured ledger port
-	// when none was passed. Explicit --endpoint wins; if still empty fall
-	// through to the ErrNeedsV2LocalNet remediation.
 	if opts.Endpoint == "" {
 		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
 	}
@@ -391,20 +257,12 @@ func RunAccept(ctx context.Context, out io.Writer, opts AcceptOptions) error {
 		})
 		return ErrNeedsV2LocalNet
 	}
-	// An issuer-administered test-token offer is accepted on-ledger; only
-	// Amulet / external-registry instructions go through the off-ledger
-	// choice-context endpoint (runAcceptOnLedgerIfTestToken reports
-	// handled=false for those).
 	if handled, err := runAcceptOnLedgerFn(ctx, out, opts); handled || err != nil {
 		return err
 	}
 	return runAcceptOffLedgerFn(ctx, out, opts)
 }
 
-// RunBurn burns supply of an on-ledger test-token instrument by
-// transferring the holder's tokens to the instrument's special burn
-// account. Amulet / registry-only instruments have no such path and
-// yield ErrUnsupportedOnInstrument.
 func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 	if err := requireFields("burn", "instance", opts.Instance, "instrument", opts.Instrument,
 		"holder party", opts.From, "amount", opts.Amount); err != nil {
@@ -420,8 +278,6 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 	if opts.Role == "" {
 		opts.Role = DefaultRole
 	}
-	// Auto-discover the endpoint from the instance's captured ledger port
-	// when none was passed. Explicit --endpoint wins.
 	if opts.Endpoint == "" {
 		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
 	}
@@ -443,29 +299,17 @@ func RunBurn(ctx context.Context, out io.Writer, opts BurnOptions) error {
 	return ErrUnsupportedOnInstrument
 }
 
-// RunBalance returns per-(party, instrument) balances. When a live
-// participant endpoint is available (explicit or auto-discovered from
-// the registry) it sums the ACS holdings; otherwise it falls back to
-// registry-derived pseudo-balances (Amount = InitialSupply when
-// --party matches the issuer, zero otherwise), tagged SourceRegistry
-// so no caller can present them as on-ledger truth. The bool result
-// reports whether the live scan was truncated at maxHoldingsScan.
 func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]BalanceRow, bool, error) {
 	if opts.Instance == "" {
 		return nil, false, errors.New("instance is required")
 	}
 	opts.Party = ResolveAlias(aliasMapForInstance(opts.Instance), opts.Party)
-	// Auto-discover the endpoint from the registry when none was passed,
-	// so both surfaces get the live ACS by default. Explicit wins.
 	if opts.Endpoint == "" {
 		opts.Endpoint = ResolveLedgerEndpoint(opts.Instance, opts.Role)
 	}
 	if opts.Endpoint != "" {
 		return runBalanceLive(ctx, opts)
 	}
-	// Registry fallback: no live participant. Rows are pseudo-balances
-	// (issuer holds InitialSupply, everyone else 0), tagged SourceRegistry
-	// so the caller can flag them as not-on-ledger.
 	state, err := registry.Read(opts.Instance)
 	if err != nil {
 		return nil, false, fmt.Errorf("read instance state: %w", err)
@@ -494,11 +338,6 @@ func RunBalance(ctx context.Context, out io.Writer, opts BalanceOptions) ([]Bala
 	return rows, false, nil
 }
 
-// BalanceSource reports which path RunBalance will take for opts —
-// "ledger" when a participant endpoint is available (explicit or
-// auto-discovered), "registry" otherwise. Callers set the response-level
-// provenance from it. Pure: endpoint availability, not reachability,
-// decides the path — matching RunBalance's own branch.
 func BalanceSource(opts BalanceOptions) HoldingSource {
 	if opts.Endpoint != "" || ResolveLedgerEndpoint(opts.Instance, opts.Role) != "" {
 		return SourceLedger
@@ -506,22 +345,13 @@ func BalanceSource(opts BalanceOptions) HoldingSource {
 	return SourceRegistry
 }
 
-// runBalanceLive streams every vetted-generation Holding from the
-// participant, parses the view, and sums amounts per (party, instrument).
-// Symbols come from the local registry when a streamed instrument matches
-// a recorded TokenRef; otherwise the row carries the raw `(admin, id)`
-// pair. addDecimal sums the textual Daml Decimals without precision loss.
 func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, bool, error) {
-	// Cancel on every return path so an early break (cap, decode error)
-	// doesn't leak the gRPC stream pump goroutine.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	state, err := registry.Read(opts.Instance)
 	if err != nil {
 		return nil, false, fmt.Errorf("read instance state: %w", err)
 	}
-	// Resolve the optional --instrument filter (symbol or raw
-	// InstrumentID) into the (admin, id) pair we match streamed views on.
 	var wantAdmin, wantID string
 	if opts.Instrument != "" {
 		if ref, ok := state.Tokens[opts.Instrument]; ok {
@@ -568,8 +398,6 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, boo
 		// nothing to report anyway.
 		return nil, false, nil
 	}
-	// Query every vetted holding surface so a V1 token like Amulet is
-	// summed on a stable release, not just V2.
 	surfaces, err := discoverTokenSurfaces(ctx, client)
 	if err != nil {
 		return nil, false, err
@@ -607,8 +435,6 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, boo
 		if !ok || entry.ActiveContract == nil {
 			continue
 		}
-		// One holding per contract (prefers the richer V2 view) — never
-		// double-counted.
 		hv, ok := extractBestHoldingView(entry.ActiveContract.GetCreatedEvent().GetInterfaceViews())
 		if !ok || hv.Owner == "" {
 			continue
@@ -627,7 +453,6 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, boo
 		bucket[k] = sum
 	}
 
-	// Join back to the local symbol table for friendly rendering.
 	symByID := make(map[string]string, len(state.Tokens))
 	for _, t := range state.Tokens {
 		symByID[t.IssuerParty+"\x00"+t.InstrumentID] = t.Symbol
@@ -645,40 +470,23 @@ func runBalanceLive(ctx context.Context, opts BalanceOptions) ([]BalanceRow, boo
 	return rows, truncated, nil
 }
 
-// addDecimal returns a + b for two Daml Decimal strings. Empty is treated
-// as "0". Aligns fractional widths ("1.0" + "1" → "2.0") and adds as
-// big.Ints so we don't depend on a big-decimal library.
-// ErrSupplyCapExceeded is returned when a mint would push an instrument's
-// circulating supply past the initial supply declared at create. CLI maps
-// it to a user error; the HTTP handler maps it to 422 so the Web UI can
-// render the numbers rather than a generic failure.
 var ErrSupplyCapExceeded = errors.New("mint exceeds the instrument's declared supply")
 
-// enforceSupplyCap rejects a mint that would take total supply past the
-// figure recorded at `token create`. The declared supply is devkit-side
-// bookkeeping, not a ledger invariant — the test token's TokenRules has no
-// cap, so a client minting against it directly still can — but it makes
-// the number the operator typed at create actually mean something.
-//
-// Skipped when the instrument has no declared supply (Amulet and anything
-// not created here), or when either figure isn't a decimal we can compare.
-// A scan failure is not treated as a violation: the mint proceeds rather
-// than being blocked by an unrelated read error.
 func enforceSupplyCap(ctx context.Context, opts MintOptions, ref registry.TokenRef) error {
 	declared, ok := new(big.Rat).SetString(ref.InitialSupply)
 	if !ok {
-		return nil // nothing declared (or unparseable) — no cap to enforce
+		return nil
 	}
 	want, ok := new(big.Rat).SetString(opts.Amount)
 	if !ok {
-		return nil // validateAmount already vetted this; be permissive here
+		return nil
 	}
 	sum, err := RunInstrumentSummary(ctx, BalanceOptions{
 		Instance: opts.Instance, Role: opts.Role, Insecure: opts.Insecure,
 		Endpoint: opts.Endpoint, Instrument: ref.InstrumentID,
 	})
 	if err != nil {
-		return nil // can't measure supply — don't block the mint on a read error
+		return nil
 	}
 	minted, ok := new(big.Rat).SetString(zeroIfEmpty(sum.TotalSupply))
 	if !ok {
@@ -698,8 +506,6 @@ func enforceSupplyCap(ctx context.Context, opts MintOptions, ref registry.TokenR
 		trimDecimal(minted), trimDecimal(headroom))
 }
 
-// trimDecimal renders a Rat without trailing-zero noise, so an error reads
-// "2001" rather than "2001.0000000000".
 func trimDecimal(r *big.Rat) string {
 	if r.IsInt() {
 		return r.Num().String()
@@ -747,10 +553,6 @@ func splitDecimal(s string) (intPart, fracPart string) {
 	return s, ""
 }
 
-// instrumentRefOrRaw resolves the --instrument string to a recorded
-// TokenRef, falling back to a bare ref carrying the string as the
-// InstrumentID (Amulet and other unregistered instruments have no
-// `token create` record).
 func instrumentRefOrRaw(instance, ident string) registry.TokenRef {
 	ref, err := resolveInstrument(instance, ident)
 	if err != nil {
@@ -759,9 +561,6 @@ func instrumentRefOrRaw(instance, ident string) registry.TokenRef {
 	return ref
 }
 
-// resolveInstrument turns the --instrument string into a full TokenRef.
-// It may be the symbol (the common path) or the raw InstrumentID (the
-// escape hatch the HTTP handler uses with already-resolved IDs).
 func resolveInstrument(instance, ident string) (registry.TokenRef, error) {
 	if ident == "" {
 		return registry.TokenRef{}, errors.New("--instrument is required")
@@ -773,7 +572,6 @@ func resolveInstrument(instance, ident string) (registry.TokenRef, error) {
 	if t, ok := state.Tokens[ident]; ok {
 		return t, nil
 	}
-	// Fall back to InstrumentID match when the caller passed the raw id.
 	for _, t := range state.Tokens {
 		if t.InstrumentID == ident {
 			return t, nil
@@ -784,12 +582,6 @@ func resolveInstrument(instance, ident string) (registry.TokenRef, error) {
 		ident, instance)
 }
 
-// requireFields surfaces the same "field X is required" wording as
-// the create wizard so every error in the token surface looks alike.
-// requireFields reports the first missing field by name. Callers pass
-// name/value pairs ("recipient party", opts.To) so the error tells the
-// operator which input to fill — this text surfaces directly in the Web
-// UI's form, where an internal field index means nothing.
 func requireFields(verb string, nameValuePairs ...string) error {
 	for i := 0; i+1 < len(nameValuePairs); i += 2 {
 		if nameValuePairs[i+1] == "" {
@@ -799,9 +591,6 @@ func requireFields(verb string, nameValuePairs ...string) error {
 	return nil
 }
 
-// validateAmount rejects an --amount that isn't a positive Daml decimal
-// before any action logic, so a plain input error is never mislabelled as
-// ErrNeedsV2LocalNet.
 func validateAmount(verb, amount string) error {
 	if !looksLikeDecimal(amount) {
 		return fmt.Errorf(
@@ -814,8 +603,6 @@ func validateAmount(verb, amount string) error {
 	return nil
 }
 
-// isZeroDecimal reports whether a looksLikeDecimal-valid string is zero
-// (only 0s and an optional dot). Cheap and allocation-free.
 func isZeroDecimal(s string) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] >= '1' && s[i] <= '9' {
@@ -825,13 +612,11 @@ func isZeroDecimal(s string) bool {
 	return true
 }
 
-// emit writes a "<verb>: {json}" progress line, JSON-encoded for a
-// consistent surface across CLI and HTTP.
 func emit(out io.Writer, verb string, payload map[string]any) {
 	if out == nil {
 		return
 	}
 	_, _ = fmt.Fprintf(out, "%s: ", verb)
 	enc := json.NewEncoder(out)
-	_ = enc.Encode(payload) // includes trailing newline
+	_ = enc.Encode(payload)
 }
