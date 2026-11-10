@@ -24,23 +24,6 @@ import (
 // SchemaVersion constant in internal/api/types for HTTP shapes.
 const contractsTxSchemaVersion = 1
 
-// buildContracts wires `dpm localnet contracts <verb>` — the CLI
-// surface for the Daml LF v2 Ledger API, backed by the
-// internal/canton/ledger client.
-//
-// Sub-verbs:
-//
-//	watch — stream Active Contract Set changes (StateService.GetActiveContracts
-//	        + UpdateService.GetUpdates for ongoing deltas).
-//	ls — paginated snapshot of the current ACS (StateService.GetActiveContracts).
-//
-// Both default to text output (term.Table); --format json emits a
-// stable JSON shape with schema_version suitable for jq / CI
-// assertions.
-//
-// Endpoint discovery: LocalNet's participant gRPC ports are
-// network-internal (not host-published) — pass --endpoint
-// host:port explicitly.
 func buildContracts() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "contracts",
@@ -92,10 +75,6 @@ func buildContractsLs() *cobra.Command {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "ledger end query failed:", err)
 				return localnet.AsExitError(localnet.ExitRuntimeFailure)
 			}
-			// Default party scope: when --party is omitted, project
-			// through the JWT's own act/read parties (mirrors the Web
-			// UI's per-party filter) so the default filter is a shape
-			// the participant accepts even for user-id tokens.
 			effParties, err := resolveDefaultParties(cmd.Context(), cmd.ErrOrStderr(), client, parties)
 			if err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
@@ -189,15 +168,6 @@ func buildContractsWatch() *cobra.Command {
 	return cmd
 }
 
-// buildTx wires `dpm localnet tx <verb>` — transaction ops sister
-// command to `contracts`. Same ledger client, different lens.
-//
-// Sub-verbs:
-//
-//	ls     — bounded list of recent transactions (UpdateService.GetUpdates).
-//	replay — fetch a single transaction by --id or --offset and render its
-//	         events in tree shape (UpdateService.GetUpdateById /
-//	         GetUpdateByOffset).
 func buildTx() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "tx",
@@ -253,9 +223,6 @@ func buildTxLs() *cobra.Command {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "ledger end query failed:", err)
 				return localnet.AsExitError(localnet.ExitRuntimeFailure)
 			}
-			// --from is a real offset only when the user set it:
-			// an explicit --from 0 reads from genesis, while an
-			// unset --from picks the default recent window.
 			fromSet := cmd.Flags().Changed("from")
 			toSet := cmd.Flags().Changed("to")
 			begin, endIncl, err := resolveOffsetWindow(fromOff, toOff, fromSet, toSet, end.Offset)
@@ -278,11 +245,6 @@ func buildTxLs() *cobra.Command {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "update stream failed:", err)
 				return localnet.AsExitError(localnet.ExitRuntimeFailure)
 			}
-			// tx ls is a bounded LIST (not a live tail): collect the
-			// NEWEST `limit` matching rows in the scanned window via a
-			// ring buffer, then print the window we actually inspected
-			// so a filtered query that finds nothing isn't mistaken for
-			// "no such transactions" when matches sit just outside it.
 			return renderUpdateList(cmd.OutOrStdout(), instance, effParties, format, stream, limit, begin, *endIncl)
 		},
 	}
@@ -299,19 +261,11 @@ func buildTxLs() *cobra.Command {
 	return cmd
 }
 
-// txReplayLedger is the narrow interface `tx replay` needs from the
-// ledger client. Mirrors the token package's LedgerClient seam: keeps
-// the production path on *ledger.Client while letting unit tests inject
-// a fake without dialing a real participant. Add methods only as new
-// orchestration paths come under test.
 type txReplayLedger interface {
 	UpdateById(ctx context.Context, req *lapiv2.GetUpdateByIdRequest) (*lapiv2.GetUpdateResponse, error)
 	UpdateByOffset(ctx context.Context, req *lapiv2.GetUpdateByOffsetRequest) (*lapiv2.GetUpdateResponse, error)
 }
 
-// dialTxReplayLedgerFn is the test seam buildTxReplay's RunE dials
-// through. Defaults to upcasting dialLedger's concrete *ledger.Client
-// to txReplayLedger. Tests reassign to return a fake.
 var dialTxReplayLedgerFn = func(ctx context.Context, instance, endpoint, token, role string) (txReplayLedger, func(), error) {
 	c, cleanup, err := dialLedger(ctx, instance, endpoint, token, role)
 	if err != nil {
@@ -346,7 +300,6 @@ func buildTxReplay() *cobra.Command {
 			if err := localnet.ValidateFormat(format, "text", "json"); err != nil {
 				return err
 			}
-			// Mutually exclusive: exactly one of --id / --offset.
 			haveID := strings.TrimSpace(updateID) != ""
 			haveOff := cmd.Flags().Changed("offset")
 			if !haveID && !haveOff {
@@ -368,10 +321,6 @@ func buildTxReplay() *cobra.Command {
 			}
 			defer cleanup()
 
-			// Replay uses the tree (LEDGER_EFFECTS) shape so users see
-			// exercised choices, not just the ACS-delta projection. The
-			// EventFormat carries the --party filter; nil templates means
-			// "no template restriction".
 			uf := &lapiv2.UpdateFormat{
 				IncludeTransactions: &lapiv2.TransactionFormat{
 					EventFormat:      buildEventFormat(parties, nil, true),
@@ -414,11 +363,6 @@ func buildTxReplay() *cobra.Command {
 	cmd.Flags().Int64Var(&offset, "offset", 0, "Ledger offset to fetch — mutually exclusive with --id")
 	return cmd
 }
-
-// The per-event `tx replay` shape is shared with the Web UI replay
-// endpoint via apitypes.TxReplayEvent / TxReplayResponse, and the
-// projection itself is ledger.ProjectReplayEvents — so the two
-// surfaces can never drift on which fields a replay surfaces.
 
 func renderTxReplay(out io.Writer, instance string, parties []string, format string, txn *lapiv2.Transaction) error {
 	summaries := ledger.ProjectReplayEvents(txn)
@@ -503,8 +447,6 @@ func renderTxReplayText(out io.Writer, instance string, parties []string, txn *l
 	return nil
 }
 
-// identString stringifies a gRPC Identifier as pkg:Module:Entity (same
-// shape contractRow.TemplateID uses).
 func identString(id *lapiv2.Identifier) string {
 	if id == nil {
 		return ""
@@ -524,19 +466,6 @@ func identString(id *lapiv2.Identifier) string {
 // LocalNet.
 const defaultTxWindowSpan = 10_000
 
-// resolveOffsetWindow computes the (beginExclusive, endInclusive]
-// offset window for `tx ls`. --limit is deliberately NOT an input:
-// it is a row cap the renderer applies, not an offset count.
-//
-// Precedence:
-//   - --to set  → that exact end; otherwise the current ledger end.
-//   - --from set → that exact begin (`--from 0` reads from genesis).
-//   - --from unset → begin = max(0, end - defaultTxWindowSpan): a
-//     generous recent window independent of --limit, so sparse
-//     filtered matches are still found.
-//
-// When the resulting begin > end we fail loudly rather than silently
-// producing an empty window.
 func resolveOffsetWindow(fromOff, toOff int64, fromSet, toSet bool, ledgerEnd int64) (int64, *int64, error) {
 	end := ledgerEnd
 	if toSet {
@@ -557,18 +486,6 @@ func resolveOffsetWindow(fromOff, toOff int64, fromSet, toSet bool, ledgerEnd in
 	return begin, &end, nil
 }
 
-// dialLedger resolves the participant endpoint + dials the ledger
-// client. Returns a (client, cleanup) pair so the caller can
-// `defer cleanup()` to close the gRPC conn.
-//
-// Resolution mirrors the Web UI Explorer handlers (CLI ↔ Web UI
-// parity): when --endpoint is empty we resolve the participant
-// ledger port AND the per-role JWT from the registry via
-// localnet.ResolveLedgerEndpoint (registry → participant_ledger_<role>
-// port → captured JWT → SignToken fallback). --endpoint and --token
-// remain explicit overrides; an explicit --endpoint wins outright,
-// and an explicit --token overrides the resolved JWT. `role` defaults
-// to app-provider inside the resolver when empty.
 func dialLedger(ctx context.Context, instance, endpoint, token, role string) (*ledger.Client, func(), error) {
 	if endpoint == "" {
 		resolved, err := localnet.ResolveLedgerEndpoint(instance, role)
@@ -576,9 +493,6 @@ func dialLedger(ctx context.Context, instance, endpoint, token, role string) (*l
 			return nil, func() {}, err
 		}
 		endpoint = resolved.Endpoint
-		// Explicit --token always wins; otherwise use the resolved
-		// per-role JWT (which may be "" for an unauthenticated
-		// participant).
 		if token == "" {
 			token = resolved.Token
 		}
@@ -600,12 +514,6 @@ func dialLedger(ctx context.Context, instance, endpoint, token, role string) (*l
 	return client, cleanup, nil
 }
 
-// resolveDefaultParties picks the party set the EventFormat is built
-// from. An explicit --party is honoured verbatim. Otherwise — including
-// a --template with no --party — we project through the JWT's own
-// act/read parties, mirroring the Web UI Explorer's resolveLedgerForRole
-// → ResolveActAndReadParties flow.
-//
 // Why this matters: Splice LocalNet signs user-id JWTs by default. A
 // bare FiltersForAnyParty wildcard is accepted by request validation
 // but the participant then PermissionDenies the stream for a user-id
@@ -613,14 +521,6 @@ func dialLedger(ctx context.Context, instance, endpoint, token, role string) (*l
 // present. Resolving the user's concrete parties and filtering by-party
 // (with the template filter applied per party) is the shape that
 // actually returns data — the same reason the UI does it.
-//
-// Best-effort: if the rights lookup fails or returns no parties we
-// fall back to the wildcard (empty party set). That keeps the
-// explicit --endpoint/--token admin path and unauthenticated
-// participants working, and lets buildEventFormat emit the valid
-// non-nil-empty FiltersForAnyParty wildcard. A warning is printed to
-// errw when we couldn't resolve any party so the empty result isn't
-// mistaken for "no contracts".
 func resolveDefaultParties(
 	ctx context.Context,
 	errw io.Writer,
@@ -632,9 +532,6 @@ func resolveDefaultParties(
 	}
 	resolved, err := client.ResolveActAndReadParties(ctx)
 	if err != nil {
-		// Don't fail the command — fall back to the wildcard and let
-		// the participant decide. Surface the reason so a later
-		// PermissionDenied is easier to diagnose.
 		_, _ = fmt.Fprintln(errw, term.Dimc(
 			"note: could not resolve the JWT's parties ("+err.Error()+
 				"); querying with the wildcard claim"))
@@ -648,11 +545,6 @@ func resolveDefaultParties(
 	}
 	return resolved, nil
 }
-
-// The per-contract row + list response shapes are shared with the Web
-// UI ACS handler via apitypes.ContractRow / ContractsListResponse, so
-// the two surfaces emit the same JSON and the schema pin test keeps
-// them aligned with frontend/src/api.ts.
 
 func renderACSStream(
 	out io.Writer,
@@ -672,8 +564,6 @@ func renderACSStream(
 			continue
 		}
 		ev := ac.CreatedEvent
-		// nilToEmpty: marshal nil slices as [] not null so the wire
-		// contract is "always an array" (matches the UI handler).
 		sigs := ev.GetSignatories()
 		if sigs == nil {
 			sigs = []string{}
@@ -693,8 +583,6 @@ func renderACSStream(
 			row.CreatedAt = ev.CreatedAt.AsTime().Format(time.RFC3339)
 		}
 		if ev.CreateArguments != nil {
-			// Shared decoder so the CLI and Web UI decode payloads
-			// identically.
 			row.Payload = ledger.RecordToMap(ev.CreateArguments)
 		}
 		rows = append(rows, row)
@@ -713,9 +601,6 @@ func renderACSStream(
 	return renderACSText(out, instance, parties, offset, rows)
 }
 
-// renderACSText delegates to term.Table so the column layout
-// matches the rest of the CLI surface (status, list, container
-// list).
 func renderACSText(out io.Writer, instance string, parties []string, offset int64, rows []apitypes.ContractRow) error {
 	if len(rows) == 0 {
 		_, _ = fmt.Fprintln(out, term.Dimc("no active contracts"))
@@ -723,7 +608,7 @@ func renderACSText(out io.Writer, instance string, parties []string, offset int6
 	}
 	cols := []term.Column{
 		{Label: "contract id", Width: 24},
-		{Label: "template", Width: 0}, // flex
+		{Label: "template", Width: 0},
 		{Label: "signatories", Width: 0},
 	}
 	body := make([][]string, 0, len(rows))
@@ -744,11 +629,6 @@ func renderACSText(out io.Writer, instance string, parties []string, offset int6
 	return nil
 }
 
-// updateEventRow is the per-event JSON shape emitted under each
-// transaction by `contracts watch` / `tx ls`. Mirrors the Web UI
-// transactions handler's txEventRow so both surfaces agree on the
-// create/archive/exercise projection (shared decoder:
-// ledger.ProjectTransactionEvents).
 type updateEventRow struct {
 	Kind       string   `json:"kind"`
 	ContractID string   `json:"contract_id,omitempty"`
@@ -772,15 +652,6 @@ func eventRowsFrom(txn *lapiv2.Transaction) []updateEventRow {
 	return rows
 }
 
-// renderUpdateStream prints rows for the UpdateService stream — the
-// live `contracts watch` tail. Limit caps the count (after which we
-// cancel by returning). JSON mode is NDJSON so consumers can `dpm
-// localnet contracts watch --format json | jq` stream-style.
-//
-// Each transaction is followed by one indented line PER event (kind,
-// template, contract id, witnesses) — a live tail of create/archive
-// events, similar to `kubectl get -w`, so a user watching for a
-// specific contract creation sees it as it lands.
 func renderUpdateStream(
 	out io.Writer,
 	instance string,
@@ -823,9 +694,6 @@ func renderUpdateStream(
 	return nil
 }
 
-// printTxnText renders one transaction header followed by one
-// indented line per event. Shared by `contracts watch` and `tx ls`
-// text output so the two surfaces look identical.
 func printTxnText(out io.Writer, txn *lapiv2.Transaction, events []updateEventRow) {
 	_, _ = fmt.Fprintf(out, "%s  offset=%d  events=%d  %s\n",
 		term.Brandc(truncTail(txn.UpdateId, 16)),
@@ -844,15 +712,6 @@ func printTxnText(out io.Writer, txn *lapiv2.Transaction, events []updateEventRo
 	}
 }
 
-// renderUpdateList collects the NEWEST `limit` transactions from a
-// bounded `tx ls` stream and prints them newest-first. Unlike
-// renderUpdateStream (a live tail where stopping at the first `limit`
-// rows is correct), `tx ls` must return the most RECENT matches in
-// the scanned window — the stream arrives in ASCENDING offset order,
-// so we keep a fixed-size ring of the last `limit` rows rather than
-// the first. The scanned offset window (begin, end] is printed so a
-// filtered query that finds nothing isn't mistaken for "no such
-// transactions" when matches sit just outside the window.
 func renderUpdateList(
 	out io.Writer,
 	instance string,
@@ -866,8 +725,6 @@ func renderUpdateList(
 		txn    *lapiv2.Transaction
 		events []updateEventRow
 	}
-	// Ring buffer of the newest `limit` records. limit<=0 means
-	// "unbounded" — collect everything in the window.
 	var ring []txnRecord
 	ringCap := limit
 	if ringCap > 0 {
@@ -897,8 +754,6 @@ func renderUpdateList(
 			count++
 		}
 	}
-	// Unwind the ring into chronological (oldest-first) order when it
-	// was used.
 	if ringCap > 0 {
 		ring = ring[:0]
 		start := (head - count + ringCap) % ringCap
@@ -906,7 +761,6 @@ func renderUpdateList(
 			ring = append(ring, buf[(start+i)%ringCap])
 		}
 	}
-	// Reverse to newest-first for display.
 	for i, j := 0, len(ring)-1; i < j; i, j = i+1, j-1 {
 		ring[i], ring[j] = ring[j], ring[i]
 	}
@@ -951,10 +805,6 @@ func renderUpdateList(
 	return nil
 }
 
-// truncTail / truncMiddle keep wide IDs from blowing column
-// widths. truncTail appends "…"; truncMiddle elides the middle
-// (preserves prefix + suffix — useful for contract IDs where the
-// last chars distinguish entries with the same prefix).
 func truncTail(s string, n int) string {
 	if len(s) <= n {
 		return s

@@ -12,18 +12,6 @@ import (
 	"github.com/bitdynamics-ab/canton-devkit/assets"
 )
 
-// splice610Containers lists every service that has a hardcoded
-// `container_name:` in Splice LocalNet's compose.yaml at the time of
-// writing (verified against both 0.5.18 and 0.6.4 — the list is
-// identical across both majors).
-//
-// Adding a new container name when Splice changes upstream is a 1-line
-// edit here. We keep the list explicit (rather than parsing compose.yaml
-// at runtime) for two reasons:
-//   - Determinism: a renamed service is caught by the compile + test
-//     pipeline rather than only at runtime.
-//   - Simplicity: avoids dragging a YAML parser into the binary for
-//     what is fundamentally a known-set problem.
 var splice610Containers = []string{
 	"ans-web-ui-app-provider",
 	"ans-web-ui-app-user",
@@ -41,31 +29,6 @@ var splice610Containers = []string{
 	"wallet-web-ui-sv",
 }
 
-// WriteContainerRenameOverlay generates a compose overlay file that
-// rewrites every `container_name:` from <original> to <prefix><original>
-// AND relaxes the dependency conditions that block bring-up.
-//
-// Two reasons one overlay covers both:
-//
-//  1. Container-name rename: without it, two `localnet up` invocations
-//     collide on docker daemon-global container names (e.g. both want
-//     to create `postgres`).
-//  2. depends_on relaxation: Splice's compose.yaml declares
-//     `nginx depends_on splice (condition: service_healthy)` — but
-//     splice's onboarding (DAML package vetting, SV keygen, validator
-//     registration) routinely takes 5-10 min while splice's container
-//     healthcheck retry budget is ~5 min. Compose times out the
-//     dependency wait on `docker compose up -d` / `start` and reports
-//     `dependency failed to start: container ... is unhealthy`, even
-//     though the splice container is still alive and would settle.
-//     We override JUST that condition to `service_started` so compose
-//     stops blocking; ComposeRunner.WaitForHealthy then polls for real
-//     readiness with a 15-min, Splice-sized timeout.
-//
-// The overlay file is written to <dataDir>/containers.yaml. Caller
-// appends it to the ComposeFiles list when invoking docker compose.
-//
-// Returns the absolute path of the written file.
 func WriteContainerRenameOverlay(dataDir, prefix string) (string, error) {
 	if prefix == "" {
 		return "", fmt.Errorf("container prefix must be non-empty")
@@ -84,7 +47,6 @@ func WriteContainerRenameOverlay(dataDir, prefix string) (string, error) {
 	b.WriteString("#      Real readiness is polled by WaitForHealthy.\n")
 	b.WriteString("services:\n")
 
-	// Deterministic order makes the file easy to diff/inspect.
 	names := append([]string(nil), splice610Containers...)
 	sort.Strings(names)
 	for _, svc := range names {
@@ -107,34 +69,10 @@ func WriteContainerRenameOverlay(dataDir, prefix string) (string, error) {
 	return path, nil
 }
 
-// SplicePortInternal lists the container ports the splice service
-// publishes. Same naming convention as CantonPortInternal — the
-// <role>903 pattern is from Splice's compose port block.
-//
-// These ports use the same `${TEST_PORT-N:}M` pattern as the Canton
-// participant ports, so they end up on 0.0.0.0 with Docker-assigned
-// ephemeral host ports when TEST_PORT is empty.
 var SplicePortInternal = []int{2903, 3903, 4903}
 
-// loopbackPortServices enumerates every Splice compose service that
-// publishes host ports, along with the container-side ports and the
-// compose env-var pattern for the host side. Services whose host port
-// is an env-var (nginx, postgres, swagger-ui) use the "${VAR}" form
-// so the overlay reuses the allocated ephemeral value. Services whose
-// host port is Docker-assigned (canton, splice) use "0" so Docker
-// picks a free port.
-//
-// The data is intentionally kept as a literal table (not derived from
-// adapter.EndpointServices or CantonPortInternal) so that a Splice
-// upstream port-list change is caught by the cross-reference test
-// rather than silently masked by dynamic derivation.
 type loopbackPort struct {
-	// HostExpr is "0" for Docker-ephemeral, or "${VAR}" for env-driven.
-	HostExpr string
-	// ContainerExpr is usually a literal container port. For nginx UI
-	// ports it must stay env-driven too: Splice templates nginx's
-	// `listen` directives from the same vars DevKit overrides for
-	// deterministic host ports.
+	HostExpr      string
 	ContainerExpr string
 }
 
@@ -143,9 +81,6 @@ type loopbackService struct {
 	Ports []loopbackPort
 }
 
-// loopbackPortTable returns the full list of services whose ports must
-// be overridden to bind to 127.0.0.1. Returned as a function (not a
-// package-level var) so tests can call it without an init-order issue.
 func loopbackPortTable() []loopbackService {
 	return []loopbackService{
 		{
@@ -154,12 +89,6 @@ func loopbackPortTable() []loopbackService {
 				{"0", "2901"}, {"0", "2902"}, {"0", "2975"},
 				{"0", "3901"}, {"0", "3902"}, {"0", "3975"},
 				{"0", "4901"}, {"0", "4902"}, {"0", "4975"},
-				// :10013 is the built-in Prometheus reporter (JVM + canton
-				// metrics). Published to loopback so the SHARED host-level
-				// Prometheus can scrape it via host.docker.internal —
-				// it lives in its own compose network and can't reach the
-				// `canton` service name. Ephemeral host port, captured as
-				// canton_metrics.
 				{"0", "10013"},
 			},
 		},
@@ -167,7 +96,6 @@ func loopbackPortTable() []loopbackService {
 			Name: "splice",
 			Ports: []loopbackPort{
 				{"0", "2903"}, {"0", "3903"}, {"0", "4903"},
-				// :10013 — splice's Prometheus reporter; see canton above.
 				{"0", "10013"},
 			},
 		},
@@ -194,26 +122,11 @@ func loopbackPortTable() []loopbackService {
 	}
 }
 
-// WriteLoopbackPortsOverlay generates a compose overlay that forces
-// every published port to bind to 127.0.0.1 (loopback only) instead
-// of the upstream default of 0.0.0.0 (all interfaces).
-//
-// Without this overlay, the canton, splice, postgres, and swagger-ui
-// containers are reachable from any host on the local network — a
-// security issue for a dev tool that exposes unauthenticated gRPC,
-// database, and HTTP endpoints.
-//
 // The overlay uses the `!override` YAML tag (Docker Compose v2.24.0+,
 // Compose Specification §merge) to REPLACE rather than append the
 // ports list. Without `!override`, compose's default sequence-merge
 // would concatenate the 127.0.0.1-bound entries onto the existing
 // 0.0.0.0-bound ones, resulting in dual bindings.
-//
-// The overlay is written to <dataDir>/loopback-ports.yaml. Caller
-// appends it to the ComposeFiles list AFTER the container-rename
-// overlay so both take effect.
-//
-// Returns the absolute path of the written file.
 func WriteLoopbackPortsOverlay(dataDir string) (string, error) {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return "", fmt.Errorf("create data dir %s: %w", dataDir, err)
@@ -240,31 +153,14 @@ func WriteLoopbackPortsOverlay(dataDir string) (string, error) {
 	return path, nil
 }
 
-// nginxVhostConfNames are the Splice nginx server-config templates
-// DevKit overrides. Each is materialized from assets/nginx/<name>.conf
-// into the instance data dir and bind-mounted over the upstream copy so
-// the routing fix ships with the binary rather than being patched into
-// the content-hash-verified Splice cache.
 var nginxVhostConfNames = []string{
 	"app-provider.conf",
 	"app-user.conf",
 	"sv.conf",
 }
 
-// nginxTuningConfName is a DevKit-owned http-context snippet mounted
-// straight into conf.d (not a Splice template). It bumps
-// server_names_hash_bucket_size so nginx can boot with DevKit's longer
-// role-scoped vhosts (<service>.<role>.<instance>.localhost); the
-// default 64-byte bucket is too small and nginx aborts with a
-// "could not build server_names_hash" emerg. The "00-" prefix sorts it
-// ahead of the role server blocks in the include glob.
 const nginxTuningConfName = "00-devkit-tuning.conf"
 
-// Splice service names for the instance-scoped nginx virtual hosts. Each
-// UI/API the localnet nginx fronts is reachable at
-// <service>.<instance>.localhost:<port> (see instanceVHost). The names
-// match Splice's own docs (wallet, ans, scan, sv, json-ledger-api,
-// grpc-ledger-api).
 const (
 	VHostServiceWallet     = "wallet"
 	VHostServiceANS        = "ans"
@@ -274,74 +170,16 @@ const (
 	VHostServiceGRPCLedger = "grpc-ledger-api"
 )
 
-// vhostRoles are the wallet-serving roles, in the order their
-// VHOST_WALLET_<ROLE> env vars are emitted. Each maps to a role .conf on
-// its own UI port.
 var vhostRoles = []string{"app-user", "app-provider", "sv"}
 
-// instanceVHost returns the instance-scoped nginx virtual host for a
-// service, e.g. instanceVHost("wallet", "localnet-2") ==
-// "wallet.localnet-2.localhost". This is the single source of truth for
-// the hostname shape shared by the nginx overlay (which injects the
-// values as ${VHOST_*} env vars) and every URL/env emitter.
-//
-// Instance names are already validated as DNS labels
-// (registry.ValidateName), so the result is always a valid hostname.
-//
-// *.localhost resolves to 127.0.0.1 in browsers, curl, and Go, but NOT
-// in the JVM/Node/Python resolvers (and some Rust HTTP clients) — those
-// need an explicit Host header (HTTP) / :authority pseudo-header (gRPC)
-// or an /etc/hosts entry.
 func instanceVHost(service, instance string) string {
 	return service + "." + instance + ".localhost"
 }
 
-// instanceVHostRole is instanceVHost for services that exist once per
-// role/participant (wallet, ans, json-ledger-api, grpc-ledger-api). The
-// role becomes its own subdomain label so the URL self-describes which
-// participant it hits, e.g.
-// instanceVHostRole("wallet", "app-user", "localnet-2") ==
-// "wallet.app-user.localnet-2.localhost". Single-per-instance services
-// (scan, sv) keep the shorter instanceVHost shape.
-//
-// Same resolution caveat as instanceVHost — one extra label doesn't
-// change browser/curl/Go behavior, but the stricter JVM/Node/Python
-// resolvers still need an explicit Host header / :authority or an
-// /etc/hosts entry.
 func instanceVHostRole(service, role, instance string) string {
 	return service + "." + role + "." + instance + ".localhost"
 }
 
-// WriteNginxVhostOverlay rewrites the hostnames DevKit's nginx serves so
-// each UI/API is reachable at an instance-scoped virtual host of the
-// form <service>.<instance>.localhost (e.g. wallet.localnet-2.localhost).
-//
-// Splice's nginx routes by Host header, defining several `server_name`
-// blocks per listen port. DevKit ships its own copies of the role .conf
-// files (assets/nginx/*.conf) whose server_name is a ${VHOST_*} env var;
-// this overlay injects the per-instance value for each var via a compose
-// `environment:` block, and bind-mounts the DevKit copies over Splice's
-// upstream templates.
-//
-// Only the instance-scoped names are served — the flat Splice names
-// (wallet.localhost, scan.localhost, ...) are intentionally dropped so
-// URLs stay unambiguous across concurrently running localnets. DevKit's
-// own scan-registry client threads the same instance-scoped Host header
-// (see internal/localnet/token.resolveRegistryURL).
-//
-// The upstream .conf files live in the content-hash-verified Splice
-// cache (shared across instances), so we do NOT edit them. nginx.conf
-// and the includes/ dir are unchanged upstream, so the overlay still
-// points those at ${LOCALNET_DIR}/conf/nginx (the cache). Compose merges
-// `volumes` by appending, so the whole mount list is re-declared under
-// `!override` (same tactic as WriteLoopbackPortsOverlay).
-//
-// The overlay is written to <dataDir>/nginx-vhosts.yaml. Caller appends
-// it to the ComposeFiles list AFTER the loopback overlay. warnw receives
-// a drift notice for any materialized .conf an operator has edited; it
-// may be nil.
-//
-// Returns the absolute path of the written overlay.
 func WriteNginxVhostOverlay(dataDir, instanceName string, warnw io.Writer) (string, error) {
 	if dataDir == "" {
 		return "", fmt.Errorf("WriteNginxVhostOverlay: empty dataDir")
@@ -354,8 +192,6 @@ func WriteNginxVhostOverlay(dataDir, instanceName string, warnw io.Writer) (stri
 		return "", fmt.Errorf("create nginx overlay dir %s: %w", nginxDir, err)
 	}
 
-	// Materialize the embedded templates (edit-preserving so an operator
-	// who tweaks a vhost keeps it across `localnet up`).
 	for _, name := range nginxVhostConfNames {
 		data, err := fs.ReadFile(assets.FS, "nginx/"+name)
 		if err != nil {
@@ -366,9 +202,6 @@ func WriteNginxVhostOverlay(dataDir, instanceName string, warnw io.Writer) (stri
 		}
 	}
 
-	// The http-context tuning snippet is a DevKit invariant (nginx won't
-	// boot without the bigger bucket), so it is NOT edit-preserving —
-	// always overwrite with the bundled copy.
 	tuning, err := fs.ReadFile(assets.FS, "nginx/"+nginxTuningConfName)
 	if err != nil {
 		return "", fmt.Errorf("read embedded nginx/%s: %w", nginxTuningConfName, err)
@@ -384,12 +217,6 @@ func WriteNginxVhostOverlay(dataDir, instanceName string, warnw io.Writer) (stri
 	// nginx.conf and includes/ stay on the upstream cache paths. The
 	// destination keeps Splice's `${..._PROFILE}` gating so a disabled
 	// profile still parks the file at an inactive `.coff.template` name.
-	//
-	// Per-role services (wallet, ans, json/grpc-ledger-api) get a
-	// role-suffixed env var per role .conf (VHOST_WALLET_APP_USER, …) so
-	// each conf can carry a distinct role-scoped hostname while sharing
-	// the one nginx env namespace. Single-per-instance services (scan,
-	// sv) keep a plain VHOST_SCAN / VHOST_SV.
 	var b strings.Builder
 	b.WriteString("# Generated by canton-devkit.\n")
 	b.WriteString("# Serves each Splice UI/API at an instance-scoped virtual host:\n")
@@ -400,8 +227,6 @@ func WriteNginxVhostOverlay(dataDir, instanceName string, warnw io.Writer) (stri
 	b.WriteString("services:\n")
 	b.WriteString("  nginx:\n")
 	b.WriteString("    environment:\n")
-	// Wallet is served for every role; ans and the ledger APIs only by
-	// the app-user / app-provider confs (sv.conf has no such blocks).
 	for _, role := range vhostRoles {
 		seg := normalizeEnvSegment(role)
 		fmt.Fprintf(&b, "      VHOST_WALLET_%s: %q\n", seg, instanceVHostRole(VHostServiceWallet, role, instanceName))
@@ -412,7 +237,6 @@ func WriteNginxVhostOverlay(dataDir, instanceName string, warnw io.Writer) (stri
 		fmt.Fprintf(&b, "      VHOST_JSON_LEDGER_%s: %q\n", seg, instanceVHostRole(VHostServiceJSONLedger, role, instanceName))
 		fmt.Fprintf(&b, "      VHOST_GRPC_LEDGER_%s: %q\n", seg, instanceVHostRole(VHostServiceGRPCLedger, role, instanceName))
 	}
-	// Single-per-instance services (the SV node's scan / sv UIs).
 	fmt.Fprintf(&b, "      VHOST_SCAN: %q\n", instanceVHost(VHostServiceScan, instanceName))
 	fmt.Fprintf(&b, "      VHOST_SV: %q\n", instanceVHost(VHostServiceSV, instanceName))
 	b.WriteString("    volumes: !override\n")
@@ -420,10 +244,6 @@ func WriteNginxVhostOverlay(dataDir, instanceName string, warnw io.Writer) (stri
 	fmt.Fprintf(&b, "      - %s/app-provider.conf:/etc/nginx/templates/app-provider.c${APP_PROVIDER_PROFILE}f.template\n", filepath.ToSlash(nginxDir))
 	fmt.Fprintf(&b, "      - %s/app-user.conf:/etc/nginx/templates/app-user.c${APP_USER_PROFILE}f.template\n", filepath.ToSlash(nginxDir))
 	fmt.Fprintf(&b, "      - %s/sv.conf:/etc/nginx/templates/sv.c${SV_PROFILE}f.template\n", filepath.ToSlash(nginxDir))
-	// http-context tuning snippet: mount straight into conf.d (bypassing
-	// the templates/envsubst step, since it has no ${VHOST_*} vars) so
-	// `include /etc/nginx/conf.d/*.conf` picks it up ahead of the
-	// envsubst-rendered role blocks.
 	fmt.Fprintf(&b, "      - %s/%s:/etc/nginx/conf.d/%s\n", filepath.ToSlash(nginxDir), nginxTuningConfName, nginxTuningConfName)
 	b.WriteString("      - ${LOCALNET_DIR}/conf/nginx/swagger-ui:/etc/nginx/includes\n")
 
