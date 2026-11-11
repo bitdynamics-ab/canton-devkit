@@ -33,76 +33,39 @@ import (
 // the resolved image digests post-up and warns on drift — see
 // internal/localnet/image_digests.go and docs/limitations.md ("Container
 // image pinning").
-//
-// # Maintainer flow
-//
-// Add a new entry via:
-//
-//	scripts/add-splice-version.sh <tag>
-//
-// The script resolves <tag> → commit SHA via the GitHub API, fetches +
-// extracts the archive, computes ContentSHA, and appends a versions.json
-// entry. A maintainer reviews the diff and commits.
 type Version struct {
 	Tag        string `json:"tag"`
 	Commit     string `json:"commit"`      // immutable git commit SHA the tag pointed to
 	ContentSHA string `json:"content_sha"` // sha-256 of the extracted localnet subtree (sorted, path+content)
-	Size       int64  `json:"size"`        // informational; used only to print a hint before download
-	Major      string `json:"major"`       // routes to internal/splice/v0X adapter
+	Size       int64  `json:"size"`
+	Major      string `json:"major"` // routes to internal/splice/v0X adapter
 
-	// MinMemoryBytes is the minimum Docker daemon memory the version
-	// needs to start cleanly. Empirically derived: Splice 0.6.x boots
-	// a single canton container hosting 2 sequencers + 2 mediators +
-	// 3 participants each at -Xmx 2.5 GiB, so the container OOM-loops
-	// on a stock Docker Desktop install (4 GB default). 0.5.x is
-	// lighter. 0 means "use docker.DefaultMinMemoryBytes" — the
-	// historical 4 GB floor.
-	//
-	// Values use decimal GB (1 GB = 10^9 bytes) to match Docker
-	// Desktop on macOS, which is the primary platform where users
-	// must manually set a memory limit. Using decimal GB ensures
-	// that "8 GB" in Docker Desktop satisfies a min_memory_bytes
-	// of 8_000_000_000.
+	// MinMemoryBytes overrides the code default min for this entry;
+	// 0 means no override. Values use decimal GB (1 GB = 10^9 bytes) so
+	// "8 GB" in Docker Desktop satisfies min_memory_bytes of 8_000_000_000.
 	MinMemoryBytes uint64 `json:"min_memory_bytes,omitempty"`
-	// RecommendedMemoryBytes is the value at which the version
-	// runs without resource warnings. UI surfaces this as the
-	// "raise Docker memory to ≥ N" remediation hint when Min*
-	// passes but the recommended threshold is not met.
+	// RecommendedMemoryBytes overrides the code default recommended
+	// memory for this entry; 0 means no override.
 	RecommendedMemoryBytes uint64 `json:"recommended_memory_bytes,omitempty"`
 
 	// Channel labels the maturity of a catalogue entry. Empty (the
 	// historical default) and "stable" both mean a production-ready
-	// release; "alpha" marks an opt-in pre-release that the user is
-	// expected to know they are pulling (e.g. the Token Standard V2
-	// snapshot, which runs on a separate -dev image repo and needs
-	// `--profile tokens-v2` for the alpha Canton protocol). The
-	// `versions` command surfaces this and `up` warns on selection.
+	// release; "alpha" marks an opt-in pre-release.
 	Channel string `json:"channel,omitempty"`
 
 	// ImageRepo overrides the default Docker image repository for
 	// this entry. Empty falls back to the stable repo that Splice's
-	// compose env files default to (currently
-	// `ghcr.io/digital-asset/decentralized-canton-sync/docker`). The
-	// Token Standard V2 pre-release stream publishes to a separate
-	// `-dev` repo, so its catalogue entry sets this explicitly. The
-	// adapter forwards it as the `IMAGE_REPO` compose env.
+	// compose env files default to. The adapter forwards it as the
+	// `IMAGE_REPO` compose env.
 	ImageRepo string `json:"image_repo,omitempty"`
 
 	// ImageTag overrides the Docker image tag used for this entry.
-	// Empty falls back to Tag, which is right for stable releases
-	// (where the catalogue Tag === the upstream ghcr tag). The
-	// Token Standard V2 alpha publishes its images under a snapshot
-	// tag distinct from the catalogue tag (e.g.
-	// `0.6.5-snapshot.20260526.2931.0.ve28a6722`), so its entry sets
-	// this explicitly. The adapter forwards it as the `IMAGE_TAG`
-	// compose env.
+	// Empty falls back to Tag. The adapter forwards it as the
+	// `IMAGE_TAG` compose env.
 	ImageTag string `json:"image_tag,omitempty"`
 }
 
-// IsAlpha reports whether the entry is in the alpha channel — an
-// opt-in pre-release the user must consciously select. Equivalent to
-// `v.Channel == "alpha"` but kept as a method so the comparison string
-// only lives in one place.
+// IsAlpha reports whether the entry is in the alpha channel.
 func (v Version) IsAlpha() bool { return v.Channel == "alpha" }
 
 // SupportsTokenStandardV2 reports whether a Splice release includes the
@@ -113,22 +76,16 @@ func SupportsTokenStandardV2(tag string) bool {
 	if tag == "token-standard-v2" {
 		return true
 	}
-	v, ok := parseSemver(tag)
+	v, ok := parseLeadingSemver(tag)
 	if !ok {
 		return false
 	}
 	return v[0] > 0 || (v[0] == 0 && (v[1] > 6 || (v[1] == 6 && v[2] >= 11)))
 }
 
-// catalogueFile is the embedded JSON catalogue. Kept as a separate file
-// (rather than literal Go code) so the maintainer refresh script can
-// append entries with a tiny JSON edit instead of regenerating Go
-// source.
-//
 //go:embed versions.json
 var catalogueFile []byte
 
-// catalogue holds the in-memory shape of versions.json after init().
 var catalogue struct {
 	LatestAlias string    `json:"latest_alias"`
 	Versions    []Version `json:"versions"`
@@ -170,10 +127,6 @@ func init() {
 // the catalogue return ErrUncuratedTag — the caller is responsible for
 // deciding whether to fall through to runtime resolution (see
 // ResolveOrUpstream / ResolveUpstream).
-//
-// We keep Resolve catalogue-only so a "just give me whatever works"
-// caller can't accidentally start running arbitrary upstream tags
-// without an explicit opt-in elsewhere.
 func Resolve(req string) (Version, error) {
 	if req == "" || req == "latest" {
 		req = LatestAlias
@@ -186,97 +139,62 @@ func Resolve(req string) (Version, error) {
 	return v, nil
 }
 
-// MinMemoryFor returns the version-specific Docker daemon memory
-// floor for v. Called from both `dpm localnet up` (CLI gate) and the
-// Web UI's GET /api/preflight handler so the two surfaces enforce
-// identical numbers (see CONTRIBUTING.md "CLI ↔ Web UI parity"). The
-// fallback constant is duplicated below to avoid an import cycle with
-// internal/docker.
-//
+// MinMemoryFor returns the Docker daemon memory floor for v.
 // Resolution order:
-//  1. v.MinMemoryBytes when the entry sets it (curated entries).
-//  2. The STRICTEST (largest) MinMemoryFor across every catalogued
-//     entry that shares v.Major — this is the uncurated path. An
-//     uncurated 0.6.x tag has no memory fields of its own, but its
-//     resource profile is governed by the Splice major, not by
-//     whether DevKit reviewed the tag; reusing the catalogued floor
-//     for the same major means the escape hatch TIGHTENS the gate to
-//     match curated 0.6.x (8 GiB) instead of silently loosening it to
-//     the global 4 GiB default, which is exactly backwards for the
-//     least-tested versions.
-//  3. The global defaultMinMemoryBytesFallback when neither applies
-//     (e.g. a major with no catalogued entry at all).
-//
-// Invariant pinned by TestThresholdParity_VersionMinAtLeastDefault:
-// every catalogued MinMemoryBytes is >= the global default, so the
-// derived floor for a known major is also >= the default. A user on a
-// 4 GiB host always sees a refusal regardless of which version they
-// pick, curated or not.
+//  1. v.MinMemoryBytes when the entry sets an override.
+//  2. The largest MinMemoryBytes among catalogued entries that share
+//     v.Major — one override covers the whole major line.
+//  3. defaultMinMemoryBytesFallback (4 GB).
 func MinMemoryFor(v Version) uint64 {
 	if v.MinMemoryBytes > 0 {
 		return v.MinMemoryBytes
 	}
-	if m := strictestMinForMajor(v.Major); m > 0 {
+	if m := strictestForMajor(v.Major, func(v Version) uint64 { return v.MinMemoryBytes }); m > 0 {
 		return m
 	}
 	return defaultMinMemoryBytesFallback
 }
 
 // RecommendedMemoryFor returns the version's recommended memory
-// (above which there are no resource warnings). For uncurated entries
-// (no recommendation of their own) it falls back to the strictest
-// catalogued recommendation for the same major, so the WARN tier is
-// not silently disabled for the least-tested versions. Returns 0 only
-// when neither the entry nor any same-major catalogue entry sets a
-// recommendation; 0 disables the WARN tier in docker.checkDockerMemory
-// — see internal/docker/checks.go.
+// (above which there are no resource warnings). Resolution order:
+//  1. v.RecommendedMemoryBytes when the entry sets an override.
+//  2. The largest RecommendedMemoryBytes among catalogued entries
+//     that share v.Major.
+//  3. defaultRecommendedMemoryBytesFallback (6 GB), raised to at
+//     least MinMemoryFor(v) so the WARN tier never undercuts the
+//     hard gate and never returns 0.
 func RecommendedMemoryFor(v Version) uint64 {
 	if v.RecommendedMemoryBytes > 0 {
 		return v.RecommendedMemoryBytes
 	}
-	return strictestRecommendedForMajor(v.Major)
+	if m := strictestForMajor(v.Major, func(v Version) uint64 { return v.RecommendedMemoryBytes }); m > 0 {
+		return m
+	}
+	rec := defaultRecommendedMemoryBytesFallback
+	if min := MinMemoryFor(v); rec < min {
+		return min
+	}
+	return rec
 }
 
-// strictestMinForMajor returns the largest MinMemoryBytes among
-// catalogued entries whose Major matches, or 0 when major is empty or
-// no catalogued entry shares it. "Strictest" (max) is deliberate: the
-// gate must refuse a host that any same-major curated entry would
-// refuse.
-func strictestMinForMajor(major string) uint64 {
+func strictestForMajor(major string, field func(Version) uint64) uint64 {
 	if major == "" {
 		return 0
 	}
 	var max uint64
 	for _, v := range SupportedVersions {
-		if v.Major == major && v.MinMemoryBytes > max {
-			max = v.MinMemoryBytes
+		if v.Major == major {
+			if n := field(v); n > max {
+				max = n
+			}
 		}
 	}
 	return max
 }
 
-// strictestRecommendedForMajor mirrors strictestMinForMajor for the
-// recommended (WARN) threshold.
-func strictestRecommendedForMajor(major string) uint64 {
-	if major == "" {
-		return 0
-	}
-	var max uint64
-	for _, v := range SupportedVersions {
-		if v.Major == major && v.RecommendedMemoryBytes > max {
-			max = v.RecommendedMemoryBytes
-		}
-	}
-	return max
-}
-
-// defaultMinMemoryBytesFallback mirrors docker.DefaultMinMemoryBytes,
-// duplicated so this package can compute the effective min without
-// importing internal/docker (docker imports splice — importing back
-// would create a cycle). TestThresholdParity_VersionMinAtLeastDefault
-// asserts equality with docker.DefaultMinMemoryBytes so this never
-// drifts.
 const defaultMinMemoryBytesFallback uint64 = 4_000_000_000
+
+const defaultRecommendedMemoryBytesFallback uint64 = 6_000_000_000
 
 // Supported returns the supported tags in ascending version order.
 // Ordering is numeric (0.6.9 before 0.6.10), not lexical, so the CLI's
@@ -291,12 +209,9 @@ func Supported() []string {
 	return out
 }
 
-// compareTags orders two catalogue tags by numeric major.minor.patch.
-// Semver tags sort before non-semver ones (token-standard-v2); ties and
-// two non-semver tags fall back to a lexical compare.
 func compareTags(a, b string) int {
-	va, oka := parseSemver(a)
-	vb, okb := parseSemver(b)
+	va, oka := parseLeadingSemver(a)
+	vb, okb := parseLeadingSemver(b)
 	if oka && okb {
 		for k := 0; k < 3; k++ {
 			if va[k] != vb[k] {
@@ -306,20 +221,18 @@ func compareTags(a, b string) int {
 				return 1
 			}
 		}
-		return strings.Compare(a, b) // same major.minor.patch: pre-release suffix, etc.
+		return strings.Compare(a, b)
 	}
 	if oka != okb {
 		if oka {
-			return -1 // semver before non-semver
+			return -1
 		}
 		return 1
 	}
 	return strings.Compare(a, b)
 }
 
-// parseSemver reads the leading major.minor.patch of a tag, ignoring any
-// `-pre`/`+build` suffix. Returns false when the tag isn't N.N.N.
-func parseSemver(tag string) ([3]int, bool) {
+func parseLeadingSemver(tag string) ([3]int, bool) {
 	var v [3]int
 	base := tag
 	if i := strings.IndexAny(base, "-+"); i >= 0 {

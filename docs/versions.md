@@ -57,8 +57,8 @@ the canonical name in code and docs.
 | `content_sha` | `scripts/compute-tree-sha.sh` | SHA-256 over the extracted `cluster/compose/localnet/` subtree (sorted by path). Stable across upstream gzip-envelope rewrites; this is the authoritative integrity check at fetch time. |
 | `size` | byte count of the source-tarball | Informational; used to print a hint before download and to size the in-flight body cap. |
 | `major` | first two segments of `tag` (or set manually for branch tags) | Routes to the per-major Splice adapter for that release line. |
-| `min_memory_bytes` | empirically derived per release line (see `versions.go`) | Minimum Docker daemon memory the version needs to start cleanly; the pre-flight memory gate refuses to `up` below it. `0` / absent inherits the strictest catalogued floor for the same major line; the global 4 GB floor applies only when the major has no catalogued entry at all. |
-| `recommended_memory_bytes` | empirically derived per release line (see `versions.go`) | The value at which the version runs without resource warnings; surfaced as the "raise Docker memory to ≥ N" remediation hint when the minimum passes but this threshold is not met. |
+| `min_memory_bytes` | override only (see `versions.go`) | Optional. Minimum Docker daemon memory the version needs to start cleanly; the pre-flight memory gate refuses to `up` below it. Omit when the line matches the code default (4 GB). When set, later tags in the same major inherit the largest override; otherwise the code default applies. |
+| `recommended_memory_bytes` | override only (see `versions.go`) | Optional. The value at which the version runs without resource warnings; surfaced as the "raise Docker memory to ≥ N" remediation hint when the minimum passes but this threshold is not met. Omit when the line matches the code default (6 GB). Same-major inheritance matches `min_memory_bytes`. |
 | `channel` *(optional)* | catalogue maintainer | `""` / `"stable"` → production-ready; `"alpha"` → opt-in pre-release (Token Standard V2 snapshot etc.). `up` prints a one-line warning when an alpha entry is selected. |
 | `image_repo` *(optional)* | catalogue maintainer | Overrides the default Docker image repository. Defaults to `ghcr.io/digital-asset/decentralized-canton-sync/docker`. Set to `ghcr.io/digital-asset/decentralized-canton-sync-dev/docker` for the V2 alpha track. The v06 adapter forwards this as the `IMAGE_REPO` compose env. |
 | `image_tag` *(optional)* | catalogue maintainer | Overrides the Docker image tag. Empty falls back to `tag`, which is right for stable releases; the branch-backed `token-standard-v2` alpha entry sets it explicitly to a `0.6.5-snapshot` tag. The adapter forwards it as the `IMAGE_TAG` compose env. |
@@ -109,11 +109,11 @@ A maintainer then:
 - Reviews the diff.
 - Bumps `latest_alias` if the new tag should become the default
   `--version latest`.
-- Sets `min_memory_bytes` and `recommended_memory_bytes` on the first
-  entry of a new major line (from that release's
-  `cluster/compose/localnet/resource-constraints.yaml`). Later tags in
-  the line inherit them; `go test ./internal/splice/` fails until a
-  new major has them.
+- Sets `min_memory_bytes` and `recommended_memory_bytes` only when
+  the release line needs floors different from the code defaults
+  (4 GB min / 6 GB recommended), using that release's
+  `cluster/compose/localnet/resource-constraints.yaml`. One override
+  on the major line is enough; later tags inherit it.
 - Optionally runs the integration test against the new entry before
   merging.
 - Commits + pushes.

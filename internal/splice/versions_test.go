@@ -6,11 +6,6 @@ import (
 	"testing"
 )
 
-// TestAlphaChannelEntryShape pins that the catalogue carries at least
-// one alpha entry with a non-empty ImageRepo override — the Token
-// Standard V2 snapshot — and that the IsAlpha helper agrees.
-// Contract: alpha catalogue entries opt into a separate image repo via
-// these fields, and the CLI/up paths key off `Channel == "alpha"`.
 func TestAlphaChannelEntryShape(t *testing.T) {
 	var sawAlpha bool
 	for tag, v := range SupportedVersions {
@@ -107,10 +102,6 @@ func TestResolveSupportedTag(t *testing.T) {
 	}
 }
 
-// TestVersionsJSONIsValid sanity-checks the embedded catalogue: every
-// commit SHA looks like a hex git SHA (40 chars), every ContentSHA is
-// SHA-256 hex (64 chars). Catches typos that init() would also catch
-// but with a clearer error.
 func TestVersionsJSONIsValid(t *testing.T) {
 	for tag, v := range SupportedVersions {
 		if len(v.Commit) != 40 {
@@ -139,11 +130,6 @@ func TestResolveUnsupported(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unsupported version")
 	}
-	// Resolve returns ErrUncuratedTag (rather than a generic
-	// "unsupported" error) so orchestrators can distinguish
-	// "tag exists nowhere" from "tag is upstream but not curated."
-	// The list of curated tags is still embedded so users see what
-	// the safe options are.
 	if !errors.Is(err, ErrUncuratedTag) {
 		t.Errorf("expected ErrUncuratedTag, got %v", err)
 	}
@@ -158,15 +144,7 @@ func TestLatestAliasIsInSupported(t *testing.T) {
 	}
 }
 
-// TestMinMemoryFor_UncuratedInheritsMajorFloor is the regression:
-// an uncurated Version (no MinMemoryBytes of its own) must inherit the
-// STRICTEST catalogued floor for its Major rather than the global 4 GiB
-// default. Splice 0.6.x's resource profile doesn't change just because
-// the tag wasn't reviewed, so the gate must TIGHTEN, not loosen, on the
-// escape hatch.
 func TestMinMemoryFor_UncuratedInheritsMajorFloor(t *testing.T) {
-	// Compute the expected strictest 0.6 floor straight from the
-	// catalogue so this test tracks versions.json without hardcoding.
 	var want06 uint64
 	for _, v := range SupportedVersions {
 		if v.Major == "0.6" && v.MinMemoryBytes > want06 {
@@ -174,21 +152,14 @@ func TestMinMemoryFor_UncuratedInheritsMajorFloor(t *testing.T) {
 		}
 	}
 	if want06 == 0 {
-		t.Skip("no 0.6 catalogue entry with a memory floor — nothing to inherit")
+		t.Skip("no 0.6 catalogue entry with a memory override — nothing to inherit")
 	}
 
-	// Uncurated 0.6.x: no memory fields, Major inferred from the tag.
 	uncurated := Version{Tag: "0.6.99-rc.1", Commit: "deadbeef", Major: "0.6"}
 	if got := MinMemoryFor(uncurated); got != want06 {
-		t.Errorf("MinMemoryFor(uncurated 0.6) = %d, want strictest-0.6 floor %d (not the 4 GiB default)",
-			got, want06)
-	}
-	if got := MinMemoryFor(uncurated); got <= defaultMinMemoryBytesFallback {
-		t.Errorf("uncurated 0.6 floor %d must exceed the global default %d — the escape hatch must not loosen the gate",
-			got, defaultMinMemoryBytesFallback)
+		t.Errorf("MinMemoryFor(uncurated 0.6) = %d, want same-major override %d", got, want06)
 	}
 
-	// Recommended (WARN tier) must also inherit, not silently disable.
 	var wantRec06 uint64
 	for _, v := range SupportedVersions {
 		if v.Major == "0.6" && v.RecommendedMemoryBytes > wantRec06 {
@@ -200,26 +171,21 @@ func TestMinMemoryFor_UncuratedInheritsMajorFloor(t *testing.T) {
 	}
 }
 
-// TestMinMemoryFor_UnknownMajorFallsBackToDefault covers the safety
-// net: a tag whose Major has no catalogue entry at all (or an empty
-// Major) still gets the global default floor — never 0, which would
-// silently disable the gate.
 func TestMinMemoryFor_UnknownMajorFallsBackToDefault(t *testing.T) {
 	for _, v := range []Version{
-		{Tag: "9.9.9", Major: "9.9"}, // no catalogued 9.9 entry
-		{Tag: "weird", Major: ""},    // unparseable tag → empty major
+		{Tag: "9.9.9", Major: "9.9"},
+		{Tag: "weird", Major: ""},
+		{},
 	} {
 		if got := MinMemoryFor(v); got != defaultMinMemoryBytesFallback {
 			t.Errorf("MinMemoryFor(%+v) = %d, want default %d", v, got, defaultMinMemoryBytesFallback)
 		}
-		if got := RecommendedMemoryFor(v); got != 0 {
-			t.Errorf("RecommendedMemoryFor(%+v) = %d, want 0 (no same-major recommendation)", v, got)
+		if got := RecommendedMemoryFor(v); got != defaultRecommendedMemoryBytesFallback {
+			t.Errorf("RecommendedMemoryFor(%+v) = %d, want default %d", v, got, defaultRecommendedMemoryBytesFallback)
 		}
 	}
 }
 
-// TestMinMemoryFor_ExplicitOverrideWins confirms a curated entry's own
-// MinMemoryBytes still takes precedence over the Major-derived floor.
 func TestMinMemoryFor_ExplicitOverrideWins(t *testing.T) {
 	v := Version{Tag: "custom", Major: "0.6", MinMemoryBytes: 16_000_000_000, RecommendedMemoryBytes: 20_000_000_000}
 	if got := MinMemoryFor(v); got != 16_000_000_000 {
@@ -230,20 +196,10 @@ func TestMinMemoryFor_ExplicitOverrideWins(t *testing.T) {
 	}
 }
 
-func TestEveryCataloguedMajorHasCuratedFloor(t *testing.T) {
-	curated := map[string]bool{}
-	for _, v := range SupportedVersions {
-		if _, ok := curated[v.Major]; !ok {
-			curated[v.Major] = false
-		}
-		if v.MinMemoryBytes > 0 && v.RecommendedMemoryBytes > 0 {
-			curated[v.Major] = true
-		}
-	}
-	for major, ok := range curated {
-		if !ok {
-			t.Errorf("Splice major %q has no entry with min_memory_bytes and recommended_memory_bytes set", major)
-		}
+func TestRecommendedMemoryFor_NeverBelowMin(t *testing.T) {
+	v := Version{Tag: "custom", Major: "orphan-major", MinMemoryBytes: 10_000_000_000}
+	if got := RecommendedMemoryFor(v); got != 10_000_000_000 {
+		t.Errorf("RecommendedMemoryFor(min-only) = %d, want raised to MinMemoryFor %d", got, 10_000_000_000)
 	}
 }
 
@@ -257,15 +213,12 @@ func TestSupportedIsSorted(t *testing.T) {
 	}
 }
 
-// TestSupportedOrderIsNumeric guards the double-digit-patch regression:
-// with lexical sorting "0.6.10" sorts before "0.6.3", which is wrong.
 func TestSupportedOrderIsNumeric(t *testing.T) {
 	got := Supported()
 	pos := map[string]int{}
 	for i, tag := range got {
 		pos[tag] = i
 	}
-	// 0.6.9 must precede 0.6.10, which must precede 0.6.11.
 	for _, pair := range [][2]string{{"0.6.9", "0.6.10"}, {"0.6.10", "0.6.11"}, {"0.6.4", "0.6.9"}} {
 		lo, okLo := pos[pair[0]]
 		hi, okHi := pos[pair[1]]
@@ -273,7 +226,6 @@ func TestSupportedOrderIsNumeric(t *testing.T) {
 			t.Errorf("Supported() ordered %q after %q: %v", pair[0], pair[1], got)
 		}
 	}
-	// token-standard-v2 (non-semver) sorts last.
 	if p, ok := pos["token-standard-v2"]; ok && p != len(got)-1 {
 		t.Errorf("token-standard-v2 should sort last, got position %d in %v", p, got)
 	}
@@ -281,20 +233,20 @@ func TestSupportedOrderIsNumeric(t *testing.T) {
 
 func TestCompareTags(t *testing.T) {
 	cases := []struct {
-		a, b string
-		want int // sign of the expected result
+		a, b     string
+		wantSign int
 	}{
 		{"0.6.9", "0.6.10", -1},
 		{"0.6.10", "0.6.9", 1},
 		{"0.6.4", "0.6.4", 0},
 		{"0.5.18", "0.6.3", -1},
-		{"0.6.11", "token-standard-v2", -1}, // semver before non-semver
+		{"0.6.11", "token-standard-v2", -1},
 		{"token-standard-v2", "0.6.3", 1},
 	}
 	for _, c := range cases {
 		got := compareTags(c.a, c.b)
-		if (got < 0) != (c.want < 0) || (got > 0) != (c.want > 0) {
-			t.Errorf("compareTags(%q, %q) = %d, want sign %d", c.a, c.b, got, c.want)
+		if (got < 0) != (c.wantSign < 0) || (got > 0) != (c.wantSign > 0) {
+			t.Errorf("compareTags(%q, %q) = %d, want sign %d", c.a, c.b, got, c.wantSign)
 		}
 	}
 }
