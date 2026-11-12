@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Repo commit-msg hook: strip the Cloud Agent initiator Co-authored-by
+# trailer. When Cursor manages core.hooksPath, this runs via the
+# dispatcher *before* commit-msg.cursor.co-author re-adds the trailer;
+# scripts/ci/ensure-cursor-commit-hooks.sh also installs a later
+# commit-msg.cursor.zz-strip-coauthor that strips it again.
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bash "${hook_dir}/strip-coauthored-by.sh" "$1"
