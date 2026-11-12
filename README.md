@@ -128,15 +128,10 @@ For general Canton and Daml questions, use the
 
 ## Download statistics
 
-### Standalone downloads
+![Total monthly downloads](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/total-downloads-monthly.svg)
 
-![Monthly release downloads](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-monthly.svg)
-
-![All-time downloads per platform](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/release-downloads-by-platform.svg)
-
-### DPM package downloads
-
-![Daily DPM package downloads](https://raw.githubusercontent.com/bitdynamics-ab/canton-devkit/release-stats-data/docs/assets/package-downloads-daily.svg)
+Standalone vs DPM breakdowns and per-platform totals:
+[detailed download statistics](docs/download-stats.md).
 
 ## Contributing
 

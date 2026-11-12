@@ -2,13 +2,15 @@ name: Package stats
 
 # Regenerate GHCR package download-statistics charts for DPM installs.
 # Scrapes the public Packages page (no read:packages token required).
-# Separate from release-stats.yml — never writes release-downloads-* files.
+# Separate from release-stats.yml for package-downloads-* files. Both
+# workflows also regenerate total-downloads-* (standalone + DPM combined)
+# after seeding each other's history.
 #
 # Generated files are published to the `release-stats-data` branch (not
-# `main`) under the package-downloads-* prefix. The README embeds them via
-# raw.githubusercontent.com URLs because the `main` branch ruleset requires
-# all changes to go through a pull request and this bot commit can't satisfy
-# that.
+# `main`) under the package-downloads-* / total-downloads-* prefixes. The
+# README embeds them via raw.githubusercontent.com URLs because the `main`
+# branch ruleset requires all changes to go through a pull request and this
+# bot commit can't satisfy that.
 
 on:
   workflow_dispatch:
@@ -36,14 +38,20 @@ jobs:
       - name: Seed history from release-stats-data branch
         run: |
           set -euo pipefail
-          history_file="docs/assets/package-downloads-history.jsonl"
           mkdir -p docs/assets
           if git fetch origin release-stats-data:refs/remotes/origin/release-stats-data 2>/dev/null; then
-            git show origin/release-stats-data:"${history_file}" > "${history_file}" 2>/dev/null || true
+            for history_file in \
+                docs/assets/package-downloads-history.jsonl \
+                docs/assets/release-downloads-history.jsonl; do
+              git show origin/release-stats-data:"${history_file}" > "${history_file}" 2>/dev/null || true
+            done
           fi
 
       - name: Generate charts + append daily snapshot
-        run: bash scripts/package-stats.sh
+        run: |
+          bash scripts/package-stats.sh
+          # Combined monthly chart (standalone + DPM); needs both histories seeded above.
+          bash scripts/total-download-stats.sh
 
       - name: Publish package-downloads-* to release-stats-data branch
         run: |
@@ -52,6 +60,8 @@ jobs:
             docs/assets/package-downloads-daily.svg
             docs/assets/package-downloads.md
             docs/assets/package-downloads-history.jsonl
+            docs/assets/total-downloads-monthly.svg
+            docs/assets/total-downloads.md
           )
 
           # Stash generated files before switching branches —

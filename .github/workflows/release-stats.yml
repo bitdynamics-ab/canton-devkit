@@ -1,9 +1,11 @@
 name: Release stats
 
-# Regenerate the release download-statistics charts embedded in the README.
-# Data sources are both release repos (bitdynamics-ab/canton-devkit and
-# bitdynamics-ab/homebrew-canton-devkit); download counts are merged by tag.
-# Uses the built-in GITHUB_TOKEN only — no additional secrets required.
+# Regenerate standalone release download-statistics charts, then the
+# combined monthly total chart (standalone + DPM) used in the README.
+# Data sources for standalone are both release repos
+# (bitdynamics-ab/canton-devkit and bitdynamics-ab/homebrew-canton-devkit);
+# download counts are merged by tag. Uses the built-in GITHUB_TOKEN only —
+# no additional secrets required.
 #
 # Generated files are published to the `release-stats-data` branch (not
 # `main`) and the README embeds them via raw.githubusercontent.com URLs,
@@ -41,16 +43,23 @@ jobs:
       - name: Seed history from release-stats-data branch
         run: |
           set -euo pipefail
-          history_file="docs/assets/release-downloads-history.jsonl"
+          mkdir -p docs/assets
           if git fetch origin release-stats-data:refs/remotes/origin/release-stats-data 2>/dev/null; then
-            git show origin/release-stats-data:"${history_file}" > "${history_file}" 2>/dev/null || true
+            for history_file in \
+                docs/assets/release-downloads-history.jsonl \
+                docs/assets/package-downloads-history.jsonl; do
+              git show origin/release-stats-data:"${history_file}" > "${history_file}" 2>/dev/null || true
+            done
           fi
 
       - name: Generate charts + append daily snapshot
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATS_REPOS: bitdynamics-ab/canton-devkit bitdynamics-ab/homebrew-canton-devkit
-        run: bash scripts/release-stats.sh
+        run: |
+          bash scripts/release-stats.sh
+          # Combined monthly chart (standalone + DPM); needs both histories seeded above.
+          bash scripts/total-download-stats.sh
 
       - name: Publish charts + snapshot to release-stats-data branch
         run: |
@@ -61,6 +70,8 @@ jobs:
             docs/assets/release-downloads.md
             docs/assets/release-downloads-history.jsonl
             docs/assets/release-downloads-badge.json
+            docs/assets/total-downloads-monthly.svg
+            docs/assets/total-downloads.md
           )
 
           # Stash the freshly generated files before switching branches —
