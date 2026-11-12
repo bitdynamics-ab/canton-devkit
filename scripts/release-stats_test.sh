@@ -92,5 +92,10 @@ if ! grep -Fq 'release-downloads-badge.json' "${workflow}"; then
   echo "FAIL: release-stats.yml does not publish release-downloads-badge.json" >&2
   exit 1
 fi
+# Cross-seeded DPM history must be cleared before checkout of release-stats-data.
+if ! grep -Fq 'package-downloads-history.jsonl' "${workflow}"; then
+  echo "FAIL: release-stats.yml does not clear package-downloads-history.jsonl before checkout" >&2
+  exit 1
+fi
 
 echo "OK: release-stats monthly aggregation"

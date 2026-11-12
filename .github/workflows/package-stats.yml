@@ -78,6 +78,17 @@ jobs:
               rm -f "${f}"
             fi
           done
+          # Also clear the cross-seeded standalone history used by
+          # total-download-stats.sh. It is not in files[] above, so it would
+          # otherwise remain untracked on main and block checkout of
+          # release-stats-data.
+          for f in docs/assets/release-downloads-history.jsonl; do
+            if git ls-files --error-unmatch "${f}" >/dev/null 2>&1; then
+              git checkout -- "${f}"
+            else
+              rm -f "${f}"
+            fi
+          done
 
           if git fetch origin release-stats-data:refs/remotes/origin/release-stats-data; then
             git checkout -B release-stats-data refs/remotes/origin/release-stats-data
