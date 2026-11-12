@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="760" height="380" viewBox="0 0 760 380" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-label="Total monthly downloads (standalone + DPM)">
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="380" viewBox="0 0 760 380" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-label="Total monthly downloads">
 <rect width="760" height="380" fill="#ffffff"/>
-<text x="56" y="26" font-size="16" font-weight="600" fill="#111827">Total monthly downloads (standalone + DPM)</text>
+<text x="56" y="26" font-size="16" font-weight="600" fill="#111827">Total monthly downloads</text>
 <line x1="56" y1="316.0" x2="736" y2="316.0" stroke="#e5e7eb" stroke-width="1"/>
 <text x="48" y="320.0" font-size="11" fill="#6b7280" text-anchor="end">0</text>
 <line x1="56" y1="262.4" x2="736" y2="262.4" stroke="#e5e7eb" stroke-width="1"/>
