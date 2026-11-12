@@ -21,10 +21,10 @@
 <text x="566.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">2026-10</text>
 <text x="736.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">2026-11</text>
 <text x="396" y="368" font-size="12" fill="#374151" text-anchor="middle">Month (oldest -&gt; newest)</text>
-<polyline points="56.0,298.9 226.0,307.2 396.0,48.0 566.0,221.6 736.0,96.1" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+<polyline points="56.0,298.9 226.0,307.2 396.0,48.0 566.0,221.6 736.0,69.8" fill="none" stroke="#2563eb" stroke-width="2.5"/>
 <circle cx="56.0" cy="298.9" r="3.5" fill="#2563eb"/>
 <circle cx="226.0" cy="307.2" r="3.5" fill="#2563eb"/>
 <circle cx="396.0" cy="48.0" r="3.5" fill="#2563eb"/>
 <circle cx="566.0" cy="221.6" r="3.5" fill="#2563eb"/>
-<circle cx="736.0" cy="96.1" r="3.5" fill="#2563eb"/>
+<circle cx="736.0" cy="69.8" r="3.5" fill="#2563eb"/>
 </svg>
