@@ -92,9 +92,21 @@ if ! grep -Fq 'release-downloads-badge.json' "${workflow}"; then
   echo "FAIL: release-stats.yml does not publish release-downloads-badge.json" >&2
   exit 1
 fi
-# Cross-seeded DPM history must be cleared before checkout of release-stats-data.
-if ! grep -Fq 'package-downloads-history.jsonl' "${workflow}"; then
-  echo "FAIL: release-stats.yml does not clear package-downloads-history.jsonl before checkout" >&2
+if ! grep -Fq 'seeded_histories=(' "${workflow}"; then
+  echo "FAIL: release-stats.yml missing seeded_histories array" >&2
+  exit 1
+fi
+if ! grep -Fq '"${files[@]}" "${seeded_histories[@]}"' "${workflow}"; then
+  echo "FAIL: release-stats.yml publish cleanup does not clear seeded_histories" >&2
+  exit 1
+fi
+if ! awk '
+  /seeded_histories=\(/ { in_arr=1 }
+  in_arr && /package-downloads-history\.jsonl/ { found=1 }
+  in_arr && /\)/ { in_arr=0 }
+  END { exit found ? 0 : 1 }
+' "${workflow}"; then
+  echo "FAIL: release-stats.yml seeded_histories omits package-downloads-history.jsonl" >&2
   exit 1
 fi
 

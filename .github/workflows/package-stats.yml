@@ -39,10 +39,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p docs/assets
+          seeded_histories=(
+            docs/assets/package-downloads-history.jsonl
+            docs/assets/release-downloads-history.jsonl
+          )
           if git fetch origin release-stats-data:refs/remotes/origin/release-stats-data 2>/dev/null; then
-            for history_file in \
-                docs/assets/package-downloads-history.jsonl \
-                docs/assets/release-downloads-history.jsonl; do
+            for history_file in "${seeded_histories[@]}"; do
               git show origin/release-stats-data:"${history_file}" > "${history_file}" 2>/dev/null || true
             done
           fi
@@ -63,6 +65,10 @@ jobs:
             docs/assets/total-downloads-monthly.svg
             docs/assets/total-downloads.md
           )
+          seeded_histories=(
+            docs/assets/package-downloads-history.jsonl
+            docs/assets/release-downloads-history.jsonl
+          )
 
           # Stash generated files before switching branches —
           # release-stats-data's tree is unrelated to main's.
@@ -71,18 +77,7 @@ jobs:
             mkdir -p "${tmp}/$(dirname "${f}")"
             cp "${f}" "${tmp}/${f}"
           done
-          for f in "${files[@]}"; do
-            if git ls-files --error-unmatch "${f}" >/dev/null 2>&1; then
-              git checkout -- "${f}"
-            else
-              rm -f "${f}"
-            fi
-          done
-          # Also clear the cross-seeded standalone history used by
-          # total-download-stats.sh. It is not in files[] above, so it would
-          # otherwise remain untracked on main and block checkout of
-          # release-stats-data.
-          for f in docs/assets/release-downloads-history.jsonl; do
+          for f in "${files[@]}" "${seeded_histories[@]}"; do
             if git ls-files --error-unmatch "${f}" >/dev/null 2>&1; then
               git checkout -- "${f}"
             else

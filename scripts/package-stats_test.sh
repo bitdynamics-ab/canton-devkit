@@ -125,9 +125,21 @@ assert_eq "next-day row" \
 bash -n "${script_dir}/package-stats.sh"
 
 workflow="${script_dir}/../.github/workflows/package-stats.yml"
-# Cross-seeded standalone history must be cleared before checkout of release-stats-data.
-if ! grep -Fq 'release-downloads-history.jsonl' "${workflow}"; then
-  echo "FAIL: package-stats.yml does not clear release-downloads-history.jsonl before checkout" >&2
+if ! grep -Fq 'seeded_histories=(' "${workflow}"; then
+  echo "FAIL: package-stats.yml missing seeded_histories array" >&2
+  exit 1
+fi
+if ! grep -Fq '"${files[@]}" "${seeded_histories[@]}"' "${workflow}"; then
+  echo "FAIL: package-stats.yml publish cleanup does not clear seeded_histories" >&2
+  exit 1
+fi
+if ! awk '
+  /seeded_histories=\(/ { in_arr=1 }
+  in_arr && /release-downloads-history\.jsonl/ { found=1 }
+  in_arr && /\)/ { in_arr=0 }
+  END { exit found ? 0 : 1 }
+' "${workflow}"; then
+  echo "FAIL: package-stats.yml seeded_histories omits release-downloads-history.jsonl" >&2
   exit 1
 fi
 
