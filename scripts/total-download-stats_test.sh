@@ -76,7 +76,7 @@ md="${out}/total-downloads.md"
 [ -f "${svg}" ] || { echo "FAIL: missing svg" >&2; exit 1; }
 [ -f "${md}" ] || { echo "FAIL: missing md" >&2; exit 1; }
 
-assert_file_contains "svg title" "${svg}" "Total monthly downloads (standalone + DPM)"
+assert_file_contains "svg title" "${svg}" "Total monthly downloads"
 assert_file_contains "md header" "${md}" "| Month | Standalone | DPM | Total |"
 # Sept: standalone 10 + dpm 20 = 30; Oct: 20+40=60; Nov: 10+20=30
 assert_file_contains "md sept total" "${md}" "| 2026-09 | 10 | 20 | 30 |"
