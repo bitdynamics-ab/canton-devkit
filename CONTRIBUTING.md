@@ -144,6 +144,11 @@ Rules:
 - Linters enabled: `govet`, `ineffassign`, `staticcheck`, `unused`
 - Formatters enabled: `gofmt`, `goimports`
 - Pre-commit hook available: install with `uvx pre-commit install`
+- Cloud Agent commit hooks (strip Cursor’s initiator `Co-authored-by`,
+  block AI authorship on `git commit`): see [`.githooks/README.md`](.githooks/README.md)
+  and [`.cursor/hooks.json`](.cursor/hooks.json). Run
+  `bash scripts/ci/ensure-cursor-commit-hooks.sh` once per Cloud Agent
+  boot if commits happen before the Agent hook fires.
 
 ### Build
 
