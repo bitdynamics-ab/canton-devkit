@@ -20,6 +20,13 @@
       "major": "0.10"
     },
     {
+      "tag": "0.10.2",
+      "commit": "e214318836feb7cee420dee33e85c7a6abbc7c04",
+      "content_sha": "ce4e0897cae9a13cd9ee3a572dcc667d90c5c49d4ae2a3043d864f163ac75b65",
+      "size": 227615701,
+      "major": "0.10"
+    },
+    {
       "tag": "0.5.18",
       "commit": "b162650cd18df5b96dddeffd9bd48be5b2ff37d7",
       "content_sha": "1a9d0b329cd7c9f76c04085674b9e8dc98169064b0404d007d7e2b22cb582150",
