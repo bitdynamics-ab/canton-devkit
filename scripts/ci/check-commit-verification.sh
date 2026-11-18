@@ -1,16 +1,10 @@
 #!/usr/bin/env bash
 #
-# Fail if any commit in a range is not GitHub-verified (green Verified badge).
-# Uses the GitHub Commits API — local git verify-commit is not enough, because
-# GitHub only marks a signature verified when the signing key is registered to
-# the commit author (or when GitHub itself signed the commit).
+# Fail if any commit in a range is not GitHub-verified.
+# GitHub's Commits API is authoritative; local git verify-commit is not.
 #
 # Usage: check-commit-verification.sh <base-ref> [head-ref]
 #        check-commit-verification.sh <revision-range>
-#
-# Env:
-#   GITHUB_REPOSITORY  owner/repo (required)
-#   GITHUB_TOKEN       optional; raises API rate limits in Actions
 
 set -euo pipefail
 
