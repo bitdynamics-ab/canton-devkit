@@ -8,9 +8,10 @@
 
 set -euo pipefail
 
-# Matched case-insensitively against a whole "Name <email>" identity, with
-# non-alphanumeric boundaries so names like "Claudia" or "precursor" pass.
-PATTERN='(^|[^[:alnum:]])(claude|anthropic|cursor|cursoragent)([^[:alnum:]]|$)'
+_ci_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=coding-tool-identity.sh
+source "${_ci_dir}/coding-tool-identity.sh"
+PATTERN="${CODING_TOOL_IDENTITY_PATTERN}"
 
 usage() {
 	echo "usage: $0 <base-ref> [head-ref]" >&2

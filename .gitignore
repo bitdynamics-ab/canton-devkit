@@ -17,7 +17,10 @@ tmp/
 .vscode/
 
 # AI files
-.cursor/
+.cursor/*
+!.cursor/hooks.json
+!.cursor/hooks/
+!.cursor/hooks/**
 .claude/
 AGENTS.md
 CLAUDE.md
