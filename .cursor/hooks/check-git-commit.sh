@@ -1,16 +1,10 @@
 #!/usr/bin/env bash
-# beforeShellExecution: gate git commit for this repo.
-# - Ensures Cursor commit-msg strip hooks are installed
-# - Denies AI-tool author/committer identities (same idea as
-#   scripts/ci/check-authorship.sh)
-# - Denies an explicit initiator Co-authored-by in the command text
-#
-# Stdin: JSON { command, cwd, ... }
-# Stdout: JSON { permission, agent_message?, user_message? }
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../.." && pwd)"
+# shellcheck source=../../scripts/ci/ai-tool-identity.sh
+source "${repo_root}/scripts/ci/ai-tool-identity.sh"
 
 input="$(cat)"
 command="$(printf '%s' "${input}" | jq -r '.command // empty')"
@@ -27,48 +21,50 @@ deny() {
   exit 0
 }
 
-# Only care about git commit (including amend). Matcher already filters, but
-# be defensive for hooks.json edits.
 if ! printf '%s' "${command}" | grep -Eq '(^|[[:space:];|&])git([[:space:]]+|-c[[:space:]]|-)([^;|&]*[[:space:]])?commit([[:space:]]|$)'; then
   allow
 fi
 
-# Keep the strip hook after Cursor's co-author hook.
 if [ -x "${repo_root}/scripts/ci/ensure-cursor-commit-hooks.sh" ]; then
   bash "${repo_root}/scripts/ci/ensure-cursor-commit-hooks.sh" >/dev/null 2>&1 || true
 fi
 
-# Same boundary-aware pattern as scripts/ci/check-authorship.sh.
-AI_PATTERN='(^|[^[:alnum:]])(claude|anthropic|cursor|cursoragent)([^[:alnum:]]|$)'
-
 identity_is_ai() {
-  printf '%s' "$1" | grep -Eiq "${AI_PATTERN}"
+  printf '%s' "$1" | grep -Eiq "${AI_TOOL_IDENTITY_PATTERN}"
 }
 
-author_name="${GIT_AUTHOR_NAME:-}"
-author_email="${GIT_AUTHOR_EMAIL:-}"
-committer_name="${GIT_COMMITTER_NAME:-}"
-committer_email="${GIT_COMMITTER_EMAIL:-}"
+resolve_identity_part() {
+  local var="$1" env_val="$2"
+  local from_cmd
+  from_cmd="$(ai_tool_identity_from_command "${var}" "${command}")"
+  if [ -n "${from_cmd}" ]; then
+    printf '%s' "${from_cmd}"
+    return
+  fi
+  if [ -n "${env_val}" ]; then
+    printf '%s' "${env_val}"
+    return
+  fi
+  case "${var}" in
+    GIT_AUTHOR_NAME | GIT_COMMITTER_NAME)
+      git -C "${repo_root}" config --get user.name 2>/dev/null || true
+      ;;
+    GIT_AUTHOR_EMAIL | GIT_COMMITTER_EMAIL)
+      git -C "${repo_root}" config --get user.email 2>/dev/null || true
+      ;;
+  esac
+}
 
-# Fall back to git config when env overrides are absent.
-if [ -z "${author_name}" ]; then
-  author_name="$(git -C "${repo_root}" config --get user.name 2>/dev/null || true)"
-fi
-if [ -z "${author_email}" ]; then
-  author_email="$(git -C "${repo_root}" config --get user.email 2>/dev/null || true)"
-fi
-if [ -z "${committer_name}" ]; then
-  committer_name="$(git -C "${repo_root}" config --get user.name 2>/dev/null || true)"
-fi
-if [ -z "${committer_email}" ]; then
-  committer_email="$(git -C "${repo_root}" config --get user.email 2>/dev/null || true)"
-fi
+author_name="$(resolve_identity_part GIT_AUTHOR_NAME "${GIT_AUTHOR_NAME:-}")"
+author_email="$(resolve_identity_part GIT_AUTHOR_EMAIL "${GIT_AUTHOR_EMAIL:-}")"
+committer_name="$(resolve_identity_part GIT_COMMITTER_NAME "${GIT_COMMITTER_NAME:-}")"
+committer_email="$(resolve_identity_part GIT_COMMITTER_EMAIL "${GIT_COMMITTER_EMAIL:-}")"
 
 author="${author_name} <${author_email}>"
 committer="${committer_name} <${committer_email}>"
 
 if identity_is_ai "${author}" || identity_is_ai "${committer}"; then
-  deny "git commit blocked: author/committer looks like an AI tool (${author} / ${committer}). Re-run with human GIT_AUTHOR_* and GIT_COMMITTER_* (and no Co-authored-by: Zhe Li trailer). Example:
+  deny "git commit blocked: author/committer looks like an AI tool (${author} / ${committer}). Prefix the same shell command with human GIT_AUTHOR_* and GIT_COMMITTER_* (the gate reads those from the command text). Example:
 GIT_AUTHOR_NAME='Zhe Li' GIT_AUTHOR_EMAIL='linuxcity.jn@gmail.com' \\
 GIT_COMMITTER_NAME='Zhe Li' GIT_COMMITTER_EMAIL='linuxcity.jn@gmail.com' \\
 git commit ..."
