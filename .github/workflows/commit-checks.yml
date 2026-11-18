@@ -1,4 +1,4 @@
-name: Commit Verification
+name: Commit Checks
 
 on:
   pull_request:
@@ -7,9 +7,9 @@ permissions:
   contents: read
 
 jobs:
-  check-verification:
-    name: Check commit verification
-    runs-on: [ubuntu-latest]
+  check-commits:
+    name: Check commits
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
@@ -18,6 +18,12 @@ jobs:
         with:
           # Full history so the base..head range is resolvable.
           fetch-depth: 0
+
+      - name: Check commit author, committer, and co-author fields
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/ci/check-authorship.sh "$BASE_SHA" "$HEAD_SHA"
 
       - name: Check GitHub Verified badge on each commit
         env:
