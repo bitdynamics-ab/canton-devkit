@@ -1,0 +1,18 @@
+---
+description: pstack per-role model choices (overrides skill defaults)
+alwaysApply: true
+---
+# pstack model configuration. One line per role. Delete a line to fall back to the skill default.
+# `inherit-parent` or `auto` as a value: the role runs on the parent chat model (omit Task `model` and spawn `generalPurpose`). Alias entries in a panel list still count toward its fan-out.
+# Committed so Cursor Cloud Agents pick it up for poteto-mode.
+# defaults: 3
+# budget: small (medium)
+feature, refactoring: claude-opus-5-5-medium-fast
+bug-fix: claude-opus-5-5-medium-fast
+perf-issue: claude-opus-5-5-medium-fast
+hillclimb: claude-opus-5-5-medium-fast
+judgment and prose: claude-opus-5-5-medium-fast
+arena runners: claude-fable-5-2-low, claude-opus-5-5-low-fast, gemini-4-carbon-low
+arena cross-judge pool: claude-opus-5-5-low-fast, gemini-4-carbon-low
+swarm workers: claude-opus-5-5-low-fast
+interrogate reviewers: claude-fable-5-2-low, claude-opus-5-5-low-fast, gemini-4-carbon-low

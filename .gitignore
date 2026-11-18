@@ -17,7 +17,11 @@ tmp/
 .vscode/
 
 # AI files
-.cursor/
+# Ignore Cursor local state, but keep committed always-applied rules
+# (e.g. pstack-models.mdc for poteto-mode) so Cloud Agents pick them up.
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 .claude/
 AGENTS.md
 CLAUDE.md
