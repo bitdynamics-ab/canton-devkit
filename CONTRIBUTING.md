@@ -158,6 +158,19 @@ Rules:
 - Cobra command builders return `*cobra.Command`
 - `App` struct uses dependency injection for `io.Writer` (testability)
 
+### Comments
+
+Do not add comments by default. No narration or why-comments.
+
+Allowed only:
+
+- Legal / license headers
+- Public API doc comments that define a contract
+- Issue/RFC links that state a constraint code cannot express
+- Behavior forced by an external dependency, platform, vendor, or protocol we cannot reshape
+
+Encode other constraints in types, names, tests, or CI.
+
 ## Architecture Notes
 
 - **Entry point:** `cmd/canton-devkit/main.go`
