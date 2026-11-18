@@ -7,12 +7,12 @@ alwaysApply: true
 # Committed so Cursor Cloud Agents pick it up for poteto-mode.
 # defaults: 3
 # budget: small (medium)
-feature, refactoring: claude-opus-5-5-medium-fast
-bug-fix: claude-opus-5-5-medium-fast
-perf-issue: claude-opus-5-5-medium-fast
-hillclimb: claude-opus-5-5-medium-fast
-judgment and prose: claude-opus-5-5-medium-fast
-arena runners: claude-fable-5-2-low, claude-opus-5-5-low-fast, gemini-4-carbon-low
-arena cross-judge pool: claude-opus-5-5-low-fast, gemini-4-carbon-low
-swarm workers: claude-opus-5-5-low-fast
-interrogate reviewers: claude-fable-5-2-low, claude-opus-5-5-low-fast, gemini-4-carbon-low
+feature, refactoring: claude-opus-5-5-medium
+bug-fix: claude-opus-5-5-medium
+perf-issue: claude-opus-5-5-medium
+hillclimb: claude-opus-5-5-medium
+judgment and prose: claude-opus-5-5-medium
+arena runners: claude-fable-5-2-low, claude-opus-5-5-low, gemini-4-carbon-low
+arena cross-judge pool: claude-opus-5-5-low, gemini-4-carbon-low
+swarm workers: claude-opus-5-5-low
+interrogate reviewers: claude-fable-5-2-low, claude-opus-5-5-low, gemini-4-carbon-low
