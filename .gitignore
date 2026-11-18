@@ -16,7 +16,6 @@ tmp/
 !.cursor/rules/
 !.cursor/rules/**
 .claude/
-AGENTS.md
 CLAUDE.md
 
 # Vite/React build output for the embedded Web UI. The placeholder
