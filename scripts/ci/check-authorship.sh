@@ -9,9 +9,9 @@
 set -euo pipefail
 
 _ci_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=ai-tool-identity.sh
-source "${_ci_dir}/ai-tool-identity.sh"
-PATTERN="${AI_TOOL_IDENTITY_PATTERN}"
+# shellcheck source=coding-tool-identity.sh
+source "${_ci_dir}/coding-tool-identity.sh"
+PATTERN="${CODING_TOOL_IDENTITY_PATTERN}"
 
 usage() {
 	echo "usage: $0 <base-ref> [head-ref]" >&2

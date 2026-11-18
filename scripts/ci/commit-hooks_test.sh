@@ -137,7 +137,7 @@ hooks_mutated=0
 bash -n "${repo_root}/.githooks/commit-msg"
 bash -n "${repo_root}/.githooks/strip-coauthored-by.sh"
 bash -n "${repo_root}/scripts/ci/ensure-cursor-commit-hooks.sh"
-bash -n "${repo_root}/scripts/ci/ai-tool-identity.sh"
+bash -n "${repo_root}/scripts/ci/coding-tool-identity.sh"
 bash -n "${hook}"
 
 echo "OK: commit-hooks"

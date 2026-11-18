@@ -3,8 +3,8 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../.." && pwd)"
-# shellcheck source=../../scripts/ci/ai-tool-identity.sh
-source "${repo_root}/scripts/ci/ai-tool-identity.sh"
+# shellcheck source=../../scripts/ci/coding-tool-identity.sh
+source "${repo_root}/scripts/ci/coding-tool-identity.sh"
 
 input="$(cat)"
 command="$(printf '%s' "${input}" | jq -r '.command // empty')"
@@ -29,14 +29,14 @@ if [ -x "${repo_root}/scripts/ci/ensure-cursor-commit-hooks.sh" ]; then
   bash "${repo_root}/scripts/ci/ensure-cursor-commit-hooks.sh" >/dev/null 2>&1 || true
 fi
 
-identity_is_ai() {
-  printf '%s' "$1" | grep -Eiq "${AI_TOOL_IDENTITY_PATTERN}"
+identity_is_coding_tool() {
+  printf '%s' "$1" | grep -Eiq "${CODING_TOOL_IDENTITY_PATTERN}"
 }
 
 resolve_identity_part() {
   local var="$1" env_val="$2"
   local from_cmd
-  from_cmd="$(ai_tool_identity_from_command "${var}" "${command}")"
+  from_cmd="$(env_value_from_command "${var}" "${command}")"
   if [ -n "${from_cmd}" ]; then
     printf '%s' "${from_cmd}"
     return
@@ -63,8 +63,8 @@ committer_email="$(resolve_identity_part GIT_COMMITTER_EMAIL "${GIT_COMMITTER_EM
 author="${author_name} <${author_email}>"
 committer="${committer_name} <${committer_email}>"
 
-if identity_is_ai "${author}" || identity_is_ai "${committer}"; then
-  deny "git commit blocked: author/committer looks like an AI tool (${author} / ${committer}). Prefix the same shell command with human GIT_AUTHOR_* and GIT_COMMITTER_* (the gate reads those from the command text). Example:
+if identity_is_coding_tool "${author}" || identity_is_coding_tool "${committer}"; then
+  deny "git commit blocked: author/committer looks like a coding tool (${author} / ${committer}). Prefix the same shell command with human GIT_AUTHOR_* and GIT_COMMITTER_* (the gate reads those from the command text). Example:
 GIT_AUTHOR_NAME='Zhe Li' GIT_AUTHOR_EMAIL='linuxcity.jn@gmail.com' \\
 GIT_COMMITTER_NAME='Zhe Li' GIT_COMMITTER_EMAIL='linuxcity.jn@gmail.com' \\
 git commit ..."
