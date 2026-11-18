@@ -1,3 +1,4 @@
+artifacts/
 bin/
 dist/
 
@@ -11,12 +12,6 @@ tmp/
 .DS_Store
 .idea/
 .vscode/
-
-.cursor/*
-!.cursor/rules/
-!.cursor/rules/**
-.claude/
-CLAUDE.md
 
 # Vite/React build output for the embedded Web UI. The placeholder
 # index.html is tracked so go:embed has at least one match on a
@@ -36,4 +31,3 @@ internal/ui/dist/*
 
 *.code-workspace
 .omo/
-/artifacts/
