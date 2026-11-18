@@ -182,7 +182,7 @@ Rationale: [Lauren Tan (@poteto) on comments](https://x.com/poteto/status/211075
 
 ## CI Pipeline
 
-- All CI jobs (`test`, `mockup-syntax`, `lint`, `frontend`) run on `[self-hosted, Linux]` runners on every PR and push to `main`.
+- All CI jobs (`test`, `mockup-syntax`, `lint`, `frontend`, commit authorship, commit verification) run on `[self-hosted, Linux]` runners on every PR (and the build jobs also on push to `main`).
 - macOS / Windows CI was removed in commit `9a0dae1` — cross-platform validation now lives in `.github/workflows/release.yml`.
 - All GitHub Actions must be SHA-pinned (no floating tags like `@v4`)
 
@@ -190,6 +190,26 @@ Rationale: [Lauren Tan (@poteto) on comments](https://x.com/poteto/status/211075
 
 - Commit messages must explain **why** the change is needed
 - Keep messages clear and informative
+
+## Commit signatures
+
+Every commit on a pull request must show as **Verified** on GitHub. CI runs
+`scripts/ci/check-commit-verification.sh` (workflow **Check commit verification**).
+
+- Sign with a GPG or SSH key registered to the commit author under
+  GitHub → Settings → SSH and GPG keys (**Signing keys**, not only Authentication).
+- Enable signing locally (`git config commit.gpgsign true`, and for SSH:
+  `gpg.format ssh` + `user.signingkey` pointing at your public key).
+- **Unverified** means the commit is signed, but GitHub does not trust the key
+  for that author (common reason: `unknown_key`). Cursor / Cloud Agent SSH
+  signatures on human-authored commits produce this badge — re-sign as the
+  author before review:
+
+```sh
+# After your signing key is registered on GitHub:
+git rebase --exec 'git commit --amend --no-edit -S' origin/main
+git push --force-with-lease
+```
 
 ## PR Checklist
 

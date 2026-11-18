@@ -1,0 +1,28 @@
+name: Commit Verification
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check-verification:
+    name: Check commit verification
+    runs-on: [self-hosted, Linux]
+
+    steps:
+      - name: Check out repository
+        # actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          # Full history so the base..head range is resolvable.
+          fetch-depth: 0
+
+      - name: Check GitHub Verified badge on each commit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/ci/check-commit-verification.sh "$BASE_SHA" "$HEAD_SHA"
