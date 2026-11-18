@@ -171,6 +171,8 @@ Allowed only:
 
 Encode other constraints in types, names, tests, or CI.
 
+Rationale: [Lauren Tan (@poteto) on comments](https://x.com/poteto/status/2110758788525621282).
+
 ## Architecture Notes
 
 - **Entry point:** `cmd/canton-devkit/main.go`
