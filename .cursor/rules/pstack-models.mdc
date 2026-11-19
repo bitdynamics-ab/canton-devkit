@@ -1,0 +1,14 @@
+---
+description: pstack per-role model choices (overrides skill defaults)
+alwaysApply: true
+---
+# budget: small (medium)
+feature, refactoring: claude-opus-5-5-medium
+bug-fix: claude-opus-5-5-medium
+perf-issue: claude-opus-5-5-medium
+hillclimb: claude-opus-5-5-medium
+judgment and prose: claude-opus-5-5-medium
+arena runners: claude-fable-5-2-low, claude-opus-5-5-low, gemini-4-carbon-low
+arena cross-judge pool: claude-opus-5-5-low, gemini-4-carbon-low
+swarm workers: claude-opus-5-5-low
+interrogate reviewers: claude-fable-5-2-low, claude-opus-5-5-low, gemini-4-carbon-low

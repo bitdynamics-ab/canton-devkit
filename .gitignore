@@ -1,32 +1,24 @@
-# Build artifacts
+artifacts/
 bin/
 dist/
 
-# Scratch dir for local validation / temporary files
 .tmp/
 tmp/
 
-# Local environment
 .env
 .env.*
 !.env.example
 
-# OS/editor files
 .DS_Store
 .idea/
 .vscode/
-
-# AI files
-.cursor/
-.claude/
-AGENTS.md
-CLAUDE.md
 
 # Vite/React build output for the embedded Web UI. The placeholder
 # index.html is tracked so go:embed has at least one match on a
 # fresh clone; `make frontend` overwrites it with the real bundle.
 # See internal/ui/assets.go.
 #
+# TODO: Create a github check for this
 # DO NOT commit a real Vite build's index.html over the placeholder: the
 # hashed assets/*.js and *.css it references are git-ignored, so a checkout
 # would point at files that don't exist. Keep the DEVKIT_FRONTEND_PLACEHOLDER
@@ -35,10 +27,7 @@ internal/ui/dist/*
 !internal/ui/dist/index.html
 .worktrees/
 
-# worktrunk configs
 .config/wt.toml
 
-# workspace files
 *.code-workspace
 .omo/
-/artifacts/

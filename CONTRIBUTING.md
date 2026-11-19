@@ -110,7 +110,7 @@ When the work spans both:
 - **Mirror the verbs.** If the UI gets `POST /api/instances/{name}/containers/{c}/restart`, the CLI should get `dpm localnet container restart <inst> <c>`. The CLI name is a wrapper around the same handler logic; both pass through the same shared function.
 - **Mirror the guards.** If the Web UI's pre-flight gate refuses to start a Splice 0.6.4 instance on a 4 GiB host, `dpm localnet up --version 0.6.4` must refuse it for the same reason. Don't let one surface be lenient where the other is strict.
 
-**When you can't reach parity in the same PR**, file a follow-up issue and add a `// TODO(#issue): CLI parity — <description>` comment at the divergence point so reviewers can see it. Never close out a feature as "done" while one surface is silently missing it.
+**When you can't reach parity in the same PR**, file a follow-up issue and link it from the PR. Never close out a feature as "done" while one surface is silently missing it.
 
 ### Docker Compose teardown must be `-p`-only
 
@@ -158,6 +158,21 @@ Rules:
 - Cobra command builders return `*cobra.Command`
 - `App` struct uses dependency injection for `io.Writer` (testability)
 
+### Comments
+
+Do not add comments by default. No narration or why-comments.
+
+Allowed only:
+
+- Legal / license headers
+- Public API doc comments that define a contract
+- Issue/RFC links that state a constraint code cannot express
+- Behavior forced by an external dependency, platform, vendor, or protocol we cannot reshape
+
+Encode other constraints in types, names, tests, or CI.
+
+Rationale: [Lauren Tan (@poteto) on comments](https://x.com/poteto/status/2110758788525621282).
+
 ## Architecture Notes
 
 - **Entry point:** `cmd/canton-devkit/main.go`
@@ -167,7 +182,7 @@ Rules:
 
 ## CI Pipeline
 
-- All CI jobs (`test`, `mockup-syntax`, `lint`, `frontend`) run on `[self-hosted, Linux]` runners on every PR and push to `main`.
+- Build CI jobs (`test`, `mockup-syntax`, `lint`, `frontend`) run on `[self-hosted, Linux]` runners on every PR and push to `main`. Commit checks (`Check commits`: authorship + GitHub Verified) run on `ubuntu-latest` on every PR.
 - macOS / Windows CI was removed in commit `9a0dae1` — cross-platform validation now lives in `.github/workflows/release.yml`.
 - All GitHub Actions must be SHA-pinned (no floating tags like `@v4`)
 
@@ -175,6 +190,26 @@ Rules:
 
 - Commit messages must explain **why** the change is needed
 - Keep messages clear and informative
+
+## Commit signatures
+
+Every commit on a pull request must show as **Verified** on GitHub. CI runs
+`scripts/ci/check-commit-verification.sh` as part of workflow **Check commits**.
+
+- Sign with a GPG or SSH key registered to the commit author under
+  GitHub → Settings → SSH and GPG keys (**Signing keys**, not only Authentication).
+- Enable signing locally (`git config commit.gpgsign true`, and for SSH:
+  `gpg.format ssh` + `user.signingkey` pointing at your public key).
+- **Unverified** means the commit is signed, but GitHub does not trust the key
+  for that author (common reason: `unknown_key`). Cursor / Cloud Agent SSH
+  signatures on human-authored commits produce this badge — re-sign as the
+  author before review:
+
+```sh
+# After your signing key is registered on GitHub:
+git rebase --exec 'git commit --amend --no-edit -S' origin/main
+git push --force-with-lease
+```
 
 ## PR Checklist
 
@@ -185,4 +220,4 @@ Before submitting:
 3. No test coverage regression (check with `go tool cover`)
 4. Relevant documentation added/updated
 5. PR title is clear and understandable
-6. **CLI ↔ Web UI parity:** if the change touches a user-facing feature, both surfaces are updated (or a follow-up issue is filed with a `TODO(#issue): CLI parity` / `TODO(#issue): UI parity` comment at the divergence point). See "CLI ↔ Web UI parity" rule above.
+6. **CLI ↔ Web UI parity:** if the change touches a user-facing feature, both surfaces are updated (or a follow-up issue is filed and linked from the PR). See "CLI ↔ Web UI parity" rule above.

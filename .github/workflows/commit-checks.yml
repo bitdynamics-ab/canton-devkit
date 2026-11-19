@@ -1,4 +1,4 @@
-name: Commit Authorship
+name: Commit Checks
 
 on:
   pull_request:
@@ -7,9 +7,9 @@ permissions:
   contents: read
 
 jobs:
-  check-authorship:
-    name: Check commit authorship
-    runs-on: [self-hosted, Linux]
+  check-commits:
+    name: Check commits
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
@@ -24,3 +24,11 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: scripts/ci/check-authorship.sh "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Check GitHub Verified badge on each commit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/ci/check-commit-verification.sh "$BASE_SHA" "$HEAD_SHA"
