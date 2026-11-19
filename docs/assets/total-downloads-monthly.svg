@@ -4,15 +4,15 @@
 <line x1="56" y1="316.0" x2="736" y2="316.0" stroke="#e5e7eb" stroke-width="1"/>
 <text x="48" y="320.0" font-size="11" fill="#6b7280" text-anchor="end">0</text>
 <line x1="56" y1="262.4" x2="736" y2="262.4" stroke="#e5e7eb" stroke-width="1"/>
-<text x="48" y="266.4" font-size="11" fill="#6b7280" text-anchor="end">127</text>
+<text x="48" y="266.4" font-size="11" fill="#6b7280" text-anchor="end">137</text>
 <line x1="56" y1="208.8" x2="736" y2="208.8" stroke="#e5e7eb" stroke-width="1"/>
-<text x="48" y="212.8" font-size="11" fill="#6b7280" text-anchor="end">255</text>
+<text x="48" y="212.8" font-size="11" fill="#6b7280" text-anchor="end">275</text>
 <line x1="56" y1="155.2" x2="736" y2="155.2" stroke="#e5e7eb" stroke-width="1"/>
-<text x="48" y="159.2" font-size="11" fill="#6b7280" text-anchor="end">382</text>
+<text x="48" y="159.2" font-size="11" fill="#6b7280" text-anchor="end">413</text>
 <line x1="56" y1="101.6" x2="736" y2="101.6" stroke="#e5e7eb" stroke-width="1"/>
-<text x="48" y="105.6" font-size="11" fill="#6b7280" text-anchor="end">510</text>
+<text x="48" y="105.6" font-size="11" fill="#6b7280" text-anchor="end">551</text>
 <line x1="56" y1="48.0" x2="736" y2="48.0" stroke="#e5e7eb" stroke-width="1"/>
-<text x="48" y="52.0" font-size="11" fill="#6b7280" text-anchor="end">638</text>
+<text x="48" y="52.0" font-size="11" fill="#6b7280" text-anchor="end">689</text>
 <line x1="56" y1="48" x2="56" y2="316" stroke="#9ca3af" stroke-width="1"/>
 <line x1="56" y1="316" x2="736" y2="316" stroke="#9ca3af" stroke-width="1"/>
 <text x="56.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">2026-07</text>
@@ -21,10 +21,10 @@
 <text x="566.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">2026-10</text>
 <text x="736.0" y="336" font-size="11" fill="#6b7280" text-anchor="middle">2026-11</text>
 <text x="396" y="368" font-size="12" fill="#374151" text-anchor="middle">Month (oldest -&gt; newest)</text>
-<polyline points="56.0,300.5 226.0,308.0 396.0,72.8 566.0,230.3 736.0,48.0" fill="none" stroke="#2563eb" stroke-width="2.5"/>
-<circle cx="56.0" cy="300.5" r="3.5" fill="#2563eb"/>
-<circle cx="226.0" cy="308.0" r="3.5" fill="#2563eb"/>
-<circle cx="396.0" cy="72.8" r="3.5" fill="#2563eb"/>
-<circle cx="566.0" cy="230.3" r="3.5" fill="#2563eb"/>
+<polyline points="56.0,301.6 226.0,308.6 396.0,90.8 566.0,236.7 736.0,48.0" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+<circle cx="56.0" cy="301.6" r="3.5" fill="#2563eb"/>
+<circle cx="226.0" cy="308.6" r="3.5" fill="#2563eb"/>
+<circle cx="396.0" cy="90.8" r="3.5" fill="#2563eb"/>
+<circle cx="566.0" cy="236.7" r="3.5" fill="#2563eb"/>
 <circle cx="736.0" cy="48.0" r="3.5" fill="#2563eb"/>
 </svg>
