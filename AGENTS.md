@@ -5,6 +5,6 @@ Follow [`CONTRIBUTING.md`](CONTRIBUTING.md). It is the source of truth for proje
 ## Agent workflow
 
 - Work on a feature branch off `main`; do not commit to `main`.
-- Match this repo's commit checks CI: human author/committer (no AI-tool identities or AI `Co-authored-by` trailers), and every commit GitHub-**Verified**. Do not leave Cursor-signed commits on a human author (`Unverified` / `unknown_key`); the human author must re-sign with their GitHub signing key before merge (see CONTRIBUTING "Commit signatures").
+- Match this repo's commit checks CI: human author/committer (no AI-tool identities or AI `Co-authored-by` trailers). Prefer every commit GitHub-**Verified**; unverified commits only get an advisory PR comment and do not fail CI. Do not leave Cursor-signed commits on a human author (`Unverified` / `unknown_key`); the human author should re-sign with their GitHub signing key before merge (see CONTRIBUTING "Commit signatures").
 - Before review, run `/no-comments` on the diff.
 - Prefer the smallest change that satisfies CONTRIBUTING; do not expand scope.

@@ -182,7 +182,7 @@ Rationale: [Lauren Tan (@poteto) on comments](https://x.com/poteto/status/211075
 
 ## CI Pipeline
 
-- Build CI jobs (`test`, `mockup-syntax`, `lint`, `frontend`) run on `[self-hosted, Linux]` runners on every PR and push to `main`. Commit checks (`Check commits`: authorship + GitHub Verified) run on `ubuntu-latest` on every PR.
+- Build CI jobs (`test`, `mockup-syntax`, `lint`, `frontend`) run on `[self-hosted, Linux]` runners on every PR and push to `main`. Commit checks (`Check commits`: authorship fails the job; GitHub Verified is advisory and only comments on the PR) run on `ubuntu-latest` on every PR.
 - macOS / Windows CI was removed in commit `9a0dae1` — cross-platform validation now lives in `.github/workflows/release.yml`.
 - All GitHub Actions must be SHA-pinned (no floating tags like `@v4`)
 
@@ -193,8 +193,9 @@ Rationale: [Lauren Tan (@poteto) on comments](https://x.com/poteto/status/211075
 
 ## Commit signatures
 
-Every commit on a pull request must show as **Verified** on GitHub. CI runs
+Every commit on a pull request should show as **Verified** on GitHub. CI runs
 `scripts/ci/check-commit-verification.sh` as part of workflow **Check commits**.
+Unverified commits produce an advisory PR comment only; they do not fail the check.
 
 - Sign with a GPG or SSH key registered to the commit author under
   GitHub → Settings → SSH and GPG keys (**Signing keys**, not only Authentication).
